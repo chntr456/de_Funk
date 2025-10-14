@@ -1,0 +1,53 @@
+{
+  "credentials": { "api_key": "q6qHAGqgBoBNxeuQ5bjIXpBfKloYjaL5" },
+  "base_urls": { "core": "https://api.polygon.io" },
+  "headers": { "Authorization": "Bearer ${API_KEY}" },
+  "rate_limit_per_sec": 4.0,
+  "endpoints": {
+    "prices_daily": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v2/aggs/ticker/{symbol}/range/{mult}/{timespan}/{from}/{to}",
+      "required_params": ["symbol", "from", "to"],
+      "default_path_params": { "mult": 1, "timespan": "day" },
+      "default_query": { "adjusted": "true", "sort": "asc", "limit": 50000 },
+      "response_key": "results"
+    },
+    "fundamentals_ttm": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/vX/reference/financials?ticker={symbol}",
+      "required_params": ["symbol"],
+      "default_path_params": {},
+      "default_query": { "period": "ttm", "limit": 1 },
+      "response_key": "results"
+    },
+    "news": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v2/reference/news",
+      "required_params": [],
+      "default_path_params": {},
+      "default_query": { "ticker": "{symbol}", "limit": 50, "sort": "published_utc", "order": "asc" },
+      "response_key": "results"
+    },
+    "ref_ticker": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v3/reference/tickers/{symbol}",
+      "required_params": ["symbol"],
+      "default_path_params": {},
+      "default_query": {},
+      "response_key": "results"
+    },
+    "exchanges": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v3/reference/exchanges",
+      "required_params": [],
+      "default_path_params": {},
+      "default_query": { "asset_class": "stocks", "limit": 1000 },
+      "response_key": "results"
+    }
+  }
+}
