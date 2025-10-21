@@ -1,0 +1,74 @@
+version: 1
+model: company
+
+defaults:
+  snapshot_version: v1
+  company_id_expr: "abs(hash(ticker)) as company_id"
+  exchange_id_expr: "abs(hash(code)) as exchange_id"
+
+datasets:
+  prices_daily:
+    table: prices_daily
+    filters:
+      - "trade_date >= '${DATE_FROM}'"
+      - "trade_date <= '${DATE_TO}'"
+
+  news:
+    table: news
+    filters:
+      - "publish_date >= '${DATE_FROM}'"
+      - "publish_date <= '${DATE_TO}'"
+
+  ref_ticker:
+    table: ref_ticker
+    snapshot_dt: "${SNAPSHOT_DT:-}"
+
+  exchanges:
+    table: exchanges
+    snapshot_dt: "${SNAPSHOT_DT:-}"
+
+dimensions:
+  dim_exchange:
+    source: exchanges
+    select:
+      - "${exchange_id_expr}"
+      - "operating_mic as code"
+      - "name"
+    dedupe_by: ["code"]
+
+  dim_company:
+    sources:
+      ref: ref_ticker
+      xch: exchanges
+    joins:
+      - "ref.primary_exchange = xch.operating_mic"
+    select:
+      - "${company_id_expr}"
+      - "ref.ticker as ticker"
+      - "ref.name as name"
+      - "xch.operating_mic as exchange_code"
+      - "${exchange_id_expr}"
+    dedupe_by: ["ticker"]
+
+facts:
+  fact_prices:
+    source: prices_daily
+    select:
+      - "trade_date"
+      - "ticker"
+      - "open"
+      - "high"
+      - "low"
+      - "close"
+      - "volume_weighted"
+      - "volume"
+
+  fact_news_sentiment:
+    source: news
+    select:
+      - "publish_dt"
+      - "ticker"
+      - "source"
+      - "id"
+      - "title"
+      - "description"

@@ -1,15 +1,15 @@
 from __future__ import annotations
-from typing import Dict, Iterable, Tuple, Optional
+from typing import Dict, Iterable, Tuple
 from functools import reduce
-from pyspark.sql import DataFrame, functions as F
+from pyspark.sql import DataFrame, functions as F, types as T
 
 def project_with_mapping(
-    df: DataFrame,
-    rename_map: Dict[str, str] | None = None,
-    casts: Dict[str, str] | None = None,
-    literals: Dict[str, tuple[str, object]] | None = None,
-    keep: Iterable[str] | None = None
-) -> DataFrame:
+        df: DataFrame,
+        rename_map: Dict[str, str] | None = None,
+        casts: Dict[str, str] | None = None,
+        literals: Dict[str, tuple[str, object]] | None = None,
+        keep: Iterable[str] | None = None
+    ) -> DataFrame:
     rename_map = rename_map or {}
     casts = casts or {}
     literals = literals or {}
@@ -48,3 +48,28 @@ def union_all(dfs: Iterable[DataFrame]) -> DataFrame:
     if not dfs:
         raise ValueError("union_all: no DataFrames provided")
     return reduce(lambda a, b: a.unionByName(b, allowMissingColumns=True), dfs)
+
+# NEW: build a StructType from a simple spec like [("o","double"),("t","long"),...]
+def struct_from_spec(spec: Iterable[Tuple[str, str]]) -> T.StructType:
+    type_map = {
+        "string": T.StringType(),
+        "double": T.DoubleType(),
+        "float": T.FloatType(),
+        "long": T.LongType(),
+        "int": T.IntegerType(),
+        "integer": T.IntegerType(),
+        "boolean": T.BooleanType(),
+        "date": T.DateType(),
+        "timestamp": T.TimestampType(),
+        "binary": T.BinaryType(),
+        "short": T.ShortType(),
+        "byte": T.ByteType(),
+        "decimal": T.DecimalType(38, 18)
+    }
+    fields = []
+    for name, tname in spec:
+        t = type_map.get(tname.lower())
+        if t is None:
+            raise ValueError(f"Unsupported type in spec: {tname} for field {name}")
+        fields.append(T.StructField(name, t, True))
+    return T.StructType(fields)

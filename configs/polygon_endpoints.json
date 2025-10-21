@@ -1,25 +1,29 @@
+
+
 {
-  "credentials": { "api_key": "q6qHAGqgBoBNxeuQ5bjIXpBfKloYjaL5" },
+  "credentials": {
+    "api_keys": ["q6qHAGqgBoBNxeuQ5bjIXpBfKloYjaL5"]
+  },
   "base_urls": { "core": "https://api.polygon.io" },
   "headers": { "Authorization": "Bearer ${API_KEY}" },
-  "rate_limit_per_sec": 4.0,
+  "rate_limit_per_sec": 0.0834,
   "endpoints": {
     "prices_daily": {
       "base": "core",
       "method": "GET",
-      "path_template": "/v2/aggs/ticker/{symbol}/range/{mult}/{timespan}/{from}/{to}",
-      "required_params": ["symbol", "from", "to"],
+      "path_template": "/v2/aggs/ticker/{ticker}/range/{mult}/{timespan}/{from}/{to}",
+      "required_params": ["ticker", "from", "to"],
       "default_path_params": { "mult": 1, "timespan": "day" },
       "default_query": { "adjusted": "true", "sort": "asc", "limit": 50000 },
       "response_key": "results"
     },
-    "fundamentals_ttm": {
+    "prices_daily_grouped": {
       "base": "core",
       "method": "GET",
-      "path_template": "/vX/reference/financials?ticker={symbol}",
-      "required_params": ["symbol"],
+      "path_template": "/v2/aggs/grouped/locale/us/market/stocks/{date}",
+      "required_params": ["date"],
       "default_path_params": {},
-      "default_query": { "period": "ttm", "limit": 1 },
+      "default_query": { "adjusted": "true" },
       "response_key": "results"
     },
     "news": {
@@ -28,14 +32,23 @@
       "path_template": "/v2/reference/news",
       "required_params": [],
       "default_path_params": {},
-      "default_query": { "ticker": "{symbol}", "limit": 50, "sort": "published_utc", "order": "asc" },
+      "default_query": { "limit": 1000, "sort": "published_utc", "order": "asc" },
+      "response_key": "results"
+    },
+    "fundamentals_ttm": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/vX/reference/financials",
+      "required_params": ["ticker"],
+      "default_path_params": {},
+      "default_query": { "period": "ttm", "limit": 1, "ticker": "{ticker}" },
       "response_key": "results"
     },
     "ref_ticker": {
       "base": "core",
       "method": "GET",
-      "path_template": "/v3/reference/tickers/{symbol}",
-      "required_params": ["symbol"],
+      "path_template": "/v3/reference/tickers/{ticker}",
+      "required_params": ["ticker"],
       "default_path_params": {},
       "default_query": {},
       "response_key": "results"

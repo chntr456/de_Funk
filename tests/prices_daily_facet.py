@@ -1,5 +1,4 @@
-from pyspark.sql import SparkSession
-from src.data_pipelines.polygon.prices_daily_facet import PricesDailyFacet
+from src.data_pipelines.polygon.facets.prices_daily_facet import PricesDailyFacet
 
 import os, sys
 
