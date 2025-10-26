@@ -1,19 +1,22 @@
 {
   "roots": {
     "bronze": "storage/bronze",
-    "silver": "storage/silver",
-    "manifests": "storage/silver/_meta/manifests"
+    "silver": "storage/silver"
   },
   "tables": {
-    "prices_daily": { "root": "bronze", "rel": "prices_daily", "partitions": ["trade_date"] },
-    "news":         { "root": "bronze", "rel": "news", "partitions": ["publish_date"] },
-    "fundamentals": { "root": "bronze", "rel": "fundamentals_ttm", "partitions": ["snapshot_dt"] },
-    "ref_ticker":   { "root": "bronze", "rel": "ref_ticker", "partitions": ["snapshot_dt"] },
-    "exchanges":    { "root": "bronze", "rel": "exchanges", "partitions": ["snapshot_dt"] },
+    "ref_all_tickers": { "root": "bronze", "rel": "ref_all_tickers", "partitions": ["snapshot_dt"] },
+    "exchanges":       { "root": "bronze", "rel": "exchanges",       "partitions": ["snapshot_dt"] },
+    "ref_ticker":      { "root": "bronze", "rel": "ref_ticker",      "partitions": ["snapshot_dt"] },
+    "prices_daily":    { "root": "bronze", "rel": "prices_daily",    "partitions": ["trade_date"] },
+    "news":            { "root": "bronze", "rel": "news",            "partitions": ["publish_date"] },
+    "fundamentals":    { "root": "bronze", "rel": "fundamentals",    "partitions": ["fiscal_year","fiscal_period"] },
 
-    "dim_company":  { "root": "silver", "rel": "company/dims/dim_company" },
-    "dim_exchange": { "root": "silver", "rel": "company/dims/dim_exchange" },
-    "fact_prices":  { "root": "silver", "rel": "company/facts/fact_prices" },
-    "fact_news":    { "root": "silver", "rel": "company/facts/fact_news_sentiment" }
+    "dim_company":     { "root": "silver", "rel": "company/dims/dim_company" },
+    "dim_exchange":    { "root": "silver", "rel": "company/dims/dim_exchange" },
+    "fact_prices":     { "root": "silver", "rel": "company/facts/fact_prices" },
+    "fact_news":       { "root": "silver", "rel": "company/facts/fact_news" },
+
+    "prices_with_company": { "root": "silver", "rel": "company/facts/prices_with_company" },
+    "news_with_company":   { "root": "silver", "rel": "company/facts/news_with_company" }
   }
 }

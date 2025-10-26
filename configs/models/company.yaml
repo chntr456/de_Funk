@@ -1,0 +1,58 @@
+version: 1
+model: company
+tags: [equities, polygon, us]
+graph:
+  nodes:
+    - id: dim_company
+      from: bronze.ref_ticker
+      select:
+        ticker: ticker
+        company_name: name        # <— renamed here
+        exchange_code: exchange_code
+      derive:
+        company_id: "sha1(ticker)"
+      tags: [dim, entity, company]
+      unique_key: [ticker]
+
+    - id: dim_exchange
+      from: bronze.exchanges
+      select:
+        exchange_code: code       # <— align key name with company
+        exchange_name: name       # <— renamed here
+      tags: [dim, ref, exchange]
+      unique_key: [exchange_code]
+
+    - id: fact_prices
+      from: bronze.prices_daily
+      select:
+        trade_date: trade_date
+        ticker: ticker
+        open: open
+        high: high
+        low: low
+        close: close
+        volume_weighted: volume_weighted
+        volume: volume
+      tags: [fact, prices]
+
+    - id: fact_news
+      from: bronze.news
+      select:
+        publish_date: publish_date
+        ticker: ticker
+        article_id: article_id
+        title: title
+        source: source
+        sentiment: sentiment
+      tags: [fact, news]
+
+  edges:
+    - { from: fact_prices, to: dim_company,   on: ["ticker=ticker"],        type: many_to_one }
+    - { from: dim_company, to: dim_exchange,  on: ["exchange_code=exchange_code"], type: many_to_one }
+    - { from: fact_news,   to: dim_company,   on: ["ticker=ticker"],        type: many_to_one }
+
+  paths:
+    - { id: prices_with_company, hops: "fact_prices -> dim_company -> dim_exchange", tags: [canonical, analytics] }
+    - { id: news_with_company,   hops: "fact_news -> dim_company",                   tags: [news, analytics] }
+
+

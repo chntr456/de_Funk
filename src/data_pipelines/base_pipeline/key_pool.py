@@ -1,27 +1,23 @@
-from __future__ import annotations
 import time
-from typing import List, Tuple
+from collections import deque
 
 class ApiKeyPool:
-    def __init__(self, keys: List[str], cooldown_seconds: float = 60.0):
-        if not keys:
-            raise ValueError("ApiKeyPool requires at least one API key")
-        self.state = [{"key": k, "cooldown_until": 0.0} for k in keys]
-        self.idx = 0
-        self.cooldown_seconds = cooldown_seconds
+    def __init__(self, keys, cooldown_seconds=60.0):
+        self.keys = deque(keys or [])
+        self.cooldown = cooldown_seconds
+        self.last_used = {}
 
-    def acquire(self) -> Tuple[str, int]:
+    def size(self):
+        return len(self.keys)
+
+    def next_key(self):
+        if not self.keys:
+            return None
         now = time.time()
-        n = len(self.state)
-        for hop in range(n):
-            j = (self.idx + hop) % n
-            if now >= self.state[j]["cooldown_until"]:
-                self.idx = (j + 1) % n
-                return self.state[j]["key"], j
-        j = min(range(n), key=lambda i: self.state[i]["cooldown_until"])
-        self.idx = (j + 1) % n
-        return self.state[j]["key"], j
-
-    def penalize(self, index: int, seconds: float | None = None):
-        until = time.time() + (seconds if seconds is not None else self.cooldown_seconds)
-        self.state[index]["cooldown_until"] = max(self.state[index]["cooldown_until"], until)
+        k = self.keys[0]
+        if k in self.last_used and (now - self.last_used[k]) < self.cooldown:
+            self.keys.rotate(-1)
+            k = self.keys[0]
+        self.last_used[k] = now
+        self.keys.rotate(-1)
+        return k

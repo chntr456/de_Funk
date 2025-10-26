@@ -1,8 +1,5 @@
-from __future__ import annotations
+# src/data_pipelines/base_pipeline/registry.py
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple, Union
-from pathlib import Path
-from src.common.config_loader import ConfigLoader
 
 @dataclass
 class Endpoint:
@@ -10,59 +7,68 @@ class Endpoint:
     base: str
     method: str
     path_template: str
-    required_params: list[str]
-    default_query: dict[str, Any]
+    required_params: list
+    default_query: dict
     response_key: str
-    default_path_params: dict[str, Any]
 
 class BaseRegistry:
-    """
-    Provider-agnostic endpoint registry.
-    - Loads endpoints from JSON/YAML config
-    - Renders (path, query) with simple string formatting
-    - NO provider-specific quirks, NO symbol/ticker shims
-    """
-    def __init__(self, cfg_source: Union[str, Path, dict]):
-        cfg = ConfigLoader(cfg_source).injected()
-        self.headers: Dict[str, str]   = cfg.get("headers", {})
-        self.base_urls: Dict[str, str] = {k: v.rstrip("/") for k, v in (cfg.get("base_urls", {}) or {}).items()}
-        self.rate_limit: float         = cfg.get("rate_limit_per_sec", 0.0834)
+    def __init__(self, cfg):
+        self.headers = cfg.get("headers", {})
+        self.base_urls = cfg["base_urls"]
+        self.rate_limit = cfg.get("rate_limit_per_sec", 0.0834)
+        self.endpoints = cfg["endpoints"]
 
-        self.endpoints: Dict[str, Endpoint] = {
-            name: Endpoint(
-                name=name,
-                base=e["base"],
-                method=e.get("method", "GET"),
-                path_template=e["path_template"],
-                required_params=e.get("required_params", []),
-                default_query=e.get("default_query", {}),
-                response_key=e.get("response_key", "results"),
-                default_path_params=e.get("default_path_params", {})
-            )
-            for name, e in (cfg.get("endpoints", {}) or {}).items()
+    def render(self, ep_name, **params):
+        """
+        - Accepts required params either at the top-level or inside params['query'].
+        - Renders path with path params only (top-level + default_path_params).
+        - Builds final query from default_query + params['query'] + any extra top-level keys
+          that are NOT used in the path and look like query params.
+        """
+        e = self.endpoints[ep_name]
+
+        # Gather what's been provided
+        top = dict(params)
+        q_in = dict(top.pop("query", {}) or {})  # extract query dict if present
+
+        # Determine required presence across BOTH top-level and query
+        provided_keys = set(top.keys()) | set(q_in.keys())
+        required = e.get("required_params", []) or []
+        missing = [r for r in required if r not in provided_keys]
+        if missing:
+            raise ValueError(f"{ep_name}: missing {missing}")
+
+        # Path formatting uses only path params (merge defaults + top-level)
+        path_params = {**e.get("default_path_params", {}), **top}
+        path = e["path_template"].format(**path_params)
+
+        # Build final query: defaults + explicit query + any remaining top-level scalars
+        # that aren't used in the path (treat as query keys). This allows either style.
+        default_q = dict(e.get("default_query", {}) or {})
+        # Anything in top that wasn't consumed by path placeholders becomes query
+        # (exclude non-scalars to avoid passing nested dicts/lists inadvertently).
+        path_placeholders = set()
+        # Rough parse for {placeholder} occurrences:
+        for frag in e["path_template"].split("{")[1:]:
+            path_placeholders.add(frag.split("}")[0])
+
+        spill_into_query = {
+            k: v for k, v in top.items()
+            if k not in path_placeholders and not isinstance(v, (dict, list, tuple, set))
         }
 
-    def render(self, ep_name: str, **params) -> Tuple[Endpoint, str, dict]:
-        if ep_name not in self.endpoints:
-            raise KeyError(f"Endpoint not found: {ep_name}")
-        ep = self.endpoints[ep_name]
+        query = {**default_q, **q_in, **spill_into_query}
 
-        # 1) merge defaults + user params
-        merged = {**ep.default_path_params, **params}
-
-        # 2) validate required params
-        missing = [k for k in ep.required_params if k not in merged]
-        if missing:
-            raise ValueError(f"{ep_name}: missing required params {missing}")
-
-        # 3) render path
-        path = ep.path_template.format(**merged)
-
-        # 4) build query (defaults, then user overrides via 'query' dict)
-        query = {}
-        for k, v in (ep.default_query or {}).items():
-            query[k] = v.format(**merged) if isinstance(v, str) else v
-        user_q = params.get("query") or {}
-        query.update(user_q)
-
-        return ep, path, query
+        return (
+            Endpoint(
+                name=ep_name,
+                base=e["base"],
+                method=e["method"],
+                path_template=e["path_template"],
+                required_params=required,
+                default_query=default_q,
+                response_key=e["response_key"],
+            ),
+            path,
+            query,
+        )

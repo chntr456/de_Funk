@@ -1,91 +1,74 @@
-from __future__ import annotations
-import time, json, random, urllib.parse, urllib.request
-from typing import Any, Dict, Optional
+import json, time, urllib.request, urllib.parse
 from urllib.error import HTTPError, URLError
-from .key_pool import ApiKeyPool
-
-def _render_headers(template: Dict[str, str], api_key: str) -> Dict[str, str]:
-    out = {}
-    for k, v in template.items():
-        out[k] = v.replace("${API_KEY}", api_key) if isinstance(v, str) else v
-    return out
+import math
 
 class HttpClient:
-    def __init__(
-        self,
-        base_urls: dict[str, str],
-        headers: Optional[Dict[str, str]] = None,
-        rate_limit_per_sec: float = 0.0834,
-        api_key_pool: Optional[ApiKeyPool] = None,
-        max_retries: int = 6,
-        backoff_base: float = 0.75,
-        backoff_factor: float = 2.0,
-        backoff_jitter: float = 0.25
-    ):
-        self.base_urls = {k: v.rstrip("/") for k, v in base_urls.items()}
-        self.header_template = headers or {}
-        self.global_min_interval = 1.0 / max(rate_limit_per_sec, 0.0001)
+    def __init__(self, base_urls, headers, rate_limit_per_sec, api_key_pool, safety_factor=0.9, max_retries=6):
+        self.base_urls = base_urls
+        self.headers = headers
+        self.configured_rps = float(rate_limit_per_sec or 0.0834)
+        self.api_key_pool = api_key_pool
+        self.safety = float(safety_factor)
+        self.max_retries = int(max_retries)
         self._last_ts = 0.0
-        self.pool = api_key_pool or ApiKeyPool(keys=[""], cooldown_seconds=60.0)
-        self.max_retries = max_retries
-        self.backoff_base = backoff_base
-        self.backoff_factor = backoff_factor
-        self.backoff_jitter = backoff_jitter
 
-    def request(self, base_key: str, path: str, query: Optional[Dict[str, Any]] = None,
-                method: str = "GET", timeout: float = 60.0) -> dict:
-        url = f"{self.base_urls[base_key]}/{path.lstrip('/')}"
-        if query:
-            q = "&".join(f"{urllib.parse.quote(str(k))}={urllib.parse.quote(str(v))}" for k, v in sorted(query.items()))
-            url = f"{url}?{q}"
+    def _effective_min_interval(self):
+        """
+        Polygon hard limit ~5 req/min/key. If multiple keys, scale up conservatively.
+        Use the configured rate_limit_per_sec as an upper bound, but cap by keys*5/min.
+        """
+        keys = max(1, self.api_key_pool.size())
+        hard_rps = (keys * 5.0) / 60.0  # 5 per minute per key
+        rps = min(self.configured_rps, hard_rps) * self.safety
+        rps = max(rps, 1.0 / 120.0)  # never >1 req per 120s when misconfigured
+        return 1.0 / rps
 
-        attempt = 0
-        while True:
-            api_key, key_idx = self.pool.acquire()
-            headers = _render_headers(self.header_template, api_key)
-
-            self._respect_global_rate()
-            req = urllib.request.Request(url, headers=headers, method=method)
-            try:
-                with urllib.request.urlopen(req, timeout=timeout) as resp:
-                    return json.loads(resp.read().decode("utf-8"))
-
-            except HTTPError as e:
-                status = e.code
-                if status == 429:
-                    ra = self._parse_retry_after(e.headers.get("Retry-After")) or 120.0
-                    self.pool.penalize(key_idx, ra)
-                    sleep_for = self._next_backoff(attempt)
-                elif status in (401, 403):
-                    self.pool.penalize(key_idx, 600.0)
-                    sleep_for = self._next_backoff(attempt)
-                elif 500 <= status < 600:
-                    sleep_for = self._next_backoff(attempt)
-                else:
-                    raise
-                attempt += 1
-                if attempt > self.max_retries: raise
-                time.sleep(sleep_for)
-
-            except (URLError, TimeoutError, ConnectionError):
-                attempt += 1
-                if attempt > self.max_retries: raise
-                time.sleep(self._next_backoff(attempt))
-
-    def _respect_global_rate(self):
-        now = time.time()
-        delta = now - self._last_ts
-        if delta < self.global_min_interval:
-            time.sleep(self.global_min_interval - delta)
+    def _throttle(self):
+        min_interval = self._effective_min_interval()
+        dt = time.time() - self._last_ts
+        if dt < min_interval:
+            time.sleep(min_interval - dt)
         self._last_ts = time.time()
 
-    def _next_backoff(self, attempt: int) -> float:
-        base = self.backoff_base * (self.backoff_factor ** max(attempt - 1, 0))
-        jitter = random.uniform(-self.backoff_jitter, self.backoff_jitter)
-        return max(0.1, base + jitter)
+    def _build_request(self, base_key, path, query, method):
+        base = self.base_urls[base_key].rstrip("/")
+        url = f"{base}{path}"
+        if query:
+            url += "?" + urllib.parse.urlencode(query, doseq=True)
+        key = self.api_key_pool.next_key()
+        hdrs = {k: v.replace("${API_KEY}", key or "") for k, v in self.headers.items()}
+        return urllib.request.Request(url, headers=hdrs, method=method), url
 
-    @staticmethod
-    def _parse_retry_after(value: Optional[str]) -> Optional[float]:
-        if not value: return None
-        try: return max(0.0, float(value.strip()))
-        except Exception: return None
+    from urllib.error import HTTPError, URLError
+
+    def request(self, base_key, path, query, method="GET"):
+        backoff_base = 2.0
+        for attempt in range(self.max_retries):
+            self._throttle()
+            req, url = self._build_request(base_key, path, query, method)
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            except HTTPError as e:
+                body = None
+                try:
+                    body = e.read().decode("utf-8")
+                except Exception:
+                    pass
+                # 429 → backoff + retry (kept as-is)
+                if e.code == 429:
+                    retry_after = e.headers.get("Retry-After")
+                    wait = float(retry_after) if retry_after and retry_after.isdigit() else min(120.0, (
+                                backoff_base ** attempt)) + (0.1 * attempt)
+                    time.sleep(wait);
+                    continue
+                # 5xx → retry
+                if 500 <= e.code < 600:
+                    time.sleep(min(60.0, (backoff_base ** attempt)));
+                    continue
+                # 4xx (like 400) → raise with details
+                raise RuntimeError(f"HTTP {e.code} for {url} :: query={query} :: body={body}") from e
+            except URLError:
+                time.sleep(min(30.0, (backoff_base ** attempt)));
+                continue
+        raise RuntimeError(f"HTTP request failed after {self.max_retries} retries: {method} {path} {query}")

@@ -1,25 +1,22 @@
-from __future__ import annotations
-from typing import Iterable, List, Tuple
-from pyspark.sql import SparkSession, functions as F
-from .polygon_base_facet import PolygonFacet
+from pyspark.sql import functions as F
+from src.data_pipelines.polygon.facets.polygon_base_facet import PolygonFacet
+from src.data_pipelines.facets.base_facet import coalesce_existing
 
 class ExchangesFacet(PolygonFacet):
-    name = "exchanges"
-    SCOPE = "singleton"
-    RAW_SCHEMA_SPEC: List[Tuple[str, str]] = [
-        ("exchange","string"), ("name","string"), ("operating_mic","string")
-    ]
-    OUTPUT_SCHEMA = [
-        ("exchange_id","bigint"), ("code","string"), ("name","string")
-    ]
+    SPARK_CASTS = {"code":"string","name":"string"}
+    FINAL_COLUMNS = [("code","string"), ("name","string")]
 
-    def __init__(self, spark: SparkSession):
+    def __init__(self, spark):
         super().__init__(spark)
 
-    def calls(self) -> Iterable[dict]:
+    def calls(self):
         yield {"ep_name": "exchanges", "params": {}}
 
     def postprocess(self, df):
-        return (df.withColumn("exchange_id", F.abs(F.hash("exchange")).cast("bigint"))
-                  .withColumnRenamed("exchange", "code")
-                  .select("exchange_id","code","name"))
+        code = coalesce_existing(df, ["code","id"]).cast("string").alias("code")
+        name = coalesce_existing(df, ["name","description"]).cast("string").alias("name")
+        return (
+            df.select(code, name)
+              .dropna(subset=["code"])
+              .dropDuplicates(["code"])
+        )
