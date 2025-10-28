@@ -265,8 +265,13 @@ class NotebookSession:
 
                 df = node.df
 
-                # Apply filters
-                df = self.filter_engine.apply_filters(df, filter_context, {})
+                # Apply filters with column mapping
+                # Map filter variables to dataframe columns
+                column_mapping = {
+                    'time': 'trade_date',  # time filter maps to trade_date column
+                    'tickers': 'ticker',   # tickers filter maps to ticker column
+                }
+                df = self.filter_engine.apply_filters(df, filter_context, column_mapping)
 
                 # Aggregate the measure
                 agg_func = self._get_agg_function(measure.aggregation)
@@ -300,8 +305,13 @@ class NotebookSession:
 
         df = node.df
 
-        # Apply filters
-        df = self.filter_engine.apply_filters(df, filter_context, {})
+        # Apply filters with column mapping
+        # Map filter variables to dataframe columns
+        column_mapping = {
+            'time': 'trade_date',  # time filter maps to trade_date column
+            'tickers': 'ticker',   # tickers filter maps to ticker column
+        }
+        df = self.filter_engine.apply_filters(df, filter_context, column_mapping)
 
         # Collect dimension columns for grouping
         group_cols = []
