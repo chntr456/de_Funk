@@ -33,21 +33,19 @@ st.set_page_config(
 @st.cache_resource
 def get_repo_context():
     """Get repository context (cached)."""
-    return RepoContext()
+    return RepoContext.from_repo_root()
 
 
 @st.cache_resource
 def get_model_session(_ctx):
     """Get model session (cached)."""
-    return ModelSession(_ctx)
+    return ModelSession(_ctx.spark, _ctx.repo, _ctx.storage)
 
 
 @st.cache_resource
-def get_notebook_session(_model_session, _repo_root):
+def get_notebook_session(_model_session, _ctx):
     """Get notebook session (cached)."""
-    from pyspark.sql import SparkSession
-    spark = SparkSession.builder.getOrCreate()
-    return NotebookSession(spark, _model_session, _repo_root)
+    return NotebookSession(_ctx.spark, _model_session, _ctx.repo)
 
 
 class NotebookApp:
@@ -59,7 +57,7 @@ class NotebookApp:
         self.model_session = get_model_session(self.ctx)
         self.notebook_session = get_notebook_session(
             self.model_session,
-            self.ctx.repo_root,
+            self.ctx,
         )
 
     def run(self):
@@ -87,7 +85,7 @@ class NotebookApp:
         st.header("Select Notebook")
 
         # Find available notebooks
-        notebooks_dir = self.ctx.repo_root / "configs" / "notebooks"
+        notebooks_dir = self.ctx.repo / "configs" / "notebooks"
         notebooks_dir.mkdir(parents=True, exist_ok=True)
 
         notebook_files = list(notebooks_dir.glob("*.yaml"))
