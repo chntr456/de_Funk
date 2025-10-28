@@ -242,102 +242,107 @@ class NotebookSession:
         """
         Build a dataframe for an exhibit with dimensions and measures.
 
-        This is a simplified implementation. In production, you would:
-        1. Identify which graph nodes are needed
-        2. Build join paths
-        3. Apply filters
-        4. Compute measures
-        5. Return result
+        This is a simplified implementation that:
+        1. Gets the fact node containing both dimensions and measures
+        2. Applies filters
+        3. Groups by dimensions and aggregates measures
+        4. Returns result
         """
         # Handle exhibits without dimensions (like metric cards)
         if not dimensions and measures:
             # For metric cards with just measures, compute each measure separately
-            # and combine them
-            measure_dfs = []
+            measure_results = []
+
             for measure in measures:
                 if not measure.source:
                     continue
 
-                # Get the source dataframe
-                df = self.query_engine.get_node_df(
-                    self.graph,
-                    measure.source,
-                )
+                # Get the fact node (has all columns)
+                node_id = f"{measure.source.model}.{measure.source.node}"
+                node = self.graph.get_node(node_id)
+                if not node:
+                    continue
 
-                # Apply filters using FilterEngine
-                # Build column mapping for this measure's source
-                column_mapping = {}
-                if measure.source.column:
-                    # Map filter variables to actual column names
-                    # For now, assume direct mapping
-                    pass
+                df = node.df
 
-                df = self.filter_engine.apply_filters(df, filter_context, column_mapping)
+                # Apply filters
+                df = self.filter_engine.apply_filters(df, filter_context, {})
 
-                # Compute the measure (aggregate)
-                df_measure = self.query_engine.resolve_measure(
-                    self.graph,
-                    measure,
-                    group_by=None,  # No grouping for metrics
-                    filters=None,  # Already filtered above
-                )
-                measure_dfs.append(df_measure)
+                # Aggregate the measure
+                agg_func = self._get_agg_function(measure.aggregation)
+                df_agg = df.agg(agg_func(measure.source.column).alias(measure.id))
+
+                measure_results.append(df_agg)
 
             # Combine all measures into one row
-            if measure_dfs:
-                result = measure_dfs[0]
-                for df_measure in measure_dfs[1:]:
+            if measure_results:
+                result = measure_results[0]
+                for df_measure in measure_results[1:]:
                     result = result.crossJoin(df_measure)
                 return result
             else:
                 return self.spark.createDataFrame([], schema="")
 
-        # For exhibits with dimensions
+        # For exhibits with dimensions - need to get fact node that has everything
         if not dimensions:
             raise ValueError(f"Exhibit {exhibit.id} has no dimensions or measures")
 
-        primary_dim = dimensions[0]
-        df = self.query_engine.get_node_df(
-            self.graph,
-            primary_dim.source,
-        )
+        # Find the fact node that contains the measures
+        # Assumption: All measures come from the same fact node
+        if not measures or not measures[0].source:
+            raise ValueError(f"Exhibit {exhibit.id} has no measures with sources")
+
+        fact_source = measures[0].source
+        node_id = f"{fact_source.model}.{fact_source.node}"
+        node = self.graph.get_node(node_id)
+        if not node:
+            raise ValueError(f"Fact node not found: {node_id}")
+
+        df = node.df
 
         # Apply filters
-        # Build column mapping (dimension_id -> column_name in source)
-        column_mapping = {}
+        df = self.filter_engine.apply_filters(df, filter_context, {})
+
+        # Collect dimension columns for grouping
+        group_cols = []
         for dim in dimensions:
-            if dim.source.column:
-                column_mapping[dim.id] = dim.source.column
+            group_cols.append(dim.source.column)
 
-        df = self.filter_engine.apply_filters(df, filter_context, column_mapping)
-
-        # Compute measures
-        # This is simplified - in production you'd handle different measure types
+        # Collect aggregations for measures
+        agg_exprs = []
         for measure in measures:
-            if measure.source:
-                # Add measure column
-                df = self.query_engine.resolve_measure(
-                    self.graph,
-                    measure,
-                    group_by=[d.id for d in dimensions] if dimensions else None,
-                    filters=None,  # Already filtered above
-                )
+            agg_func = self._get_agg_function(measure.aggregation)
+            agg_exprs.append(agg_func(measure.source.column).alias(measure.id))
 
-        # Select and rename columns
-        select_cols = []
+        # Group and aggregate
+        if group_cols:
+            df = df.groupBy(*group_cols).agg(*agg_exprs)
+        else:
+            df = df.agg(*agg_exprs)
+
+        # Rename dimension columns to match dimension IDs
         for dim in dimensions:
-            if dim.source.column and dim.source.column != dim.id:
-                select_cols.append(F.col(dim.source.column).alias(dim.id))
-            else:
-                select_cols.append(dim.id)
-
-        for measure in measures:
-            select_cols.append(measure.id)
-
-        if select_cols:
-            df = df.select(select_cols)
+            if dim.source.column != dim.id:
+                df = df.withColumnRenamed(dim.source.column, dim.id)
 
         return df
+
+    def _get_agg_function(self, aggregation):
+        """Get Spark aggregation function."""
+        from ..schema import AggregationType
+
+        mapping = {
+            AggregationType.SUM: F.sum,
+            AggregationType.AVG: F.avg,
+            AggregationType.MIN: F.min,
+            AggregationType.MAX: F.max,
+            AggregationType.COUNT: F.count,
+            AggregationType.STDDEV: F.stddev,
+            AggregationType.VARIANCE: F.variance,
+            AggregationType.FIRST: F.first,
+            AggregationType.LAST: F.last,
+        }
+        return mapping.get(aggregation, F.sum)
 
     def get_dimension_values(
         self,
