@@ -249,10 +249,52 @@ class NotebookSession:
         4. Compute measures
         5. Return result
         """
-        # For now, return a simplified version
-        # Get the primary node for this exhibit (first dimension's source)
+        # Handle exhibits without dimensions (like metric cards)
+        if not dimensions and measures:
+            # For metric cards with just measures, compute each measure separately
+            # and combine them
+            measure_dfs = []
+            for measure in measures:
+                if not measure.source:
+                    continue
+
+                # Get the source dataframe
+                df = self.query_engine.get_node_df(
+                    self.graph,
+                    measure.source,
+                )
+
+                # Apply filters using FilterEngine
+                # Build column mapping for this measure's source
+                column_mapping = {}
+                if measure.source.column:
+                    # Map filter variables to actual column names
+                    # For now, assume direct mapping
+                    pass
+
+                df = self.filter_engine.apply_filters(df, filter_context, column_mapping)
+
+                # Compute the measure (aggregate)
+                df_measure = self.query_engine.resolve_measure(
+                    self.graph,
+                    measure,
+                    group_by=None,  # No grouping for metrics
+                    filters=None,  # Already filtered above
+                )
+                measure_dfs.append(df_measure)
+
+            # Combine all measures into one row
+            if measure_dfs:
+                result = measure_dfs[0]
+                for df_measure in measure_dfs[1:]:
+                    result = result.crossJoin(df_measure)
+                return result
+            else:
+                return self.spark.createDataFrame([], schema="")
+
+        # For exhibits with dimensions
         if not dimensions:
-            raise ValueError(f"Exhibit {exhibit.id} has no dimensions")
+            raise ValueError(f"Exhibit {exhibit.id} has no dimensions or measures")
 
         primary_dim = dimensions[0]
         df = self.query_engine.get_node_df(
@@ -278,7 +320,7 @@ class NotebookSession:
                     self.graph,
                     measure,
                     group_by=[d.id for d in dimensions] if dimensions else None,
-                    filters=filter_context.get_all(),
+                    filters=None,  # Already filtered above
                 )
 
         # Select and rename columns

@@ -156,13 +156,21 @@ class NotebookApp:
 
     def _render_date_range_filter(self, var_id: str, variable) -> Dict[str, datetime]:
         """Render date range filter."""
-        default = variable.default
-        if isinstance(default, dict) and 'start' in default and 'end' in default:
-            default_start = default['start']
-            default_end = default['end']
+        # Get current filter value from context (already resolved)
+        filter_context = self.notebook_session.get_filter_context()
+        current_value = filter_context.get(var_id)
+
+        if current_value and isinstance(current_value, dict):
+            default_start = current_value['start']
+            default_end = current_value['end']
+            # Convert to date if datetime
+            if isinstance(default_start, datetime):
+                default_start = default_start.date()
+            if isinstance(default_end, datetime):
+                default_end = default_end.date()
         else:
-            default_start = datetime.now() - timedelta(days=30)
-            default_end = datetime.now()
+            default_start = datetime.now().date() - timedelta(days=30)
+            default_end = datetime.now().date()
 
         start_date = st.date_input(
             f"{variable.display_name} (Start)",

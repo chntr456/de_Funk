@@ -216,6 +216,9 @@ class GraphQueryEngine:
         # Apply additional filters
         if filters:
             for col_name, value in filters.items():
+                # Skip dict values (like date_range), they should be handled by FilterEngine
+                if isinstance(value, dict):
+                    continue
                 if isinstance(value, list):
                     df = df.filter(F.col(col_name).isin(value))
                 else:
