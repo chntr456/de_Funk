@@ -108,6 +108,13 @@ class CompanyModel:
     def build(self):
         nodes = self._build_nodes()
         self._apply_edges(nodes)
-        facts = self._materialize_paths(nodes)
+        paths = self._materialize_paths(nodes)
+
+        # Separate dims and facts
         dims = {k: v for k, v in nodes.items() if k.startswith("dim_")}
+        fact_nodes = {k: v for k, v in nodes.items() if k.startswith("fact_")}
+
+        # Combine fact nodes with materialized paths
+        facts = {**fact_nodes, **paths}
+
         return dims, facts
