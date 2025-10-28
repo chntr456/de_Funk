@@ -184,7 +184,6 @@ exhibits:
     columns:
       - trade_date
       - ticker
-      - company_name
       - avg_close_price
       - total_volume
       - max_high

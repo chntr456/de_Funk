@@ -191,15 +191,17 @@ class NotebookApp:
 
     def _render_multi_select_filter(self, var_id: str, variable) -> List[Any]:
         """Render multi-select filter."""
-        # Get options
-        options = variable.options if variable.options else variable.default
-
-        if not options:
-            # Try to load from dimension
-            try:
-                options = self.notebook_session.get_dimension_values(var_id)
-            except:
-                options = []
+        # Use explicit options if provided
+        if variable.options:
+            options = variable.options
+        # Use defaults as both options and selection if no source
+        elif not variable.source:
+            options = variable.default if variable.default else []
+        # If there's a source but loading would be expensive, just use defaults
+        else:
+            # For now, just use defaults rather than loading all options
+            # In production, you might want to load a limited set or provide search
+            options = variable.default if variable.default else []
 
         default = variable.default if variable.default else []
 
