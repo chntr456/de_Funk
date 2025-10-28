@@ -1,18 +1,16 @@
 # src/ui/streamlit_app.py
-# src/ui/streamlit_app.py
 from __future__ import annotations
 
-
-# --- import path bootstrap: ensure repo root is on sys.path ---
+# --- import path bootstrap: ensure repo root is on sys.path BEFORE other imports ---
 import sys
 from pathlib import Path
-
-# streamlit_app.py is at <repo>/src/ui/streamlit_app.py
-REPO_ROOT = Path(__file__).resolve().parents[2]  # parent of 'src'
+REPO_ROOT = Path(__file__).resolve().parents[2]  # repo/
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-# --------------------------------------------------------------
 
+# --- Streamlit must be first command: set page config here ---
+import streamlit as st
+st.set_page_config(page_title="Company Model Explorer", layout="wide")
 
 """
 Streamlit starter UI for exploring the Company model.
@@ -28,7 +26,6 @@ Notes:
 import datetime as dt
 from typing import List
 
-import streamlit as st
 from pyspark.sql import functions as F
 
 from src.orchestration.context import RepoContext
@@ -47,6 +44,12 @@ def get_ctx() -> RepoContext:
 def get_model_session() -> ModelSession:
     """Build ModelSession using the cached RepoContext (no args → no hashing of Spark)."""
     ctx = get_ctx()
+    # Optionally quiet Spark logs a bit in UI sessions:
+    try:
+        ctx.spark.sparkContext.setLogLevel("ERROR")
+        ctx.spark.conf.set("spark.ui.enabled", "false")
+    except Exception:
+        pass
     return ModelSession(ctx.spark, ctx.repo, ctx.storage)
 
 @st.cache_data(show_spinner=False)
@@ -143,10 +146,8 @@ class CompanyExplorerApp:
         )
 
         # Simple “top sources” bar
+        top = df.groupBy("source").count().orderBy(F.desc("count")).limit(10).toPandas()
         st.caption("Top sources")
-        top = (
-            df.groupBy("source").count().orderBy(F.desc("count")).limit(10).toPandas()
-        )
         if not top.empty:
             top = top.sort_values("count", ascending=False)
             st.bar_chart(top.set_index("source")["count"])
@@ -156,7 +157,6 @@ class CompanyExplorerApp:
     # ------------------------------------------------ main ------------------------------------------------
 
     def run(self):
-        st.set_page_config(page_title="Company Model Explorer", layout="wide")
         st.title("Company Model Explorer")
 
         with st.sidebar:
@@ -178,5 +178,4 @@ def main():
 
 if __name__ == "__main__":
     # Prefer: streamlit run src/ui/streamlit_app.py
-    # Running directly may show "missing ScriptRunContext" warnings in bare mode.
     main()
