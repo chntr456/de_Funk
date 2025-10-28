@@ -1,21 +1,20 @@
 """
-Professional notebook application with improved UX.
+Professional notebook application with vault-style navigation and themes.
 
 Features:
-- Clean, minimalist design
-- Dual-panel layout (Explorer + Filters)
 - Directory tree navigation
-- Day/night theme
-- Notebook management
+- Multiple notebook tabs
+- Toggle between YAML edit and rendered view
+- Nested scrollable filters
+- Day/night professional themes
 """
 
 import streamlit as st
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
 import yaml
 
 # Add parent directory to path for imports
@@ -32,97 +31,115 @@ from src.notebook.schema import VariableType, ExhibitType
 st.set_page_config(
     page_title="Notebook Platform",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 
-def apply_theme():
+def apply_professional_theme():
     """Apply professional theme styling."""
     theme = st.session_state.get('theme', 'light')
 
     if theme == 'dark':
-        bg_color = '#0e1117'
-        secondary_bg = '#262730'
-        text_color = '#fafafa'
-        border_color = '#3a3d45'
-        accent_color = '#4d9ef6'
+        colors = {
+            'bg': '#0E1117',
+            'sidebar_bg': '#262730',
+            'card_bg': '#1E2130',
+            'text': '#FAFAFA',
+            'text_muted': '#9CA3AF',
+            'border': '#3A3D45',
+            'accent': '#4D9EF6',
+            'accent_hover': '#3B82F6',
+        }
     else:
-        bg_color = '#ffffff'
-        secondary_bg = '#f0f2f6'
-        text_color = '#31333F'
-        border_color = '#e0e0e0'
-        accent_color = '#0068c9'
+        colors = {
+            'bg': '#FFFFFF',
+            'sidebar_bg': '#F0F2F6',
+            'card_bg': '#F8F9FA',
+            'text': '#262730',
+            'text_muted': '#6C757D',
+            'border': '#E0E0E0',
+            'accent': '#0068C9',
+            'accent_hover': '#0056A3',
+        }
 
     st.markdown(f"""
     <style>
-        /* Clean, minimal professional styling */
+        /* Main background */
         .main {{
-            background-color: {bg_color};
-        }}
-
-        /* Remove default padding */
-        .block-container {{
-            padding-top: 2rem;
-            padding-bottom: 0rem;
+            background-color: {colors['bg']};
         }}
 
         /* Sidebar styling */
-        .sidebar-panel {{
-            background-color: {secondary_bg};
-            padding: 1rem;
-            border-radius: 0.5rem;
-            height: 85vh;
-            overflow-y: auto;
+        section[data-testid="stSidebar"] {{
+            background-color: {colors['sidebar_bg']};
         }}
 
-        /* Tree item */
-        .tree-item {{
-            padding: 0.5rem;
-            margin: 0.25rem 0;
-            border-radius: 0.25rem;
-            cursor: pointer;
-            transition: background-color 0.2s;
+        section[data-testid="stSidebar"] .block-container {{
+            padding-top: 2rem;
         }}
 
-        .tree-item:hover {{
-            background-color: {border_color};
+        /* Headers */
+        .main h1, .main h2, .main h3 {{
+            color: {colors['text']};
         }}
 
-        /* Section headers */
-        .section-header {{
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin: 2rem 0 1rem 0;
-            padding-bottom: 0.5rem;
-            border-bottom: 2px solid {accent_color};
+        /* Section dividers */
+        hr {{
+            border-color: {colors['border']};
         }}
 
-        /* Metric card */
-        .metric-card {{
-            background-color: {secondary_bg};
-            padding: 1.5rem;
-            border-radius: 0.5rem;
-            text-align: center;
-            border-left: 4px solid {accent_color};
-        }}
-
-        .metric-value {{
-            font-size: 2rem;
+        /* Metric cards */
+        div[data-testid="stMetricValue"] {{
+            font-size: 2.5rem;
             font-weight: 700;
-            color: {accent_color};
+            color: {colors['accent']};
         }}
 
-        .metric-label {{
+        div[data-testid="stMetricLabel"] {{
             font-size: 0.9rem;
-            color: {text_color};
-            opacity: 0.7;
+            color: {colors['text_muted']};
             text-transform: uppercase;
             letter-spacing: 0.05em;
+        }}
+
+        /* Buttons */
+        .stButton > button {{
+            border-radius: 0.375rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }}
+
+        .stButton > button[kind="primary"] {{
+            background-color: {colors['accent']};
+            border-color: {colors['accent']};
+        }}
+
+        .stButton > button[kind="primary"]:hover {{
+            background-color: {colors['accent_hover']};
+            border-color: {colors['accent_hover']};
+        }}
+
+        /* Tab bar styling */
+        .tab-container {{
+            background-color: {colors['card_bg']};
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            margin-bottom: 1rem;
+        }}
+
+        /* Code editor */
+        .stCodeBlock {{
+            background-color: {colors['card_bg']};
         }}
 
         /* Hide Streamlit branding */
         #MainMenu {{visibility: hidden;}}
         footer {{visibility: hidden;}}
+
+        /* Plotly charts background */
+        .js-plotly-plot .plotly {{
+            background-color: {colors['card_bg']} !important;
+        }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -145,16 +162,31 @@ def get_notebook_session(_model_session, _ctx):
     return NotebookSession(_ctx.spark, _model_session, _ctx.repo)
 
 
-class NotebookApp:
-    """Professional notebook application."""
+# Session state initialization
+if 'open_tabs' not in st.session_state:
+    st.session_state.open_tabs = []  # List of (notebook_id, notebook_path, notebook_config)
+
+if 'active_tab' not in st.session_state:
+    st.session_state.active_tab = None
+
+if 'edit_mode' not in st.session_state:
+    st.session_state.edit_mode = {}  # Dict of notebook_id -> bool
+
+if 'yaml_content' not in st.session_state:
+    st.session_state.yaml_content = {}  # Dict of notebook_id -> yaml string
+
+if 'theme' not in st.session_state:
+    st.session_state.theme = 'light'  # 'light' or 'dark'
+
+# Apply theme
+apply_professional_theme()
+
+
+class NotebookVaultApp:
+    """Enhanced notebook application with vault-style navigation."""
 
     def __init__(self):
         """Initialize application."""
-        if 'theme' not in st.session_state:
-            st.session_state.theme = 'light'
-
-        apply_theme()
-
         self.ctx = get_repo_context()
         self.model_session = get_model_session(self.ctx)
         self.notebook_session = get_notebook_session(
@@ -162,110 +194,195 @@ class NotebookApp:
             self.ctx,
         )
         self.notebooks_root = self.ctx.repo / "configs" / "notebooks"
+        self.notebooks_root.mkdir(parents=True, exist_ok=True)
 
     def run(self):
         """Run the application."""
-        # Header with theme toggle
-        col1, col2 = st.columns([6, 1])
-        with col1:
-            st.title("📊 Notebook Platform")
+        # Theme toggle in top-right
+        col1, col2 = st.columns([0.95, 0.05])
         with col2:
-            icon = "🌙" if st.session_state.theme == 'light' else "☀️"
-            if st.button(icon, help="Toggle theme"):
+            theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
+            if st.button(theme_icon, help="Toggle theme", key="theme_toggle"):
                 st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
                 st.rerun()
 
-        st.divider()
+        # Sidebar: Directory tree + filters
+        with st.sidebar:
+            self._render_directory_tree()
 
-        # Three-column layout
-        left_col, main_col, right_col = st.columns([2, 6, 2])
+            # Show filters if a notebook is active
+            if st.session_state.active_tab:
+                st.divider()
+                self._render_filters_section()
 
-        with left_col:
-            self._render_explorer()
+        # Main content: Tabs
+        self._render_main_content()
 
-        with main_col:
-            self._render_main_content()
+    def _render_directory_tree(self):
+        """Render directory tree navigation."""
+        st.header("📚 Notebooks")
 
-        with right_col:
-            self._render_filters()
-
-    def _render_explorer(self):
-        """Render notebook explorer."""
-        st.markdown('<div class="sidebar-panel">', unsafe_allow_html=True)
-        st.markdown("### 📁 Notebooks")
-
-        # Scan notebooks
-        if not self.notebooks_root.exists():
-            self.notebooks_root.mkdir(parents=True, exist_ok=True)
-
-        notebooks = sorted(self.notebooks_root.rglob("*.yaml"))
+        # Scan for notebooks
+        notebooks = self._scan_notebooks()
 
         if not notebooks:
-            st.info("No notebooks found")
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.info("No notebooks found. Create a `.yaml` file in `configs/notebooks/`")
             return
 
-        # Group by folder
-        by_folder = {}
-        for nb_path in notebooks:
-            rel_path = nb_path.relative_to(self.notebooks_root)
-            folder = str(rel_path.parent) if rel_path.parent != Path('.') else "📄 Root"
-            if folder not in by_folder:
-                by_folder[folder] = []
-            by_folder[folder].append(nb_path)
+        # Group by directory
+        grouped = self._group_by_directory(notebooks)
 
         # Render tree
-        for folder, files in sorted(by_folder.items()):
-            if folder != "📄 Root":
-                st.markdown(f"**📂 {folder}**")
+        for folder, files in sorted(grouped.items()):
+            if folder == ".":
+                # Root level files
+                for file_path in sorted(files):
+                    self._render_notebook_item(file_path)
+            else:
+                # Folder with files
+                with st.expander(f"📁 {folder}", expanded=True):
+                    for file_path in sorted(files):
+                        self._render_notebook_item(file_path)
 
-            for nb_path in sorted(files):
-                if st.button(
-                    f"  📄 {nb_path.stem}",
-                    key=f"nb_{nb_path}",
-                    use_container_width=True
-                ):
-                    self._load_notebook(nb_path)
+    def _scan_notebooks(self) -> List[Path]:
+        """Scan for notebook YAML files."""
+        return list(self.notebooks_root.rglob("*.yaml"))
 
-        st.markdown('</div>', unsafe_allow_html=True)
+    def _group_by_directory(self, notebooks: List[Path]) -> Dict[str, List[Path]]:
+        """Group notebooks by their parent directory."""
+        grouped = {}
+        for notebook_path in notebooks:
+            # Get relative path from notebooks root
+            rel_path = notebook_path.relative_to(self.notebooks_root)
 
-    def _render_filters(self):
-        """Render filter controls."""
-        st.markdown('<div class="sidebar-panel">', unsafe_allow_html=True)
-        st.markdown("### 🎛️ Filters")
+            if len(rel_path.parts) == 1:
+                # Root level
+                folder = "."
+            else:
+                # In a subfolder
+                folder = rel_path.parts[0]
 
-        if 'notebook_loaded' not in st.session_state:
-            st.info("Load a notebook to see filters")
-            st.markdown('</div>', unsafe_allow_html=True)
+            if folder not in grouped:
+                grouped[folder] = []
+            grouped[folder].append(notebook_path)
+
+        return grouped
+
+    def _render_notebook_item(self, notebook_path: Path):
+        """Render a single notebook item in the tree."""
+        notebook_id = str(notebook_path.relative_to(self.notebooks_root))
+        notebook_name = notebook_path.stem
+
+        # Check if already open
+        is_open = any(tab[0] == notebook_id for tab in st.session_state.open_tabs)
+        is_active = st.session_state.active_tab == notebook_id
+
+        # Style based on state
+        if is_active:
+            icon = "📖"
+            label = f"**{notebook_name}**"
+        elif is_open:
+            icon = "📄"
+            label = f"*{notebook_name}*"
+        else:
+            icon = "📄"
+            label = notebook_name
+
+        # Click to open/activate
+        if st.button(f"{icon} {label}", key=f"nav_{notebook_id}", use_container_width=True):
+            self._open_notebook(notebook_id, notebook_path)
+
+    def _open_notebook(self, notebook_id: str, notebook_path: Path):
+        """Open a notebook (or switch to it if already open)."""
+        # Check if already open
+        existing_tab = next((tab for tab in st.session_state.open_tabs if tab[0] == notebook_id), None)
+
+        if existing_tab:
+            # Just switch to it
+            st.session_state.active_tab = notebook_id
+        else:
+            # Load the notebook
+            try:
+                notebook_config = self.notebook_session.load_notebook(str(notebook_path))
+                st.session_state.open_tabs.append((notebook_id, notebook_path, notebook_config))
+                st.session_state.active_tab = notebook_id
+                st.session_state.edit_mode[notebook_id] = False
+
+                # Load YAML content for editing
+                with open(notebook_path, 'r') as f:
+                    st.session_state.yaml_content[notebook_id] = f.read()
+
+            except Exception as e:
+                st.error(f"Error loading notebook: {str(e)}")
+
+        st.rerun()
+
+    def _close_tab(self, notebook_id: str):
+        """Close a notebook tab."""
+        # Remove from open tabs
+        st.session_state.open_tabs = [
+            tab for tab in st.session_state.open_tabs if tab[0] != notebook_id
+        ]
+
+        # Clear edit mode
+        if notebook_id in st.session_state.edit_mode:
+            del st.session_state.edit_mode[notebook_id]
+
+        # Clear YAML content
+        if notebook_id in st.session_state.yaml_content:
+            del st.session_state.yaml_content[notebook_id]
+
+        # Switch active tab
+        if st.session_state.active_tab == notebook_id:
+            if st.session_state.open_tabs:
+                st.session_state.active_tab = st.session_state.open_tabs[-1][0]
+            else:
+                st.session_state.active_tab = None
+
+        st.rerun()
+
+    def _render_filters_section(self):
+        """Render the filters section in sidebar."""
+        st.subheader("🎛️ Filters")
+
+        # Get active notebook
+        active_notebook = next(
+            (tab for tab in st.session_state.open_tabs if tab[0] == st.session_state.active_tab),
+            None
+        )
+
+        if not active_notebook:
             return
 
-        notebook_config = st.session_state.get('notebook_config')
-        if not notebook_config:
-            st.markdown('</div>', unsafe_allow_html=True)
-            return
+        notebook_id, notebook_path, notebook_config = active_notebook
 
-        filter_context = self.notebook_session.get_filter_context()
-        filter_values = {}
+        # Create a scrollable container for filters
+        with st.container():
+            filter_context = self.notebook_session.get_filter_context()
+            filter_values = {}
 
-        # Render each variable
-        for var_id, variable in notebook_config.variables.items():
-            st.markdown(f"**{variable.display_name}**")
+            # Render each variable as a filter control
+            for var_id, variable in notebook_config.variables.items():
+                if variable.type == VariableType.DATE_RANGE:
+                    filter_values[var_id] = self._render_date_range_filter(var_id, variable)
 
-            if variable.type == VariableType.DATE_RANGE:
-                filter_values[var_id] = self._render_date_filter(var_id, variable)
+                elif variable.type == VariableType.MULTI_SELECT:
+                    filter_values[var_id] = self._render_multi_select_filter(var_id, variable)
 
-            elif variable.type == VariableType.MULTI_SELECT:
-                filter_values[var_id] = self._render_multi_select(var_id, variable)
+                elif variable.type == VariableType.SINGLE_SELECT:
+                    filter_values[var_id] = self._render_single_select_filter(var_id, variable)
 
-            elif variable.type == VariableType.NUMBER:
-                filter_values[var_id] = self._render_number_filter(var_id, variable)
+                elif variable.type == VariableType.NUMBER:
+                    filter_values[var_id] = self._render_number_filter(var_id, variable)
 
-        if filter_values:
-            self.notebook_session.update_filters(filter_values)
+                elif variable.type == VariableType.BOOLEAN:
+                    filter_values[var_id] = self._render_boolean_filter(var_id, variable)
 
-        st.markdown('</div>', unsafe_allow_html=True)
+            # Update filter context
+            if filter_values:
+                self.notebook_session.update_filters(filter_values)
 
-    def _render_date_filter(self, var_id: str, variable) -> Dict[str, datetime]:
+    def _render_date_range_filter(self, var_id: str, variable) -> Dict[str, datetime]:
         """Render date range filter."""
         filter_context = self.notebook_session.get_filter_context()
         current_value = filter_context.get(var_id)
@@ -281,35 +398,53 @@ class NotebookApp:
             default_start = datetime.now().date() - timedelta(days=30)
             default_end = datetime.now().date()
 
-        start = st.date_input(
-            "From",
+        start_date = st.date_input(
+            f"{variable.display_name} (Start)",
             value=default_start,
             key=f"filter_{var_id}_start",
-            label_visibility="collapsed"
         )
-        end = st.date_input(
-            "To",
+
+        end_date = st.date_input(
+            f"{variable.display_name} (End)",
             value=default_end,
             key=f"filter_{var_id}_end",
-            label_visibility="collapsed"
         )
 
         return {
-            'start': datetime.combine(start, datetime.min.time()),
-            'end': datetime.combine(end, datetime.min.time()),
+            'start': datetime.combine(start_date, datetime.min.time()),
+            'end': datetime.combine(end_date, datetime.min.time()),
         }
 
-    def _render_multi_select(self, var_id: str, variable) -> List[Any]:
+    def _render_multi_select_filter(self, var_id: str, variable) -> List[Any]:
         """Render multi-select filter."""
-        options = variable.default if variable.default else []
+        if variable.options:
+            options = variable.options
+        elif not variable.source:
+            options = variable.default if variable.default else []
+        else:
+            options = variable.default if variable.default else []
+
         default = variable.default if variable.default else []
 
         return st.multiselect(
-            "Select",
+            variable.display_name,
             options=options,
             default=default,
             key=f"filter_{var_id}",
-            label_visibility="collapsed"
+            help=variable.description,
+        )
+
+    def _render_single_select_filter(self, var_id: str, variable) -> Any:
+        """Render single-select filter."""
+        options = variable.options if variable.options else []
+        default = variable.default
+
+        return st.selectbox(
+            variable.display_name,
+            options=options,
+            index=options.index(default) if default in options else 0,
+            key=f"filter_{var_id}",
+            help=variable.description,
         )
 
     def _render_number_filter(self, var_id: str, variable) -> float:
@@ -317,42 +452,161 @@ class NotebookApp:
         default = variable.default if variable.default is not None else 0.0
 
         return st.number_input(
-            "Value",
+            variable.display_name,
             value=float(default),
             key=f"filter_{var_id}",
-            label_visibility="collapsed"
+            help=variable.description,
+        )
+
+    def _render_boolean_filter(self, var_id: str, variable) -> bool:
+        """Render boolean filter."""
+        default = variable.default if variable.default is not None else False
+
+        return st.checkbox(
+            variable.display_name,
+            value=default,
+            key=f"filter_{var_id}",
+            help=variable.description,
         )
 
     def _render_main_content(self):
-        """Render main content area."""
-        if 'notebook_loaded' not in st.session_state:
+        """Render main content area with tabs."""
+        if not st.session_state.open_tabs:
             self._render_welcome()
             return
 
-        notebook_config = st.session_state.get('notebook_config')
-        if not notebook_config:
-            return
+        # Render tabs
+        tab_names = [f"{tab[2].notebook.title}" for tab in st.session_state.open_tabs]
 
-        # Notebook title
-        st.header(notebook_config.notebook.title)
-        if notebook_config.notebook.description:
-            st.caption(notebook_config.notebook.description)
+        # Create tabs with close buttons
+        cols = st.columns([0.9, 0.1] * len(st.session_state.open_tabs))
+
+        for i, (notebook_id, notebook_path, notebook_config) in enumerate(st.session_state.open_tabs):
+            with cols[i * 2]:
+                is_active = st.session_state.active_tab == notebook_id
+                if st.button(
+                    notebook_config.notebook.title,
+                    key=f"tab_{notebook_id}",
+                    type="primary" if is_active else "secondary",
+                    use_container_width=True,
+                ):
+                    st.session_state.active_tab = notebook_id
+                    st.rerun()
+
+            with cols[i * 2 + 1]:
+                if st.button("✕", key=f"close_{notebook_id}"):
+                    self._close_tab(notebook_id)
 
         st.divider()
 
-        # Render sections
-        for layout_item in notebook_config.layout:
-            if hasattr(layout_item, 'section'):
-                section = layout_item.section
-                self._render_section(section)
+        # Render active notebook
+        active_notebook = next(
+            (tab for tab in st.session_state.open_tabs if tab[0] == st.session_state.active_tab),
+            None
+        )
+
+        if active_notebook:
+            self._render_notebook_content(active_notebook)
+
+    def _render_notebook_content(self, notebook_tuple):
+        """Render the content of a notebook."""
+        notebook_id, notebook_path, notebook_config = notebook_tuple
+
+        # Toggle between edit and view mode
+        col1, col2 = st.columns([0.1, 0.9])
+
+        with col1:
+            edit_mode = st.session_state.edit_mode.get(notebook_id, False)
+
+            if st.button("📝 Edit" if not edit_mode else "📊 View", key=f"toggle_{notebook_id}"):
+                st.session_state.edit_mode[notebook_id] = not edit_mode
+                st.rerun()
+
+        with col2:
+            st.title(notebook_config.notebook.title)
+            if notebook_config.notebook.description:
+                st.caption(notebook_config.notebook.description)
+
+        st.divider()
+
+        # Render based on mode
+        if st.session_state.edit_mode.get(notebook_id, False):
+            self._render_yaml_editor(notebook_id, notebook_path)
+        else:
+            self._render_notebook_exhibits(notebook_id, notebook_config)
+
+    def _render_yaml_editor(self, notebook_id: str, notebook_path: Path):
+        """Render YAML editor."""
+        st.subheader("📝 Edit Notebook YAML")
+
+        # Get current YAML content
+        yaml_content = st.session_state.yaml_content.get(notebook_id, "")
+
+        # Text area for editing
+        edited_content = st.text_area(
+            "YAML Content",
+            value=yaml_content,
+            height=600,
+            key=f"yaml_editor_{notebook_id}",
+        )
+
+        # Save button
+        col1, col2, col3 = st.columns([0.2, 0.2, 0.6])
+
+        with col1:
+            if st.button("💾 Save", key=f"save_{notebook_id}"):
+                try:
+                    # Validate YAML
+                    yaml.safe_load(edited_content)
+
+                    # Save to file
+                    with open(notebook_path, 'w') as f:
+                        f.write(edited_content)
+
+                    # Update session state
+                    st.session_state.yaml_content[notebook_id] = edited_content
+
+                    # Reload notebook
+                    notebook_config = self.notebook_session.load_notebook(str(notebook_path))
+
+                    # Update open tab
+                    for i, tab in enumerate(st.session_state.open_tabs):
+                        if tab[0] == notebook_id:
+                            st.session_state.open_tabs[i] = (notebook_id, notebook_path, notebook_config)
+                            break
+
+                    st.success("✅ Notebook saved and reloaded!")
+
+                except yaml.YAMLError as e:
+                    st.error(f"❌ Invalid YAML: {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Error saving: {str(e)}")
+
+        with col2:
+            if st.button("🔄 Reload", key=f"reload_{notebook_id}"):
+                with open(notebook_path, 'r') as f:
+                    st.session_state.yaml_content[notebook_id] = f.read()
+                st.rerun()
+
+        # Preview
+        st.subheader("📋 YAML Preview")
+        st.code(edited_content, language="yaml")
+
+    def _render_notebook_exhibits(self, notebook_id: str, notebook_config):
+        """Render notebook exhibits."""
+        # Render layout sections
+        for section in notebook_config.layout:
+            self._render_section(section)
 
     def _render_section(self, section):
         """Render a layout section."""
         if section.title:
-            st.markdown(f'<div class="section-header">{section.title}</div>', unsafe_allow_html=True)
+            st.subheader(section.title)
+        if section.description:
+            st.markdown(section.description)
 
         # Create columns if specified
-        if hasattr(section, 'columns') and section.columns > 1:
+        if section.columns > 1:
             cols = st.columns(section.columns)
             for i, exhibit_id in enumerate(section.exhibits):
                 with cols[i % section.columns]:
@@ -363,16 +617,28 @@ class NotebookApp:
 
     def _render_exhibit(self, exhibit_id: str):
         """Render an exhibit."""
-        notebook_config = st.session_state['notebook_config']
+        active_notebook = next(
+            (tab for tab in st.session_state.open_tabs if tab[0] == st.session_state.active_tab),
+            None
+        )
+
+        if not active_notebook:
+            return
+
+        notebook_id, notebook_path, notebook_config = active_notebook
 
         # Find exhibit
-        exhibit = next((ex for ex in notebook_config.exhibits if ex.id == exhibit_id), None)
+        exhibit = None
+        for ex in notebook_config.exhibits:
+            if ex.id == exhibit_id:
+                exhibit = ex
+                break
 
         if not exhibit:
             st.error(f"Exhibit not found: {exhibit_id}")
             return
 
-        # Get data
+        # Get data for exhibit
         try:
             with st.spinner(f"Loading {exhibit.title}..."):
                 df = self.notebook_session.get_exhibit_data(exhibit_id)
@@ -388,133 +654,129 @@ class NotebookApp:
             elif exhibit.type == ExhibitType.DATA_TABLE:
                 self._render_data_table(exhibit, pdf)
             else:
-                st.warning(f"Unsupported exhibit type: {exhibit.type}")
+                st.warning(f"Exhibit type not yet implemented: {exhibit.type}")
 
         except Exception as e:
-            st.error(f"Error rendering {exhibit_id}: {str(e)}")
+            st.error(f"Error rendering exhibit: {str(e)}")
             with st.expander("Show details"):
                 st.exception(e)
 
     def _render_metric_cards(self, exhibit, pdf: pd.DataFrame):
-        """Render metric cards."""
+        """Render metric cards exhibit."""
         st.subheader(exhibit.title)
-        if exhibit.description:
-            st.caption(exhibit.description)
 
-        if not hasattr(exhibit, 'metrics') or not exhibit.metrics:
-            st.warning("No metrics defined")
-            return
+        if exhibit.metrics:
+            cols = st.columns(len(exhibit.metrics))
+            for i, metric_config in enumerate(exhibit.metrics):
+                with cols[i]:
+                    measure_id = metric_config.measure
+                    if measure_id in pdf.columns:
+                        value = pdf[measure_id].iloc[0] if len(pdf) > 0 else 0
 
-        # Calculate columns based on number of metrics
-        num_metrics = len(exhibit.metrics)
-        cols = st.columns(num_metrics)
+                        # Format value based on magnitude
+                        if pd.isna(value):
+                            formatted = "N/A"
+                        elif abs(value) >= 1e9:
+                            formatted = f"${value/1e9:.2f}B"
+                        elif abs(value) >= 1e6:
+                            formatted = f"${value/1e6:.2f}M"
+                        elif abs(value) >= 1e3:
+                            formatted = f"${value/1e3:.2f}K"
+                        else:
+                            formatted = f"${value:,.2f}"
 
-        for i, metric_config in enumerate(exhibit.metrics):
-            with cols[i]:
-                measure_id = metric_config.measure
-                if measure_id in pdf.columns and len(pdf) > 0:
-                    value = pdf[measure_id].iloc[0]
-
-                    # Format value
-                    if pd.isna(value):
-                        formatted = "N/A"
-                    elif value >= 1e9:
-                        formatted = f"${value/1e9:.2f}B"
-                    elif value >= 1e6:
-                        formatted = f"${value/1e6:.2f}M"
-                    elif value >= 1e3:
-                        formatted = f"${value/1e3:.2f}K"
+                        # Use Streamlit metric with delta styling
+                        display_name = measure_id.replace('_', ' ').title()
+                        st.metric(label=display_name, value=formatted)
                     else:
-                        formatted = f"${value:,.2f}"
-
-                    # Use custom card HTML
-                    st.markdown(f"""
-                    <div class="metric-card">
-                        <div class="metric-label">{measure_id.replace('_', ' ').title()}</div>
-                        <div class="metric-value">{formatted}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                else:
-                    st.metric(label=measure_id, value="N/A")
+                        st.metric(label=measure_id.replace('_', ' ').title(), value="N/A")
 
     def _render_line_chart(self, exhibit, pdf: pd.DataFrame):
-        """Render line chart."""
+        """Render line chart exhibit."""
         st.subheader(exhibit.title)
-        if exhibit.description:
-            st.caption(exhibit.description)
 
-        if not hasattr(exhibit, 'x_axis') or not hasattr(exhibit, 'y_axis'):
-            st.warning("Chart configuration incomplete")
-            return
+        if exhibit.x_axis and exhibit.y_axis:
+            x_col = exhibit.x_axis.dimension
+            y_cols = exhibit.y_axis.measures or [exhibit.y_axis.measure]
 
-        x_col = exhibit.x_axis.dimension
-        y_cols = exhibit.y_axis.measures if hasattr(exhibit.y_axis, 'measures') else [exhibit.y_axis.measure]
-
-        fig = px.line(
-            pdf,
-            x=x_col,
-            y=y_cols,
-            color=exhibit.color_by if hasattr(exhibit, 'color_by') and exhibit.color_by else None,
-            labels={x_col: exhibit.x_axis.label if hasattr(exhibit.x_axis, 'label') else x_col},
-        )
-
-        # Theme-aware styling
-        if st.session_state.theme == 'dark':
-            fig.update_layout(
-                plot_bgcolor='#262730',
-                paper_bgcolor='#262730',
-                font_color='#fafafa'
+            fig = px.line(
+                pdf,
+                x=x_col,
+                y=y_cols,
+                color=exhibit.color_by if exhibit.color_by else None,
+                title=exhibit.title,
+                labels={x_col: exhibit.x_axis.label or x_col},
             )
 
-        st.plotly_chart(fig, use_container_width=True)
+            # Apply theme to chart
+            if st.session_state.theme == 'dark':
+                fig.update_layout(
+                    plot_bgcolor='#1E2130',
+                    paper_bgcolor='#1E2130',
+                    font_color='#FAFAFA',
+                    xaxis=dict(gridcolor='#3A3D45'),
+                    yaxis=dict(gridcolor='#3A3D45'),
+                )
+            else:
+                fig.update_layout(
+                    plot_bgcolor='#F8F9FA',
+                    paper_bgcolor='#F8F9FA',
+                )
+
+            st.plotly_chart(fig, use_container_width=True)
 
     def _render_bar_chart(self, exhibit, pdf: pd.DataFrame):
-        """Render bar chart."""
+        """Render bar chart exhibit."""
         st.subheader(exhibit.title)
-        if exhibit.description:
-            st.caption(exhibit.description)
 
-        if not hasattr(exhibit, 'x_axis') or not hasattr(exhibit, 'y_axis'):
-            st.warning("Chart configuration incomplete")
-            return
+        if exhibit.x_axis and exhibit.y_axis:
+            x_col = exhibit.x_axis.dimension
+            y_cols = exhibit.y_axis.measures or [exhibit.y_axis.measure]
 
-        x_col = exhibit.x_axis.dimension
-        y_cols = exhibit.y_axis.measures if hasattr(exhibit.y_axis, 'measures') else [exhibit.y_axis.measure]
-
-        fig = px.bar(
-            pdf,
-            x=x_col,
-            y=y_cols[0] if y_cols else None,
-            color=exhibit.color_by if hasattr(exhibit, 'color_by') and exhibit.color_by else None,
-        )
-
-        # Theme-aware styling
-        if st.session_state.theme == 'dark':
-            fig.update_layout(
-                plot_bgcolor='#262730',
-                paper_bgcolor='#262730',
-                font_color='#fafafa'
+            fig = px.bar(
+                pdf,
+                x=x_col,
+                y=y_cols[0] if y_cols else None,
+                color=exhibit.color_by if exhibit.color_by else None,
+                title=exhibit.title,
             )
 
-        st.plotly_chart(fig, use_container_width=True)
+            # Apply theme to chart
+            if st.session_state.theme == 'dark':
+                fig.update_layout(
+                    plot_bgcolor='#1E2130',
+                    paper_bgcolor='#1E2130',
+                    font_color='#FAFAFA',
+                    xaxis=dict(gridcolor='#3A3D45'),
+                    yaxis=dict(gridcolor='#3A3D45'),
+                )
+            else:
+                fig.update_layout(
+                    plot_bgcolor='#F8F9FA',
+                    paper_bgcolor='#F8F9FA',
+                )
+
+            st.plotly_chart(fig, use_container_width=True)
 
     def _render_data_table(self, exhibit, pdf: pd.DataFrame):
-        """Render data table."""
+        """Render data table exhibit."""
         st.subheader(exhibit.title)
+
         if exhibit.description:
             st.caption(exhibit.description)
 
+        # Display dataframe
         st.dataframe(
             pdf,
             use_container_width=True,
             hide_index=True,
         )
 
-        # Download button
-        if hasattr(exhibit, 'download') and exhibit.download:
+        # Download button if enabled
+        if exhibit.download:
             csv = pdf.to_csv(index=False)
             st.download_button(
-                label="📥 Download CSV",
+                label="Download CSV",
                 data=csv,
                 file_name=f"{exhibit.id}.csv",
                 mime="text/csv",
@@ -522,47 +784,48 @@ class NotebookApp:
 
     def _render_welcome(self):
         """Render welcome screen."""
+        st.title("📊 Notebook Platform")
+
         st.markdown("""
-        ## Welcome to the Notebook Platform
+        ## Professional Financial Modeling Environment
 
-        ### Professional Financial Modeling Environment
+        ### Features
 
-        **Get Started:**
-        1. Select a notebook from the left sidebar
-        2. Adjust filters in the right sidebar
-        3. Explore your data with interactive exhibits
+        **📁 Notebook Library**
+        - Organized directory structure
+        - Multi-tab interface
+        - Quick navigation
 
-        **Features:**
-        - 📊 Dynamic exhibits with real-time filtering
-        - 🎨 Clean, professional design with dark/light themes
-        - 📁 Organized notebook library
-        - 🚀 High-performance data processing
+        **📝 YAML Configuration**
+        - Inline YAML editor
+        - Real-time validation
+        - Hot reload
+
+        **🎛️ Dynamic Filtering**
+        - Time-based filters
+        - Multi-select dimensions
+        - Context-aware filtering
+
+        **📊 Interactive Exhibits**
+        - Metric cards with smart formatting
+        - Line and bar charts
+        - Data tables with export
+        - Theme-aware visualizations
+
+        **🎨 Professional Design**
+        - Light/dark themes
+        - Clean, minimal interface
+        - Consulting-grade appearance
 
         ---
 
-        *Select a notebook from the Explorer to begin*
+        **Get Started:** Select a notebook from the sidebar →
         """)
-
-    def _load_notebook(self, notebook_path: Path):
-        """Load a notebook."""
-        try:
-            with st.spinner("Loading notebook..."):
-                notebook_config = self.notebook_session.load_notebook(str(notebook_path))
-
-                st.session_state['notebook_loaded'] = True
-                st.session_state['notebook_config'] = notebook_config
-
-                st.success(f"✓ Loaded: {notebook_config.notebook.title}")
-                st.rerun()
-
-        except Exception as e:
-            st.error(f"Error loading notebook: {str(e)}")
-            st.exception(e)
 
 
 def main():
     """Main entry point."""
-    app = NotebookApp()
+    app = NotebookVaultApp()
     app.run()
 
 
