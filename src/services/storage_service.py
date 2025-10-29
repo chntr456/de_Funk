@@ -1,168 +1,259 @@
 """
-Silver Storage Service.
+Generic Silver Storage Service.
 
-Service layer for reading from the Silver layer with caching and filtering.
+Provides data access to Silver layer using model registry (no table-specific methods).
+Uses connection layer abstraction for future extensibility.
 """
 
-from typing import Dict, List, Optional
-from datetime import datetime
-from pyspark.sql import DataFrame, SparkSession
-import pyspark.sql.functions as F
+from typing import Dict, List, Optional, Any
+from pathlib import Path
+
+from ..core.connection import DataConnection
+from ..core.model_registry import ModelRegistry
 
 
 class SilverStorageService:
     """
-    Service for reading from Silver layer.
+    Generic service for reading from Silver layer.
 
     Responsibilities:
-    - Read Silver layer tables
-    - Apply simple filters (date range, tickers, etc.)
-    - Cache DataFrames for performance
-    - Abstract storage details from upper layers
+    - Read any table by model + table name
+    - Apply filters
+    - Cache DataFrames
+    - NO table-specific methods (scalable to any model/table)
 
     Usage:
-        service = SilverStorageService(spark, storage_cfg)
-        df = service.get_prices_with_company(
-            start_date="2024-01-01",
-            end_date="2024-01-05",
-            tickers=["AAPL", "GOOGL"]
-        )
+        service = SilverStorageService(connection, model_registry)
+
+        # Get any table
+        df = service.get_table("company", "fact_prices", filters={...})
+
+        # List available data
+        models = service.list_models()
+        tables = service.list_tables("company")
+        schema = service.get_schema("company", "fact_prices")
     """
 
-    def __init__(self, spark: SparkSession, storage_cfg: Dict):
+    def __init__(
+        self,
+        connection: DataConnection,
+        model_registry: ModelRegistry,
+    ):
         """
         Initialize storage service.
 
         Args:
-            spark: Spark session
-            storage_cfg: Storage configuration (storage.json)
+            connection: Data connection (Spark, DuckDB, etc.)
+            model_registry: Model registry for metadata
         """
-        self.spark = spark
-        self.storage_cfg = storage_cfg
-        self._cache: Dict[str, DataFrame] = {}
+        self.connection = connection
+        self.model_registry = model_registry
+        self._cache: Dict[str, Any] = {}
 
-    def _silver_path(self, table: str) -> str:
-        """Get Silver layer path for a table."""
-        root = self.storage_cfg["roots"]["silver"]
-        rel = self.storage_cfg["tables"][table]["rel"]
-        return f"{root.rstrip('/')}/{rel}"
-
-    def _read_silver(self, table: str, use_cache: bool = True) -> DataFrame:
-        """
-        Read Silver table with optional caching.
-
-        Args:
-            table: Table name (from storage.json)
-            use_cache: Whether to use cached DataFrame
-
-        Returns:
-            DataFrame from Silver layer
-        """
-        if use_cache and table in self._cache:
-            return self._cache[table]
-
-        path = self._silver_path(table)
-        df = self.spark.read.parquet(path)
-
-        if use_cache:
-            df.cache()
-            self._cache[table] = df
-
-        return df
-
-    def get_dim_company(
+    def get_table(
         self,
-        tickers: Optional[List[str]] = None
-    ) -> DataFrame:
+        model_name: str,
+        table_name: str,
+        filters: Optional[Dict[str, Any]] = None,
+        use_cache: bool = True,
+    ) -> Any:
         """
-        Get dim_company dimension table.
+        Get table data with optional filters.
 
         Args:
-            tickers: Optional list of tickers to filter
+            model_name: Model name (e.g., 'company')
+            table_name: Table name (e.g., 'fact_prices', 'dim_company')
+            filters: Optional filters to apply
+            use_cache: Whether to use cached data
 
         Returns:
-            DataFrame with columns: ticker, company_name, exchange_code, company_id
-        """
-        df = self._read_silver("dim_company")
+            DataFrame (type depends on connection)
 
-        if tickers:
-            df = df.filter(F.col("ticker").isin(tickers))
+        Raises:
+            ValueError: If model or table not found
+
+        Example:
+            df = service.get_table(
+                "company",
+                "fact_prices",
+                filters={
+                    "trade_date": {"start": "2024-01-01", "end": "2024-01-05"},
+                    "ticker": ["AAPL", "GOOGL"]
+                }
+            )
+        """
+        # Validate model and table exist
+        model = self.model_registry.get_model(model_name)
+        if not model.has_table(table_name):
+            raise ValueError(
+                f"Table '{table_name}' not found in model '{model_name}'. "
+                f"Available: {model.list_tables()}"
+            )
+
+        # Build cache key
+        cache_key = f"{model_name}.{table_name}"
+
+        # Check cache
+        if use_cache and cache_key in self._cache:
+            df = self._cache[cache_key]
+        else:
+            # Get table path from model
+            table_path = model.get_table_path(table_name)
+
+            # Read from storage
+            df = self.connection.read_table(table_path, model.storage_format)
+
+            # Cache if requested
+            if use_cache:
+                df = self.connection.cache(df)
+                self._cache[cache_key] = df
+
+        # Apply filters if provided
+        if filters:
+            df = self.connection.apply_filters(df, filters)
 
         return df
 
-    def get_dim_exchange(self) -> DataFrame:
+    def list_models(self) -> List[str]:
         """
-        Get dim_exchange dimension table.
+        List all available models.
 
         Returns:
-            DataFrame with columns: exchange_code, exchange_name
-        """
-        return self._read_silver("dim_exchange")
+            List of model names
 
-    def get_fact_prices(
-        self,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        tickers: Optional[List[str]] = None,
-    ) -> DataFrame:
+        Example:
+            ['company', 'fund', 'macro']
         """
-        Get fact_prices table with optional filters.
+        return self.model_registry.list_models()
+
+    def list_tables(self, model_name: str) -> List[str]:
+        """
+        List all tables in a model.
 
         Args:
-            start_date: Start date (YYYY-MM-DD)
-            end_date: End date (YYYY-MM-DD)
-            tickers: List of tickers to filter
+            model_name: Model name
 
         Returns:
-            DataFrame with columns: trade_date, ticker, open, high, low, close,
-                                   volume_weighted, volume
+            List of table names
+
+        Example:
+            ['dim_company', 'dim_exchange', 'fact_prices', ...]
         """
-        df = self._read_silver("fact_prices")
+        model = self.model_registry.get_model(model_name)
+        return model.list_tables()
 
-        # Apply filters
-        if start_date:
-            df = df.filter(F.col("trade_date") >= start_date)
-        if end_date:
-            df = df.filter(F.col("trade_date") <= end_date)
-        if tickers:
-            df = df.filter(F.col("ticker").isin(tickers))
+    def list_dimensions(self, model_name: str) -> List[str]:
+        """List dimension tables in a model."""
+        model = self.model_registry.get_model(model_name)
+        return model.list_dimensions()
 
-        return df
+    def list_facts(self, model_name: str) -> List[str]:
+        """List fact tables in a model."""
+        model = self.model_registry.get_model(model_name)
+        return model.list_facts()
 
-    def get_prices_with_company(
-        self,
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        tickers: Optional[List[str]] = None,
-    ) -> DataFrame:
+    def list_measures(self, model_name: str) -> List[str]:
         """
-        Get prices_with_company materialized path with optional filters.
-
-        This is a pre-joined table: fact_prices + dim_company + dim_exchange
+        List available measures in a model.
 
         Args:
-            start_date: Start date (YYYY-MM-DD)
-            end_date: End date (YYYY-MM-DD)
-            tickers: List of tickers to filter
+            model_name: Model name
 
         Returns:
-            DataFrame with columns: trade_date, ticker, company_name, exchange_name,
-                                   open, high, low, close, volume_weighted, volume
+            List of measure names
+
+        Example:
+            ['avg_close_price', 'total_volume', 'max_high', ...]
         """
-        df = self._read_silver("prices_with_company")
+        model = self.model_registry.get_model(model_name)
+        return model.list_measures()
 
-        # Apply filters
-        if start_date:
-            df = df.filter(F.col("trade_date") >= start_date)
-        if end_date:
-            df = df.filter(F.col("trade_date") <= end_date)
-        if tickers:
-            df = df.filter(F.col("ticker").isin(tickers))
+    def get_schema(self, model_name: str, table_name: str) -> Dict[str, str]:
+        """
+        Get schema (columns and types) for a table.
 
-        return df
+        Args:
+            model_name: Model name
+            table_name: Table name
 
-    def clear_cache(self):
-        """Clear all cached DataFrames."""
-        for df in self._cache.values():
-            df.unpersist()
-        self._cache.clear()
+        Returns:
+            Dict of column_name -> data_type
+
+        Example:
+            {
+                'ticker': 'string',
+                'company_name': 'string',
+                'trade_date': 'date',
+                'close': 'double'
+            }
+        """
+        return self.model_registry.get_table_schema(model_name, table_name)
+
+    def get_measure_config(self, model_name: str, measure_name: str) -> Dict:
+        """
+        Get measure configuration.
+
+        Args:
+            model_name: Model name
+            measure_name: Measure name
+
+        Returns:
+            Measure configuration dict
+
+        Example:
+            {
+                'name': 'avg_close_price',
+                'description': 'Average closing price',
+                'source': 'fact_prices.close',
+                'aggregation': 'avg',
+                'format': '$#,##0.00'
+            }
+        """
+        model = self.model_registry.get_model(model_name)
+        measure = model.get_measure(measure_name)
+
+        return {
+            'name': measure.name,
+            'description': measure.description,
+            'source': measure.source,
+            'aggregation': measure.aggregation,
+            'data_type': measure.data_type,
+            'format': measure.format,
+            'tags': measure.tags
+        }
+
+    def clear_cache(self, model_name: Optional[str] = None, table_name: Optional[str] = None):
+        """
+        Clear cached data.
+
+        Args:
+            model_name: If provided, clear only this model's cache
+            table_name: If provided (with model_name), clear only this table
+        """
+        if model_name and table_name:
+            # Clear specific table
+            cache_key = f"{model_name}.{table_name}"
+            if cache_key in self._cache:
+                self.connection.uncache(self._cache[cache_key])
+                del self._cache[cache_key]
+
+        elif model_name:
+            # Clear all tables for a model
+            keys_to_remove = [k for k in self._cache.keys() if k.startswith(f"{model_name}.")]
+            for key in keys_to_remove:
+                self.connection.uncache(self._cache[key])
+                del self._cache[key]
+
+        else:
+            # Clear everything
+            for df in self._cache.values():
+                self.connection.uncache(df)
+            self._cache.clear()
+
+    def get_model_registry(self) -> ModelRegistry:
+        """Get the model registry (for advanced use cases)."""
+        return self.model_registry
+
+    def get_connection(self) -> DataConnection:
+        """Get the data connection (for advanced use cases)."""
+        return self.connection
