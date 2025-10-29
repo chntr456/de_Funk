@@ -78,15 +78,24 @@ class NotebookParser:
         Returns:
             NotebookConfig object
         """
+        # Parse dimensions and measures if present (backward compatibility)
+        dimensions = None
+        if 'dimensions' in data and data['dimensions']:
+            dimensions = self._parse_dimensions(data['dimensions'])
+
+        measures = None
+        if 'measures' in data and data['measures']:
+            measures = self._parse_measures(data['measures'])
+
         return NotebookConfig(
             version=data['version'],
             notebook=self._parse_metadata(data['notebook']),
             graph=self._parse_graph(data['graph']),
             variables=self._parse_variables(data.get('variables', {})),
-            dimensions=self._parse_dimensions(data.get('dimensions', [])),
-            measures=self._parse_measures(data.get('measures', [])),
             exhibits=self._parse_exhibits(data.get('exhibits', [])),
             layout=self._parse_layout(data.get('layout', [])),
+            dimensions=dimensions,
+            measures=measures,
             exports=self._parse_exports(data.get('exports', [])),
         )
 
@@ -321,6 +330,7 @@ class NotebookParser:
                 type=exhibit_type,
                 title=e['title'],
                 description=e.get('description'),
+                source=e.get('source'),
                 filters=e.get('filters'),
                 x_axis=x_axis,
                 y_axis=y_axis,

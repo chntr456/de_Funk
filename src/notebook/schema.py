@@ -196,6 +196,7 @@ class Exhibit:
     type: ExhibitType
     title: str
     description: Optional[str] = None
+    source: Optional[str] = None  # model.table reference (e.g., "company.prices_with_company")
     filters: Optional[Dict[str, str]] = None  # filter_id: variable_ref
 
     # Chart configurations
@@ -269,8 +270,8 @@ class NotebookConfig:
     notebook: NotebookMetadata
     graph: GraphConfig
     variables: Dict[str, Variable]
-    dimensions: List[Dimension]
-    measures: List[Measure]
     exhibits: List[Exhibit]
     layout: List[Section]
+    dimensions: Optional[List[Dimension]] = None  # Optional: deprecated in favor of model-defined dimensions
+    measures: Optional[List[Measure]] = None  # Optional: deprecated in favor of model-defined measures
     exports: Optional[List[ExportConfig]] = None

@@ -42,94 +42,14 @@ variables:
     default: 0
     display_name: "Minimum Volume"
 
-# Dimensions define attributes from dimension tables
-dimensions:
-  - id: ticker
-    source:
-      model: company
-      node: dim_company
-      column: ticker
-    display_name: "Ticker Symbol"
-    type: string
-
-  - id: company_name
-    source:
-      model: company
-      node: dim_company
-      column: company_name
-    display_name: "Company Name"
-    type: string
-
-  - id: trade_date
-    source:
-      model: company
-      node: fact_prices
-      column: trade_date
-    display_name: "Trade Date"
-    type: date
-    format: "YYYY-MM-DD"
-
-  - id: exchange_name
-    source:
-      model: company
-      node: dim_exchange
-      column: exchange_name
-    display_name: "Exchange"
-    type: string
-
-# Measures define calculations and aggregations
-measures:
-  - id: avg_close_price
-    source:
-      model: company
-      node: fact_prices
-      column: close
-    aggregation: avg
-    display_name: "Average Close Price"
-    format: "$#,##0.00"
-
-  - id: total_volume
-    source:
-      model: company
-      node: fact_prices
-      column: volume
-    aggregation: sum
-    display_name: "Total Volume"
-    format: "#,##0"
-
-  - id: max_high
-    source:
-      model: company
-      node: fact_prices
-      column: high
-    aggregation: max
-    display_name: "Highest Price"
-    format: "$#,##0.00"
-
-  - id: min_low
-    source:
-      model: company
-      node: fact_prices
-      column: low
-    aggregation: min
-    display_name: "Lowest Price"
-    format: "$#,##0.00"
-
-  - id: vwap
-    source:
-      model: company
-      node: fact_prices
-      column: volume_weighted
-    aggregation: avg
-    display_name: "Volume Weighted Average Price"
-    format: "$#,##0.00"
-
 # Exhibits define visualizations and interactions
+# All dimensions and measures come from the model - no duplication!
 exhibits:
   - id: price_overview
     type: metric_cards
     title: "Price Overview"
     description: "Key price metrics for selected period"
+    source: company.prices_with_company
     filters:
       time: $time
       tickers: $tickers
@@ -145,6 +65,7 @@ exhibits:
     type: line_chart
     title: "Daily Closing Prices"
     description: "Price trends over time"
+    source: company.prices_with_company
     filters:
       time: $time
       tickers: $tickers
@@ -163,6 +84,7 @@ exhibits:
     type: bar_chart
     title: "Trading Volume by Stock"
     description: "Total volume comparison"
+    source: company.prices_with_company
     filters:
       time: $time
       tickers: $tickers
@@ -178,16 +100,18 @@ exhibits:
   - id: detailed_prices
     type: data_table
     title: "Detailed Price Data"
+    source: company.prices_with_company
     filters:
       time: $time
       tickers: $tickers
     columns:
       - trade_date
       - ticker
-      - avg_close_price
-      - total_volume
-      - max_high
-      - min_low
+      - company_name
+      - close
+      - volume
+      - high
+      - low
     pagination: true
     page_size: 50
     download: true
