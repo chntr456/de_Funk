@@ -15,6 +15,7 @@ from pyspark.sql import DataFrame
 from .storage_service import SilverStorageService
 from ..notebook.schema import NotebookConfig, Exhibit, Variable, VariableType
 from ..notebook.parser import NotebookParser
+from ..core.validation import NotebookValidator, ValidationError
 
 
 class NotebookService:
@@ -23,6 +24,7 @@ class NotebookService:
 
     Responsibilities ONLY:
     - Load and parse notebook YAML
+    - Validate against models
     - Manage filter state
     - Fetch pre-computed data from SilverStorageService
     - Apply filters
@@ -38,6 +40,7 @@ class NotebookService:
         self,
         storage_service: SilverStorageService,
         repo_root: Optional[Path] = None,
+        validate_on_load: bool = True,
     ):
         """
         Initialize notebook service.
@@ -45,28 +48,71 @@ class NotebookService:
         Args:
             storage_service: Silver storage service for data access
             repo_root: Repository root for resolving paths
+            validate_on_load: Whether to validate notebooks on load (default: True)
         """
         self.storage_service = storage_service
         self.repo_root = repo_root or Path.cwd()
         self.parser = NotebookParser(repo_root)
+        self.validate_on_load = validate_on_load
+
+        # Get validator from storage service
+        model_registry = storage_service.get_model_registry()
+        self.validator = NotebookValidator(model_registry)
 
         # State
         self.notebook_config: Optional[NotebookConfig] = None
         self.filter_values: Dict[str, Any] = {}
+        self.validation_errors: List[ValidationError] = []
+        self.validation_warnings: List[ValidationError] = []
 
     def load_notebook(self, notebook_path: str) -> NotebookConfig:
         """
-        Load notebook from YAML file.
+        Load notebook from YAML file with validation.
 
         Args:
             notebook_path: Path to notebook YAML
 
         Returns:
             Parsed notebook configuration
+
+        Raises:
+            ValueError: If validation fails (when validate_on_load=True)
         """
         self.notebook_config = self.parser.parse_file(notebook_path)
+
+        # Validate
+        if self.validate_on_load:
+            self.validation_errors = self.validator.get_errors(self.notebook_config)
+            self.validation_warnings = self.validator.get_warnings(self.notebook_config)
+
+            if self.validation_errors:
+                error_messages = '\n'.join([
+                    f"  [{e.level.upper()}] {e.location}: {e.message}"
+                    for e in self.validation_errors
+                ])
+                raise ValueError(f"Notebook validation failed:\n{error_messages}")
+
         self._initialize_filters()
         return self.notebook_config
+
+    def get_validation_status(self) -> Dict[str, Any]:
+        """
+        Get validation status.
+
+        Returns:
+            Dict with validation results
+        """
+        return {
+            'is_valid': len(self.validation_errors) == 0,
+            'errors': [
+                {'level': e.level, 'location': e.location, 'message': e.message}
+                for e in self.validation_errors
+            ],
+            'warnings': [
+                {'level': e.level, 'location': e.location, 'message': e.message}
+                for e in self.validation_warnings
+            ]
+        }
 
     def _initialize_filters(self):
         """Initialize filter values with defaults from notebook."""
