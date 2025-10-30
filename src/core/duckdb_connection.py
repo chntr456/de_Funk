@@ -132,6 +132,20 @@ class DuckDBConnection(DataConnection):
             # Fallback: execute and convert
             return self.conn.execute("SELECT * FROM df").df()
 
+    def count(self, df: Any) -> int:
+        """
+        Get row count from DuckDB relation.
+
+        Args:
+            df: DuckDB relation
+
+        Returns:
+            Number of rows
+        """
+        # Execute count query
+        result = self.conn.execute("SELECT COUNT(*) FROM df").fetchone()
+        return result[0] if result else 0
+
     def cache(self, df: Any, name: Optional[str] = None) -> Any:
         """
         Cache a DuckDB relation.
@@ -143,30 +157,39 @@ class DuckDBConnection(DataConnection):
         Returns:
             Cached relation
         """
-        if name:
-            # Create a temporary table
-            self.conn.execute(f"CREATE TEMP TABLE {name} AS SELECT * FROM df")
-            self._cached_tables[name] = True
-            return self.conn.table(name)
+        # Generate a name if not provided
+        if not name:
+            name = f"_cached_{id(df)}"
 
-        return df
+        # Create a temporary table
+        self.conn.execute(f"CREATE TEMP TABLE {name} AS SELECT * FROM df")
+        self._cached_tables[name] = df
+        return self.conn.table(name)
 
-    def uncache(self, name: str):
+    def uncache(self, df: Any):
         """
         Remove cached table.
 
         Args:
-            name: Name of cached table to remove
+            df: DuckDB relation to uncache
         """
-        if name in self._cached_tables:
-            self.conn.execute(f"DROP TABLE IF EXISTS {name}")
-            del self._cached_tables[name]
+        # Find the name associated with this dataframe
+        name_to_remove = None
+        for name, cached_df in self._cached_tables.items():
+            if cached_df is df:
+                name_to_remove = name
+                break
+
+        if name_to_remove:
+            self.conn.execute(f"DROP TABLE IF EXISTS {name_to_remove}")
+            del self._cached_tables[name_to_remove]
 
     def stop(self):
         """Close the DuckDB connection."""
         # Clear cached tables
         for name in list(self._cached_tables.keys()):
-            self.uncache(name)
+            self.conn.execute(f"DROP TABLE IF EXISTS {name}")
+        self._cached_tables.clear()
 
         # Close connection
         if self.conn:
