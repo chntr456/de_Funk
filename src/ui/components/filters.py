@@ -6,16 +6,44 @@ Provides UI controls for different variable types (date range, multi-select, etc
 
 import streamlit as st
 from datetime import datetime, timedelta
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 
-def render_filters_section(notebook_config, notebook_session):
+@st.cache_data(ttl=300)
+def _get_distinct_values(_connection, table: str, column: str) -> List[Any]:
+    """
+    Query DuckDB for distinct values in a column.
+
+    Args:
+        _connection: DataConnection instance (DuckDB or Spark)
+        table: Table name to query
+        column: Column name to get distinct values from
+
+    Returns:
+        Sorted list of distinct values
+    """
+    try:
+        # Build query to get distinct values
+        query = f"SELECT DISTINCT {column} FROM {table} WHERE {column} IS NOT NULL ORDER BY {column}"
+        df = _connection.query(query)
+        pdf = _connection.to_pandas(df)
+
+        # Convert to list
+        values = pdf[column].tolist()
+        return values
+    except Exception as e:
+        st.warning(f"Could not load dynamic options for {column}: {str(e)}")
+        return []
+
+
+def render_filters_section(notebook_config, notebook_session, connection=None):
     """
     Render the filters section for a notebook.
 
     Args:
         notebook_config: NotebookConfig with variables
         notebook_session: NotebookSession for filter context
+        connection: Optional DataConnection for dynamic filter options
     """
     st.subheader("🎛️ Filters")
 
@@ -33,10 +61,14 @@ def render_filters_section(notebook_config, notebook_session):
                 filter_values[var_id] = render_date_range_filter(var_id, variable, notebook_session)
 
             elif variable.type == VariableType.MULTI_SELECT:
-                filter_values[var_id] = render_multi_select_filter(var_id, variable)
+                filter_values[var_id] = render_multi_select_filter(
+                    var_id, variable, connection=connection
+                )
 
             elif variable.type == VariableType.SINGLE_SELECT:
-                filter_values[var_id] = render_single_select_filter(var_id, variable)
+                filter_values[var_id] = render_single_select_filter(
+                    var_id, variable, connection=connection
+                )
 
             elif variable.type == VariableType.NUMBER:
                 filter_values[var_id] = render_number_filter(var_id, variable)
@@ -83,16 +115,47 @@ def render_date_range_filter(var_id: str, variable, notebook_session) -> Dict[st
     }
 
 
-def render_multi_select_filter(var_id: str, variable) -> List[Any]:
-    """Render multi-select filter."""
+def render_multi_select_filter(var_id: str, variable, connection=None) -> List[Any]:
+    """
+    Render multi-select filter with dynamic options from DuckDB.
+
+    Args:
+        var_id: Variable identifier
+        variable: Variable configuration
+        connection: Optional DataConnection for querying dynamic options
+
+    Returns:
+        List of selected values
+    """
+    # Determine options source
     if variable.options:
+        # Static options from YAML
         options = variable.options
-    elif not variable.source:
-        options = variable.default if variable.default else []
+    elif hasattr(variable, 'source') and variable.source and connection:
+        # Dynamic options from DuckDB query
+        # Source is a SourceReference object with model, node, column
+        source_ref = variable.source
+        table = source_ref.node  # e.g., "fact_prices"
+        column = source_ref.column  # e.g., "ticker"
+
+        if not column:
+            # If no column specified, use the variable id as column name
+            column = var_id
+
+        options = _get_distinct_values(connection, table, column)
+
+        if not options:
+            # Fallback to default if query fails
+            options = variable.default if variable.default else []
     else:
+        # No options source, use default
         options = variable.default if variable.default else []
 
     default = variable.default if variable.default else []
+
+    # Filter default to only include values that exist in options
+    if default and options:
+        default = [d for d in default if d in options]
 
     return st.multiselect(
         variable.display_name,
@@ -103,15 +166,48 @@ def render_multi_select_filter(var_id: str, variable) -> List[Any]:
     )
 
 
-def render_single_select_filter(var_id: str, variable) -> Any:
-    """Render single-select filter."""
-    options = variable.options if variable.options else []
+def render_single_select_filter(var_id: str, variable, connection=None) -> Any:
+    """
+    Render single-select filter with dynamic options from DuckDB.
+
+    Args:
+        var_id: Variable identifier
+        variable: Variable configuration
+        connection: Optional DataConnection for querying dynamic options
+
+    Returns:
+        Selected value
+    """
+    # Determine options source
+    if variable.options:
+        # Static options from YAML
+        options = variable.options
+    elif hasattr(variable, 'source') and variable.source and connection:
+        # Dynamic options from DuckDB query
+        # Source is a SourceReference object with model, node, column
+        source_ref = variable.source
+        table = source_ref.node  # e.g., "fact_prices"
+        column = source_ref.column  # e.g., "ticker"
+
+        if not column:
+            # If no column specified, use the variable id as column name
+            column = var_id
+
+        options = _get_distinct_values(connection, table, column)
+
+        if not options:
+            # Fallback to default if query fails
+            options = [variable.default] if variable.default else []
+    else:
+        # No options source, use default
+        options = [variable.default] if variable.default else []
+
     default = variable.default
 
     return st.selectbox(
         variable.display_name,
         options=options,
-        index=options.index(default) if default in options else 0,
+        index=options.index(default) if default and default in options else 0,
         key=f"filter_{var_id}",
         help=variable.description,
     )

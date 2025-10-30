@@ -127,7 +127,7 @@ class NotebookVaultApp:
                 active_notebook = self._get_active_notebook()
                 if active_notebook:
                     _, _, notebook_config = active_notebook
-                    render_filters_section(notebook_config, self.notebook_session)
+                    render_filters_section(notebook_config, self.notebook_session, self.ctx.connection)
 
         # Main content: Tabs
         self._render_main_content()
