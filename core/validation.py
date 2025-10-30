@@ -7,7 +7,7 @@ Validates notebook configurations against available models.
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 
-from .model_registry import ModelRegistry
+from models.registry import ModelRegistry
 from ..notebook.schema import NotebookConfig, Exhibit
 
 

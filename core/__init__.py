@@ -3,13 +3,11 @@ Core infrastructure for de_Funk.
 
 Provides foundational abstractions for:
 - Data connections (Spark, DuckDB, future: GraphDB)
-- Model registry and configuration
+- Repository context
 - Validation
 """
 
-from .connection import DataConnection, SparkConnection, ConnectionFactory, get_spark_connection
-from .model_registry import ModelRegistry, ModelConfig, TableConfig, MeasureConfig
-from .validation import NotebookValidator, ValidationError
+from .connection import DataConnection
 
 # DuckDB connection (lazy import - only if duckdb is installed)
 try:
@@ -19,16 +17,13 @@ except ImportError:
     DuckDBConnection = None
     _duckdb_available = False
 
+from .validation import NotebookValidator, ValidationError
+from .context import RepoContext
+
 __all__ = [
     'DataConnection',
-    'SparkConnection',
     'DuckDBConnection',
-    'ConnectionFactory',
-    'get_spark_connection',
-    'ModelRegistry',
-    'ModelConfig',
-    'TableConfig',
-    'MeasureConfig',
     'NotebookValidator',
     'ValidationError',
+    'RepoContext',
 ]
