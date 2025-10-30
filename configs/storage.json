@@ -1,7 +1,7 @@
 {
   "connection": {
-    "type": "duckdb",
-    "comment": "Options: 'spark' or 'duckdb'. DuckDB is much faster for interactive queries."
+    "type": "spark",
+    "comment": "Default for pipelines/builds. Use 'spark' (ETL/writes) or 'duckdb' (UI/reads - 10-100x faster)."
   },
   "roots": {
     "bronze": "storage/bronze",
