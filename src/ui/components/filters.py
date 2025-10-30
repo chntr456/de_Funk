@@ -127,12 +127,9 @@ def render_multi_select_filter(var_id: str, variable, connection=None) -> List[A
     Returns:
         List of selected values
     """
-    # Determine options source
-    if variable.options:
-        # Static options from YAML
-        options = variable.options
-    elif hasattr(variable, 'source') and variable.source and connection:
-        # Dynamic options from DuckDB query
+    # Determine options source - prioritize dynamic source over static options
+    if hasattr(variable, 'source') and variable.source and connection:
+        # Dynamic options from DuckDB query (PRIORITY)
         # Source is a SourceReference object with model, node, column
         source_ref = variable.source
         table = source_ref.node  # e.g., "fact_prices"
@@ -144,9 +141,17 @@ def render_multi_select_filter(var_id: str, variable, connection=None) -> List[A
 
         options = _get_distinct_values(connection, table, column)
 
+        # Show indicator that dynamic loading is active
+        if options:
+            st.caption(f"ℹ️ {len(options)} options loaded from {table}.{column}")
+
         if not options:
-            # Fallback to default if query fails
-            options = variable.default if variable.default else []
+            # Fallback to static options or default if query fails
+            st.warning(f"⚠️ Could not load dynamic options from {table}.{column}, using fallback")
+            options = variable.options if variable.options else (variable.default if variable.default else [])
+    elif variable.options:
+        # Static options from YAML (fallback)
+        options = variable.options
     else:
         # No options source, use default
         options = variable.default if variable.default else []
@@ -178,12 +183,9 @@ def render_single_select_filter(var_id: str, variable, connection=None) -> Any:
     Returns:
         Selected value
     """
-    # Determine options source
-    if variable.options:
-        # Static options from YAML
-        options = variable.options
-    elif hasattr(variable, 'source') and variable.source and connection:
-        # Dynamic options from DuckDB query
+    # Determine options source - prioritize dynamic source over static options
+    if hasattr(variable, 'source') and variable.source and connection:
+        # Dynamic options from DuckDB query (PRIORITY)
         # Source is a SourceReference object with model, node, column
         source_ref = variable.source
         table = source_ref.node  # e.g., "fact_prices"
@@ -195,9 +197,17 @@ def render_single_select_filter(var_id: str, variable, connection=None) -> Any:
 
         options = _get_distinct_values(connection, table, column)
 
+        # Show indicator that dynamic loading is active
+        if options:
+            st.caption(f"ℹ️ {len(options)} options loaded from {table}.{column}")
+
         if not options:
-            # Fallback to default if query fails
-            options = [variable.default] if variable.default else []
+            # Fallback to static options or default if query fails
+            st.warning(f"⚠️ Could not load dynamic options from {table}.{column}, using fallback")
+            options = variable.options if variable.options else ([variable.default] if variable.default else [])
+    elif variable.options:
+        # Static options from YAML (fallback)
+        options = variable.options
     else:
         # No options source, use default
         options = [variable.default] if variable.default else []
