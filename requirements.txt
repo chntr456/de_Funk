@@ -1,0 +1,17 @@
+# Core dependencies for the Notebook Application
+
+# Web Framework
+streamlit>=1.28.0
+
+# Data Processing
+pyspark>=3.4.0
+pandas>=2.0.0
+
+# Visualization
+plotly>=5.17.0
+
+# Configuration
+pyyaml>=6.0
+
+# Optional: For better performance
+pyarrow>=13.0.0
