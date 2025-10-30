@@ -29,7 +29,7 @@ try:
     # 1. Create RepoContext with DuckDB
     print("\n1. Creating RepoContext with DuckDB...")
     start = time.time()
-    from src.orchestration.context import RepoContext
+    from core.context import RepoContext
 
     ctx = RepoContext.from_repo_root(connection_type="duckdb")
     elapsed_context = time.time() - start
@@ -55,7 +55,7 @@ try:
     # 3. Create StorageService with DuckDB
     print("\n3. Creating StorageService with DuckDB...")
     start = time.time()
-    from src.services.storage_service import SilverStorageService
+    from app.services.storage_service import SilverStorageService
 
     storage_service = SilverStorageService(
         connection=ctx.connection,

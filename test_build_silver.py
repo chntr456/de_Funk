@@ -25,8 +25,8 @@ print("=" * 60)
 try:
     # Import dependencies
     print("\n1. Loading dependencies...")
-    from src.orchestration.context import RepoContext
-    from src.model.silver.company_silver_builder import CompanySilverBuilder, load_config
+    from core.context import RepoContext
+    from models.builders.company_silver_builder import CompanySilverBuilder, load_config
     print("   ✓ Dependencies loaded")
 
     # Initialize context

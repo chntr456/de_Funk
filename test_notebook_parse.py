@@ -24,7 +24,7 @@ try:
 
     # Temporarily handle the import issue by mocking pyspark if needed
     try:
-        from src.notebook.parser import NotebookParser
+        from app.notebook.parser import NotebookParser
     except ModuleNotFoundError as e:
         if 'pyspark' in str(e):
             # Mock pyspark for parsing test
@@ -32,7 +32,7 @@ try:
             from unittest.mock import MagicMock
             sys.modules['pyspark'] = MagicMock()
             sys.modules['pyspark.sql'] = MagicMock()
-            from src.notebook.parser import NotebookParser
+            from app.notebook.parser import NotebookParser
         else:
             raise
 

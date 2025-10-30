@@ -35,9 +35,9 @@ except ImportError:
     print("   ✓ pyspark installed")
 
 # Import after ensuring pyspark is available
-from src.common.spark_session import get_spark
-from src.model.silver.company_silver_builder import CompanySilverBuilder, load_config
-from src.model.loaders.parquet_loader_optimized import ParquetLoaderOptimized
+from orchestration.common.spark_session import get_spark
+from models.builders.company_silver_builder import CompanySilverBuilder, load_config
+from models.loaders.parquet_loader_optimized import ParquetLoaderOptimized
 
 # Check storage
 print("\n2. Checking storage...")
