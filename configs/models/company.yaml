@@ -1,13 +1,145 @@
 version: 1
 model: company
 tags: [equities, polygon, us]
+
+# Storage configuration (model owns its storage)
+storage:
+  root: storage/silver/company
+  format: parquet
+
+# Schema definitions - source of truth for available tables
+schema:
+  dimensions:
+    dim_company:
+      path: dims/dim_company
+      description: "Company dimension with ticker and exchange info"
+      columns:
+        ticker: string
+        company_name: string
+        exchange_code: string
+        company_id: string
+      primary_key: [ticker]
+      tags: [dim, entity, company]
+
+    dim_exchange:
+      path: dims/dim_exchange
+      description: "Exchange reference dimension"
+      columns:
+        exchange_code: string
+        exchange_name: string
+      primary_key: [exchange_code]
+      tags: [dim, ref, exchange]
+
+  facts:
+    fact_prices:
+      path: facts/fact_prices
+      description: "Daily stock prices"
+      columns:
+        trade_date: date
+        ticker: string
+        open: double
+        high: double
+        low: double
+        close: double
+        volume_weighted: double
+        volume: long
+      partitions: [trade_date]
+      tags: [fact, prices, timeseries]
+
+    fact_news:
+      path: facts/fact_news
+      description: "News articles by ticker"
+      columns:
+        publish_date: date
+        ticker: string
+        article_id: string
+        title: string
+        source: string
+        sentiment: double
+      partitions: [publish_date]
+      tags: [fact, news]
+
+    prices_with_company:
+      path: facts/prices_with_company
+      description: "Prices joined with company and exchange info"
+      columns:
+        trade_date: date
+        ticker: string
+        company_name: string
+        exchange_name: string
+        open: double
+        high: double
+        low: double
+        close: double
+        volume_weighted: double
+        volume: long
+      partitions: [trade_date]
+      tags: [canonical, analytics, materialized]
+
+    news_with_company:
+      path: facts/news_with_company
+      description: "News joined with company info"
+      columns:
+        publish_date: date
+        ticker: string
+        company_name: string
+        article_id: string
+        title: string
+        source: string
+        sentiment: double
+      partitions: [publish_date]
+      tags: [news, analytics, materialized]
+
+# Available measures - pre-defined aggregations
+measures:
+  avg_close_price:
+    description: "Average closing price"
+    source: fact_prices.close
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00"
+    tags: [price, average]
+
+  total_volume:
+    description: "Total trading volume"
+    source: fact_prices.volume
+    aggregation: sum
+    data_type: long
+    format: "#,##0"
+    tags: [volume, total]
+
+  max_high:
+    description: "Highest price in period"
+    source: fact_prices.high
+    aggregation: max
+    data_type: double
+    format: "$#,##0.00"
+    tags: [price, max]
+
+  min_low:
+    description: "Lowest price in period"
+    source: fact_prices.low
+    aggregation: min
+    data_type: double
+    format: "$#,##0.00"
+    tags: [price, min]
+
+  avg_vwap:
+    description: "Average volume weighted average price"
+    source: fact_prices.volume_weighted
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00"
+    tags: [price, vwap]
+
+# Graph structure for visualization and future graph database
 graph:
   nodes:
     - id: dim_company
       from: bronze.ref_ticker
       select:
         ticker: ticker
-        company_name: name        # <— renamed here
+        company_name: name
         exchange_code: exchange_code
       derive:
         company_id: "sha1(ticker)"
@@ -17,8 +149,8 @@ graph:
     - id: dim_exchange
       from: bronze.exchanges
       select:
-        exchange_code: code       # <— align key name with company
-        exchange_name: name       # <— renamed here
+        exchange_code: code
+        exchange_name: name
       tags: [dim, ref, exchange]
       unique_key: [exchange_code]
 
@@ -47,12 +179,31 @@ graph:
       tags: [fact, news]
 
   edges:
-    - { from: fact_prices, to: dim_company,   on: ["ticker=ticker"],        type: many_to_one }
-    - { from: dim_company, to: dim_exchange,  on: ["exchange_code=exchange_code"], type: many_to_one }
-    - { from: fact_news,   to: dim_company,   on: ["ticker=ticker"],        type: many_to_one }
+    - from: fact_prices
+      to: dim_company
+      on: ["ticker=ticker"]
+      type: many_to_one
+      description: "Prices belong to a company"
+
+    - from: dim_company
+      to: dim_exchange
+      on: ["exchange_code=exchange_code"]
+      type: many_to_one
+      description: "Company lists on an exchange"
+
+    - from: fact_news
+      to: dim_company
+      on: ["ticker=ticker"]
+      type: many_to_one
+      description: "News articles about a company"
 
   paths:
-    - { id: prices_with_company, hops: "fact_prices -> dim_company -> dim_exchange", tags: [canonical, analytics] }
-    - { id: news_with_company,   hops: "fact_news -> dim_company",                   tags: [news, analytics] }
+    - id: prices_with_company
+      hops: "fact_prices -> dim_company -> dim_exchange"
+      description: "Prices with full company and exchange context"
+      tags: [canonical, analytics]
 
-
+    - id: news_with_company
+      hops: "fact_news -> dim_company"
+      description: "News with company context"
+      tags: [news, analytics]

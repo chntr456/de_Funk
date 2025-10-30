@@ -1,4 +1,8 @@
 {
+  "connection": {
+    "type": "spark",
+    "comment": "Default for pipelines/builds. Use 'spark' (ETL/writes) or 'duckdb' (UI/reads - 10-100x faster)."
+  },
   "roots": {
     "bronze": "storage/bronze",
     "silver": "storage/silver"

@@ -1,0 +1,20 @@
+# Core dependencies for the Notebook Application
+
+# Web Framework
+streamlit>=1.28.0
+
+# Data Processing
+pandas>=2.0.0
+duckdb>=0.9.0  # Fast analytics engine (10-100x faster than Spark for UI)
+
+# Visualization
+plotly>=5.17.0
+
+# Configuration
+pyyaml>=6.0
+
+# Storage
+pyarrow>=13.0.0  # For Parquet support
+
+# Optional: Spark (only needed for ETL pipelines, not for notebook UI)
+# pyspark>=3.4.0  # Uncomment if running ETL pipelines

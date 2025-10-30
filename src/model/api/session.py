@@ -53,6 +53,38 @@ class ModelSession:
             raise KeyError(f"Silver path '{path_id}' not built.")
         return facts[path_id]
 
+    def get_dimension_df(self, model_name: str, node_name: str) -> DataFrame:
+        """
+        Get a dimension dataframe.
+
+        Args:
+            model_name: Model name (e.g., 'company')
+            node_name: Node name (e.g., 'dim_company')
+
+        Returns:
+            Dimension dataframe
+        """
+        dims, _ = self.ensure_built()
+        if node_name not in dims:
+            raise KeyError(f"Dimension '{node_name}' not found in model '{model_name}'. Available dims: {list(dims.keys())}")
+        return dims[node_name]
+
+    def get_fact_df(self, model_name: str, node_name: str) -> DataFrame:
+        """
+        Get a fact dataframe.
+
+        Args:
+            model_name: Model name (e.g., 'company')
+            node_name: Node name (e.g., 'fact_prices')
+
+        Returns:
+            Fact dataframe
+        """
+        _, facts = self.ensure_built()
+        if node_name not in facts:
+            raise KeyError(f"Fact '{node_name}' not found in model '{model_name}'. Available facts: {list(facts.keys())}")
+        return facts[node_name]
+
     # Optional: writer if you decide to persist silver later
     def persist_silver(self, outputs: Dict[str, str]):
         """

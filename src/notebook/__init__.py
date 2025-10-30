@@ -2,7 +2,7 @@
 Notebook module for YAML-based financial modeling notebooks.
 
 This module provides declarative notebook capabilities with:
-- Graph-based data modeling
+- Model-centric data definitions
 - Complex measures and aggregations
 - Dynamic exhibits and visualizations
 - Sophisticated filtering
@@ -19,7 +19,9 @@ from .schema import (
     Exhibit,
 )
 from .parser import NotebookParser
-from .api.notebook_session import NotebookSession
+
+# NotebookSession is deprecated - use NotebookService from src.services instead
+# from .api.notebook_session import NotebookSession
 
 __all__ = [
     "NotebookConfig",
@@ -31,5 +33,4 @@ __all__ = [
     "Measure",
     "Exhibit",
     "NotebookParser",
-    "NotebookSession",
 ]
