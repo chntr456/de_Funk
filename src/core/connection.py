@@ -195,9 +195,17 @@ class ConnectionFactory:
                 raise ValueError("spark_session required for Spark connection")
             return SparkConnection(spark_session)
 
+        elif connection_type == "duckdb":
+            try:
+                from .duckdb_connection import DuckDBConnection
+                return DuckDBConnection(**kwargs)
+            except ImportError:
+                raise ValueError(
+                    "DuckDB connection requires 'duckdb' package. "
+                    "Install it with: pip install duckdb"
+                )
+
         # Future implementations:
-        # elif connection_type == "duckdb":
-        #     return DuckDBConnection(**kwargs)
         # elif connection_type == "graph":
         #     return GraphDBConnection(**kwargs)
 

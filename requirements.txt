@@ -13,5 +13,8 @@ plotly>=5.17.0
 # Configuration
 pyyaml>=6.0
 
-# Optional: For better performance
-pyarrow>=13.0.0
+# Storage
+pyarrow>=13.0.0  # For Parquet support
+
+# Optional: DuckDB for faster analytics (recommended)
+duckdb>=0.9.0  # Much faster than Spark for single-node workloads
