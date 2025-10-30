@@ -87,10 +87,18 @@ class NotebookParser:
         if 'measures' in data and data['measures']:
             measures = self._parse_measures(data['measures'])
 
+        # Parse graph if present (backward compatibility with old format)
+        graph = None
+        if 'graph' in data and data['graph']:
+            graph = self._parse_graph(data['graph'])
+        else:
+            # Create empty graph for new simplified format
+            graph = GraphConfig(models=[], bridges=[])
+
         return NotebookConfig(
             version=data['version'],
             notebook=self._parse_metadata(data['notebook']),
-            graph=self._parse_graph(data['graph']),
+            graph=graph,
             variables=self._parse_variables(data.get('variables', {})),
             exhibits=self._parse_exhibits(data.get('exhibits', [])),
             layout=self._parse_layout(data.get('layout', [])),
