@@ -1,12 +1,13 @@
 #!/bin/bash
 #
-# Run the Notebook Application
+# Run the Notebook Application (DuckDB-powered)
 #
-# This script starts the Streamlit-based notebook application.
+# This script starts the Streamlit-based notebook application with DuckDB backend.
+# DuckDB provides 10-100x faster queries compared to Spark for interactive use.
 #
 
 echo "=================================================="
-echo "  Starting Notebook Application"
+echo "  Starting Notebook Application (DuckDB)"
 echo "=================================================="
 echo ""
 
@@ -15,7 +16,9 @@ if ! command -v streamlit &> /dev/null; then
     echo "ERROR: Streamlit is not installed."
     echo ""
     echo "Please install it with:"
-    echo "  pip install streamlit plotly pyyaml pyspark pandas"
+    echo "  pip install streamlit plotly pyyaml pandas duckdb pyarrow"
+    echo ""
+    echo "Note: pyspark is NOT required for this DuckDB-powered app!"
     echo ""
     exit 1
 fi

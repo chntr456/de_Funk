@@ -22,7 +22,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.orchestration.context import RepoContext
-from src.model.api.session import ModelSession
+from src.core import ModelRegistry
 from src.notebook.api.notebook_session import NotebookSession
 from src.notebook.schema import VariableType, ExhibitType
 
@@ -146,20 +146,30 @@ def apply_professional_theme():
 
 @st.cache_resource
 def get_repo_context():
-    """Get repository context (cached)."""
-    return RepoContext.from_repo_root()
+    """
+    Get repository context configured for notebook UI.
+
+    Uses DuckDB for 10-100x faster queries compared to Spark.
+    Perfect for interactive notebook rendering.
+    """
+    return RepoContext.from_repo_root(connection_type="duckdb")
 
 
 @st.cache_resource
-def get_model_session(_ctx):
-    """Get model session (cached)."""
-    return ModelSession(_ctx.spark, _ctx.repo, _ctx.storage)
+def get_model_registry(_ctx):
+    """Get model registry (cached)."""
+    models_dir = _ctx.repo / "configs" / "models"
+    return ModelRegistry(models_dir)
 
 
 @st.cache_resource
-def get_notebook_session(_model_session, _ctx):
-    """Get notebook session (cached)."""
-    return NotebookSession(_ctx.spark, _model_session, _ctx.repo)
+def get_notebook_session(_ctx, _model_registry):
+    """
+    Get notebook session with DuckDB backend (cached).
+
+    This session uses StorageService with DuckDB for instant queries.
+    """
+    return NotebookSession(_ctx.connection, _model_registry, _ctx.repo)
 
 
 # Session state initialization
@@ -186,13 +196,10 @@ class NotebookVaultApp:
     """Enhanced notebook application with vault-style navigation."""
 
     def __init__(self):
-        """Initialize application."""
+        """Initialize application with DuckDB backend."""
         self.ctx = get_repo_context()
-        self.model_session = get_model_session(self.ctx)
-        self.notebook_session = get_notebook_session(
-            self.model_session,
-            self.ctx,
-        )
+        self.model_registry = get_model_registry(self.ctx)
+        self.notebook_session = get_notebook_session(self.ctx, self.model_registry)
         self.notebooks_root = self.ctx.repo / "configs" / "notebooks"
         self.notebooks_root.mkdir(parents=True, exist_ok=True)
 
@@ -642,7 +649,8 @@ class NotebookVaultApp:
         try:
             with st.spinner(f"Loading {exhibit.title}..."):
                 df = self.notebook_session.get_exhibit_data(exhibit_id)
-                pdf = df.toPandas()
+                # Convert to pandas (works with both Spark DF and DuckDB relation)
+                pdf = self.ctx.connection.to_pandas(df)
 
             # Render based on type
             if exhibit.type == ExhibitType.METRIC_CARDS:

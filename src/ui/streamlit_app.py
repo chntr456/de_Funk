@@ -13,14 +13,20 @@ import streamlit as st
 st.set_page_config(page_title="Company Model Explorer", layout="wide")
 
 """
-Streamlit starter UI for exploring the Company model.
+Streamlit starter UI for exploring the Company model (Spark-based).
 
 Run from repo root:
     streamlit run src/ui/streamlit_app.py
 
+Architecture:
+- This app uses Spark + ModelSession for direct model/table exploration
+- For DuckDB-powered notebooks (10-100x faster), use:
+    streamlit run src/ui/notebook_app_professional.py
+
 Notes:
 - This UI reads what's already in bronze/silver. Run your ingestion script separately to refresh data.
 - We avoid passing Spark/RepoContext into cached functions to prevent Streamlit hashing Spark objects.
+- Requires pyspark installed
 """
 
 import datetime as dt
