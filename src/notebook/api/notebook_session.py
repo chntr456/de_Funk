@@ -159,26 +159,51 @@ class NotebookSession:
         """
         Build filters for an exhibit from filter context and exhibit-specific filters.
 
+        Handles conversion of filter values based on variable types:
+        - date_range: Already in {'start': ..., 'end': ...} format
+        - multi_select: List of values
+        - number: Convert to {'min': value} for range filtering
+        - single_select/boolean: Direct value
+
         Args:
             exhibit: Exhibit configuration
 
         Returns:
-            Dictionary of filters to apply
+            Dictionary of filters to apply (column_name -> filter_value)
         """
         filters = {}
 
         # Start with notebook-level filters from filter context
-        if self.filter_context:
+        if self.filter_context and self.notebook_config:
             context_filters = self.filter_context.get_all()
-            filters.update(context_filters)
+
+            # Convert filter values based on variable types
+            for var_id, value in context_filters.items():
+                if var_id not in self.notebook_config.variables:
+                    continue
+
+                variable = self.notebook_config.variables[var_id]
+
+                # For number variables, convert to range format if not already
+                if variable.type.value == 'number' and not isinstance(value, dict):
+                    # Convert single number to min/max range
+                    if value is not None and value > 0:
+                        filters[var_id] = {'min': value}
+                    # Skip if 0 or None (no filter)
+                elif variable.type.value == 'date_range':
+                    # Date range already in correct format
+                    filters[var_id] = value
+                elif variable.type.value == 'multi_select':
+                    # List of values for IN clause
+                    if value:  # Only add if not empty
+                        filters[var_id] = value
+                else:
+                    # Single value filters
+                    if value is not None:
+                        filters[var_id] = value
 
         # Apply exhibit-level filters (override notebook filters if present)
         if hasattr(exhibit, 'filters') and exhibit.filters:
             filters.update(exhibit.filters)
-
-        # Convert filter context format to storage service format
-        # Filter context might have: {'date_range': {'start': ..., 'end': ...}}
-        # Storage service expects: {'trade_date': {'start': ..., 'end': ...}}
-        # For now, pass through as-is (format should be compatible)
 
         return filters

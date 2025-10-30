@@ -93,19 +93,35 @@ class DuckDBConnection(DataConnection):
         conditions = []
         for column, value in filters.items():
             if isinstance(value, dict):
-                # Date range filter
+                # Date range filter (start/end)
                 if 'start' in value and 'end' in value:
+                    start = value['start']
+                    end = value['end']
+                    # Convert datetime objects to strings
+                    if hasattr(start, 'strftime'):
+                        start = start.strftime('%Y-%m-%d')
+                    if hasattr(end, 'strftime'):
+                        end = end.strftime('%Y-%m-%d')
                     conditions.append(
-                        f"{column} BETWEEN '{value['start']}' AND '{value['end']}'"
+                        f"{column} BETWEEN '{start}' AND '{end}'"
                     )
+                # Numeric range filter (min/max)
+                elif 'min' in value or 'max' in value:
+                    if 'min' in value and value['min'] is not None and value['min'] > 0:
+                        conditions.append(f"{column} >= {value['min']}")
+                    if 'max' in value and value['max'] is not None:
+                        conditions.append(f"{column} <= {value['max']}")
             elif isinstance(value, list):
                 # IN filter
                 if value:  # Only add if list is not empty
                     values_str = ", ".join(f"'{v}'" for v in value)
                     conditions.append(f"{column} IN ({values_str})")
-            else:
-                # Equality filter
-                conditions.append(f"{column} = '{value}'")
+            elif value is not None:
+                # Equality filter (skip None values)
+                if isinstance(value, str):
+                    conditions.append(f"{column} = '{value}'")
+                else:
+                    conditions.append(f"{column} = {value}")
 
         if conditions:
             where_clause = " AND ".join(conditions)

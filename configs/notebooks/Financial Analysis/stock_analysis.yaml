@@ -9,205 +9,98 @@ notebook:
   updated: "2024-01-15"
   tags: [stocks, prices, analysis]
 
-# Graph defines the data subgraph for this notebook
-graph:
-  models:
-    - name: company
-      config: configs/models/company.yaml
-      nodes:
-        - dim_company
-        - dim_exchange
-        - fact_prices
-        - prices_with_company
-
-# Variables define reusable parameters and filters
+# Variables define reusable notebook-level filters
+# These map directly to table column names for DuckDB filtering
 variables:
-  # Time is the default notebook variable
-  time:
+  trade_date:
     type: date_range
     default:
       start: "2024-01-01"
       end: "2024-01-05"
     display_name: "Date Range"
-    description: "Primary time filter for all exhibits"
+    description: "Filter by trade date range"
 
-  tickers:
+  ticker:
     type: multi_select
     default: ["AAPL", "GOOGL", "MSFT"]
+    options: ["AAPL", "GOOGL", "MSFT", "AMZN", "META", "NVDA", "TSLA"]
     display_name: "Stock Tickers"
     description: "Select stocks to analyze"
 
-  min_volume:
+  volume:
     type: number
     default: 0
     display_name: "Minimum Volume"
+    description: "Filter by minimum trading volume"
 
-# Dimensions define attributes from dimension tables
-dimensions:
-  - id: ticker
-    source:
-      model: company
-      node: dim_company
-      column: ticker
-    display_name: "Ticker Symbol"
-    type: string
-
-  - id: company_name
-    source:
-      model: company
-      node: dim_company
-      column: company_name
-    display_name: "Company Name"
-    type: string
-
-  - id: trade_date
-    source:
-      model: company
-      node: fact_prices
-      column: trade_date
-    display_name: "Trade Date"
-    type: date
-    format: "YYYY-MM-DD"
-
-  - id: exchange_name
-    source:
-      model: company
-      node: dim_exchange
-      column: exchange_name
-    display_name: "Exchange"
-    type: string
-
-# Measures define calculations and aggregations
-measures:
-  - id: avg_close_price
-    source:
-      model: company
-      node: fact_prices
-      column: close
-    aggregation: avg
-    display_name: "Average Close Price"
-    format: "$#,##0.00"
-
-  - id: total_volume
-    source:
-      model: company
-      node: fact_prices
-      column: volume
-    aggregation: sum
-    display_name: "Total Volume"
-    format: "#,##0"
-
-  - id: max_high
-    source:
-      model: company
-      node: fact_prices
-      column: high
-    aggregation: max
-    display_name: "Highest Price"
-    format: "$#,##0.00"
-
-  - id: min_low
-    source:
-      model: company
-      node: fact_prices
-      column: low
-    aggregation: min
-    display_name: "Lowest Price"
-    format: "$#,##0.00"
-
-  - id: vwap
-    source:
-      model: company
-      node: fact_prices
-      column: volume_weighted
-    aggregation: avg
-    display_name: "Volume Weighted Average Price"
-    format: "$#,##0.00"
-
-# Exhibits define visualizations and interactions
+# Exhibits define visualizations
+# Each exhibit specifies:
+# - source: "model.table" format to query from
+# - Columns directly from the source table
+# - Filters applied via notebook variables (mapped to column names)
 exhibits:
   - id: price_overview
     type: metric_cards
     title: "Price Overview"
     description: "Key price metrics for selected period"
-    filters:
-      time: $time
-      tickers: $tickers
+    source: "company.fact_prices"
     metrics:
-      - measure: avg_close_price
-      - measure: total_volume
-      - measure: max_high
-      - measure: min_low
-    layout:
-      columns: 4
+      - measure: close
+        label: "Avg Close"
+        aggregation: avg
+      - measure: volume
+        label: "Total Volume"
+        aggregation: sum
+      - measure: high
+        label: "Max High"
+        aggregation: max
+      - measure: low
+        label: "Min Low"
+        aggregation: min
 
   - id: price_trend
     type: line_chart
     title: "Daily Closing Prices"
     description: "Price trends over time"
-    filters:
-      time: $time
-      tickers: $tickers
+    source: "company.fact_prices"
     x_axis:
       dimension: trade_date
       label: "Date"
     y_axis:
-      measures:
-        - avg_close_price
+      measure: close
       label: "Price ($)"
     color_by: ticker
-    legend: true
-    interactive: true
 
   - id: volume_comparison
     type: bar_chart
     title: "Trading Volume by Stock"
     description: "Total volume comparison"
-    filters:
-      time: $time
-      tickers: $tickers
+    source: "company.fact_prices"
     x_axis:
       dimension: ticker
       label: "Stock"
     y_axis:
-      measures:
-        - total_volume
+      measure: volume
       label: "Volume"
     color_by: ticker
 
   - id: detailed_prices
     type: data_table
     title: "Detailed Price Data"
-    filters:
-      time: $time
-      tickers: $tickers
-    columns:
-      - trade_date
-      - ticker
-      - avg_close_price
-      - total_volume
-      - max_high
-      - min_low
-    pagination: true
-    page_size: 50
+    description: "All columns from prices table"
+    source: "company.fact_prices"
     download: true
-    sortable: true
 
-# Layout defines how exhibits are arranged
+# Layout defines how exhibits are arranged on the page
 layout:
-  - section:
-      title: "Summary Metrics"
-      exhibits:
-        - price_overview
+  - title: "Summary Metrics"
+    exhibits: [price_overview]
+    columns: 1
 
-  - section:
-      title: "Trend Analysis"
-      exhibits:
-        - price_trend
-        - volume_comparison
-      columns: 2
+  - title: "Trend Analysis"
+    exhibits: [price_trend, volume_comparison]
+    columns: 2
 
-  - section:
-      title: "Detailed Data"
-      exhibits:
-        - detailed_prices
+  - title: "Detailed Data"
+    exhibits: [detailed_prices]
+    columns: 1
