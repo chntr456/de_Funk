@@ -1,4 +1,8 @@
 {
+  "connection": {
+    "type": "duckdb",
+    "comment": "Options: 'spark' or 'duckdb'. DuckDB is much faster for interactive queries."
+  },
   "roots": {
     "bronze": "storage/bronze",
     "silver": "storage/silver"
