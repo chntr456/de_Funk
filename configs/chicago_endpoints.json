@@ -1,0 +1,56 @@
+
+
+
+{
+  "credentials": { "api_keys": ["q6qHAGqgBoBNxeuQ5bjIXpBfKloYjaL5"] },
+  "base_urls": { "core": "https://api.polygon.io" },
+  "headers": { "Authorization": "Bearer ${API_KEY}" },
+  "rate_limit_per_sec": 0.0834,
+  "endpoints": {
+    "ref_all_tickers": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v3/reference/tickers",
+      "required_params": [],
+      "default_query": { "market": "stocks", "active": "true", "limit": 1000 },
+      "response_key": "results",
+      "default_path_params": {}
+    },
+    "ref_ticker": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v3/reference/tickers/{ticker}",
+      "required_params": ["ticker"],
+      "default_query": {},
+      "response_key": "results",
+      "default_path_params": {}
+    },
+    "exchanges": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v3/reference/exchanges",
+      "required_params": [],
+      "default_query": { "asset_class": "stocks", "limit": 1000 },
+      "response_key": "results",
+      "default_path_params": {}
+    },
+    "prices_daily_grouped": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v2/aggs/grouped/locale/us/market/stocks/{date}",
+      "required_params": ["date"],
+      "default_query": { "adjusted": "true" },
+      "response_key": "results",
+      "default_path_params": {}
+    },
+    "news_by_date": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v2/reference/news",
+      "required_params": ["published_utc.gte", "published_utc.lte"],
+      "default_query": { "order": "asc", "limit": 1000 },
+      "response_key": "results",
+      "default_path_params": {}
+    }
+  }
+}
