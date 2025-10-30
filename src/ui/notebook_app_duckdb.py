@@ -89,8 +89,8 @@ if 'yaml_content' not in st.session_state:
 if 'theme' not in st.session_state:
     st.session_state.theme = 'light'  # 'light' or 'dark'
 
-# Apply theme
-apply_professional_theme(st.session_state.theme)
+# Apply theme (reads from st.session_state internally)
+apply_professional_theme()
 
 
 class NotebookVaultApp:
