@@ -14,7 +14,7 @@ from .exhibits import (
 )
 
 
-def render_notebook_exhibits(notebook_id: str, notebook_config, notebook_session):
+def render_notebook_exhibits(notebook_id: str, notebook_config, notebook_session, connection):
     """
     Render all notebook exhibits according to layout.
 
@@ -22,13 +22,14 @@ def render_notebook_exhibits(notebook_id: str, notebook_config, notebook_session
         notebook_id: Unique identifier for the notebook
         notebook_config: NotebookConfig with exhibits and layout
         notebook_session: NotebookSession for data retrieval
+        connection: DataConnection for converting to pandas (DuckDB or Spark)
     """
     # Render layout sections
     for section in notebook_config.layout:
-        render_section(section, notebook_config, notebook_session)
+        render_section(section, notebook_config, notebook_session, connection)
 
 
-def render_section(section, notebook_config, notebook_session):
+def render_section(section, notebook_config, notebook_session, connection):
     """
     Render a layout section.
 
@@ -36,6 +37,7 @@ def render_section(section, notebook_config, notebook_session):
         section: Section config with title, exhibits, columns
         notebook_config: NotebookConfig for exhibit lookup
         notebook_session: NotebookSession for data retrieval
+        connection: DataConnection for pandas conversion
     """
     if section.title:
         st.subheader(section.title)
@@ -47,13 +49,13 @@ def render_section(section, notebook_config, notebook_session):
         cols = st.columns(section.columns)
         for i, exhibit_id in enumerate(section.exhibits):
             with cols[i % section.columns]:
-                render_exhibit(exhibit_id, notebook_config, notebook_session)
+                render_exhibit(exhibit_id, notebook_config, notebook_session, connection)
     else:
         for exhibit_id in section.exhibits:
-            render_exhibit(exhibit_id, notebook_config, notebook_session)
+            render_exhibit(exhibit_id, notebook_config, notebook_session, connection)
 
 
-def render_exhibit(exhibit_id: str, notebook_config, notebook_session):
+def render_exhibit(exhibit_id: str, notebook_config, notebook_session, connection):
     """
     Render a single exhibit.
 
@@ -61,6 +63,7 @@ def render_exhibit(exhibit_id: str, notebook_config, notebook_session):
         exhibit_id: ID of the exhibit to render
         notebook_config: NotebookConfig for exhibit lookup
         notebook_session: NotebookSession for data retrieval
+        connection: DataConnection for pandas conversion (DuckDB or Spark)
     """
     # Find exhibit
     exhibit = None
@@ -77,7 +80,8 @@ def render_exhibit(exhibit_id: str, notebook_config, notebook_session):
     try:
         with st.spinner(f"Loading {exhibit.title}..."):
             df = notebook_session.get_exhibit_data(exhibit_id)
-            pdf = df.toPandas()
+            # Use connection to convert to pandas (works with DuckDB or Spark)
+            pdf = connection.to_pandas(df)
 
         # Render based on type
         if exhibit.type == ExhibitType.METRIC_CARDS:

@@ -52,12 +52,8 @@ class RepoContext:
         if connection_type == "duckdb":
             from src.core import ConnectionFactory
             connection = ConnectionFactory.create("duckdb")
-            # Still create Spark for backward compatibility (ETL might need it)
-            try:
-                from src.common.spark_session import get_spark
-                spark = get_spark("CompanyPipeline")
-            except Exception:
-                spark = None  # DuckDB-only mode
+            # DuckDB-only mode: No Spark needed for UI/analytics
+            spark = None
         else:
             # Default to Spark
             from src.common.spark_session import get_spark
