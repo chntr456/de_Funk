@@ -69,10 +69,11 @@ class DuckDBConnection(DataConnection):
         if path_obj.is_dir():
             # Read all parquet files in directory
             pattern = f"{path}/**/*.parquet"
-            return self.conn.execute(f"SELECT * FROM read_parquet('{pattern}', union_by_name=true)")
+            # Use from_parquet to get a relation object
+            return self.conn.from_parquet(pattern, union_by_name=True)
         else:
             # Read single file
-            return self.conn.execute(f"SELECT * FROM read_parquet('{path}')")
+            return self.conn.from_parquet(path)
 
     def apply_filters(self, df: Any, filters: Dict[str, Any]) -> Any:
         """
@@ -108,8 +109,8 @@ class DuckDBConnection(DataConnection):
 
         if conditions:
             where_clause = " AND ".join(conditions)
-            # Get the table from the relation and apply filter
-            return self.conn.execute(f"SELECT * FROM df WHERE {where_clause}")
+            # Use DuckDB relation's filter method
+            return df.filter(where_clause)
 
         return df
 
@@ -123,14 +124,8 @@ class DuckDBConnection(DataConnection):
         Returns:
             Pandas DataFrame
         """
-        # DuckDB has built-in pandas conversion
-        if hasattr(df, 'df'):
-            return df.df()
-        elif hasattr(df, 'fetchdf'):
-            return df.fetchdf()
-        else:
-            # Fallback: execute and convert
-            return self.conn.execute("SELECT * FROM df").df()
+        # DuckDB relation has direct pandas conversion
+        return df.df()
 
     def count(self, df: Any) -> int:
         """
@@ -142,9 +137,8 @@ class DuckDBConnection(DataConnection):
         Returns:
             Number of rows
         """
-        # Execute count query
-        result = self.conn.execute("SELECT COUNT(*) FROM df").fetchone()
-        return result[0] if result else 0
+        # DuckDB relation has count() method
+        return df.count('*').fetchone()[0]
 
     def cache(self, df: Any, name: Optional[str] = None) -> Any:
         """
@@ -161,8 +155,8 @@ class DuckDBConnection(DataConnection):
         if not name:
             name = f"_cached_{id(df)}"
 
-        # Create a temporary table
-        self.conn.execute(f"CREATE TEMP TABLE {name} AS SELECT * FROM df")
+        # Create a temporary table from the relation
+        df.create(name)
         self._cached_tables[name] = df
         return self.conn.table(name)
 
