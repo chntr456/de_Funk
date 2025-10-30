@@ -48,7 +48,7 @@ class NotebookSession:
 
         # Initialize components
         self.parser = NotebookParser(self.repo_root)
-        self.filter_context = FilterContext()
+        self.filter_context: Optional[FilterContext] = None
 
         # Current notebook
         self.notebook_config: Optional[NotebookConfig] = None
@@ -66,18 +66,16 @@ class NotebookSession:
         # Parse notebook
         self.notebook_config = self.parser.parse_file(notebook_path)
 
-        # Initialize filter context with defaults
-        default_filters = {}
-        for var_id, variable in self.notebook_config.variables.items():
-            default_filters[var_id] = variable.default
-
-        self.filter_context.set_filters(default_filters)
+        # Initialize filter context with notebook variables
+        self.filter_context = FilterContext(self.notebook_config.variables)
 
         return self.notebook_config
 
     def get_filter_context(self) -> Dict[str, Any]:
         """Get current filter context."""
-        return self.filter_context.filters
+        if self.filter_context is None:
+            return {}
+        return self.filter_context.get_all()
 
     def update_filters(self, filter_values: Dict[str, Any]):
         """
@@ -86,7 +84,8 @@ class NotebookSession:
         Args:
             filter_values: Dictionary of filter_id -> value
         """
-        self.filter_context.set_filters(filter_values)
+        if self.filter_context is not None:
+            self.filter_context.update(filter_values)
 
     def get_exhibit_data(self, exhibit_id: str) -> DataFrame:
         """
