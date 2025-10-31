@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Dict, Any, Tuple
 from pyspark.sql import DataFrame, SparkSession, functions as F
 
-from src.model.company_model import CompanyModel
+from models.company_model import CompanyModel
 from models.api.dal import StorageRouter, BronzeTable, SilverPath
 
 try:

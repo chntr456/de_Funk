@@ -50,7 +50,7 @@ class RepoContext:
         connection = None
 
         if connection_type == "duckdb":
-            from src.core import ConnectionFactory
+            from core.connection import ConnectionFactory
             connection = ConnectionFactory.create("duckdb")
             # DuckDB-only mode: No Spark needed for UI/analytics
             spark = None
@@ -58,7 +58,7 @@ class RepoContext:
             # Default to Spark
             from orchestration.common.spark_session import get_spark
             spark = get_spark("CompanyPipeline")
-            from src.core import ConnectionFactory
+            from core.connection import ConnectionFactory
             connection = ConnectionFactory.create("spark", spark_session=spark)
 
         return cls(

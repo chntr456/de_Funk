@@ -8,7 +8,7 @@ from typing import List, Tuple, Optional
 from dataclasses import dataclass
 
 from models.registry import ModelRegistry
-from ..notebook.schema import NotebookConfig, Exhibit
+from app.notebook.schema import NotebookConfig, Exhibit
 
 
 @dataclass
