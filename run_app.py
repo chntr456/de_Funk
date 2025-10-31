@@ -37,7 +37,7 @@ def main():
         sys.exit(1)
 
     # Path to the Streamlit app
-    app_path = repo_root / "src" / "ui" / "notebook_app_professional.py"
+    app_path = repo_root / "app" / "ui" / "notebook_app_professional.py"
 
     if not app_path.exists():
         print(f"ERROR: Application not found at {app_path}")

@@ -24,7 +24,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from core.context import RepoContext
-from src.core import ModelRegistry
+from models.registry import ModelRegistry
 from app.notebook.api.notebook_session import NotebookSession
 
 # Import modular UI components (Phase 4)
