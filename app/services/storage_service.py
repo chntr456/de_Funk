@@ -8,8 +8,8 @@ Uses connection layer abstraction for future extensibility.
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-from ..core.connection import DataConnection
-from ..core.model_registry import ModelRegistry
+from core.connection import DataConnection
+from models.registry import ModelRegistry
 
 
 class SilverStorageService:

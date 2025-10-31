@@ -7,9 +7,9 @@ from typing import Dict, Any
 
 from pyspark.sql import DataFrame
 
-from src.orchestration.context import RepoContext
-from src.ingest.company_ingestor import CompanyPolygonIngestor
-from src.model.company_model import CompanyModel
+from core.context import RepoContext
+from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
+from models.company_model import CompanyModel
 
 try:
     import yaml  # type: ignore
