@@ -233,11 +233,20 @@ class NotebookSession:
         measure_ids = exhibit.value_measures  # e.g., ["equal_weighted_index", "volume_weighted_index"]
 
         # Build filter clause for the query
+        # NOTE: Weighted aggregates are already aggregated across all stocks (no ticker column),
+        # so we only apply filters that exist in the aggregated view (mainly date filters)
         filters = self._build_filters(exhibit)
         where_clauses = []
 
+        # Columns that don't exist in aggregated views (skip these filters)
+        skip_filters = {'ticker', 'symbol', 'stock_id'}
+
         # Handle different filter types
         for filter_name, filter_value in filters.items():
+            # Skip dimension filters that don't exist in aggregated views
+            if filter_name in skip_filters:
+                continue
+
             if isinstance(filter_value, dict):
                 # Date range filter
                 if 'start' in filter_value and 'end' in filter_value:
@@ -248,9 +257,10 @@ class NotebookSession:
                 if 'max' in filter_value:
                     where_clauses.append(f"{filter_name} <= {filter_value['max']}")
             elif isinstance(filter_value, list):
-                # Multi-select filter (IN clause)
-                values_str = ','.join([f"'{v}'" for v in filter_value])
-                where_clauses.append(f"{filter_name} IN ({values_str})")
+                # Multi-select filter (IN clause) - skip if it's a dimension filter
+                if filter_name not in skip_filters:
+                    values_str = ','.join([f"'{v}'" for v in filter_value])
+                    where_clauses.append(f"{filter_name} IN ({values_str})")
             else:
                 # Simple equality filter
                 where_clauses.append(f"{filter_name} = '{filter_value}'")
