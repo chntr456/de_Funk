@@ -87,7 +87,7 @@ if 'yaml_content' not in st.session_state:
     st.session_state.yaml_content = {}  # Dict of notebook_id -> yaml string
 
 if 'theme' not in st.session_state:
-    st.session_state.theme = 'light'  # 'light' or 'dark'
+    st.session_state.theme = 'dark'  # 'light' or 'dark'
 
 # Apply theme (reads from st.session_state internally)
 apply_professional_theme()
