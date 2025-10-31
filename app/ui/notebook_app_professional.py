@@ -44,7 +44,7 @@ st.set_page_config(
 
 def apply_professional_theme():
     """Apply professional theme styling."""
-    theme = st.session_state.get('theme', 'light')
+    theme = st.session_state.get('theme', 'dark')
 
     if theme == 'dark':
         colors = {

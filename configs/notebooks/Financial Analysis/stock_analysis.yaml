@@ -22,7 +22,8 @@ variables:
 
   ticker:
     type: multi_select
-    default: []
+    default: ["AAPL"]
+    options: []
     source:
       model: "company"
       node: "fact_prices"
