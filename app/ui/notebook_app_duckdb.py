@@ -59,7 +59,7 @@ def get_repo_context():
 @st.cache_resource
 def get_model_registry(_ctx):
     """Get model registry (cached)."""
-    models_dir = _ctx.repo / "configs" / "notebooks"
+    models_dir = _ctx.repo / "configs" / "models"
     return ModelRegistry(models_dir)
 
 

@@ -349,6 +349,12 @@ class NotebookParser:
                 legend=e.get('legend', True),
                 interactive=e.get('interactive', True),
                 metrics=metrics,
+                # Weighted aggregate fields
+                weighting=e.get('weighting'),
+                aggregate_by=e.get('aggregate_by'),
+                value_measures=e.get('value_measures'),
+                group_by=e.get('group_by'),
+                # Table fields
                 columns=e.get('columns'),
                 pagination=e.get('pagination', False),
                 page_size=e.get('page_size', 50),
