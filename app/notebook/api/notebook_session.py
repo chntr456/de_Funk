@@ -17,8 +17,8 @@ from pathlib import Path
 from ..schema import NotebookConfig, Exhibit
 from ..parser import NotebookParser
 from ..filters.context import FilterContext
-from ...core import ModelRegistry
-from ...services.storage_service import SilverStorageService
+from models.registry import ModelRegistry
+from app.services.storage_service import SilverStorageService
 
 
 class NotebookSession:
