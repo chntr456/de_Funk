@@ -74,7 +74,10 @@ def render_exhibit(exhibit_id: str, notebook_config, notebook_session, connectio
             break
 
     if not exhibit:
+        available_ids = [ex.id for ex in notebook_config.exhibits]
         st.error(f"Exhibit not found: {exhibit_id}")
+        st.caption(f"Available exhibits: {available_ids}")
+        st.caption(f"Notebook: {notebook_config.notebook.title if hasattr(notebook_config, 'notebook') else 'Unknown'}")
         return
 
     # Get data for exhibit
