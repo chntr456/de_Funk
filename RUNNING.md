@@ -48,7 +48,7 @@ python run_app.py
 ### Option 3: Direct Streamlit Command
 
 ```bash
-streamlit run src/ui/notebook_app_professional.py
+streamlit run app/ui/notebook_app_duckdb.py
 ```
 
 ## What to Expect
@@ -119,7 +119,7 @@ src/ui/
 │       ├── line_chart.py     # Line chart rendering
 │       ├── bar_chart.py      # Bar chart rendering
 │       └── data_table.py     # Data table rendering
-└── notebook_app_professional.py  # Main application
+└── notebook_app_duckdb.py  # Main application (DuckDB-powered)
 ```
 
 ## Configuration
@@ -175,7 +175,7 @@ ls configs/notebooks/
 
 If port 8501 is already in use, specify a different port:
 ```bash
-streamlit run src/ui/notebook_app_professional.py --server.port=8502
+streamlit run app/ui/notebook_app_duckdb.py --server.port=8502
 ```
 
 ## Development
@@ -205,12 +205,11 @@ streamlit run src/ui/notebook_app_professional.py --server.port=8502
 
 ## Next Steps
 
-The current application (`notebook_app_professional.py`) will be migrated to use:
-- New modular components from `src/ui/components/`
-- `NotebookService` instead of `NotebookSession`
-- Generic `StorageService`
-
-For now, it continues to work with the existing architecture while the new components are integrated.
+The current application (`notebook_app_duckdb.py`) uses:
+- Modular components from `app/ui/components/`
+- `NotebookSession` for session management
+- DuckDB-powered `StorageService` for fast queries
+- Integrated weighted aggregate graphics feature
 
 ## Support
 

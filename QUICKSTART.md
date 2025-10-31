@@ -39,7 +39,7 @@ python run_app.py
 ### Direct Streamlit Command
 
 ```bash
-streamlit run src/ui/notebook_app_professional.py
+streamlit run app/ui/notebook_app_duckdb.py
 ```
 
 ## What You'll See
@@ -106,7 +106,7 @@ python test_build_silver.py
 
 Use different port:
 ```bash
-streamlit run src/ui/notebook_app_professional.py --server.port=8502
+streamlit run app/ui/notebook_app_duckdb.py --server.port=8502
 ```
 
 ## Need Help?

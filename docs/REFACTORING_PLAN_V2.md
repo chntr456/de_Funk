@@ -23,7 +23,7 @@ class SilverStorageService:
 **Problem:** Model doesn't know where its own data lives.
 
 ### 3. UI is Monolithic
-**Current:** `notebook_app_professional.py` - 800+ lines
+**Current:** `notebook_app_duckdb.py` - 800+ lines
 - Directory tree rendering
 - Filter rendering
 - Exhibit rendering

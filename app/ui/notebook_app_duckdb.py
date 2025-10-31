@@ -12,7 +12,7 @@ Features:
 - Professional themes (light/dark)
 
 Usage:
-    streamlit run src/ui/notebook_app_professional.py
+    streamlit run app/ui/notebook_app_duckdb.py
 """
 
 import streamlit as st

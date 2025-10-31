@@ -21,7 +21,7 @@ Run from repo root:
 Architecture:
 - This app uses Spark + ModelSession for direct model/table exploration
 - For DuckDB-powered notebooks (10-100x faster), use:
-    streamlit run src/ui/notebook_app_professional.py
+    streamlit run src/ui/notebook_app_duckdb.py
 
 Notes:
 - This UI reads what's already in bronze/silver. Run your ingestion script separately to refresh data.

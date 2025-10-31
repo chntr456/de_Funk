@@ -35,7 +35,7 @@ This document explains how DuckDB is integrated and deployed in the pipeline, ad
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                   │
 │  ┌─────────────────────────────────────────────────────────┐   │
-│  │ UI App (FUTURE - notebook_app_professional.py)           │   │
+│  │ UI App (FUTURE - notebook_app_duckdb.py)           │   │
 │  │ ────────────────────────────────────────────────────────│   │
 │  │ RepoContext.from_repo_root(connection_type="duckdb")     │   │
 │  │   ↓                                                       │   │
@@ -101,7 +101,7 @@ This document explains how DuckDB is integrated and deployed in the pipeline, ad
 
 ### ⚠️ TODO: Notebook App Update
 
-The notebook app (`src/ui/notebook_app_professional.py`) currently:
+The notebook app (`src/ui/notebook_app_duckdb.py`) currently:
 - Line 150: `RepoContext.from_repo_root()` (will get Spark)
 - Line 156: `ModelSession(_ctx.spark, ...)` (requires Spark)
 - Line 162: `NotebookSession(_ctx.spark, ...)` (requires Spark)
@@ -175,7 +175,7 @@ python test_duckdb_pipeline.py
 
 ```bash
 # Once NotebookSession is updated:
-streamlit run src/ui/notebook_app_professional.py
+streamlit run src/ui/notebook_app_duckdb.py
 
 # Will use DuckDB for 10-100x faster queries
 ```
@@ -236,7 +236,7 @@ streamlit run src/ui/notebook_app_professional.py
 
 **Cause**: Notebook app not explicitly requesting DuckDB
 
-**Fix**: Update line 150 in `notebook_app_professional.py`:
+**Fix**: Update line 150 in `notebook_app_duckdb.py`:
 ```python
 return RepoContext.from_repo_root(connection_type="duckdb")
 ```

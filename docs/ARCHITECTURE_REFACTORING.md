@@ -38,7 +38,7 @@ Should be: One responsibility only
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        PRESENTATION LAYER                    │
-│  - notebook_app_professional.py                             │
+│  - notebook_app_duckdb.py                             │
 │  - Renders UI only, no business logic                       │
 │  - Receives pre-computed Pandas DataFrames                  │
 └──────────────────────┬──────────────────────────────────────┘
@@ -166,7 +166,7 @@ class NotebookService:
 - Measure calculation logic
 
 ### Step 4: Simplify UI
-**File**: `src/ui/notebook_app_professional.py`
+**File**: `src/ui/notebook_app_duckdb.py`
 
 Changes:
 - Use NotebookService instead of NotebookSession
@@ -274,7 +274,7 @@ src/
 │   ├── storage_service.py            (Silver layer access)
 │   └── notebook_service.py           (Simplified)
 ├── ui/
-│   └── notebook_app_professional.py  (Render only)
+│   └── notebook_app_duckdb.py  (Render only)
 └── notebook/
     ├── schema.py                      (Keep)
     ├── parser.py                      (Keep)

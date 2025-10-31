@@ -135,7 +135,7 @@ try:
     print("=" * 60)
     print(f"\nSilver layer location: {silver_root}")
     print("\nYou can now:")
-    print("  1. Run the UI: streamlit run src/ui/notebook_app_professional.py")
+    print("  1. Run the UI: streamlit run app/ui/notebook_app_duckdb.py")
     print("  2. Update UI to use new NotebookService")
     print("  3. Query Silver layer directly for analysis")
     print()

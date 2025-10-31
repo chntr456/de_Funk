@@ -41,4 +41,4 @@ echo "Press Ctrl+C to stop the server."
 echo ""
 
 # Run the Streamlit app
-streamlit run src/ui/notebook_app_professional.py
+streamlit run app/ui/notebook_app_duckdb.py
