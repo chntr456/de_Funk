@@ -73,19 +73,19 @@ def main():
 
     # Register fact_prices table with DuckDB
     print("\n4. Registering tables with DuckDB...")
-    ctx.connection.execute(f"""
+    ctx.connection.conn.execute(f"""
         CREATE OR REPLACE VIEW fact_prices AS
         SELECT * FROM read_parquet('{fact_prices_path}/*.parquet')
     """)
 
     # Count rows
-    row_count = ctx.connection.execute("SELECT COUNT(*) FROM fact_prices").fetchone()[0]
+    row_count = ctx.connection.conn.execute("SELECT COUNT(*) FROM fact_prices").fetchone()[0]
     print(f"   ✓ fact_prices registered: {row_count:,} rows")
 
     # Build weighted aggregates
     print("\n5. Building weighted aggregate measures...")
     builder = WeightedAggregateBuilder(
-        connection=ctx.connection,
+        connection=ctx.connection.conn,  # Pass raw DuckDB connection
         model_config=model_config,
         storage_path=silver_path
     )
@@ -110,7 +110,7 @@ def main():
     print("\n   Sample data from each aggregate:\n")
     for measure_id in weighted_measures:
         try:
-            result = ctx.connection.execute(f"""
+            result = ctx.connection.conn.execute(f"""
                 SELECT COUNT(*) as row_count,
                        MIN(weighted_value) as min_value,
                        MAX(weighted_value) as max_value,
@@ -132,7 +132,7 @@ def main():
     print("\n7. Sample comparison (first 5 dates):")
     print("   " + "-" * 66)
     try:
-        result = ctx.connection.execute("""
+        result = ctx.connection.conn.execute("""
             SELECT
                 trade_date,
                 ROUND(ew.weighted_value, 2) as equal_weighted,

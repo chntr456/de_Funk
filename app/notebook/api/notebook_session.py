@@ -272,7 +272,7 @@ class NotebookSession:
 
             try:
                 # Execute query and fetch result
-                df = self.connection.execute(sql).fetchdf()
+                df = self.connection.conn.execute(sql).fetchdf()
                 results.append(df)
             except Exception as e:
                 # If the measure doesn't exist, provide helpful error
@@ -286,7 +286,7 @@ class NotebookSession:
         if results:
             combined_df = pd.concat(results, ignore_index=True)
             # Convert to DuckDB relation for consistency
-            return self.connection.from_df(combined_df)
+            return self.connection.conn.from_df(combined_df)
         else:
             # Return empty DataFrame
-            return self.connection.from_df(pd.DataFrame(columns=[aggregate_by, 'weighted_value', 'measure_id']))
+            return self.connection.conn.from_df(pd.DataFrame(columns=[aggregate_by, 'weighted_value', 'measure_id']))
