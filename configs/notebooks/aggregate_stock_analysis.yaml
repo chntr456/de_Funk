@@ -1,0 +1,154 @@
+version: "1.0"
+
+notebook:
+  id: aggregate_stock_analysis
+  title: "Aggregate Stock Index Analysis"
+  description: "Analyzing aggregated stock performance using various weighting methods"
+  author: analyst@company.com
+  created: "2024-01-15"
+  updated: "2024-01-15"
+  tags: [stocks, aggregate, index, weighted]
+
+# Variables define reusable notebook-level filters
+variables:
+  trade_date:
+    type: date_range
+    default:
+      start: "2024-01-01"
+      end: "2024-02-01"
+    display_name: "Date Range"
+    description: "Filter by trade date range"
+
+  ticker:
+    type: multi_select
+    default: ["AAPL", "GOOGL", "MSFT", "AMZN", "META"]
+    options: ["AAPL", "GOOGL", "MSFT", "AMZN", "META", "NVDA", "TSLA", "NFLX", "AMD", "INTC"]
+    display_name: "Stock Tickers"
+    description: "Select stocks to include in aggregate index"
+
+  volume:
+    type: number
+    default: 0
+    display_name: "Minimum Volume"
+    description: "Filter by minimum trading volume"
+
+# Exhibits define visualizations
+exhibits:
+  # Overview metrics for individual stocks
+  - id: individual_overview
+    type: metric_cards
+    title: "Individual Stock Metrics"
+    description: "Key metrics across selected stocks"
+    source: "company.fact_prices"
+    metrics:
+      - measure: close
+        label: "Avg Close"
+        aggregation: avg
+      - measure: volume
+        label: "Total Volume"
+        aggregation: sum
+      - measure: high
+        label: "Max High"
+        aggregation: max
+      - measure: low
+        label: "Min Low"
+        aggregation: min
+
+  # Weighted aggregate index - Price trends
+  - id: aggregate_price_index
+    type: weighted_aggregate_chart
+    title: "Aggregate Price Index"
+    description: "Combined price index across selected stocks using different weighting methods"
+    source: "company.fact_prices"
+    aggregate_by: trade_date
+    value_measures: ["close"]
+    weighting:
+      method: equal
+      normalize: true
+
+  # Weighted aggregate index - Volume trends
+  - id: aggregate_volume_index
+    type: weighted_aggregate_chart
+    title: "Aggregate Volume Index"
+    description: "Combined volume index across selected stocks"
+    source: "company.fact_prices"
+    aggregate_by: trade_date
+    value_measures: ["volume"]
+    weighting:
+      method: equal
+      normalize: true
+
+  # Multi-measure aggregate showing both price and volume
+  - id: multi_measure_aggregate
+    type: weighted_aggregate_chart
+    title: "Multi-Measure Aggregate Index"
+    description: "Aggregate index showing multiple measures (price, volume, VWAP)"
+    source: "company.fact_prices"
+    aggregate_by: trade_date
+    value_measures: ["close", "volume", "volume_weighted"]
+    weighting:
+      method: market_cap
+      normalize: true
+
+  # Individual stock comparison (for reference)
+  - id: individual_price_trends
+    type: line_chart
+    title: "Individual Stock Prices (For Comparison)"
+    description: "Individual stock price trends to compare with aggregate"
+    source: "company.fact_prices"
+    x_axis:
+      dimension: trade_date
+      label: "Date"
+    y_axis:
+      measure: close
+      label: "Price ($)"
+    color_by: ticker
+
+  # Volume comparison
+  - id: volume_distribution
+    type: bar_chart
+    title: "Volume Distribution by Stock"
+    description: "Total trading volume by stock (affects market cap weighting)"
+    source: "company.fact_prices"
+    x_axis:
+      dimension: ticker
+      label: "Stock"
+    y_axis:
+      measure: volume
+      label: "Total Volume"
+    color_by: ticker
+
+  # Detailed data table
+  - id: detailed_prices
+    type: data_table
+    title: "Detailed Price Data"
+    description: "Raw data used for aggregate calculations"
+    source: "company.fact_prices"
+    download: true
+
+# Layout defines how exhibits are arranged on the page
+layout:
+  - title: "📊 Overview"
+    description: "Summary metrics for selected stocks"
+    exhibits: [individual_overview]
+    columns: 1
+
+  - title: "📈 Aggregate Indices"
+    description: "Aggregated stock indices with dynamic weighting methods"
+    exhibits: [aggregate_price_index]
+    columns: 1
+
+  - title: "📊 Advanced Aggregates"
+    description: "Multi-measure and volume-based aggregate indices"
+    exhibits: [aggregate_volume_index, multi_measure_aggregate]
+    columns: 2
+
+  - title: "🔍 Comparison & Analysis"
+    description: "Compare aggregate indices with individual stock performance"
+    exhibits: [individual_price_trends, volume_distribution]
+    columns: 2
+
+  - title: "📋 Detailed Data"
+    description: "Raw data and export options"
+    exhibits: [detailed_prices]
+    columns: 1

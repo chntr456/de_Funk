@@ -41,6 +41,17 @@ class AggregationType(Enum):
     LAST = "last"
 
 
+class WeightingMethod(Enum):
+    """Weighting methods for aggregate calculations."""
+    EQUAL = "equal"  # Equal weighting (simple average)
+    MARKET_CAP = "market_cap"  # Market capitalization weighted
+    VOLUME = "volume"  # Volume weighted
+    PRICE = "price"  # Price weighted
+    CUSTOM = "custom"  # Custom expression-based weighting
+    VOLUME_DEVIATION = "volume_deviation"  # (volume - avg_volume) * price weighted
+    VOLATILITY = "volatility"  # Inverse volatility weighted
+
+
 class ExhibitType(Enum):
     """Types of exhibits (visualizations)."""
     METRIC_CARDS = "metric_cards"
@@ -52,6 +63,7 @@ class ExhibitType(Enum):
     DATA_TABLE = "data_table"
     PIVOT_TABLE = "pivot_table"
     CUSTOM_COMPONENT = "custom_component"
+    WEIGHTED_AGGREGATE_CHART = "weighted_aggregate_chart"
 
 
 @dataclass
@@ -190,6 +202,15 @@ class LayoutConfig:
 
 
 @dataclass
+class WeightingConfig:
+    """Configuration for weighted aggregation."""
+    method: WeightingMethod
+    weight_column: Optional[str] = None  # Column to use for weighting (for CUSTOM)
+    expression: Optional[str] = None  # Custom weight expression
+    normalize: bool = True  # Whether to normalize weights to sum to 1
+
+
+@dataclass
 class Exhibit:
     """Exhibit definition (visualization)."""
     id: str
@@ -211,6 +232,12 @@ class Exhibit:
 
     # Metric cards
     metrics: Optional[List[MetricConfig]] = None
+
+    # Weighted aggregate configurations
+    weighting: Optional[WeightingConfig] = None
+    aggregate_by: Optional[str] = None  # Dimension to aggregate by (e.g., "trade_date")
+    value_measures: Optional[List[str]] = None  # Measures to aggregate (e.g., ["close", "volume"])
+    group_by: Optional[str] = None  # Optional grouping dimension
 
     # Table configurations
     columns: Optional[List[str]] = None  # dimension or measure ids
