@@ -6,12 +6,17 @@ from typing import Any, Dict, Optional
 
 def _repo_root(start: Path) -> Path:
     # Walk up until we find the repo markers (adjust if you use a different layout)
-    cur = start
+    # If start is a file, get its directory first
+    cur = start if start.is_dir() else start.parent
+
     while cur != cur.parent:
-        if (cur / "configs").exists() and (cur / "src").exists():
+        # Check for configs directory and core directory (new structure)
+        if (cur / "configs").exists() and (cur / "core").exists():
             return cur
         cur = cur.parent
-    return start  # fallback
+
+    # Fallback: return parent of start if it was a file, otherwise start
+    return start.parent if start.is_file() else start
 
 @dataclass
 class RepoContext:

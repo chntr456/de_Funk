@@ -26,6 +26,13 @@ from models.registry import ModelRegistry
 from app.notebook.api.notebook_session import NotebookSession
 from app.notebook.schema import VariableType, ExhibitType
 
+# Import modular components for filters and exhibits
+from app.ui.components.filters import render_filters_section
+from app.ui.components.exhibits.line_chart import render_line_chart
+from app.ui.components.exhibits.bar_chart import render_bar_chart
+from app.ui.components.exhibits.metric_cards import render_metric_cards
+from app.ui.components.exhibits.data_table import render_data_table
+
 
 # Configure page
 st.set_page_config(
@@ -349,9 +356,7 @@ class NotebookVaultApp:
         st.rerun()
 
     def _render_filters_section(self):
-        """Render the filters section in sidebar."""
-        st.subheader("🎛️ Filters")
-
+        """Render the filters section in sidebar using modular component."""
         # Get active notebook
         active_notebook = next(
             (tab for tab in st.session_state.open_tabs if tab[0] == st.session_state.active_tab),
@@ -363,118 +368,14 @@ class NotebookVaultApp:
 
         notebook_id, notebook_path, notebook_config = active_notebook
 
-        # Create a scrollable container for filters
-        with st.container():
-            filter_context = self.notebook_session.get_filter_context()
-            filter_values = {}
-
-            # Render each variable as a filter control
-            for var_id, variable in notebook_config.variables.items():
-                if variable.type == VariableType.DATE_RANGE:
-                    filter_values[var_id] = self._render_date_range_filter(var_id, variable)
-
-                elif variable.type == VariableType.MULTI_SELECT:
-                    filter_values[var_id] = self._render_multi_select_filter(var_id, variable)
-
-                elif variable.type == VariableType.SINGLE_SELECT:
-                    filter_values[var_id] = self._render_single_select_filter(var_id, variable)
-
-                elif variable.type == VariableType.NUMBER:
-                    filter_values[var_id] = self._render_number_filter(var_id, variable)
-
-                elif variable.type == VariableType.BOOLEAN:
-                    filter_values[var_id] = self._render_boolean_filter(var_id, variable)
-
-            # Update filter context
-            if filter_values:
-                self.notebook_session.update_filters(filter_values)
-
-    def _render_date_range_filter(self, var_id: str, variable) -> Dict[str, datetime]:
-        """Render date range filter."""
-        filter_context = self.notebook_session.get_filter_context()
-        current_value = filter_context.get(var_id)
-
-        if current_value and isinstance(current_value, dict):
-            default_start = current_value['start']
-            default_end = current_value['end']
-            if isinstance(default_start, datetime):
-                default_start = default_start.date()
-            if isinstance(default_end, datetime):
-                default_end = default_end.date()
-        else:
-            default_start = datetime.now().date() - timedelta(days=30)
-            default_end = datetime.now().date()
-
-        start_date = st.date_input(
-            f"{variable.display_name} (Start)",
-            value=default_start,
-            key=f"filter_{var_id}_start",
+        # Use modular component with DuckDB connection and storage service for dynamic loading
+        render_filters_section(
+            notebook_config,
+            self.notebook_session,
+            connection=self.ctx.connection,
+            storage_service=self.notebook_session.storage_service
         )
 
-        end_date = st.date_input(
-            f"{variable.display_name} (End)",
-            value=default_end,
-            key=f"filter_{var_id}_end",
-        )
-
-        return {
-            'start': datetime.combine(start_date, datetime.min.time()),
-            'end': datetime.combine(end_date, datetime.min.time()),
-        }
-
-    def _render_multi_select_filter(self, var_id: str, variable) -> List[Any]:
-        """Render multi-select filter."""
-        if variable.options:
-            options = variable.options
-        elif not variable.source:
-            options = variable.default if variable.default else []
-        else:
-            options = variable.default if variable.default else []
-
-        default = variable.default if variable.default else []
-
-        return st.multiselect(
-            variable.display_name,
-            options=options,
-            default=default,
-            key=f"filter_{var_id}",
-            help=variable.description,
-        )
-
-    def _render_single_select_filter(self, var_id: str, variable) -> Any:
-        """Render single-select filter."""
-        options = variable.options if variable.options else []
-        default = variable.default
-
-        return st.selectbox(
-            variable.display_name,
-            options=options,
-            index=options.index(default) if default in options else 0,
-            key=f"filter_{var_id}",
-            help=variable.description,
-        )
-
-    def _render_number_filter(self, var_id: str, variable) -> float:
-        """Render number filter."""
-        default = variable.default if variable.default is not None else 0.0
-
-        return st.number_input(
-            variable.display_name,
-            value=float(default),
-            key=f"filter_{var_id}",
-            help=variable.description,
-        )
-
-    def _render_boolean_filter(self, var_id: str, variable) -> bool:
-        """Render boolean filter."""
-        default = variable.default if variable.default is not None else False
-
-        return st.checkbox(
-            variable.display_name,
-            value=default,
-            key=f"filter_{var_id}",
-            help=variable.description,
-        )
 
     def _render_main_content(self):
         """Render main content area with tabs."""
@@ -652,15 +553,15 @@ class NotebookVaultApp:
                 # Convert to pandas (works with both Spark DF and DuckDB relation)
                 pdf = self.ctx.connection.to_pandas(df)
 
-            # Render based on type
+            # Render based on type using modular components (with proper date sorting)
             if exhibit.type == ExhibitType.METRIC_CARDS:
-                self._render_metric_cards(exhibit, pdf)
+                render_metric_cards(exhibit, pdf)
             elif exhibit.type == ExhibitType.LINE_CHART:
-                self._render_line_chart(exhibit, pdf)
+                render_line_chart(exhibit, pdf)
             elif exhibit.type == ExhibitType.BAR_CHART:
-                self._render_bar_chart(exhibit, pdf)
+                render_bar_chart(exhibit, pdf)
             elif exhibit.type == ExhibitType.DATA_TABLE:
-                self._render_data_table(exhibit, pdf)
+                render_data_table(exhibit, pdf)
             else:
                 st.warning(f"Exhibit type not yet implemented: {exhibit.type}")
 
@@ -669,126 +570,6 @@ class NotebookVaultApp:
             with st.expander("Show details"):
                 st.exception(e)
 
-    def _render_metric_cards(self, exhibit, pdf: pd.DataFrame):
-        """Render metric cards exhibit."""
-        st.subheader(exhibit.title)
-
-        if exhibit.metrics:
-            cols = st.columns(len(exhibit.metrics))
-            for i, metric_config in enumerate(exhibit.metrics):
-                with cols[i]:
-                    measure_id = metric_config.measure
-                    if measure_id in pdf.columns:
-                        value = pdf[measure_id].iloc[0] if len(pdf) > 0 else 0
-
-                        # Format value based on magnitude
-                        if pd.isna(value):
-                            formatted = "N/A"
-                        elif abs(value) >= 1e9:
-                            formatted = f"${value/1e9:.2f}B"
-                        elif abs(value) >= 1e6:
-                            formatted = f"${value/1e6:.2f}M"
-                        elif abs(value) >= 1e3:
-                            formatted = f"${value/1e3:.2f}K"
-                        else:
-                            formatted = f"${value:,.2f}"
-
-                        # Use Streamlit metric with delta styling
-                        display_name = measure_id.replace('_', ' ').title()
-                        st.metric(label=display_name, value=formatted)
-                    else:
-                        st.metric(label=measure_id.replace('_', ' ').title(), value="N/A")
-
-    def _render_line_chart(self, exhibit, pdf: pd.DataFrame):
-        """Render line chart exhibit."""
-        st.subheader(exhibit.title)
-
-        if exhibit.x_axis and exhibit.y_axis:
-            x_col = exhibit.x_axis.dimension
-            y_cols = exhibit.y_axis.measures or [exhibit.y_axis.measure]
-
-            fig = px.line(
-                pdf,
-                x=x_col,
-                y=y_cols,
-                color=exhibit.color_by if exhibit.color_by else None,
-                title=exhibit.title,
-                labels={x_col: exhibit.x_axis.label or x_col},
-            )
-
-            # Apply theme to chart
-            if st.session_state.theme == 'dark':
-                fig.update_layout(
-                    plot_bgcolor='#1E2130',
-                    paper_bgcolor='#1E2130',
-                    font_color='#FAFAFA',
-                    xaxis=dict(gridcolor='#3A3D45'),
-                    yaxis=dict(gridcolor='#3A3D45'),
-                )
-            else:
-                fig.update_layout(
-                    plot_bgcolor='#F8F9FA',
-                    paper_bgcolor='#F8F9FA',
-                )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-    def _render_bar_chart(self, exhibit, pdf: pd.DataFrame):
-        """Render bar chart exhibit."""
-        st.subheader(exhibit.title)
-
-        if exhibit.x_axis and exhibit.y_axis:
-            x_col = exhibit.x_axis.dimension
-            y_cols = exhibit.y_axis.measures or [exhibit.y_axis.measure]
-
-            fig = px.bar(
-                pdf,
-                x=x_col,
-                y=y_cols[0] if y_cols else None,
-                color=exhibit.color_by if exhibit.color_by else None,
-                title=exhibit.title,
-            )
-
-            # Apply theme to chart
-            if st.session_state.theme == 'dark':
-                fig.update_layout(
-                    plot_bgcolor='#1E2130',
-                    paper_bgcolor='#1E2130',
-                    font_color='#FAFAFA',
-                    xaxis=dict(gridcolor='#3A3D45'),
-                    yaxis=dict(gridcolor='#3A3D45'),
-                )
-            else:
-                fig.update_layout(
-                    plot_bgcolor='#F8F9FA',
-                    paper_bgcolor='#F8F9FA',
-                )
-
-            st.plotly_chart(fig, use_container_width=True)
-
-    def _render_data_table(self, exhibit, pdf: pd.DataFrame):
-        """Render data table exhibit."""
-        st.subheader(exhibit.title)
-
-        if exhibit.description:
-            st.caption(exhibit.description)
-
-        # Display dataframe
-        st.dataframe(
-            pdf,
-            use_container_width=True,
-            hide_index=True,
-        )
-
-        # Download button if enabled
-        if exhibit.download:
-            csv = pdf.to_csv(index=False)
-            st.download_button(
-                label="Download CSV",
-                data=csv,
-                file_name=f"{exhibit.id}.csv",
-                mime="text/csv",
-            )
 
     def _render_welcome(self):
         """Render welcome screen."""
