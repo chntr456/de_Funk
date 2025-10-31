@@ -1,8 +1,44 @@
-# Weighted Aggregate Graphics Feature
+# Weighted Aggregate Graphics Feature (Model-Based)
 
 ## Overview
 
 The weighted aggregate graphics feature allows you to create dynamic visualizations that aggregate stock data across multiple securities using various weighting methods. This is particularly useful for creating custom indices, portfolio views, and comparative analyses.
+
+**Architecture:** Calculations are performed in the model/silver layer using DuckDB for optimal performance. The UI only handles rendering - no business logic.
+
+## Quick Start
+
+### 1. Build Weighted Aggregate Views
+
+Before using weighted aggregate charts, you need to build the weighted aggregate views:
+
+```bash
+python scripts/build_weighted_aggregates_duckdb.py
+```
+
+This creates DuckDB views for all 6 weighting methods defined in the model configuration.
+
+### 2. Use in Notebooks
+
+Reference the pre-defined measures in your notebook YAML:
+
+```yaml
+exhibits:
+  - id: my_aggregate_index
+    type: weighted_aggregate_chart
+    title: "My Index"
+    aggregate_by: trade_date
+    value_measures:
+      - equal_weighted_index
+      - volume_weighted_index
+      - market_cap_weighted_index
+```
+
+### 3. Run the App
+
+```bash
+streamlit run app/ui/notebook_app_duckdb.py
+```
 
 ## Features
 
@@ -40,17 +76,41 @@ The weighted aggregate graphics feature allows you to create dynamic visualizati
 
 ### Interactive Features
 
-- **Dynamic Weighting Selector**: Switch between weighting methods in real-time
-- **Normalization Toggle**: Optionally normalize weights to sum to 1
-- **Multi-Measure Support**: Display multiple aggregated metrics simultaneously
-- **Summary Statistics**: View detailed statistics about the aggregate
+- **Multi-Method Display**: Show multiple weighting methods side-by-side
+- **Interactive Legend**: Click to show/hide individual methods
+- **Multiple Metrics**: Display multiple aggregated indices simultaneously
+- **Summary Statistics**: View detailed statistics about each aggregate
 - **Export Capability**: Download charts as PNG images
+- **Fast Performance**: Pre-calculated views mean instant rendering
 
 ## Configuration
 
-### YAML Configuration
+### Model Configuration (configs/models/company.yaml)
 
-Add a weighted aggregate exhibit to your notebook YAML:
+Define weighted aggregate measures in your model configuration:
+
+```yaml
+measures:
+  equal_weighted_index:
+    description: "Equal weighted price index across stocks"
+    type: weighted_aggregate
+    source: fact_prices.close
+    weighting_method: equal
+    group_by: [trade_date]
+    format: "$#,##0.00"
+
+  volume_weighted_index:
+    description: "Volume weighted price index across stocks"
+    type: weighted_aggregate
+    source: fact_prices.close
+    weighting_method: volume
+    group_by: [trade_date]
+    format: "$#,##0.00"
+```
+
+### Notebook YAML Configuration
+
+Reference the model measures in your notebook:
 
 ```yaml
 exhibits:
@@ -58,12 +118,11 @@ exhibits:
     type: weighted_aggregate_chart
     title: "Aggregate Price Index"
     description: "Combined price index across selected stocks"
-    source: "company.fact_prices"
     aggregate_by: trade_date
-    value_measures: ["close"]
-    weighting:
-      method: equal
-      normalize: true
+    value_measures:
+      - equal_weighted_index
+      - volume_weighted_index
+      - market_cap_weighted_index
 ```
 
 ### Configuration Parameters
@@ -72,14 +131,8 @@ exhibits:
 - **`type`** (required): Must be `weighted_aggregate_chart`
 - **`title`** (required): Display title
 - **`description`** (optional): Description text
-- **`source`** (required): Data source in "model.table" format
 - **`aggregate_by`** (required): Dimension to aggregate by (e.g., "trade_date")
-- **`value_measures`** (required): List of measures to aggregate (e.g., ["close", "volume"])
-- **`weighting`** (optional): Weighting configuration
-  - **`method`**: Weighting method (default: "equal")
-  - **`normalize`**: Normalize weights (default: true)
-  - **`weight_column`**: Custom weight column (for custom method)
-  - **`expression`**: Custom weight expression (for custom method)
+- **`value_measures`** (required): List of model measure IDs to display
 
 ### Multi-Measure Example
 

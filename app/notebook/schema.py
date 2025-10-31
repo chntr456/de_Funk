@@ -23,6 +23,7 @@ class MeasureType(Enum):
     """Types of measures supported."""
     SIMPLE = "simple"
     WEIGHTED_AVERAGE = "weighted_average"
+    WEIGHTED_AGGREGATE = "weighted_aggregate"  # Multi-stock weighted index
     CALCULATION = "calculation"
     WINDOW_FUNCTION = "window_function"
     RATIO = "ratio"
@@ -152,6 +153,11 @@ class Measure:
     # For weighted average
     value_column: Optional[SourceReference] = None
     weight_column: Optional[SourceReference] = None
+
+    # For weighted aggregate (multi-stock indices)
+    weighting_method: Optional[WeightingMethod] = None
+    group_by: Optional[List[str]] = None  # e.g., ["trade_date"]
+    weight_config: Optional[Dict[str, Any]] = None  # Method-specific config
 
     # For calculations
     expression: Optional[str] = None

@@ -132,6 +132,67 @@ measures:
     format: "$#,##0.00"
     tags: [price, vwap]
 
+  # Weighted aggregate measures (multi-stock indices)
+  equal_weighted_index:
+    description: "Equal weighted price index across stocks"
+    type: weighted_aggregate
+    source: fact_prices.close
+    weighting_method: equal
+    group_by: [trade_date]
+    data_type: double
+    format: "$#,##0.00"
+    tags: [index, aggregate, equal_weighted]
+
+  volume_weighted_index:
+    description: "Volume weighted price index across stocks"
+    type: weighted_aggregate
+    source: fact_prices.close
+    weighting_method: volume
+    group_by: [trade_date]
+    data_type: double
+    format: "$#,##0.00"
+    tags: [index, aggregate, volume_weighted]
+
+  market_cap_weighted_index:
+    description: "Market cap weighted price index across stocks"
+    type: weighted_aggregate
+    source: fact_prices.close
+    weighting_method: market_cap
+    group_by: [trade_date]
+    data_type: double
+    format: "$#,##0.00"
+    tags: [index, aggregate, market_cap_weighted]
+
+  price_weighted_index:
+    description: "Price weighted index across stocks"
+    type: weighted_aggregate
+    source: fact_prices.close
+    weighting_method: price
+    group_by: [trade_date]
+    data_type: double
+    format: "$#,##0.00"
+    tags: [index, aggregate, price_weighted]
+
+  volume_deviation_weighted_index:
+    description: "Volume deviation weighted index (unusual activity)"
+    type: weighted_aggregate
+    source: fact_prices.close
+    weighting_method: volume_deviation
+    group_by: [trade_date]
+    data_type: double
+    format: "$#,##0.00"
+    tags: [index, aggregate, volume_deviation]
+
+  volatility_weighted_index:
+    description: "Inverse volatility weighted index (risk-adjusted)"
+    type: weighted_aggregate
+    source: fact_prices.close
+    weighting_method: volatility
+    group_by: [trade_date]
+    data_type: double
+    format: "$#,##0.00"
+    tags: [index, aggregate, volatility_weighted]
+
 # Graph structure for visualization and future graph database
 graph:
   nodes:

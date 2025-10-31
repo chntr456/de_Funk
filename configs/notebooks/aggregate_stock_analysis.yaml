@@ -54,41 +54,41 @@ exhibits:
         label: "Min Low"
         aggregation: min
 
-  # Weighted aggregate index - Price trends
+  # Weighted aggregate index - Price trends (model-based)
   - id: aggregate_price_index
     type: weighted_aggregate_chart
     title: "Aggregate Price Index"
     description: "Combined price index across selected stocks using different weighting methods"
-    source: "company.fact_prices"
     aggregate_by: trade_date
-    value_measures: ["close"]
-    weighting:
-      method: equal
-      normalize: true
+    value_measures:
+      - equal_weighted_index
+      - volume_weighted_index
+      - market_cap_weighted_index
 
-  # Weighted aggregate index - Volume trends
-  - id: aggregate_volume_index
+  # Alternative weighting methods comparison
+  - id: alternative_weighting_comparison
     type: weighted_aggregate_chart
-    title: "Aggregate Volume Index"
-    description: "Combined volume index across selected stocks"
-    source: "company.fact_prices"
+    title: "Alternative Weighting Methods"
+    description: "Compare price-weighted, volume deviation, and volatility weighted indices"
     aggregate_by: trade_date
-    value_measures: ["volume"]
-    weighting:
-      method: equal
-      normalize: true
+    value_measures:
+      - price_weighted_index
+      - volume_deviation_weighted_index
+      - volatility_weighted_index
 
-  # Multi-measure aggregate showing both price and volume
-  - id: multi_measure_aggregate
+  # All methods comparison
+  - id: all_methods_comparison
     type: weighted_aggregate_chart
-    title: "Multi-Measure Aggregate Index"
-    description: "Aggregate index showing multiple measures (price, volume, VWAP)"
-    source: "company.fact_prices"
+    title: "All Weighting Methods Comparison"
+    description: "Side-by-side comparison of all 6 weighting methods"
     aggregate_by: trade_date
-    value_measures: ["close", "volume", "volume_weighted"]
-    weighting:
-      method: market_cap
-      normalize: true
+    value_measures:
+      - equal_weighted_index
+      - volume_weighted_index
+      - market_cap_weighted_index
+      - price_weighted_index
+      - volume_deviation_weighted_index
+      - volatility_weighted_index
 
   # Individual stock comparison (for reference)
   - id: individual_price_trends
@@ -139,8 +139,8 @@ layout:
     columns: 1
 
   - title: "📊 Advanced Aggregates"
-    description: "Multi-measure and volume-based aggregate indices"
-    exhibits: [aggregate_volume_index, multi_measure_aggregate]
+    description: "Alternative weighting methods and comprehensive comparison"
+    exhibits: [alternative_weighting_comparison, all_methods_comparison]
     columns: 2
 
   - title: "🔍 Comparison & Analysis"

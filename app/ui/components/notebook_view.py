@@ -12,7 +12,7 @@ from .exhibits import (
     render_bar_chart,
     render_data_table,
 )
-from .exhibits.weighted_aggregate_chart import render_weighted_aggregate_chart
+from .exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_chart
 
 
 def render_notebook_exhibits(notebook_id: str, notebook_config, notebook_session, connection):

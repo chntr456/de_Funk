@@ -14,11 +14,12 @@ Key Features:
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 
-from ..schema import NotebookConfig, Exhibit
+from ..schema import NotebookConfig, Exhibit, ExhibitType
 from ..parser import NotebookParser
 from ..filters.context import FilterContext
 from models.registry import ModelRegistry
 from app.services.storage_service import SilverStorageService
+import pandas as pd
 
 
 class NotebookSession:
@@ -111,6 +112,10 @@ class NotebookSession:
         exhibit = self._find_exhibit(exhibit_id)
         if not exhibit:
             raise ValueError(f"Exhibit not found: {exhibit_id}")
+
+        # Special handling for weighted aggregate charts
+        if exhibit.type == ExhibitType.WEIGHTED_AGGREGATE_CHART:
+            return self._get_weighted_aggregate_data(exhibit)
 
         # Parse source (format: "model.table")
         if not hasattr(exhibit, 'source') or not exhibit.source:
@@ -207,3 +212,81 @@ class NotebookSession:
             filters.update(exhibit.filters)
 
         return filters
+
+    def _get_weighted_aggregate_data(self, exhibit: Exhibit) -> Any:
+        """
+        Get data for weighted aggregate charts by querying model-defined measures.
+
+        This queries pre-built weighted aggregate views from the silver layer,
+        avoiding the need for UI-level calculations.
+
+        Args:
+            exhibit: Weighted aggregate chart exhibit
+
+        Returns:
+            DataFrame with columns: aggregate_by, weighted_value, measure_id
+        """
+        if not hasattr(exhibit, 'value_measures') or not exhibit.value_measures:
+            raise ValueError(f"Weighted aggregate exhibit {exhibit.id} has no value_measures defined")
+
+        aggregate_by = exhibit.aggregate_by or 'trade_date'
+        measure_ids = exhibit.value_measures  # e.g., ["equal_weighted_index", "volume_weighted_index"]
+
+        # Build filter clause for the query
+        filters = self._build_filters(exhibit)
+        where_clauses = []
+
+        # Handle different filter types
+        for filter_name, filter_value in filters.items():
+            if isinstance(filter_value, dict):
+                # Date range filter
+                if 'start' in filter_value and 'end' in filter_value:
+                    where_clauses.append(f"{filter_name} BETWEEN '{filter_value['start']}' AND '{filter_value['end']}'")
+                # Numeric range filter
+                elif 'min' in filter_value:
+                    where_clauses.append(f"{filter_name} >= {filter_value['min']}")
+                if 'max' in filter_value:
+                    where_clauses.append(f"{filter_name} <= {filter_value['max']}")
+            elif isinstance(filter_value, list):
+                # Multi-select filter (IN clause)
+                values_str = ','.join([f"'{v}'" for v in filter_value])
+                where_clauses.append(f"{filter_name} IN ({values_str})")
+            else:
+                # Simple equality filter
+                where_clauses.append(f"{filter_name} = '{filter_value}'")
+
+        where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
+
+        # Query each weighted aggregate measure
+        results = []
+        for measure_id in measure_ids:
+            sql = f"""
+            SELECT
+                {aggregate_by},
+                weighted_value,
+                '{measure_id}' as measure_id
+            FROM {measure_id}
+            WHERE {where_clause}
+            ORDER BY {aggregate_by}
+            """
+
+            try:
+                # Execute query and fetch result
+                df = self.connection.execute(sql).fetchdf()
+                results.append(df)
+            except Exception as e:
+                # If the measure doesn't exist, provide helpful error
+                raise ValueError(
+                    f"Error querying weighted aggregate '{measure_id}': {str(e)}. "
+                    f"Make sure to run 'python scripts/build_weighted_aggregates_duckdb.py' "
+                    f"to create the weighted aggregate views."
+                )
+
+        # Combine all measures into a single DataFrame
+        if results:
+            combined_df = pd.concat(results, ignore_index=True)
+            # Convert to DuckDB relation for consistency
+            return self.connection.from_df(combined_df)
+        else:
+            # Return empty DataFrame
+            return self.connection.from_df(pd.DataFrame(columns=[aggregate_by, 'weighted_value', 'measure_id']))
