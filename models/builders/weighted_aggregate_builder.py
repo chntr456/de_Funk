@@ -153,66 +153,125 @@ class WeightedAggregateBuilder:
             raise ValueError(f"Unknown weighting method: {method}")
 
     def _sql_equal_weighted(self, table: str, value_col: str, group_cols: str) -> str:
-        """Generate SQL for equal weighting (simple average)."""
+        """Generate SQL for equal weighting (simple average), normalized to base 100."""
         return f"""
+        WITH daily_values AS (
+            SELECT
+                {group_cols},
+                AVG({value_col}) as raw_value,
+                COUNT(*) as stock_count
+            FROM {table}
+            WHERE {value_col} IS NOT NULL
+            GROUP BY {group_cols}
+        ),
+        base_value AS (
+            SELECT MIN({group_cols}) as base_date, raw_value as base_raw_value
+            FROM daily_values
+            LIMIT 1
+        )
         SELECT
-            {group_cols},
-            AVG({value_col}) as weighted_value,
-            COUNT(*) as stock_count
-        FROM {table}
-        WHERE {value_col} IS NOT NULL
-        GROUP BY {group_cols}
+            dv.{group_cols},
+            (dv.raw_value / bv.base_raw_value) * 100 as weighted_value,
+            dv.stock_count
+        FROM daily_values dv
+        CROSS JOIN base_value bv
+        ORDER BY dv.{group_cols}
         """
 
     def _sql_volume_weighted(self, table: str, value_col: str, group_cols: str) -> str:
-        """Generate SQL for volume weighting."""
+        """Generate SQL for volume weighting, normalized to base 100."""
         return f"""
+        WITH daily_values AS (
+            SELECT
+                {group_cols},
+                SUM({value_col} * volume) / NULLIF(SUM(volume), 0) as raw_value,
+                COUNT(*) as stock_count,
+                SUM(volume) as total_volume
+            FROM {table}
+            WHERE {value_col} IS NOT NULL
+              AND volume IS NOT NULL
+              AND volume > 0
+            GROUP BY {group_cols}
+        ),
+        base_value AS (
+            SELECT MIN({group_cols}) as base_date, raw_value as base_raw_value
+            FROM daily_values
+            LIMIT 1
+        )
         SELECT
-            {group_cols},
-            SUM({value_col} * volume) / NULLIF(SUM(volume), 0) as weighted_value,
-            COUNT(*) as stock_count,
-            SUM(volume) as total_volume
-        FROM {table}
-        WHERE {value_col} IS NOT NULL
-          AND volume IS NOT NULL
-          AND volume > 0
-        GROUP BY {group_cols}
+            dv.{group_cols},
+            (dv.raw_value / bv.base_raw_value) * 100 as weighted_value,
+            dv.stock_count,
+            dv.total_volume
+        FROM daily_values dv
+        CROSS JOIN base_value bv
+        ORDER BY dv.{group_cols}
         """
 
     def _sql_market_cap_weighted(self, table: str, value_col: str, group_cols: str) -> str:
-        """Generate SQL for market cap weighting (price * volume as proxy)."""
+        """Generate SQL for market cap weighting (price * volume as proxy), normalized to base 100."""
         return f"""
+        WITH daily_values AS (
+            SELECT
+                {group_cols},
+                SUM({value_col} * close * volume) / NULLIF(SUM(close * volume), 0) as raw_value,
+                COUNT(*) as stock_count,
+                SUM(close * volume) as total_market_cap
+            FROM {table}
+            WHERE {value_col} IS NOT NULL
+              AND close IS NOT NULL
+              AND volume IS NOT NULL
+              AND close > 0
+              AND volume > 0
+            GROUP BY {group_cols}
+        ),
+        base_value AS (
+            SELECT MIN({group_cols}) as base_date, raw_value as base_raw_value
+            FROM daily_values
+            LIMIT 1
+        )
         SELECT
-            {group_cols},
-            SUM({value_col} * close * volume) / NULLIF(SUM(close * volume), 0) as weighted_value,
-            COUNT(*) as stock_count,
-            SUM(close * volume) as total_market_cap
-        FROM {table}
-        WHERE {value_col} IS NOT NULL
-          AND close IS NOT NULL
-          AND volume IS NOT NULL
-          AND close > 0
-          AND volume > 0
-        GROUP BY {group_cols}
+            dv.{group_cols},
+            (dv.raw_value / bv.base_raw_value) * 100 as weighted_value,
+            dv.stock_count,
+            dv.total_market_cap
+        FROM daily_values dv
+        CROSS JOIN base_value bv
+        ORDER BY dv.{group_cols}
         """
 
     def _sql_price_weighted(self, table: str, value_col: str, group_cols: str) -> str:
-        """Generate SQL for price weighting."""
+        """Generate SQL for price weighting, normalized to base 100."""
         return f"""
+        WITH daily_values AS (
+            SELECT
+                {group_cols},
+                SUM({value_col} * close) / NULLIF(SUM(close), 0) as raw_value,
+                COUNT(*) as stock_count,
+                SUM(close) as total_price
+            FROM {table}
+            WHERE {value_col} IS NOT NULL
+              AND close IS NOT NULL
+              AND close > 0
+            GROUP BY {group_cols}
+        ),
+        base_value AS (
+            SELECT MIN({group_cols}) as base_date, raw_value as base_raw_value
+            FROM daily_values
+            LIMIT 1
+        )
         SELECT
-            {group_cols},
-            SUM({value_col} * close) / NULLIF(SUM(close), 0) as weighted_value,
-            COUNT(*) as stock_count,
-            SUM(close) as total_price
-        FROM {table}
-        WHERE {value_col} IS NOT NULL
-          AND close IS NOT NULL
-          AND close > 0
-        GROUP BY {group_cols}
+            dv.{group_cols},
+            (dv.raw_value / bv.base_raw_value) * 100 as weighted_value,
+            dv.stock_count,
+            dv.total_price
+        FROM daily_values dv
+        CROSS JOIN base_value bv
+        ORDER BY dv.{group_cols}
         """
 
     def _sql_volume_deviation_weighted(self, table: str, value_col: str, group_cols: str) -> str:
-        """Generate SQL for volume deviation weighting (unusual activity)."""
+        """Generate SQL for volume deviation weighting (unusual activity), normalized to base 100."""
         return f"""
         WITH avg_volumes AS (
             SELECT
@@ -221,24 +280,39 @@ class WeightedAggregateBuilder:
             FROM {table}
             WHERE volume IS NOT NULL
             GROUP BY {group_cols}
+        ),
+        daily_values AS (
+            SELECT
+                f.{group_cols},
+                SUM(f.{value_col} * ABS(f.volume - av.avg_volume) * f.close) /
+                    NULLIF(SUM(ABS(f.volume - av.avg_volume) * f.close), 0) as raw_value,
+                COUNT(*) as stock_count,
+                av.avg_volume
+            FROM {table} f
+            JOIN avg_volumes av USING ({group_cols})
+            WHERE f.{value_col} IS NOT NULL
+              AND f.volume IS NOT NULL
+              AND f.close IS NOT NULL
+              AND f.close > 0
+            GROUP BY f.{group_cols}, av.avg_volume
+        ),
+        base_value AS (
+            SELECT MIN({group_cols}) as base_date, raw_value as base_raw_value
+            FROM daily_values
+            LIMIT 1
         )
         SELECT
-            f.{group_cols},
-            SUM(f.{value_col} * ABS(f.volume - av.avg_volume) * f.close) /
-                NULLIF(SUM(ABS(f.volume - av.avg_volume) * f.close), 0) as weighted_value,
-            COUNT(*) as stock_count,
-            av.avg_volume
-        FROM {table} f
-        JOIN avg_volumes av USING ({group_cols})
-        WHERE f.{value_col} IS NOT NULL
-          AND f.volume IS NOT NULL
-          AND f.close IS NOT NULL
-          AND f.close > 0
-        GROUP BY f.{group_cols}, av.avg_volume
+            dv.{group_cols},
+            (dv.raw_value / bv.base_raw_value) * 100 as weighted_value,
+            dv.stock_count,
+            dv.avg_volume
+        FROM daily_values dv
+        CROSS JOIN base_value bv
+        ORDER BY dv.{group_cols}
         """
 
     def _sql_volatility_weighted(self, table: str, value_col: str, group_cols: str) -> str:
-        """Generate SQL for inverse volatility weighting (risk-adjusted)."""
+        """Generate SQL for inverse volatility weighting (risk-adjusted), normalized to base 100."""
         return f"""
         WITH daily_ranges AS (
             SELECT
@@ -251,16 +325,31 @@ class WeightedAggregateBuilder:
               AND low IS NOT NULL
               AND high >= low
               AND {value_col} IS NOT NULL
+        ),
+        daily_values AS (
+            SELECT
+                {group_cols},
+                SUM({value_col} / NULLIF(daily_range, 0)) /
+                    NULLIF(SUM(1.0 / NULLIF(daily_range, 0)), 0) as raw_value,
+                COUNT(*) as stock_count,
+                AVG(daily_range) as avg_volatility
+            FROM daily_ranges
+            WHERE daily_range > 0.001  -- Avoid division by zero
+            GROUP BY {group_cols}
+        ),
+        base_value AS (
+            SELECT MIN({group_cols}) as base_date, raw_value as base_raw_value
+            FROM daily_values
+            LIMIT 1
         )
         SELECT
-            {group_cols},
-            SUM({value_col} / NULLIF(daily_range, 0)) /
-                NULLIF(SUM(1.0 / NULLIF(daily_range, 0)), 0) as weighted_value,
-            COUNT(*) as stock_count,
-            AVG(daily_range) as avg_volatility
-        FROM daily_ranges
-        WHERE daily_range > 0.001  -- Avoid division by zero
-        GROUP BY {group_cols}
+            dv.{group_cols},
+            (dv.raw_value / bv.base_raw_value) * 100 as weighted_value,
+            dv.stock_count,
+            dv.avg_volatility
+        FROM daily_values dv
+        CROSS JOIN base_value bv
+        ORDER BY dv.{group_cols}
         """
 
     def drop_weighted_aggregates(self):
