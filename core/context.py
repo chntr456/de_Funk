@@ -56,7 +56,10 @@ class RepoContext:
 
         if connection_type == "duckdb":
             from core.connection import ConnectionFactory
-            connection = ConnectionFactory.create("duckdb")
+            # Use persistent DuckDB file instead of in-memory
+            duckdb_path = root / "storage" / "duckdb" / "analytics.db"
+            duckdb_path.parent.mkdir(parents=True, exist_ok=True)
+            connection = ConnectionFactory.create("duckdb", db_path=str(duckdb_path))
             # DuckDB-only mode: No Spark needed for UI/analytics
             spark = None
         else:
