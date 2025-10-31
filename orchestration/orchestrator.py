@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 
-from pyspark.sql import DataFrame
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame
+    from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
+    from models.company_model import CompanyModel
 
 from core.context import RepoContext
-from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
-from models.company_model import CompanyModel
 
 try:
     import yaml  # type: ignore
@@ -40,7 +41,11 @@ class Orchestrator:
         date_from: str,
         date_to: str,
         max_tickers: int | None = None,
-    ) -> DataFrame:
+    ) -> "DataFrame":
+        # Lazy imports - only load when method is actually called
+        from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
+        from models.company_model import CompanyModel
+
         # ✅ do NOT call spark like a function
         spark = self.ctx.spark
 

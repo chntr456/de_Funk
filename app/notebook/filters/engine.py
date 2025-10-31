@@ -2,10 +2,16 @@
 Filter engine for applying filters to DataFrames.
 """
 
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, TYPE_CHECKING
 from datetime import datetime
-from pyspark.sql import DataFrame
-import pyspark.sql.functions as F
+
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame
+    import pyspark.sql.functions as F
+else:
+    # Lazy import for runtime - only needed when actually using the class
+    DataFrame = None
+    F = None
 
 from ..schema import Variable, VariableType
 from .context import FilterContext
@@ -21,7 +27,16 @@ class FilterEngine:
 
     def __init__(self):
         """Initialize filter engine."""
-        pass
+        # Lazy import pyspark if needed at runtime
+        global F
+        if F is None:
+            try:
+                import pyspark.sql.functions as F_module
+                F = F_module
+            except ImportError:
+                raise ImportError(
+                    "FilterEngine requires PySpark. Install it with: pip install pyspark"
+                )
 
     def apply_filters(
         self,
