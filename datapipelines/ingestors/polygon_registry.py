@@ -1,4 +1,4 @@
-from src.data_pipelines.base_pipeline.registry import BaseRegistry
+from datapipelines.base.registry import BaseRegistry
 
 class PolygonRegistry(BaseRegistry):
     pass

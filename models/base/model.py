@@ -1,6 +1,6 @@
 from pyspark.sql import functions as F
 
-from src.model.graph_dsl import as_graph, interpolate
+from models.graph_dsl import as_graph, interpolate
 
 class BaseModel:
     def __init__(self, spark, model_cfg: dict, storage_cfg: dict, params=None):

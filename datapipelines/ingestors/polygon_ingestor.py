@@ -1,4 +1,4 @@
-from src.data_pipelines.polygon.registry import PolygonRegistry
+from datapipelines.ingestors.polygon_registry import PolygonRegistry
 from datapipelines.base.http_client import HttpClient
 from datapipelines.base.key_pool import ApiKeyPool
 from datapipelines.ingestors.bronze_sink import BronzeSink
