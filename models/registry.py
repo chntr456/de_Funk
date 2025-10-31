@@ -28,8 +28,11 @@ class MeasureConfig:
     name: str
     description: str
     source: str  # e.g., "fact_prices.close"
-    aggregation: str  # avg, sum, min, max, count, etc.
     data_type: str
+    aggregation: Optional[str] = None  # avg, sum, min, max, count, etc. (for simple measures)
+    type: Optional[str] = None  # simple, weighted_aggregate, etc.
+    weighting_method: Optional[str] = None  # For weighted_aggregate type
+    group_by: Optional[List[str]] = None  # For weighted_aggregate type
     format: Optional[str] = None
     tags: Optional[List[str]] = None
 
@@ -102,8 +105,11 @@ class ModelConfig:
                 name=measure_name,
                 description=measure_config.get('description', ''),
                 source=measure_config['source'],
-                aggregation=measure_config['aggregation'],
                 data_type=measure_config.get('data_type', 'double'),
+                aggregation=measure_config.get('aggregation'),  # Optional for weighted aggregates
+                type=measure_config.get('type'),  # Type of measure
+                weighting_method=measure_config.get('weighting_method'),  # For weighted aggregates
+                group_by=measure_config.get('group_by'),  # For weighted aggregates
                 format=measure_config.get('format'),
                 tags=measure_config.get('tags', [])
             )
