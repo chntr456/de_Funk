@@ -267,17 +267,34 @@ class NotebookSession:
 
         where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
 
-        # Query each weighted aggregate measure
+        # Query each weighted aggregate measure with dynamic normalization
         results = []
         for measure_id in measure_ids:
+            # Query with dynamic normalization based on filtered date range
+            # The index will always start at 100 for the first date in the filtered results
             sql = f"""
+            WITH raw_data AS (
+                SELECT
+                    {aggregate_by},
+                    weighted_value
+                FROM {measure_id}
+                WHERE {where_clause}
+            ),
+            base_value AS (
+                SELECT
+                    MIN({aggregate_by}) as base_date,
+                    weighted_value as base_weighted_value
+                FROM raw_data
+                ORDER BY {aggregate_by}
+                LIMIT 1
+            )
             SELECT
-                {aggregate_by},
-                weighted_value,
+                rd.{aggregate_by},
+                (rd.weighted_value / bv.base_weighted_value) * 100 as weighted_value,
                 '{measure_id}' as measure_id
-            FROM {measure_id}
-            WHERE {where_clause}
-            ORDER BY {aggregate_by}
+            FROM raw_data rd
+            CROSS JOIN base_value bv
+            ORDER BY rd.{aggregate_by}
             """
 
             try:
