@@ -279,13 +279,12 @@ class NotebookSession:
                     weighted_value
                 FROM {measure_id}
                 WHERE {where_clause}
+                ORDER BY {aggregate_by}
             ),
             base_value AS (
                 SELECT
-                    MIN({aggregate_by}) as base_date,
                     weighted_value as base_weighted_value
                 FROM raw_data
-                ORDER BY {aggregate_by}
                 LIMIT 1
             )
             SELECT
