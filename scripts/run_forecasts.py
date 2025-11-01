@@ -18,6 +18,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 import yaml
+import json
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -26,9 +27,14 @@ from models.forecast_model import ForecastModel
 
 
 def load_config(config_path: str) -> dict:
-    """Load YAML configuration file."""
+    """Load configuration file (YAML or JSON)."""
+    config_path = Path(config_path)
+
     with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+        if config_path.suffix == '.json':
+            return json.load(f)
+        else:
+            return yaml.safe_load(f)
 
 
 def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
@@ -95,7 +101,7 @@ def run_forecast_pipeline(
     print("Loading configurations...")
     config_root = Path(__file__).parent.parent / "configs"
 
-    storage_cfg = load_config(config_root / "storage.yaml")
+    storage_cfg = load_config(config_root / "storage.json")
     forecast_cfg = load_config(config_root / "models" / "forecast.yaml")
 
     print(f"  ✓ Loaded storage config")
