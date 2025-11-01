@@ -496,8 +496,17 @@ class ForecastModel:
             results_list = []
 
             # Load recent data for iterative forecasting
+            # Need enough data for maximum lag + some buffer
+            lags = metadata.get('lags', [1, 7, 14])
+            max_lag = max(lags) if lags else 30
+            lookback_days = metadata.get('lookback_days', 30)
+
+            # Load at least max_lag + lookback_days + 30 extra calendar days for safety
+            # This accounts for weekends, holidays, and ensures we have enough trading days
+            days_to_load = max_lag + lookback_days + 30
+
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=60)
+            start_date = end_date - timedelta(days=days_to_load)
 
             df = self._load_prices(
                 ticker=ticker,
@@ -507,27 +516,36 @@ class ForecastModel:
 
             ts = self._prepare_time_series(df, ticker, target)
 
+            # Ensure we have enough data after loading
+            if len(ts) < max_lag + 10:
+                raise ValueError(f"Insufficient data for Random Forest forecast: need {max_lag + 10} days, have {len(ts)}")
+
             for h in range(1, min(forecast_horizon + 1, 15)):  # Limit to 14 days for RF
-                # Create features for next prediction using the same lags as training
-                lags = metadata.get('lags', [1, 7, 14])
+                try:
+                    # Create features for next prediction using the same lags as training
+                    lags = metadata.get('lags', [1, 7, 14])
 
-                ts_feat = self._create_lagged_features(ts, target, lags)
-                ts_feat = self._add_day_of_week_features(ts_feat)
+                    ts_feat = self._create_lagged_features(ts, target, lags)
+                    ts_feat = self._add_day_of_week_features(ts_feat)
 
-                if len(ts_feat) == 0:
+                    if len(ts_feat) == 0:
+                        print(f"Warning: No features created at horizon {h}, stopping forecast")
+                        break
+
+                    # Use the exact same features as during training
+                    trained_features = metadata.get('features', [])
+
+                    # Verify all required features exist
+                    missing_features = [f for f in trained_features if f not in ts_feat.columns]
+                    if missing_features:
+                        # If we're missing features, we can't continue
+                        print(f"Warning: Missing features {missing_features}, stopping forecast at horizon {h}")
+                        break
+
+                    X_next = ts_feat[trained_features].tail(1)
+                except Exception as e:
+                    print(f"Warning: Error creating features at horizon {h}: {e}, stopping forecast")
                     break
-
-                # Use the exact same features as during training
-                trained_features = metadata.get('features', [])
-
-                # Verify all required features exist
-                missing_features = [f for f in trained_features if f not in ts_feat.columns]
-                if missing_features:
-                    # If we're missing features, we can't continue
-                    print(f"Warning: Missing features {missing_features}, stopping forecast at horizon {h}")
-                    break
-
-                X_next = ts_feat[trained_features].tail(1)
 
                 # Predict
                 pred = model.predict(X_next)[0]
@@ -549,16 +567,22 @@ class ForecastModel:
                 })
 
             results = pd.DataFrame(results_list)
+
+            # Check if we generated any results
+            if results.empty:
+                raise ValueError(f"No forecast generated for {ticker} - insufficient data for features")
+
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
         # Add target-specific column names
-        if target == 'close':
-            results['predicted_close'] = results['predicted_value']
-            results = results.drop('predicted_value', axis=1)
-        elif target == 'volume':
-            results['predicted_volume'] = results['predicted_value']
-            results = results.drop('predicted_value', axis=1)
+        if not results.empty and 'predicted_value' in results.columns:
+            if target == 'close':
+                results['predicted_close'] = results['predicted_value']
+                results = results.drop('predicted_value', axis=1)
+            elif target == 'volume':
+                results['predicted_volume'] = results['predicted_value']
+                results = results.drop('predicted_value', axis=1)
 
         return results
 
