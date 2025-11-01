@@ -141,17 +141,23 @@ class ForecastModel:
         return df
 
     def _create_lagged_features(self, df: pd.DataFrame, target: str, lags: List[int]) -> pd.DataFrame:
-        """Create lagged features for ML models."""
+        """Create lagged features for ML models based on available data."""
         df_feat = df.copy()
+        data_length = len(df)
 
+        # Only create lags if we have enough data
         for lag in lags:
-            df_feat[f'lag_{lag}'] = df_feat[target].shift(lag)
+            if data_length > lag:
+                df_feat[f'lag_{lag}'] = df_feat[target].shift(lag)
 
-        # Rolling statistics
-        df_feat['rolling_mean_7'] = df_feat[target].rolling(window=7).mean()
-        df_feat['rolling_std_7'] = df_feat[target].rolling(window=7).std()
-        df_feat['rolling_mean_30'] = df_feat[target].rolling(window=30).mean()
-        df_feat['rolling_std_30'] = df_feat[target].rolling(window=30).std()
+        # Only create rolling statistics if we have enough data
+        if data_length >= 7:
+            df_feat['rolling_mean_7'] = df_feat[target].rolling(window=7).mean()
+            df_feat['rolling_std_7'] = df_feat[target].rolling(window=7).std()
+
+        if data_length >= 30:
+            df_feat['rolling_mean_30'] = df_feat[target].rolling(window=30).mean()
+            df_feat['rolling_std_30'] = df_feat[target].rolling(window=30).std()
 
         # Drop rows with NaN due to lagging
         df_feat = df_feat.dropna()
@@ -235,7 +241,8 @@ class ForecastModel:
             'forecast_horizon': forecast_horizon,
             'model_type': 'ARIMA',
             'training_samples': len(ts),
-            'training_end': ts.index[-1].strftime('%Y-%m-%d')
+            'training_end': ts.index[-1].strftime('%Y-%m-%d'),
+            'day_of_week_adj': day_of_week_adj
         }
 
         return model, metadata
@@ -350,13 +357,26 @@ class ForecastModel:
         # Prepare time series
         ts = self._prepare_time_series(df, ticker, target)
 
-        # Create features
-        lags = [1, 7, 14, 30] if lookback_days >= 30 else [1, 7, 14]
+        # Determine which lags to use based on available data
+        # We need lookback_days + max_lag to have enough data after feature creation
+        available_data = len(ts)
+        if available_data < 15:
+            raise ValueError(f"Not enough data for Random Forest: need at least 15 days, have {available_data}")
+
+        # Only use lags we have enough data for
+        if available_data >= lookback_days + 30:
+            lags = [1, 7, 14, 30]
+        elif available_data >= lookback_days + 14:
+            lags = [1, 7, 14]
+        else:
+            lags = [1, 7]
+
         ts_feat = self._create_lagged_features(ts, target, lags)
         ts_feat = self._add_day_of_week_features(ts_feat)
 
-        # Use only the specified lookback period
-        ts_feat = ts_feat.tail(lookback_days)
+        # Ensure we have data after feature creation
+        if ts_feat.empty or len(ts_feat) < 10:
+            raise ValueError(f"Not enough data after feature creation for {ticker}")
 
         # Prepare X and y
         feature_cols = [col for col in ts_feat.columns if col != target]
@@ -409,22 +429,24 @@ class ForecastModel:
 
         if model_type == 'ARIMA' or model_type == 'SARIMAX':
             # ARIMA forecast
-            forecast = model.forecast(steps=forecast_horizon)
-
-            if hasattr(forecast, 'predicted_mean'):
-                predictions = forecast.predicted_mean
-            else:
-                predictions = forecast
-
-            # Get confidence intervals
-            forecast_obj = model.get_forecast(steps=forecast_horizon)
-            conf_int = forecast_obj.conf_int()
-
+            # Generate future dates for exogenous variables
             dates = pd.date_range(
                 start=pd.Timestamp(metadata['training_end']) + pd.Timedelta(days=1),
                 periods=forecast_horizon,
                 freq='D'
             )
+
+            # Prepare exogenous variables for forecast period if day_of_week_adj was used
+            exog_forecast = None
+            if metadata.get('day_of_week_adj', False):
+                exog_forecast = pd.DataFrame({
+                    'day_of_week': dates.dayofweek
+                }, index=dates)
+
+            # Generate forecast with exogenous variables
+            forecast_obj = model.get_forecast(steps=forecast_horizon, exog=exog_forecast)
+            predictions = forecast_obj.predicted_mean
+            conf_int = forecast_obj.conf_int()
 
             results = pd.DataFrame({
                 'ticker': ticker,
@@ -479,16 +501,34 @@ class ForecastModel:
 
             for h in range(1, min(forecast_horizon + 1, 15)):  # Limit to 14 days for RF
                 # Create features for next prediction
-                lags = [1, 7, 14]
+                # Determine lags based on available data
+                available_data = len(ts)
+                if available_data >= 30:
+                    lags = [1, 7, 14, 30]
+                elif available_data >= 14:
+                    lags = [1, 7, 14]
+                else:
+                    lags = [1, 7]
+
                 ts_feat = self._create_lagged_features(ts, target, lags)
                 ts_feat = self._add_day_of_week_features(ts_feat)
 
                 if len(ts_feat) == 0:
                     break
 
-                # Get features from metadata
-                feature_cols = metadata.get('features', [col for col in ts_feat.columns if col != target])
-                X_next = ts_feat[feature_cols].tail(1)
+                # Get features from metadata, but only use those that exist in current ts_feat
+                trained_features = metadata.get('features', [])
+                available_features = [f for f in trained_features if f in ts_feat.columns]
+
+                # If we're missing features, try to match with available columns
+                if len(available_features) != len(trained_features):
+                    # Use only features that exist in both training and current data
+                    available_features = [col for col in ts_feat.columns if col != target and col in trained_features]
+
+                if not available_features:
+                    break
+
+                X_next = ts_feat[available_features].tail(1)
 
                 # Predict
                 pred = model.predict(X_next)[0]
