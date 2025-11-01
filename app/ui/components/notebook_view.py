@@ -13,6 +13,7 @@ from .exhibits import (
     render_data_table,
 )
 from .exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_chart
+from .exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
 
 
 def render_notebook_exhibits(notebook_id: str, notebook_config, notebook_session, connection):
@@ -98,6 +99,10 @@ def render_exhibit(exhibit_id: str, notebook_config, notebook_session, connectio
             render_data_table(exhibit, pdf)
         elif exhibit.type == ExhibitType.WEIGHTED_AGGREGATE_CHART:
             render_weighted_aggregate_chart(exhibit, pdf)
+        elif exhibit.type == ExhibitType.FORECAST_CHART:
+            render_forecast_chart(exhibit, pdf)
+        elif exhibit.type == ExhibitType.FORECAST_METRICS_TABLE:
+            render_forecast_metrics_table(exhibit, pdf)
         else:
             st.warning(f"Exhibit type not yet implemented: {exhibit.type}")
 
