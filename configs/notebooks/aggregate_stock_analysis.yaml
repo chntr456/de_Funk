@@ -15,16 +15,20 @@ variables:
     type: date_range
     default:
       start: "2024-01-01"
-      end: "2024-02-01"
+      end: "2025-10-20"
     display_name: "Date Range"
     description: "Filter by trade date range"
 
   ticker:
     type: multi_select
-    default: ["AAPL", "GOOGL", "MSFT", "AMZN", "META"]
-    options: ["AAPL", "GOOGL", "MSFT", "AMZN", "META", "NVDA", "TSLA", "NFLX", "AMD", "INTC"]
+    default: ["AAPL"]
+    options: []
+    source:
+      model: "company"
+      node: "fact_prices"
+      column: "ticker"
     display_name: "Stock Tickers"
-    description: "Select stocks to include in aggregate index"
+    description: "Select stocks to analyze (loaded from database)"
 
   volume:
     type: number
