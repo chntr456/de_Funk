@@ -357,19 +357,23 @@ class ForecastModel:
         # Prepare time series
         ts = self._prepare_time_series(df, ticker, target)
 
-        # Determine which lags to use based on available data
-        # We need lookback_days + max_lag to have enough data after feature creation
+        # Determine which lags to use based on lookback_days (not available data)
+        # This ensures we can create the same features during both training and prediction
+        # Rule: Only use lags that are less than lookback_days to ensure consistency
         available_data = len(ts)
         if available_data < 15:
             raise ValueError(f"Not enough data for Random Forest: need at least 15 days, have {available_data}")
 
-        # Only use lags we have enough data for
-        if available_data >= lookback_days + 30:
+        # Conservative lag selection based on lookback period
+        # This ensures we can always recreate these features during prediction
+        if lookback_days >= 30:
             lags = [1, 7, 14, 30]
-        elif available_data >= lookback_days + 14:
+        elif lookback_days >= 14:
             lags = [1, 7, 14]
-        else:
+        elif lookback_days >= 7:
             lags = [1, 7]
+        else:
+            lags = [1]
 
         ts_feat = self._create_lagged_features(ts, target, lags)
         ts_feat = self._add_day_of_week_features(ts_feat)
@@ -377,6 +381,9 @@ class ForecastModel:
         # Ensure we have data after feature creation
         if ts_feat.empty or len(ts_feat) < 10:
             raise ValueError(f"Not enough data after feature creation for {ticker}")
+
+        # Store the lags used for later reference during prediction
+        metadata_lags = lags
 
         # Prepare X and y
         feature_cols = [col for col in ts_feat.columns if col != target]
@@ -399,7 +406,8 @@ class ForecastModel:
             'model_type': 'RandomForest',
             'training_samples': len(ts_feat),
             'training_end': ts_feat.index[-1].strftime('%Y-%m-%d'),
-            'features': feature_cols
+            'features': feature_cols,
+            'lags': metadata_lags  # Store lags for prediction consistency
         }
 
         return model, metadata
@@ -500,15 +508,8 @@ class ForecastModel:
             ts = self._prepare_time_series(df, ticker, target)
 
             for h in range(1, min(forecast_horizon + 1, 15)):  # Limit to 14 days for RF
-                # Create features for next prediction
-                # Determine lags based on available data
-                available_data = len(ts)
-                if available_data >= 30:
-                    lags = [1, 7, 14, 30]
-                elif available_data >= 14:
-                    lags = [1, 7, 14]
-                else:
-                    lags = [1, 7]
+                # Create features for next prediction using the same lags as training
+                lags = metadata.get('lags', [1, 7, 14])
 
                 ts_feat = self._create_lagged_features(ts, target, lags)
                 ts_feat = self._add_day_of_week_features(ts_feat)
@@ -516,19 +517,17 @@ class ForecastModel:
                 if len(ts_feat) == 0:
                     break
 
-                # Get features from metadata, but only use those that exist in current ts_feat
+                # Use the exact same features as during training
                 trained_features = metadata.get('features', [])
-                available_features = [f for f in trained_features if f in ts_feat.columns]
 
-                # If we're missing features, try to match with available columns
-                if len(available_features) != len(trained_features):
-                    # Use only features that exist in both training and current data
-                    available_features = [col for col in ts_feat.columns if col != target and col in trained_features]
-
-                if not available_features:
+                # Verify all required features exist
+                missing_features = [f for f in trained_features if f not in ts_feat.columns]
+                if missing_features:
+                    # If we're missing features, we can't continue
+                    print(f"Warning: Missing features {missing_features}, stopping forecast at horizon {h}")
                     break
 
-                X_next = ts_feat[available_features].tail(1)
+                X_next = ts_feat[trained_features].tail(1)
 
                 # Predict
                 pred = model.predict(X_next)[0]
