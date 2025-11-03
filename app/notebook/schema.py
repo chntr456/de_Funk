@@ -65,6 +65,8 @@ class ExhibitType(Enum):
     PIVOT_TABLE = "pivot_table"
     CUSTOM_COMPONENT = "custom_component"
     WEIGHTED_AGGREGATE_CHART = "weighted_aggregate_chart"
+    FORECAST_CHART = "forecast_chart"
+    FORECAST_METRICS_TABLE = "forecast_metrics_table"
 
 
 @dataclass

@@ -5,7 +5,9 @@
   },
   "roots": {
     "bronze": "storage/bronze",
-    "silver": "storage/silver"
+    "silver": "storage/silver",
+    "company_silver": "storage/silver/company",
+    "forecast_silver": "storage/silver/forecast"
   },
   "tables": {
     "ref_all_tickers": { "root": "bronze", "rel": "ref_all_tickers", "partitions": ["snapshot_dt"] },
