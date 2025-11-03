@@ -2,17 +2,17 @@
 
 
 {
-  "credentials": { "api_keys": ["q6qHAGqgBoBNxeuQ5bjIXpBfKloYjaL5"] },
-  "base_urls": { "core": "https://api.polygon.io" },
+  "credentials": { "api_keys": ["J6tEetTp8m16ZaPw7S2MgV6nHglK14O8"] },
+  "base_urls": { "core": "https://api.massive.com" },
   "headers": { "Authorization": "Bearer ${API_KEY}" },
-  "rate_limit_per_sec": 0.0834,
+  "rate_limit_per_sec": 1.0000,
   "endpoints": {
     "ref_all_tickers": {
       "base": "core",
       "method": "GET",
       "path_template": "/v3/reference/tickers",
       "required_params": [],
-      "default_query": { "market": "stocks", "active": "true", "limit": 1000 },
+      "default_query": { "market": "stocks", "active": "true"},
       "response_key": "results",
       "default_path_params": {}
     },

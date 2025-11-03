@@ -1,16 +1,15 @@
 
 
-
 {
-  "credentials": { "api_keys": ["q6qHAGqgBoBNxeuQ5bjIXpBfKloYjaL5"] },
-  "base_urls": { "core": "https://api.polygon.io" },
+  "credentials": { "api_keys": ["3on4vbtla2xwgwgidykkz7h4q"] },
+  "base_urls": { "core": "https://data.cityofchicago.org/api" },
   "headers": { "Authorization": "Bearer ${API_KEY}" },
   "rate_limit_per_sec": 0.0834,
   "endpoints": {
     "ref_all_tickers": {
       "base": "core",
       "method": "GET",
-      "path_template": "/v3/reference/tickers",
+      "path_template": "/v3/views/s4vu-giwb/query.json",
       "required_params": [],
       "default_query": { "market": "stocks", "active": "true", "limit": 1000 },
       "response_key": "results",

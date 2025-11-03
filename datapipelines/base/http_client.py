@@ -17,11 +17,8 @@ class HttpClient:
         Polygon hard limit ~5 req/min/key. If multiple keys, scale up conservatively.
         Use the configured rate_limit_per_sec as an upper bound, but cap by keys*5/min.
         """
-        keys = max(1, self.api_key_pool.size())
-        hard_rps = (keys * 5.0) / 60.0  # 5 per minute per key
-        rps = min(self.configured_rps, hard_rps) * self.safety
-        rps = max(rps, 1.0 / 120.0)  # never >1 req per 120s when misconfigured
-        return 1.0 / rps
+
+        return 1.0 / self.configured_rps
 
     def _throttle(self):
         min_interval = self._effective_min_interval()

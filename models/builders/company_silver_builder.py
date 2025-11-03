@@ -178,14 +178,14 @@ class CompanySilverBuilder:
 
         return df
 
-    def build_and_write(self, snapshot_date: str):
+    def build_and_write(self):
         """
         Build all Silver layer tables and write to storage.
 
         Args:
             snapshot_date: Snapshot date for versioning (YYYY-MM-DD)
         """
-        print(f"Building Silver layer for snapshot_date={snapshot_date}")
+        print(f"Building Silver layer:")
 
         # Build dimensions
         print("Building dim_company...")
@@ -218,16 +218,18 @@ class CompanySilverBuilder:
         print("\nWriting to Silver layer...")
 
         print("Writing dim_company...")
-        self.loader.write_dim("dim_company", dim_company, snapshot_date)
+        self.loader.write_dim("dim_company", dim_company)
 
         print("Writing dim_exchange...")
-        self.loader.write_dim("dim_exchange", dim_exchange, snapshot_date)
+        self.loader.write_dim("dim_exchange", dim_exchange)
 
         print("Writing fact_prices...")
-        self.loader.write_fact("fact_prices", fact_prices, snapshot_date)
+        self.loader.write_fact("fact_prices", fact_prices,
+        sort_by=["trade_date", "ticker"])
 
         print("Writing prices_with_company...")
-        self.loader.write_fact("prices_with_company", prices_with_company, snapshot_date)
+        self.loader.write_fact("prices_with_company", prices_with_company,
+        sort_by=["trade_date", "ticker"])
 
         print("\n✓ Silver layer build complete!")
 

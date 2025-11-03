@@ -1,9 +1,13 @@
 from __future__ import annotations
 import shutil
+import sys
 from pathlib import Path
 
-from src.orchestration.context import RepoContext
-from src.orchestration.orchestrator import Orchestrator
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from core.context import RepoContext
+from orchestration.orchestrator import Orchestrator
 
 DATE_FROM = "2024-01-01"
 DATE_TO   = "2024-01-05"
@@ -29,7 +33,6 @@ o = Orchestrator(ctx)                 # <-- pass the ctx here
 final_df = o.run_company_pipeline(
     date_from=DATE_FROM,
     date_to=DATE_TO,
-    max_tickers=50
 )
 
 # show a sample from the canonical path
