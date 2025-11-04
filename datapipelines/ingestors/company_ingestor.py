@@ -56,8 +56,12 @@ class CompanyPolygonIngestor(PolygonIngestor):
             df_all = all_f.normalize(all_batches)
             self.sink.write_if_missing("ref_all_tickers", {"snapshot_dt": snap}, df_all)
         else:
-            df_all = self.spark.read.parquet(
-                str(self.sink._path("ref_all_tickers", {"snapshot_dt": snap}))
+            path = str(self.sink._path("ref_all_tickers", {"snapshot_dt": snap}))
+            df_all = (
+                self.spark.read
+                .option("mergeSchema", "true")
+                .option("basePath", path)
+                .parquet(path)
             )
 
         # Build ticker universe (active only), optionally truncate

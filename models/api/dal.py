@@ -27,8 +27,24 @@ class BronzeTable:
     def path(self) -> str:
         return self.router.bronze_path(self.logical_table)
 
-    def read(self) -> DataFrame:
-        return self.spark.read.parquet(self.path)
+    def read(self, merge_schema: bool = True) -> DataFrame:
+        """
+        Read bronze table from parquet.
+
+        Args:
+            merge_schema: If True, merges schemas across partitions to handle schema evolution.
+                         This prevents 'CANNOT_DETERMINE_TYPE' errors when different partitions
+                         have slightly different schemas.
+
+        Returns:
+            DataFrame with data from all partitions
+        """
+        return (
+            self.spark.read
+            .option("mergeSchema", str(merge_schema).lower())
+            .option("basePath", self.path)
+            .parquet(self.path)
+        )
 
 class SilverPath:
     """

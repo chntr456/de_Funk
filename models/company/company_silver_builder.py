@@ -57,8 +57,19 @@ class CompanySilverBuilder:
         return f"{root.rstrip('/')}/{rel}"
 
     def _load_bronze(self, table: str) -> DataFrame:
-        """Load Bronze table."""
-        return self.spark.read.parquet(self._bronze_path(table))
+        """
+        Load Bronze table with schema merging.
+
+        The mergeSchema option prevents 'CANNOT_DETERMINE_TYPE' errors when
+        different partitions have slightly different schemas.
+        """
+        path = self._bronze_path(table)
+        return (
+            self.spark.read
+            .option("mergeSchema", "true")
+            .option("basePath", path)
+            .parquet(path)
+        )
 
     def build_dim_company(self) -> DataFrame:
         """
