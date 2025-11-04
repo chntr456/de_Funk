@@ -12,7 +12,7 @@
       "method": "GET",
       "path_template": "/v3/reference/tickers",
       "required_params": [],
-      "default_query": { "market": "stocks", "active": "true"},
+      "default_query": { "market": "stocks", "active": "true", "limit": 1000 },
       "response_key": "results",
       "default_path_params": {}
     },
