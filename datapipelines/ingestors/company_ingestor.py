@@ -60,7 +60,6 @@ class CompanyPolygonIngestor(PolygonIngestor):
             df_all = (
                 self.spark.read
                 .option("mergeSchema", "true")
-                .option("basePath", path)
                 .parquet(path)
             )
 

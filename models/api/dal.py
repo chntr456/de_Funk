@@ -42,7 +42,6 @@ class BronzeTable:
         return (
             self.spark.read
             .option("mergeSchema", str(merge_schema).lower())
-            .option("basePath", self.path)
             .parquet(self.path)
         )
 

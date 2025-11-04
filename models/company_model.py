@@ -57,7 +57,6 @@ class CompanyModel:
         return (
             self.spark.read
             .option("mergeSchema", "true")
-            .option("basePath", path)
             .parquet(path)
         )
 
