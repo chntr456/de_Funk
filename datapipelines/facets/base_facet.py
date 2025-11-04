@@ -139,7 +139,10 @@ class Facet:
             if not rows:
                 continue
             rows = self._coerce_rows(rows)
-            df = self.spark.createDataFrame(rows)
+            # Use samplingRatio=1.0 to sample all rows for schema inference
+            # This prevents CANNOT_DETERMINE_TYPE errors when the first row
+            # doesn't have all fields or has None/null values
+            df = self.spark.createDataFrame(rows, samplingRatio=1.0)
             dfs.append(df)
 
         if not dfs:
