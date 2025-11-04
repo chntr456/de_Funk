@@ -3,29 +3,19 @@ from __future__ import annotations
 
 from datetime import date
 from typing import List, Optional
-from urllib.parse import urlparse, parse_qs
 
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
 
 from datapipelines.ingestors.base_ingestor import Ingestor
-from datapipelines.ingestors.polygon_ingestor import PolygonIngestor
+from datapipelines.providers.polygon.polygon_ingestor import PolygonIngestor
 from datapipelines.ingestors.bronze_sink import BronzeSink
 
-from datapipelines.facets.polygon.ref_all_tickers_facet import RefAllTickersFacet
-from datapipelines.facets.polygon.exchange_facet import ExchangesFacet
-from datapipelines.facets.polygon.ref_ticker_facet import RefTickerFacet
-from datapipelines.facets.polygon.prices_daily_grouped_facet import PricesDailyGroupedFacet
-from datapipelines.facets.polygon.news_by_date_facet import NewsByDateFacet
-
-
-def _cursor_from_next(next_url: Optional[str]) -> Optional[str]:
-    """Extract Polygon 'cursor' value from a next_url, if present."""
-    if not next_url:
-        return None
-    qs = parse_qs(urlparse(next_url).query)
-    vals = qs.get("cursor")
-    return vals[0] if vals else None
+from datapipelines.providers.polygon.facets.ref_all_tickers_facet import RefAllTickersFacet
+from datapipelines.providers.polygon.facets.exchange_facet import ExchangesFacet
+from datapipelines.providers.polygon.facets.ref_ticker_facet import RefTickerFacet
+from datapipelines.providers.polygon.facets.prices_daily_grouped_facet import PricesDailyGroupedFacet
+from datapipelines.providers.polygon.facets.news_by_date_facet import NewsByDateFacet
 
 
 class CompanyPolygonIngestor(PolygonIngestor):

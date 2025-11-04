@@ -1,0 +1,92 @@
+{
+  "credentials": {
+    "api_keys": ["REPLACE_WITH_YOUR_BLS_API_KEY"],
+    "registration_url": "https://data.bls.gov/registrationEngine/"
+  },
+  "base_urls": {
+    "core": "https://api.bls.gov/publicAPI/v2"
+  },
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "rate_limit_per_sec": 0.42,
+  "endpoints": {
+    "timeseries": {
+      "base": "core",
+      "method": "POST",
+      "path_template": "/timeseries/data/",
+      "required_params": ["seriesid", "startyear", "endyear"],
+      "default_query": {},
+      "response_key": "Results.series",
+      "default_path_params": {},
+      "pagination_type": "none",
+      "description": "Get time series data for specified BLS series IDs"
+    },
+    "series_info": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/timeseries/data/{seriesid}",
+      "required_params": ["seriesid"],
+      "default_query": {},
+      "response_key": "Results.series",
+      "default_path_params": {},
+      "pagination_type": "none",
+      "description": "Get information about a specific series"
+    }
+  },
+  "series_codes": {
+    "unemployment": {
+      "national": "LNS14000000",
+      "description": "Unemployment Rate - Civilian Labor Force"
+    },
+    "employment": {
+      "total_nonfarm": "CES0000000001",
+      "description": "Total Nonfarm Employment"
+    },
+    "cpi": {
+      "all_items": "CUUR0000SA0",
+      "description": "Consumer Price Index - All Urban Consumers"
+    },
+    "ppi": {
+      "final_demand": "WPUFD4",
+      "description": "Producer Price Index - Final Demand"
+    },
+    "productivity": {
+      "business_sector": "PRS85006092",
+      "description": "Labor Productivity - Business Sector"
+    },
+    "wages": {
+      "avg_hourly_earnings": "CES0500000003",
+      "description": "Average Hourly Earnings - Total Private"
+    },
+    "job_openings": {
+      "total": "JTS00000000JOL",
+      "description": "Job Openings - Total Nonfarm"
+    },
+    "quits": {
+      "total": "JTS00000000QUR",
+      "description": "Quits Rate - Total Nonfarm"
+    }
+  },
+  "notes": {
+    "api_documentation": "https://www.bls.gov/developers/api_signature_v2.htm",
+    "registration": "Register for API key at https://data.bls.gov/registrationEngine/",
+    "rate_limits": {
+      "unregistered": "25 queries per day, 10 years of data per query",
+      "registered_v1": "500 queries per day, 10 years of data per query",
+      "registered_v2": "500 queries per day, 20 years of data per query, net/percent calculations"
+    },
+    "pagination": "BLS API returns all data for the requested time period in a single response",
+    "series_id_format": "Series IDs are unique identifiers for specific data series (e.g., LNS14000000 for unemployment)",
+    "data_frequency": "Most series are monthly, some are quarterly or annual",
+    "request_format": "POST requests require JSON body with seriesid array and date range"
+  },
+  "example_request": {
+    "seriesid": ["LNS14000000", "CES0000000001"],
+    "startyear": "2020",
+    "endyear": "2023",
+    "registrationkey": "YOUR_API_KEY",
+    "calculations": true,
+    "annualaverage": true
+  }
+}

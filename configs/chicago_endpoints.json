@@ -1,55 +1,105 @@
-
-
 {
-  "credentials": { "api_keys": ["3on4vbtla2xwgwgidykkz7h4q"] },
-  "base_urls": { "core": "https://data.cityofchicago.org/api" },
-  "headers": { "Authorization": "Bearer ${API_KEY}" },
-  "rate_limit_per_sec": 0.0834,
+  "credentials": {
+    "api_keys": ["3on4vbtla2xwgwgidykkz7h4q"],
+    "app_token": "REPLACE_WITH_YOUR_APP_TOKEN"
+  },
+  "base_urls": {
+    "core": "https://data.cityofchicago.org"
+  },
+  "headers": {
+    "X-App-Token": "${API_KEY}"
+  },
+  "rate_limit_per_sec": 5.0,
   "endpoints": {
-    "ref_all_tickers": {
+    "building_permits": {
       "base": "core",
       "method": "GET",
-      "path_template": "/v3/views/s4vu-giwb/query.json",
+      "path_template": "/resource/ydr8-5enu.json",
       "required_params": [],
-      "default_query": { "market": "stocks", "active": "true", "limit": 1000 },
-      "response_key": "results",
-      "default_path_params": {}
+      "default_query": {
+        "$limit": 1000,
+        "$order": "issue_date DESC"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "pagination_type": "offset",
+      "description": "Building permits issued by the City of Chicago"
     },
-    "ref_ticker": {
+    "business_licenses": {
       "base": "core",
       "method": "GET",
-      "path_template": "/v3/reference/tickers/{ticker}",
-      "required_params": ["ticker"],
-      "default_query": {},
-      "response_key": "results",
-      "default_path_params": {}
-    },
-    "exchanges": {
-      "base": "core",
-      "method": "GET",
-      "path_template": "/v3/reference/exchanges",
+      "path_template": "/resource/r5kz-chrr.json",
       "required_params": [],
-      "default_query": { "asset_class": "stocks", "limit": 1000 },
-      "response_key": "results",
-      "default_path_params": {}
+      "default_query": {
+        "$limit": 1000,
+        "$order": "license_start_date DESC"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "pagination_type": "offset",
+      "description": "Active business licenses in Chicago"
     },
-    "prices_daily_grouped": {
+    "unemployment_rates": {
       "base": "core",
       "method": "GET",
-      "path_template": "/v2/aggs/grouped/locale/us/market/stocks/{date}",
-      "required_params": ["date"],
-      "default_query": { "adjusted": "true" },
-      "response_key": "results",
-      "default_path_params": {}
+      "path_template": "/resource/ane4-dwhs.json",
+      "required_params": [],
+      "default_query": {
+        "$limit": 1000,
+        "$order": "date DESC"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "pagination_type": "offset",
+      "description": "Monthly unemployment rates by Chicago community area"
     },
-    "news_by_date": {
+    "per_capita_income": {
       "base": "core",
       "method": "GET",
-      "path_template": "/v2/reference/news",
-      "required_params": ["published_utc.gte", "published_utc.lte"],
-      "default_query": { "order": "asc", "limit": 1000 },
-      "response_key": "results",
-      "default_path_params": {}
+      "path_template": "/resource/qpxx-qyaw.json",
+      "required_params": [],
+      "default_query": {
+        "$limit": 1000,
+        "$order": "community_area_number"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "pagination_type": "offset",
+      "description": "Per capita income by Chicago community area"
+    },
+    "economic_indicators": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/resource/nej5-8p3s.json",
+      "required_params": [],
+      "default_query": {
+        "$limit": 1000,
+        "$order": "date DESC"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "pagination_type": "offset",
+      "description": "Chicago economic indicators time series"
+    },
+    "affordable_rental_housing": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/resource/s6ha-ppgi.json",
+      "required_params": [],
+      "default_query": {
+        "$limit": 1000,
+        "$order": "property_name"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "pagination_type": "offset",
+      "description": "Affordable rental housing developments"
     }
+  },
+  "notes": {
+    "api_documentation": "https://dev.socrata.com/foundry/data.cityofchicago.org",
+    "pagination": "Socrata uses $offset and $limit parameters for pagination",
+    "authentication": "App token is optional but recommended for higher rate limits",
+    "rate_limits": "Without token: 1000 req/day. With token: higher limits apply"
   }
 }

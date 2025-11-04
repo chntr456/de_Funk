@@ -1,5 +1,5 @@
 from urllib.parse import urlparse, parse_qs
-from datapipelines.ingestors.polygon_registry import PolygonRegistry
+from datapipelines.providers.polygon.polygon_registry import PolygonRegistry
 from datapipelines.base.http_client import HttpClient
 from datapipelines.base.key_pool import ApiKeyPool
 from datapipelines.ingestors.bronze_sink import BronzeSink
