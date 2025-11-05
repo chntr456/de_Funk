@@ -307,13 +307,13 @@ class ModelRegistry:
         # Try to register known models
         # Imports are delayed and failures are silently ignored
         try:
-            from models.company.model import CompanyModel
+            from models.implemented.company.model import CompanyModel
             self.register_model_class('company', CompanyModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         try:
-            from models.forecast.model import ForecastModel
+            from models.implemented.forecast.model import ForecastModel
             self.register_model_class('forecast', ForecastModel)
         except Exception:
             pass  # Will use auto-registration on first access
@@ -367,7 +367,7 @@ class ModelRegistry:
         try:
             # Convert model name to class name (e.g., "company" -> "CompanyModel")
             class_name = f"{model_name.capitalize()}Model"
-            module_path = f"models.{model_name}.model"
+            module_path = f"models.implemented.{model_name}.model"
 
             # Try to import
             import importlib

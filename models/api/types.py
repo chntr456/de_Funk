@@ -8,6 +8,6 @@ This file re-exports them for backward compatibility.
 from __future__ import annotations
 
 # Import from new location
-from models.company.types import NewsItem, PriceBar
+from models.implemented.company.types import NewsItem, PriceBar
 
 __all__ = ['NewsItem', 'PriceBar']

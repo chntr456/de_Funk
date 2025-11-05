@@ -8,7 +8,7 @@ from typing import Dict, Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame
     from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
-    from models.company.model import CompanyModel
+    from models.implemented.company.model import CompanyModel
 
 from core.context import RepoContext
 
@@ -44,7 +44,7 @@ class Orchestrator:
     ) -> "DataFrame":
         # Lazy imports - only load when method is actually called
         from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
-        from models.company.model import CompanyModel
+        from models.implemented.company.model import CompanyModel
 
         # ✅ do NOT call spark like a function
         spark = self.ctx.spark

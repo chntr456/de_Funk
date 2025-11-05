@@ -42,7 +42,7 @@ def build_calendar_dimension(spark, repo_root: Path, storage_cfg: dict):
     print("STEP 1: Building Calendar Dimension (Core Model)")
     print("=" * 70)
 
-    from models.core.builders.calendar_builder import build_calendar_table
+    from models.implemented.core.builders.calendar_builder import build_calendar_table
 
     # Get calendar config
     import yaml
@@ -146,7 +146,7 @@ def build_company_model(spark, repo_root: Path, storage_cfg: dict):
     print(f"  - Facts: {tables['facts']}")
 
     # Optionally write to Silver storage
-    from models.company.company_silver_builder import build_and_write_company_silver
+    from models.implemented.company.company_silver_builder import build_and_write_company_silver
 
     print("\nWriting company Silver layer to storage...")
     build_and_write_company_silver(spark, repo_root, storage_cfg)
