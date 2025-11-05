@@ -76,10 +76,10 @@ class ForecastModel:
 
     def _load_prices(self, ticker: str = None, start_date: str = None, end_date: str = None) -> pd.DataFrame:
         """
-        Load price data from company model's Silver layer.
+        Load price data from company model's Silver layer (case-insensitive).
 
         Args:
-            ticker: Optional ticker filter
+            ticker: Optional ticker filter (case-insensitive)
             start_date: Optional start date filter
             end_date: Optional end date filter
 
@@ -95,7 +95,8 @@ class ForecastModel:
 
         where_clauses = []
         if ticker:
-            where_clauses.append(f"ticker = '{ticker}'")
+            # Use UPPER() for case-insensitive ticker matching
+            where_clauses.append(f"UPPER(ticker) = UPPER('{ticker}')")
         if start_date:
             where_clauses.append(f"trade_date >= DATE '{start_date}'")
         if end_date:
