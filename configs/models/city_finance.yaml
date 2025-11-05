@@ -5,6 +5,7 @@ description: "City of Chicago financial and economic data"
 
 # Dependencies on other models
 depends_on:
+  - core  # Uses shared dim_calendar for time-based queries
   - macro  # Compare local vs national indicators
 
 # Storage configuration

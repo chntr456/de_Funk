@@ -212,6 +212,7 @@ models:
 
 # Dependencies on other models
 depends_on:
+  - core     # Uses shared dim_calendar for time-based queries
   - company  # Forecast model reads from company model for training data
 
 # Graph structure for forecast model

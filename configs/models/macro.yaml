@@ -3,6 +3,11 @@ model: macro
 tags: [macro, economics, bls, timeseries]
 description: "Macroeconomic indicators from BLS (Bureau of Labor Statistics)"
 
+
+# Dependencies on other models
+depends_on:
+  - core  # Uses shared dim_calendar for time-based queries
+
 # Storage configuration
 storage:
   root: storage/silver/macro

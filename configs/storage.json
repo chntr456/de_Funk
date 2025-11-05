@@ -6,12 +6,15 @@
   "roots": {
     "bronze": "storage/bronze",
     "silver": "storage/silver",
+    "core_silver": "storage/silver/core",
     "company_silver": "storage/silver/company",
     "forecast_silver": "storage/silver/forecast",
     "macro_silver": "storage/silver/macro",
     "city_finance_silver": "storage/silver/city_finance"
   },
   "tables": {
+    "calendar_seed":   { "root": "bronze", "rel": "calendar_seed", "partitions": [] },
+
     "ref_all_tickers": { "root": "bronze", "rel": "ref_all_tickers", "partitions": ["snapshot_dt"] },
     "exchanges":       { "root": "bronze", "rel": "exchanges",       "partitions": ["snapshot_dt"] },
     "ref_ticker":      { "root": "bronze", "rel": "ref_ticker",      "partitions": ["snapshot_dt"] },

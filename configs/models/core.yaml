@@ -1,0 +1,118 @@
+version: 1
+model: core
+tags: [shared, common, dimensions, reference]
+description: "Core shared dimensions and reference data used across all models"
+
+# Storage configuration
+storage:
+  root: storage/silver/core
+  format: parquet
+
+# Schema definitions
+schema:
+  dimensions:
+    dim_calendar:
+      path: dims/dim_calendar
+      description: "Universal calendar dimension with rich date attributes"
+      columns:
+        date: date                    # Primary key: YYYY-MM-DD
+        year: integer                 # Calendar year (2020, 2021, etc.)
+        quarter: integer              # Calendar quarter (1-4)
+        month: integer                # Month number (1-12)
+        month_name: string            # Month name (January, February, etc.)
+        month_abbr: string            # Month abbreviation (Jan, Feb, etc.)
+        week_of_year: integer         # ISO week number (1-53)
+        day_of_month: integer         # Day of month (1-31)
+        day_of_week: integer          # Day of week (1=Monday, 7=Sunday)
+        day_of_week_name: string      # Day name (Monday, Tuesday, etc.)
+        day_of_week_abbr: string      # Day abbreviation (Mon, Tue, etc.)
+        day_of_year: integer          # Day of year (1-366)
+        is_weekend: boolean           # True if Saturday or Sunday
+        is_weekday: boolean           # True if Monday-Friday
+        is_month_start: boolean       # First day of month
+        is_month_end: boolean         # Last day of month
+        is_quarter_start: boolean     # First day of quarter
+        is_quarter_end: boolean       # Last day of quarter
+        is_year_start: boolean        # First day of year
+        is_year_end: boolean          # Last day of year
+        fiscal_year: integer          # Fiscal year (configurable)
+        fiscal_quarter: integer       # Fiscal quarter (1-4)
+        fiscal_month: integer         # Fiscal month (1-12)
+        days_in_month: integer        # Number of days in the month
+        year_month: string            # YYYY-MM format
+        year_quarter: string          # YYYY-Q1, YYYY-Q2, etc.
+        date_str: string              # YYYY-MM-DD as string
+      primary_key: [date]
+      tags: [dim, calendar, time, shared]
+
+# No measures needed for core model (it's all reference data)
+measures: {}
+
+# Graph structure
+graph:
+  nodes:
+    - id: dim_calendar
+      from: bronze.calendar_seed
+      select:
+        date: date
+        year: year
+        quarter: quarter
+        month: month
+        month_name: month_name
+        month_abbr: month_abbr
+        week_of_year: week_of_year
+        day_of_month: day_of_month
+        day_of_week: day_of_week
+        day_of_week_name: day_of_week_name
+        day_of_week_abbr: day_of_week_abbr
+        day_of_year: day_of_year
+        is_weekend: is_weekend
+        is_weekday: is_weekday
+        is_month_start: is_month_start
+        is_month_end: is_month_end
+        is_quarter_start: is_quarter_start
+        is_quarter_end: is_quarter_end
+        is_year_start: is_year_start
+        is_year_end: is_year_end
+        fiscal_year: fiscal_year
+        fiscal_quarter: fiscal_quarter
+        fiscal_month: fiscal_month
+        days_in_month: days_in_month
+        year_month: year_month
+        year_quarter: year_quarter
+        date_str: date_str
+      tags: [dim, calendar, shared]
+      unique_key: [date]
+
+  # No edges needed - calendar is a standalone dimension
+  edges: []
+
+  # No paths needed
+  paths: []
+
+# Calendar generation configuration
+calendar_config:
+  start_date: "2000-01-01"
+  end_date: "2050-12-31"
+  fiscal_year_start_month: 1  # January (can be changed to July for fiscal year starting in July)
+
+  # Weekend days (1=Monday, 7=Sunday)
+  weekend_days: [6, 7]  # Saturday, Sunday
+
+  # Holidays (optional - can be added later)
+  holidays:
+    # US Federal Holidays
+    - name: "New Year's Day"
+      type: "fixed"
+      month: 1
+      day: 1
+
+    - name: "Independence Day"
+      type: "fixed"
+      month: 7
+      day: 4
+
+    - name: "Christmas Day"
+      type: "fixed"
+      month: 12
+      day: 25

@@ -2,6 +2,10 @@ version: 1
 model: company
 tags: [equities, polygon, us]
 
+# Dependencies on other models
+depends_on:
+  - core  # Uses shared dim_calendar for time-based queries
+
 # Storage configuration (model owns its storage)
 storage:
   root: storage/silver/company
