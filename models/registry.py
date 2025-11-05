@@ -313,7 +313,8 @@ class ModelRegistry:
             pass  # Will use auto-registration on first access
 
         try:
-            from models.implemented.forecast.model import ForecastModel
+            # Import from package, which uses the backward compatibility alias
+            from models.implemented.forecast import ForecastModel
             self.register_model_class('forecast', ForecastModel)
         except Exception:
             pass  # Will use auto-registration on first access
@@ -357,24 +358,37 @@ class ModelRegistry:
         """
         Try to auto-register a model class by convention.
 
-        Convention:
-        - Company model -> models.company.model.CompanyModel
-        - Forecast model -> models.forecast.model.ForecastModel
+        Convention (tries in order):
+        1. Package import: models.implemented.{model_name} (uses __init__.py exports)
+        2. Module import: models.implemented.{model_name}.model.{ModelName}Model
 
         Args:
             model_name: Name of the model
         """
+        import importlib
+
         try:
-            # Convert model name to class name (e.g., "company" -> "CompanyModel")
+            # Try package import first (preferred - allows package to control exports)
+            package_path = f"models.implemented.{model_name}"
+            module = importlib.import_module(package_path)
+
+            # Look for ForecastModel, CompanyModel, etc.
+            class_name = f"{model_name.capitalize()}Model"
+
+            if hasattr(module, class_name):
+                model_class = getattr(module, class_name)
+                self.register_model_class(model_name, model_class)
+                return
+
+        except (ImportError, AttributeError):
+            pass
+
+        try:
+            # Fall back to old convention: models.implemented.{model_name}.model
             class_name = f"{model_name.capitalize()}Model"
             module_path = f"models.implemented.{model_name}.model"
-
-            # Try to import
-            import importlib
             module = importlib.import_module(module_path)
             model_class = getattr(module, class_name)
-
-            # Register
             self.register_model_class(model_name, model_class)
 
         except (ImportError, AttributeError):
