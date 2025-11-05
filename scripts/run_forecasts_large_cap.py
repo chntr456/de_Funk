@@ -177,6 +177,10 @@ def run_forecast_pipeline(
     print("=" * 80)
     print()
 
+    # Initialize Spark
+    from orchestration.common.spark_session import get_spark
+    spark = get_spark("LargeCapForecastPipeline")
+
     # Load configurations
     print("Loading configurations...")
     config_root = Path(__file__).parent.parent / "configs"
@@ -249,8 +253,10 @@ def run_forecast_pipeline(
     print("-" * 80)
 
     forecast_model = ForecastModel(
+        connection=spark,
         storage_cfg=storage_cfg,
-        model_cfg=forecast_cfg
+        model_cfg=forecast_cfg,
+        params={}
     )
 
     print(f"  ✓ Forecast model initialized")
@@ -325,6 +331,9 @@ def run_forecast_pipeline(
     print("=" * 80)
     print(f"End time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 80)
+
+    # Clean up
+    spark.stop()
 
     return results
 
