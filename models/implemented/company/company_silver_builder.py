@@ -258,3 +258,23 @@ def load_config(repo_root: Path):
     model_cfg = yaml.safe_load((repo_root / "configs" / "models" / "company.yaml").read_text())
 
     return storage_cfg, model_cfg
+
+
+def build_and_write_company_silver(spark: SparkSession, repo_root: Path, storage_cfg: Dict):
+    """
+    Convenience function to build and write company Silver layer.
+
+    Args:
+        spark: Spark session
+        repo_root: Repository root path
+        storage_cfg: Storage configuration
+
+    NOTE: This is a legacy builder that duplicates BaseModel functionality.
+    TODO: Refactor to use BaseModel.write_tables() method instead.
+    """
+    # Load model config
+    model_cfg = yaml.safe_load((repo_root / "configs" / "models" / "company.yaml").read_text())
+
+    # Build and write
+    builder = CompanySilverBuilder(spark, storage_cfg, model_cfg)
+    builder.build_and_write()
