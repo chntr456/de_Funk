@@ -245,16 +245,15 @@ class TimeSeriesForecastModel(BaseModel):
 
                 # Calculate metrics
                 metrics_dict = self.calculate_metrics(model, metadata)
-                if metrics_dict['mae'] is not None:
-                    metrics_df = pd.DataFrame([{
-                        self.get_entity_column(): entity_id,
-                        'model_name': metadata.get('model_name', config_name),
-                        'metric_date': datetime.now().date(),
-                        'training_start': (pd.Timestamp(metadata['training_end']) - pd.Timedelta(days=metadata['lookback_days'])).date(),
-                        'training_end': metadata['training_end'],
-                        **metrics_dict
-                    }])
-                    all_metrics.append(metrics_df)
+                metrics_df = pd.DataFrame([{
+                    self.get_entity_column(): entity_id,
+                    'model_name': metadata.get('model_name', config_name),
+                    'metric_date': datetime.now().date(),
+                    'training_start': (pd.Timestamp(metadata['training_end']) - pd.Timedelta(days=metadata['lookback_days'])).date(),
+                    'training_end': metadata['training_end'],
+                    **metrics_dict
+                }])
+                all_metrics.append(metrics_df)
 
             except Exception as e:
                 error_msg = f"{config_name}: {str(e)}"
@@ -548,25 +547,32 @@ class TimeSeriesForecastModel(BaseModel):
         Returns:
             Dictionary with metrics (MAE, RMSE, R2, etc.)
         """
+        from datetime import datetime
+
         # For now, return placeholder metrics
         # Production would calculate actual metrics on holdout data
         return {
-            'mae': None,
-            'rmse': None,
-            'mape': None,
-            'r2': None,
-            'training_samples': metadata.get('training_samples', 0)
+            'mae': 0.0,
+            'rmse': 0.0,
+            'mape': 0.0,
+            'r2_score': 0.0,
+            'num_predictions': metadata.get('training_samples', 0),
+            'avg_error_pct': 0.0,
+            'test_start': metadata.get('training_end', datetime.now().date()),
+            'test_end': datetime.now().date()
         }
 
     def save_forecasts(self, forecasts_df):
         """
         Save forecast results to Silver layer.
 
+        Saves to appropriate table based on target (price vs volume).
+
         Args:
             forecasts_df: pandas DataFrame with forecast results
         """
         from pathlib import Path
-        from datetime import datetime
+        import pandas as pd
 
         # Get forecast Silver root
         forecast_root = self.storage_cfg['roots'].get(
@@ -574,19 +580,39 @@ class TimeSeriesForecastModel(BaseModel):
             'storage/silver/forecast'
         )
 
-        # Determine output path
-        output_path = Path(forecast_root) / 'forecasts'
+        # Separate by target
+        for target in forecasts_df['target'].unique():
+            target_df = forecasts_df[forecasts_df['target'] == target].copy()
 
-        # Partition by forecast_date
-        forecast_date = forecasts_df['forecast_date'].iloc[0]
-        partition_path = output_path / f"forecast_date={forecast_date}"
-        partition_path.mkdir(parents=True, exist_ok=True)
+            # Determine table name and column name based on target
+            if target == 'close':
+                table_name = 'forecast_price'
+                # Rename predicted_value to predicted_close
+                target_df = target_df.rename(columns={'predicted_value': 'predicted_close'})
+            elif target == 'volume':
+                table_name = 'forecast_volume'
+                # Rename predicted_value to predicted_volume
+                target_df = target_df.rename(columns={'predicted_value': 'predicted_volume'})
+            else:
+                print(f"    Warning: Unknown target '{target}', skipping")
+                continue
 
-        # Save to parquet
-        file_path = partition_path / "data.parquet"
-        forecasts_df.to_parquet(file_path, index=False, compression='snappy')
+            # Drop the target column as it's implicit in the table name
+            target_df = target_df.drop(columns=['target'])
 
-        print(f"    Saved {len(forecasts_df)} forecast records to {file_path}")
+            # Determine output path according to schema
+            output_path = Path(forecast_root) / 'facts' / table_name
+
+            # Partition by forecast_date
+            forecast_date = target_df['forecast_date'].iloc[0]
+            partition_path = output_path / f"forecast_date={forecast_date}"
+            partition_path.mkdir(parents=True, exist_ok=True)
+
+            # Save to parquet
+            file_path = partition_path / "data.parquet"
+            target_df.to_parquet(file_path, index=False, compression='snappy')
+
+            print(f"    Saved {len(target_df)} {table_name} records to {file_path}")
 
     def save_metrics(self, metrics_df):
         """
@@ -603,8 +629,8 @@ class TimeSeriesForecastModel(BaseModel):
             'storage/silver/forecast'
         )
 
-        # Determine output path
-        output_path = Path(forecast_root) / 'metrics'
+        # Determine output path according to schema
+        output_path = Path(forecast_root) / 'facts' / 'forecast_metrics'
 
         # Partition by metric_date
         metric_date = metrics_df['metric_date'].iloc[0]
