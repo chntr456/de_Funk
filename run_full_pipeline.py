@@ -204,15 +204,56 @@ def generate_forecasts(spark, repo_root: Path, storage_cfg: dict, top_n: int = 1
 
     print(f"Generating forecasts for {len(tickers)} tickers...")
 
-    # For each ticker, train and generate forecasts
-    # Note: Using the old forecast_model.py for now, will be updated to use new architecture
+    # Get forecast model and set session for cross-model access
     forecast_model = session.get_model_instance('forecast')
+    forecast_model.set_session(session)
 
-    # TODO: Implement forecast training using new architecture
-    # For now, just log that this step would run
-    print(f"✓ Forecast generation would train models for: {', '.join(tickers[:10])}...")
-    print(f"  (and {len(tickers) - 10} more tickers)")
-    print("✓ Forecasts complete (placeholder)")
+    # Run forecasts for each ticker
+    results = {
+        'total_tickers': len(tickers),
+        'tickers_processed': 0,
+        'tickers_failed': 0,
+        'total_models_trained': 0,
+        'total_forecasts_generated': 0,
+        'errors': []
+    }
+
+    for i, ticker in enumerate(tickers, 1):
+        try:
+            print(f"  [{i}/{len(tickers)}] Training forecasts for {ticker}...", end=" ")
+
+            # Run all configured forecast models for this ticker
+            ticker_results = forecast_model.run_forecast_for_ticker(ticker)
+
+            results['tickers_processed'] += 1
+            results['total_models_trained'] += ticker_results['models_trained']
+            results['total_forecasts_generated'] += ticker_results['forecasts_generated']
+
+            if ticker_results['errors']:
+                results['errors'].extend(ticker_results['errors'])
+                print(f"✓ ({ticker_results['models_trained']} models, {len(ticker_results['errors'])} errors)")
+            else:
+                print(f"✓ ({ticker_results['models_trained']} models)")
+
+        except Exception as e:
+            results['tickers_failed'] += 1
+            error_msg = f"{ticker}: {str(e)}"
+            results['errors'].append(error_msg)
+            print(f"✗ {str(e)}")
+
+    # Print summary
+    print("\nForecast Generation Summary:")
+    print(f"  Tickers processed: {results['tickers_processed']}/{results['total_tickers']}")
+    print(f"  Tickers failed: {results['tickers_failed']}")
+    print(f"  Models trained: {results['total_models_trained']}")
+    print(f"  Forecasts generated: {results['total_forecasts_generated']}")
+
+    if results['errors']:
+        print(f"  Errors: {len(results['errors'])} (showing first 5)")
+        for error in results['errors'][:5]:
+            print(f"    - {error}")
+
+    print("✓ Forecasts complete")
 
     return tickers
 
