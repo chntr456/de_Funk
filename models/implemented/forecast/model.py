@@ -278,6 +278,76 @@ class ForecastModel(BaseModel):
         return models[model_name]
 
     # ============================================================
+    # ORCHESTRATION METHODS
+    # ============================================================
+
+    def run_forecast_for_ticker(
+        self,
+        ticker: str,
+        model_configs: Optional[list] = None
+    ) -> dict:
+        """
+        Run all configured forecast models for a ticker.
+
+        This is the main orchestration method that runs multiple forecast models
+        (ARIMA, Prophet, RandomForest) for a single ticker symbol.
+
+        Args:
+            ticker: Ticker symbol to forecast
+            model_configs: List of model config names to run (e.g., ['arima_7d', 'prophet_30d'])
+                          If None, runs all configured models
+
+        Returns:
+            Dictionary with results:
+            {
+                'ticker': str,
+                'models_trained': int,
+                'forecasts_generated': int,
+                'errors': List[str]
+            }
+        """
+        results = {
+            'ticker': ticker,
+            'models_trained': 0,
+            'forecasts_generated': 0,
+            'errors': []
+        }
+
+        # Get model configs to run
+        all_configs = self.get_model_configs()
+        if model_configs is None:
+            model_configs = list(all_configs.keys())
+
+        # Run each model
+        for config_name in model_configs:
+            try:
+                # Determine model type from config name
+                if 'arima' in config_name.lower():
+                    self.train_arima(ticker, config_name)
+                elif 'prophet' in config_name.lower():
+                    self.train_prophet(ticker, config_name)
+                elif 'random_forest' in config_name.lower() or 'rf' in config_name.lower():
+                    self.train_random_forest(ticker, config_name)
+                else:
+                    raise ValueError(f"Unknown model type for config: {config_name}")
+
+                results['models_trained'] += 1
+                # Assuming each model generates forecasts for the horizon
+                config = all_configs.get(config_name, {})
+                horizon = config.get('horizon', 7)
+                results['forecasts_generated'] += horizon
+
+            except NotImplementedError as e:
+                # Expected for unimplemented training methods
+                error_msg = f"{config_name}: Training not yet implemented"
+                results['errors'].append(error_msg)
+            except Exception as e:
+                error_msg = f"{config_name}: {str(e)}"
+                results['errors'].append(error_msg)
+
+        return results
+
+    # ============================================================
     # ML TRAINING METHODS (to be implemented)
     # ============================================================
 
