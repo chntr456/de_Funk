@@ -209,3 +209,32 @@ models:
       - rolling_std_7
       - rolling_mean_30
       - rolling_std_30
+
+# Dependencies on other models
+depends_on:
+  - company  # Forecast model reads from company model for training data
+
+# Graph structure for forecast model
+# Note: Forecast model loads from Silver (pre-computed forecasts)
+# rather than building from Bronze like company model
+graph:
+  nodes:
+    - id: fact_forecasts
+      from: silver.forecasts
+      description: "Pre-computed forecast predictions"
+      tags: [fact, forecast, predictions]
+
+    - id: fact_forecast_metrics
+      from: silver.metrics
+      description: "Pre-computed forecast accuracy metrics"
+      tags: [fact, metrics]
+
+    - id: fact_model_registry
+      from: silver.model_registry
+      description: "Registry of trained models"
+      tags: [dim, registry]
+
+  # Forecast model typically doesn't have edges/paths like company model
+  # It's more focused on ML training and prediction
+  edges: []
+  paths: []

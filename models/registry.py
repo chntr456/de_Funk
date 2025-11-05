@@ -216,6 +216,7 @@ class ModelRegistry:
 
     Discovers models from configs/models/ directory.
     Provides model metadata, validation, and querying.
+    Also maintains a registry of model classes for dynamic instantiation.
     """
 
     def __init__(self, models_dir: Path):
@@ -227,7 +228,9 @@ class ModelRegistry:
         """
         self.models_dir = Path(models_dir)
         self.models: Dict[str, ModelConfig] = {}
+        self._model_classes: Dict[str, type] = {}
         self._load_models()
+        self._register_default_model_classes()
 
     def _load_models(self):
         """Discover and load all model configurations."""
@@ -289,3 +292,110 @@ class ModelRegistry:
         """Reload all model configurations."""
         self.models.clear()
         self._load_models()
+
+    # ============================================================
+    # MODEL CLASS REGISTRY (for dynamic instantiation)
+    # ============================================================
+
+    def _register_default_model_classes(self):
+        """
+        Register default model classes.
+
+        This allows the registry to dynamically instantiate models.
+        Models are lazy-imported to avoid circular dependencies.
+        """
+        # Try to register known models
+        # Imports are delayed and failures are silently ignored
+        try:
+            from models.company.model import CompanyModel
+            self.register_model_class('company', CompanyModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
+        try:
+            from models.forecast.model import ForecastModel
+            self.register_model_class('forecast', ForecastModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
+    def register_model_class(self, model_name: str, model_class: type):
+        """
+        Register a model class for dynamic instantiation.
+
+        Args:
+            model_name: Name of the model (matches YAML config name)
+            model_class: Python class (must inherit from BaseModel)
+        """
+        self._model_classes[model_name] = model_class
+
+    def get_model_class(self, model_name: str) -> type:
+        """
+        Get the Python class for a model.
+
+        Args:
+            model_name: Name of the model
+
+        Returns:
+            Model class
+
+        Raises:
+            ValueError: If model class not registered
+        """
+        # Lazy registration - try to import if not already registered
+        if model_name not in self._model_classes:
+            self._try_auto_register(model_name)
+
+        if model_name not in self._model_classes:
+            raise ValueError(
+                f"Model class for '{model_name}' not registered. "
+                f"Available: {list(self._model_classes.keys())}"
+            )
+
+        return self._model_classes[model_name]
+
+    def _try_auto_register(self, model_name: str):
+        """
+        Try to auto-register a model class by convention.
+
+        Convention:
+        - Company model -> models.company.model.CompanyModel
+        - Forecast model -> models.forecast.model.ForecastModel
+
+        Args:
+            model_name: Name of the model
+        """
+        try:
+            # Convert model name to class name (e.g., "company" -> "CompanyModel")
+            class_name = f"{model_name.capitalize()}Model"
+            module_path = f"models.{model_name}.model"
+
+            # Try to import
+            import importlib
+            module = importlib.import_module(module_path)
+            model_class = getattr(module, class_name)
+
+            # Register
+            self.register_model_class(model_name, model_class)
+
+        except (ImportError, AttributeError):
+            # Auto-registration failed - model needs manual registration
+            pass
+
+    def get_model_config(self, model_name: str) -> Dict:
+        """
+        Get raw model configuration dictionary (for model instantiation).
+
+        Args:
+            model_name: Name of the model
+
+        Returns:
+            Dictionary with model configuration
+        """
+        model_config = self.get_model(model_name)
+
+        # Return raw dict with all config
+        config_path = self.models_dir / f"{model_name}.yaml"
+        if config_path.exists():
+            return yaml.safe_load(config_path.read_text())
+        else:
+            raise ValueError(f"Model config file not found: {config_path}")
