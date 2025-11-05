@@ -4,10 +4,11 @@ ForecastModel - Domain model for time series forecasting.
 Inherits graph building from BaseModel but extends with ML training capabilities.
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 from pathlib import Path
 from pyspark.sql import DataFrame
 from models.base.model import BaseModel
+from models.implemented.forecast import training_methods
 
 
 class ForecastModel(BaseModel):
@@ -356,10 +357,10 @@ class ForecastModel(BaseModel):
         return results
 
     # ============================================================
-    # ML TRAINING METHODS (to be implemented)
+    # ML TRAINING METHODS
     # ============================================================
 
-    def train_arima(self, ticker: str, config_name: str = 'arima_7d'):
+    def train_arima(self, ticker: str, config_name: str = 'arima_7d') -> Tuple[object, Dict]:
         """
         Train ARIMA model for a ticker.
 
@@ -368,21 +369,37 @@ class ForecastModel(BaseModel):
             config_name: ARIMA config name from YAML
 
         Returns:
-            Trained model and metadata
-
-        Note: Implementation to be added based on existing forecast_model.py
+            Tuple of (fitted_model, metadata)
         """
         config = self.get_model_config(config_name)
+
+        # Get training data as Spark DataFrame
         training_data = self.get_training_data(
             ticker,
-            lookback_days=config['lookback_days']
+            lookback_days=config.get('lookback_days', 60)
         )
 
-        # TODO: Implement ARIMA training
-        # (Will port from existing forecast_model.py)
-        raise NotImplementedError("ARIMA training to be implemented")
+        # Convert to pandas for ML training
+        data_pdf = training_data.toPandas()
 
-    def train_prophet(self, ticker: str, config_name: str = 'prophet_7d'):
+        # Extract target from config (default to 'close')
+        target = config.get('target', 'close')
+        if isinstance(target, list):
+            target = target[0]  # Use first target if multiple specified
+
+        # Train using helper function
+        return training_methods.train_arima_model(
+            data_pdf=data_pdf,
+            ticker=ticker,
+            target=target,
+            lookback_days=config.get('lookback_days', 60),
+            forecast_horizon=config.get('forecast_horizon', 7),
+            day_of_week_adj=config.get('day_of_week_adj', True),
+            seasonal=config.get('seasonal', False),
+            auto=config.get('auto_arima', True)
+        )
+
+    def train_prophet(self, ticker: str, config_name: str = 'prophet_7d') -> Tuple[object, Dict]:
         """
         Train Prophet model for a ticker.
 
@@ -391,20 +408,36 @@ class ForecastModel(BaseModel):
             config_name: Prophet config name from YAML
 
         Returns:
-            Trained model and metadata
-
-        Note: Implementation to be added based on existing forecast_model.py
+            Tuple of (fitted_model, metadata)
         """
         config = self.get_model_config(config_name)
+
+        # Get training data as Spark DataFrame
         training_data = self.get_training_data(
             ticker,
-            lookback_days=config['lookback_days']
+            lookback_days=config.get('lookback_days', 60)
         )
 
-        # TODO: Implement Prophet training
-        raise NotImplementedError("Prophet training to be implemented")
+        # Convert to pandas for ML training
+        data_pdf = training_data.toPandas()
 
-    def train_random_forest(self, ticker: str, config_name: str = 'random_forest_14d'):
+        # Extract target from config (default to 'close')
+        target = config.get('target', 'close')
+        if isinstance(target, list):
+            target = target[0]  # Use first target if multiple specified
+
+        # Train using helper function
+        return training_methods.train_prophet_model(
+            data_pdf=data_pdf,
+            ticker=ticker,
+            target=target,
+            lookback_days=config.get('lookback_days', 60),
+            forecast_horizon=config.get('forecast_horizon', 7),
+            day_of_week_adj=config.get('day_of_week_adj', True),
+            seasonality_mode=config.get('seasonality_mode', 'multiplicative')
+        )
+
+    def train_random_forest(self, ticker: str, config_name: str = 'random_forest_14d') -> Tuple[object, Dict]:
         """
         Train Random Forest model for a ticker.
 
@@ -413,15 +446,31 @@ class ForecastModel(BaseModel):
             config_name: RF config name from YAML
 
         Returns:
-            Trained model and metadata
-
-        Note: Implementation to be added based on existing forecast_model.py
+            Tuple of (fitted_model, metadata)
         """
         config = self.get_model_config(config_name)
+
+        # Get training data as Spark DataFrame
         training_data = self.get_training_data(
             ticker,
-            lookback_days=config['lookback_days']
+            lookback_days=config.get('lookback_days', 60)
         )
 
-        # TODO: Implement RandomForest training
-        raise NotImplementedError("RandomForest training to be implemented")
+        # Convert to pandas for ML training
+        data_pdf = training_data.toPandas()
+
+        # Extract target from config (default to 'close')
+        target = config.get('target', 'close')
+        if isinstance(target, list):
+            target = target[0]  # Use first target if multiple specified
+
+        # Train using helper function
+        return training_methods.train_random_forest_model(
+            data_pdf=data_pdf,
+            ticker=ticker,
+            target=target,
+            lookback_days=config.get('lookback_days', 60),
+            forecast_horizon=config.get('forecast_horizon', 7),
+            n_estimators=config.get('n_estimators', 100),
+            max_depth=config.get('max_depth', 10)
+        )
