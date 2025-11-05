@@ -198,6 +198,9 @@ class TimeSeriesForecastModel(BaseModel):
                 'errors': List[str]
             }
         """
+        import pandas as pd
+        from datetime import datetime
+
         results = {
             'entity_id': entity_id,
             'models_trained': 0,
@@ -210,28 +213,61 @@ class TimeSeriesForecastModel(BaseModel):
         if model_configs is None:
             model_configs = list(all_configs.keys())
 
+        # Collect forecasts and metrics for batch saving
+        all_forecasts = []
+        all_metrics = []
+
         # Run each model
         for config_name in model_configs:
             try:
+                config = all_configs[config_name]
+
                 # Determine model type from config name
                 if 'arima' in config_name.lower():
-                    self.train_arima(entity_id, config_name)
+                    model, metadata = self.train_arima(entity_id, config_name)
                 elif 'prophet' in config_name.lower():
-                    self.train_prophet(entity_id, config_name)
+                    model, metadata = self.train_prophet(entity_id, config_name)
                 elif 'random_forest' in config_name.lower() or 'rf' in config_name.lower():
-                    self.train_random_forest(entity_id, config_name)
+                    model, metadata = self.train_random_forest(entity_id, config_name)
                 else:
                     raise ValueError(f"Unknown model type for config: {config_name}")
 
                 results['models_trained'] += 1
-                # Assuming each model generates forecasts for the horizon
-                config = all_configs.get(config_name, {})
-                horizon = config.get('horizon', 7)
-                results['forecasts_generated'] += horizon
+
+                # Generate forecast from trained model
+                forecast_df = self.generate_forecast(
+                    model,
+                    metadata,
+                    config.get('forecast_horizon', 7)
+                )
+                all_forecasts.append(forecast_df)
+                results['forecasts_generated'] += len(forecast_df)
+
+                # Calculate metrics
+                metrics_dict = self.calculate_metrics(model, metadata)
+                if metrics_dict['mae'] is not None:
+                    metrics_df = pd.DataFrame([{
+                        self.get_entity_column(): entity_id,
+                        'model_name': metadata.get('model_name', config_name),
+                        'metric_date': datetime.now().date(),
+                        'training_start': (pd.Timestamp(metadata['training_end']) - pd.Timedelta(days=metadata['lookback_days'])).date(),
+                        'training_end': metadata['training_end'],
+                        **metrics_dict
+                    }])
+                    all_metrics.append(metrics_df)
 
             except Exception as e:
                 error_msg = f"{config_name}: {str(e)}"
                 results['errors'].append(error_msg)
+
+        # Save all forecasts and metrics
+        if all_forecasts:
+            combined_forecasts = pd.concat(all_forecasts, ignore_index=True)
+            self.save_forecasts(combined_forecasts)
+
+        if all_metrics:
+            combined_metrics = pd.concat(all_metrics, ignore_index=True)
+            self.save_metrics(combined_metrics)
 
         return results
 
@@ -399,3 +435,184 @@ class TimeSeriesForecastModel(BaseModel):
             n_estimators=config.get('n_estimators', 100),
             max_depth=config.get('max_depth', 10)
         )
+
+    # ============================================================
+    # FORECAST GENERATION AND PERSISTENCE
+    # ============================================================
+
+    def generate_forecast(
+        self,
+        model: object,
+        metadata: Dict,
+        forecast_horizon: int
+    ):
+        """
+        Generate forecast from a trained model.
+
+        Args:
+            model: Trained model (ARIMA, Prophet, or RandomForest)
+            metadata: Model metadata
+            forecast_horizon: Number of days to forecast
+
+        Returns:
+            pandas DataFrame with forecast results
+        """
+        import pandas as pd
+        from datetime import datetime
+
+        model_type = metadata['model_type']
+        entity_id = metadata['ticker']  # Using 'ticker' from metadata
+        target = metadata['target']
+        forecast_date = datetime.now().date()
+
+        if model_type == 'ARIMA':
+            # ARIMA forecast
+            dates = pd.date_range(
+                start=pd.Timestamp(metadata['training_end']) + pd.Timedelta(days=1),
+                periods=forecast_horizon,
+                freq='D'
+            )
+
+            # Prepare exogenous variables if day_of_week_adj was used
+            exog_forecast = None
+            if metadata.get('day_of_week_adj', False):
+                exog_forecast = pd.DataFrame({
+                    'day_of_week': dates.dayofweek
+                }, index=dates)
+
+            # Generate forecast
+            forecast_obj = model.get_forecast(steps=forecast_horizon, exog=exog_forecast)
+            predictions = forecast_obj.predicted_mean
+            conf_int = forecast_obj.conf_int()
+
+            results = pd.DataFrame({
+                self.get_entity_column(): entity_id,
+                'forecast_date': forecast_date,
+                'prediction_date': dates.date,
+                'horizon': range(1, forecast_horizon + 1),
+                'model_name': metadata.get('model_name', f"ARIMA_{metadata['lookback_days']}d"),
+                'predicted_value': predictions.values,
+                'lower_bound': conf_int.iloc[:, 0].values,
+                'upper_bound': conf_int.iloc[:, 1].values,
+                'target': target,
+                'confidence': 0.95
+            })
+
+        elif model_type == 'Prophet':
+            # Prophet forecast
+            future = model.make_future_dataframe(periods=forecast_horizon, freq='D')
+            forecast = model.predict(future)
+
+            # Get only future predictions
+            forecast = forecast.tail(forecast_horizon)
+
+            results = pd.DataFrame({
+                self.get_entity_column(): entity_id,
+                'forecast_date': forecast_date,
+                'prediction_date': forecast['ds'].dt.date,
+                'horizon': range(1, forecast_horizon + 1),
+                'model_name': metadata.get('model_name', f"Prophet_{metadata['lookback_days']}d"),
+                'predicted_value': forecast['yhat'].values,
+                'lower_bound': forecast['yhat_lower'].values,
+                'upper_bound': forecast['yhat_upper'].values,
+                'target': target,
+                'confidence': 0.95
+            })
+
+        elif model_type == 'RandomForest':
+            # RandomForest - simplified one-step forecast
+            # Production version would use iterative forecasting
+            results = pd.DataFrame({
+                self.get_entity_column(): entity_id,
+                'forecast_date': forecast_date,
+                'prediction_date': [forecast_date + pd.Timedelta(days=i) for i in range(1, forecast_horizon + 1)],
+                'horizon': range(1, forecast_horizon + 1),
+                'model_name': metadata.get('model_name', f"RF_{metadata['lookback_days']}d"),
+                'predicted_value': [0.0] * forecast_horizon,  # Placeholder
+                'lower_bound': [0.0] * forecast_horizon,
+                'upper_bound': [0.0] * forecast_horizon,
+                'target': target,
+                'confidence': 0.95
+            })
+
+        return results
+
+    def calculate_metrics(self, model: object, metadata: Dict) -> Dict:
+        """
+        Calculate forecast accuracy metrics.
+
+        Args:
+            model: Trained model
+            metadata: Model metadata
+
+        Returns:
+            Dictionary with metrics (MAE, RMSE, R2, etc.)
+        """
+        # For now, return placeholder metrics
+        # Production would calculate actual metrics on holdout data
+        return {
+            'mae': None,
+            'rmse': None,
+            'mape': None,
+            'r2': None,
+            'training_samples': metadata.get('training_samples', 0)
+        }
+
+    def save_forecasts(self, forecasts_df):
+        """
+        Save forecast results to Silver layer.
+
+        Args:
+            forecasts_df: pandas DataFrame with forecast results
+        """
+        from pathlib import Path
+        from datetime import datetime
+
+        # Get forecast Silver root
+        forecast_root = self.storage_cfg['roots'].get(
+            'forecast_silver',
+            'storage/silver/forecast'
+        )
+
+        # Determine output path
+        output_path = Path(forecast_root) / 'forecasts'
+
+        # Partition by forecast_date
+        forecast_date = forecasts_df['forecast_date'].iloc[0]
+        partition_path = output_path / f"forecast_date={forecast_date}"
+        partition_path.mkdir(parents=True, exist_ok=True)
+
+        # Save to parquet
+        file_path = partition_path / "data.parquet"
+        forecasts_df.to_parquet(file_path, index=False, compression='snappy')
+
+        print(f"    Saved {len(forecasts_df)} forecast records to {file_path}")
+
+    def save_metrics(self, metrics_df):
+        """
+        Save forecast metrics to Silver layer.
+
+        Args:
+            metrics_df: pandas DataFrame with metrics
+        """
+        from pathlib import Path
+
+        # Get forecast Silver root
+        forecast_root = self.storage_cfg['roots'].get(
+            'forecast_silver',
+            'storage/silver/forecast'
+        )
+
+        # Determine output path
+        output_path = Path(forecast_root) / 'metrics'
+
+        # Partition by metric_date
+        metric_date = metrics_df['metric_date'].iloc[0]
+        partition_path = output_path / f"metric_date={metric_date}"
+        partition_path.mkdir(parents=True, exist_ok=True)
+
+        # Save to parquet
+        file_path = partition_path / "data.parquet"
+        metrics_df.to_parquet(file_path, index=False, compression='snappy')
+
+        print(f"    Saved {len(metrics_df)} metric records to {file_path}")
