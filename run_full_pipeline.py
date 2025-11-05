@@ -69,13 +69,14 @@ def build_calendar_dimension(spark, repo_root: Path, storage_cfg: dict):
     return calendar_df
 
 
-def ingest_company_data(spark, repo_root: Path, top_n: int = 100):
+def ingest_company_data(spark, repo_root: Path, storage_cfg: dict, top_n: int = 100):
     """
     Step 2: Ingest company data from Polygon API.
 
     Args:
         spark: SparkSession
         repo_root: Repository root path
+        storage_cfg: Storage configuration
         top_n: Number of top companies to ingest
     """
     print("\n" + "=" * 70)
@@ -83,13 +84,23 @@ def ingest_company_data(spark, repo_root: Path, top_n: int = 100):
     print("=" * 70)
 
     from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
+    import json
 
     # Calculate date range (last 2 years)
     date_to = date.today()
     date_from = date_to - timedelta(days=730)
 
+    # Load Polygon API config
+    polygon_cfg_path = repo_root / "configs" / "polygon.json"
+    with open(polygon_cfg_path) as f:
+        polygon_cfg = json.load(f)
+
     # Create ingestor
-    ingestor = CompanyPolygonIngestor(spark, repo_root)
+    ingestor = CompanyPolygonIngestor(
+        polygon_cfg=polygon_cfg,
+        storage_cfg=storage_cfg,
+        spark=spark
+    )
 
     # Run ingestion
     print(f"Ingesting data from {date_from} to {date_to}")
@@ -396,7 +407,7 @@ def main():
 
         # Step 2: Ingest company data (unless skipped)
         if not args.skip_ingestion:
-            ingest_company_data(spark, repo_root, top_n=args.top_n)
+            ingest_company_data(spark, repo_root, storage_cfg, top_n=args.top_n)
         else:
             print("\n⚠ Skipping data ingestion (using existing Bronze data)")
 
