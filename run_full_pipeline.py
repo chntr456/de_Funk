@@ -185,6 +185,7 @@ def generate_forecasts(spark, repo_root: Path, storage_cfg: dict, top_n: int = 1
     print("=" * 70)
 
     from models.api.session import UniversalSession
+    from datapipelines.ingestors.company_ingestor import MAJOR_COMPANIES
 
     # Create session with both company and forecast models
     session = UniversalSession(
@@ -194,15 +195,29 @@ def generate_forecasts(spark, repo_root: Path, storage_cfg: dict, top_n: int = 1
         models=['company', 'forecast']
     )
 
-    # Get top N tickers from company model
+    # Get top N tickers from company model, prioritizing major companies
     company_model = session.get_model_instance('company')
     company_model.ensure_built()
 
-    # Get dim_company to find active tickers
+    # Get dim_company to find available tickers
     dim_company = company_model.get_dimension_df('dim_company')
-    tickers = [row['ticker'] for row in dim_company.limit(top_n).collect()]
+    available_tickers = {row['ticker'] for row in dim_company.collect()}
+
+    # Prioritize major companies that are available
+    tickers = []
+    for ticker in MAJOR_COMPANIES:
+        if ticker in available_tickers:
+            tickers.append(ticker)
+            if len(tickers) >= top_n:
+                break
+
+    # If we didn't get enough, fill with remaining tickers alphabetically
+    if len(tickers) < top_n:
+        remaining = [t for t in sorted(available_tickers) if t not in tickers][:top_n - len(tickers)]
+        tickers.extend(remaining)
 
     print(f"Generating forecasts for {len(tickers)} tickers...")
+    print(f"Tickers: {', '.join(tickers)}")
 
     # Get forecast model and set session for cross-model access
     forecast_model = session.get_model_instance('forecast')

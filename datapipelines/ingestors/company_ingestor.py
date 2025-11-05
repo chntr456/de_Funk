@@ -17,6 +17,21 @@ from datapipelines.providers.polygon.facets.ref_ticker_facet import RefTickerFac
 from datapipelines.providers.polygon.facets.prices_daily_grouped_facet import PricesDailyGroupedFacet
 from datapipelines.providers.polygon.facets.news_by_date_facet import NewsByDateFacet
 
+# Large-cap companies prioritized for top-N selection
+# Ordered by approximate market cap (as of 2024)
+MAJOR_COMPANIES = [
+    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "BRK.B", "LLY", "V",
+    "UNH", "XOM", "JPM", "JNJ", "WMT", "MA", "PG", "AVGO", "HD", "ORCL",
+    "CVX", "MRK", "ABBV", "COST", "KO", "PEP", "BAC", "ADBE", "CRM", "MCD",
+    "CSCO", "TMO", "ACN", "LIN", "ABT", "NKE", "NFLX", "AMD", "WFC", "DHR",
+    "PM", "TXN", "QCOM", "NEE", "DIS", "INTU", "VZ", "RTX", "CMCSA", "IBM",
+    "AMGN", "HON", "GE", "UNP", "SPGI", "CAT", "BA", "LOW", "AMAT", "PFE",
+    "ELV", "GS", "BLK", "SYK", "DE", "SBUX", "GILD", "AXP", "NOW", "TJX",
+    "BKNG", "ISRG", "PLD", "MDLZ", "LMT", "ADI", "VRTX", "CI", "REGN", "C",
+    "MMC", "ADP", "ZTS", "MO", "BDX", "SCHW", "CB", "LRCX", "ETN", "SHW",
+    "DUK", "SO", "CME", "BMY", "BSX", "PGR", "ITW", "PANW", "EOG", "USB"
+]
+
 
 class CompanyPolygonIngestor(PolygonIngestor):
     """
@@ -63,16 +78,39 @@ class CompanyPolygonIngestor(PolygonIngestor):
                 .parquet(path)
             )
 
-        # Build ticker universe (active only), optionally truncate
-        tickers = (
-            df_all.where(F.col("active") == True)
-            .select("ticker")
-            .distinct()
-            .orderBy("ticker")
-        )
+        # Build ticker universe (active only)
         if max_tickers:
-            tickers = tickers.limit(int(max_tickers))
-        tickers_list = [r["ticker"] for r in tickers.collect()]
+            # Use prioritized list of major companies when max_tickers is specified
+            # Filter to only active tickers that exist in our major companies list
+            active_tickers = df_all.where(F.col("active") == True).select("ticker").distinct()
+            active_set = {r["ticker"] for r in active_tickers.collect()}
+
+            # Take first max_tickers from MAJOR_COMPANIES that are active
+            tickers_list = []
+            for ticker in MAJOR_COMPANIES:
+                if ticker in active_set:
+                    tickers_list.append(ticker)
+                    if len(tickers_list) >= max_tickers:
+                        break
+
+            # If we didn't get enough, fill with alphabetically sorted active tickers
+            if len(tickers_list) < max_tickers:
+                remaining = (
+                    active_tickers
+                    .filter(~F.col("ticker").isin(tickers_list))
+                    .orderBy("ticker")
+                    .limit(max_tickers - len(tickers_list))
+                )
+                tickers_list.extend([r["ticker"] for r in remaining.collect()])
+        else:
+            # No limit, just get all active tickers
+            tickers = (
+                df_all.where(F.col("active") == True)
+                .select("ticker")
+                .distinct()
+                .orderBy("ticker")
+            )
+            tickers_list = [r["ticker"] for r in tickers.collect()]
 
         # ---------------------------
         # 2) Exchanges snapshot
