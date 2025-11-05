@@ -147,8 +147,11 @@ def run_forecast_pipeline(
         params={}
     )
 
+    # Get output directory from storage config
+    forecast_root = storage_cfg['roots'].get('forecast_silver', 'storage/silver/forecast')
+
     print(f"  ✓ Forecast model initialized")
-    print(f"  ✓ Output directory: {forecast_model.forecast_root}")
+    print(f"  ✓ Output directory: {forecast_root}")
     print()
 
     # Step 4: Run forecasts for each ticker
