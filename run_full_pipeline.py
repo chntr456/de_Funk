@@ -91,7 +91,7 @@ def ingest_company_data(spark, repo_root: Path, storage_cfg: dict, top_n: int = 
     date_from = date_to - timedelta(days=730)
 
     # Load Polygon API config
-    polygon_cfg_path = repo_root / "configs" / "polygon.json"
+    polygon_cfg_path = repo_root / "configs" / "polygon_endpoints.json"
     with open(polygon_cfg_path) as f:
         polygon_cfg = json.load(f)
 
