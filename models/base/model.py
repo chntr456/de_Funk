@@ -509,6 +509,165 @@ class BaseModel:
         }
 
     # ============================================================
+    # PERSISTENCE (write to storage)
+    # ============================================================
+
+    def write_tables(
+        self,
+        output_root: Optional[str] = None,
+        format: str = "parquet",
+        mode: str = "overwrite",
+        use_optimized_writer: bool = True,
+        partition_by: Optional[Dict[str, List[str]]] = None
+    ):
+        """
+        Write all model tables to storage.
+
+        This is the standard way to persist a model's Silver layer.
+        Uses optimized ParquetLoader by default for better performance.
+
+        Args:
+            output_root: Root path for output (defaults to storage_cfg silver root for this model)
+            format: Output format (parquet, delta, etc.)
+            mode: Write mode (overwrite, append, etc.)
+            use_optimized_writer: Use ParquetLoader for optimized writes (recommended)
+            partition_by: Optional dict of table_name -> partition_columns
+
+        Returns:
+            Dictionary with write statistics
+
+        Example:
+            model = CompanyModel(...)
+            stats = model.write_tables(
+                output_root="storage/silver/company",
+                partition_by={"fact_prices": ["trade_date"]}
+            )
+        """
+        # Ensure model is built
+        self.ensure_built()
+
+        # Determine output root
+        if output_root is None:
+            # Use storage config to find model's silver root
+            model_silver_key = f"{self.model_name}_silver"
+            if model_silver_key in self.storage_cfg.get('roots', {}):
+                output_root = self.storage_cfg['roots'][model_silver_key]
+            else:
+                # Fallback to generic silver root
+                output_root = f"{self.storage_cfg.get('roots', {}).get('silver', 'storage/silver')}/{self.model_name}"
+
+        print(f"\n{'=' * 70}")
+        print(f"Writing {self.model_name.upper()} Model to Silver Layer")
+        print(f"{'=' * 70}")
+        print(f"Output root: {output_root}")
+        print(f"Format: {format}")
+        print(f"Mode: {mode}")
+        print(f"Optimized writer: {use_optimized_writer}")
+
+        stats = {
+            'dimensions': {},
+            'facts': {},
+            'total_rows': 0,
+            'total_tables': 0
+        }
+
+        # Use optimized ParquetLoader if requested and format is parquet
+        if use_optimized_writer and format == "parquet":
+            from models.base.parquet_loader import ParquetLoader
+            loader = ParquetLoader(root=output_root.rsplit('/', 1)[0])  # Get parent of model dir
+
+            # Write dimensions
+            print(f"\nWriting Dimensions:")
+            for name, df in self._dims.items():
+                print(f"  Writing {name}...")
+                row_count = df.count()
+
+                # ParquetLoader expects relative path
+                rel_path = f"{self.model_name}/dims/{name}"
+                loader.write_dim(rel_path, df)
+
+                stats['dimensions'][name] = row_count
+                stats['total_rows'] += row_count
+                stats['total_tables'] += 1
+                print(f"    ✓ {row_count:,} rows")
+
+            # Write facts
+            print(f"\nWriting Facts:")
+            for name, df in self._facts.items():
+                print(f"  Writing {name}...")
+                row_count = df.count()
+
+                # Determine sort columns for optimal query performance
+                sort_by = partition_by.get(name, []) if partition_by else []
+                if not sort_by:
+                    # Default: use common date/time columns if present
+                    columns = df.columns
+                    for date_col in ['trade_date', 'date', 'publish_date', 'timestamp']:
+                        if date_col in columns:
+                            sort_by = [date_col]
+                            if 'ticker' in columns:
+                                sort_by.append('ticker')
+                            elif 'symbol' in columns:
+                                sort_by.append('symbol')
+                            break
+
+                rel_path = f"{self.model_name}/facts/{name}"
+                loader.write_fact(rel_path, df, sort_by=sort_by)
+
+                stats['facts'][name] = row_count
+                stats['total_rows'] += row_count
+                stats['total_tables'] += 1
+                print(f"    ✓ {row_count:,} rows")
+
+        else:
+            # Standard Spark writer (fallback)
+            print("\nUsing standard Spark writer...")
+
+            # Write dimensions
+            print(f"\nWriting Dimensions:")
+            for name, df in self._dims.items():
+                path = f"{output_root}/dims/{name}"
+                print(f"  Writing {name} to {path}...")
+
+                writer = df.write.mode(mode).format(format)
+                if partition_by and name in partition_by:
+                    writer = writer.partitionBy(partition_by[name])
+
+                writer.save(path)
+                row_count = df.count()
+                stats['dimensions'][name] = row_count
+                stats['total_rows'] += row_count
+                stats['total_tables'] += 1
+                print(f"    ✓ {row_count:,} rows")
+
+            # Write facts
+            print(f"\nWriting Facts:")
+            for name, df in self._facts.items():
+                path = f"{output_root}/facts/{name}"
+                print(f"  Writing {name} to {path}...")
+
+                writer = df.write.mode(mode).format(format)
+                if partition_by and name in partition_by:
+                    writer = writer.partitionBy(partition_by[name])
+
+                writer.save(path)
+                row_count = df.count()
+                stats['facts'][name] = row_count
+                stats['total_rows'] += row_count
+                stats['total_tables'] += 1
+                print(f"    ✓ {row_count:,} rows")
+
+        print(f"\n{'=' * 70}")
+        print(f"✓ Silver Layer Write Complete")
+        print(f"{'=' * 70}")
+        print(f"Total tables written: {stats['total_tables']}")
+        print(f"Total rows written: {stats['total_rows']:,}")
+        print(f"  - Dimensions: {len(stats['dimensions'])} tables, {sum(stats['dimensions'].values()):,} rows")
+        print(f"  - Facts: {len(stats['facts'])} tables, {sum(stats['facts'].values()):,} rows")
+
+        return stats
+
+    # ============================================================
     # EXTENSION POINTS (override in subclasses)
     # ============================================================
 

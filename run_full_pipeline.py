@@ -156,13 +156,16 @@ def build_company_model(spark, repo_root: Path, storage_cfg: dict):
     print(f"  - Dimensions: {tables['dimensions']}")
     print(f"  - Facts: {tables['facts']}")
 
-    # Optionally write to Silver storage
-    from models.implemented.company.company_silver_builder import build_and_write_company_silver
+    # Write to Silver storage using BaseModel's generic write method
+    stats = company_model.write_tables(
+        use_optimized_writer=True,  # Use ParquetLoader for better performance
+        partition_by={
+            'fact_prices': ['trade_date', 'ticker'],
+            'fact_news': ['publish_date']
+        }
+    )
 
-    print("\nWriting company Silver layer to storage...")
-    build_and_write_company_silver(spark, repo_root, storage_cfg)
-
-    print("✓ Company model complete")
+    print(f"✓ Company model complete - {stats['total_tables']} tables written")
 
     return company_model
 
@@ -249,7 +252,10 @@ def build_macro_model(spark, repo_root: Path, storage_cfg: dict):
     print(f"  - Dimensions: {tables['dimensions']}")
     print(f"  - Facts: {tables['facts']}")
 
-    print("✓ Macro model complete")
+    # Write to Silver storage
+    stats = macro_model.write_tables(use_optimized_writer=True)
+
+    print(f"✓ Macro model complete - {stats['total_tables']} tables written")
 
     return macro_model
 
@@ -290,7 +296,10 @@ def build_city_finance_model(spark, repo_root: Path, storage_cfg: dict):
     print(f"  - Dimensions: {tables['dimensions']}")
     print(f"  - Facts: {tables['facts']}")
 
-    print("✓ City finance model complete")
+    # Write to Silver storage
+    stats = city_finance_model.write_tables(use_optimized_writer=True)
+
+    print(f"✓ City finance model complete - {stats['total_tables']} tables written")
 
     return city_finance_model
 
