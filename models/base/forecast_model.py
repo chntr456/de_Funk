@@ -573,12 +573,18 @@ class TimeSeriesForecastModel(BaseModel):
         """
         from pathlib import Path
         import pandas as pd
+        import os
 
         # Get forecast Silver root
         forecast_root = self.storage_cfg['roots'].get(
             'forecast_silver',
             'storage/silver/forecast'
         )
+
+        # Convert to absolute path if relative
+        forecast_root = Path(forecast_root).resolve()
+
+        print(f"    Saving forecasts to: {forecast_root}")
 
         # Separate by target
         for target in forecasts_df['target'].unique():
@@ -612,7 +618,8 @@ class TimeSeriesForecastModel(BaseModel):
             file_path = partition_path / "data.parquet"
             target_df.to_parquet(file_path, index=False, compression='snappy')
 
-            print(f"    Saved {len(target_df)} {table_name} records to {file_path}")
+            print(f"    → Saved {len(target_df)} {table_name} records")
+            print(f"      File: {file_path}")
 
     def save_metrics(self, metrics_df):
         """

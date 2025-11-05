@@ -220,7 +220,7 @@ def generate_forecasts(spark, repo_root: Path, storage_cfg: dict, top_n: int = 1
 
     for i, ticker in enumerate(tickers, 1):
         try:
-            print(f"  [{i}/{len(tickers)}] Training forecasts for {ticker}...", end=" ")
+            print(f"  [{i}/{len(tickers)}] Training forecasts for {ticker}...")
 
             # Run all configured forecast models for this ticker
             ticker_results = forecast_model.run_forecast_for_ticker(ticker)
@@ -231,15 +231,15 @@ def generate_forecasts(spark, repo_root: Path, storage_cfg: dict, top_n: int = 1
 
             if ticker_results['errors']:
                 results['errors'].extend(ticker_results['errors'])
-                print(f"✓ ({ticker_results['models_trained']} models, {len(ticker_results['errors'])} errors)")
+                print(f"    ✓ Completed ({ticker_results['models_trained']} models, {len(ticker_results['errors'])} errors)")
             else:
-                print(f"✓ ({ticker_results['models_trained']} models)")
+                print(f"    ✓ Completed ({ticker_results['models_trained']} models)")
 
         except Exception as e:
             results['tickers_failed'] += 1
             error_msg = f"{ticker}: {str(e)}"
             results['errors'].append(error_msg)
-            print(f"✗ {str(e)}")
+            print(f"    ✗ {str(e)}")
 
     # Print summary
     print("\nForecast Generation Summary:")
