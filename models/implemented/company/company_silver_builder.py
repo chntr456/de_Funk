@@ -12,7 +12,7 @@ import pyspark.sql.functions as F
 from pathlib import Path
 import yaml
 
-from ..loaders.parquet_loader import ParquetLoader
+from models.base.parquet_loader import ParquetLoader
 
 
 class CompanySilverBuilder:
