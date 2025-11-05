@@ -614,11 +614,20 @@ class TimeSeriesForecastModel(BaseModel):
             partition_path = output_path / f"forecast_date={forecast_date}"
             partition_path.mkdir(parents=True, exist_ok=True)
 
-            # Save to parquet
+            # Append to existing data or create new file
             file_path = partition_path / "data.parquet"
-            target_df.to_parquet(file_path, index=False, compression='snappy')
 
-            print(f"    → Saved {len(target_df)} {table_name} records")
+            if file_path.exists():
+                # Read existing data and append new data
+                existing_df = pd.read_parquet(file_path)
+                combined_df = pd.concat([existing_df, target_df], ignore_index=True)
+                combined_df.to_parquet(file_path, index=False, compression='snappy')
+                print(f"    → Appended {len(target_df)} {table_name} records (total: {len(combined_df)})")
+            else:
+                # Create new file
+                target_df.to_parquet(file_path, index=False, compression='snappy')
+                print(f"    → Saved {len(target_df)} {table_name} records")
+
             print(f"      File: {file_path}")
 
     def save_metrics(self, metrics_df):
@@ -644,8 +653,16 @@ class TimeSeriesForecastModel(BaseModel):
         partition_path = output_path / f"metric_date={metric_date}"
         partition_path.mkdir(parents=True, exist_ok=True)
 
-        # Save to parquet
+        # Append to existing data or create new file
         file_path = partition_path / "data.parquet"
-        metrics_df.to_parquet(file_path, index=False, compression='snappy')
 
-        print(f"    Saved {len(metrics_df)} metric records to {file_path}")
+        if file_path.exists():
+            # Read existing data and append new data
+            existing_df = pd.read_parquet(file_path)
+            combined_df = pd.concat([existing_df, metrics_df], ignore_index=True)
+            combined_df.to_parquet(file_path, index=False, compression='snappy')
+            print(f"    Appended {len(metrics_df)} metric records (total: {len(combined_df)}) to {file_path}")
+        else:
+            # Create new file
+            metrics_df.to_parquet(file_path, index=False, compression='snappy')
+            print(f"    Saved {len(metrics_df)} metric records to {file_path}")
