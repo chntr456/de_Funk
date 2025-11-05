@@ -19,10 +19,10 @@ import duckdb
 
 def load_forecast_data(ticker: str, target: str = "price") -> pd.DataFrame:
     """
-    Load forecast data for a ticker.
+    Load forecast data for a ticker (case-insensitive).
 
     Args:
-        ticker: Stock ticker symbol
+        ticker: Stock ticker symbol (case-insensitive)
         target: "price" or "volume"
 
     Returns:
@@ -32,10 +32,11 @@ def load_forecast_data(ticker: str, target: str = "price") -> pd.DataFrame:
 
     try:
         con = duckdb.connect(database=':memory:')
+        # Use UPPER() for case-insensitive ticker matching
         query = f"""
         SELECT *
         FROM read_parquet('{forecast_path}/**/*.parquet')
-        WHERE ticker = '{ticker}'
+        WHERE UPPER(ticker) = UPPER('{ticker}')
         ORDER BY prediction_date, model_name
         """
         df = con.execute(query).fetchdf()
@@ -48,10 +49,10 @@ def load_forecast_data(ticker: str, target: str = "price") -> pd.DataFrame:
 
 def load_actual_data(ticker: str, days: int = 90) -> pd.DataFrame:
     """
-    Load actual historical data for comparison.
+    Load actual historical data for comparison (case-insensitive).
 
     Args:
-        ticker: Stock ticker symbol
+        ticker: Stock ticker symbol (case-insensitive)
         days: Number of days of history to load
 
     Returns:
@@ -64,10 +65,11 @@ def load_actual_data(ticker: str, days: int = 90) -> pd.DataFrame:
         start_date = end_date - timedelta(days=days)
 
         con = duckdb.connect(database=':memory:')
+        # Use UPPER() for case-insensitive ticker matching
         query = f"""
         SELECT trade_date, ticker, close, volume
         FROM read_parquet('{prices_path}/**/*.parquet')
-        WHERE ticker = '{ticker}'
+        WHERE UPPER(ticker) = UPPER('{ticker}')
           AND trade_date >= DATE '{start_date.strftime('%Y-%m-%d')}'
         ORDER BY trade_date
         """
@@ -81,10 +83,10 @@ def load_actual_data(ticker: str, days: int = 90) -> pd.DataFrame:
 
 def load_forecast_metrics(ticker: str = None) -> pd.DataFrame:
     """
-    Load forecast accuracy metrics.
+    Load forecast accuracy metrics (case-insensitive).
 
     Args:
-        ticker: Optional ticker filter
+        ticker: Optional ticker filter (case-insensitive)
 
     Returns:
         DataFrame with metrics
@@ -98,7 +100,8 @@ def load_forecast_metrics(ticker: str = None) -> pd.DataFrame:
         FROM read_parquet('{metrics_path}/**/*.parquet')
         """
         if ticker:
-            query += f" WHERE ticker = '{ticker}'"
+            # Use UPPER() for case-insensitive ticker matching
+            query += f" WHERE UPPER(ticker) = UPPER('{ticker}')"
         query += " ORDER BY metric_date DESC, ticker, model_name"
 
         df = con.execute(query).fetchdf()

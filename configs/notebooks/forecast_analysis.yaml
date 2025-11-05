@@ -18,20 +18,17 @@ variables:
     display_name: "Stock Tickers"
     description: "Select stocks to view forecasts"
 
-  forecast_date:
-    type: date_range
-    default:
-      start: "2024-01-01"
-      end: "2024-12-31"
-    display_name: "Forecast Date Range"
-    description: "When the forecast was generated"
-
   model_name:
     type: multi_select
     default: ["ARIMA_30d", "Prophet_30d"]
     options: ["ARIMA_7d", "ARIMA_14d", "ARIMA_30d", "ARIMA_60d", "Prophet_7d", "Prophet_30d", "Prophet_60d", "RandomForest_14d", "RandomForest_30d"]
     display_name: "Models"
     description: "Select forecast models to compare"
+
+# Note: forecast_date filtering removed to avoid column mismatch errors
+# - forecast_price/forecast_volume tables use 'forecast_date' column
+# - forecast_metrics table uses 'metric_date' column
+# Date filtering is handled within individual exhibit components
 
 # Exhibits for displaying forecasts
 exhibits:
