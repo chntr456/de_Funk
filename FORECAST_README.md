@@ -174,7 +174,7 @@ models:
 Use the ForecastModel class directly in Python:
 
 ```python
-from models.forecast_model import ForecastModel
+from models.forecast.model import ForecastModel
 import yaml
 
 # Load configurations

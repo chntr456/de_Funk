@@ -23,7 +23,7 @@ import json
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from models.forecast_model import ForecastModel
+from models.forecast.model import ForecastModel
 
 
 def load_config(config_path: str) -> dict:
