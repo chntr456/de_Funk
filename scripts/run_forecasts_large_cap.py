@@ -38,7 +38,7 @@ import json
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from models.implemented.forecast.model import ForecastModel
+from models.implemented.forecast import ForecastModel
 from models.api.session import UniversalSession
 
 
