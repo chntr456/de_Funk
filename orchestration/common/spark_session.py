@@ -11,6 +11,10 @@ def get_spark(app_name: str = "App"):
                 .config("spark.python.worker.faulthandler.enabled", "true")
                 .config("spark.sql.execution.pyspark.udf.faulthandler.enabled", "true")
                 .getOrCreate())
-    return  spark
+    return spark
+
+
+# Alias for backward compatibility
+get_spark_session = get_spark
 
 
