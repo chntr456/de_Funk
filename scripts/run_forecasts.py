@@ -24,7 +24,7 @@ import json
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from models.implemented.forecast.model import ForecastModel
-from models.base.session import UniversalSession
+from models.api.session import UniversalSession
 
 
 def load_config(config_path: str) -> dict:
