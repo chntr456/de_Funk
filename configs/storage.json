@@ -7,7 +7,9 @@
     "bronze": "storage/bronze",
     "silver": "storage/silver",
     "company_silver": "storage/silver/company",
-    "forecast_silver": "storage/silver/forecast"
+    "forecast_silver": "storage/silver/forecast",
+    "macro_silver": "storage/silver/macro",
+    "city_finance_silver": "storage/silver/city_finance"
   },
   "tables": {
     "ref_all_tickers": { "root": "bronze", "rel": "ref_all_tickers", "partitions": ["snapshot_dt"] },
@@ -16,6 +18,16 @@
     "prices_daily":    { "root": "bronze", "rel": "prices_daily",    "partitions": ["trade_date"] },
     "news":            { "root": "bronze", "rel": "news",            "partitions": ["publish_date"] },
     "fundamentals":    { "root": "bronze", "rel": "fundamentals",    "partitions": ["fiscal_year","fiscal_period"] },
+
+    "bls_unemployment":  { "root": "bronze", "rel": "bls/unemployment",  "partitions": ["year"] },
+    "bls_cpi":           { "root": "bronze", "rel": "bls/cpi",           "partitions": ["year"] },
+    "bls_employment":    { "root": "bronze", "rel": "bls/employment",    "partitions": ["year"] },
+    "bls_wages":         { "root": "bronze", "rel": "bls/wages",         "partitions": ["year"] },
+
+    "chicago_unemployment":     { "root": "bronze", "rel": "chicago/unemployment",     "partitions": ["date"] },
+    "chicago_building_permits": { "root": "bronze", "rel": "chicago/building_permits", "partitions": ["issue_date"] },
+    "chicago_business_licenses": { "root": "bronze", "rel": "chicago/business_licenses", "partitions": ["start_date"] },
+    "chicago_economic_indicators": { "root": "bronze", "rel": "chicago/economic_indicators", "partitions": ["date"] },
 
     "dim_company":     { "root": "silver", "rel": "company/dims/dim_company" },
     "dim_exchange":    { "root": "silver", "rel": "company/dims/dim_exchange" },
