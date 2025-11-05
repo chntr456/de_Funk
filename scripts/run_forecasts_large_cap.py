@@ -39,6 +39,7 @@ import json
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from models.implemented.forecast.model import ForecastModel
+from models.base.session import UniversalSession
 
 
 def load_config(config_path: str) -> dict:
@@ -252,6 +253,14 @@ def run_forecast_pipeline(
     print(f"Step {3 if refresh_data else 2}: Initializing forecast model...")
     print("-" * 80)
 
+    # Create universal session for cross-model access
+    repo_root = Path(__file__).parent.parent
+    session = UniversalSession(
+        connection=spark,
+        storage_cfg=storage_cfg,
+        repo_root=repo_root
+    )
+
     forecast_model = ForecastModel(
         connection=spark,
         storage_cfg=storage_cfg,
@@ -259,10 +268,14 @@ def run_forecast_pipeline(
         params={}
     )
 
+    # Set session for cross-model data access
+    forecast_model.set_session(session)
+
     # Get output directory from storage config
     forecast_root = storage_cfg['roots'].get('forecast_silver', 'storage/silver/forecast')
 
     print(f"  ✓ Forecast model initialized")
+    print(f"  ✓ Session configured for cross-model access")
     print(f"  ✓ Output directory: {forecast_root}")
     print()
 

@@ -161,7 +161,8 @@ class ForecastModel(BaseModel):
         self,
         ticker: str,
         date_from: Optional[str] = None,
-        date_to: Optional[str] = None
+        date_to: Optional[str] = None,
+        lookback_days: Optional[int] = None
     ) -> DataFrame:
         """
         Get training data from company model.
@@ -170,6 +171,8 @@ class ForecastModel(BaseModel):
             ticker: Ticker symbol
             date_from: Start date (optional)
             date_to: End date (optional)
+            lookback_days: Number of days to look back from today (optional)
+                          If provided, overrides date_from
 
         Returns:
             DataFrame with price data for training
@@ -182,6 +185,11 @@ class ForecastModel(BaseModel):
                 "ForecastModel requires session for cross-model access. "
                 "Call set_session() first."
             )
+
+        # Calculate date_from from lookback_days if provided
+        if lookback_days:
+            from datetime import datetime, timedelta
+            date_from = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
 
         # Get company model
         company_model = self._session.load_model('company')
