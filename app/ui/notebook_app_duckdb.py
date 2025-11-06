@@ -120,7 +120,13 @@ class NotebookVaultApp:
                 active_notebook = self._get_active_notebook()
                 if active_notebook:
                     # Show filter context information
-                    self._render_filter_context_info()
+                    try:
+                        self._render_filter_context_info()
+                    except Exception as e:
+                        st.error(f"Filter context error: {e}")
+                        import traceback
+                        st.code(traceback.format_exc())
+
                     st.divider()
 
                     self._render_filters(active_notebook[2])
@@ -197,16 +203,31 @@ class NotebookVaultApp:
 
     def _render_filter_context_info(self):
         """Render filter context information and controls."""
-        folder_name = self.notebook_manager.get_folder_display_name()
-        folder_ctx_mgr = self.notebook_manager.folder_context_manager
-        current_folder = self.notebook_manager.get_current_folder()
+        # Check if folder context manager exists
+        if not hasattr(self.notebook_manager, 'folder_context_manager'):
+            st.warning("⚠️ Folder context manager not initialized")
+            return
+
+        try:
+            folder_name = self.notebook_manager.get_folder_display_name()
+            folder_ctx_mgr = self.notebook_manager.folder_context_manager
+            current_folder = self.notebook_manager.get_current_folder()
+        except Exception as e:
+            st.error(f"Error accessing folder context: {e}")
+            return
 
         if not current_folder:
+            st.caption("_No notebook loaded_")
             return
 
         # Get global and folder-specific filters
-        global_filters = folder_ctx_mgr.get_global_filters()
-        folder_filters = folder_ctx_mgr.get_folder_specific_filters(current_folder)
+        try:
+            global_filters = folder_ctx_mgr.get_global_filters()
+            folder_filters = folder_ctx_mgr.get_folder_specific_filters(current_folder)
+        except Exception as e:
+            st.error(f"Error loading filters: {e}")
+            global_filters = {}
+            folder_filters = {}
 
         # Filter context header
         st.markdown("### 🎛️ Filter Context")
@@ -217,33 +238,42 @@ class NotebookVaultApp:
 
             if global_filters:
                 for key, value in global_filters.items():
-                    if isinstance(value, dict) and 'start' in value:
-                        st.caption(f"**{key}**: {value['start']} to {value['end']}")
-                    elif isinstance(value, list):
-                        st.caption(f"**{key}**: {', '.join(map(str, value[:3]))}{'...' if len(value) > 3 else ''}")
-                    else:
-                        st.caption(f"**{key}**: {value}")
+                    try:
+                        if isinstance(value, dict) and 'start' in value:
+                            st.caption(f"**{key}**: {value['start']} to {value['end']}")
+                        elif isinstance(value, list):
+                            st.caption(f"**{key}**: {', '.join(map(str, value[:3]))}{'...' if len(value) > 3 else ''}")
+                        else:
+                            st.caption(f"**{key}**: {value}")
+                    except Exception as e:
+                        st.caption(f"**{key}**: (error displaying)")
             else:
                 st.caption("_No global filters set_")
 
             # Clear global filters button
-            if global_filters and st.button("🗑️ Clear Global Filters", key="clear_global", use_container_width=True):
-                folder_ctx_mgr.clear_global_filters()
-                st.success("Global filters cleared!")
-                st.rerun()
+            if global_filters and st.button("🗑️ Clear Global", key="clear_global", use_container_width=True):
+                try:
+                    folder_ctx_mgr.clear_global_filters()
+                    st.success("✅ Global filters cleared!")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error clearing: {e}")
 
         # Folder context section
-        with st.expander(f"📁 Folder: {folder_name}", expanded=bool(folder_filters)):
+        with st.expander(f"📁 {folder_name}", expanded=bool(folder_filters)):
             st.caption("_Filters shared within this folder only_")
 
             if folder_filters:
                 for key, value in folder_filters.items():
-                    if isinstance(value, dict) and 'start' in value:
-                        st.caption(f"**{key}**: {value['start']} to {value['end']}")
-                    elif isinstance(value, list):
-                        st.caption(f"**{key}**: {', '.join(map(str, value[:3]))}{'...' if len(value) > 3 else ''}")
-                    else:
-                        st.caption(f"**{key}**: {value}")
+                    try:
+                        if isinstance(value, dict) and 'start' in value:
+                            st.caption(f"**{key}**: {value['start']} to {value['end']}")
+                        elif isinstance(value, list):
+                            st.caption(f"**{key}**: {', '.join(map(str, value[:3]))}{'...' if len(value) > 3 else ''}")
+                        else:
+                            st.caption(f"**{key}**: {value}")
+                    except Exception as e:
+                        st.caption(f"**{key}**: (error displaying)")
             else:
                 st.caption("_No folder-specific filters set_")
 
@@ -251,16 +281,22 @@ class NotebookVaultApp:
             col1, col2 = st.columns(2)
 
             with col1:
-                if folder_filters and st.button("🗑️ Clear Folder", key="clear_folder", use_container_width=True):
-                    folder_ctx_mgr.clear_filters(current_folder)
-                    st.success("Folder filters cleared!")
-                    st.rerun()
+                if folder_filters and st.button("🗑️ Folder", key="clear_folder", use_container_width=True):
+                    try:
+                        folder_ctx_mgr.clear_filters(current_folder)
+                        st.success("✅ Folder cleared!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
             with col2:
-                if (global_filters or folder_filters) and st.button("🗑️ Clear All", key="clear_all", use_container_width=True):
-                    folder_ctx_mgr.clear_all_filters(current_folder)
-                    st.success("All filters cleared!")
-                    st.rerun()
+                if (global_filters or folder_filters) and st.button("🗑️ All", key="clear_all", use_container_width=True):
+                    try:
+                        folder_ctx_mgr.clear_all_filters(current_folder)
+                        st.success("✅ All cleared!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
 
     def _render_filters(self, notebook_config):
         """Render filters for active notebook."""
