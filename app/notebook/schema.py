@@ -315,3 +315,4 @@ class NotebookConfig:
     # Markdown-specific fields
     _content_blocks: Optional[List[Dict[str, Any]]] = None  # For markdown rendering
     _is_markdown: bool = False  # Flag to indicate markdown format
+    _filter_collection: Optional[Any] = None  # Dynamic filters (FilterCollection)

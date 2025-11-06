@@ -1,8 +1,8 @@
 ---
-id: stock_analysis_md
-title: Stock Performance Analysis
-description: Analyzing stock prices with volume metrics
-tags: [stocks, prices, analysis]
+id: stock_analysis_dynamic
+title: Stock Performance Analysis (Dynamic Filters)
+description: Analyzing stock prices with dynamic database-driven filters
+tags: [stocks, prices, analysis, dynamic]
 models: [company]
 author: analyst@company.com
 created: 2024-01-01
@@ -15,6 +15,7 @@ $filter${
   label: Date Range
   operator: between
   default: {start: "2024-01-01", end: "2024-01-05"}
+  help_text: Select the date range for analysis
 }
 
 $filter${
@@ -22,22 +23,25 @@ $filter${
   label: Stock Tickers
   type: select
   multi: true
-  source: company.dim_company.ticker
+  source: {model: company, table: dim_company, column: ticker}
+  help_text: Select stocks to analyze (loaded from database)
 }
 
 $filter${
   id: volume
   label: Minimum Volume
-  type: number_range
+  type: slider
   min_value: 0
   max_value: 100000000
-  default: {min: 0}
+  step: 1000000
+  default: 0
   operator: gte
+  help_text: Filter by minimum trading volume
 }
 
 # Stock Performance Analysis
 
-This analysis examines stock price trends and trading volumes for selected technology equities over a specified date range. The data is sourced from our company model and includes daily trading information.
+This analysis examines stock price trends and trading volumes for selected technology equities. All filters are **dynamically loaded from the database** and update automatically as data changes.
 
 ## Summary Metrics
 
@@ -67,7 +71,7 @@ $exhibits${
   title: Daily Closing Prices
 }
 
-You can see from the chart above that prices vary significantly across different stocks and time periods. This visualization helps identify trends, patterns, and anomalies in the data.
+You can see from the chart above that prices vary significantly across different stocks and time periods. The filters above allow you to dynamically explore different time windows and stock combinations.
 
 ## Volume Analysis
 
@@ -86,7 +90,7 @@ $exhibits${
   title: Trading Volume by Stock
 }
 
-High trading volumes often indicate strong investor interest and liquidity in a particular stock.
+High trading volumes often indicate strong investor interest and liquidity in a particular stock. Use the volume slider above to filter for highly-traded stocks only.
 
 </details>
 
@@ -94,17 +98,19 @@ High trading volumes often indicate strong investor interest and liquidity in a 
 
 Based on the analysis above, we can draw several conclusions:
 
-1. **Price Stability**: Some stocks show more stable price movements than others
-2. **Volume Patterns**: Trading volumes vary significantly across different equities
-3. **Trend Direction**: Clear upward or downward trends are visible in certain periods
+1. **Dynamic Filtering**: All ticker options are loaded directly from the database
+2. **Real-time Updates**: As new stocks are added to the system, they automatically appear in filters
+3. **Flexible Analysis**: Adjust date ranges and volume thresholds to explore different scenarios
 
-### Next Steps
+### Filter Features
 
-Consider the following actions based on this analysis:
+The new dynamic filter system provides:
 
-- Monitor stocks with unusual volume spikes
-- Investigate price movements that deviate from sector trends
-- Review fundamental factors for stocks with significant changes
+- **Database-Driven**: Options pulled directly from data
+- **No Static Lists**: Never hardcode ticker lists again
+- **Fuzzy Search**: Find stocks quickly (coming soon)
+- **Session State**: Filters persist across notebook interactions
+- **SQL Generation**: Automatic WHERE clause generation
 
 ## Detailed Data
 
@@ -126,4 +132,4 @@ $exhibits${
 
 ---
 
-**Note**: This analysis is for informational purposes only and should not be considered investment advice.
+**Note**: This notebook demonstrates the new dynamic filter system. Filters are no longer rendered in the notebook view - they appear only in the sidebar for a cleaner interface.

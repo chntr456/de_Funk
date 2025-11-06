@@ -26,6 +26,14 @@ from .schema import (
     DateRangeDefault,
     AggregationType,
 )
+from .filters.dynamic import (
+    FilterConfig,
+    FilterType,
+    FilterOperator,
+    FilterSource,
+    FilterCollection,
+)
+from .markdown_parser_filter_helpers import parse_filter
 
 
 @dataclass
@@ -42,8 +50,7 @@ class MarkdownNotebookParser:
 
     # Regex patterns
     FRONT_MATTER_PATTERN = re.compile(r'^---\s*\n(.*?)\n---\s*\n', re.MULTILINE | re.DOTALL)
-    FILTERS_SECTION_PATTERN = re.compile(r'^#\s*Filters\s*\n(.*?)(?=\n#|\Z)', re.MULTILINE | re.DOTALL)
-    FILTER_LINE_PATTERN = re.compile(r'-\s*\*\*(.+?)\*\*:\s*(\w+)\s*\((.+?)\)\s*\[(\w+)\]')
+    FILTER_PATTERN = re.compile(r'\$filters?\$\{\s*\n(.*?)\n\}', re.MULTILINE | re.DOTALL)
     EXHIBIT_PATTERN = re.compile(r'\$exhibits?\$\{\s*\n(.*?)\n\}', re.MULTILINE | re.DOTALL)
     DETAILS_PATTERN = re.compile(r'<details>\s*<summary>(.*?)</summary>\s*(.*?)</details>', re.MULTILINE | re.DOTALL)
 
@@ -93,14 +100,17 @@ class MarkdownNotebookParser:
         # Remove front matter from content
         content = self.FRONT_MATTER_PATTERN.sub('', content, count=1)
 
-        # Extract filters section
-        filters = self._extract_filters(content)
+        # Extract filters (new $filter${} syntax)
+        filter_collection = self._extract_dynamic_filters(content)
+
+        # Remove filter blocks from content (they don't render in notebook view)
+        content = self.FILTER_PATTERN.sub('', content)
 
         # Extract exhibits and build content structure
         exhibits, content_blocks = self._extract_exhibits(content)
 
         # Build NotebookConfig
-        return self._build_config(front_matter, filters, exhibits, content_blocks)
+        return self._build_config(front_matter, filter_collection, exhibits, content_blocks)
 
     def _extract_front_matter(self, content: str) -> Optional[Dict[str, Any]]:
         """Extract and parse YAML front matter."""
@@ -111,49 +121,30 @@ class MarkdownNotebookParser:
         yaml_content = match.group(1)
         return yaml.safe_load(yaml_content)
 
-    def _extract_filters(self, content: str) -> Dict[str, Variable]:
+    def _extract_dynamic_filters(self, content: str) -> FilterCollection:
         """
-        Extract filters from the Filters section.
+        Extract filters using $filter${...} syntax.
 
-        Format: - **Display Name**: column_name (default) [type]
+        Returns:
+            FilterCollection with all parsed filters
         """
-        filters = {}
+        filter_collection = FilterCollection()
 
-        # Find filters section
-        match = self.FILTERS_SECTION_PATTERN.search(content)
-        if not match:
-            return filters
+        # Find all filter blocks
+        for match in self.FILTER_PATTERN.finditer(content):
+            filter_yaml = match.group(1)
 
-        filters_content = match.group(1)
+            try:
+                filter_config = parse_filter(filter_yaml)
+                filter_collection.add_filter(filter_config)
+            except Exception as e:
+                # Log error but continue parsing
+                print(f"Error parsing filter: {str(e)}")
+                continue
 
-        # Parse each filter line
-        for line_match in self.FILTER_LINE_PATTERN.finditer(filters_content):
-            display_name = line_match.group(1).strip()
-            column_name = line_match.group(2).strip()
-            default_str = line_match.group(3).strip()
-            var_type_str = line_match.group(4).strip()
+        return filter_collection
 
-            # Parse variable type
-            var_type = VariableType(var_type_str)
-
-            # Parse default value based on type
-            default = self._parse_filter_default(default_str, var_type)
-
-            # Create variable
-            filters[column_name] = Variable(
-                id=column_name,
-                type=var_type,
-                display_name=display_name,
-                default=default,
-                source=None,
-                description=None,
-                format=None,
-                options=self._parse_filter_options(default_str, var_type),
-            )
-
-        return filters
-
-    def _parse_filter_default(self, default_str: str, var_type: VariableType) -> Any:
+    def _old_parse_filter_default(self, default_str: str, var_type: VariableType) -> Any:
         """Parse default value based on variable type."""
         if var_type == VariableType.DATE_RANGE:
             # Format: "2024-01-01 to 2024-01-05"
@@ -178,7 +169,7 @@ class MarkdownNotebookParser:
         else:
             return default_str
 
-    def _parse_filter_options(self, default_str: str, var_type: VariableType) -> Optional[List[Any]]:
+    def _old_parse_filter_options(self, default_str: str, var_type: VariableType) -> Optional[List[Any]]:
         """Parse options for multi_select filters."""
         if var_type == VariableType.MULTI_SELECT:
             return [v.strip() for v in default_str.split(',')]
@@ -467,7 +458,7 @@ class MarkdownNotebookParser:
     def _build_config(
         self,
         front_matter: Dict[str, Any],
-        filters: Dict[str, Variable],
+        filter_collection: FilterCollection,
         exhibits: List[Exhibit],
         content_blocks: List[Dict[str, Any]]
     ) -> NotebookConfig:
@@ -508,18 +499,23 @@ class MarkdownNotebookParser:
             for exhibit in exhibits
         ]
 
+        # Convert filter collection to old variables format for backward compat
+        # (will be phased out)
+        variables = {}
+
         config = NotebookConfig(
             version="2.0",  # Markdown format version
             notebook=metadata,
             graph=graph,
-            variables=filters,
+            variables=variables,
             exhibits=exhibits,
             layout=layout,
             dimensions=None,
             measures=None,
             exports=None,
             _content_blocks=content_blocks,
-            _is_markdown=True
+            _is_markdown=True,
+            _filter_collection=filter_collection
         )
 
         return config

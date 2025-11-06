@@ -236,11 +236,7 @@ class NotebookSession:
         """
         Build filters for an exhibit from filter context and exhibit-specific filters.
 
-        Handles conversion of filter values based on variable types:
-        - date_range: Already in {'start': ..., 'end': ...} format
-        - multi_select: List of values
-        - number: Convert to {'min': value} for range filtering
-        - single_select/boolean: Direct value
+        Now supports both old filter context (FilterContext) and new dynamic filters (FilterCollection).
 
         Args:
             exhibit: Exhibit configuration
@@ -250,8 +246,22 @@ class NotebookSession:
         """
         filters = {}
 
-        # Start with notebook-level filters from filter context
-        if self.filter_context and self.notebook_config:
+        # Check if we have dynamic filters (new system)
+        if (self.notebook_config and
+            hasattr(self.notebook_config, '_filter_collection') and
+            self.notebook_config._filter_collection):
+
+            # Get active filters from collection
+            filter_collection = self.notebook_config._filter_collection
+            active_filters = filter_collection.get_active_filters()
+
+            # Apply filters
+            for filter_id, value in active_filters.items():
+                if value is not None:
+                    filters[filter_id] = value
+
+        # Otherwise use old filter context system
+        elif self.filter_context and self.notebook_config:
             context_filters = self.filter_context.get_all()
 
             # Convert filter values based on variable types

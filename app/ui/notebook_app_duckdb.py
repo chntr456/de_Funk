@@ -127,12 +127,27 @@ class NotebookVaultApp:
                 active_notebook = self._get_active_notebook()
                 if active_notebook:
                     _, _, notebook_config = active_notebook
-                    render_filters_section(
-                        notebook_config,
-                        self.notebook_session,
-                        self.ctx.connection,
-                        self.notebook_session.storage_service
-                    )
+
+                    # Check if this is a markdown notebook with dynamic filters
+                    if (hasattr(notebook_config, '_filter_collection') and
+                        notebook_config._filter_collection and
+                        notebook_config._filter_collection.filters):
+                        # Use new dynamic filter system
+                        from app.ui.components.dynamic_filters import render_dynamic_filters
+                        render_dynamic_filters(
+                            notebook_config._filter_collection,
+                            self.notebook_session,
+                            self.ctx.connection,
+                            self.notebook_session.storage_service
+                        )
+                    elif notebook_config.variables:
+                        # Use old filter system for backward compatibility
+                        render_filters_section(
+                            notebook_config,
+                            self.notebook_session,
+                            self.ctx.connection,
+                            self.notebook_session.storage_service
+                        )
 
         # Main content: Tabs
         self._render_main_content()
