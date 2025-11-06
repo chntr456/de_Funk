@@ -204,35 +204,44 @@ class NotebookVaultApp:
     def _render_folder_filter_editor(self):
         """Render YAML editor for folder filter context file."""
         if not hasattr(self.notebook_manager, 'folder_context_manager'):
+            st.warning("⚠️ Folder context manager not available")
             return
 
         folder_ctx_mgr = self.notebook_manager.folder_context_manager
         current_folder = self.notebook_manager.get_current_folder()
 
         if not current_folder:
+            st.caption("_No notebook loaded_")
             return
 
         folder_name = current_folder.name
         context_file = folder_ctx_mgr.get_context_file_path(current_folder)
+        file_exists = context_file.exists()
 
         # Header
-        st.markdown(f"### 📁 {folder_name}")
-        st.caption("_Filter context shared by all notebooks in this folder_")
+        st.markdown(f"### 📁 Folder: {folder_name}")
+        st.caption("_Filters shared by all notebooks in this folder_")
+
+        # Show file status
+        if file_exists:
+            st.caption(f"✅ `.filter_context.yaml` exists")
+        else:
+            st.caption(f"ℹ️ No `.filter_context.yaml` yet (will be created on save)")
 
         # Show current filter values
         current_filters = folder_ctx_mgr.get_filters(current_folder)
 
-        with st.expander("📊 Current Filter Values", expanded=bool(current_filters)):
+        with st.expander("📊 Active Filters", expanded=True):
             if current_filters:
                 for key, value in current_filters.items():
-                    if isinstance(value, dict):
-                        st.caption(f"**{key}**: {value}")
+                    if isinstance(value, dict) and 'start' in value:
+                        st.caption(f"**{key}**: {value.get('start')} to {value.get('end')}")
                     elif isinstance(value, list):
                         st.caption(f"**{key}**: {', '.join(map(str, value[:5]))}{'...' if len(value) > 5 else ''}")
                     else:
-                        st.caption(f"**{key}**: {value}")
+                        st.caption(f"**{key}**: `{value}`")
             else:
-                st.caption("_No filters set_")
+                st.info("📝 **No filters set**\n\nClick 'Edit Filter Context' below to add filters.\n\nExample:\n```yaml\nfilters:\n  ticker: AAPL\n  date_range:\n    start: 2024-10-01\n    end: 2024-11-01\n```")
 
         # Edit button
         filter_edit_key = f"filter_edit_{current_folder}"
@@ -241,35 +250,44 @@ class NotebookVaultApp:
             st.session_state[filter_edit_key] = False
 
         if not st.session_state[filter_edit_key]:
-            # View mode - show edit button
-            if st.button("✏️ Edit Filter Context", key=f"btn_edit_{current_folder}", use_container_width=True):
-                st.session_state[filter_edit_key] = True
-                st.rerun()
+            # View mode - show edit button (prominent)
+            st.button("✏️ Edit Filter Context",
+                     key=f"btn_edit_{current_folder}",
+                     use_container_width=True,
+                     type="primary" if not current_filters else "secondary",
+                     on_click=lambda: st.session_state.update({filter_edit_key: True}))
         else:
             # Edit mode - show YAML editor
-            st.info("📝 Editing .filter_context.yaml")
+            st.success("📝 **Editing** `.filter_context.yaml`")
 
             # Load current YAML content
             yaml_content = folder_ctx_mgr.get_context_yaml_content(current_folder)
+
+            # Show helpful message if empty
+            if not current_filters:
+                st.info("💡 **Tip**: Add filters in YAML format below, then click Save")
 
             # YAML editor
             edited_yaml = st.text_area(
                 "YAML Content",
                 value=yaml_content,
-                height=300,
+                height=400,
                 key=f"yaml_editor_{current_folder}",
-                help="Edit the filter context YAML file"
+                help="Edit filters in YAML format - changes apply to all notebooks in this folder"
             )
 
             # Buttons
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                if st.button("💾 Save", key=f"save_{current_folder}", use_container_width=True):
+                if st.button("💾 Save", key=f"save_{current_folder}", use_container_width=True, type="primary"):
                     try:
                         # Validate YAML
                         import yaml
-                        yaml.safe_load(edited_yaml)
+                        parsed = yaml.safe_load(edited_yaml)
+
+                        if parsed and 'filters' in parsed:
+                            st.success(f"✅ Valid YAML! Found {len(parsed['filters'])} filter(s)")
 
                         # Save
                         folder_ctx_mgr.save_context_yaml_content(current_folder, edited_yaml)
@@ -278,9 +296,9 @@ class NotebookVaultApp:
                         st.session_state[filter_edit_key] = False
                         st.rerun()
                     except yaml.YAMLError as e:
-                        st.error(f"Invalid YAML: {e}")
+                        st.error(f"❌ Invalid YAML syntax:\n```\n{str(e)}\n```")
                     except Exception as e:
-                        st.error(f"Error saving: {e}")
+                        st.error(f"❌ Error saving: {e}")
 
             with col2:
                 if st.button("❌ Cancel", key=f"cancel_{current_folder}", use_container_width=True):
@@ -288,17 +306,17 @@ class NotebookVaultApp:
                     st.rerun()
 
             with col3:
-                if st.button("🗑️ Clear", key=f"clear_{current_folder}", use_container_width=True):
+                if st.button("🗑️ Delete", key=f"delete_{current_folder}", use_container_width=True):
                     try:
-                        folder_ctx_mgr.clear_filters(current_folder)
-                        st.success("✅ Cleared!")
+                        folder_ctx_mgr.delete_context(current_folder)
+                        st.success("✅ Deleted!")
                         st.session_state[filter_edit_key] = False
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")
 
             # Show file location
-            st.caption(f"📄 File: `{context_file}`")
+            st.caption(f"📄 File: `{context_file.relative_to(context_file.parent.parent)}`")
 
     def _render_filter_context_info_OLD(self):
         """Render filter context information and controls."""
