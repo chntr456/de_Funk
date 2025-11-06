@@ -89,6 +89,63 @@ class DuckDBConnection(DataConnection):
         """
         return self.read_table(path, format="parquet")
 
+    def createDataFrame(self, data: list, schema=None) -> Any:
+        """
+        Create a DuckDB relation from data and schema.
+
+        Compatibility method for Spark's createDataFrame API.
+        This is primarily used for creating empty tables when no data exists.
+
+        Args:
+            data: List of rows (typically empty [])
+            schema: PySpark StructType schema (optional)
+
+        Returns:
+            DuckDB relation
+        """
+        # If no schema provided, create empty relation with no columns
+        if schema is None:
+            return self.conn.from_df(pd.DataFrame())
+
+        # Parse PySpark schema to create pandas DataFrame with correct types
+        try:
+            # Import PySpark types if available
+            from pyspark.sql.types import StructType, StructField, StringType, IntegerType, LongType, DoubleType, BooleanType, TimestampType, DateType
+
+            if isinstance(schema, StructType):
+                # Map PySpark types to pandas/DuckDB types
+                type_map = {
+                    'StringType': 'object',
+                    'IntegerType': 'int64',
+                    'LongType': 'int64',
+                    'DoubleType': 'float64',
+                    'FloatType': 'float64',
+                    'BooleanType': 'bool',
+                    'TimestampType': 'datetime64[ns]',
+                    'DateType': 'datetime64[ns]',
+                }
+
+                # Create empty pandas DataFrame with correct column types
+                columns = {}
+                for field in schema.fields:
+                    field_type = field.dataType.__class__.__name__
+                    pandas_type = type_map.get(field_type, 'object')
+                    columns[field.name] = pd.Series([], dtype=pandas_type)
+
+                df = pd.DataFrame(columns)
+                return self.conn.from_df(df)
+            else:
+                # Schema is not StructType, create empty DataFrame
+                return self.conn.from_df(pd.DataFrame())
+
+        except ImportError:
+            # PySpark not available, just create empty DataFrame
+            return self.conn.from_df(pd.DataFrame())
+        except Exception as e:
+            # Fallback: create empty DataFrame
+            print(f"Warning: Could not parse schema for createDataFrame: {e}")
+            return self.conn.from_df(pd.DataFrame())
+
     def apply_filters(self, df: Any, filters: Dict[str, Any]) -> Any:
         """
         Apply filters to a DuckDB relation.
