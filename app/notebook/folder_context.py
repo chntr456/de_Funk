@@ -9,22 +9,29 @@ Features:
 - Supports copying folders to recreate views
 - Isolates filter sessions across folder boundaries
 - Enables multiple concurrent filter sessions (one per folder)
+- Global context for ticker and date_range (shared across all folders)
+- Folder-specific context for all other filters
 """
 
 import yaml
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Set
 from datetime import datetime
 from dataclasses import dataclass, field, asdict
 
 
+# Filters that are shared globally across all folders
+GLOBAL_FILTERS = {'ticker', 'date_range', 'tickers', 'date'}
+
+
 @dataclass
 class FilterContext:
-    """Filter context for a folder."""
-    folder_path: Path
+    """Filter context for a folder or global scope."""
+    folder_path: Optional[Path] = None  # None for global context
     filters: Dict[str, Any] = field(default_factory=dict)
     created: Optional[datetime] = None
     last_updated: Optional[datetime] = None
+    is_global: bool = False
 
     def __post_init__(self):
         """Initialize timestamps if not provided."""
@@ -39,43 +46,47 @@ class FilterContext:
             'filters': self.filters,
             'metadata': {
                 'created': self.created.isoformat() if self.created else None,
-                'last_updated': self.last_updated.isoformat() if self.last_updated else None
+                'last_updated': self.last_updated.isoformat() if self.last_updated else None,
+                'is_global': self.is_global
             }
         }
 
     @classmethod
-    def from_dict(cls, folder_path: Path, data: Dict[str, Any]) -> 'FilterContext':
+    def from_dict(cls, folder_path: Optional[Path], data: Dict[str, Any]) -> 'FilterContext':
         """Create from dictionary."""
         metadata = data.get('metadata', {})
         return cls(
             folder_path=folder_path,
             filters=data.get('filters', {}),
             created=datetime.fromisoformat(metadata['created']) if metadata.get('created') else None,
-            last_updated=datetime.fromisoformat(metadata['last_updated']) if metadata.get('last_updated') else None
+            last_updated=datetime.fromisoformat(metadata['last_updated']) if metadata.get('last_updated') else None,
+            is_global=metadata.get('is_global', False)
         )
 
 
 class FolderFilterContextManager:
     """
-    Manages filter contexts at the folder level.
+    Manages filter contexts at the folder level with global context support.
 
-    Each folder can have its own filter context that is shared by all notebooks
-    within that folder. Contexts are isolated across folder boundaries.
+    Two-tier filter system:
+    1. Global context: ticker, date_range (shared across ALL folders)
+    2. Folder context: all other filters (shared within folder, isolated across folders)
 
     Usage:
         manager = FolderFilterContextManager(notebooks_root)
 
-        # Get context for a notebook
-        context = manager.get_context_for_notebook(notebook_path)
+        # Update global filter
+        manager.update_filters(folder_path, {'ticker': 'AAPL'})  # → Global
 
-        # Update filters
-        manager.update_filters(folder_path, {'ticker': 'AAPL'})
+        # Update folder filter
+        manager.update_filters(folder_path, {'volume_min': 1000})  # → Folder
 
-        # Save to disk
-        manager.save_context(folder_path)
+        # Get merged filters
+        filters = manager.get_filters(folder_path)  # → {ticker: AAPL, volume_min: 1000}
     """
 
     CONTEXT_FILENAME = '.filter_context.yaml'
+    GLOBAL_CONTEXT_FILENAME = '.global_filter_context.yaml'
 
     def __init__(self, notebooks_root: Path):
         """
@@ -86,6 +97,7 @@ class FolderFilterContextManager:
         """
         self.notebooks_root = Path(notebooks_root)
         self._contexts: Dict[str, FilterContext] = {}
+        self._global_context: Optional[FilterContext] = None
 
     def get_folder_for_notebook(self, notebook_path: Path) -> Path:
         """
@@ -136,38 +148,102 @@ class FolderFilterContextManager:
 
         return self._contexts[folder_key]
 
+    def get_global_context(self) -> FilterContext:
+        """
+        Get or create global filter context.
+
+        Returns:
+            Global FilterContext
+        """
+        if self._global_context is None:
+            # Try to load from disk
+            context = self._load_global_context()
+            if context is None:
+                # Create new global context
+                context = FilterContext(folder_path=None, is_global=True)
+            self._global_context = context
+
+        return self._global_context
+
     def update_filters(self, folder_path: Path, filters: Dict[str, Any], auto_save: bool = True):
         """
-        Update filters for a folder.
+        Update filters - routes to global or folder context based on filter type.
+
+        Global filters (ticker, date_range): Saved to global context
+        Other filters: Saved to folder context
 
         Args:
             folder_path: Path to folder
             filters: Filter values to update
             auto_save: Whether to auto-save to disk
         """
-        context = self.get_context(folder_path)
-        context.filters.update(filters)
-        context.last_updated = datetime.now()
+        # Split filters into global and folder-specific
+        global_filters = {}
+        folder_filters = {}
 
-        if auto_save:
-            self.save_context(folder_path)
+        for key, value in filters.items():
+            if key in GLOBAL_FILTERS:
+                global_filters[key] = value
+            else:
+                folder_filters[key] = value
+
+        # Update global context
+        if global_filters:
+            global_context = self.get_global_context()
+            global_context.filters.update(global_filters)
+            global_context.last_updated = datetime.now()
+            if auto_save:
+                self.save_global_context()
+
+        # Update folder context
+        if folder_filters:
+            folder_context = self.get_context(folder_path)
+            folder_context.filters.update(folder_filters)
+            folder_context.last_updated = datetime.now()
+            if auto_save:
+                self.save_context(folder_path)
 
     def get_filters(self, folder_path: Path) -> Dict[str, Any]:
         """
-        Get current filters for a folder.
+        Get merged filters (global + folder-specific).
+
+        Returns:
+            Dictionary combining global and folder filters
+        """
+        # Start with global filters
+        merged = self.get_global_context().filters.copy()
+
+        # Add folder-specific filters (they override global if there's overlap)
+        folder_context = self.get_context(folder_path)
+        merged.update(folder_context.filters)
+
+        return merged
+
+    def get_global_filters(self) -> Dict[str, Any]:
+        """
+        Get only global filters.
+
+        Returns:
+            Dictionary of global filter values
+        """
+        return self.get_global_context().filters.copy()
+
+    def get_folder_specific_filters(self, folder_path: Path) -> Dict[str, Any]:
+        """
+        Get only folder-specific filters (excluding global).
 
         Args:
             folder_path: Path to folder
 
         Returns:
-            Dictionary of filter values
+            Dictionary of folder-specific filter values
         """
         context = self.get_context(folder_path)
         return context.filters.copy()
 
     def clear_filters(self, folder_path: Path, auto_save: bool = True):
         """
-        Clear all filters for a folder.
+        Clear folder-specific filters only (preserves global filters).
 
         Args:
             folder_path: Path to folder
@@ -180,9 +256,34 @@ class FolderFilterContextManager:
         if auto_save:
             self.save_context(folder_path)
 
+    def clear_global_filters(self, auto_save: bool = True):
+        """
+        Clear global filters (ticker, date_range).
+
+        Args:
+            auto_save: Whether to auto-save to disk
+        """
+        global_context = self.get_global_context()
+        global_context.filters.clear()
+        global_context.last_updated = datetime.now()
+
+        if auto_save:
+            self.save_global_context()
+
+    def clear_all_filters(self, folder_path: Path, auto_save: bool = True):
+        """
+        Clear both global and folder-specific filters.
+
+        Args:
+            folder_path: Path to folder
+            auto_save: Whether to auto-save to disk
+        """
+        self.clear_global_filters(auto_save=auto_save)
+        self.clear_filters(folder_path, auto_save=auto_save)
+
     def save_context(self, folder_path: Path):
         """
-        Save filter context to disk.
+        Save folder-specific filter context to disk.
 
         Args:
             folder_path: Path to folder
@@ -196,6 +297,20 @@ class FolderFilterContextManager:
         # Save to YAML
         with open(context_file, 'w') as f:
             yaml.dump(context.to_dict(), f, default_flow_style=False, sort_keys=False)
+
+    def save_global_context(self):
+        """
+        Save global filter context to disk (in notebooks root).
+        """
+        global_context = self.get_global_context()
+        context_file = self.notebooks_root / self.GLOBAL_CONTEXT_FILENAME
+
+        # Ensure directory exists
+        self.notebooks_root.mkdir(parents=True, exist_ok=True)
+
+        # Save to YAML
+        with open(context_file, 'w') as f:
+            yaml.dump(global_context.to_dict(), f, default_flow_style=False, sort_keys=False)
 
     def _load_context(self, folder_path: Path) -> Optional[FilterContext]:
         """
@@ -220,6 +335,29 @@ class FolderFilterContextManager:
                 return FilterContext.from_dict(folder_path, data)
         except Exception as e:
             print(f"Warning: Could not load filter context from {context_file}: {e}")
+
+        return None
+
+    def _load_global_context(self) -> Optional[FilterContext]:
+        """
+        Load global filter context from disk.
+
+        Returns:
+            FilterContext if found, None otherwise
+        """
+        context_file = self.notebooks_root / self.GLOBAL_CONTEXT_FILENAME
+
+        if not context_file.exists():
+            return None
+
+        try:
+            with open(context_file, 'r') as f:
+                data = yaml.safe_load(f)
+
+            if data:
+                return FilterContext.from_dict(None, data)
+        except Exception as e:
+            print(f"Warning: Could not load global filter context from {context_file}: {e}")
 
         return None
 

@@ -123,12 +123,9 @@ class NotebookVaultApp:
                 st.divider()
                 active_notebook = self._get_active_notebook()
                 if active_notebook:
-                    # Show current folder context
-                    folder_name = self.notebook_manager.get_folder_display_name()
-                    if folder_name and folder_name != "No folder":
-                        st.caption(f"📁 Context: **{folder_name}**")
-                        st.caption("_Filters shared within this folder_")
-                        st.divider()
+                    # Show filter context information
+                    self._render_filter_context_info()
+                    st.divider()
 
                     self._render_filters(active_notebook[2])
 
@@ -201,6 +198,73 @@ class NotebookVaultApp:
                 st.caption(f"+ {len(st.session_state.open_tabs) - num_tabs} more tabs (use sidebar)")
 
         st.divider()
+
+    def _render_filter_context_info(self):
+        """Render filter context information and controls."""
+        folder_name = self.notebook_manager.get_folder_display_name()
+        folder_ctx_mgr = self.notebook_manager.folder_context_manager
+        current_folder = self.notebook_manager.get_current_folder()
+
+        if not current_folder:
+            return
+
+        # Get global and folder-specific filters
+        global_filters = folder_ctx_mgr.get_global_filters()
+        folder_filters = folder_ctx_mgr.get_folder_specific_filters(current_folder)
+
+        # Filter context header
+        st.markdown("### 🎛️ Filter Context")
+
+        # Global context section
+        with st.expander("🌍 Global Context (All Folders)", expanded=bool(global_filters)):
+            st.caption("_Ticker & Date shared across all folders_")
+
+            if global_filters:
+                for key, value in global_filters.items():
+                    if isinstance(value, dict) and 'start' in value:
+                        st.caption(f"**{key}**: {value['start']} to {value['end']}")
+                    elif isinstance(value, list):
+                        st.caption(f"**{key}**: {', '.join(map(str, value[:3]))}{'...' if len(value) > 3 else ''}")
+                    else:
+                        st.caption(f"**{key}**: {value}")
+            else:
+                st.caption("_No global filters set_")
+
+            # Clear global filters button
+            if global_filters and st.button("🗑️ Clear Global Filters", key="clear_global", use_container_width=True):
+                folder_ctx_mgr.clear_global_filters()
+                st.success("Global filters cleared!")
+                st.rerun()
+
+        # Folder context section
+        with st.expander(f"📁 Folder: {folder_name}", expanded=bool(folder_filters)):
+            st.caption("_Filters shared within this folder only_")
+
+            if folder_filters:
+                for key, value in folder_filters.items():
+                    if isinstance(value, dict) and 'start' in value:
+                        st.caption(f"**{key}**: {value['start']} to {value['end']}")
+                    elif isinstance(value, list):
+                        st.caption(f"**{key}**: {', '.join(map(str, value[:3]))}{'...' if len(value) > 3 else ''}")
+                    else:
+                        st.caption(f"**{key}**: {value}")
+            else:
+                st.caption("_No folder-specific filters set_")
+
+            # Control buttons row
+            col1, col2 = st.columns(2)
+
+            with col1:
+                if folder_filters and st.button("🗑️ Clear Folder", key="clear_folder", use_container_width=True):
+                    folder_ctx_mgr.clear_filters(current_folder)
+                    st.success("Folder filters cleared!")
+                    st.rerun()
+
+            with col2:
+                if (global_filters or folder_filters) and st.button("🗑️ Clear All", key="clear_all", use_container_width=True):
+                    folder_ctx_mgr.clear_all_filters(current_folder)
+                    st.success("All filters cleared!")
+                    st.rerun()
 
     def _render_filters(self, notebook_config):
         """Render filters for active notebook."""
