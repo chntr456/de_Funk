@@ -214,7 +214,7 @@ class MarkdownNotebookParser:
             markdown_content = processed_content[last_pos:match.start()].strip()
             if markdown_content:
                 # Check if this markdown contains collapsible section placeholders
-                self._add_content_with_collapsibles(
+                exhibit_counter = self._add_content_with_collapsibles(
                     markdown_content,
                     collapsible_sections,
                     content_blocks,
@@ -250,7 +250,7 @@ class MarkdownNotebookParser:
         # Add remaining markdown content
         remaining_content = processed_content[last_pos:].strip()
         if remaining_content:
-            self._add_content_with_collapsibles(
+            exhibit_counter = self._add_content_with_collapsibles(
                 remaining_content,
                 collapsible_sections,
                 content_blocks,
@@ -267,7 +267,7 @@ class MarkdownNotebookParser:
         content_blocks: List[Dict[str, Any]],
         exhibits: List[Exhibit],
         exhibit_counter: int
-    ):
+    ) -> int:
         """
         Add content blocks, processing any collapsible section placeholders.
         """
@@ -311,6 +311,7 @@ class MarkdownNotebookParser:
                 inner_content = part_data['content']
                 inner_exhibits = []
                 inner_blocks = []
+                inner_counter = len(exhibits)  # Start from current count
 
                 # Extract exhibits from inner content
                 last_pos = 0
@@ -325,7 +326,8 @@ class MarkdownNotebookParser:
 
                     # Parse exhibit
                     exhibit_yaml = match.group(1)
-                    exhibit_id = f"exhibit_{len(exhibits)}"
+                    exhibit_id = f"exhibit_{inner_counter}"
+                    inner_counter += 1
 
                     try:
                         exhibit = self._parse_exhibit(exhibit_yaml, exhibit_id)
@@ -360,6 +362,8 @@ class MarkdownNotebookParser:
                     'summary': part_data['summary'],
                     'content': inner_blocks
                 })
+
+        return len(exhibits)  # Return updated counter
 
     def _parse_exhibit(self, exhibit_yaml: str, exhibit_id: str) -> Exhibit:
         """
