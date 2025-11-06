@@ -418,7 +418,7 @@ class MarkdownNotebookParser:
         # Parse sort configuration
         sort = None
         if 'sort' in data and isinstance(data['sort'], dict):
-            from .schema import SortConfig
+            from ..schema import SortConfig
             sort = SortConfig(
                 by=data['sort']['by'],
                 order=data['sort'].get('order', 'asc')
