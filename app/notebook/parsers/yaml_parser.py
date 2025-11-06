@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import re
 
-from .schema import (
+from ..schema import (
     NotebookConfig,
     NotebookMetadata,
     GraphConfig,

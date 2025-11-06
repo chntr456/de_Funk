@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
 
-from .schema import (
+from ..schema import (
     NotebookConfig,
     NotebookMetadata,
     GraphConfig,
@@ -26,14 +26,14 @@ from .schema import (
     DateRangeDefault,
     AggregationType,
 )
-from .filters.dynamic import (
+from ..filters.dynamic import (
     FilterConfig,
     FilterType,
     FilterOperator,
     FilterSource,
     FilterCollection,
 )
-from .markdown_parser_filter_helpers import parse_filter
+from ..markdown_parser_filter_helpers import parse_filter
 
 
 @dataclass
