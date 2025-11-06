@@ -509,6 +509,109 @@ class BaseModel:
         }
 
     # ============================================================
+    # MEASURE CALCULATIONS (generic operations on facts)
+    # ============================================================
+
+    def calculate_measure_by_entity(
+        self,
+        measure_name: str,
+        entity_column: str,
+        limit: Optional[int] = None
+    ) -> DataFrame:
+        """
+        Calculate a measure aggregated by entity (generic method for all models).
+
+        This method reads measure definitions from YAML config and calculates
+        them as operations on fact tables. This is proper dimensional modeling:
+        measures are calculated from facts, not stored in dimensions.
+
+        Args:
+            measure_name: Name of measure from config (e.g., 'market_cap', 'avg_close_price')
+            entity_column: Column to group by (e.g., 'ticker', 'indicator_id', 'city_id')
+            limit: Optional limit for top-N results (ordered descending by measure value)
+
+        Returns:
+            DataFrame with columns: <entity_column>, <measure_name>
+
+        Example:
+            # In CompanyModel
+            df = self.calculate_measure_by_entity('market_cap', 'ticker', limit=10)
+            # Returns: DataFrame with [ticker, market_cap]
+
+            # In MacroModel
+            df = self.calculate_measure_by_entity('avg_value', 'indicator_id', limit=5)
+            # Returns: DataFrame with [indicator_id, avg_value]
+
+        Raises:
+            ValueError: If measure not defined in config
+        """
+        from pyspark.sql import functions as F
+
+        # Get measure configuration from YAML
+        measures = self.model_cfg.get('measures', {})
+
+        if measure_name not in measures:
+            available = list(measures.keys())
+            raise ValueError(
+                f"Measure '{measure_name}' not defined in {self.model_name}. "
+                f"Available measures: {available}"
+            )
+
+        measure_config = measures[measure_name]
+
+        # Get source table and column
+        source = measure_config.get('source', '')
+        if '.' not in source:
+            raise ValueError(f"Measure source must be 'table.column', got: {source}")
+
+        table_name, column_name = source.split('.', 1)
+
+        # Get the source table
+        source_table = self.get_table(table_name)
+
+        # Calculate measure based on type
+        measure_type = measure_config.get('type', 'simple')
+        aggregation = measure_config.get('aggregation', 'avg')
+
+        if measure_type == 'computed':
+            # Computed measure with custom expression (e.g., close * volume)
+            expression = measure_config.get('expression', '')
+            if not expression:
+                raise ValueError(
+                    f"Computed measure '{measure_name}' requires 'expression' in config"
+                )
+
+            result = (
+                source_table
+                .withColumn('_measure_value', F.expr(expression))
+                .groupBy(entity_column)
+                .agg(F.avg('_measure_value').alias(measure_name))
+            )
+
+        else:
+            # Simple aggregation measure (e.g., avg, sum, max)
+            agg_func = getattr(F, aggregation, F.avg)
+
+            result = (
+                source_table
+                .groupBy(entity_column)
+                .agg(agg_func(F.col(column_name)).alias(measure_name))
+            )
+
+        # Filter nulls and order by measure value descending
+        result = (
+            result
+            .filter(F.col(measure_name).isNotNull())
+            .orderBy(F.desc(measure_name))
+        )
+
+        # Apply limit if specified
+        if limit:
+            result = result.limit(limit)
+
+        return result
+
+    # ============================================================
     # PERSISTENCE (write to storage)
     # ============================================================
 

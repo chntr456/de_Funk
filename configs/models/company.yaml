@@ -98,6 +98,16 @@ schema:
 
 # Available measures - pre-defined aggregations
 measures:
+  market_cap:
+    description: "Market capitalization proxy (close * volume)"
+    type: computed
+    source: fact_prices.close
+    expression: "close * volume"
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00"
+    tags: [market, valuation, aggregate]
+
   avg_close_price:
     description: "Average closing price"
     source: fact_prices.close

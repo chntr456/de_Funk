@@ -5,10 +5,8 @@ Inherits all graph building logic from BaseModel.
 Only adds company-specific convenience methods.
 """
 
-from typing import Optional, Dict
+from typing import Optional
 from pyspark.sql import DataFrame
-from pyspark.sql import functions as F
-from pyspark.sql.window import Window
 from models.base.model import BaseModel
 
 
@@ -22,10 +20,11 @@ class CompanyModel(BaseModel):
     - Edge validation
     - Path materialization
     - Table access methods
+    - Measure calculations
 
     The YAML config (configs/models/company.yaml) drives everything.
 
-    This class only adds company-specific convenience methods.
+    This class adds company-specific convenience methods.
     """
 
     # All core functionality is inherited from BaseModel!
@@ -33,92 +32,57 @@ class CompanyModel(BaseModel):
     # - Nodes: dim_company, dim_exchange, fact_prices, fact_news
     # - Edges: relationships between tables
     # - Paths: prices_with_company, news_with_company
+    # - Measures: market_cap, avg_close_price, total_volume, etc.
 
     # ============================================================
-    # CUSTOM NODE LOADING
+    # COMPANY-SPECIFIC MEASURE CALCULATIONS
     # ============================================================
 
-    def custom_node_loading(self, node_id: str, node_config: Dict) -> Optional[DataFrame]:
+    def calculate_measure_by_ticker(self, measure_name: str, limit: Optional[int] = None) -> DataFrame:
         """
-        Custom loading for dim_company to add market cap calculation.
+        Calculate a measure aggregated by ticker.
+
+        This is a convenience wrapper around the generic BaseModel.calculate_measure_by_entity()
+        method, specifically for the 'ticker' entity column.
 
         Args:
-            node_id: Node identifier
-            node_config: Node configuration from YAML
+            measure_name: Name of measure from config (e.g., 'market_cap', 'avg_close_price')
+            limit: Optional limit for top-N results
 
         Returns:
-            DataFrame with custom loading, or None for default loading
+            DataFrame with columns: ticker, <measure_name>
+
+        Example:
+            # Get top 10 companies by market cap
+            df = company_model.calculate_measure_by_ticker('market_cap', limit=10)
+            # Returns: DataFrame with [ticker, market_cap]
         """
-        if node_id == 'dim_company':
-            return self._load_dim_company_with_market_cap(node_config)
-        return None
-
-    def _load_dim_company_with_market_cap(self, node_config: Dict) -> DataFrame:
-        """
-        Load dim_company with market cap proxy calculation.
-
-        Market cap proxy = recent average of (close * volume)
-        Uses last 30 days of trading data.
-
-        Args:
-            node_config: Node configuration from YAML
-
-        Returns:
-            DataFrame with ticker, company_name, exchange_code, company_id, market_cap_proxy
-        """
-        from pyspark.sql import functions as F
-
-        # Load ref_ticker (company reference data)
-        ref_ticker = self._load_bronze_table('ref_ticker')
-
-        # Apply standard select transformations from config
-        select_cols = node_config.get('select', {})
-        dim_company = ref_ticker.select(
-            F.col(select_cols.get('ticker', 'ticker')).alias('ticker'),
-            F.col(select_cols.get('company_name', 'name')).alias('company_name'),
-            F.col(select_cols.get('exchange_code', 'exchange_code')).alias('exchange_code')
+        return self.calculate_measure_by_entity(
+            measure_name=measure_name,
+            entity_column='ticker',
+            limit=limit
         )
 
-        # Apply derive transformations
-        derive_cols = node_config.get('derive', {})
-        for col_name, expr in derive_cols.items():
-            if expr == "sha1(ticker)":
-                dim_company = dim_company.withColumn(col_name, F.sha1(F.col('ticker')))
-            else:
-                dim_company = dim_company.withColumn(col_name, F.expr(expr))
+    def get_top_tickers_by_measure(self, measure_name: str, limit: int = 10) -> list:
+        """
+        Get list of top ticker symbols by a measure.
 
-        # Calculate market cap proxy from recent prices
-        try:
-            prices = self._load_bronze_table('prices_daily')
+        Convenience method that returns just the ticker list.
 
-            # Calculate market cap proxy: close * volume
-            # Use average over last 30 days for stability
-            market_cap_calc = (
-                prices
-                .withColumn('market_cap', F.col('close') * F.col('volume'))
-                .groupBy('ticker')
-                .agg(
-                    F.avg('market_cap').alias('market_cap_proxy'),
-                    F.max('trade_date').alias('latest_trade_date')
-                )
-            )
+        Args:
+            measure_name: Name of measure from config
+            limit: Number of top tickers to return
 
-            # Left join to preserve all companies even if no recent prices
-            dim_company = dim_company.join(
-                market_cap_calc,
-                on='ticker',
-                how='left'
-            )
+        Returns:
+            List of ticker symbols, ordered by measure value descending
 
-            # Fill null market caps with 0 (companies without price data)
-            dim_company = dim_company.fillna({'market_cap_proxy': 0.0})
-
-        except Exception as e:
-            # If prices not available, add market_cap_proxy as null
-            print(f"    Warning: Could not calculate market cap proxy: {e}")
-            dim_company = dim_company.withColumn('market_cap_proxy', F.lit(None).cast('double'))
-
-        return dim_company
+        Example:
+            # Get top 10 companies by market cap
+            tickers = company_model.get_top_tickers_by_measure('market_cap', limit=10)
+            # Returns: ['AAPL', 'MSFT', 'GOOGL', ...]
+        """
+        df = self.calculate_measure_by_ticker(measure_name, limit=limit)
+        return [row['ticker'] for row in df.collect()]
 
     # ============================================================
     # COMPANY-SPECIFIC CONVENIENCE METHODS

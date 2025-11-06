@@ -185,7 +185,6 @@ def generate_forecasts(spark, repo_root: Path, storage_cfg: dict, top_n: int = 1
     print("=" * 70)
 
     from models.api.session import UniversalSession
-    from pyspark.sql import functions as F
 
     # Create session with both company and forecast models
     session = UniversalSession(
@@ -195,29 +194,19 @@ def generate_forecasts(spark, repo_root: Path, storage_cfg: dict, top_n: int = 1
         models=['company', 'forecast']
     )
 
-    # Get top N tickers by market cap (calculated on-demand from fact_prices)
+    # Get top N tickers by market cap measure
+    # Market cap is defined in company.yaml and calculated as avg(close * volume)
+    # This is proper dimensional modeling: measure calculated from facts
     company_model = session.get_model_instance('company')
     company_model.ensure_built()
 
-    # Calculate market cap as an operation on fact_prices (measure, not dimension attribute)
-    fact_prices = company_model.get_fact_df('fact_prices')
-
-    # Calculate average market cap proxy per ticker: avg(close * volume)
-    # This is a measure calculated from the fact table, not a dimension attribute
-    market_cap_by_ticker = (
-        fact_prices
-        .withColumn('market_cap', F.col('close') * F.col('volume'))
-        .groupBy('ticker')
-        .agg(
-            F.avg('market_cap').alias('avg_market_cap'),
-            F.max('trade_date').alias('latest_trade_date')
-        )
-        .filter(F.col('avg_market_cap').isNotNull())
-        .orderBy(F.desc('avg_market_cap'))
-        .limit(top_n)
-    )
-
-    tickers = [row['ticker'] for row in market_cap_by_ticker.collect()]
+    try:
+        tickers = company_model.get_top_tickers_by_measure('market_cap', limit=top_n)
+    except Exception as e:
+        print(f"Warning: Could not calculate market cap measure: {e}")
+        print("Falling back to alphabetical ticker order...")
+        dim_company = company_model.get_dimension_df('dim_company')
+        tickers = [row['ticker'] for row in dim_company.limit(top_n).collect()]
 
     if len(tickers) == 0:
         print("Warning: No tickers with price data found. Using first N tickers from dim_company...")
