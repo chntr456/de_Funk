@@ -255,9 +255,57 @@ class NotebookSession:
             filter_collection = self.notebook_config._filter_collection
             active_filters = filter_collection.get_active_filters()
 
-            # Apply filters
+            # Convert filter values to storage service format
+            from app.notebook.filters.dynamic import FilterType, FilterOperator
+
             for filter_id, value in active_filters.items():
-                if value is not None:
+                if value is None:
+                    continue
+
+                filter_config = filter_collection.get_filter(filter_id)
+                if not filter_config:
+                    filters[filter_id] = value
+                    continue
+
+                # Convert based on filter type and operator
+                if filter_config.type == FilterType.DATE_RANGE:
+                    # Already in correct format: {'start': ..., 'end': ...}
+                    filters[filter_id] = value
+
+                elif filter_config.type == FilterType.SELECT:
+                    # Already in correct format: list or single value
+                    if value:  # Only add non-empty values
+                        filters[filter_id] = value
+
+                elif filter_config.type == FilterType.NUMBER_RANGE:
+                    # Already in correct format: {'min': ..., 'max': ...}
+                    filters[filter_id] = value
+
+                elif filter_config.type == FilterType.SLIDER:
+                    # Convert single value based on operator
+                    if filter_config.operator == FilterOperator.GREATER_EQUAL:
+                        if value > 0:  # Only add if > 0
+                            filters[filter_id] = {'min': value}
+                    elif filter_config.operator == FilterOperator.LESS_EQUAL:
+                        filters[filter_id] = {'max': value}
+                    elif filter_config.operator == FilterOperator.EQUALS:
+                        filters[filter_id] = value
+                    else:
+                        # Default to min for other operators
+                        if value > 0:
+                            filters[filter_id] = {'min': value}
+
+                elif filter_config.type == FilterType.TEXT_SEARCH:
+                    # For text search, just pass the value
+                    if value:
+                        filters[filter_id] = value
+
+                elif filter_config.type == FilterType.BOOLEAN:
+                    # For boolean, pass the value
+                    filters[filter_id] = value
+
+                else:
+                    # Default: pass value as-is
                     filters[filter_id] = value
 
         # Otherwise use old filter context system

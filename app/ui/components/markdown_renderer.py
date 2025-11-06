@@ -105,8 +105,9 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection):
 
     except Exception as e:
         st.error(f"Error rendering exhibit: {str(e)}")
-        with st.expander("Show details"):
-            st.exception(e)
+        # Don't use expander - can't nest inside collapsible sections
+        import traceback
+        st.code(traceback.format_exc())
 
 
 def render_collapsible_section(block: Dict[str, Any], notebook_session, connection):
@@ -135,8 +136,9 @@ def render_collapsible_section(block: Dict[str, Any], notebook_session, connecti
 
             elif inner_type == 'error':
                 st.error(f"Error: {inner_block['message']}")
-                with st.expander("Show exhibit YAML"):
-                    st.code(inner_block['content'], language='yaml')
+                # Don't use expander - already inside one
+                st.caption("Exhibit YAML:")
+                st.code(inner_block['content'], language='yaml')
 
 
 def render_markdown_block(content: str):
