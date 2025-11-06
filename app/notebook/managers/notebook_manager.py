@@ -16,8 +16,7 @@ from pathlib import Path
 import pandas as pd
 
 from ..schema import NotebookConfig, Exhibit, ExhibitType
-from ..parser import NotebookParser
-from ..markdown_parser import MarkdownNotebookParser
+from ..parsers import NotebookParser, MarkdownNotebookParser
 from ..filters.context import FilterContext
 from models.api.session import UniversalSession
 from models.registry import ModelRegistry

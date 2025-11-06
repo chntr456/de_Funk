@@ -15,8 +15,7 @@ from typing import Dict, List, Optional, Any
 from pathlib import Path
 
 from ..schema import NotebookConfig, Exhibit, ExhibitType
-from ..parser import NotebookParser
-from ..markdown_parser import MarkdownNotebookParser
+from ..parsers import NotebookParser, MarkdownNotebookParser
 from ..filters.context import FilterContext
 from models.registry import ModelRegistry
 from app.services.storage_service import SilverStorageService

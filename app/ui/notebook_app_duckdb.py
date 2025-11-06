@@ -25,7 +25,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from core.context import RepoContext
 from models.registry import ModelRegistry
-from app.notebook.api.notebook_session import NotebookSession
+from models.api.session import UniversalSession
+from app.notebook.managers import NotebookManager
 
 # Import modular UI components
 from app.ui.components.theme import apply_professional_theme
@@ -57,9 +58,19 @@ def get_model_registry(_ctx):
 
 
 @st.cache_resource
-def get_notebook_session(_ctx, _model_registry):
-    """Get notebook session with DuckDB backend (cached)."""
-    return NotebookSession(_ctx.connection, _model_registry, _ctx.repo)
+def get_universal_session(_ctx):
+    """Get UniversalSession with DuckDB backend (cached)."""
+    return UniversalSession(
+        connection=_ctx.connection,
+        storage_cfg=_ctx.storage,
+        repo_root=_ctx.repo
+    )
+
+
+@st.cache_resource
+def get_notebook_manager(_universal_session, _repo):
+    """Get NotebookManager (cached)."""
+    return NotebookManager(_universal_session, _repo)
 
 
 # Session state initialization
@@ -93,10 +104,11 @@ class NotebookVaultApp:
         """Initialize application."""
         self.ctx = get_repo_context()
         self.model_registry = ModelRegistry(self.ctx.repo / "configs" / "models")
-        self.notebook_session = get_notebook_session(self.ctx, self.model_registry)
+        self.universal_session = get_universal_session(self.ctx)
+        self.notebook_manager = get_notebook_manager(self.universal_session, self.ctx.repo)
         self.notebooks_root = self.ctx.repo / "configs" / "notebooks"
         self.notebooks_root.mkdir(parents=True, exist_ok=True)
-        self.sidebar_nav = SidebarNavigator(self.notebooks_root, self.notebook_session)
+        self.sidebar_nav = SidebarNavigator(self.notebooks_root, self.notebook_manager)
 
     def run(self):
         """Run the application."""
@@ -192,17 +204,17 @@ class NotebookVaultApp:
             from app.ui.components.dynamic_filters import render_dynamic_filters
             render_dynamic_filters(
                 notebook_config._filter_collection,
-                self.notebook_session,
+                self.notebook_manager,
                 self.ctx.connection,
-                self.notebook_session.storage_service
+                self.universal_session
             )
         elif notebook_config.variables:
             # Old filter system (backward compat)
             render_filters_section(
                 notebook_config,
-                self.notebook_session,
+                self.notebook_manager,
                 self.ctx.connection,
-                self.notebook_session.storage_service
+                self.universal_session
             )
 
     def _get_active_notebook(self):
@@ -234,17 +246,17 @@ class NotebookVaultApp:
 
         if st.session_state.current_notebook_id != notebook_id:
             # Switching to a different notebook
-            self.notebook_session.notebook_config = notebook_config
+            self.notebook_manager.notebook_config = notebook_config
 
             # Check if we have cached model sessions for this notebook
             if notebook_id in st.session_state.notebook_model_sessions:
                 # Restore cached model sessions
-                self.notebook_session.model_sessions = st.session_state.notebook_model_sessions[notebook_id]
+                self.notebook_manager.model_sessions = st.session_state.notebook_model_sessions[notebook_id]
             else:
                 # Initialize model sessions for the first time
-                self.notebook_session._initialize_model_sessions()
+                self.notebook_manager._initialize_model_sessions()
                 # Cache them for future switches
-                st.session_state.notebook_model_sessions[notebook_id] = self.notebook_session.model_sessions.copy()
+                st.session_state.notebook_model_sessions[notebook_id] = self.notebook_manager.model_sessions.copy()
 
             st.session_state.current_notebook_id = notebook_id
 
@@ -303,7 +315,7 @@ class NotebookVaultApp:
         render_notebook_exhibits(
             notebook_id,
             notebook_config,
-            self.notebook_session,
+            self.notebook_manager,
             self.ctx.connection
         )
 

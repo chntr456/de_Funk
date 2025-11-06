@@ -14,7 +14,7 @@ from pyspark.sql import DataFrame
 
 from .storage_service import SilverStorageService
 from ..notebook.schema import NotebookConfig, Exhibit, Variable, VariableType
-from ..notebook.parser import NotebookParser
+from ..notebook.parsers import NotebookParser
 from ..core.validation import NotebookValidator, ValidationError
 
 
