@@ -75,6 +75,20 @@ class DuckDBConnection(DataConnection):
             # Read single file
             return self.conn.from_parquet(path)
 
+    def read_parquet(self, path: str) -> Any:
+        """
+        Read parquet file(s) from path.
+
+        Alias for read_table() for compatibility with models that call read_parquet().
+
+        Args:
+            path: Path to parquet file or directory
+
+        Returns:
+            DuckDB relation (lazy query result)
+        """
+        return self.read_table(path, format="parquet")
+
     def apply_filters(self, df: Any, filters: Dict[str, Any]) -> Any:
         """
         Apply filters to a DuckDB relation.

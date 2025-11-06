@@ -142,16 +142,22 @@ class UniversalSession:
 
         return model
 
-    def get_table(self, model_name: str, table_name: str) -> DataFrame:
+    def get_table(self, model_name: str, table_name: str, use_cache: bool = True) -> DataFrame:
         """
         Get a table from any model.
 
         Args:
             model_name: Name of the model
             table_name: Name of the table
+            use_cache: Whether to use cached data (ignored, kept for backwards compatibility)
 
         Returns:
             DataFrame
+
+        Note:
+            The use_cache parameter is kept for backwards compatibility with old
+            SilverStorageService API but is not used. Model caching is handled
+            automatically via the _models cache in UniversalSession.
         """
         model = self.load_model(model_name)
         return model.get_table(table_name)
