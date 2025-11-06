@@ -117,25 +117,51 @@ class NotebookVaultApp:
         self._render_main_content()
 
     def _render_header(self):
-        """Render professional header with clickable tabs and toolbar."""
-        if st.session_state.open_tabs:
-            # Calculate number of tabs to show (max 5)
-            num_tabs = min(len(st.session_state.open_tabs), 5)
+        """Render professional header with toolbar and tabs."""
+        # Row 1: Edit and Theme buttons on the right
+        col_spacer, col_edit, col_theme = st.columns([0.8, 0.1, 0.1])
 
-            # Create columns: [tab1, tab2, ..., edit, theme]
-            # Each tab gets equal width, edit and theme get smaller fixed widths
-            tab_widths = [1] * num_tabs + [0.5, 0.5]  # Tabs + edit + theme
-            cols = st.columns(tab_widths)
+        with col_edit:
+            # Edit button (only if active notebook)
+            if st.session_state.active_tab:
+                active_notebook = self._get_active_notebook()
+                if active_notebook:
+                    notebook_id = active_notebook[0]
+                    in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
+
+                    button_label = "👁️" if in_edit_mode else "✏️"
+                    button_help = "View mode" if in_edit_mode else "Edit markdown"
+
+                    if st.button(button_label, help=button_help, key="toolbar_edit", use_container_width=True):
+                        st.session_state.edit_mode[notebook_id] = not in_edit_mode
+                        st.rerun()
+
+        with col_theme:
+            # Theme button
+            theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
+            theme_help = "Dark mode" if st.session_state.theme == 'light' else "Light mode"
+
+            if st.button(theme_icon, help=theme_help, key="toolbar_theme", use_container_width=True):
+                st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
+                st.rerun()
+
+        # Row 2: Tabs below (if any notebooks are open)
+        if st.session_state.open_tabs:
+            # Calculate number of tabs to show (max 6 since we have full width)
+            num_tabs = min(len(st.session_state.open_tabs), 6)
+
+            # Create columns for tabs
+            tab_cols = st.columns(num_tabs)
 
             # Render tab buttons
             for i, (notebook_id, notebook_path, notebook_config) in enumerate(st.session_state.open_tabs[:num_tabs]):
-                with cols[i]:
+                with tab_cols[i]:
                     is_active = st.session_state.active_tab == notebook_id
                     title = notebook_config.notebook.title
 
                     # Truncate long titles
-                    if len(title) > 15:
-                        title = title[:12] + "..."
+                    if len(title) > 18:
+                        title = title[:15] + "..."
 
                     button_type = "primary" if is_active else "secondary"
 
@@ -151,45 +177,9 @@ class NotebookVaultApp:
                             st.session_state.active_tab = notebook_id
                             st.rerun()
 
-            # Edit button in second-to-last column
-            with cols[num_tabs]:
-                if st.session_state.active_tab:
-                    active_notebook = self._get_active_notebook()
-                    if active_notebook:
-                        notebook_id = active_notebook[0]
-                        in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
-
-                        button_label = "👁️" if in_edit_mode else "✏️"
-                        button_help = "View mode" if in_edit_mode else "Edit markdown"
-
-                        if st.button(button_label, help=button_help, key="toolbar_edit", use_container_width=True):
-                            st.session_state.edit_mode[notebook_id] = not in_edit_mode
-                            st.rerun()
-
-            # Theme button in last column
-            with cols[num_tabs + 1]:
-                theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
-                theme_help = "Dark mode" if st.session_state.theme == 'light' else "Light mode"
-
-                if st.button(theme_icon, help=theme_help, key="toolbar_theme", use_container_width=True):
-                    st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
-                    st.rerun()
-
             # Show indicator if more tabs exist
             if len(st.session_state.open_tabs) > num_tabs:
                 st.caption(f"+ {len(st.session_state.open_tabs) - num_tabs} more tabs (use sidebar)")
-
-        else:
-            # No tabs open - just show theme button on right
-            col1, col_theme = st.columns([0.9, 0.1])
-
-            with col_theme:
-                theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
-                theme_help = "Dark mode" if st.session_state.theme == 'light' else "Light mode"
-
-                if st.button(theme_icon, help=theme_help, key="toolbar_theme", use_container_width=True):
-                    st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
-                    st.rerun()
 
         st.divider()
 
