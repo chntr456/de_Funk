@@ -17,7 +17,7 @@ class SidebarNavigator:
         Initialize sidebar navigator.
 
         Args:
-            notebooks_root: Root directory containing notebook YAML files
+            notebooks_root: Root directory containing markdown notebook files
             notebook_session: NotebookSession for loading notebooks
         """
         self.notebooks_root = notebooks_root
@@ -31,7 +31,7 @@ class SidebarNavigator:
         notebooks = self._scan_notebooks()
 
         if not notebooks:
-            st.info("No notebooks found. Create a `.yaml` or `.md` file in `configs/notebooks/`")
+            st.info("No notebooks found. Create a `.md` file in `configs/notebooks/`")
             return
 
         # Group by directory
@@ -50,14 +50,13 @@ class SidebarNavigator:
                         self._render_notebook_item(file_path)
 
     def _scan_notebooks(self) -> List[Path]:
-        """Scan for notebook files (YAML and Markdown)."""
-        yaml_notebooks = list(self.notebooks_root.rglob("*.yaml"))
+        """Scan for markdown notebook files."""
         md_notebooks = list(self.notebooks_root.rglob("*.md"))
 
         # Filter out README and other documentation files
         md_notebooks = [p for p in md_notebooks if not p.name.upper().startswith('README')]
 
-        return yaml_notebooks + md_notebooks
+        return md_notebooks
 
     def _group_by_directory(self, notebooks: List[Path]) -> Dict[str, List[Path]]:
         """Group notebooks by their parent directory."""
@@ -125,10 +124,6 @@ class SidebarNavigator:
                 st.session_state.active_tab = notebook_id
                 st.session_state.edit_mode[notebook_id] = False
 
-                # Load YAML content for editing
-                with open(notebook_path, 'r') as f:
-                    st.session_state.yaml_content[notebook_id] = f.read()
-
             except Exception as e:
                 st.error(f"Error loading notebook: {str(e)}")
 
@@ -151,9 +146,9 @@ def close_tab(notebook_id: str):
     if notebook_id in st.session_state.edit_mode:
         del st.session_state.edit_mode[notebook_id]
 
-    # Clear YAML content
-    if notebook_id in st.session_state.yaml_content:
-        del st.session_state.yaml_content[notebook_id]
+    # Clear markdown content
+    if notebook_id in st.session_state.markdown_content:
+        del st.session_state.markdown_content[notebook_id]
 
     # Switch active tab
     if st.session_state.active_tab == notebook_id:

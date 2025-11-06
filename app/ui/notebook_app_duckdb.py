@@ -1,14 +1,15 @@
 """
 Professional notebook application with DuckDB backend.
 
-Modern, streamlined UI with markdown-first notebooks.
+Modern, streamlined UI with markdown notebooks.
 
 Features:
 - DuckDB backend (10-100x faster than Spark)
 - Markdown notebooks with dynamic filters
+- Database-driven filter options
 - Professional design with dark/light themes
-- Modular component architecture
-- Real-time collaborative editing
+- Inline exhibit and filter syntax
+- Collapsible sections with <details> tags
 
 Usage:
     streamlit run app/ui/notebook_app_duckdb.py
@@ -30,7 +31,6 @@ from app.notebook.api.notebook_session import NotebookSession
 from app.ui.components.theme import apply_professional_theme
 from app.ui.components.sidebar import SidebarNavigator, close_tab
 from app.ui.components.filters import render_filters_section
-from app.ui.components.yaml_editor import render_yaml_editor
 from app.ui.components.notebook_view import render_notebook_exhibits
 
 
@@ -74,9 +74,6 @@ if 'edit_mode' not in st.session_state:
 
 if 'markdown_content' not in st.session_state:
     st.session_state.markdown_content = {}
-
-if 'yaml_content' not in st.session_state:
-    st.session_state.yaml_content = {}
 
 if 'theme' not in st.session_state:
     st.session_state.theme = 'dark'
@@ -144,10 +141,6 @@ class NotebookVaultApp:
             active_notebook = self._get_active_notebook()
             if active_notebook:
                 notebook_id = active_notebook[0]
-                notebook_config = active_notebook[2]
-
-                # Determine notebook type
-                is_markdown = hasattr(notebook_config, '_is_markdown') and notebook_config._is_markdown
 
                 # Check if in edit mode
                 in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
@@ -157,12 +150,8 @@ class NotebookVaultApp:
                     button_label = "👁️ View"
                     button_help = "Switch to view mode"
                 else:
-                    if is_markdown:
-                        button_label = "✏️ Edit"
-                        button_help = "Edit markdown"
-                    else:
-                        button_label = "⚙️ Edit"
-                        button_help = "Edit configuration"
+                    button_label = "✏️ Edit"
+                    button_help = "Edit markdown"
 
                 if st.button(button_label, help=button_help, key="toolbar_edit"):
                     st.session_state.edit_mode[notebook_id] = not in_edit_mode
@@ -255,13 +244,8 @@ class NotebookVaultApp:
 
     def _render_edit_mode(self, notebook_id, notebook_path, notebook_config):
         """Render notebook in edit mode."""
-        is_markdown = hasattr(notebook_config, '_is_markdown') and notebook_config._is_markdown
-
         # Header
-        if is_markdown:
-            st.info("📝 **Editing Markdown Notebook** - Changes save automatically")
-        else:
-            st.info("⚙️ **Editing Configuration** - Changes save automatically")
+        st.info("📝 **Editing Markdown Notebook** - Changes save automatically")
 
         # Load current content
         if notebook_id not in st.session_state.markdown_content:
@@ -270,7 +254,7 @@ class NotebookVaultApp:
 
         # Editor
         edited_content = st.text_area(
-            "Content" if is_markdown else "YAML Configuration",
+            "Markdown Content",
             value=st.session_state.markdown_content[notebook_id],
             height=600,
             key=f"editor_{notebook_id}",

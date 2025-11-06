@@ -2,7 +2,9 @@
 
 ## Overview
 
-The new markdown-based notebook format provides a user-friendly, document-centric approach to data analysis. It combines YAML front matter for configuration with markdown for narrative and embedded visualizations.
+The markdown notebook format provides a user-friendly, document-centric approach to data analysis. It combines YAML front matter for configuration with markdown for narrative, inline filters, and embedded visualizations.
+
+**Note**: This is the only supported format. YAML notebooks are no longer supported.
 
 ## Format Structure
 
@@ -37,25 +39,53 @@ updated: YYYY-MM-DD
 
 ### 2. Filters Section
 
-The filters section defines interactive parameters using a human-readable format:
+Filters are defined inline using the `$filter${...}` syntax with database-driven options:
 
 ```markdown
-# Filters
+$filter${
+  id: ticker
+  label: Stock Tickers
+  type: select
+  multi: true
+  source: {model: company, table: fact_prices, column: ticker}
+  help_text: Select stocks to analyze (loaded from database)
+}
 
-- **Display Name**: column_name (default_value) [type]
-- **Date Range**: trade_date (2024-01-01 to 2024-01-05) [date_range]
-- **Tickers**: ticker (AAPL, GOOGL, MSFT) [multi_select]
-- **Min Volume**: volume (0) [number]
-- **Active Only**: is_active (true) [boolean]
+$filter${
+  id: trade_date
+  type: date_range
+  label: Date Range
+  operator: between
+  default: {start: "2024-01-01", end: "2024-01-05"}
+  help_text: Filter by trade date range
+}
+
+$filter${
+  id: volume
+  label: Minimum Volume
+  type: slider
+  min_value: 0
+  max_value: 100000000
+  step: 1000000
+  default: 0
+  operator: gte
+  help_text: Filter by minimum trading volume
+}
 ```
 
 **Filter Types:**
-- `date_range`: Date range picker (format: start to end)
-- `multi_select`: Multiple selection (comma-separated defaults)
-- `single_select`: Single selection
-- `number`: Numeric input (for minimum threshold)
-- `text`: Text input
+- `select`: Multi/single select (options from database via `source`)
+- `date_range`: Date range picker
+- `slider`: Numeric slider with min/max/step
+- `number_range`: Min/max numeric inputs
+- `text_search`: Text search with contains/fuzzy operators
 - `boolean`: Toggle (true/false)
+
+**Key Features:**
+- Filters only appear in sidebar (not in notebook view)
+- Options pulled dynamically from database via `source` parameter
+- Automatic SQL WHERE clause generation
+- Support for multiple operators (in, between, gte, contains, etc.)
 
 ### 3. Markdown Content
 

@@ -1,14 +1,15 @@
-# YAML Notebook System for Financial Modeling
+# Markdown Notebook System for Financial Modeling
 
 ## Overview
 
-The YAML Notebook System provides a declarative, markdown-style approach to building financial modeling notebooks. Each user can create editable YAML files that generate interactive exhibits and note pages in Streamlit.
+The Markdown Notebook System provides a document-centric approach to building financial modeling notebooks. Create markdown files with inline filters and exhibits that generate interactive data visualizations in Streamlit.
 
 ## Key Features
 
-### 1. **Declarative Configuration**
-- Define notebooks in YAML without writing code
-- Reusable templates across teams
+### 1. **Markdown-First Approach**
+- Write notebooks in markdown with inline filters and exhibits
+- No code required - use $filter${} and $exhibits${} syntax
+- Human-readable format with YAML front matter
 - Version-controlled notebook definitions
 
 ### 2. **Graph-Based Data Modeling**
@@ -30,27 +31,30 @@ The YAML Notebook System provides a declarative, markdown-style approach to buil
 - Notebook-level and exhibit-specific filters
 - Responsive layouts with sections and columns
 
-### 5. **Sophisticated Filtering**
-- Time as default variable with relative notation (-30d, today)
-- Multi-select and single-select filters
-- Numeric and text filters with operators
-- Filter inheritance from notebook to exhibit level
-- Dynamic filter sources from dimension tables
+### 5. **Dynamic Database-Driven Filters**
+- Filters defined with inline $filter${} syntax
+- Options pulled directly from database (no static lists)
+- Multi-select, date ranges, sliders, and more
+- Automatic SQL WHERE clause generation
+- Filter values persist in session state
+- Support for multiple operators (in, between, gte, contains, fuzzy)
 
 ## Architecture
 
 ```
-YAML Notebook File
+Markdown Notebook File (.md)
     ↓
-Notebook Parser
+Markdown Parser (extracts front matter, filters, exhibits)
     ↓
-Graph Query Engine (subgraph extraction)
+Model Session Initialization (from front matter)
     ↓
-Measure Engine (aggregations, calculations)
+Dynamic Filter Rendering (database-driven options)
     ↓
-Filter Engine (time, dimensions, metrics)
+Markdown Renderer (text, collapsible sections)
     ↓
-Exhibit Renderer (Streamlit components)
+Exhibit Renderer (visualizations with filtered data)
+    ↓
+DuckDB Backend (10-100x faster than Spark)
 ```
 
 ## File Structure
@@ -58,11 +62,15 @@ Exhibit Renderer (Streamlit components)
 ```
 configs/
 ├── notebooks/
-│   ├── stock_analysis.yaml          # Example stock analysis notebook
-│   └── portfolio_performance.yaml   # Example portfolio notebook
+│   ├── stock_analysis.md                    # Markdown notebook with inline filters/exhibits
+│   ├── aggregate_stock_analysis.md          # Weighted aggregate indices notebook
+│   ├── forecast_analysis.md                 # Time series forecast notebook
+│   └── Financial Analysis/
+│       └── stock_analysis.md                # Organized in folders
 ├── models/
-│   └── company.yaml                 # Company model definition
-└── storage.json                     # Storage configuration
+│   ├── company.yaml                         # Company model definition
+│   └── forecast.yaml                        # Forecast model definition
+└── storage.json                             # Storage configuration
 
 src/
 ├── notebook/
