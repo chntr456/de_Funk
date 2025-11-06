@@ -232,9 +232,86 @@ class NotebookVaultApp:
         # Filter context header
         st.markdown("### 🎛️ Filter Context")
 
-        # Global context section
-        with st.expander("🌍 Global Context (All Folders)", expanded=bool(global_filters)):
-            st.caption("_Ticker & Date shared across all folders_")
+        # EDITABLE CONTROLS SECTION
+        st.markdown("#### ✏️ Edit Filters")
+
+        # Global ticker filter
+        with st.container():
+            st.caption("🌍 **Global Filters** (shared across all folders)")
+
+            # Ticker multi-select
+            current_tickers = global_filters.get('ticker', global_filters.get('tickers', []))
+            if not isinstance(current_tickers, list):
+                current_tickers = [current_tickers] if current_tickers else []
+
+            # Get ticker options from database
+            ticker_options = self._get_available_tickers()
+
+            new_tickers = st.multiselect(
+                "🌍 Ticker Selection",
+                options=ticker_options,
+                default=current_tickers,
+                key="global_ticker_edit",
+                help="Select tickers - shared across all folders"
+            )
+
+            # Date range filter
+            from datetime import datetime, timedelta
+            current_date_range = global_filters.get('date_range', {})
+
+            if isinstance(current_date_range, dict) and 'start' in current_date_range:
+                default_start = current_date_range['start']
+                default_end = current_date_range['end']
+                if isinstance(default_start, str):
+                    default_start = datetime.fromisoformat(default_start).date()
+                elif isinstance(default_start, datetime):
+                    default_start = default_start.date()
+                if isinstance(default_end, str):
+                    default_end = datetime.fromisoformat(default_end).date()
+                elif isinstance(default_end, datetime):
+                    default_end = default_end.date()
+            else:
+                default_start = (datetime.now() - timedelta(days=30)).date()
+                default_end = datetime.now().date()
+
+            col1, col2 = st.columns(2)
+            with col1:
+                start_date = st.date_input(
+                    "🌍 Start Date",
+                    value=default_start,
+                    key="global_date_start"
+                )
+            with col2:
+                end_date = st.date_input(
+                    "🌍 End Date",
+                    value=default_end,
+                    key="global_date_end"
+                )
+
+            # Update button for global filters
+            if st.button("💾 Save Global Filters", key="save_global", use_container_width=True):
+                new_global = {}
+                if new_tickers:
+                    new_global['ticker'] = new_tickers[0] if len(new_tickers) == 1 else new_tickers
+                    new_global['tickers'] = new_tickers
+                if start_date and end_date:
+                    new_global['date_range'] = {
+                        'start': datetime.combine(start_date, datetime.min.time()),
+                        'end': datetime.combine(end_date, datetime.min.time())
+                    }
+
+                folder_ctx_mgr.update_filters(current_folder, new_global, auto_save=True)
+                st.success("✅ Global filters saved!")
+                st.rerun()
+
+        st.divider()
+
+        # DISPLAY CURRENT VALUES (Read-only summary)
+        st.markdown("#### 📊 Current Filter Values")
+
+        # Global context section (read-only display)
+        with st.expander("🌍 Global Context", expanded=bool(global_filters)):
+            st.caption("_Shared across all folders_")
 
             if global_filters:
                 for key, value in global_filters.items():
@@ -259,9 +336,9 @@ class NotebookVaultApp:
                 except Exception as e:
                     st.error(f"Error clearing: {e}")
 
-        # Folder context section
+        # Folder context section (read-only display)
         with st.expander(f"📁 {folder_name}", expanded=bool(folder_filters)):
-            st.caption("_Filters shared within this folder only_")
+            st.caption("_Shared within this folder only_")
 
             if folder_filters:
                 for key, value in folder_filters.items():
@@ -297,6 +374,21 @@ class NotebookVaultApp:
                         st.rerun()
                     except Exception as e:
                         st.error(f"Error: {e}")
+
+    def _get_available_tickers(self):
+        """Get list of available tickers from database."""
+        try:
+            # Try to get tickers from company model
+            df = self.universal_session.get_table('company', 'dim_company')
+            pdf = self.ctx.connection.to_pandas(df)
+            if 'ticker' in pdf.columns:
+                tickers = sorted(pdf['ticker'].dropna().unique().tolist())
+                return tickers
+        except Exception as e:
+            st.caption(f"ℹ️ Could not load tickers from database: {e}")
+
+        # Fallback to common tickers
+        return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
 
     def _render_filters(self, notebook_config):
         """Render filters for active notebook."""
