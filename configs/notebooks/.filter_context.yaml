@@ -1,0 +1,16 @@
+# Folder Filter Context for Root Notebooks
+# Different filters - demonstrating complete isolation from Financial Analysis folder
+
+filters:
+  # Different ticker - Google
+  ticker: GOOG
+
+  # Different date range - earlier period
+  trade_date:
+    start: "2024-07-01"
+    end: "2024-09-30"
+
+metadata:
+  created: "2025-11-06T00:00:00"
+  last_updated: "2025-11-06T00:00:00"
+  folder: "notebooks"

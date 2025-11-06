@@ -1,0 +1,21 @@
+# Folder Filter Context for Financial Analysis
+# These filters are shared by all notebooks in this folder
+
+filters:
+  # Filter to Apple and Microsoft stocks
+  ticker:
+    - AAPL
+    - MSFT
+
+  # Date range for Q4 2024
+  trade_date:
+    start: "2024-10-01"
+    end: "2024-12-31"
+
+  # Minimum volume threshold
+  volume: 5000000
+
+metadata:
+  created: "2025-11-06T00:00:00"
+  last_updated: "2025-11-06T00:00:00"
+  folder: "Financial Analysis"
