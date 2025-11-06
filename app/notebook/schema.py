@@ -192,6 +192,8 @@ class ComparisonConfig:
 class MetricConfig:
     """Metric card configuration."""
     measure: str
+    label: Optional[str] = None
+    aggregation: Optional[AggregationType] = None
     comparison: Optional[ComparisonConfig] = None
 
 
@@ -310,3 +312,6 @@ class NotebookConfig:
     dimensions: Optional[List[Dimension]] = None  # Optional: deprecated in favor of model-defined dimensions
     measures: Optional[List[Measure]] = None  # Optional: deprecated in favor of model-defined measures
     exports: Optional[List[ExportConfig]] = None
+    # Markdown-specific fields
+    _content_blocks: Optional[List[Dict[str, Any]]] = None  # For markdown rendering
+    _is_markdown: bool = False  # Flag to indicate markdown format

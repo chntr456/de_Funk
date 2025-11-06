@@ -2,6 +2,7 @@
 Notebook view component.
 
 Handles rendering of notebook exhibits in layout sections.
+Supports both YAML and Markdown notebook formats.
 """
 
 import streamlit as st
@@ -20,15 +21,25 @@ def render_notebook_exhibits(notebook_id: str, notebook_config, notebook_session
     """
     Render all notebook exhibits according to layout.
 
+    Supports both YAML and Markdown notebook formats. Markdown notebooks
+    are rendered with embedded exhibits inline with content.
+
     Args:
         notebook_id: Unique identifier for the notebook
         notebook_config: NotebookConfig with exhibits and layout
         notebook_session: NotebookSession for data retrieval
         connection: DataConnection for converting to pandas (DuckDB or Spark)
     """
-    # Render layout sections
-    for section in notebook_config.layout:
-        render_section(section, notebook_config, notebook_session, connection)
+    # Check if this is a markdown notebook
+    if hasattr(notebook_config, '_is_markdown') and notebook_config._is_markdown:
+        # Render markdown notebook
+        from .markdown_renderer import render_markdown_notebook, apply_markdown_styles
+        apply_markdown_styles()
+        render_markdown_notebook(notebook_config, notebook_session, connection)
+    else:
+        # Render YAML notebook (traditional layout sections)
+        for section in notebook_config.layout:
+            render_section(section, notebook_config, notebook_session, connection)
 
 
 def render_section(section, notebook_config, notebook_session, connection):

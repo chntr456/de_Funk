@@ -31,7 +31,7 @@ class SidebarNavigator:
         notebooks = self._scan_notebooks()
 
         if not notebooks:
-            st.info("No notebooks found. Create a `.yaml` file in `configs/notebooks/`")
+            st.info("No notebooks found. Create a `.yaml` or `.md` file in `configs/notebooks/`")
             return
 
         # Group by directory
@@ -50,8 +50,14 @@ class SidebarNavigator:
                         self._render_notebook_item(file_path)
 
     def _scan_notebooks(self) -> List[Path]:
-        """Scan for notebook YAML files."""
-        return list(self.notebooks_root.rglob("*.yaml"))
+        """Scan for notebook files (YAML and Markdown)."""
+        yaml_notebooks = list(self.notebooks_root.rglob("*.yaml"))
+        md_notebooks = list(self.notebooks_root.rglob("*.md"))
+
+        # Filter out README and other documentation files
+        md_notebooks = [p for p in md_notebooks if not p.name.upper().startswith('README')]
+
+        return yaml_notebooks + md_notebooks
 
     def _group_by_directory(self, notebooks: List[Path]) -> Dict[str, List[Path]]:
         """Group notebooks by their parent directory."""
@@ -82,15 +88,21 @@ class SidebarNavigator:
         is_open = any(tab[0] == notebook_id for tab in st.session_state.open_tabs)
         is_active = st.session_state.active_tab == notebook_id
 
+        # Determine icon based on file type
+        if notebook_path.suffix == '.md':
+            base_icon = "📝"  # Markdown icon
+        else:
+            base_icon = "📄"  # YAML icon
+
         # Style based on state
         if is_active:
             icon = "📖"
             label = f"**{notebook_name}**"
         elif is_open:
-            icon = "📄"
+            icon = base_icon
             label = f"*{notebook_name}*"
         else:
-            icon = "📄"
+            icon = base_icon
             label = notebook_name
 
         # Click to open/activate

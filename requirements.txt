@@ -12,6 +12,7 @@ plotly>=5.17.0
 
 # Configuration
 pyyaml>=6.0
+markdown>=3.4.0  # For markdown notebook rendering
 
 # Storage
 pyarrow>=13.0.0  # For Parquet support

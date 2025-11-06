@@ -16,6 +16,7 @@ from pathlib import Path
 
 from ..schema import NotebookConfig, Exhibit, ExhibitType
 from ..parser import NotebookParser
+from ..markdown_parser import MarkdownNotebookParser
 from ..filters.context import FilterContext
 from models.registry import ModelRegistry
 from app.services.storage_service import SilverStorageService
@@ -55,29 +56,100 @@ class NotebookSession:
         self.storage_service = SilverStorageService(connection, model_registry)
 
         # Initialize components
-        self.parser = NotebookParser(self.repo_root)
+        self.yaml_parser = NotebookParser(self.repo_root)
+        self.markdown_parser = MarkdownNotebookParser(self.repo_root)
         self.filter_context: Optional[FilterContext] = None
 
         # Current notebook
         self.notebook_config: Optional[NotebookConfig] = None
 
+        # Model sessions (initialized from notebook front matter)
+        self.model_sessions: Dict[str, Any] = {}
+
     def load_notebook(self, notebook_path: str) -> NotebookConfig:
         """
-        Load and parse a notebook.
+        Load and parse a notebook (YAML or Markdown format).
 
         Args:
-            notebook_path: Path to notebook YAML file
+            notebook_path: Path to notebook file (.yaml or .md)
 
         Returns:
             NotebookConfig object
         """
-        # Parse notebook
-        self.notebook_config = self.parser.parse_file(notebook_path)
+        path = Path(notebook_path)
+
+        # Detect format based on extension
+        if path.suffix in ['.md', '.markdown']:
+            # Parse markdown notebook
+            self.notebook_config = self.markdown_parser.parse_file(notebook_path)
+        else:
+            # Parse YAML notebook
+            self.notebook_config = self.yaml_parser.parse_file(notebook_path)
 
         # Initialize filter context with notebook variables
         self.filter_context = FilterContext(self.notebook_config.variables)
 
+        # Initialize model sessions from front matter
+        self._initialize_model_sessions()
+
         return self.notebook_config
+
+    def _initialize_model_sessions(self):
+        """
+        Initialize model sessions based on models listed in notebook front matter.
+
+        This loads the models and makes them available for querying.
+        """
+        if not self.notebook_config or not self.notebook_config.graph:
+            return
+
+        # Clear existing sessions
+        self.model_sessions.clear()
+
+        # Initialize each model
+        for model_ref in self.notebook_config.graph.models:
+            model_name = model_ref.name
+
+            try:
+                # Get model from registry
+                if model_name in self.model_registry._models:
+                    model = self.model_registry._models[model_name]
+                    self.model_sessions[model_name] = {
+                        'model': model,
+                        'config': model_ref.config,
+                        'initialized': True
+                    }
+                else:
+                    # Model not found in registry
+                    self.model_sessions[model_name] = {
+                        'model': None,
+                        'config': model_ref.config,
+                        'initialized': False,
+                        'error': f"Model '{model_name}' not found in registry"
+                    }
+            except Exception as e:
+                self.model_sessions[model_name] = {
+                    'model': None,
+                    'config': model_ref.config,
+                    'initialized': False,
+                    'error': str(e)
+                }
+
+    def get_model_session(self, model_name: str) -> Optional[Any]:
+        """
+        Get a model session by name.
+
+        Args:
+            model_name: Name of the model
+
+        Returns:
+            Model session or None if not found
+        """
+        if model_name in self.model_sessions:
+            session = self.model_sessions[model_name]
+            if session['initialized']:
+                return session['model']
+        return None
 
     def get_filter_context(self) -> Dict[str, Any]:
         """Get current filter context."""
