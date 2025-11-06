@@ -16,12 +16,14 @@ schema:
   dimensions:
     dim_company:
       path: dims/dim_company
-      description: "Company dimension with ticker and exchange info"
+      description: "Company dimension with ticker, exchange info, and market cap"
       columns:
         ticker: string
         company_name: string
         exchange_code: string
         company_id: string
+        market_cap_proxy: double
+        latest_trade_date: date
       primary_key: [ticker]
       tags: [dim, entity, company]
 

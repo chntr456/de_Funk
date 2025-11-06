@@ -185,7 +185,7 @@ def generate_forecasts(spark, repo_root: Path, storage_cfg: dict, top_n: int = 1
     print("=" * 70)
 
     from models.api.session import UniversalSession
-    from datapipelines.ingestors.company_ingestor import MAJOR_COMPANIES
+    from pyspark.sql import functions as F
 
     # Create session with both company and forecast models
     session = UniversalSession(
@@ -195,29 +195,37 @@ def generate_forecasts(spark, repo_root: Path, storage_cfg: dict, top_n: int = 1
         models=['company', 'forecast']
     )
 
-    # Get top N tickers from company model, prioritizing major companies
+    # Get top N tickers by market cap (calculated on-demand from fact_prices)
     company_model = session.get_model_instance('company')
     company_model.ensure_built()
 
-    # Get dim_company to find available tickers
-    dim_company = company_model.get_dimension_df('dim_company')
-    available_tickers = {row['ticker'] for row in dim_company.collect()}
+    # Calculate market cap as an operation on fact_prices (measure, not dimension attribute)
+    fact_prices = company_model.get_fact_df('fact_prices')
 
-    # Prioritize major companies that are available
-    tickers = []
-    for ticker in MAJOR_COMPANIES:
-        if ticker in available_tickers:
-            tickers.append(ticker)
-            if len(tickers) >= top_n:
-                break
+    # Calculate average market cap proxy per ticker: avg(close * volume)
+    # This is a measure calculated from the fact table, not a dimension attribute
+    market_cap_by_ticker = (
+        fact_prices
+        .withColumn('market_cap', F.col('close') * F.col('volume'))
+        .groupBy('ticker')
+        .agg(
+            F.avg('market_cap').alias('avg_market_cap'),
+            F.max('trade_date').alias('latest_trade_date')
+        )
+        .filter(F.col('avg_market_cap').isNotNull())
+        .orderBy(F.desc('avg_market_cap'))
+        .limit(top_n)
+    )
 
-    # If we didn't get enough, fill with remaining tickers alphabetically
-    if len(tickers) < top_n:
-        remaining = [t for t in sorted(available_tickers) if t not in tickers][:top_n - len(tickers)]
-        tickers.extend(remaining)
+    tickers = [row['ticker'] for row in market_cap_by_ticker.collect()]
 
-    print(f"Generating forecasts for {len(tickers)} tickers...")
-    print(f"Tickers: {', '.join(tickers)}")
+    if len(tickers) == 0:
+        print("Warning: No tickers with price data found. Using first N tickers from dim_company...")
+        dim_company = company_model.get_dimension_df('dim_company')
+        tickers = [row['ticker'] for row in dim_company.limit(top_n).collect()]
+
+    print(f"Generating forecasts for top {len(tickers)} companies by market cap...")
+    print(f"Tickers: {', '.join(tickers[:5])}" + (f" ... and {len(tickers)-5} more" if len(tickers) > 5 else ""))
 
     # Get forecast model and set session for cross-model access
     forecast_model = session.get_model_instance('forecast')
