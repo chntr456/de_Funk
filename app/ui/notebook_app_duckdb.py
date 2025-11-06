@@ -123,6 +123,13 @@ class NotebookVaultApp:
                 st.divider()
                 active_notebook = self._get_active_notebook()
                 if active_notebook:
+                    # Show current folder context
+                    folder_name = self.notebook_manager.get_folder_display_name()
+                    if folder_name and folder_name != "No folder":
+                        st.caption(f"📁 Context: **{folder_name}**")
+                        st.caption("_Filters shared within this folder_")
+                        st.divider()
+
                     self._render_filters(active_notebook[2])
 
         # Main content area

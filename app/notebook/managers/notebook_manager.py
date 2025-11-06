@@ -9,6 +9,7 @@ Key changes from NotebookSession:
 - Uses centralized FilterEngine for filter application
 - Focused on notebook parsing, filter management, and exhibit preparation
 - No direct database queries (delegated to UniversalSession)
+- Supports folder-based filter contexts (shared within folder, isolated across folders)
 """
 
 from typing import Dict, List, Optional, Any
@@ -18,6 +19,7 @@ import pandas as pd
 from ..schema import NotebookConfig, Exhibit, ExhibitType
 from ..parsers import NotebookParser, MarkdownNotebookParser
 from ..filters.context import FilterContext
+from ..folder_context import FolderFilterContextManager
 from models.api.session import UniversalSession
 from models.registry import ModelRegistry
 from core.session.filters import FilterEngine
@@ -43,6 +45,7 @@ class NotebookManager:
         self,
         universal_session: UniversalSession,
         repo_root: Optional[Path] = None,
+        notebooks_root: Optional[Path] = None,
     ):
         """
         Initialize notebook manager.
@@ -50,6 +53,7 @@ class NotebookManager:
         Args:
             universal_session: UniversalSession for data access
             repo_root: Repository root for resolving paths
+            notebooks_root: Root directory for notebooks (defaults to repo_root/configs/notebooks)
         """
         self.session = universal_session
         self.repo_root = repo_root or Path.cwd()
@@ -58,14 +62,24 @@ class NotebookManager:
         self.yaml_parser = NotebookParser(self.repo_root)
         self.markdown_parser = MarkdownNotebookParser(self.repo_root)
 
+        # Folder-based filter context management
+        if notebooks_root is None:
+            notebooks_root = self.repo_root / "configs" / "notebooks"
+        self.folder_context_manager = FolderFilterContextManager(notebooks_root)
+
         # Notebook state
         self.notebook_config: Optional[NotebookConfig] = None
-        self.filter_context: Optional[FilterContext] = None
+        self.current_notebook_path: Optional[Path] = None
+        self.current_folder: Optional[Path] = None
+        self.filter_context: Optional[FilterContext] = None  # Legacy compatibility
         self.model_sessions: Dict[str, Any] = {}
 
     def load_notebook(self, notebook_path: str) -> NotebookConfig:
         """
         Load and parse a notebook (YAML or Markdown format).
+
+        Handles folder context switching - if notebook is in a different folder,
+        switches to that folder's filter context.
 
         Args:
             notebook_path: Path to notebook file (.yaml or .md)
@@ -76,7 +90,7 @@ class NotebookManager:
         Raises:
             ValueError: If notebook file format is unsupported
         """
-        path = Path(notebook_path)
+        path = Path(notebook_path).resolve()
 
         # Detect format based on extension
         if path.suffix in ['.md', '.markdown']:
@@ -91,8 +105,28 @@ class NotebookManager:
                 "Supported formats: .md, .markdown, .yaml, .yml"
             )
 
-        # Initialize filter context with notebook variables
+        # Track notebook path and folder
+        new_folder = self.folder_context_manager.get_folder_for_notebook(path)
+        folder_changed = self.folder_context_manager.has_context_changed(new_folder, self.current_folder)
+
+        self.current_notebook_path = path
+        self.current_folder = new_folder
+
+        # Load folder-based filter context
+        folder_filters = self.folder_context_manager.get_filters(new_folder)
+
+        # Initialize filter context with notebook variables and folder filters
         self.filter_context = FilterContext(self.notebook_config.variables)
+
+        # Apply folder filters to context (if they match notebook variables)
+        if folder_filters:
+            # Only apply filters that match notebook variables
+            valid_filters = {
+                k: v for k, v in folder_filters.items()
+                if k in self.notebook_config.variables
+            }
+            if valid_filters:
+                self.filter_context.update(valid_filters)
 
         # Initialize model sessions from front matter
         self._initialize_model_sessions()
@@ -159,15 +193,54 @@ class NotebookManager:
             return {}
         return self.filter_context.get_all()
 
+    def get_current_folder(self) -> Optional[Path]:
+        """
+        Get the current folder path.
+
+        Returns:
+            Path to current folder, or None if no notebook loaded
+        """
+        return self.current_folder
+
+    def get_folder_display_name(self) -> str:
+        """
+        Get display name for current folder (relative to notebooks root).
+
+        Returns:
+            Folder name for display (e.g., "company_analysis" or "market/overview")
+        """
+        if self.current_folder is None:
+            return "No folder"
+
+        try:
+            notebooks_root = self.folder_context_manager.notebooks_root
+            relative = self.current_folder.relative_to(notebooks_root)
+            return str(relative) if str(relative) != '.' else self.current_folder.name
+        except ValueError:
+            # Not relative to notebooks root
+            return self.current_folder.name
+
     def update_filters(self, filter_values: Dict[str, Any]):
         """
         Update filter values.
 
+        Updates both the in-memory filter context and the folder-level
+        persistent context (saved to .filter_context.yaml).
+
         Args:
             filter_values: Dictionary of filter_id -> value
         """
+        # Update in-memory context
         if self.filter_context is not None:
             self.filter_context.update(filter_values)
+
+        # Update folder-level persistent context
+        if self.current_folder is not None:
+            self.folder_context_manager.update_filters(
+                self.current_folder,
+                filter_values,
+                auto_save=True  # Persist to disk
+            )
 
     def get_exhibit_data(self, exhibit_id: str) -> Any:
         """
