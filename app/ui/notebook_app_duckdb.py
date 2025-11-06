@@ -117,16 +117,42 @@ class NotebookVaultApp:
         self._render_main_content()
 
     def _render_header(self):
-        """Render professional header with toolbar."""
-        # Header row: tabs on left, edit and theme buttons on right (no title text)
+        """Render professional header with clickable tabs and toolbar."""
         if st.session_state.open_tabs:
-            col_tabs, col_edit, col_theme = st.columns([0.8, 0.1, 0.1])
+            # Calculate number of tabs to show (max 5)
+            num_tabs = min(len(st.session_state.open_tabs), 5)
 
-            with col_tabs:
-                self._render_compact_tabs()
+            # Create columns: [tab1, tab2, ..., edit, theme]
+            # Each tab gets equal width, edit and theme get smaller fixed widths
+            tab_widths = [1] * num_tabs + [0.5, 0.5]  # Tabs + edit + theme
+            cols = st.columns(tab_widths)
 
-            # Edit button
-            with col_edit:
+            # Render tab buttons
+            for i, (notebook_id, notebook_path, notebook_config) in enumerate(st.session_state.open_tabs[:num_tabs]):
+                with cols[i]:
+                    is_active = st.session_state.active_tab == notebook_id
+                    title = notebook_config.notebook.title
+
+                    # Truncate long titles
+                    if len(title) > 15:
+                        title = title[:12] + "..."
+
+                    button_type = "primary" if is_active else "secondary"
+
+                    if st.button(
+                        title,
+                        key=f"tab_btn_{notebook_id}",
+                        type=button_type,
+                        use_container_width=True,
+                        help=notebook_config.notebook.title
+                    ):
+                        # Switch to this notebook
+                        if st.session_state.active_tab != notebook_id:
+                            st.session_state.active_tab = notebook_id
+                            st.rerun()
+
+            # Edit button in second-to-last column
+            with cols[num_tabs]:
                 if st.session_state.active_tab:
                     active_notebook = self._get_active_notebook()
                     if active_notebook:
@@ -140,21 +166,22 @@ class NotebookVaultApp:
                             st.session_state.edit_mode[notebook_id] = not in_edit_mode
                             st.rerun()
 
-            # Theme button
-            with col_theme:
+            # Theme button in last column
+            with cols[num_tabs + 1]:
                 theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
                 theme_help = "Dark mode" if st.session_state.theme == 'light' else "Light mode"
 
                 if st.button(theme_icon, help=theme_help, key="toolbar_theme", use_container_width=True):
                     st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
                     st.rerun()
-        else:
-            # No tabs open - just show buttons on right
-            col1, col_edit, col_theme = st.columns([0.8, 0.1, 0.1])
 
-            with col_edit:
-                # Empty when no active tab
-                pass
+            # Show indicator if more tabs exist
+            if len(st.session_state.open_tabs) > num_tabs:
+                st.caption(f"+ {len(st.session_state.open_tabs) - num_tabs} more tabs (use sidebar)")
+
+        else:
+            # No tabs open - just show theme button on right
+            col1, col_theme = st.columns([0.9, 0.1])
 
             with col_theme:
                 theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
@@ -165,29 +192,6 @@ class NotebookVaultApp:
                     st.rerun()
 
         st.divider()
-
-    def _render_compact_tabs(self):
-        """Render compact tab bar in header."""
-        # Display tabs as simple text with active indicator
-        tab_labels = []
-        for notebook_id, notebook_path, notebook_config in st.session_state.open_tabs[:4]:
-            is_active = st.session_state.active_tab == notebook_id
-            title = notebook_config.notebook.title
-            if len(title) > 20:
-                title = title[:17] + "..."
-
-            # Mark active tab
-            if is_active:
-                tab_labels.append(f"**📍 {title}**")
-            else:
-                tab_labels.append(title)
-
-        tabs_display = " • ".join(tab_labels)
-
-        if len(st.session_state.open_tabs) > 4:
-            tabs_display += f" • +{len(st.session_state.open_tabs) - 4} more"
-
-        st.caption(tabs_display)
 
     def _render_filters(self, notebook_config):
         """Render filters for active notebook."""
