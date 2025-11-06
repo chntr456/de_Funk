@@ -78,6 +78,10 @@ if 'markdown_content' not in st.session_state:
 if 'theme' not in st.session_state:
     st.session_state.theme = 'dark'
 
+# Cache model sessions per notebook to avoid reinitializing
+if 'notebook_model_sessions' not in st.session_state:
+    st.session_state.notebook_model_sessions = {}
+
 # Apply theme
 apply_professional_theme()
 
@@ -114,56 +118,53 @@ class NotebookVaultApp:
 
     def _render_header(self):
         """Render professional header with toolbar."""
-        # Title row
-        st.markdown("### 📊 Data Notebooks")
-
-        # Tab bar and toolbar row (no nested columns)
+        # Header row: tabs on left, edit and theme buttons on right (no title text)
         if st.session_state.open_tabs:
-            col_tabs, col_toolbar = st.columns([0.7, 0.3])
+            col_tabs, col_edit, col_theme = st.columns([0.8, 0.1, 0.1])
 
             with col_tabs:
                 self._render_compact_tabs()
 
-            with col_toolbar:
-                self._render_toolbar()
+            # Edit button
+            with col_edit:
+                if st.session_state.active_tab:
+                    active_notebook = self._get_active_notebook()
+                    if active_notebook:
+                        notebook_id = active_notebook[0]
+                        in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
+
+                        button_label = "👁️" if in_edit_mode else "✏️"
+                        button_help = "View mode" if in_edit_mode else "Edit markdown"
+
+                        if st.button(button_label, help=button_help, key="toolbar_edit", use_container_width=True):
+                            st.session_state.edit_mode[notebook_id] = not in_edit_mode
+                            st.rerun()
+
+            # Theme button
+            with col_theme:
+                theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
+                theme_help = "Dark mode" if st.session_state.theme == 'light' else "Light mode"
+
+                if st.button(theme_icon, help=theme_help, key="toolbar_theme", use_container_width=True):
+                    st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
+                    st.rerun()
         else:
-            # Just toolbar when no tabs
-            self._render_toolbar()
+            # No tabs open - just show buttons on right
+            col1, col_edit, col_theme = st.columns([0.8, 0.1, 0.1])
 
-        st.divider()
+            with col_edit:
+                # Empty when no active tab
+                pass
 
-    def _render_toolbar(self):
-        """Render toolbar with edit and theme buttons."""
-        # Render buttons horizontally without nested columns
+            with col_theme:
+                theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
+                theme_help = "Dark mode" if st.session_state.theme == 'light' else "Light mode"
 
-        # Edit button (only if active notebook)
-        if st.session_state.active_tab:
-            active_notebook = self._get_active_notebook()
-            if active_notebook:
-                notebook_id = active_notebook[0]
-
-                # Check if in edit mode
-                in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
-
-                # Button label based on mode
-                if in_edit_mode:
-                    button_label = "👁️ View"
-                    button_help = "Switch to view mode"
-                else:
-                    button_label = "✏️ Edit"
-                    button_help = "Edit markdown"
-
-                if st.button(button_label, help=button_help, key="toolbar_edit"):
-                    st.session_state.edit_mode[notebook_id] = not in_edit_mode
+                if st.button(theme_icon, help=theme_help, key="toolbar_theme", use_container_width=True):
+                    st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
                     st.rerun()
 
-        # Theme toggle
-        theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
-        theme_help = "Switch to dark mode" if st.session_state.theme == 'light' else "Switch to light mode"
-
-        if st.button(theme_icon, help=theme_help, key="toolbar_theme"):
-            st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
-            st.rerun()
+        st.divider()
 
     def _render_compact_tabs(self):
         """Render compact tab bar in header."""
@@ -231,6 +232,27 @@ class NotebookVaultApp:
     def _render_notebook_content(self, notebook_tuple):
         """Render notebook content (edit or view mode)."""
         notebook_id, notebook_path, notebook_config = notebook_tuple
+
+        # Ensure the notebook session is synced with this notebook
+        # Cache model sessions per notebook to avoid expensive reinitializations
+        if 'current_notebook_id' not in st.session_state:
+            st.session_state.current_notebook_id = None
+
+        if st.session_state.current_notebook_id != notebook_id:
+            # Switching to a different notebook
+            self.notebook_session.notebook_config = notebook_config
+
+            # Check if we have cached model sessions for this notebook
+            if notebook_id in st.session_state.notebook_model_sessions:
+                # Restore cached model sessions
+                self.notebook_session.model_sessions = st.session_state.notebook_model_sessions[notebook_id]
+            else:
+                # Initialize model sessions for the first time
+                self.notebook_session._initialize_model_sessions()
+                # Cache them for future switches
+                st.session_state.notebook_model_sessions[notebook_id] = self.notebook_session.model_sessions.copy()
+
+            st.session_state.current_notebook_id = notebook_id
 
         # Check edit mode
         in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)

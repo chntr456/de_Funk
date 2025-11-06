@@ -114,25 +114,25 @@ class SidebarNavigator:
         existing_tab = next((tab for tab in st.session_state.open_tabs if tab[0] == notebook_id), None)
 
         if existing_tab:
-            # Just switch to it
+            # Just switch to it (no need to reload)
             st.session_state.active_tab = notebook_id
+            st.rerun()
         else:
-            # Load the notebook
+            # Load the notebook (first time opening)
             try:
                 notebook_config = self.notebook_session.load_notebook(str(notebook_path))
                 st.session_state.open_tabs.append((notebook_id, notebook_path, notebook_config))
                 st.session_state.active_tab = notebook_id
                 st.session_state.edit_mode[notebook_id] = False
+                st.rerun()
 
             except Exception as e:
                 st.error(f"Error loading notebook: {str(e)}")
 
-        st.rerun()
-
 
 def close_tab(notebook_id: str):
     """
-    Close a notebook tab.
+    Close a notebook tab and clean up its resources.
 
     Args:
         notebook_id: ID of the notebook to close
@@ -150,11 +150,16 @@ def close_tab(notebook_id: str):
     if notebook_id in st.session_state.markdown_content:
         del st.session_state.markdown_content[notebook_id]
 
+    # Clear cached model sessions to free memory
+    if notebook_id in st.session_state.notebook_model_sessions:
+        del st.session_state.notebook_model_sessions[notebook_id]
+
     # Switch active tab
     if st.session_state.active_tab == notebook_id:
         if st.session_state.open_tabs:
             st.session_state.active_tab = st.session_state.open_tabs[-1][0]
         else:
             st.session_state.active_tab = None
+            st.session_state.current_notebook_id = None
 
     st.rerun()
