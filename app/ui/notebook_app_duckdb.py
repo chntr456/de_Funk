@@ -44,35 +44,6 @@ st.set_page_config(
 )
 
 
-@st.cache_resource
-def get_repo_context():
-    """Get repository context with DuckDB backend."""
-    return RepoContext.from_repo_root(connection_type="duckdb")
-
-
-@st.cache_resource
-def get_model_registry(_ctx):
-    """Get model registry (cached)."""
-    models_dir = _ctx.repo / "configs" / "models"
-    return ModelRegistry(models_dir)
-
-
-@st.cache_resource
-def get_universal_session(_ctx):
-    """Get UniversalSession with DuckDB backend (cached)."""
-    return UniversalSession(
-        connection=_ctx.connection,
-        storage_cfg=_ctx.storage,
-        repo_root=_ctx.repo
-    )
-
-
-@st.cache_resource
-def get_notebook_manager(_universal_session, _repo):
-    """Get NotebookManager (cached)."""
-    return NotebookManager(_universal_session, _repo)
-
-
 # Session state initialization
 if 'open_tabs' not in st.session_state:
     st.session_state.open_tabs = []
@@ -93,6 +64,31 @@ if 'theme' not in st.session_state:
 if 'notebook_model_sessions' not in st.session_state:
     st.session_state.notebook_model_sessions = {}
 
+# Initialize app-level objects in session state (per-user, per-tab)
+if 'repo_context' not in st.session_state:
+    st.session_state.repo_context = RepoContext.from_repo_root(connection_type="duckdb")
+
+if 'model_registry' not in st.session_state:
+    ctx = st.session_state.repo_context
+    st.session_state.model_registry = ModelRegistry(ctx.repo / "configs" / "models")
+
+if 'universal_session' not in st.session_state:
+    ctx = st.session_state.repo_context
+    st.session_state.universal_session = UniversalSession(
+        connection=ctx.connection,
+        storage_cfg=ctx.storage,
+        repo_root=ctx.repo
+    )
+
+if 'notebook_manager' not in st.session_state:
+    ctx = st.session_state.repo_context
+    notebooks_root = ctx.repo / "configs" / "notebooks"
+    st.session_state.notebook_manager = NotebookManager(
+        st.session_state.universal_session,
+        ctx.repo,
+        notebooks_root
+    )
+
 # Apply theme
 apply_professional_theme()
 
@@ -101,11 +97,11 @@ class NotebookVaultApp:
     """Professional notebook application with modern UI."""
 
     def __init__(self):
-        """Initialize application."""
-        self.ctx = get_repo_context()
-        self.model_registry = ModelRegistry(self.ctx.repo / "configs" / "models")
-        self.universal_session = get_universal_session(self.ctx)
-        self.notebook_manager = get_notebook_manager(self.universal_session, self.ctx.repo)
+        """Initialize application - uses session state objects."""
+        self.ctx = st.session_state.repo_context
+        self.model_registry = st.session_state.model_registry
+        self.universal_session = st.session_state.universal_session
+        self.notebook_manager = st.session_state.notebook_manager
         self.notebooks_root = self.ctx.repo / "configs" / "notebooks"
         self.notebooks_root.mkdir(parents=True, exist_ok=True)
         self.sidebar_nav = SidebarNavigator(self.notebooks_root, self.notebook_manager)
