@@ -83,6 +83,8 @@ Content here can include text, charts, and exhibits.
 </details>
 ```
 
+**Implementation Note**: These tags are parsed and rendered as Streamlit expanders (`st.expander()`) to ensure proper component nesting. Exhibits and other Streamlit elements inside collapsible sections will correctly show/hide when toggling the expander.
+
 ### 5. Embedded Exhibits
 
 Exhibits are embedded inline using the `$exhibits${...}` syntax:

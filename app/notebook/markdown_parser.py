@@ -45,6 +45,7 @@ class MarkdownNotebookParser:
     FILTERS_SECTION_PATTERN = re.compile(r'^#\s*Filters\s*\n(.*?)(?=\n#|\Z)', re.MULTILINE | re.DOTALL)
     FILTER_LINE_PATTERN = re.compile(r'-\s*\*\*(.+?)\*\*:\s*(\w+)\s*\((.+?)\)\s*\[(\w+)\]')
     EXHIBIT_PATTERN = re.compile(r'\$exhibits?\$\{\s*\n(.*?)\n\}', re.MULTILINE | re.DOTALL)
+    DETAILS_PATTERN = re.compile(r'<details>\s*<summary>(.*?)</summary>\s*(.*?)</details>', re.MULTILINE | re.DOTALL)
 
     def __init__(self, repo_root: Optional[Path] = None):
         """
@@ -185,24 +186,50 @@ class MarkdownNotebookParser:
 
     def _extract_exhibits(self, content: str) -> Tuple[List[Exhibit], List[Dict[str, Any]]]:
         """
-        Extract exhibits from markdown content.
+        Extract exhibits from markdown content and handle collapsible sections.
 
         Returns:
             Tuple of (exhibits list, content_blocks list)
         """
+        # First, process collapsible sections (details tags)
+        # Replace them with placeholders and extract their content
+        collapsible_sections = {}
+        section_counter = 0
+
+        def replace_details(match):
+            nonlocal section_counter
+            summary = match.group(1).strip()
+            inner_content = match.group(2).strip()
+            placeholder = f"__COLLAPSIBLE_{section_counter}__"
+            collapsible_sections[placeholder] = {
+                'summary': summary,
+                'content': inner_content
+            }
+            section_counter += 1
+            return placeholder
+
+        # Replace all <details> tags with placeholders
+        processed_content = self.DETAILS_PATTERN.sub(replace_details, content)
+
+        # Now extract exhibits and build content blocks
         exhibits = []
         content_blocks = []
-        last_pos = 0
         exhibit_counter = 0
 
-        for match in self.EXHIBIT_PATTERN.finditer(content):
+        # Process the content with placeholders
+        last_pos = 0
+        for match in self.EXHIBIT_PATTERN.finditer(processed_content):
             # Add markdown content before exhibit
-            markdown_content = content[last_pos:match.start()].strip()
+            markdown_content = processed_content[last_pos:match.start()].strip()
             if markdown_content:
-                content_blocks.append({
-                    'type': 'markdown',
-                    'content': markdown_content
-                })
+                # Check if this markdown contains collapsible section placeholders
+                self._add_content_with_collapsibles(
+                    markdown_content,
+                    collapsible_sections,
+                    content_blocks,
+                    exhibits,
+                    exhibit_counter
+                )
 
             # Parse exhibit
             exhibit_yaml = match.group(1)
@@ -230,14 +257,118 @@ class MarkdownNotebookParser:
             last_pos = match.end()
 
         # Add remaining markdown content
-        remaining_content = content[last_pos:].strip()
+        remaining_content = processed_content[last_pos:].strip()
         if remaining_content:
-            content_blocks.append({
-                'type': 'markdown',
-                'content': remaining_content
-            })
+            self._add_content_with_collapsibles(
+                remaining_content,
+                collapsible_sections,
+                content_blocks,
+                exhibits,
+                exhibit_counter
+            )
 
         return exhibits, content_blocks
+
+    def _add_content_with_collapsibles(
+        self,
+        content: str,
+        collapsible_sections: Dict[str, Dict[str, str]],
+        content_blocks: List[Dict[str, Any]],
+        exhibits: List[Exhibit],
+        exhibit_counter: int
+    ):
+        """
+        Add content blocks, processing any collapsible section placeholders.
+        """
+        # Split content by collapsible placeholders
+        parts = []
+        current_pos = 0
+
+        for placeholder in collapsible_sections.keys():
+            idx = content.find(placeholder)
+            if idx != -1:
+                # Add content before placeholder
+                if idx > current_pos:
+                    before = content[current_pos:idx].strip()
+                    if before:
+                        parts.append(('markdown', before))
+
+                # Add collapsible section
+                section_data = collapsible_sections[placeholder]
+                parts.append(('collapsible', section_data))
+                current_pos = idx + len(placeholder)
+
+        # Add remaining content
+        if current_pos < len(content):
+            remaining = content[current_pos:].strip()
+            if remaining:
+                parts.append(('markdown', remaining))
+
+        # If no collapsible sections found, just add as markdown
+        if not parts and content:
+            parts.append(('markdown', content))
+
+        # Add parts to content blocks
+        for part_type, part_data in parts:
+            if part_type == 'markdown':
+                content_blocks.append({
+                    'type': 'markdown',
+                    'content': part_data
+                })
+            elif part_type == 'collapsible':
+                # Parse the inner content for exhibits
+                inner_content = part_data['content']
+                inner_exhibits = []
+                inner_blocks = []
+
+                # Extract exhibits from inner content
+                last_pos = 0
+                for match in self.EXHIBIT_PATTERN.finditer(inner_content):
+                    # Add markdown before exhibit
+                    md_before = inner_content[last_pos:match.start()].strip()
+                    if md_before:
+                        inner_blocks.append({
+                            'type': 'markdown',
+                            'content': md_before
+                        })
+
+                    # Parse exhibit
+                    exhibit_yaml = match.group(1)
+                    exhibit_id = f"exhibit_{len(exhibits)}"
+
+                    try:
+                        exhibit = self._parse_exhibit(exhibit_yaml, exhibit_id)
+                        exhibits.append(exhibit)
+                        inner_exhibits.append(exhibit)
+
+                        inner_blocks.append({
+                            'type': 'exhibit',
+                            'id': exhibit_id,
+                            'exhibit': exhibit
+                        })
+                    except Exception as e:
+                        inner_blocks.append({
+                            'type': 'error',
+                            'message': f"Error parsing exhibit: {str(e)}",
+                            'content': exhibit_yaml
+                        })
+
+                    last_pos = match.end()
+
+                # Add remaining content
+                remaining = inner_content[last_pos:].strip()
+                if remaining:
+                    inner_blocks.append({
+                        'type': 'markdown',
+                        'content': remaining
+                    })
+
+                # Add collapsible block with inner content
+                content_blocks.append({
+                    'type': 'collapsible',
+                    'summary': part_data['summary'],
+                    'content': inner_blocks
+                })
 
     def _parse_exhibit(self, exhibit_yaml: str, exhibit_id: str) -> Exhibit:
         """

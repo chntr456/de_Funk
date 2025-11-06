@@ -148,7 +148,7 @@ Horizontal rule
 
 ### Collapsible Sections
 
-Use HTML `<details>` tags:
+Use HTML `<details>` tags (rendered as Streamlit expanders):
 
 ```markdown
 <details>
@@ -158,6 +158,8 @@ Content here (can include text, exhibits, etc.)
 
 </details>
 ```
+
+**Note**: These are automatically converted to Streamlit expanders for proper component nesting. Exhibits inside collapsible sections will correctly show/hide when toggling.
 
 ### Embedded Exhibits
 
