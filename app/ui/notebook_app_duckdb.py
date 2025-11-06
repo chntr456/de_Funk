@@ -75,6 +75,9 @@ if 'edit_mode' not in st.session_state:
 if 'markdown_content' not in st.session_state:
     st.session_state.markdown_content = {}
 
+if 'yaml_content' not in st.session_state:
+    st.session_state.yaml_content = {}
+
 if 'theme' not in st.session_state:
     st.session_state.theme = 'dark'
 
