@@ -321,7 +321,7 @@ class FilterEngine:
         Returns:
             Filtered dataframe
         """
-        from ..parser import DateResolver
+        from ..parsers.yaml_parser import DateResolver
 
         # Calculate date range based on horizon
         end_date = datetime.now()

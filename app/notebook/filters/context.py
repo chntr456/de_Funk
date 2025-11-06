@@ -9,7 +9,7 @@ from datetime import datetime
 from copy import deepcopy
 
 from ..schema import Variable, VariableType, DateRangeDefault
-from ..parser import DateResolver
+from ..parsers.yaml_parser import DateResolver
 
 
 class FilterContext:
