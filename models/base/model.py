@@ -12,8 +12,19 @@ The YAML config is the source of truth for the model structure.
 """
 
 from abc import ABC
-from typing import Dict, Any, Optional, List, Tuple
-from pyspark.sql import DataFrame, functions as F
+from typing import Dict, Any, Optional, List, Tuple, Union
+
+# Try to import PySpark (may not be available when using DuckDB)
+try:
+    from pyspark.sql import DataFrame as SparkDataFrame, functions as F
+    PYSPARK_AVAILABLE = True
+except ImportError:
+    PYSPARK_AVAILABLE = False
+    SparkDataFrame = None
+    F = None
+
+# Type alias for DataFrame (can be Spark or DuckDB)
+DataFrame = Any
 
 
 class BaseModel:
@@ -53,6 +64,54 @@ class BaseModel:
         # Storage router for path resolution
         from models.api.dal import StorageRouter
         self.storage_router = StorageRouter(self.storage_cfg)
+
+        # Detect backend type
+        self._backend = self._detect_backend()
+
+    @property
+    def backend(self) -> str:
+        """Get backend type (spark or duckdb)."""
+        return self._backend
+
+    def _detect_backend(self) -> str:
+        """Detect backend type from connection."""
+        connection_type = str(type(self.connection))
+
+        if 'spark' in connection_type.lower() or hasattr(self.connection, 'sql'):
+            return 'spark'
+
+        if 'duckdb' in connection_type.lower() or (
+            hasattr(self.connection, '_conn') and 'duckdb' in str(type(self.connection._conn)).lower()
+        ):
+            return 'duckdb'
+
+        raise ValueError(f"Unknown connection type: {connection_type}")
+
+    def _select_columns(self, df: DataFrame, select_config: Dict[str, str]) -> DataFrame:
+        """
+        Backend-agnostic column selection.
+
+        Args:
+            df: Input DataFrame (Spark or DuckDB)
+            select_config: Dict mapping output_name -> expression
+
+        Returns:
+            DataFrame with selected/renamed columns
+        """
+        if self.backend == 'spark':
+            if not PYSPARK_AVAILABLE:
+                raise ImportError("PySpark not available but Spark backend detected")
+            # Use PySpark
+            cols = [
+                F.col(expr).alias(out_name)
+                for out_name, expr in select_config.items()
+            ]
+            return df.select(*cols)
+        else:
+            # DuckDB - use project() method for column selection
+            # project() takes column expressions as strings
+            col_expressions = [f"{expr} AS {out_name}" for out_name, expr in select_config.items()]
+            return df.project(','.join(col_expressions))
 
     # ============================================================
     # GENERIC GRAPH BUILDING (from company_model.py)
@@ -124,11 +183,7 @@ class BaseModel:
 
             # Apply select (column selection/aliasing)
             if 'select' in node_config and node_config['select']:
-                cols = [
-                    F.col(expr).alias(out_name)
-                    for out_name, expr in node_config['select'].items()
-                ]
-                df = df.select(*cols)
+                df = self._select_columns(df, node_config['select'])
 
             # Apply derive (computed columns)
             if 'derive' in node_config and node_config['derive']:
@@ -178,21 +233,38 @@ class BaseModel:
         Returns:
             DataFrame with new column
         """
-        # SHA1 hash
-        if expr.startswith('sha1(') and expr.endswith(')'):
-            col = expr[5:-1]  # Extract column name
-            return df.withColumn(col_name, F.sha1(F.col(col)))
+        if self.backend == 'spark':
+            if not PYSPARK_AVAILABLE:
+                raise ImportError("PySpark not available but Spark backend detected")
 
-        # Direct column reference
-        elif expr in df.columns:
-            return df.withColumn(col_name, F.col(expr))
+            # SHA1 hash
+            if expr.startswith('sha1(') and expr.endswith(')'):
+                col = expr[5:-1]  # Extract column name
+                return df.withColumn(col_name, F.sha1(F.col(col)))
 
-        # Unknown expression
+            # Direct column reference
+            elif expr in df.columns:
+                return df.withColumn(col_name, F.col(expr))
+
+            # Unknown expression
+            else:
+                raise ValueError(
+                    f"Unsupported derive expression '{expr}' in node '{node_id}'. "
+                    f"Supported: column references, sha1(column)"
+                )
         else:
-            raise ValueError(
-                f"Unsupported derive expression '{expr}' in node '{node_id}'. "
-                f"Supported: column references, sha1(column)"
-            )
+            # DuckDB - use SQL expressions
+            if expr.startswith('sha1(') and expr.endswith(')'):
+                col = expr[5:-1]  # Extract column name
+                sql_expr = f"SHA1({col})"
+            else:
+                # Direct column reference or SQL expression
+                sql_expr = expr
+
+            # DuckDB: add column using project with *
+            # Get all existing columns plus the new one
+            existing_cols = ', '.join([f'"{c}"' for c in df.columns])
+            return df.project(f'{existing_cols}, {sql_expr} AS {col_name}')
 
     def _apply_edges(self, nodes: Dict[str, DataFrame]) -> None:
         """
@@ -203,9 +275,15 @@ class BaseModel:
         - Join columns exist
         - Join is valid
 
+        Note: Skipped for DuckDB backend (joins not yet implemented)
+
         Args:
             nodes: Dictionary of node_id -> DataFrame
         """
+        # Skip edge validation for DuckDB (joins not yet supported)
+        if self.backend == 'duckdb':
+            return
+
         graph = self.model_cfg.get('graph', {})
 
         for edge in graph.get('edges', []):
@@ -248,12 +326,18 @@ class BaseModel:
 
         Paths represent materialized views (e.g., fact_prices joined with dim_company).
 
+        Note: Skipped for DuckDB backend (joins not yet implemented)
+
         Args:
             nodes: Dictionary of node_id -> DataFrame
 
         Returns:
             Dictionary of path_id -> joined DataFrame
         """
+        # Skip path materialization for DuckDB (joins not yet supported)
+        if self.backend == 'duckdb':
+            return {}
+
         graph = self.model_cfg.get('graph', {})
         paths = {}
 
@@ -525,6 +609,8 @@ class BaseModel:
         them as operations on fact tables. This is proper dimensional modeling:
         measures are calculated from facts, not stored in dimensions.
 
+        Note: Currently only supported for Spark backend
+
         Args:
             measure_name: Name of measure from config (e.g., 'market_cap', 'avg_close_price')
             entity_column: Column to group by (e.g., 'ticker', 'indicator_id', 'city_id')
@@ -545,6 +631,13 @@ class BaseModel:
         Raises:
             ValueError: If measure not defined in config
         """
+        # Measure calculations not yet implemented for DuckDB
+        if self.backend == 'duckdb':
+            raise NotImplementedError(
+                f"Measure calculations not yet supported for DuckDB backend. "
+                f"Use Spark backend for measure: '{measure_name}'"
+            )
+
         from pyspark.sql import functions as F
 
         # Get measure configuration from YAML
