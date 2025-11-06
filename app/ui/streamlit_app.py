@@ -16,17 +16,18 @@ st.set_page_config(page_title="Company Model Explorer", layout="wide")
 Streamlit starter UI for exploring the Company model (Spark-based).
 
 Run from repo root:
-    streamlit run src/ui/streamlit_app.py
+    streamlit run app/ui/streamlit_app.py
 
 Architecture:
-- This app uses Spark + ModelSession for direct model/table exploration
+- This app uses Spark + UniversalSession for direct model/table exploration
 - For DuckDB-powered notebooks (10-100x faster), use:
-    streamlit run src/ui/notebook_app_duckdb.py
+    streamlit run app/ui/notebook_app_duckdb.py
 
 Notes:
 - This UI reads what's already in bronze/silver. Run your ingestion script separately to refresh data.
 - We avoid passing Spark/RepoContext into cached functions to prevent Streamlit hashing Spark objects.
 - Requires pyspark installed
+- ModelSession has been deprecated - all apps now use UniversalSession
 """
 
 import datetime as dt
@@ -35,7 +36,7 @@ from typing import List
 from pyspark.sql import functions as F
 
 from core.context import RepoContext
-from models.api.session import ModelSession
+from models.api.session import UniversalSession
 from models.api.services import PricesAPI, NewsAPI, CompanyAPI
 
 
@@ -47,8 +48,8 @@ def get_ctx() -> RepoContext:
     return RepoContext.from_repo_root()
 
 @st.cache_resource
-def get_model_session() -> ModelSession:
-    """Build ModelSession using the cached RepoContext (no args → no hashing of Spark)."""
+def get_universal_session() -> UniversalSession:
+    """Build UniversalSession using the cached RepoContext (no args → no hashing of Spark)."""
     ctx = get_ctx()
     # Optionally quiet Spark logs a bit in UI sessions:
     try:
@@ -56,13 +57,18 @@ def get_model_session() -> ModelSession:
         ctx.spark.conf.set("spark.ui.enabled", "false")
     except Exception:
         pass
-    return ModelSession(ctx.spark, ctx.repo, ctx.storage)
+    return UniversalSession(
+        connection=ctx.spark,
+        storage_cfg=ctx.storage,
+        repo_root=ctx.repo,
+        models=['company']  # Pre-load company model
+    )
 
 @st.cache_data(show_spinner=False)
 def cached_active_tickers(limit: int | None = 2000) -> List[str]:
     """Cache the active ticker universe as a plain Python list for a snappy multiselect."""
-    ms = get_model_session()
-    company = CompanyAPI(ms)
+    session = get_universal_session()
+    company = CompanyAPI(session, 'company')
     df = company.active_universe(limit=limit)
     return [r["ticker"] for r in df.collect()]
 
@@ -79,10 +85,10 @@ class CompanyExplorerApp:
 
     def __init__(self):
         self.ctx = get_ctx()
-        self.ms = get_model_session()
-        self.prices = PricesAPI(self.ms)
-        self.news = NewsAPI(self.ms)
-        self.company = CompanyAPI(self.ms)
+        self.session = get_universal_session()
+        self.prices = PricesAPI(self.session, 'company')
+        self.news = NewsAPI(self.session, 'company')
+        self.company = CompanyAPI(self.session, 'company')
 
         # sensible defaults
         self.default_start = dt.date(2024, 1, 1)
