@@ -2,30 +2,12 @@
 Filter components for notebook variables.
 
 Provides UI controls for different variable types (date range, multi-select, etc.)
+All filters are folder-scoped (shared within folder, isolated across folders).
 """
 
 import streamlit as st
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
-
-# Import global filters list
-try:
-    from app.notebook.folder_context import GLOBAL_FILTERS
-except ImportError:
-    GLOBAL_FILTERS = {'ticker', 'date_range', 'tickers', 'date'}
-
-
-def _is_global_filter(var_id: str) -> bool:
-    """Check if a filter is global (shared across all folders)."""
-    return var_id in GLOBAL_FILTERS
-
-
-def _get_filter_label(var_id: str, display_name: str) -> str:
-    """Get filter label with badge indicating scope."""
-    if _is_global_filter(var_id):
-        return f"🌍 {display_name}"
-    else:
-        return f"📁 {display_name}"
 
 
 @st.cache_data(ttl=300)
@@ -126,16 +108,14 @@ def render_date_range_filter(var_id: str, variable, notebook_session) -> Dict[st
         default_start = datetime.now().date() - timedelta(days=30)
         default_end = datetime.now().date()
 
-    label = _get_filter_label(var_id, variable.display_name)
-
     start_date = st.date_input(
-        f"{label} (Start)",
+        f"{variable.display_name} (Start)",
         value=default_start,
         key=f"filter_{var_id}_start",
     )
 
     end_date = st.date_input(
-        f"{label} (End)",
+        f"{variable.display_name} (End)",
         value=default_end,
         key=f"filter_{var_id}_end",
     )
@@ -195,10 +175,8 @@ def render_multi_select_filter(var_id: str, variable, connection=None, storage_s
     if default and options:
         default = [d for d in default if d in options]
 
-    label = _get_filter_label(var_id, variable.display_name)
-
     return st.multiselect(
-        label,
+        variable.display_name,
         options=options,
         default=default,
         key=f"filter_{var_id}",
@@ -251,10 +229,8 @@ def render_single_select_filter(var_id: str, variable, connection=None, storage_
 
     default = variable.default
 
-    label = _get_filter_label(var_id, variable.display_name)
-
     return st.selectbox(
-        label,
+        variable.display_name,
         options=options,
         index=options.index(default) if default and default in options else 0,
         key=f"filter_{var_id}",
@@ -266,10 +242,8 @@ def render_number_filter(var_id: str, variable) -> float:
     """Render number filter."""
     default = variable.default if variable.default is not None else 0.0
 
-    label = _get_filter_label(var_id, variable.display_name)
-
     return st.number_input(
-        label,
+        variable.display_name,
         value=float(default),
         key=f"filter_{var_id}",
         help=variable.description,
@@ -280,10 +254,8 @@ def render_boolean_filter(var_id: str, variable) -> bool:
     """Render boolean filter."""
     default = variable.default if variable.default is not None else False
 
-    label = _get_filter_label(var_id, variable.display_name)
-
     return st.checkbox(
-        label,
+        variable.display_name,
         value=default,
         key=f"filter_{var_id}",
         help=variable.description,
