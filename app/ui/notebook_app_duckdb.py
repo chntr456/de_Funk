@@ -114,101 +114,87 @@ class NotebookVaultApp:
 
     def _render_header(self):
         """Render professional header with toolbar."""
-        # Create header columns
-        col1, col2, col3 = st.columns([0.3, 0.5, 0.2])
+        # Title row
+        st.markdown("### 📊 Data Notebooks")
 
-        with col1:
-            st.markdown("### 📊 Data Notebooks")
+        # Tab bar and toolbar row (no nested columns)
+        if st.session_state.open_tabs:
+            col_tabs, col_toolbar = st.columns([0.7, 0.3])
 
-        with col2:
-            # Tab bar in header if notebooks are open
-            if st.session_state.open_tabs:
+            with col_tabs:
                 self._render_compact_tabs()
 
-        with col3:
-            # Toolbar: Edit + Theme buttons
+            with col_toolbar:
+                self._render_toolbar()
+        else:
+            # Just toolbar when no tabs
             self._render_toolbar()
 
         st.divider()
 
     def _render_toolbar(self):
         """Render toolbar with edit and theme buttons."""
-        col1, col2 = st.columns(2)
+        # Render buttons horizontally without nested columns
 
-        with col1:
-            # Edit button (only if active notebook)
-            if st.session_state.active_tab:
-                active_notebook = self._get_active_notebook()
-                if active_notebook:
-                    notebook_id = active_notebook[0]
-                    notebook_config = active_notebook[2]
+        # Edit button (only if active notebook)
+        if st.session_state.active_tab:
+            active_notebook = self._get_active_notebook()
+            if active_notebook:
+                notebook_id = active_notebook[0]
+                notebook_config = active_notebook[2]
 
-                    # Determine notebook type
-                    is_markdown = hasattr(notebook_config, '_is_markdown') and notebook_config._is_markdown
+                # Determine notebook type
+                is_markdown = hasattr(notebook_config, '_is_markdown') and notebook_config._is_markdown
 
-                    # Check if in edit mode
-                    in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
+                # Check if in edit mode
+                in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
 
-                    # Button label based on mode
-                    if in_edit_mode:
-                        button_label = "👁️ View"
-                        button_help = "Switch to view mode"
+                # Button label based on mode
+                if in_edit_mode:
+                    button_label = "👁️ View"
+                    button_help = "Switch to view mode"
+                else:
+                    if is_markdown:
+                        button_label = "✏️ Edit"
+                        button_help = "Edit markdown"
                     else:
-                        if is_markdown:
-                            button_label = "✏️ Edit"
-                            button_help = "Edit markdown"
-                        else:
-                            button_label = "⚙️ Edit"
-                            button_help = "Edit configuration"
+                        button_label = "⚙️ Edit"
+                        button_help = "Edit configuration"
 
-                    if st.button(button_label, help=button_help, use_container_width=True):
-                        st.session_state.edit_mode[notebook_id] = not in_edit_mode
-                        st.rerun()
+                if st.button(button_label, help=button_help, key="toolbar_edit"):
+                    st.session_state.edit_mode[notebook_id] = not in_edit_mode
+                    st.rerun()
 
-        with col2:
-            # Theme toggle
-            theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
-            theme_help = "Switch to dark mode" if st.session_state.theme == 'light' else "Switch to light mode"
+        # Theme toggle
+        theme_icon = "🌙" if st.session_state.theme == 'light' else "☀️"
+        theme_help = "Switch to dark mode" if st.session_state.theme == 'light' else "Switch to light mode"
 
-            if st.button(theme_icon, help=theme_help, use_container_width=True):
-                st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
-                st.rerun()
+        if st.button(theme_icon, help=theme_help, key="toolbar_theme"):
+            st.session_state.theme = 'dark' if st.session_state.theme == 'light' else 'light'
+            st.rerun()
 
     def _render_compact_tabs(self):
         """Render compact tab bar in header."""
-        tab_cols = st.columns(min(len(st.session_state.open_tabs), 4))
+        # Display tabs as simple text with active indicator
+        tab_labels = []
+        for notebook_id, notebook_path, notebook_config in st.session_state.open_tabs[:4]:
+            is_active = st.session_state.active_tab == notebook_id
+            title = notebook_config.notebook.title
+            if len(title) > 20:
+                title = title[:17] + "..."
 
-        for i, (notebook_id, notebook_path, notebook_config) in enumerate(st.session_state.open_tabs[:4]):
-            if i < len(tab_cols):
-                with tab_cols[i]:
-                    is_active = st.session_state.active_tab == notebook_id
+            # Mark active tab
+            if is_active:
+                tab_labels.append(f"**📍 {title}**")
+            else:
+                tab_labels.append(title)
 
-                    # Truncate title if too long
-                    title = notebook_config.notebook.title
-                    if len(title) > 15:
-                        title = title[:12] + "..."
+        tabs_display = " • ".join(tab_labels)
 
-                    # Tab button with close
-                    col_tab, col_close = st.columns([0.8, 0.2])
-
-                    with col_tab:
-                        if st.button(
-                            title,
-                            key=f"header_tab_{notebook_id}",
-                            type="primary" if is_active else "secondary",
-                            use_container_width=True
-                        ):
-                            st.session_state.active_tab = notebook_id
-                            st.rerun()
-
-                    with col_close:
-                        if st.button("×", key=f"header_close_{notebook_id}"):
-                            close_tab(notebook_id)
-                            st.rerun()
-
-        # Show "..." if more tabs
         if len(st.session_state.open_tabs) > 4:
-            st.caption(f"+{len(st.session_state.open_tabs) - 4} more")
+            tabs_display += f" • +{len(st.session_state.open_tabs) - 4} more"
+
+        st.caption(tabs_display)
 
     def _render_filters(self, notebook_config):
         """Render filters for active notebook."""
