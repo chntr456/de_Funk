@@ -304,12 +304,13 @@ def render_slider_filter(filter_config: FilterConfig, current_value: Any) -> Any
     max_val = filter_config.max_value or 100
     default_val = current_value if current_value is not None else min_val
 
+    # Ensure all values are the same type (float) for Streamlit slider
     value = st.slider(
         "Value",
         min_value=float(min_val),
         max_value=float(max_val),
         value=float(default_val),
-        step=filter_config.step or 1.0,
+        step=float(filter_config.step) if filter_config.step else 1.0,
         key=f"slider_{filter_config.id}"
     )
 
