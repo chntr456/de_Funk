@@ -557,8 +557,14 @@ class NotebookVaultApp:
             st.session_state.current_notebook_id = None
 
         if st.session_state.current_notebook_id != notebook_id:
-            # Switching to a different notebook
-            self.notebook_manager.notebook_config = notebook_config
+            # Switching to a different notebook - MUST reload to get correct folder context
+            try:
+                # Call load_notebook to properly initialize folder filters and context
+                self.notebook_manager.load_notebook(str(notebook_path))
+            except Exception as e:
+                st.error(f"Error loading notebook context: {e}")
+                # Fallback to just setting config (old behavior)
+                self.notebook_manager.notebook_config = notebook_config
 
             # Check if we have cached model sessions for this notebook
             if notebook_id in st.session_state.notebook_model_sessions:
