@@ -126,8 +126,8 @@ class NotebookVaultApp:
 
     def _render_header(self):
         """Render professional header with toolbar and tabs."""
-        # Row 1: Edit and Theme buttons on the right
-        col_spacer, col_edit, col_theme = st.columns([0.8, 0.1, 0.1])
+        # Row 1: Edit, Filter, and Theme buttons on the right
+        col_spacer, col_edit, col_filter, col_theme = st.columns([0.7, 0.1, 0.1, 0.1])
 
         with col_edit:
             # Edit button (only if active notebook)
@@ -142,6 +142,22 @@ class NotebookVaultApp:
 
                     if st.button(button_label, help=button_help, key="toolbar_edit", use_container_width=True):
                         st.session_state.edit_mode[notebook_id] = not in_edit_mode
+                        st.rerun()
+
+        with col_filter:
+            # Filter editor button (only if active notebook)
+            if st.session_state.active_tab:
+                active_notebook = self._get_active_notebook()
+                if active_notebook:
+                    # Initialize filter editor state
+                    if 'filter_editor_open' not in st.session_state:
+                        st.session_state.filter_editor_open = False
+
+                    filter_icon = "🔍"
+                    filter_help = "Edit filter definitions"
+
+                    if st.button(filter_icon, help=filter_help, key="toolbar_filter", use_container_width=True):
+                        st.session_state.filter_editor_open = not st.session_state.filter_editor_open
                         st.rerun()
 
         with col_theme:
@@ -506,6 +522,10 @@ class NotebookVaultApp:
             from app.ui.components.dynamic_filters import render_dynamic_filters
             from app.ui.components.active_filters_display import render_active_filters_summary
 
+            # Show active filter summary FIRST (above filters)
+            render_active_filters_summary(notebook_config._filter_collection)
+            st.divider()
+
             # Render filter widgets
             render_dynamic_filters(
                 notebook_config._filter_collection,
@@ -513,10 +533,6 @@ class NotebookVaultApp:
                 self.ctx.connection,
                 self.universal_session
             )
-
-            # Show active filter summary AFTER filters are rendered
-            st.divider()
-            render_active_filters_summary(notebook_config._filter_collection)
         else:
             st.info("ℹ️ No filters defined in this notebook.\n\nAdd filters using `$filter${...}` syntax in your markdown.")
 
@@ -527,10 +543,136 @@ class NotebookVaultApp:
             None
         )
 
+    def _render_filter_editor(self):
+        """Render filter editor for the active notebook."""
+        active_notebook = self._get_active_notebook()
+        if not active_notebook:
+            st.warning("No active notebook")
+            return
+
+        notebook_id, notebook_path, notebook_config = active_notebook
+
+        # Header
+        st.title("🔍 Filter Editor")
+        st.markdown(f"**Notebook:** {notebook_config.notebook.title}")
+        st.caption(f"File: `{notebook_path.name}`")
+        st.divider()
+
+        # Check if notebook has filter collection
+        if not hasattr(notebook_config, '_filter_collection') or not notebook_config._filter_collection:
+            st.info("This notebook has no filters defined yet.")
+            st.markdown("""
+            **Add filters to your notebook** by editing the markdown file and adding `$filter${...}` blocks.
+
+            Example:
+            ```markdown
+            $filter${
+              id: ticker
+              label: Stock Tickers
+              type: select
+              multi: true
+              source: {model: company, table: fact_prices, column: ticker}
+              help_text: Select stocks to analyze
+            }
+            ```
+            """)
+            return
+
+        # Display current filters
+        st.subheader("📋 Current Filter Definitions")
+
+        filter_collection = notebook_config._filter_collection
+
+        # Show each filter in an expandable section
+        for filter_id, filter_config in filter_collection.filters.items():
+            with st.expander(f"**{filter_config.label}** (`{filter_id}`)", expanded=True):
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    st.markdown("**Type:**")
+                    st.code(filter_config.type.value)
+
+                    st.markdown("**ID:**")
+                    st.code(filter_id)
+
+                    if filter_config.help_text:
+                        st.markdown("**Help Text:**")
+                        st.caption(filter_config.help_text)
+
+                with col2:
+                    st.markdown("**Default Value:**")
+                    st.json(filter_config.default)
+
+                    if filter_config.source:
+                        st.markdown("**Source:**")
+                        st.code(f"{filter_config.source.model}.{filter_config.source.table}.{filter_config.source.column}")
+
+                    st.markdown("**Operator:**")
+                    st.code(filter_config.operator.value if filter_config.operator else "N/A")
+
+                # Show current value from session state
+                filter_state = filter_collection.get_state(filter_id)
+                if filter_state:
+                    st.markdown("**Current Runtime Value:**")
+                    session_key = f"filter_{filter_id}"
+                    current_value = st.session_state.get(session_key, filter_state.current_value)
+                    st.json(current_value)
+
+        st.divider()
+
+        # Instructions for editing
+        st.subheader("✏️ How to Edit Filters")
+        st.markdown("""
+        To modify filter definitions:
+
+        1. **Click the Edit button** (✏️) in the toolbar to switch to edit mode
+        2. **Edit the `$filter${...}` blocks** directly in the markdown
+        3. **Save your changes** to update the filters
+
+        **Filter Properties:**
+        - `id`: Unique identifier for the filter
+        - `label`: Display name shown to users
+        - `type`: Filter type (`select`, `date_range`, `slider`, `text_search`, `boolean`, `number_range`)
+        - `multi`: (for select) Allow multiple selections
+        - `source`: Database source for dynamic options `{model: X, table: Y, column: Z}`
+        - `default`: Default value
+        - `operator`: SQL operator (`in`, `eq`, `gte`, `lte`, `between`, `like`)
+        - `help_text`: Help text shown to users
+        - `min_value`, `max_value`, `step`: (for slider/number_range)
+        - `placeholder`: Placeholder text
+        """)
+
+        # Example template
+        with st.expander("📄 Filter Template"):
+            st.code("""$filter${
+  id: my_filter
+  label: My Filter Label
+  type: select
+  multi: true
+  source: {model: my_model, table: my_table, column: my_column}
+  default: []
+  operator: in
+  help_text: Description of what this filter does
+}""", language="markdown")
+
+        st.divider()
+
+        # Close button
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("✅ Close Filter Editor", use_container_width=True, type="primary"):
+                st.session_state.filter_editor_open = False
+                st.rerun()
+
     def _render_main_content(self):
         """Render main content area."""
         if not st.session_state.open_tabs:
             self._render_welcome()
+            return
+
+        # Check if filter editor is open
+        if st.session_state.get('filter_editor_open', False):
+            self._render_filter_editor()
             return
 
         # Render active notebook

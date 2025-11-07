@@ -28,8 +28,9 @@ def enable_chart_selection(fig, exhibit_id: str, on_click_callback: Optional[Cal
     )
 
     # Update traces to support selection
+    # Only use properties that work for all chart types (bars, lines, scatter)
     fig.update_traces(
-        selected=dict(marker=dict(opacity=1.0, size=8, color='yellow')),
+        selected=dict(marker=dict(opacity=1.0, color='yellow')),
         unselected=dict(marker=dict(opacity=0.3))
     )
 
