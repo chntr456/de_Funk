@@ -522,6 +522,10 @@ class NotebookVaultApp:
             from app.ui.components.dynamic_filters import render_dynamic_filters
             from app.ui.components.active_filters_display import render_active_filters_summary
 
+            # CRITICAL: Sync session state to filters BEFORE rendering
+            # This ensures filter changes from previous interactions are reflected
+            self.notebook_manager._sync_session_state_to_filters()
+
             # Show active filter summary FIRST (above filters)
             render_active_filters_summary(notebook_config._filter_collection)
             st.divider()
