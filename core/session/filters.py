@@ -163,8 +163,13 @@ class FilterEngine:
 
         for col_name, value in filters.items():
             if isinstance(value, dict):
-                # Range filter
-                if 'min' in value:
+                # Range filter - support both min/max AND start/end formats
+                # Date ranges use start/end, numeric ranges use min/max
+                if 'start' in value and 'end' in value:
+                    # Date range format
+                    conditions.append(f"{col_name} >= '{value['start']}'")
+                    conditions.append(f"{col_name} <= '{value['end']}'")
+                elif 'min' in value:
                     conditions.append(f"{col_name} >= '{value['min']}'")
                 if 'max' in value:
                     conditions.append(f"{col_name} <= '{value['max']}'")
@@ -217,8 +222,13 @@ class FilterEngine:
 
         for col_name, value in filters.items():
             if isinstance(value, dict):
-                # Range filter
-                if 'min' in value:
+                # Range filter - support both min/max AND start/end formats
+                # Date ranges use start/end, numeric ranges use min/max
+                if 'start' in value and 'end' in value:
+                    # Date range format
+                    conditions.append(f"{col_name} >= '{value['start']}'")
+                    conditions.append(f"{col_name} <= '{value['end']}'")
+                elif 'min' in value:
                     conditions.append(f"{col_name} >= '{value['min']}'")
                 if 'max' in value:
                     conditions.append(f"{col_name} <= '{value['max']}'")
