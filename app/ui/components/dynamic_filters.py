@@ -231,10 +231,14 @@ def render_select_filter(
         elif not isinstance(current_value, list):
             current_value = [current_value]
 
+        # Filter current_value to only include values that exist in options
+        # This prevents Streamlit errors when folder context has values not in the dataset
+        valid_defaults = [v for v in current_value if v in options]
+
         selected = st.multiselect(
             "Select options",
             options=options,
-            default=current_value,
+            default=valid_defaults,
             placeholder=filter_config.placeholder or "Choose options...",
             key=f"select_{filter_config.id}"
         )
