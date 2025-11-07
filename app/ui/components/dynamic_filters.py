@@ -96,9 +96,25 @@ def render_filter(
     filter_id = filter_config.id
     filter_state = filter_collection.get_state(filter_id)
 
-    # Get current value from session state or use default
+    # Get current value - PRIORITY ORDER:
+    # 1. Session state (user interaction)
+    # 2. Folder context (from .filter_context.yaml)
+    # 3. Notebook default (from $filter$ block)
     session_key = f"filter_{filter_id}"
-    current_value = st.session_state.get(session_key, filter_config.default)
+
+    # Check folder context first
+    default_value = filter_config.default
+    if notebook_session:
+        folder_filters = getattr(notebook_session, '_extra_folder_filters', {})
+        if filter_id in folder_filters:
+            default_value = folder_filters[filter_id]
+        else:
+            # Also check regular filter context
+            filter_context = notebook_session.get_filter_context() if hasattr(notebook_session, 'get_filter_context') else {}
+            if filter_id in filter_context:
+                default_value = filter_context[filter_id]
+
+    current_value = st.session_state.get(session_key, default_value)
 
     # Render based on filter type
     if filter_config.type == FilterType.DATE_RANGE:
