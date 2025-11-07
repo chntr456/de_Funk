@@ -170,6 +170,7 @@ if test_notebook.exists() and nb_config:
 
         mock_exhibit = Exhibit(
             id="test_exhibit",
+            title="Test Exhibit",
             type=ExhibitType.METRIC_CARDS,
             source="company.fact_prices",
             metrics=[]
