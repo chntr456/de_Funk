@@ -167,6 +167,9 @@ def render_markdown_block(content: str):
     """
     Render a markdown content block.
 
+    Text paragraphs are wrapped in a collapsible "📄 Details" expander
+    to enable a clean view of just exhibits and headers.
+
     Supports:
     - Standard markdown (headers, bold, italic, lists, etc.)
     - HTML tags (for collapsible sections)
@@ -177,6 +180,16 @@ def render_markdown_block(content: str):
     Args:
         content: Markdown content string
     """
+    # Check if this content is substantial text (more than just a header)
+    lines = content.strip().split('\n')
+    non_empty_lines = [l for l in lines if l.strip()]
+
+    # Detect if this is a header-only block (just 1-2 lines starting with #)
+    is_header_only = (
+        len(non_empty_lines) <= 2 and
+        any(line.strip().startswith('#') for line in non_empty_lines)
+    )
+
     # Configure markdown extensions
     md = markdown.Markdown(
         extensions=[
@@ -191,8 +204,13 @@ def render_markdown_block(content: str):
     # Convert markdown to HTML
     html = md.convert(content)
 
-    # Render HTML in Streamlit
-    st.markdown(html, unsafe_allow_html=True)
+    # If it's just a header, render directly
+    if is_header_only:
+        st.markdown(html, unsafe_allow_html=True)
+    else:
+        # Wrap text paragraphs in collapsible section for clean view
+        with st.expander("📄 Details", expanded=False):
+            st.markdown(html, unsafe_allow_html=True)
 
 
 def render_notebook_header(notebook_config: NotebookConfig):

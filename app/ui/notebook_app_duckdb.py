@@ -748,18 +748,49 @@ class NotebookVaultApp:
         # Header
         st.info("📝 **Editing Markdown Notebook** - Changes save automatically")
 
+        # Custom CSS for prettier editor
+        st.markdown("""
+        <style>
+        /* Prettier text area styling */
+        textarea {
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace !important;
+            font-size: 14px !important;
+            line-height: 1.6 !important;
+            border: 2px solid #e0e0e0 !important;
+            border-radius: 8px !important;
+            padding: 16px !important;
+            background-color: #fafafa !important;
+        }
+
+        /* Dark mode adjustments */
+        [data-theme="dark"] textarea {
+            background-color: #1e1e1e !important;
+            border-color: #404040 !important;
+            color: #d4d4d4 !important;
+        }
+
+        /* Focus state */
+        textarea:focus {
+            border-color: #1c83e1 !important;
+            box-shadow: 0 0 0 3px rgba(28, 131, 225, 0.1) !important;
+            outline: none !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         # Load current content
         if notebook_id not in st.session_state.markdown_content:
             with open(notebook_path, 'r') as f:
                 st.session_state.markdown_content[notebook_id] = f.read()
 
-        # Editor
+        # Editor with larger size
         edited_content = st.text_area(
             "Markdown Content",
             value=st.session_state.markdown_content[notebook_id],
-            height=600,
+            height=800,  # Increased from 600
             key=f"editor_{notebook_id}",
-            help="Edit your notebook content. Save with Ctrl+S (auto-save enabled)"
+            help="Edit your notebook content. Use markdown syntax with $exhibits${...} and $filter${...} blocks",
+            label_visibility="collapsed"  # Hide label for cleaner look
         )
 
         # Auto-save on change
