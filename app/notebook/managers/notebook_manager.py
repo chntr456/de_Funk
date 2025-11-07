@@ -119,6 +119,10 @@ class NotebookManager:
         # Folder context supersedes notebook defaults (no duplicates)
         self._merge_filters_unified(folder_filters)
 
+        # CRITICAL: Sync session state values back into FilterCollection
+        # This ensures user-selected filter values persist across reruns
+        self._sync_session_state_to_filters()
+
         # Initialize model sessions from front matter
         self._initialize_model_sessions()
 
@@ -237,6 +241,45 @@ class NotebookManager:
                 filter_state = filter_collection.get_state(filter_id)
                 if filter_state:
                     filter_state.current_value = value
+
+    def _sync_session_state_to_filters(self):
+        """
+        Sync Streamlit session state values back into FilterCollection.
+
+        This is critical for ensuring filter values persist across reruns.
+        When a filter is changed in the UI:
+        1. Value is stored in st.session_state['filter_{filter_id}']
+        2. Page reruns, notebook reloads, FilterCollection recreated
+        3. This method syncs session state values back into FilterCollection
+        4. Exhibits can now see the updated filter values via get_active_filters()
+
+        Priority order for filter values:
+        1. Session state (user interaction) - HIGHEST priority
+        2. FilterState.current_value (folder context + notebook defaults)
+        """
+        if not hasattr(self.notebook_config, '_filter_collection') or not self.notebook_config._filter_collection:
+            return
+
+        try:
+            import streamlit as st
+        except ImportError:
+            # Not running in Streamlit context
+            return
+
+        filter_collection = self.notebook_config._filter_collection
+
+        # Sync each filter from session state
+        for filter_id in filter_collection.filters.keys():
+            session_key = f"filter_{filter_id}"
+
+            # Check if this filter has a value in session state
+            if session_key in st.session_state:
+                session_value = st.session_state[session_key]
+
+                # Update FilterState with session value (user interaction supersedes all)
+                filter_state = filter_collection.get_state(filter_id)
+                if filter_state:
+                    filter_state.current_value = session_value
 
     def _create_filter_config_from_value(self, filter_id: str, value: Any):
         """

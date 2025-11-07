@@ -36,9 +36,8 @@ class BaseExhibitRenderer(ABC):
 
         This method:
         1. Renders title and description
-        2. Renders measure selector (if configured)
-        3. Renders dimension selector (if configured)
-        4. Calls child class's render_chart() method
+        2. Renders measure/dimension selectors in nested expander (if configured)
+        3. Calls child class's render_chart() method
         """
         # Render title and description
         if self.exhibit.title:
@@ -52,18 +51,31 @@ class BaseExhibitRenderer(ABC):
             st.info("No data available for selected filters")
             return
 
-        # Process measures
-        self.selected_measures = self._process_measures()
+        # Check if we have any selectors
+        has_measure_selector = hasattr(self.exhibit, 'measure_selector') and self.exhibit.measure_selector
+        has_dimension_selector = hasattr(self.exhibit, 'dimension_selector') and self.exhibit.dimension_selector
+        has_selectors = has_measure_selector or has_dimension_selector
+
+        # Render selectors in nested expander if present
+        if has_selectors:
+            with st.expander("⚙️ Configure", expanded=True):
+                # Process measures
+                self.selected_measures = self._process_measures()
+
+                # Process dimension
+                self.selected_dimension = self._process_dimension()
+        else:
+            # No selectors - process normally
+            self.selected_measures = self._process_measures()
+            self.selected_dimension = self._process_dimension()
+
+        # Validate measures
         if not self.selected_measures:
             st.warning("No valid measures configured")
             return
 
-        # Process dimension
-        self.selected_dimension = self._process_dimension()
-
-        # Add divider if any selectors were rendered
-        if (hasattr(self.exhibit, 'measure_selector') and self.exhibit.measure_selector) or \
-           (hasattr(self.exhibit, 'dimension_selector') and self.exhibit.dimension_selector):
+        # Add divider between selectors and chart
+        if has_selectors:
             st.markdown("---")
 
         # Call child class's chart rendering method
