@@ -98,21 +98,12 @@ def render_filter(
 
     # Get current value - PRIORITY ORDER:
     # 1. Session state (user interaction)
-    # 2. Folder context (from .filter_context.yaml)
-    # 3. Notebook default (from $filter$ block)
+    # 2. Filter state current_value (merged notebook + folder context)
     session_key = f"filter_{filter_id}"
 
-    # Check folder context first
-    default_value = filter_config.default
-    if notebook_session:
-        folder_filters = getattr(notebook_session, '_extra_folder_filters', {})
-        if filter_id in folder_filters:
-            default_value = folder_filters[filter_id]
-        else:
-            # Also check regular filter context
-            filter_context = notebook_session.get_filter_context() if hasattr(notebook_session, 'get_filter_context') else {}
-            if filter_id in filter_context:
-                default_value = filter_context[filter_id]
+    # Use filter_state.current_value which already has merged folder + notebook values
+    # (set by _merge_filters_unified() in load_notebook())
+    default_value = filter_state.current_value if filter_state.current_value is not None else filter_config.default
 
     current_value = st.session_state.get(session_key, default_value)
 
