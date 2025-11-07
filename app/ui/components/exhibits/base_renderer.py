@@ -74,7 +74,7 @@ class BaseExhibitRenderer(ABC):
 
                 # Tab 0: Hide (empty - creates collapse effect)
                 with tabs[0]:
-                    st.caption("_Select a tab above to configure exhibit settings_")
+                    pass  # Empty tab for hide effect
 
                 # Tab 1: Measures (if present)
                 current_tab = 1
@@ -91,22 +91,26 @@ class BaseExhibitRenderer(ABC):
                         self.selected_dimension = self._process_dimension()
                 else:
                     self.selected_dimension = self._process_dimension()
+
+                # Validate measures
+                if not self.selected_measures:
+                    st.warning("No valid measures configured")
+                    return
+
+                # Render chart inside the expander
+                self.render_chart()
         else:
             # No selectors - process normally
             self.selected_measures = self._process_measures()
             self.selected_dimension = self._process_dimension()
 
-        # Validate measures
-        if not self.selected_measures:
-            st.warning("No valid measures configured")
-            return
+            # Validate measures
+            if not self.selected_measures:
+                st.warning("No valid measures configured")
+                return
 
-        # Add divider before chart if we had any selectors
-        if has_measure_selector or has_dimension_selector:
-            st.markdown("---")
-
-        # Call child class's chart rendering method
-        self.render_chart()
+            # Call child class's chart rendering method
+            self.render_chart()
 
     def _process_measures(self) -> List[str]:
         """
