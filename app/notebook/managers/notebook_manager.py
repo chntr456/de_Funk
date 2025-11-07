@@ -124,17 +124,32 @@ class NotebookManager:
 
         # Apply ALL folder filters (folder context drives filtering)
         if folder_filters:
-            # Try to apply each folder filter
+            # Check if this is a markdown notebook with filter collection
+            has_filter_collection = (hasattr(self.notebook_config, '_filter_collection') and
+                                     self.notebook_config._filter_collection)
+
             for key, value in folder_filters.items():
+                filter_in_notebook = False
+
+                # Check if filter exists in markdown filter collection
+                if has_filter_collection:
+                    filter_state = self.notebook_config._filter_collection.get_state(key)
+                    if filter_state is not None:
+                        # Filter exists in markdown - update its value
+                        filter_state.set_value(value)
+                        filter_in_notebook = True
+
+                # Check if filter exists in YAML variables
                 if self.notebook_config.variables and key in self.notebook_config.variables:
-                    # Filter matches notebook variable - add to FilterContext
                     try:
                         self.filter_context.set(key, value)
+                        filter_in_notebook = True
                     except (ValueError, KeyError) as e:
-                        # Validation failed, but store for query filtering anyway
+                        # Validation failed, store for query filtering anyway
                         self._extra_folder_filters[key] = value
-                else:
-                    # Filter NOT in notebook variables - store for query filtering
+
+                # If filter not found in notebook, store for query filtering
+                if not filter_in_notebook:
                     self._extra_folder_filters[key] = value
 
         # Initialize model sessions from front matter
@@ -401,6 +416,20 @@ class NotebookManager:
 
                 else:
                     filters[filter_id] = value
+
+            # Add extra folder filters (not defined in notebook but in folder context)
+            if hasattr(self, '_extra_folder_filters'):
+                for var_id, value in self._extra_folder_filters.items():
+                    if value is not None and var_id not in filters:
+                        if isinstance(value, list):
+                            filters[var_id] = value
+                        elif isinstance(value, dict):
+                            filters[var_id] = value
+                        elif isinstance(value, (int, float)) and value > 0:
+                            # Convert numeric values to min range for filtering
+                            filters[var_id] = {'min': value}
+                        else:
+                            filters[var_id] = value
 
         # Use old filter context system
         elif self.filter_context and self.notebook_config:
