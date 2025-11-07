@@ -136,7 +136,7 @@ class NotebookManager:
                     filter_state = self.notebook_config._filter_collection.get_state(key)
                     if filter_state is not None:
                         # Filter exists in markdown - update its value
-                        filter_state.set_value(value)
+                        filter_state.current_value = value
                         filter_in_notebook = True
 
                 # Check if filter exists in YAML variables
