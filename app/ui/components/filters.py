@@ -84,28 +84,46 @@ def render_filters_section(notebook_config, notebook_session, connection=None, s
         filter_context = notebook_session.get_filter_context()
         filter_values = {}
 
-        # Render each variable as a filter control
-        for var_id, variable in notebook_config.variables.items():
-            if variable.type == VariableType.DATE_RANGE:
-                filter_values[var_id] = render_date_range_filter(var_id, variable, notebook_session)
+        # First, render auto-generated folder filters (not defined in notebook)
+        extra_folder_filters = getattr(notebook_session, '_extra_folder_filters', {})
+        if extra_folder_filters:
+            st.caption("📁 **Folder Filters** (applied automatically)")
+            for var_id, value in extra_folder_filters.items():
+                # Skip if already defined in notebook variables
+                if notebook_config.variables and var_id in notebook_config.variables:
+                    continue
 
-            elif variable.type == VariableType.MULTI_SELECT:
-                filter_values[var_id] = render_multi_select_filter(
-                    var_id, variable, notebook_session=notebook_session,
-                    connection=connection, storage_service=storage_service
-                )
+                # Auto-generate widget based on value type
+                result = render_auto_filter(var_id, value)
+                if result is not None:
+                    filter_values[var_id] = result
 
-            elif variable.type == VariableType.SINGLE_SELECT:
-                filter_values[var_id] = render_single_select_filter(
-                    var_id, variable, notebook_session=notebook_session,
-                    connection=connection, storage_service=storage_service
-                )
+            if extra_folder_filters:
+                st.divider()
 
-            elif variable.type == VariableType.NUMBER:
-                filter_values[var_id] = render_number_filter(var_id, variable, notebook_session)
+        # Then render notebook-defined variables
+        if notebook_config.variables:
+            for var_id, variable in notebook_config.variables.items():
+                if variable.type == VariableType.DATE_RANGE:
+                    filter_values[var_id] = render_date_range_filter(var_id, variable, notebook_session)
 
-            elif variable.type == VariableType.BOOLEAN:
-                filter_values[var_id] = render_boolean_filter(var_id, variable, notebook_session)
+                elif variable.type == VariableType.MULTI_SELECT:
+                    filter_values[var_id] = render_multi_select_filter(
+                        var_id, variable, notebook_session=notebook_session,
+                        connection=connection, storage_service=storage_service
+                    )
+
+                elif variable.type == VariableType.SINGLE_SELECT:
+                    filter_values[var_id] = render_single_select_filter(
+                        var_id, variable, notebook_session=notebook_session,
+                        connection=connection, storage_service=storage_service
+                    )
+
+                elif variable.type == VariableType.NUMBER:
+                    filter_values[var_id] = render_number_filter(var_id, variable, notebook_session)
+
+                elif variable.type == VariableType.BOOLEAN:
+                    filter_values[var_id] = render_boolean_filter(var_id, variable, notebook_session)
 
         # Update filter context
         if filter_values:
@@ -312,3 +330,100 @@ def render_boolean_filter(var_id: str, variable, notebook_session=None) -> bool:
         key=f"filter_{var_id}",
         help=variable.description,
     )
+
+def render_auto_filter(var_id: str, value: Any) -> Any:
+    """
+    Auto-generate filter widget based on value type from folder context.
+    
+    This allows folder filters to create UI widgets even when notebook
+    doesn't define the filter variables.
+    
+    Args:
+        var_id: Variable identifier
+        value: Current value from folder context
+        
+    Returns:
+        Widget return value
+    """
+    # Friendly label from var_id
+    label = var_id.replace('_', ' ').title()
+    
+    # Auto-detect widget type from value
+    if isinstance(value, list):
+        # Multi-select
+        return st.multiselect(
+            label,
+            options=value,
+            default=value,
+            key=f"filter_{var_id}",
+            help=f"Folder filter: {var_id}"
+        )
+    
+    elif isinstance(value, dict):
+        if 'start' in value and 'end' in value:
+            # Date range
+            from datetime import datetime
+            start_val = value['start']
+            end_val = value['end']
+            
+            if isinstance(start_val, str):
+                start_val = datetime.fromisoformat(start_val.replace('Z', '+00:00')).date()
+            if isinstance(end_val, str):
+                end_val = datetime.fromisoformat(end_val.replace('Z', '+00:00')).date()
+                
+            start_date = st.date_input(
+                f"{label} (Start)",
+                value=start_val,
+                key=f"filter_{var_id}_start"
+            )
+            end_date = st.date_input(
+                f"{label} (End)",
+                value=end_val,
+                key=f"filter_{var_id}_end"
+            )
+            return {'start': start_date, 'end': end_date}
+        
+        elif 'min' in value or 'max' in value:
+            # Number range
+            min_val = value.get('min', 0)
+            max_val = value.get('max', 1000000)
+            return st.slider(
+                label,
+                min_value=float(min_val),
+                max_value=float(max_val),
+                value=(float(min_val), float(max_val)),
+                key=f"filter_{var_id}"
+            )
+        else:
+            # Unknown dict type - show as text
+            st.caption(f"**{label}**: {value}")
+            return value
+    
+    elif isinstance(value, bool):
+        # Boolean
+        return st.checkbox(
+            label,
+            value=value,
+            key=f"filter_{var_id}"
+        )
+    
+    elif isinstance(value, (int, float)):
+        # Number
+        return st.number_input(
+            label,
+            value=float(value),
+            key=f"filter_{var_id}"
+        )
+    
+    elif isinstance(value, str):
+        # Text input
+        return st.text_input(
+            label,
+            value=value,
+            key=f"filter_{var_id}"
+        )
+    
+    else:
+        # Unknown type - show as caption
+        st.caption(f"**{label}**: {value}")
+        return value

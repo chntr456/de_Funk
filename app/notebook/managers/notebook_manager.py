@@ -399,23 +399,44 @@ class NotebookManager:
 
             # Convert filter values based on variable types
             for var_id, value in context_filters.items():
-                if var_id not in self.notebook_config.variables:
-                    continue
+                if var_id in self.notebook_config.variables:
+                    # Variable defined in notebook - use its type for conversion
+                    variable = self.notebook_config.variables[var_id]
 
-                variable = self.notebook_config.variables[var_id]
-
-                # Convert to FilterEngine format
-                if variable.type.value == 'number' and not isinstance(value, dict):
-                    if value is not None and value > 0:
-                        filters[var_id] = {'min': value}
-                elif variable.type.value == 'date_range':
-                    filters[var_id] = value
-                elif variable.type.value == 'multi_select':
-                    if value:
+                    # Convert to FilterEngine format
+                    if variable.type.value == 'number' and not isinstance(value, dict):
+                        if value is not None and value > 0:
+                            filters[var_id] = {'min': value}
+                    elif variable.type.value == 'date_range':
                         filters[var_id] = value
+                    elif variable.type.value == 'multi_select':
+                        if value:
+                            filters[var_id] = value
+                    else:
+                        if value is not None:
+                            filters[var_id] = value
                 else:
+                    # Variable NOT defined in notebook, but exists in folder context
+                    # Apply it anyway (folder context drives filtering)
                     if value is not None:
-                        filters[var_id] = value
+                        # Smart conversion based on value type
+                        if isinstance(value, list):
+                            filters[var_id] = value  # Multi-select
+                        elif isinstance(value, dict) and ('start' in value or 'min' in value):
+                            filters[var_id] = value  # Date range or number range
+                        else:
+                            filters[var_id] = value  # Direct value
+
+            # Also include extra folder filters that couldn't be added to FilterContext
+            if hasattr(self, '_extra_folder_filters'):
+                for var_id, value in self._extra_folder_filters.items():
+                    if value is not None and var_id not in filters:
+                        if isinstance(value, list):
+                            filters[var_id] = value
+                        elif isinstance(value, dict):
+                            filters[var_id] = value
+                        else:
+                            filters[var_id] = value
 
         # Apply exhibit-level filters (override notebook filters)
         if hasattr(exhibit, 'filters') and exhibit.filters:

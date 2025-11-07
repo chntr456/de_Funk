@@ -557,14 +557,32 @@ class NotebookVaultApp:
             st.session_state.current_notebook_id = None
 
         if st.session_state.current_notebook_id != notebook_id:
-            # Switching to a different notebook - MUST reload to get correct folder context
-            try:
-                # Call load_notebook to properly initialize folder filters and context
-                self.notebook_manager.load_notebook(str(notebook_path))
-            except Exception as e:
-                st.error(f"Error loading notebook context: {e}")
-                # Fallback to just setting config (old behavior)
-                self.notebook_manager.notebook_config = notebook_config
+            # Switching to a different notebook
+            # Set the config (already parsed and loaded in sidebar)
+            self.notebook_manager.notebook_config = notebook_config
+            self.notebook_manager.current_notebook_path = notebook_path
+
+            # CRITICAL: Update folder context WITHOUT calling load_notebook()
+            # (load_notebook creates DuckDB connections which causes segfaults during render)
+            new_folder = self.notebook_manager.folder_context_manager.get_folder_for_notebook(notebook_path)
+            self.notebook_manager.current_folder = new_folder
+
+            # Load folder filters for the new folder
+            folder_filters = self.notebook_manager.folder_context_manager.get_filters(new_folder)
+
+            # Reinitialize filter context with folder filters
+            from app.notebook.filters.context import FilterContext
+            self.notebook_manager.filter_context = FilterContext(self.notebook_manager.notebook_config.variables)
+            if folder_filters:
+                # Apply all folder filters (we'll use them even if not in notebook variables)
+                for key, value in folder_filters.items():
+                    try:
+                        self.notebook_manager.filter_context.set(key, value)
+                    except (ValueError, KeyError):
+                        # Filter not in notebook variables - store it anyway for later use
+                        if not hasattr(self.notebook_manager, '_extra_folder_filters'):
+                            self.notebook_manager._extra_folder_filters = {}
+                        self.notebook_manager._extra_folder_filters[key] = value
 
             # Check if we have cached model sessions for this notebook
             if notebook_id in st.session_state.notebook_model_sessions:
