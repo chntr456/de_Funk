@@ -21,7 +21,7 @@ print("=" * 80)
 print()
 
 # Initialize
-from core.repo_context import RepoContext
+from core.context import RepoContext
 from app.session.universal_session import UniversalSession
 from app.notebook.managers.notebook_manager import NotebookManager
 
