@@ -35,6 +35,24 @@ def render_dynamic_filters(
 
     st.header("🔍 Filters")
 
+    # CRITICAL: Clear filter widget state when folder changes
+    # This ensures widgets don't retain old values from previous folders
+    current_folder = str(notebook_session.get_current_folder()) if hasattr(notebook_session, 'get_current_folder') else None
+    if current_folder:
+        # Track the last folder we rendered filters for
+        if 'last_filter_folder' not in st.session_state:
+            st.session_state.last_filter_folder = None
+
+        # If folder changed, clear all filter widget keys from session state
+        if st.session_state.last_filter_folder != current_folder:
+            # Find all filter widget keys and delete them
+            keys_to_delete = [k for k in st.session_state.keys() if k.startswith('filter_')]
+            for key in keys_to_delete:
+                del st.session_state[key]
+
+            # Update tracked folder
+            st.session_state.last_filter_folder = current_folder
+
     # Track if any filter changed
     filter_changed = False
 

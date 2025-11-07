@@ -61,6 +61,24 @@ def render_filters_section(notebook_config, notebook_session, connection=None, s
     # Import here to avoid circular dependency
     from app.notebook.schema import VariableType
 
+    # CRITICAL: Clear filter widget state when folder changes
+    # This ensures widgets don't retain old values from previous folders
+    current_folder = str(notebook_session.get_current_folder()) if hasattr(notebook_session, 'get_current_folder') else None
+    if current_folder:
+        # Track the last folder we rendered filters for
+        if 'last_filter_folder' not in st.session_state:
+            st.session_state.last_filter_folder = None
+
+        # If folder changed, clear all filter widget keys from session state
+        if st.session_state.last_filter_folder != current_folder:
+            # Find all filter widget keys and delete them
+            keys_to_delete = [k for k in st.session_state.keys() if k.startswith('filter_')]
+            for key in keys_to_delete:
+                del st.session_state[key]
+
+            # Update tracked folder
+            st.session_state.last_filter_folder = current_folder
+
     # Create a scrollable container for filters
     with st.container():
         filter_context = notebook_session.get_filter_context()
