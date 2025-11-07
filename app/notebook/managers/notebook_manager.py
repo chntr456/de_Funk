@@ -58,8 +58,7 @@ class NotebookManager:
         self.session = universal_session
         self.repo_root = repo_root or Path.cwd()
 
-        # Initialize parsers
-        self.yaml_parser = NotebookParser(self.repo_root)
+        # Initialize markdown parser (only format supported)
         self.markdown_parser = MarkdownNotebookParser(self.repo_root)
 
         # Folder-based filter context management
@@ -76,13 +75,16 @@ class NotebookManager:
 
     def load_notebook(self, notebook_path: str) -> NotebookConfig:
         """
-        Load and parse a notebook (YAML or Markdown format).
+        Load and parse a markdown notebook.
+
+        Only markdown format with $filter${...} syntax is supported.
+        YAML notebook format has been deprecated.
 
         Handles folder context switching - if notebook is in a different folder,
         switches to that folder's filter context.
 
         Args:
-            notebook_path: Path to notebook file (.yaml or .md)
+            notebook_path: Path to notebook file (.md)
 
         Returns:
             NotebookConfig object
@@ -92,17 +94,15 @@ class NotebookManager:
         """
         path = Path(notebook_path).resolve()
 
-        # Detect format based on extension
+        # Only support markdown format
         if path.suffix in ['.md', '.markdown']:
             # Parse markdown notebook
             self.notebook_config = self.markdown_parser.parse_file(notebook_path)
-        elif path.suffix in ['.yaml', '.yml']:
-            # Parse YAML notebook
-            self.notebook_config = self.yaml_parser.parse_file(notebook_path)
         else:
             raise ValueError(
                 f"Unsupported notebook format: {path.suffix}. "
-                "Supported formats: .md, .markdown, .yaml, .yml"
+                "Only markdown format (.md, .markdown) is supported. "
+                "YAML notebooks have been deprecated - please convert to markdown with $filter${...} syntax."
             )
 
         # Track notebook path and folder

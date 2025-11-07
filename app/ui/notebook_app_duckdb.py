@@ -119,16 +119,6 @@ class NotebookVaultApp:
                 st.divider()
                 active_notebook = self._get_active_notebook()
                 if active_notebook:
-                    # Show folder filter context editor
-                    try:
-                        self._render_folder_filter_editor()
-                    except Exception as e:
-                        st.error(f"Filter context error: {e}")
-                        import traceback
-                        st.code(traceback.format_exc())
-
-                    st.divider()
-
                     self._render_filters(active_notebook[2])
 
         # Main content area
@@ -509,25 +499,26 @@ class NotebookVaultApp:
 
     def _render_filters(self, notebook_config):
         """Render filters for active notebook."""
-        # Check for dynamic filters (new system)
+        # Only support dynamic filters ($filter$ syntax in markdown)
         if (hasattr(notebook_config, '_filter_collection') and
             notebook_config._filter_collection and
             notebook_config._filter_collection.filters):
             from app.ui.components.dynamic_filters import render_dynamic_filters
+            from app.ui.components.active_filters_display import render_active_filters_summary
+
+            # Render filter widgets
             render_dynamic_filters(
                 notebook_config._filter_collection,
                 self.notebook_manager,
                 self.ctx.connection,
                 self.universal_session
             )
-        elif notebook_config.variables:
-            # Old filter system (backward compat)
-            render_filters_section(
-                notebook_config,
-                self.notebook_manager,
-                self.ctx.connection,
-                self.universal_session
-            )
+
+            # Show active filter summary AFTER filters are rendered
+            st.divider()
+            render_active_filters_summary(notebook_config._filter_collection)
+        else:
+            st.info("ℹ️ No filters defined in this notebook.\n\nAdd filters using `$filter${...}` syntax in your markdown.")
 
     def _get_active_notebook(self):
         """Get the active notebook tuple."""
