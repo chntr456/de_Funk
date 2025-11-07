@@ -60,24 +60,36 @@ class BaseExhibitRenderer(ABC):
         # Render selectors in a single expander with tabs
         if has_measure_selector or has_dimension_selector:
             with st.expander("⚙️ Configuration", expanded=True):
-                # If we have both selectors, use tabs
-                if has_measure_selector and has_dimension_selector:
-                    tabs = st.tabs(["📊 Measures", "🔀 Dimensions"])
+                # Build tab list with empty "Hide" tab first
+                tab_names = ["➖ Hide"]
 
-                    with tabs[0]:
+                if has_measure_selector:
+                    tab_names.append("📊 Measures")
+
+                if has_dimension_selector:
+                    tab_names.append("🔀 Dimensions")
+
+                # Create tabs
+                tabs = st.tabs(tab_names)
+
+                # Tab 0: Hide (empty - creates collapse effect)
+                with tabs[0]:
+                    st.caption("_Select a tab above to configure exhibit settings_")
+
+                # Tab 1: Measures (if present)
+                current_tab = 1
+                if has_measure_selector:
+                    with tabs[current_tab]:
                         self.selected_measures = self._process_measures()
-
-                    with tabs[1]:
-                        self.selected_dimension = self._process_dimension()
-
-                # If only measure selector
-                elif has_measure_selector:
-                    self.selected_measures = self._process_measures()
-                    self.selected_dimension = self._process_dimension()
-
-                # If only dimension selector
+                    current_tab += 1
                 else:
                     self.selected_measures = self._process_measures()
+
+                # Tab 2 or 1: Dimensions (if present)
+                if has_dimension_selector:
+                    with tabs[current_tab]:
+                        self.selected_dimension = self._process_dimension()
+                else:
                     self.selected_dimension = self._process_dimension()
         else:
             # No selectors - process normally
