@@ -232,6 +232,17 @@ class MeasureSelectorConfig:
 
 
 @dataclass
+class DimensionSelectorConfig:
+    """Configuration for dynamic dimension selection in exhibits."""
+    available_dimensions: List[str]  # List of dimension column names available for selection
+    default_dimension: Optional[str] = None  # Dimension selected by default
+    label: Optional[str] = None  # Label for the selector UI
+    selector_type: str = "radio"  # Type: radio, selectbox
+    help_text: Optional[str] = None  # Help text for the selector
+    applies_to: str = "color"  # What the dimension applies to: "color", "x", "group_by"
+
+
+@dataclass
 class Exhibit:
     """Exhibit definition (visualization)."""
     id: str
@@ -256,6 +267,14 @@ class Exhibit:
 
     # Measure selector (dynamic measure selection)
     measure_selector: Optional[MeasureSelectorConfig] = None
+
+    # Dimension selector (dynamic dimension selection for grouping/coloring)
+    dimension_selector: Optional[DimensionSelectorConfig] = None
+
+    # Collapsible exhibit configuration
+    collapsible: bool = False  # Whether to render exhibit in collapsible section
+    collapsible_title: Optional[str] = None  # Title for collapsible section (defaults to exhibit title)
+    collapsible_expanded: bool = True  # Whether collapsible section is expanded by default
 
     # Weighted aggregate configurations
     weighting: Optional[WeightingConfig] = None

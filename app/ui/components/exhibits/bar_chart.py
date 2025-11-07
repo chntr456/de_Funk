@@ -14,6 +14,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from .measure_selector import render_measure_selector
+from .dimension_selector import render_dimension_selector
 from .click_events import enable_chart_selection
 
 
@@ -77,6 +78,37 @@ def render_bar_chart(exhibit, pdf: pd.DataFrame):
         st.warning("No valid measures found in data")
         return
 
+    # Check if dynamic dimension selector is configured
+    color_dimension = None
+    if hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
+        # Render dimension selector and get selected dimension
+        selected_dimension = render_dimension_selector(
+            exhibit_id=exhibit.id,
+            dimension_selector_config=exhibit.dimension_selector,
+            available_columns=pdf.columns.tolist()
+        )
+
+        # Apply selected dimension based on applies_to setting
+        if exhibit.dimension_selector.applies_to == "color":
+            color_dimension = selected_dimension
+        # Can extend to support "x" or "group_by" in the future
+
+        # Add a divider
+        st.markdown("---")
+    else:
+        # Use static color_by if no dimension selector
+        color_dimension = exhibit.color_by if hasattr(exhibit, 'color_by') else None
+
+    # Auto-detect color dimension if not specified
+    # This fixes cross-sectional grouping - if ticker is in columns, use it by default
+    if not color_dimension:
+        # Check for common grouping dimensions in order of preference
+        auto_detect_dimensions = ['ticker', 'symbol', 'stock', 'exchange', 'sector', 'category']
+        for dim in auto_detect_dimensions:
+            if dim in pdf.columns:
+                color_dimension = dim
+                break
+
     # Sort by first y-measure for better visualization (descending)
     pdf_sorted = pdf.sort_values(by=y_measures[0], ascending=False)
 
@@ -88,7 +120,7 @@ def render_bar_chart(exhibit, pdf: pd.DataFrame):
             pdf_sorted,
             x=x_col,
             y=y_col,
-            color=exhibit.color_by if hasattr(exhibit, 'color_by') and exhibit.color_by else None,
+            color=color_dimension if color_dimension and color_dimension in pdf.columns else None,
             labels={
                 x_col: exhibit.x_axis.label or x_col.replace('_', ' ').title(),
                 y_col: exhibit.y_axis.label or y_col.replace('_', ' ').title()

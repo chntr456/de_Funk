@@ -26,6 +26,7 @@ from ..schema import (
     DateRangeDefault,
     AggregationType,
     MeasureSelectorConfig,
+    DimensionSelectorConfig,
 )
 from ..filters.dynamic import (
     FilterConfig,
@@ -438,6 +439,19 @@ class MarkdownNotebookParser:
                 help_text=ms_data.get('help_text')
             )
 
+        # Parse dimension selector configuration
+        dimension_selector = None
+        if 'dimension_selector' in data and isinstance(data['dimension_selector'], dict):
+            ds_data = data['dimension_selector']
+            dimension_selector = DimensionSelectorConfig(
+                available_dimensions=ds_data['available_dimensions'],
+                default_dimension=ds_data.get('default_dimension'),
+                label=ds_data.get('label'),
+                selector_type=ds_data.get('selector_type', 'radio'),
+                help_text=ds_data.get('help_text'),
+                applies_to=ds_data.get('applies_to', 'color')
+            )
+
         return Exhibit(
             id=exhibit_id,
             type=exhibit_type,
@@ -455,6 +469,11 @@ class MarkdownNotebookParser:
             interactive=data.get('interactive', True),
             metrics=metrics,
             measure_selector=measure_selector,
+            dimension_selector=dimension_selector,
+            # Collapsible configuration
+            collapsible=data.get('collapsible', False),
+            collapsible_title=data.get('collapsible_title'),
+            collapsible_expanded=data.get('collapsible_expanded', True),
             # Weighted aggregate fields
             weighting=data.get('weighting'),
             aggregate_by=data.get('aggregate_by'),

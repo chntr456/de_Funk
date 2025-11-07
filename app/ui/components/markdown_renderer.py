@@ -60,6 +60,8 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection):
     """
     Render a single exhibit block.
 
+    Supports collapsible exhibits via exhibit.collapsible flag.
+
     Args:
         block: Content block with exhibit data
         notebook_session: NotebookSession for data retrieval
@@ -78,36 +80,49 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection):
     from .exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_chart
     from .exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
 
-    try:
-        with st.spinner(f"Loading {exhibit.title or 'exhibit'}..."):
-            # Get data for exhibit
-            df = notebook_session.get_exhibit_data(exhibit_id)
-            pdf = connection.to_pandas(df)
+    # Check if exhibit should be rendered in collapsible section
+    is_collapsible = getattr(exhibit, 'collapsible', False)
+    collapsible_title = getattr(exhibit, 'collapsible_title', None) or exhibit.title
+    collapsible_expanded = getattr(exhibit, 'collapsible_expanded', True)
 
-        # Render based on type
-        from app.notebook.schema import ExhibitType
-        if exhibit.type == ExhibitType.METRIC_CARDS:
-            render_metric_cards(exhibit, pdf)
-        elif exhibit.type == ExhibitType.LINE_CHART:
-            render_line_chart(exhibit, pdf)
-        elif exhibit.type == ExhibitType.BAR_CHART:
-            render_bar_chart(exhibit, pdf)
-        elif exhibit.type == ExhibitType.DATA_TABLE:
-            render_data_table(exhibit, pdf)
-        elif exhibit.type == ExhibitType.WEIGHTED_AGGREGATE_CHART:
-            render_weighted_aggregate_chart(exhibit, pdf)
-        elif exhibit.type == ExhibitType.FORECAST_CHART:
-            render_forecast_chart(exhibit, pdf)
-        elif exhibit.type == ExhibitType.FORECAST_METRICS_TABLE:
-            render_forecast_metrics_table(exhibit, pdf)
-        else:
-            st.warning(f"Exhibit type not yet implemented: {exhibit.type}")
+    # Render function to execute the actual exhibit rendering
+    def _render_exhibit_content():
+        try:
+            with st.spinner(f"Loading {exhibit.title or 'exhibit'}..."):
+                # Get data for exhibit
+                df = notebook_session.get_exhibit_data(exhibit_id)
+                pdf = connection.to_pandas(df)
 
-    except Exception as e:
-        st.error(f"Error rendering exhibit: {str(e)}")
-        # Don't use expander - can't nest inside collapsible sections
-        import traceback
-        st.code(traceback.format_exc())
+            # Render based on type
+            from app.notebook.schema import ExhibitType
+            if exhibit.type == ExhibitType.METRIC_CARDS:
+                render_metric_cards(exhibit, pdf)
+            elif exhibit.type == ExhibitType.LINE_CHART:
+                render_line_chart(exhibit, pdf)
+            elif exhibit.type == ExhibitType.BAR_CHART:
+                render_bar_chart(exhibit, pdf)
+            elif exhibit.type == ExhibitType.DATA_TABLE:
+                render_data_table(exhibit, pdf)
+            elif exhibit.type == ExhibitType.WEIGHTED_AGGREGATE_CHART:
+                render_weighted_aggregate_chart(exhibit, pdf)
+            elif exhibit.type == ExhibitType.FORECAST_CHART:
+                render_forecast_chart(exhibit, pdf)
+            elif exhibit.type == ExhibitType.FORECAST_METRICS_TABLE:
+                render_forecast_metrics_table(exhibit, pdf)
+            else:
+                st.warning(f"Exhibit type not yet implemented: {exhibit.type}")
+
+        except Exception as e:
+            st.error(f"Error rendering exhibit: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+
+    # Wrap in expander if collapsible
+    if is_collapsible:
+        with st.expander(collapsible_title, expanded=collapsible_expanded):
+            _render_exhibit_content()
+    else:
+        _render_exhibit_content()
 
 
 def render_collapsible_section(block: Dict[str, Any], notebook_session, connection):
