@@ -73,19 +73,21 @@ def render_filters_section(notebook_config, notebook_session, connection=None, s
 
             elif variable.type == VariableType.MULTI_SELECT:
                 filter_values[var_id] = render_multi_select_filter(
-                    var_id, variable, connection=connection, storage_service=storage_service
+                    var_id, variable, notebook_session=notebook_session,
+                    connection=connection, storage_service=storage_service
                 )
 
             elif variable.type == VariableType.SINGLE_SELECT:
                 filter_values[var_id] = render_single_select_filter(
-                    var_id, variable, connection=connection, storage_service=storage_service
+                    var_id, variable, notebook_session=notebook_session,
+                    connection=connection, storage_service=storage_service
                 )
 
             elif variable.type == VariableType.NUMBER:
-                filter_values[var_id] = render_number_filter(var_id, variable)
+                filter_values[var_id] = render_number_filter(var_id, variable, notebook_session)
 
             elif variable.type == VariableType.BOOLEAN:
-                filter_values[var_id] = render_boolean_filter(var_id, variable)
+                filter_values[var_id] = render_boolean_filter(var_id, variable, notebook_session)
 
         # Update filter context
         if filter_values:
@@ -126,13 +128,14 @@ def render_date_range_filter(var_id: str, variable, notebook_session) -> Dict[st
     }
 
 
-def render_multi_select_filter(var_id: str, variable, connection=None, storage_service=None) -> List[Any]:
+def render_multi_select_filter(var_id: str, variable, notebook_session=None, connection=None, storage_service=None) -> List[Any]:
     """
     Render multi-select filter with dynamic options from database.
 
     Args:
         var_id: Variable identifier
         variable: Variable configuration
+        notebook_session: NotebookSession for filter context (to get folder filter values)
         connection: Optional DataConnection for querying dynamic options
         storage_service: Optional StorageService for loading table data
 
@@ -169,7 +172,17 @@ def render_multi_select_filter(var_id: str, variable, connection=None, storage_s
         # No options source, use default
         options = variable.default if variable.default else []
 
+    # Get current value from filter context (includes folder filters)
     default = variable.default if variable.default else []
+    if notebook_session:
+        filter_context = notebook_session.get_filter_context()
+        current_value = filter_context.get(var_id)
+        if current_value is not None:
+            # Use folder filter value if available
+            if isinstance(current_value, list):
+                default = current_value
+            else:
+                default = [current_value]
 
     # Filter default to only include values that exist in options
     if default and options:
@@ -184,13 +197,14 @@ def render_multi_select_filter(var_id: str, variable, connection=None, storage_s
     )
 
 
-def render_single_select_filter(var_id: str, variable, connection=None, storage_service=None) -> Any:
+def render_single_select_filter(var_id: str, variable, notebook_session=None, connection=None, storage_service=None) -> Any:
     """
     Render single-select filter with dynamic options from database.
 
     Args:
         var_id: Variable identifier
         variable: Variable configuration
+        notebook_session: NotebookSession for filter context (to get folder filter values)
         connection: Optional DataConnection for querying dynamic options
         storage_service: Optional StorageService for loading table data
 
@@ -227,7 +241,13 @@ def render_single_select_filter(var_id: str, variable, connection=None, storage_
         # No options source, use default
         options = [variable.default] if variable.default else []
 
+    # Get current value from filter context (includes folder filters)
     default = variable.default
+    if notebook_session:
+        filter_context = notebook_session.get_filter_context()
+        current_value = filter_context.get(var_id)
+        if current_value is not None:
+            default = current_value
 
     return st.selectbox(
         variable.display_name,
@@ -238,9 +258,16 @@ def render_single_select_filter(var_id: str, variable, connection=None, storage_
     )
 
 
-def render_number_filter(var_id: str, variable) -> float:
+def render_number_filter(var_id: str, variable, notebook_session=None) -> float:
     """Render number filter."""
     default = variable.default if variable.default is not None else 0.0
+
+    # Get current value from filter context (includes folder filters)
+    if notebook_session:
+        filter_context = notebook_session.get_filter_context()
+        current_value = filter_context.get(var_id)
+        if current_value is not None:
+            default = current_value
 
     return st.number_input(
         variable.display_name,
@@ -250,9 +277,16 @@ def render_number_filter(var_id: str, variable) -> float:
     )
 
 
-def render_boolean_filter(var_id: str, variable) -> bool:
+def render_boolean_filter(var_id: str, variable, notebook_session=None) -> bool:
     """Render boolean filter."""
     default = variable.default if variable.default is not None else False
+
+    # Get current value from filter context (includes folder filters)
+    if notebook_session:
+        filter_context = notebook_session.get_filter_context()
+        current_value = filter_context.get(var_id)
+        if current_value is not None:
+            default = current_value
 
     return st.checkbox(
         variable.display_name,
