@@ -58,19 +58,18 @@ def render_dimension_selector(
 
     if selector_type == "radio":
         # Render radio buttons (horizontal)
-        st.markdown(f"**{label}**")
         if dimension_selector_config.help_text:
             st.caption(dimension_selector_config.help_text)
 
         current_value = st.session_state[session_key]
         selected_dimension = st.radio(
-            label="",  # Empty label since we show it above
+            label=label,  # Use actual label for accessibility
             options=available_dimensions,
             index=available_dimensions.index(current_value) if current_value in available_dimensions else 0,
             format_func=lambda x: x.replace('_', ' ').title(),
             horizontal=True,
             key=f"{session_key}_radio",
-            label_visibility="collapsed"
+            label_visibility="visible"  # Show label for accessibility
         )
         st.session_state[session_key] = selected_dimension
 

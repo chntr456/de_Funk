@@ -61,6 +61,7 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection):
     Render a single exhibit block.
 
     Supports collapsible exhibits via exhibit.collapsible flag.
+    Auto-wraps exhibits with selectors in a collapsible section.
 
     Args:
         block: Content block with exhibit data
@@ -80,8 +81,13 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection):
     from .exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_chart
     from .exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
 
+    # Check if exhibit has selectors (auto-collapsible if it does)
+    has_measure_selector = hasattr(exhibit, 'measure_selector') and exhibit.measure_selector
+    has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
+    has_selectors = has_measure_selector or has_dimension_selector
+
     # Check if exhibit should be rendered in collapsible section
-    is_collapsible = getattr(exhibit, 'collapsible', False)
+    is_collapsible = getattr(exhibit, 'collapsible', False) or has_selectors
     collapsible_title = getattr(exhibit, 'collapsible_title', None) or exhibit.title
     collapsible_expanded = getattr(exhibit, 'collapsible_expanded', True)
 
@@ -117,7 +123,7 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection):
             import traceback
             st.code(traceback.format_exc())
 
-    # Wrap in expander if collapsible
+    # Wrap in expander if collapsible or has selectors
     if is_collapsible:
         with st.expander(collapsible_title, expanded=collapsible_expanded):
             _render_exhibit_content()

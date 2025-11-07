@@ -6,244 +6,112 @@ Renders time series or categorical data as interactive line charts with:
 - Interactive hover tooltips
 - Zoom, pan, and selection tools
 - Theme support
-- Dynamic measure selection
+- Dynamic measure and dimension selection
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from .measure_selector import render_measure_selector
-from .dimension_selector import render_dimension_selector
-from .click_events import enable_chart_selection
+from .base_renderer import BaseExhibitRenderer
 
 
-def render_line_chart(exhibit, pdf: pd.DataFrame):
-    """
-    Render enhanced line chart exhibit with proper ordering.
+class LineChartRenderer(BaseExhibitRenderer):
+    """Line chart renderer."""
 
-    Supports both single and multiple measures via:
-    - Static y_axis.measure configuration
-    - Static y_axis.measures list configuration
-    - Dynamic measure_selector configuration
+    def render_chart(self):
+        """Render the line chart with selected measures and dimension."""
+        if not hasattr(self.exhibit, 'x_axis') or not self.exhibit.x_axis:
+            st.warning("Line chart requires x_axis configuration")
+            return
 
-    Args:
-        exhibit: Exhibit configuration with x_axis, y_axis, color_by, measure_selector
-        pdf: Pandas DataFrame with data to plot
-    """
-    st.subheader(exhibit.title)
+        x_col = self.exhibit.x_axis.dimension
 
-    if exhibit.description:
-        st.caption(exhibit.description)
+        # Sort by x-axis for proper time ordering
+        pdf_sorted = self.pdf.sort_values(by=x_col)
 
-    if not exhibit.x_axis or not exhibit.y_axis:
-        st.warning("Line chart requires x_axis and y_axis configuration")
-        return
-
-    if pdf.empty:
-        st.info("No data available for selected filters")
-        return
-
-    x_col = exhibit.x_axis.dimension
-
-    # Determine which measures to plot
-    y_measures = []
-
-    # Check if dynamic measure selector is configured
-    if hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
-        # Render measure selector and get selected measures
-        selected_measures = render_measure_selector(
-            exhibit_id=exhibit.id,
-            measure_selector_config=exhibit.measure_selector,
-            available_columns=pdf.columns.tolist()
-        )
-        y_measures = selected_measures
-
-        # Add a divider
-        st.markdown("---")
-
-    # Otherwise use y_axis configuration
-    elif hasattr(exhibit.y_axis, 'measures') and exhibit.y_axis.measures:
-        y_measures = exhibit.y_axis.measures
-    elif hasattr(exhibit.y_axis, 'measure') and exhibit.y_axis.measure:
-        y_measures = [exhibit.y_axis.measure]
-    else:
-        st.warning("No measures configured for line chart")
-        return
-
-    # Filter measures to only those present in the dataframe
-    y_measures = [m for m in y_measures if m in pdf.columns]
-
-    if not y_measures:
-        st.warning("No valid measures found in data")
-        return
-
-    # Check if dynamic dimension selector is configured
-    color_dimension = None
-    if hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
-        # Render dimension selector and get selected dimension
-        selected_dimension = render_dimension_selector(
-            exhibit_id=exhibit.id,
-            dimension_selector_config=exhibit.dimension_selector,
-            available_columns=pdf.columns.tolist()
-        )
-
-        # Apply selected dimension based on applies_to setting
-        if exhibit.dimension_selector.applies_to == "color":
-            color_dimension = selected_dimension
-        # Can extend to support "x" or "group_by" in the future
-
-        # Add a divider
-        st.markdown("---")
-    else:
-        # Use static color_by if no dimension selector
-        color_dimension = exhibit.color_by if hasattr(exhibit, 'color_by') else None
-
-    # Auto-detect color dimension if not specified
-    # This fixes cross-sectional grouping - if ticker is in columns, use it by default
-    if not color_dimension:
-        # Check for common grouping dimensions in order of preference
-        auto_detect_dimensions = ['ticker', 'symbol', 'stock', 'exchange', 'sector', 'category']
-        for dim in auto_detect_dimensions:
-            if dim in pdf.columns:
-                color_dimension = dim
-                break
-
-    # Sort by x-axis for proper time ordering
-    pdf_sorted = pdf.sort_values(by=x_col)
-
-    # Create figure based on number of measures
-    if len(y_measures) == 1:
-        # Single measure - use standard plotting
-        y_col = y_measures[0]
-        fig = px.line(
-            pdf_sorted,
-            x=x_col,
-            y=y_col,
-            color=color_dimension if color_dimension and color_dimension in pdf.columns else None,
-            labels={
-                x_col: exhibit.x_axis.label or x_col.replace('_', ' ').title(),
-                y_col: exhibit.y_axis.label or y_col.replace('_', ' ').title()
-            },
-            hover_data={x_col: True, y_col: ':.2f'},
-        )
-    else:
-        # Multiple measures - need to handle differently
-        if color_dimension and color_dimension in pdf.columns:
-            # If color_by is specified, create separate lines for each measure+color combination
-            # Use plotly graph_objects for more control
+        # Create figure based on number of measures
+        if len(self.selected_measures) == 1:
+            # Single measure - use px.line for simplicity
+            y_col = self.selected_measures[0]
+            fig = px.line(
+                pdf_sorted,
+                x=x_col,
+                y=y_col,
+                color=self.selected_dimension if self.selected_dimension and self.selected_dimension in pdf_sorted.columns else None,
+                labels={
+                    x_col: self.exhibit.x_axis.label or x_col.replace('_', ' ').title(),
+                    y_col: self.exhibit.y_axis.label or y_col.replace('_', ' ').title() if hasattr(self.exhibit, 'y_axis') and self.exhibit.y_axis else y_col.replace('_', ' ').title()
+                },
+                hover_data={x_col: True, y_col: ':.2f'},
+            )
+        else:
+            # Multiple measures - use graph_objects for more control
             fig = go.Figure()
 
-            for measure in y_measures:
-                for color_val in pdf_sorted[color_dimension].unique():
-                    df_subset = pdf_sorted[pdf_sorted[color_dimension] == color_val]
+            if self.selected_dimension and self.selected_dimension in pdf_sorted.columns:
+                # Create lines for each measure+dimension combination
+                for measure in self.selected_measures:
+                    for dim_val in pdf_sorted[self.selected_dimension].unique():
+                        df_subset = pdf_sorted[pdf_sorted[self.selected_dimension] == dim_val]
+                        fig.add_trace(go.Scatter(
+                            x=df_subset[x_col],
+                            y=df_subset[measure],
+                            name=f"{dim_val} - {measure.replace('_', ' ').title()}",
+                            mode='lines+markers',
+                            line=dict(width=2.5),
+                            marker=dict(size=4),
+                            hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
+                        ))
+            else:
+                # No dimension, just plot each measure as a separate line
+                for measure in self.selected_measures:
                     fig.add_trace(go.Scatter(
-                        x=df_subset[x_col],
-                        y=df_subset[measure],
-                        name=f"{color_val} - {measure.replace('_', ' ').title()}",
+                        x=pdf_sorted[x_col],
+                        y=pdf_sorted[measure],
+                        name=measure.replace('_', ' ').title(),
                         mode='lines+markers',
                         line=dict(width=2.5),
                         marker=dict(size=4),
                         hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
                     ))
-        else:
-            # No color_by, just plot each measure as a separate line
-            fig = go.Figure()
-
-            for measure in y_measures:
-                fig.add_trace(go.Scatter(
-                    x=pdf_sorted[x_col],
-                    y=pdf_sorted[measure],
-                    name=measure.replace('_', ' ').title(),
-                    mode='lines+markers',
-                    line=dict(width=2.5),
-                    marker=dict(size=4),
-                    hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
-                ))
 
             # Update axis labels
-            fig.update_xaxes(title_text=exhibit.x_axis.label or x_col.replace('_', ' ').title())
-            fig.update_yaxes(title_text=exhibit.y_axis.label or "Value")
+            x_label = self.exhibit.x_axis.label or x_col.replace('_', ' ').title()
+            y_label = self.exhibit.y_axis.label if hasattr(self.exhibit, 'y_axis') and self.exhibit.y_axis and self.exhibit.y_axis.label else "Value"
+            fig.update_xaxes(title_text=x_label)
+            fig.update_yaxes(title_text=y_label)
 
-    # Apply theme
-    theme = st.session_state.get('theme', 'light')
-    if theme == 'dark':
-        fig.update_layout(
-            plot_bgcolor='#1E2130',
-            paper_bgcolor='#1E2130',
-            font=dict(color='#FAFAFA', size=12),
-            xaxis=dict(
-                gridcolor='#3A3D45',
-                showgrid=True,
-                zeroline=False
-            ),
-            yaxis=dict(
-                gridcolor='#3A3D45',
-                showgrid=True,
-                zeroline=False
-            ),
-            hovermode='x unified',
-            legend=dict(
-                bgcolor='#262730',
-                bordercolor='#3A3D45',
-                borderwidth=1
+        # Apply theme
+        fig = self.apply_theme_to_figure(fig)
+
+        # Update hover mode for multiple traces
+        fig.update_layout(hovermode='x unified')
+
+        # Better line styling for single measure charts
+        if len(self.selected_measures) == 1:
+            fig.update_traces(
+                line=dict(width=2.5),
+                mode='lines+markers',
+                marker=dict(size=4),
+                hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
             )
-        )
-    else:
-        fig.update_layout(
-            plot_bgcolor='#FFFFFF',
-            paper_bgcolor='#F8F9FA',
-            font=dict(size=12),
-            xaxis=dict(
-                gridcolor='#E0E0E0',
-                showgrid=True,
-                zeroline=False
-            ),
-            yaxis=dict(
-                gridcolor='#E0E0E0',
-                showgrid=True,
-                zeroline=False
-            ),
-            hovermode='x unified',
-            legend=dict(
-                bgcolor='#FFFFFF',
-                bordercolor='#E0E0E0',
-                borderwidth=1
-            )
-        )
 
-    # Enhanced layout
-    fig.update_layout(
-        title=None,  # Already have st.subheader
-        showlegend=True,
-        height=400,
-        margin=dict(l=10, r=10, t=10, b=10),
-    )
+        # Enable interactivity
+        fig = self.enable_interactivity(fig)
 
-    # Better line styling
-    fig.update_traces(
-        line=dict(width=2.5),
-        mode='lines+markers',
-        marker=dict(size=4),
-        hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
-    )
+        # Render chart
+        config = self.get_plotly_config()
+        st.plotly_chart(fig, use_container_width=True, config=config, key=f"chart_{self.exhibit.id}")
 
-    # Enable click/selection events if interactive is enabled
-    if exhibit.interactive:
-        fig = enable_chart_selection(fig, exhibit.id)
 
-    # Interactive config
-    config = {
-        'displayModeBar': True,
-        'displaylogo': False,
-        'modeBarButtonsToRemove': ['lasso2d', 'select2d'],
-        'toImageButtonOptions': {
-            'format': 'png',
-            'filename': f'{exhibit.id}',
-            'height': 600,
-            'width': 1200,
-            'scale': 2
-        }
-    }
+def render_line_chart(exhibit, pdf: pd.DataFrame):
+    """
+    Render line chart exhibit.
 
-    st.plotly_chart(fig, use_container_width=True, config=config, key=f"chart_{exhibit.id}")
+    Args:
+        exhibit: Exhibit configuration
+        pdf: Pandas DataFrame with data
+    """
+    renderer = LineChartRenderer(exhibit, pdf)
+    renderer.render()
