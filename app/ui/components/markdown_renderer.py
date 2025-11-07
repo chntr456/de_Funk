@@ -81,13 +81,14 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection):
     from .exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_chart
     from .exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
 
-    # Check if exhibit has selectors (auto-collapsible if it does)
+    # Check if exhibit has selectors
     has_measure_selector = hasattr(exhibit, 'measure_selector') and exhibit.measure_selector
     has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
     has_selectors = has_measure_selector or has_dimension_selector
 
     # Check if exhibit should be rendered in collapsible section
-    is_collapsible = getattr(exhibit, 'collapsible', False) or has_selectors
+    # NOTE: Don't auto-wrap exhibits with selectors - they'll create their own individual expanders
+    is_collapsible = getattr(exhibit, 'collapsible', False) and not has_selectors
     collapsible_title = getattr(exhibit, 'collapsible_title', None) or exhibit.title
     collapsible_expanded = getattr(exhibit, 'collapsible_expanded', True)
 

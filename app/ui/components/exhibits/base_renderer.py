@@ -36,11 +36,11 @@ class BaseExhibitRenderer(ABC):
 
         This method:
         1. Renders title and description
-        2. Renders measure/dimension selectors in a visually separated container
+        2. Renders each selector in its own independent expander (can be collapsed separately)
         3. Calls child class's render_chart() method
 
-        Note: We cannot use nested expanders as Streamlit prohibits them.
-        Instead, we use containers with styled headers for visual separation.
+        Note: Each selector gets its own expander at the same level (not nested).
+        This allows users to collapse/expand each selector independently.
         """
         # Render title and description
         if self.exhibit.title:
@@ -54,34 +54,32 @@ class BaseExhibitRenderer(ABC):
             st.info("No data available for selected filters")
             return
 
-        # Check if we have any selectors
+        # Check if we have selectors
         has_measure_selector = hasattr(self.exhibit, 'measure_selector') and self.exhibit.measure_selector
         has_dimension_selector = hasattr(self.exhibit, 'dimension_selector') and self.exhibit.dimension_selector
-        has_selectors = has_measure_selector or has_dimension_selector
 
-        # Render selectors in a visually separated container
-        if has_selectors:
-            # Use a container with a styled header for visual separation
-            with st.container():
-                st.markdown("##### ⚙️ Configuration")
-
-                # Process measures
+        # Render measure selector in its own expander
+        if has_measure_selector:
+            with st.expander("📊 Select Measures", expanded=True):
                 self.selected_measures = self._process_measures()
-
-                # Process dimension
-                self.selected_dimension = self._process_dimension()
-
-                # Add divider after selectors
-                st.markdown("---")
         else:
-            # No selectors - process normally
             self.selected_measures = self._process_measures()
+
+        # Render dimension selector in its own expander
+        if has_dimension_selector:
+            with st.expander("🔀 Select Grouping Dimension", expanded=True):
+                self.selected_dimension = self._process_dimension()
+        else:
             self.selected_dimension = self._process_dimension()
 
         # Validate measures
         if not self.selected_measures:
             st.warning("No valid measures configured")
             return
+
+        # Add divider before chart if we had any selectors
+        if has_measure_selector or has_dimension_selector:
+            st.markdown("---")
 
         # Call child class's chart rendering method
         self.render_chart()
