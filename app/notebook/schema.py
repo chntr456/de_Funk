@@ -275,6 +275,7 @@ class Exhibit:
     collapsible: bool = False  # Whether to render exhibit in collapsible section
     collapsible_title: Optional[str] = None  # Title for collapsible section (defaults to exhibit title)
     collapsible_expanded: bool = True  # Whether collapsible section is expanded by default
+    nest_in_expander: bool = True  # Whether to render chart inside Configuration expander (with selectors)
 
     # Weighted aggregate configurations
     weighting: Optional[WeightingConfig] = None

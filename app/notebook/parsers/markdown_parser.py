@@ -474,6 +474,7 @@ class MarkdownNotebookParser:
             collapsible=data.get('collapsible', False),
             collapsible_title=data.get('collapsible_title'),
             collapsible_expanded=data.get('collapsible_expanded', True),
+            nest_in_expander=data.get('nest_in_expander', True),
             # Weighted aggregate fields
             weighting=data.get('weighting'),
             aggregate_by=data.get('aggregate_by'),

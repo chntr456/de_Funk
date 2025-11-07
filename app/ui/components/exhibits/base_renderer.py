@@ -57,6 +57,9 @@ class BaseExhibitRenderer(ABC):
         has_measure_selector = hasattr(self.exhibit, 'measure_selector') and self.exhibit.measure_selector
         has_dimension_selector = hasattr(self.exhibit, 'dimension_selector') and self.exhibit.dimension_selector
 
+        # Check if chart should nest inside expander (defaults to True)
+        nest_in_expander = getattr(self.exhibit, 'nest_in_expander', True)
+
         # Render selectors in a single expander with tabs
         if has_measure_selector or has_dimension_selector:
             with st.expander("⚙️ Configuration", expanded=True):
@@ -97,7 +100,13 @@ class BaseExhibitRenderer(ABC):
                     st.warning("No valid measures configured")
                     return
 
-                # Render chart inside the expander
+                # Render chart inside or outside expander based on nest_in_expander parameter
+                if nest_in_expander:
+                    # Render chart inside the expander
+                    self.render_chart()
+
+            # If nest_in_expander is False, render chart outside expander
+            if not nest_in_expander:
                 self.render_chart()
         else:
             # No selectors - process normally
