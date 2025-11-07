@@ -304,16 +304,62 @@ filters:
 
 The new system provides **cleaner isolation** and **better reproducibility**.
 
+## How Filter Pre-Population Works
+
+When you load a notebook, the filter widgets automatically pre-populate with folder context values:
+
+### Flow
+
+1. **Notebook loads** → `NotebookManager.load_notebook()`
+2. **Folder detected** → Gets the notebook's parent folder
+3. **Folder filters loaded** → Reads `.filter_context.yaml` from that folder
+4. **Filter context initialized** → Creates `FilterContext` with notebook variables
+5. **Folder filters applied** → Updates `FilterContext` with folder filter values
+6. **UI renders** → Filter widgets read current values from `FilterContext`
+
+### Example
+
+**Folder context file**: `Financial Analysis/.filter_context.yaml`
+```yaml
+filters:
+  ticker:
+    - AAPL
+    - MSFT
+  volume: 5000000
+```
+
+**Result in UI**:
+- Ticker multi-select shows "AAPL, MSFT" pre-selected
+- Volume number input shows "5000000"
+- All other filters show their notebook defaults
+
+### Priority Order
+
+Filter widgets follow this priority when determining default values:
+
+1. **Folder context value** (from `.filter_context.yaml`) ← Highest priority
+2. **Notebook default** (from `$filter$` block in `.md` file)
+3. **Variable type default** (e.g., empty list, 0, false)
+
+This ensures folder-level filters always take precedence over notebook defaults.
+
 ## Troubleshooting
 
-### Filters Not Appearing
+### Filters Not Appearing in Editor
 
 1. **Check folder**: Is there a `.filter_context.yaml` file in the notebook's folder?
 2. **Validate YAML**: Open the file and check for syntax errors
 3. **Reload notebook**: Switch away and back to reload filters
 4. **Check UI**: The folder filter editor should show active filters
 
-### Filters Not Applying
+### Filters Not Pre-Populating Widgets
+
+1. **Verify filter names** match notebook variable IDs exactly
+2. **Check filter context**: Use folder filter editor to see active filters
+3. **Reload notebook**: Switch to different notebook and back
+4. **Check console**: Look for any JavaScript errors in browser console
+
+### Filters Not Applying to Data
 
 1. **Verify filter names** match notebook variable IDs
 2. **Check data**: Ensure data exists matching the filter criteria
