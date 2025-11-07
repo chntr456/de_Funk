@@ -73,6 +73,7 @@ class NotebookManager:
         self.current_folder: Optional[Path] = None
         self.filter_context: Optional[FilterContext] = None  # Legacy compatibility
         self.model_sessions: Dict[str, Any] = {}
+        self._extra_folder_filters: Dict[str, Any] = {}  # Folder filters not in notebook variables
 
     def load_notebook(self, notebook_path: str) -> NotebookConfig:
         """
@@ -112,21 +113,29 @@ class NotebookManager:
         self.current_notebook_path = path
         self.current_folder = new_folder
 
+        # Clear extra folder filters from previous notebook
+        self._extra_folder_filters = {}
+
         # Load folder-based filter context
         folder_filters = self.folder_context_manager.get_filters(new_folder)
 
         # Initialize filter context with notebook variables and folder filters
         self.filter_context = FilterContext(self.notebook_config.variables)
 
-        # Apply folder filters to context (if they match notebook variables)
+        # Apply ALL folder filters (folder context drives filtering)
         if folder_filters:
-            # Only apply filters that match notebook variables
-            valid_filters = {
-                k: v for k, v in folder_filters.items()
-                if k in self.notebook_config.variables
-            }
-            if valid_filters:
-                self.filter_context.update(valid_filters)
+            # Try to apply each folder filter
+            for key, value in folder_filters.items():
+                if self.notebook_config.variables and key in self.notebook_config.variables:
+                    # Filter matches notebook variable - add to FilterContext
+                    try:
+                        self.filter_context.set(key, value)
+                    except (ValueError, KeyError) as e:
+                        # Validation failed, but store for query filtering anyway
+                        self._extra_folder_filters[key] = value
+                else:
+                    # Filter NOT in notebook variables - store for query filtering
+                    self._extra_folder_filters[key] = value
 
         # Initialize model sessions from front matter
         self._initialize_model_sessions()
@@ -399,7 +408,7 @@ class NotebookManager:
 
             # Convert filter values based on variable types
             for var_id, value in context_filters.items():
-                if var_id in self.notebook_config.variables:
+                if self.notebook_config.variables and var_id in self.notebook_config.variables:
                     # Variable defined in notebook - use its type for conversion
                     variable = self.notebook_config.variables[var_id]
 
@@ -435,6 +444,9 @@ class NotebookManager:
                             filters[var_id] = value
                         elif isinstance(value, dict):
                             filters[var_id] = value
+                        elif isinstance(value, (int, float)) and value > 0:
+                            # Convert numeric values to min range for filtering
+                            filters[var_id] = {'min': value}
                         else:
                             filters[var_id] = value
 
