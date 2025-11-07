@@ -16,17 +16,28 @@ Based on test outputs and latest fixes:
 3. **FilterEngine applies filters correctly** ✓
    - TEST 6 proved FilterEngine works when given filters
 
-4. **Latest fix (commit 54f8dbc)**
+4. **Fix #1 (commit 54f8dbc)** - YAML notebooks
    - Folder filters now stored in `_extra_folder_filters` even when notebook has no variables
    - Numeric filters properly convert to `{'min': value}` format
    - Null checks prevent errors when `notebook.variables` is None
 
-### 🔧 Just Fixed (Need Testing)
+5. **Fix #2 (commit c1d3372)** - Streamlit UI
+   - Multiselect widgets filter defaults to only include valid options
+   - Prevents crash when folder context has values not in database
 
-**TEST 4 issue RESOLVED:**
-- Previously: FilterContext had 0 filters (❌)
-- Fix: All folder filters now stored in `_extra_folder_filters` (✓)
-- Fix: `_build_filters()` includes extra folder filters with proper conversion (✓)
+6. **Fix #3 (commit feb5c16)** - Markdown notebooks ⭐ **CRITICAL**
+   - `load_notebook()` now updates `_filter_collection` with folder context values
+   - Checks both `_filter_collection` (markdown) and `variables` (YAML)
+   - `_build_filters()` includes `_extra_folder_filters` for both paths
+   - Markdown filters now use folder context instead of defaults
+
+### 🔧 Latest Fix (feb5c16) - Need Testing
+
+**TEST 5 issue SHOULD BE RESOLVED:**
+- Previously: Only trade_date with wrong values (markdown defaults) ❌
+- Fix: `_filter_collection` updated from folder context on load ✓
+- Fix: `_build_filters()` includes `_extra_folder_filters` for markdown ✓
+- Expected: All 3 filters (ticker, volume, trade_date) with folder values ✓
 
 ## What You Reported
 
@@ -47,31 +58,47 @@ This suggests:
 ### Step 1: Pull Latest Fix and Run Tests
 
 ```bash
-# Pull the CRITICAL fix (commit 54f8dbc)
+# Pull the CRITICAL markdown filter fix (commit feb5c16)
 git pull origin claude/implement-session-consolidation-011CUsFuJuVCHkkBunydXEB2
 
 # Run the complete test
 python test_filter_system.py
 ```
 
-**Expected results NOW:**
+**Expected results NOW (after feb5c16 fix):**
 
 ```
 TEST 4: Notebook Loading & Filter Context
-✓ _extra_folder_filters contains: {'ticker': [...], 'volume': 5000000, 'trade_date': {...}}
+✓ Notebook loaded: Stock Performance Analysis
+✓ FilterContext loaded with 0 filters
+  (OK - markdown uses _filter_collection, not FilterContext)
+
+✓ _extra_folder_filters: {}
+  (OK - filters should be in _filter_collection, not extra)
+
+✓ Notebook defines 3 filters in _filter_collection:
+  - ticker: ['AAPL', 'MSFT']  ← FROM FOLDER CONTEXT
+  - volume: 5000000            ← FROM FOLDER CONTEXT
+  - trade_date: 2024-10-01 to 2024-12-31  ← FROM FOLDER CONTEXT (not markdown defaults!)
 
 TEST 5: Filter Building (_build_filters)
+✓ Filters built for exhibit:
+  - ticker: ['AAPL', 'MSFT']
+  - volume: {'min': 5000000}
+  - trade_date: {'start': '2024-10-01', 'end': '2024-12-31'}
+
 ℹ Testing filter application:
   ✓ 'ticker' filter WILL BE APPLIED: ['AAPL', 'MSFT']
   ✓ 'volume' filter WILL BE APPLIED: {'min': 5000000}
-  ✓ 'trade_date' filter WILL BE APPLIED: {'start': '2024-10-01', 'end': '2024-12-31'}
+  ✓ 'trade_date' filter WILL BE APPLIED (folder values, not markdown defaults)
 
 TEST 6: FilterEngine Application
 ✓ Ticker filter WORKING (only AAPL/MSFT)
 ✓ Volume filter WORKING (all >= 5M)
+✓ Date filter WORKING (Q4 2024, not Q1)
 ```
 
-**If ALL tests pass** = Backend is now fully working!
+**If ALL tests pass** = Backend is fully working for both YAML and markdown!
 
 ### Step 2: Check Data Filtering
 
