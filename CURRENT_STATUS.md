@@ -207,7 +207,7 @@ EOF
 python3 << 'EOF'
 from pathlib import Path
 from core.context import RepoContext
-from app.session.universal_session import UniversalSession
+from models.api.session import UniversalSession
 from app.notebook.managers.notebook_manager import NotebookManager
 from app.notebook.schema import Exhibit, ExhibitType
 
@@ -231,7 +231,7 @@ EOF
 python3 << 'EOF'
 from pathlib import Path
 from core.context import RepoContext
-from app.session.universal_session import UniversalSession
+from models.api.session import UniversalSession
 from core.session.filters import FilterEngine
 
 ctx = RepoContext.from_repo_root(connection_type="duckdb")

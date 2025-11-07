@@ -82,7 +82,7 @@ print("-" * 80)
 
 try:
     from core.context import RepoContext
-    from app.session.universal_session import UniversalSession
+    from models.api.session import UniversalSession
     from app.notebook.managers.notebook_manager import NotebookManager
 
     # Initialize context
