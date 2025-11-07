@@ -36,11 +36,10 @@ class BaseExhibitRenderer(ABC):
 
         This method:
         1. Renders title and description
-        2. Renders each selector in its own independent expander (can be collapsed separately)
+        2. Renders selectors in a single collapsible section with tabs
         3. Calls child class's render_chart() method
 
-        Note: Each selector gets its own expander at the same level (not nested).
-        This allows users to collapse/expand each selector independently.
+        Note: All selectors are grouped in one expander with tabs for easy navigation.
         """
         # Render title and description
         if self.exhibit.title:
@@ -58,18 +57,31 @@ class BaseExhibitRenderer(ABC):
         has_measure_selector = hasattr(self.exhibit, 'measure_selector') and self.exhibit.measure_selector
         has_dimension_selector = hasattr(self.exhibit, 'dimension_selector') and self.exhibit.dimension_selector
 
-        # Render measure selector in its own expander
-        if has_measure_selector:
-            with st.expander("📊 Select Measures", expanded=True):
-                self.selected_measures = self._process_measures()
-        else:
-            self.selected_measures = self._process_measures()
+        # Render selectors in a single expander with tabs
+        if has_measure_selector or has_dimension_selector:
+            with st.expander("⚙️ Configuration", expanded=True):
+                # If we have both selectors, use tabs
+                if has_measure_selector and has_dimension_selector:
+                    tabs = st.tabs(["📊 Measures", "🔀 Dimensions"])
 
-        # Render dimension selector in its own expander
-        if has_dimension_selector:
-            with st.expander("🔀 Select Grouping Dimension", expanded=True):
-                self.selected_dimension = self._process_dimension()
+                    with tabs[0]:
+                        self.selected_measures = self._process_measures()
+
+                    with tabs[1]:
+                        self.selected_dimension = self._process_dimension()
+
+                # If only measure selector
+                elif has_measure_selector:
+                    self.selected_measures = self._process_measures()
+                    self.selected_dimension = self._process_dimension()
+
+                # If only dimension selector
+                else:
+                    self.selected_measures = self._process_measures()
+                    self.selected_dimension = self._process_dimension()
         else:
+            # No selectors - process normally
+            self.selected_measures = self._process_measures()
             self.selected_dimension = self._process_dimension()
 
         # Validate measures
