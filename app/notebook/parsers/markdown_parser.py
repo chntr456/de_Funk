@@ -25,6 +25,7 @@ from ..schema import (
     Section,
     DateRangeDefault,
     AggregationType,
+    MeasureSelectorConfig,
 )
 from ..filters.dynamic import (
     FilterConfig,
@@ -424,6 +425,19 @@ class MarkdownNotebookParser:
                 order=data['sort'].get('order', 'asc')
             )
 
+        # Parse measure selector configuration
+        measure_selector = None
+        if 'measure_selector' in data and isinstance(data['measure_selector'], dict):
+            ms_data = data['measure_selector']
+            measure_selector = MeasureSelectorConfig(
+                available_measures=ms_data['available_measures'],
+                default_measures=ms_data.get('default_measures'),
+                label=ms_data.get('label'),
+                allow_multiple=ms_data.get('allow_multiple', True),
+                selector_type=ms_data.get('selector_type', 'checkbox'),
+                help_text=ms_data.get('help_text')
+            )
+
         return Exhibit(
             id=exhibit_id,
             type=exhibit_type,
@@ -440,6 +454,7 @@ class MarkdownNotebookParser:
             legend=data.get('legend', True),
             interactive=data.get('interactive', True),
             metrics=metrics,
+            measure_selector=measure_selector,
             # Weighted aggregate fields
             weighting=data.get('weighting'),
             aggregate_by=data.get('aggregate_by'),

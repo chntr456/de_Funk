@@ -221,6 +221,17 @@ class WeightingConfig:
 
 
 @dataclass
+class MeasureSelectorConfig:
+    """Configuration for dynamic measure selection in exhibits."""
+    available_measures: List[str]  # List of measure column names available for selection
+    default_measures: Optional[List[str]] = None  # Measures selected by default
+    label: Optional[str] = None  # Label for the selector UI
+    allow_multiple: bool = True  # Allow multiple measure selection
+    selector_type: str = "checkbox"  # Type: checkbox, multiselect, radio
+    help_text: Optional[str] = None  # Help text for the selector
+
+
+@dataclass
 class Exhibit:
     """Exhibit definition (visualization)."""
     id: str
@@ -242,6 +253,9 @@ class Exhibit:
 
     # Metric cards
     metrics: Optional[List[MetricConfig]] = None
+
+    # Measure selector (dynamic measure selection)
+    measure_selector: Optional[MeasureSelectorConfig] = None
 
     # Weighted aggregate configurations
     weighting: Optional[WeightingConfig] = None

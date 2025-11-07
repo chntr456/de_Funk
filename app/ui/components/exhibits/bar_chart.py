@@ -6,19 +6,28 @@ Renders categorical comparisons as interactive bar charts with:
 - Interactive hover tooltips
 - Zoom and selection tools
 - Theme support
+- Dynamic measure selection with grouped bars
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+from .measure_selector import render_measure_selector
+from .click_events import enable_chart_selection
 
 
 def render_bar_chart(exhibit, pdf: pd.DataFrame):
     """
     Render enhanced bar chart exhibit with proper ordering.
 
+    Supports both single and multiple measures via:
+    - Static y_axis.measure configuration
+    - Static y_axis.measures list configuration
+    - Dynamic measure_selector configuration
+
     Args:
-        exhibit: Exhibit configuration with x_axis, y_axis, color_by
+        exhibit: Exhibit configuration with x_axis, y_axis, color_by, measure_selector
         pdf: Pandas DataFrame with data to plot
     """
     st.subheader(exhibit.title)
@@ -35,23 +44,75 @@ def render_bar_chart(exhibit, pdf: pd.DataFrame):
         return
 
     x_col = exhibit.x_axis.dimension
-    y_col = exhibit.y_axis.measure if hasattr(exhibit.y_axis, 'measure') else exhibit.y_axis.measures[0]
 
-    # Sort by y-value for better visualization (descending)
-    pdf_sorted = pdf.sort_values(by=y_col, ascending=False)
+    # Determine which measures to plot
+    y_measures = []
 
-    # Create Plotly figure with enhanced interactivity
-    fig = px.bar(
-        pdf_sorted,
-        x=x_col,
-        y=y_col,
-        color=exhibit.color_by if hasattr(exhibit, 'color_by') and exhibit.color_by else None,
-        labels={
-            x_col: exhibit.x_axis.label or x_col.replace('_', ' ').title(),
-            y_col: exhibit.y_axis.label or y_col.replace('_', ' ').title()
-        },
-        hover_data={x_col: True, y_col: ':.2f'},
-    )
+    # Check if dynamic measure selector is configured
+    if hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
+        # Render measure selector and get selected measures
+        selected_measures = render_measure_selector(
+            exhibit_id=exhibit.id,
+            measure_selector_config=exhibit.measure_selector,
+            available_columns=pdf.columns.tolist()
+        )
+        y_measures = selected_measures
+
+        # Add a divider
+        st.markdown("---")
+
+    # Otherwise use y_axis configuration
+    elif hasattr(exhibit.y_axis, 'measures') and exhibit.y_axis.measures:
+        y_measures = exhibit.y_axis.measures
+    elif hasattr(exhibit.y_axis, 'measure') and exhibit.y_axis.measure:
+        y_measures = [exhibit.y_axis.measure]
+    else:
+        st.warning("No measures configured for bar chart")
+        return
+
+    # Filter measures to only those present in the dataframe
+    y_measures = [m for m in y_measures if m in pdf.columns]
+
+    if not y_measures:
+        st.warning("No valid measures found in data")
+        return
+
+    # Sort by first y-measure for better visualization (descending)
+    pdf_sorted = pdf.sort_values(by=y_measures[0], ascending=False)
+
+    # Create figure based on number of measures
+    if len(y_measures) == 1:
+        # Single measure - use standard plotting
+        y_col = y_measures[0]
+        fig = px.bar(
+            pdf_sorted,
+            x=x_col,
+            y=y_col,
+            color=exhibit.color_by if hasattr(exhibit, 'color_by') and exhibit.color_by else None,
+            labels={
+                x_col: exhibit.x_axis.label or x_col.replace('_', ' ').title(),
+                y_col: exhibit.y_axis.label or y_col.replace('_', ' ').title()
+            },
+            hover_data={x_col: True, y_col: ':.2f'},
+        )
+    else:
+        # Multiple measures - create grouped bars
+        fig = go.Figure()
+
+        for measure in y_measures:
+            fig.add_trace(go.Bar(
+                x=pdf_sorted[x_col],
+                y=pdf_sorted[measure],
+                name=measure.replace('_', ' ').title(),
+                hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
+            ))
+
+        # Update layout for grouped bars
+        fig.update_layout(
+            barmode='group',
+            xaxis_title=exhibit.x_axis.label or x_col.replace('_', ' ').title(),
+            yaxis_title=exhibit.y_axis.label or "Value"
+        )
 
     # Apply theme
     theme = st.session_state.get('theme', 'light')
@@ -114,6 +175,10 @@ def render_bar_chart(exhibit, pdf: pd.DataFrame):
         hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
     )
 
+    # Enable click/selection events if interactive is enabled
+    if exhibit.interactive:
+        fig = enable_chart_selection(fig, exhibit.id)
+
     # Interactive config
     config = {
         'displayModeBar': True,
@@ -128,4 +193,4 @@ def render_bar_chart(exhibit, pdf: pd.DataFrame):
         }
     }
 
-    st.plotly_chart(fig, use_container_width=True, config=config)
+    st.plotly_chart(fig, use_container_width=True, config=config, key=f"chart_{exhibit.id}")
