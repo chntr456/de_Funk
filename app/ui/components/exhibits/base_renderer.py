@@ -36,8 +36,11 @@ class BaseExhibitRenderer(ABC):
 
         This method:
         1. Renders title and description
-        2. Renders measure/dimension selectors in nested expander (if configured)
+        2. Renders measure/dimension selectors in a visually separated container
         3. Calls child class's render_chart() method
+
+        Note: We cannot use nested expanders as Streamlit prohibits them.
+        Instead, we use containers with styled headers for visual separation.
         """
         # Render title and description
         if self.exhibit.title:
@@ -56,14 +59,20 @@ class BaseExhibitRenderer(ABC):
         has_dimension_selector = hasattr(self.exhibit, 'dimension_selector') and self.exhibit.dimension_selector
         has_selectors = has_measure_selector or has_dimension_selector
 
-        # Render selectors in nested expander if present
+        # Render selectors in a visually separated container
         if has_selectors:
-            with st.expander("⚙️ Configure", expanded=True):
+            # Use a container with a styled header for visual separation
+            with st.container():
+                st.markdown("##### ⚙️ Configuration")
+
                 # Process measures
                 self.selected_measures = self._process_measures()
 
                 # Process dimension
                 self.selected_dimension = self._process_dimension()
+
+                # Add divider after selectors
+                st.markdown("---")
         else:
             # No selectors - process normally
             self.selected_measures = self._process_measures()
@@ -73,10 +82,6 @@ class BaseExhibitRenderer(ABC):
         if not self.selected_measures:
             st.warning("No valid measures configured")
             return
-
-        # Add divider between selectors and chart
-        if has_selectors:
-            st.markdown("---")
 
         # Call child class's chart rendering method
         self.render_chart()
