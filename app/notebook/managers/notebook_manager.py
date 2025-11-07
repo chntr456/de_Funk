@@ -71,9 +71,8 @@ class NotebookManager:
         self.notebook_config: Optional[NotebookConfig] = None
         self.current_notebook_path: Optional[Path] = None
         self.current_folder: Optional[Path] = None
-        self.filter_context: Optional[FilterContext] = None  # Legacy compatibility
+        self.filter_context: Optional[FilterContext] = None  # Legacy compatibility (deprecated)
         self.model_sessions: Dict[str, Any] = {}
-        self._extra_folder_filters: Dict[str, Any] = {}  # Folder filters not in notebook variables
 
     def load_notebook(self, notebook_path: str) -> NotebookConfig:
         """
@@ -113,44 +112,12 @@ class NotebookManager:
         self.current_notebook_path = path
         self.current_folder = new_folder
 
-        # Clear extra folder filters from previous notebook
-        self._extra_folder_filters = {}
-
         # Load folder-based filter context
         folder_filters = self.folder_context_manager.get_filters(new_folder)
 
-        # Initialize filter context with notebook variables and folder filters
-        self.filter_context = FilterContext(self.notebook_config.variables)
-
-        # Apply ALL folder filters (folder context drives filtering)
-        if folder_filters:
-            # Check if this is a markdown notebook with filter collection
-            has_filter_collection = (hasattr(self.notebook_config, '_filter_collection') and
-                                     self.notebook_config._filter_collection)
-
-            for key, value in folder_filters.items():
-                filter_in_notebook = False
-
-                # Check if filter exists in markdown filter collection
-                if has_filter_collection:
-                    filter_state = self.notebook_config._filter_collection.get_state(key)
-                    if filter_state is not None:
-                        # Filter exists in markdown - update its value
-                        filter_state.current_value = value
-                        filter_in_notebook = True
-
-                # Check if filter exists in YAML variables
-                if self.notebook_config.variables and key in self.notebook_config.variables:
-                    try:
-                        self.filter_context.set(key, value)
-                        filter_in_notebook = True
-                    except (ValueError, KeyError) as e:
-                        # Validation failed, store for query filtering anyway
-                        self._extra_folder_filters[key] = value
-
-                # If filter not found in notebook, store for query filtering
-                if not filter_in_notebook:
-                    self._extra_folder_filters[key] = value
+        # UNIFIED FILTER MERGE: Combine notebook filters + folder context into ONE collection
+        # Folder context supersedes notebook defaults (no duplicates)
+        self._merge_filters_unified(folder_filters)
 
         # Initialize model sessions from front matter
         self._initialize_model_sessions()
@@ -225,6 +192,133 @@ class NotebookManager:
             Path to current folder, or None if no notebook loaded
         """
         return self.current_folder
+
+    def _merge_filters_unified(self, folder_filters: Dict[str, Any]):
+        """
+        Merge folder context with notebook filters into ONE unified collection.
+
+        Strategy:
+        1. For notebook filters: Override value if exists in folder context (folder supersedes)
+        2. For folder-only filters: Add to collection as new filters
+        3. Result: Single _filter_collection with all merged filters (no duplicates)
+
+        Args:
+            folder_filters: Dictionary of folder context filters
+        """
+        # Ensure we have a filter collection (create if needed for YAML notebooks)
+        if not hasattr(self.notebook_config, '_filter_collection') or not self.notebook_config._filter_collection:
+            from app.notebook.filters.dynamic import FilterCollection
+            self.notebook_config._filter_collection = FilterCollection()
+
+        filter_collection = self.notebook_config._filter_collection
+
+        if not folder_filters:
+            return
+
+        # Track which folder filters we've processed
+        processed_folder_filters = set()
+
+        # Phase 1: Update notebook filters with folder values (folder supersedes notebook defaults)
+        for filter_id in list(filter_collection.filters.keys()):
+            if filter_id in folder_filters:
+                # Folder context supersedes notebook default
+                filter_state = filter_collection.get_state(filter_id)
+                if filter_state:
+                    filter_state.current_value = folder_filters[filter_id]
+                processed_folder_filters.add(filter_id)
+
+        # Phase 2: Add folder-only filters (not in notebook) so they appear in sidebar
+        for filter_id, value in folder_filters.items():
+            if filter_id not in processed_folder_filters:
+                # Create FilterConfig for folder-only filter
+                filter_config = self._create_filter_config_from_value(filter_id, value)
+                filter_collection.add_filter(filter_config)
+                # Set the current value
+                filter_state = filter_collection.get_state(filter_id)
+                if filter_state:
+                    filter_state.current_value = value
+
+    def _create_filter_config_from_value(self, filter_id: str, value: Any):
+        """
+        Auto-create FilterConfig from folder context value.
+
+        Infers filter type from value structure.
+
+        Args:
+            filter_id: Filter identifier
+            value: Filter value (used to infer type)
+
+        Returns:
+            FilterConfig object
+        """
+        from app.notebook.filters.dynamic import FilterConfig, FilterType, FilterOperator
+
+        # Generate friendly label
+        label = filter_id.replace('_', ' ').title()
+
+        # Infer type from value
+        if isinstance(value, list):
+            # Multi-select
+            return FilterConfig(
+                id=filter_id,
+                type=FilterType.SELECT,
+                label=label,
+                multi=True,
+                options=value,
+                default=value
+            )
+        elif isinstance(value, dict):
+            if 'start' in value and 'end' in value:
+                # Date range
+                return FilterConfig(
+                    id=filter_id,
+                    type=FilterType.DATE_RANGE,
+                    label=label,
+                    default=value
+                )
+            elif 'min' in value or 'max' in value:
+                # Number range
+                return FilterConfig(
+                    id=filter_id,
+                    type=FilterType.NUMBER_RANGE,
+                    label=label,
+                    default=value
+                )
+            else:
+                # Generic dict - treat as text
+                return FilterConfig(
+                    id=filter_id,
+                    type=FilterType.TEXT_SEARCH,
+                    label=label,
+                    default=str(value)
+                )
+        elif isinstance(value, (int, float)):
+            # Number slider with min threshold
+            return FilterConfig(
+                id=filter_id,
+                type=FilterType.SLIDER,
+                label=label,
+                min_value=0,
+                max_value=int(value * 10) if value > 0 else 100,
+                default=value,
+                operator=FilterOperator.GREATER_EQUAL
+            )
+        elif isinstance(value, bool):
+            # Boolean toggle
+            return FilterConfig(
+                id=filter_id,
+                type=FilterType.BOOLEAN,
+                label=label,
+                default=value
+            )
+        else:
+            # Text search fallback
+            return FilterConfig(
+                id=filter_id,
+                type=FilterType.TEXT_SEARCH,
+                label=label,
+                default=str(value) if value else ""
+            )
 
     def get_folder_display_name(self) -> str:
         """
@@ -350,24 +444,25 @@ class NotebookManager:
 
     def _build_filters(self, exhibit: Exhibit) -> Dict[str, Any]:
         """
-        Build filters for an exhibit from filter context and exhibit-specific filters.
+        Build filters for an exhibit from UNIFIED filter collection.
 
-        Supports both old filter context (FilterContext) and new dynamic filters (FilterCollection).
+        All filters (notebook + folder) are now merged in _filter_collection,
+        so this method is simplified to a single source of truth.
 
         Args:
             exhibit: Exhibit configuration
 
         Returns:
-            Dictionary of filters (column_name -> filter_value)
+            Dictionary of filters (column_name -> filter_value) for FilterEngine
         """
         filters = {}
 
-        # Check for dynamic filters (new system)
+        # Single source of truth: _filter_collection (contains merged notebook + folder filters)
         if (self.notebook_config and
             hasattr(self.notebook_config, '_filter_collection') and
             self.notebook_config._filter_collection):
 
-            # Get active filters from collection
+            # Get active filters from unified collection
             filter_collection = self.notebook_config._filter_collection
             active_filters = filter_collection.get_active_filters()
 
@@ -380,6 +475,7 @@ class NotebookManager:
 
                 filter_config = filter_collection.get_filter(filter_id)
                 if not filter_config:
+                    # No config - use raw value
                     filters[filter_id] = value
                     continue
 
@@ -417,69 +513,7 @@ class NotebookManager:
                 else:
                     filters[filter_id] = value
 
-            # Add extra folder filters (not defined in notebook but in folder context)
-            if hasattr(self, '_extra_folder_filters'):
-                for var_id, value in self._extra_folder_filters.items():
-                    if value is not None and var_id not in filters:
-                        if isinstance(value, list):
-                            filters[var_id] = value
-                        elif isinstance(value, dict):
-                            filters[var_id] = value
-                        elif isinstance(value, (int, float)) and value > 0:
-                            # Convert numeric values to min range for filtering
-                            filters[var_id] = {'min': value}
-                        else:
-                            filters[var_id] = value
-
-        # Use old filter context system
-        elif self.filter_context and self.notebook_config:
-            context_filters = self.filter_context.get_all()
-
-            # Convert filter values based on variable types
-            for var_id, value in context_filters.items():
-                if self.notebook_config.variables and var_id in self.notebook_config.variables:
-                    # Variable defined in notebook - use its type for conversion
-                    variable = self.notebook_config.variables[var_id]
-
-                    # Convert to FilterEngine format
-                    if variable.type.value == 'number' and not isinstance(value, dict):
-                        if value is not None and value > 0:
-                            filters[var_id] = {'min': value}
-                    elif variable.type.value == 'date_range':
-                        filters[var_id] = value
-                    elif variable.type.value == 'multi_select':
-                        if value:
-                            filters[var_id] = value
-                    else:
-                        if value is not None:
-                            filters[var_id] = value
-                else:
-                    # Variable NOT defined in notebook, but exists in folder context
-                    # Apply it anyway (folder context drives filtering)
-                    if value is not None:
-                        # Smart conversion based on value type
-                        if isinstance(value, list):
-                            filters[var_id] = value  # Multi-select
-                        elif isinstance(value, dict) and ('start' in value or 'min' in value):
-                            filters[var_id] = value  # Date range or number range
-                        else:
-                            filters[var_id] = value  # Direct value
-
-            # Also include extra folder filters that couldn't be added to FilterContext
-            if hasattr(self, '_extra_folder_filters'):
-                for var_id, value in self._extra_folder_filters.items():
-                    if value is not None and var_id not in filters:
-                        if isinstance(value, list):
-                            filters[var_id] = value
-                        elif isinstance(value, dict):
-                            filters[var_id] = value
-                        elif isinstance(value, (int, float)) and value > 0:
-                            # Convert numeric values to min range for filtering
-                            filters[var_id] = {'min': value}
-                        else:
-                            filters[var_id] = value
-
-        # Apply exhibit-level filters (override notebook filters)
+        # Apply exhibit-level filters (override notebook/folder filters)
         if hasattr(exhibit, 'filters') and exhibit.filters:
             filters.update(exhibit.filters)
 
