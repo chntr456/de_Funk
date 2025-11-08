@@ -38,11 +38,11 @@ This guide covers:
 - **pip** 21.0+
 - **Git** (for cloning repository)
 
-### Optional Components
+### Required for Data Ingestion and ETL
 
-**For ETL Pipelines (Optional):**
-- **Java 8 or 11** (for PySpark)
-- **PySpark 3.4+** (only if running large-scale ETL)
+**For Data Ingestion and Model Building (Required):**
+- **Java 8 or 11** (required for PySpark)
+- **PySpark 3.4+** (required for data ingestion and model transformations)
 
 **For Development:**
 - **Code editor** (VS Code, PyCharm, etc.)
@@ -157,9 +157,9 @@ pip install statsmodels>=0.14.0 prophet>=1.1.5 scikit-learn>=1.3.0
 - `prophet` - Facebook Prophet
 - `scikit-learn` - Random Forest, other ML models
 
-### Spark Dependencies (Optional)
+### Spark Dependencies (Required)
 
-Only if you need large-scale ETL:
+Spark is required for data ingestion and model building:
 
 ```bash
 # Install PySpark

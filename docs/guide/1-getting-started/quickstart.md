@@ -9,8 +9,9 @@ Get de_Funk up and running in 5 minutes!
 Before starting, ensure you have:
 
 - **Python 3.8+** installed
+- **Java 8 or 11** (required for PySpark)
 - **pip** package manager
-- **8GB+ RAM** recommended
+- **16GB+ RAM** recommended (8GB minimum)
 - **Git** (to clone if needed)
 
 ---
@@ -20,7 +21,7 @@ Before starting, ensure you have:
 Install the required Python packages:
 
 ```bash
-pip install streamlit plotly pyyaml pandas duckdb pyarrow
+pip install pyspark streamlit plotly pyyaml pandas duckdb pyarrow
 ```
 
 Or install all dependencies at once:
@@ -29,15 +30,16 @@ Or install all dependencies at once:
 pip install -r requirements.txt
 ```
 
-**Expected packages:**
+**Required packages:**
+- `pyspark` - **REQUIRED** for data ingestion and model building
 - `streamlit` - Web framework for the UI
 - `plotly` - Interactive charts
 - `pyyaml` - Configuration parsing
 - `pandas` - Data manipulation
-- `duckdb` - Fast analytics engine (10-100x faster than Spark)
+- `duckdb` - Fast analytics engine for querying (10-100x faster than Spark)
 - `pyarrow` - Parquet file support
 
-**Note:** PySpark is optional and only needed for ETL pipelines, not for the UI.
+**Important:** PySpark is **required** to build models from Bronze data. DuckDB is used for fast querying after models are built.
 
 ---
 
@@ -63,9 +65,11 @@ This script:
 ```
 
 **Where's the Bronze data?**
-- Bronze data comes from API ingestion (Polygon, BLS, Chicago)
+- Bronze data comes from API ingestion (Polygon, BLS, Chicago) using PySpark
 - If you don't have Bronze data yet, see [Installation Guide](installation.md#initial-data-ingestion)
 - For testing, sample data may be included in `/storage/bronze/`
+
+**Note:** `test_build_silver.py` uses PySpark to transform Bronze → Silver. You must have PySpark installed.
 
 ---
 

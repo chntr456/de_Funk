@@ -306,7 +306,7 @@ Each Bronze record includes metadata for traceability:
    │ Parquet files         │
    └──────────┬────────────┘
               │
-              │ Read with Spark/DuckDB
+              │ Read with Spark (required for transformation)
               ▼
    ┌───────────────────────┐
    │ Raw DataFrame         │

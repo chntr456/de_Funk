@@ -211,8 +211,8 @@ The system consists of 6 major subsystems:
 
 | Component | Technology | Purpose |
 |-----------|-----------|---------|
-| **Data Processing** | Apache Spark (PySpark) | Large-scale data transformation |
-| **Analytics Engine** | DuckDB | Fast OLAP queries (10-100x faster than Spark) |
+| **Data Processing** | Apache Spark (PySpark) | Required for data ingestion and Bronze→Silver transformation |
+| **Analytics Engine** | DuckDB | Fast OLAP queries for analytics and UI (10-100x faster than Spark) |
 | **Storage Format** | Apache Parquet | Columnar storage with compression |
 | **Data Modeling** | YAML Configs | Declarative model definitions |
 

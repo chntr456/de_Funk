@@ -112,7 +112,7 @@ Here's what most users do in their first hour:
 ## ❓ Common Questions
 
 **Q: Do I need Spark?**
-A: No! DuckDB is the default and recommended for analytics (10-100x faster). Spark is only needed for large-scale ETL.
+A: Yes! Spark is **required** for running data ingestion pipelines and building models (Bronze → Silver). DuckDB is used for fast analytics/querying once models are built.
 
 **Q: Can I use my own data?**
 A: Yes! Create a custom facet and provider. See [Create a Facet](how-to/create-a-facet.md).
@@ -134,7 +134,9 @@ Before starting, ensure you have:
 
 - **Python 3.8+**
 - **pip** (package manager)
-- **8GB+ RAM** (recommended for DuckDB analytics)
+- **PySpark** (required for data ingestion and model building)
+- **Java 8 or 11** (required for PySpark)
+- **8GB+ RAM** (minimum, 16GB+ recommended)
 - **Git** (to clone the repository)
 
 Optional but recommended:

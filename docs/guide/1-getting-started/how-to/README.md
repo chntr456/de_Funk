@@ -553,7 +553,7 @@ Want to contribute a guide?
 - **[Streamlit Documentation](https://docs.streamlit.io/)** - UI framework
 - **[DuckDB Documentation](https://duckdb.org/docs/)** - Analytics engine
 - **[Plotly Documentation](https://plotly.com/python/)** - Visualization
-- **[PySpark Documentation](https://spark.apache.org/docs/latest/api/python/)** - ETL engine (optional)
+- **[PySpark Documentation](https://spark.apache.org/docs/latest/api/python/)** - Required for data ingestion and model building
 
 ### Community
 

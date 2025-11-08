@@ -39,8 +39,8 @@ Models, notebooks, and pipelines are defined in **YAML/Markdown**, not code:
 
 The system supports multiple query engines:
 
-- **DuckDB** - Fast analytics (10-100x faster, default for UI)
-- **Spark** - Large-scale ETL (optional, for data pipelines)
+- **DuckDB** - Fast analytics and querying (10-100x faster, used for UI queries)
+- **Spark** - Required for data ingestion and ETL transformations
 
 ### 4. Notebook-Driven Analytics
 
@@ -575,8 +575,8 @@ Components:
 | Technology | Purpose | Version |
 |-----------|---------|---------|
 | **Python** | Primary language | 3.8+ |
-| **DuckDB** | Analytics engine (default) | 0.9.0+ |
-| **PySpark** | ETL engine (optional) | 3.4.0+ |
+| **DuckDB** | Analytics and querying engine | 0.9.0+ |
+| **PySpark** | Required for data ingestion and model building | 3.4.0+ |
 | **Parquet** | Storage format | via pyarrow |
 | **Streamlit** | Web framework | 1.28.0+ |
 | **Plotly** | Visualization | 5.17.0+ |
@@ -855,8 +855,8 @@ Create Markdown → Define Filters/Exhibits → Refresh UI
 | **Use case** | Interactive analytics | Large-scale ETL |
 
 **Recommendation:**
-- Use **DuckDB** for UI queries (default)
-- Use **Spark** for large-scale data pipelines (optional)
+- Use **DuckDB** for UI queries and analytics
+- Use **Spark** for data ingestion and ETL transformations (required)
 
 ---
 
