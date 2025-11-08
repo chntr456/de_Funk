@@ -1,8 +1,23 @@
+---
+title: "Company Model"
+tags: [finance/equities, component/model, concept/dimensional-modeling, source/polygon, status/stable]
+aliases: ["Company", "Stock Model", "Equity Model"]
+created: 2024-11-08
+updated: 2024-11-08
+status: stable
+dependencies:
+  - "[[Core Model]]"
+used_by:
+  - "[[Forecast Model]]"
+---
+
 # Company Model
+
+---
 
 > **Financial market and company data from Polygon.io API**
 
-The Company model provides comprehensive financial market data including stock prices, company information, exchange references, and news sentiment. It serves as the primary source for equity analysis and is used by the Forecast model for ML training.
+The Company model provides comprehensive financial market data including stock prices, company information, exchange references, and news sentiment. It serves as the primary source for equity analysis and is used by the [[Forecast Model]] for ML training.
 
 **Configuration:** `/home/user/de_Funk/configs/models/company.yaml`
 **Implementation:** `/home/user/de_Funk/models/implemented/company/model.py`
@@ -11,11 +26,15 @@ The Company model provides comprehensive financial market data including stock p
 
 ## Table of Contents
 
+---
+
 - [Overview](#overview)
-- [Schema](#schema)
+- [Schema Overview](#schema-overview)
 - [Data Sources](#data-sources)
+- [Detailed Schema](#detailed-schema)
 - [Graph Structure](#graph-structure)
 - [Measures](#measures)
+- [How-To Guides](#how-to-guides)
 - [Usage Examples](#usage-examples)
 - [Design Decisions](#design-decisions)
 - [Partitioning Strategy](#partitioning-strategy)
@@ -23,6 +42,8 @@ The Company model provides comprehensive financial market data including stock p
 ---
 
 ## Overview
+
+---
 
 ### Purpose
 
@@ -49,7 +70,7 @@ The Company model provides:
 |-----------|-------|
 | **Model Name** | `company` |
 | **Tags** | `equities`, `polygon`, `us` |
-| **Dependencies** | `core` (calendar dimension) |
+| **Dependencies** | [[Core Model]] (calendar dimension) |
 | **Data Source** | Polygon.io API |
 | **Storage Root** | `storage/silver/company` |
 | **Format** | Parquet |
@@ -61,7 +82,181 @@ The Company model provides:
 
 ---
 
-## Schema
+## Schema Overview
+
+---
+
+### High-Level Summary
+
+The Company model implements a **star schema** with company and exchange dimensions connected to price and news facts. All data is sourced from Polygon.io API and partitioned by date for optimal query performance.
+
+**Quick Reference:**
+
+| Table Type | Count | Purpose |
+|------------|-------|---------|
+| **Dimensions** | 2 | Descriptive attributes (who, what, where) |
+| **Facts** | 2 | Measurable events (prices, news) |
+| **Materialized Views** | 2 | Pre-joined analytics tables |
+| **Measures** | 10 | Pre-defined calculations |
+
+### Dimensions (Who/What)
+
+| Dimension | Rows | Primary Key | Purpose |
+|-----------|------|-------------|---------|
+| **dim_company** | ~500-5000 | ticker | Company metadata (name, exchange, market cap) |
+| **dim_exchange** | ~10-20 | exchange_code | Stock exchange reference data |
+
+### Facts (Events/Transactions)
+
+| Fact | Grain | Partitions | Purpose |
+|------|-------|------------|---------|
+| **fact_prices** | Daily per ticker | trade_date | OHLC price data, volume, VWAP |
+| **fact_news** | Article per ticker | publish_date | News articles with sentiment scores |
+
+### Materialized Views (Analytics)
+
+| View | Purpose | Joins |
+|------|---------|-------|
+| **prices_with_company** | Price analysis with company context | fact_prices → dim_company → dim_exchange |
+| **news_with_company** | News analysis with company context | fact_news → dim_company |
+
+### Star Schema Diagram
+
+```
+                    ┌─────────────────┐
+                    │  [[Core Model]] │
+                    │  dim_calendar   │
+                    │  (27 attributes)│
+                    └────────┬────────┘
+                             │
+                             │ (can join on date)
+                             │
+         ┌──────────────────┴───────────────────┐
+         │                                      │
+         ↓                                      ↓
+┌──────────────────┐                  ┌──────────────────┐
+│  fact_prices     │                  │   fact_news      │
+│  ───────────────│                  │  ───────────────│
+│  trade_date (PK) │                  │  publish_date    │
+│  ticker (FK)     │                  │  ticker (FK)     │
+│  open, high, low │                  │  article_id      │
+│  close, volume   │                  │  title, source   │
+│  volume_weighted │                  │  sentiment       │
+└────────┬─────────┘                  └────────┬─────────┘
+         │                                      │
+         │                                      │
+         └──────────────────┬───────────────────┘
+                            │
+                            ↓
+                   ┌─────────────────┐
+                   │  dim_company    │
+                   │  ───────────────│
+                   │  ticker (PK)    │
+                   │  company_name   │
+                   │  exchange_code  │
+                   │  market_cap     │
+                   └────────┬────────┘
+                            │
+                            │ (FK: exchange_code)
+                            │
+                            ↓
+                   ┌─────────────────┐
+                   │  dim_exchange   │
+                   │  ───────────────│
+                   │  exchange_code  │
+                   │  exchange_name  │
+                   └─────────────────┘
+```
+
+**Relationships:**
+- `fact_prices.ticker` → `dim_company.ticker` (many-to-one)
+- `fact_news.ticker` → `dim_company.ticker` (many-to-one)
+- `dim_company.exchange_code` → `dim_exchange.exchange_code` (many-to-one)
+- `fact_prices.trade_date` → `dim_calendar.date` (optional join to [[Core Model]])
+- `fact_news.publish_date` → `dim_calendar.date` (optional join to [[Core Model]])
+
+---
+
+## Data Sources
+
+---
+
+### Polygon.io API
+
+**Provider:** Polygon.io (https://polygon.io)
+**Authentication:** API key required (free tier available)
+**Rate Limits:** 5 calls/minute (free), unlimited (paid)
+**Data Coverage:** US stock markets (NYSE, NASDAQ, AMEX)
+
+### API Endpoints Used
+
+| Endpoint | Purpose | Bronze Table | Update Frequency |
+|----------|---------|--------------|------------------|
+| `/v3/reference/tickers` | List all tickers | `bronze.ref_all_tickers` | Weekly (snapshots) |
+| `/v2/aggs/ticker/{ticker}/range/1/day/{from}/{to}` | Daily OHLC prices | `bronze.prices_daily` | Daily |
+| `/v2/reference/exchanges` | Exchange metadata | `bronze.exchanges` | Weekly (snapshots) |
+| `/v2/reference/news` | News articles by ticker | `bronze.news` | Daily |
+
+### Bronze → Silver Transformation
+
+**Pipeline:** `datapipelines/providers/polygon/`
+
+```
+Polygon API
+    ↓
+Facets (normalize responses)
+    ├─→ RefAllTickersFacet
+    ├─→ PricesDailyGroupedFacet
+    ├─→ ExchangeFacet
+    └─→ NewsByDateFacet
+    ↓
+Bronze Storage (partitioned Parquet)
+    ├─→ bronze/ref_all_tickers/ (partitioned by snapshot_dt)
+    ├─→ bronze/prices_daily/ (partitioned by trade_date)
+    ├─→ bronze/exchanges/ (partitioned by snapshot_dt)
+    └─→ bronze/news/ (partitioned by publish_date)
+    ↓
+BaseModel.build() (YAML-driven graph transformation)
+    ↓
+Silver Storage (dimensional model)
+    ├─→ silver/company/dims/dim_company/
+    ├─→ silver/company/dims/dim_exchange/
+    ├─→ silver/company/facts/fact_prices/
+    ├─→ silver/company/facts/fact_news/
+    ├─→ silver/company/facts/prices_with_company/
+    └─→ silver/company/facts/news_with_company/
+```
+
+### Data Quality
+
+- **Completeness:** Market days only (excludes weekends/holidays)
+- **Accuracy:** Sourced directly from exchanges
+- **Timeliness:** Updated daily after market close
+- **Consistency:** Schema validated via facets
+
+### Expandability
+
+The Chicago Data Portal provides additional municipal datasets that can connect to economic models:
+
+**Available Datasets:**
+- Police reports and crime data
+- Building permits and inspections
+- Business licenses
+- 311 service requests
+- Budget and expenditures
+
+**Future Integration:**
+- Crime data by community area → economic indicators
+- Building permits → real estate development trends
+- Business licenses → economic activity
+
+See [[City Finance Model]] for current Chicago data integration.
+
+---
+
+## Detailed Schema
+
+---
 
 ### Dimensions
 
@@ -148,268 +343,117 @@ Daily stock prices with OHLC data and volume.
 | 2024-11-08 | AAPL   | 225.50 | 227.85 | 224.30 | 226.95 | 226.12          | 52847392  |
 | 2024-11-08 | GOOGL  | 168.25 | 170.30 | 167.80 | 169.75 | 169.05          | 28456213  |
 | 2024-11-08 | MSFT   | 418.30 | 421.50 | 416.90 | 420.25 | 419.40          | 24567890  |
-| 2024-11-07 | AAPL   | 223.80 | 225.60 | 222.95 | 225.10 | 224.55          | 48923456  |
 +------------+--------+--------+--------+--------+--------+-----------------+-----------+
 ```
 
 #### fact_news
 
-News articles by ticker with sentiment scores.
+News articles with sentiment analysis.
 
 **Path:** `storage/silver/company/facts/fact_news`
 **Partitions:** `publish_date`
-**Grain:** One row per article
+**Grain:** One row per article per ticker
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
 | **publish_date** | date | Article publication date (partition key) | 2024-11-08 |
-| **ticker** | string | Stock ticker (FK to dim_company) | AAPL |
-| **article_id** | string | Unique article identifier | art_abc123xyz |
-| **title** | string | Article headline | "Apple Announces Record Earnings" |
-| **source** | string | News source | Bloomberg, Reuters, CNBC |
-| **sentiment** | double | Sentiment score (-1.0 to 1.0) | 0.75 (positive) |
+| **ticker** | string | Related stock ticker (FK to dim_company) | AAPL |
+| **article_id** | string | Unique article identifier | abc123def456 |
+| **title** | string | Article headline | "Apple Announces Q4 Earnings" |
+| **source** | string | News source | "Bloomberg", "Reuters" |
+| **sentiment** | double | Sentiment score (-1 to +1) | 0.65 (positive) |
 
 **Sample Data:**
 ```
-+--------------+--------+---------------+----------------------------------+------------+-----------+
-| publish_date | ticker | article_id    | title                            | source     | sentiment |
-+--------------+--------+---------------+----------------------------------+------------+-----------+
-| 2024-11-08   | AAPL   | art_abc123    | Apple Announces Record Earnings  | Bloomberg  |  0.75     |
-| 2024-11-08   | AAPL   | art_def456    | iPhone Sales Beat Expectations   | Reuters    |  0.82     |
-| 2024-11-08   | GOOGL  | art_ghi789    | Google Cloud Revenue Grows 30%   | CNBC       |  0.68     |
-| 2024-11-07   | TSLA   | art_jkl012    | Tesla Faces Production Delays    | WSJ        | -0.45     |
-+--------------+--------+---------------+----------------------------------+------------+-----------+
++--------------+--------+--------------+--------------------------------+----------+-----------+
+| publish_date | ticker | article_id   | title                          | source   | sentiment |
++--------------+--------+--------------+--------------------------------+----------+-----------+
+| 2024-11-08   | AAPL   | abc123def456 | Apple Announces Q4 Earnings    | Bloomberg| 0.65      |
+| 2024-11-08   | GOOGL  | def456ghi789 | Google Cloud Revenue Surges    | Reuters  | 0.78      |
+| 2024-11-08   | TSLA   | ghi789jkl012 | Tesla Deliveries Beat Estimates| CNBC     | 0.82      |
++--------------+--------+--------------+--------------------------------+----------+-----------+
 ```
 
 ### Materialized Views
 
 #### prices_with_company
 
-Prices joined with company and exchange info (canonical analytics view).
+Prices joined with full company and exchange context.
 
 **Path:** `storage/silver/company/facts/prices_with_company`
 **Partitions:** `trade_date`
-**Tags:** `canonical`, `analytics`, `materialized`
+**Grain:** One row per ticker per trading day (same as fact_prices)
 
-| Column | Type | Description |
-|--------|------|-------------|
-| **trade_date** | date | Trading date |
-| **ticker** | string | Stock ticker |
-| **company_name** | string | Company name (from dim_company) |
-| **exchange_name** | string | Exchange name (from dim_exchange) |
-| **open** | double | Opening price |
-| **high** | double | High price |
-| **low** | double | Low price |
-| **close** | double | Closing price |
-| **volume_weighted** | double | VWAP |
-| **volume** | long | Trading volume |
+**Purpose:** Pre-joined view for analytics, eliminating need for runtime joins.
 
-**Graph Path:** `fact_prices → dim_company → dim_exchange`
+**Join Path:** `fact_prices → dim_company → dim_exchange`
 
 #### news_with_company
 
-News joined with company info.
+News articles joined with company information.
 
 **Path:** `storage/silver/company/facts/news_with_company`
 **Partitions:** `publish_date`
-**Tags:** `news`, `analytics`, `materialized`
+**Grain:** One row per article per ticker (same as fact_news)
 
-| Column | Type | Description |
-|--------|------|-------------|
-| **publish_date** | date | Publication date |
-| **ticker** | string | Stock ticker |
-| **company_name** | string | Company name (from dim_company) |
-| **article_id** | string | Article ID |
-| **title** | string | Article title |
-| **source** | string | News source |
-| **sentiment** | double | Sentiment score |
+**Purpose:** Pre-joined view for news analysis with company context.
 
-**Graph Path:** `fact_news → dim_company`
-
----
-
-## Data Sources
-
-### Polygon.io API
-
-The Company model sources data from Polygon.io, a financial market data provider.
-
-**API Endpoints Used:**
-1. **Ticker Reference** - `/v3/reference/tickers`
-   - Provides company metadata
-   - Maps to `dim_company`
-
-2. **Exchange Reference** - `/v3/reference/exchanges`
-   - Provides exchange metadata
-   - Maps to `dim_exchange`
-
-3. **Aggregates (Bars)** - `/v2/aggs/ticker/{ticker}/range/1/day/{from}/{to}`
-   - Daily OHLC, volume, VWAP
-   - Maps to `fact_prices`
-
-4. **News Articles** - `/v2/reference/news`
-   - News articles with sentiment
-   - Maps to `fact_news`
-
-### Bronze Layer Mapping
-
-| Bronze Table | API Source | Silver Table |
-|--------------|------------|--------------|
-| `bronze.ref_ticker` | Ticker Reference | `dim_company` |
-| `bronze.exchanges` | Exchange Reference | `dim_exchange` |
-| `bronze.prices_daily` | Aggregates (Daily) | `fact_prices` |
-| `bronze.news` | News Articles | `fact_news` |
-
-### Data Transformations
-
-#### dim_company
-```python
-# From Bronze
-bronze.ref_ticker
-  .select(
-    ticker=ticker,
-    company_name=name,
-    exchange_code=exchange_code
-  )
-  .derive(
-    company_id="sha1(ticker)"  # Surrogate key
-  )
-```
-
-#### fact_prices
-```python
-# From Bronze
-bronze.prices_daily
-  .select(
-    trade_date=trade_date,
-    ticker=ticker,
-    open=open,
-    high=high,
-    low=low,
-    close=close,
-    volume_weighted=volume_weighted,
-    volume=volume
-  )
-  .partition_by(trade_date)  # Daily partitions
-```
-
-### Update Frequency
-
-- **Daily Updates** - After US market close (4:00 PM ET)
-- **Historical Backfill** - Available back to 2004
-- **Real-time** - 15-minute delay (free tier), real-time (paid tier)
+**Join Path:** `fact_news → dim_company`
 
 ---
 
 ## Graph Structure
 
-### ASCII Diagram
+---
 
-```
-                    ┌─────────────────────┐
-                    │   dim_exchange      │
-                    │                     │
-                    │  • exchange_code    │
-                    │  • exchange_name    │
-                    │                     │
-                    └──────────┬──────────┘
-                               │
-                               │ exchange_code
-                               │
-                    ┌──────────▼──────────┐
-                    │   dim_company       │◄──────────────┐
-                    │                     │               │
-                    │  • ticker (PK)      │               │
-                    │  • company_name     │               │ ticker
-                    │  • exchange_code    │               │
-                    │  • company_id       │               │
-                    │  • market_cap_proxy │               │
-                    │                     │               │
-                    └──────────┬──────────┘               │
-                               │                          │
-                               │ ticker                   │
-                               │                          │
-        ┌──────────────────────┼──────────────────────────┘
-        │                      │
-        │ ticker               │ ticker
-        │                      │
-┌───────▼───────────┐  ┌───────▼───────────┐
-│   fact_prices     │  │   fact_news       │
-│                   │  │                   │
-│  • trade_date     │  │  • publish_date   │
-│  • ticker         │  │  • ticker         │
-│  • open           │  │  • article_id     │
-│  • high           │  │  • title          │
-│  • low            │  │  • source         │
-│  • close          │  │  • sentiment      │
-│  • volume_weighted│  │                   │
-│  • volume         │  └───────────────────┘
-│                   │
-│  Partitioned by   │
-│  trade_date       │
-└───────────────────┘
+### Nodes (Tables)
 
-Materialized Paths:
-  1. prices_with_company: fact_prices → dim_company → dim_exchange
-  2. news_with_company:   fact_news → dim_company
-
-Legend:
-  ┌─────┐
-  │     │  = Table (dimension or fact)
-  └─────┘
-
-  ──▶    = Foreign key relationship (many-to-one)
-```
-
-### Nodes
+The YAML config defines 4 nodes that transform Bronze → Silver:
 
 ```yaml
-nodes:
-  - id: dim_company
-    from: bronze.ref_ticker
-    select:
-      ticker: ticker
-      company_name: name
-      exchange_code: exchange_code
-    derive:
-      company_id: "sha1(ticker)"
-    tags: [dim, entity, company]
-    unique_key: [ticker]
+graph:
+  nodes:
+    - id: dim_company
+      from: bronze.ref_ticker
+      select:
+        ticker: ticker
+        company_name: name
+        exchange_code: exchange_code
+      derive:
+        company_id: "sha1(ticker)"
+      unique_key: [ticker]
 
-  - id: dim_exchange
-    from: bronze.exchanges
-    select:
-      exchange_code: code
-      exchange_name: name
-    tags: [dim, ref, exchange]
-    unique_key: [exchange_code]
+    - id: dim_exchange
+      from: bronze.exchanges
+      select:
+        exchange_code: code
+        exchange_name: name
+      unique_key: [exchange_code]
 
-  - id: fact_prices
-    from: bronze.prices_daily
-    select:
-      trade_date: trade_date
-      ticker: ticker
-      open: open
-      high: high
-      low: low
-      close: close
-      volume_weighted: volume_weighted
-      volume: volume
-    tags: [fact, prices]
+    - id: fact_prices
+      from: bronze.prices_daily
+      select:
+        trade_date: trade_date
+        ticker: ticker
+        open: open
+        high: high
+        low: low
+        close: close
+        volume_weighted: volume_weighted
+        volume: volume
 
-  - id: fact_news
-    from: bronze.news
-    select:
-      publish_date: publish_date
-      ticker: ticker
-      article_id: article_id
-      title: title
-      source: source
-      sentiment: sentiment
-    tags: [fact, news]
+    - id: fact_news
+      from: bronze.news
+      select:
+        publish_date: publish_date
+        ticker: ticker
+        article_id: article_id
+        title: title
+        source: source
+        sentiment: sentiment
 ```
 
-### Edges
+### Edges (Relationships)
 
 ```yaml
 edges:
@@ -432,649 +476,522 @@ edges:
     description: "News articles about a company"
 ```
 
-### Paths
+### Paths (Materialized Joins)
 
 ```yaml
 paths:
   - id: prices_with_company
     hops: "fact_prices -> dim_company -> dim_exchange"
     description: "Prices with full company and exchange context"
-    tags: [canonical, analytics]
 
   - id: news_with_company
     hops: "fact_news -> dim_company"
     description: "News with company context"
-    tags: [news, analytics]
 ```
 
 ---
 
 ## Measures
 
-The Company model defines 10 measures: 4 simple aggregates and 6 weighted indices.
+---
 
-### Simple Measures
+### Simple Aggregations
 
-#### market_cap
-Market capitalization proxy (close × volume)
+| Measure | Source | Aggregation | Format | Purpose |
+|---------|--------|-------------|--------|---------|
+| **avg_close_price** | fact_prices.close | avg | $#,##0.00 | Average closing price |
+| **total_volume** | fact_prices.volume | sum | #,##0 | Total trading volume |
+| **max_high** | fact_prices.high | max | $#,##0.00 | Highest price in period |
+| **min_low** | fact_prices.low | min | $#,##0.00 | Lowest price in period |
 
+### Computed Measures
+
+| Measure | Expression | Aggregation | Purpose |
+|---------|------------|-------------|---------|
+| **market_cap** | close × volume | avg | Market capitalization proxy |
+| **avg_vwap** | volume_weighted | avg | Average VWAP |
+
+### Weighted Aggregate Indices
+
+**Purpose:** Calculate multi-stock indices using different weighting methods.
+
+| Measure | Weighting Method | Use Case |
+|---------|------------------|----------|
+| **equal_weighted_index** | Equal | All stocks same weight (S&P Equal Weight) |
+| **volume_weighted_index** | Volume | Weight by liquidity |
+| **market_cap_weighted_index** | Market Cap | Weight by company size (S&P 500 style) |
+| **price_weighted_index** | Price | Weight by stock price (DJIA style) |
+| **volume_deviation_weighted_index** | Volume Deviation | Highlight unusual trading activity |
+| **volatility_weighted_index** | Inverse Volatility | Risk-adjusted weighting |
+
+**Example YAML Definition:**
 ```yaml
-market_cap:
-  description: "Market capitalization proxy (close * volume)"
-  type: computed
-  source: fact_prices.close
-  expression: "close * volume"
-  aggregation: avg
-  data_type: double
-  format: "$#,##0.00"
-  tags: [market, valuation, aggregate]
-```
-
-**Usage:**
-```python
-# Top 10 companies by market cap
-top_companies = company_model.calculate_measure_by_entity(
-    'market_cap',
-    'ticker',
-    limit=10
-)
-```
-
-#### avg_close_price
-Average closing price
-
-```yaml
-avg_close_price:
-  source: fact_prices.close
-  aggregation: avg
-  data_type: double
-  format: "$#,##0.00"
-  tags: [price, average]
-```
-
-#### total_volume
-Total trading volume
-
-```yaml
-total_volume:
-  source: fact_prices.volume
-  aggregation: sum
-  data_type: long
-  format: "#,##0"
-  tags: [volume, total]
-```
-
-#### max_high
-Highest price in period
-
-```yaml
-max_high:
-  source: fact_prices.high
-  aggregation: max
-  data_type: double
-  format: "$#,##0.00"
-  tags: [price, max]
-```
-
-#### min_low
-Lowest price in period
-
-```yaml
-min_low:
-  source: fact_prices.low
-  aggregation: min
-  data_type: double
-  format: "$#,##0.00"
-  tags: [price, min]
-```
-
-#### avg_vwap
-Average volume weighted average price
-
-```yaml
-avg_vwap:
-  source: fact_prices.volume_weighted
-  aggregation: avg
-  data_type: double
-  format: "$#,##0.00"
-  tags: [price, vwap]
-```
-
-### Weighted Aggregate Measures
-
-These measures create multi-stock indices using different weighting schemes.
-
-#### equal_weighted_index
-Equal weighted price index across stocks
-
-```yaml
-equal_weighted_index:
-  description: "Equal weighted price index across stocks"
-  type: weighted_aggregate
-  source: fact_prices.close
-  weighting_method: equal
-  group_by: [trade_date]
-  data_type: double
-  format: "$#,##0.00"
-  tags: [index, aggregate, equal_weighted]
-```
-
-**Logic:** Each stock has equal weight (1/N)
-
-```
-Index = (Price_AAPL + Price_GOOGL + Price_MSFT) / 3
-```
-
-#### volume_weighted_index
-Volume weighted price index
-
-```yaml
-volume_weighted_index:
-  description: "Volume weighted price index across stocks"
-  type: weighted_aggregate
-  source: fact_prices.close
-  weighting_method: volume
-  group_by: [trade_date]
-  data_type: double
-  format: "$#,##0.00"
-  tags: [index, aggregate, volume_weighted]
-```
-
-**Logic:** Weight by trading volume
-
-```
-Weight_AAPL = Volume_AAPL / (Volume_AAPL + Volume_GOOGL + Volume_MSFT)
-Index = (Price_AAPL × Weight_AAPL) + (Price_GOOGL × Weight_GOOGL) + ...
-```
-
-#### market_cap_weighted_index
-Market cap weighted price index
-
-```yaml
-market_cap_weighted_index:
-  description: "Market cap weighted price index across stocks"
-  type: weighted_aggregate
-  source: fact_prices.close
-  weighting_method: market_cap
-  group_by: [trade_date]
-  data_type: double
-  format: "$#,##0.00"
-  tags: [index, aggregate, market_cap_weighted]
-```
-
-**Logic:** Weight by market capitalization (similar to S&P 500)
-
-```
-MarketCap_AAPL = Close_AAPL × Volume_AAPL
-Weight_AAPL = MarketCap_AAPL / Total_MarketCap
-Index = (Price_AAPL × Weight_AAPL) + (Price_GOOGL × Weight_GOOGL) + ...
-```
-
-#### price_weighted_index
-Price weighted index (similar to DJIA)
-
-```yaml
-price_weighted_index:
-  description: "Price weighted index across stocks"
-  type: weighted_aggregate
-  source: fact_prices.close
-  weighting_method: price
-  group_by: [trade_date]
-  data_type: double
-  format: "$#,##0.00"
-  tags: [index, aggregate, price_weighted]
-```
-
-**Logic:** Weight by stock price (similar to Dow Jones)
-
-```
-Index = (Price_AAPL + Price_GOOGL + Price_MSFT) / Divisor
-```
-
-#### volume_deviation_weighted_index
-Volume deviation weighted index (unusual activity)
-
-```yaml
-volume_deviation_weighted_index:
-  description: "Volume deviation weighted index (unusual activity)"
-  type: weighted_aggregate
-  source: fact_prices.close
-  weighting_method: volume_deviation
-  group_by: [trade_date]
-  data_type: double
-  format: "$#,##0.00"
-  tags: [index, aggregate, volume_deviation]
-```
-
-**Logic:** Weight by volume deviation from average (highlights unusual activity)
-
-```
-Deviation_AAPL = |Volume_today - AvgVolume_30d| / AvgVolume_30d
-Weight_AAPL = Deviation_AAPL / Total_Deviation
-```
-
-#### volatility_weighted_index
-Inverse volatility weighted index (risk-adjusted)
-
-```yaml
-volatility_weighted_index:
-  description: "Inverse volatility weighted index (risk-adjusted)"
-  type: weighted_aggregate
-  source: fact_prices.close
-  weighting_method: volatility
-  group_by: [trade_date]
-  data_type: double
-  format: "$#,##0.00"
-  tags: [index, aggregate, volatility_weighted]
-```
-
-**Logic:** Weight inversely by volatility (low volatility = higher weight)
-
-```
-Volatility_AAPL = StdDev(Returns_30d)
-Weight_AAPL = (1 / Volatility_AAPL) / Sum(1 / Volatility)
+measures:
+  volume_weighted_index:
+    description: "Volume weighted price index across stocks"
+    type: weighted_aggregate
+    source: fact_prices.close
+    weighting_method: volume
+    group_by: [trade_date]
+    data_type: double
+    format: "$#,##0.00"
+    tags: [index, aggregate, volume_weighted]
 ```
 
 ---
 
-## Usage Examples
+## How-To Guides
 
-### 1. Load Company Model
+---
+
+### How to Query Stock Prices
+
+**Step 1:** Load the model and session
 
 ```python
 from core.context import RepoContext
 from models.api.session import UniversalSession
 
-# Initialize session
+# Initialize
 ctx = RepoContext.from_repo_root()
 session = UniversalSession(ctx.connection, ctx.config_root, ctx.storage_cfg)
 
 # Load company model
-company_model = session.load_model('company')
+company = session.load_model('company')
 ```
 
-### 2. Get Company Dimension
+**Step 2:** Get price data with filters
 
 ```python
-# Get all companies
-companies = company_model.get_dimension_df('dim_company')
-companies.show(10)
+# Filter by ticker and date range
+filters = {
+    'ticker': ['AAPL', 'GOOGL', 'MSFT'],
+    'trade_date': {
+        'start': '2024-01-01',
+        'end': '2024-11-08'
+    }
+}
 
-# Filter for specific tickers
-aapl = companies.filter(F.col('ticker') == 'AAPL')
-aapl.show()
+# Get prices
+prices = company.get_fact_df('fact_prices', filters=filters)
+
+# Convert to Pandas
+df = prices.to_pandas()
+print(df.head())
 ```
 
-### 3. Get Stock Prices
+**Step 3:** Analyze and visualize
 
 ```python
-# Get all prices
-prices = company_model.get_fact_df('fact_prices')
+import plotly.express as px
 
-# Filter by date range
-prices_2024 = prices.filter(
-    (F.col('trade_date') >= '2024-01-01') &
-    (F.col('trade_date') <= '2024-12-31')
+# Create price trend chart
+fig = px.line(
+    df,
+    x='trade_date',
+    y='close',
+    color='ticker',
+    title='Stock Price Trends'
+)
+fig.show()
+```
+
+---
+
+### How to Calculate Weighted Indices
+
+**Step 1:** Get price data for all stocks
+
+```python
+# Get all prices for a date range
+filters = {
+    'trade_date': {
+        'start': '2024-10-01',
+        'end': '2024-11-08'
+    }
+}
+
+prices = company.get_fact_df('fact_prices', filters=filters).to_pandas()
+```
+
+**Step 2:** Calculate equal-weighted index
+
+```python
+# Group by date and calculate equal-weighted average
+equal_weighted = prices.groupby('trade_date').agg({
+    'close': 'mean'  # Equal weight = simple average
+}).reset_index()
+
+equal_weighted.columns = ['trade_date', 'equal_weighted_index']
+print(equal_weighted)
+```
+
+**Step 3:** Calculate volume-weighted index
+
+```python
+# Calculate volume-weighted average price
+prices['weighted_price'] = prices['close'] * prices['volume']
+
+volume_weighted = prices.groupby('trade_date').agg({
+    'weighted_price': 'sum',
+    'volume': 'sum'
+}).reset_index()
+
+volume_weighted['volume_weighted_index'] = (
+    volume_weighted['weighted_price'] / volume_weighted['volume']
 )
 
-# Filter by ticker
-aapl_prices = prices.filter(F.col('ticker') == 'AAPL')
+print(volume_weighted[['trade_date', 'volume_weighted_index']])
 ```
 
-### 4. Get Prices with Company Context
+**Step 4:** Calculate market-cap weighted index
 
 ```python
-# Use materialized view
-prices_with_company = session.get_table('company', 'prices_with_company')
+# Calculate market cap proxy (close * volume)
+prices['market_cap'] = prices['close'] * prices['volume']
 
-prices_with_company.filter(F.col('trade_date') == '2024-11-08').show()
+# Weight by market cap
+prices['weighted_price'] = prices['close'] * prices['market_cap']
 
-# +------------+--------+---------------+---------------+--------+-------+
-# | trade_date | ticker | company_name  | exchange_name | close  | volume|
-# +------------+--------+---------------+---------------+--------+-------+
-# | 2024-11-08 | AAPL   | Apple Inc.    | NASDAQ        | 226.95 |52847k |
-# | 2024-11-08 | GOOGL  | Alphabet Inc. | NASDAQ        | 169.75 |28456k |
-# +------------+--------+---------------+---------------+--------+-------+
-```
+mcap_weighted = prices.groupby('trade_date').agg({
+    'weighted_price': 'sum',
+    'market_cap': 'sum'
+}).reset_index()
 
-### 5. Calculate Average Price by Ticker
-
-```python
-# Using measure calculation
-avg_prices = company_model.calculate_measure_by_entity(
-    'avg_close_price',
-    'ticker',
-    limit=10
+mcap_weighted['market_cap_weighted_index'] = (
+    mcap_weighted['weighted_price'] / mcap_weighted['market_cap']
 )
 
-avg_prices.show()
-
-# +--------+-----------------+
-# | ticker | avg_close_price |
-# +--------+-----------------+
-# | AAPL   |          186.42 |
-# | GOOGL  |          142.35 |
-# | MSFT   |          382.18 |
-# +--------+-----------------+
+print(mcap_weighted[['trade_date', 'market_cap_weighted_index']])
 ```
 
-### 6. Calculate Market Cap
+---
+
+### How to Analyze News Sentiment
+
+**Step 1:** Get news data
 
 ```python
-# Top 10 by market cap
-top_market_cap = company_model.calculate_measure_by_entity(
-    'market_cap',
-    'ticker',
-    limit=10
-)
+# Get news for specific tickers
+filters = {
+    'ticker': ['AAPL', 'TSLA'],
+    'publish_date': {
+        'start': '2024-11-01',
+        'end': '2024-11-08'
+    }
+}
 
-top_market_cap.show()
+news = company.get_fact_df('fact_news', filters=filters).to_pandas()
 ```
 
-### 7. Get News with Sentiment
+**Step 2:** Calculate sentiment statistics
 
 ```python
-# Get all news
-news = company_model.get_fact_df('fact_news')
+# Average sentiment by ticker
+sentiment_by_ticker = news.groupby('ticker').agg({
+    'sentiment': ['mean', 'std', 'count']
+}).reset_index()
 
-# Filter by ticker and date
-aapl_news = news.filter(
-    (F.col('ticker') == 'AAPL') &
-    (F.col('publish_date') >= '2024-11-01')
-)
-
-# Get positive news (sentiment > 0.5)
-positive_news = news.filter(F.col('sentiment') > 0.5)
-positive_news.show()
+print("\nSentiment by Ticker:")
+print(sentiment_by_ticker)
 ```
 
-### 8. Analyze Price Trends
+**Step 3:** Correlate sentiment with price changes
 
 ```python
-from pyspark.sql import functions as F, Window
+# Get prices for same period
+prices_filtered = prices[
+    (prices['ticker'].isin(['AAPL', 'TSLA'])) &
+    (prices['trade_date'] >= '2024-11-01')
+].copy()
 
 # Calculate daily returns
-prices = company_model.get_fact_df('fact_prices')
+prices_filtered['return'] = prices_filtered.groupby('ticker')['close'].pct_change()
 
-window_spec = Window.partitionBy('ticker').orderBy('trade_date')
+# Join with average daily sentiment
+daily_sentiment = news.groupby(['publish_date', 'ticker'])['sentiment'].mean().reset_index()
+daily_sentiment.columns = ['trade_date', 'ticker', 'avg_sentiment']
 
-returns = prices.withColumn(
-    'prev_close',
-    F.lag('close').over(window_spec)
-).withColumn(
-    'daily_return',
-    (F.col('close') - F.col('prev_close')) / F.col('prev_close')
-)
-
-# Get top daily movers
-top_movers = returns.filter(
-    F.col('trade_date') == '2024-11-08'
-).orderBy(F.desc('daily_return')).limit(10)
-
-top_movers.select('ticker', 'close', 'daily_return').show()
-```
-
-### 9. Calculate Moving Averages
-
-```python
-from pyspark.sql import Window
-
-# 30-day moving average
-window_30d = Window.partitionBy('ticker').orderBy('trade_date').rowsBetween(-29, 0)
-
-prices_with_ma = prices.withColumn(
-    'ma_30',
-    F.avg('close').over(window_30d)
-)
-
-# Filter for AAPL
-aapl_with_ma = prices_with_ma.filter(F.col('ticker') == 'AAPL')
-aapl_with_ma.select('trade_date', 'close', 'ma_30').show()
-```
-
-### 10. Join with Calendar
-
-```python
-# Load core model
-core_model = session.load_model('core')
-calendar = core_model.get_dimension_df('dim_calendar')
-
-# Join prices with calendar
-prices_with_dates = prices.join(
-    calendar,
-    prices.trade_date == calendar.date,
+merged = prices_filtered.merge(
+    daily_sentiment,
+    on=['trade_date', 'ticker'],
     how='left'
 )
 
-# Get Monday prices only
-monday_prices = prices_with_dates.filter(F.col('day_of_week') == 1)
-
-# Analyze by month
-monthly_stats = prices_with_dates.groupBy('year_month', 'ticker').agg(
-    F.avg('close').alias('avg_close'),
-    F.sum('volume').alias('total_volume')
-)
-monthly_stats.show()
+# Calculate correlation
+print("\nCorrelation between sentiment and returns:")
+print(merged[['avg_sentiment', 'return']].corr())
 ```
 
-### 11. Cross-Model Analysis: Prices + Macro
+---
+
+### How to Create a Stock Analysis Notebook
+
+**Step 1:** Create a new markdown file
+
+Create `configs/notebooks/my_stock_analysis.md`:
+
+```markdown
+---
+title: "My Stock Analysis"
+model: company
+filters:
+  - ticker
+  - date_range
+---
+
+# My Stock Analysis
+
+## Filters
+
+$filter${
+  id: ticker
+  label: Select Stocks
+  type: select
+  multi: true
+  source: {model: company, table: dim_company, column: ticker}
+  default: ["AAPL", "GOOGL", "MSFT"]
+}
+
+$filter${
+  id: date_range
+  label: Date Range
+  type: date_range
+  default: {start: 2024-10-01, end: 2024-11-08}
+}
+
+## Price Trends
+
+$exhibits${
+  type: line_chart
+  title: "Stock Price Trends"
+  source: company.fact_prices
+  x: trade_date
+  y: close
+  color: ticker
+  legend: true
+}
+
+## Trading Volume
+
+$exhibits${
+  type: bar_chart
+  title: "Trading Volume by Stock"
+  source: company.fact_prices
+  x: ticker
+  y: volume
+  aggregation: sum
+}
+
+## Detailed Data
+
+$exhibits${
+  type: data_table
+  title: "Price Data"
+  source: company.fact_prices
+  columns: [trade_date, ticker, open, high, low, close, volume]
+  sortable: true
+  download: true
+}
+```
+
+**Step 2:** View in the UI
+
+```bash
+streamlit run app/ui/notebook_app_duckdb.py
+```
+
+Navigate to "My Stock Analysis" in the sidebar.
+
+---
+
+## Usage Examples
+
+---
+
+### Example 1: Basic Price Query
 
 ```python
-# Load macro model
-macro_model = session.load_model('macro')
-unemployment = macro_model.get_fact_df('fact_unemployment')
+from models.api.session import UniversalSession
+from core.context import RepoContext
 
-# Join prices with unemployment rate
-prices_monthly = prices.groupBy(
-    F.date_trunc('month', 'trade_date').alias('month'),
-    'ticker'
-).agg(
-    F.avg('close').alias('avg_close')
-)
+# Setup
+ctx = RepoContext.from_repo_root()
+session = UniversalSession(ctx.connection, ctx.config_root, ctx.storage_cfg)
 
-unemployment_monthly = unemployment.select(
-    F.date_trunc('month', 'date').alias('month'),
-    F.col('value').alias('unemployment_rate')
-)
+# Get Apple prices for last 30 days
+prices = session.get_table('company', 'fact_prices')
+apple_prices = prices.filter(
+    (prices['ticker'] == 'AAPL') &
+    (prices['trade_date'] >= '2024-10-08')
+).to_pandas()
 
-combined = prices_monthly.join(unemployment_monthly, on='month', how='left')
-combined.show()
+print(apple_prices[['trade_date', 'close', 'volume']])
+```
+
+### Example 2: Multi-Stock Comparison
+
+```python
+# Compare tech stocks
+tickers = ['AAPL', 'GOOGL', 'MSFT', 'AMZN', 'TSLA']
+
+filters = {
+    'ticker': tickers,
+    'trade_date': {'start': '2024-01-01', 'end': '2024-11-08'}
+}
+
+company = session.load_model('company')
+prices = company.get_fact_df('fact_prices', filters=filters).to_pandas()
+
+# Calculate cumulative returns
+prices['return'] = prices.groupby('ticker')['close'].pct_change()
+prices['cumulative_return'] = prices.groupby('ticker')['return'].cumsum()
+
+# Plot
+import plotly.express as px
+fig = px.line(prices, x='trade_date', y='cumulative_return', color='ticker')
+fig.show()
+```
+
+### Example 3: Cross-Model Analysis (Company + Macro)
+
+```python
+# Load both models
+company = session.load_model('company')
+macro = session.load_model('macro')
+
+# Get stock prices
+prices = company.get_fact_df('fact_prices').to_pandas()
+
+# Get unemployment rate
+unemployment = macro.get_fact_df('fact_unemployment').to_pandas()
+
+# Join on date
+unemployment['trade_date'] = unemployment['date']
+merged = prices.merge(unemployment[['trade_date', 'value']], on='trade_date', how='left')
+merged.rename(columns={'value': 'unemployment_rate'}, inplace=True)
+
+# Analyze correlation
+print(merged[['close', 'unemployment_rate']].corr())
+```
+
+See [[Macro Model]] for economic indicators.
+
+### Example 4: Using Materialized Views
+
+```python
+# Use pre-joined view (faster than joining at query time)
+prices_with_company = session.get_table('company', 'prices_with_company').to_pandas()
+
+# Now you have company_name and exchange_name without joins
+print(prices_with_company[['ticker', 'company_name', 'exchange_name', 'close']])
+
+# Filter by exchange
+nasdaq_stocks = prices_with_company[prices_with_company['exchange_name'] == 'NASDAQ']
+print(f"Average NASDAQ price: ${nasdaq_stocks['close'].mean():.2f}")
 ```
 
 ---
 
 ## Design Decisions
 
-### 1. Partition by Date
+---
 
-**Decision:** Partition fact_prices by `trade_date` and fact_news by `publish_date`
+### Why Partitioning by Date?
+
+**Decision:** Partition fact tables by trade_date/publish_date
 
 **Rationale:**
 - Most queries filter by date range
-- Partition pruning improves performance
-- Daily partitions balance between too many/too few
+- Enables partition pruning (10-100x faster)
+- Aligns with data ingestion pattern (daily updates)
+- Reduces I/O for time-based analytics
 
-**Performance Impact:**
-```python
-# Without partitioning: Full table scan
-prices.filter(F.col('trade_date') == '2024-11-08')  # Scans all files
+### Why Materialized Views?
 
-# With partitioning: Only scans relevant partition
-prices.filter(F.col('trade_date') == '2024-11-08')  # Scans 1 partition
-```
-
-### 2. Include VWAP
-
-**Decision:** Include `volume_weighted` (VWAP) column in fact_prices
+**Decision:** Pre-compute `prices_with_company` and `news_with_company`
 
 **Rationale:**
-- VWAP is common metric for institutional traders
-- Provided by Polygon API (no calculation needed)
-- More accurate than simple average of OHLC
+- Most analytics need company context
+- Eliminates runtime join cost
+- Trades storage for query speed
+- Views auto-rebuild when dimensions change
 
-### 3. Market Cap Proxy
+### Why Multiple Weighted Indices?
 
-**Decision:** Use `close × volume` as market cap proxy in dim_company
-
-**Rationale:**
-- True market cap requires shares outstanding (not always available)
-- Proxy is "good enough" for relative comparisons
-- Updates automatically with price data
-
-**Limitations:**
-- Not actual market cap
-- Volume varies daily (use average)
-
-### 4. Materialized Views
-
-**Decision:** Create `prices_with_company` and `news_with_company` materialized views
+**Decision:** Support 6 different weighting methods
 
 **Rationale:**
-- Common join pattern (fact → dim_company → dim_exchange)
-- Pre-joining improves query performance
-- Denormalized format easier for analysts
+- Different use cases (equal weight, market cap, volatility)
+- Enables index comparison and analysis
+- Mirrors real-world indices (S&P 500, DJIA)
+- Low computational cost (pre-aggregated)
 
-**Trade-off:**
-- Storage: ~3x larger than normalized
-- Updates: Must rebuild when dim_company changes
+### Why market_cap_proxy Instead of Real Market Cap?
 
-### 5. SHA1 Company ID
-
-**Decision:** Generate surrogate key using `sha1(ticker)`
+**Decision:** Use close × volume as market cap proxy
 
 **Rationale:**
-- Consistent, deterministic ID
-- Useful for graph databases
-- Avoids auto-increment issues
+- Real market cap requires shares outstanding (not in Polygon daily feed)
+- Proxy correlates well with actual market cap
+- Available for all tickers daily
+- Sufficient for weighted index calculations
 
-### 6. No Intraday Data
-
-**Decision:** Daily grain only (no intraday prices)
-
-**Rationale:**
-- Most analytics at daily level or higher
-- Intraday requires different storage strategy
-- Reduces data volume significantly
-
-**Future Enhancement:**
-- Add `fact_prices_intraday` for minute-level bars
-
-### 7. News Sentiment
-
-**Decision:** Include pre-computed sentiment score
-
-**Rationale:**
-- Polygon provides sentiment analysis
-- Enables correlation with price movements
-- Saves computation time
-
-**Alternative:**
-- Could run own NLP sentiment analysis
-- Would require more infrastructure
-
-### 8. 10 Measures Including Weighted Indices
-
-**Decision:** Pre-define 10 measures including 6 weighted indices
-
-**Rationale:**
-- Weighted indices are complex calculations
-- Common use case: portfolio/market analysis
-- Standardizes index calculation logic
-
-**Index Types Chosen:**
-- Equal weighted: Simple benchmark
-- Volume weighted: Liquidity focus
-- Market cap weighted: S&P 500 style
-- Price weighted: DJIA style
-- Volume deviation: Unusual activity
-- Volatility weighted: Risk-adjusted
+**Limitation:** Not accurate for absolute market cap analysis
 
 ---
 
 ## Partitioning Strategy
 
-### fact_prices Partitioning
+---
 
+### fact_prices
+
+**Partition Column:** `trade_date`
+**Partition Type:** Date
+**Partition Format:** `trade_date=YYYY-MM-DD`
+
+**Storage Layout:**
 ```
 storage/silver/company/facts/fact_prices/
-├── trade_date=2024-01-01/
-│   └── part-00000.parquet
 ├── trade_date=2024-01-02/
 │   └── part-00000.parquet
 ├── trade_date=2024-01-03/
 │   └── part-00000.parquet
 ...
+└── trade_date=2024-11-08/
+    └── part-00000.parquet
 ```
 
-**Benefits:**
-- Query filtering: Only reads relevant dates
-- Update pattern: Append new date partition
-- Deletion: Easy to drop old partitions
+**Query Optimization:**
+- Filter: `WHERE trade_date >= '2024-11-01'` → Scans only 8 partitions
+- No filter: Scans all ~250 partitions (trading days per year)
 
-**Query Examples:**
-```python
-# Scans 1 partition
-prices.filter(F.col('trade_date') == '2024-11-08')
+### fact_news
 
-# Scans 7 partitions
-prices.filter(
-    (F.col('trade_date') >= '2024-11-01') &
-    (F.col('trade_date') <= '2024-11-07')
-)
-```
+**Partition Column:** `publish_date`
+**Partition Type:** Date
+**Partition Format:** `publish_date=YYYY-MM-DD`
 
-### fact_news Partitioning
-
-```
-storage/silver/company/facts/fact_news/
-├── publish_date=2024-01-01/
-├── publish_date=2024-01-02/
-...
-```
-
-Same strategy as fact_prices.
-
-### Dimension Tables: No Partitioning
-
-```
-storage/silver/company/dims/dim_company/
-└── part-00000.parquet
-
-storage/silver/company/dims/dim_exchange/
-└── part-00000.parquet
-```
-
-**Rationale:**
-- Small tables (hundreds to thousands of rows)
-- Fully scanned for joins
-- Partitioning would hurt performance
+**Storage Layout:** Same as fact_prices
 
 ---
 
-## Summary
-
-The Company model provides comprehensive financial market data with:
-
-- **Rich Schema** - 6 tables (2 dims, 2 facts, 2 materialized views)
-- **Quality Data** - From Polygon.io API with daily updates
-- **10 Measures** - Including 6 weighted market indices
-- **Graph Structure** - Clear relationships with materialized paths
-- **Performance** - Date-partitioned facts for fast queries
-- **Integration** - Dependency on Core model for date intelligence
-
-This model serves as the foundation for equity analysis and feeds the Forecast model for ML predictions.
+## Related Documentation
 
 ---
 
-**Next Steps:**
-- See [Forecast Model](forecast-model.md) for ML predictions on company data
-- See [Macro Model](macro-model.md) for economic indicators
-- See [Overview](../overview.md) for framework concepts
+- [[Core Model]] - Shared calendar dimension
+- [[Forecast Model]] - Uses company prices for training
+- [[Macro Model]] - Economic indicators for correlation analysis
+- [[Data Pipeline]] - How data is ingested from Polygon API
+- [[Universal Session]] - Cross-model query examples
 
 ---
 
-**Related Documentation:**
-- [Models Framework Overview](../overview.md)
-- [Core Model](core-model.md)
-- [Graph Building](../overview.md#graph-building)
-- [Measures](../overview.md#measures)
+**Tags:** #finance/equities #component/model #concept/dimensional-modeling #source/polygon #status/stable
+
+**Last Updated:** 2024-11-08
+**Model Version:** 1.0
+**Dependencies:** [[Core Model]]
+**Used By:** [[Forecast Model]]
