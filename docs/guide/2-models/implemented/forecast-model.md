@@ -1,4 +1,17 @@
+---
+title: "Forecast Model"
+tags: [finance/forecast, component/model, concept/analytics, status/stable]
+aliases: ["Forecast", "ML Model", "Prediction Model"]
+created: 2024-11-08
+updated: 2024-11-08
+status: stable
+dependencies: ["[[Core Model]]", "[[Company Model]]"]
+used_by: []
+---
+
 # Forecast Model
+
+---
 
 > **Time series predictions and ML model performance metrics**
 
@@ -11,17 +24,25 @@ The Forecast model provides ML-based predictions for stock prices and volumes, a
 
 ## Table of Contents
 
+---
+
 - [Overview](#overview)
-- [Schema](#schema)
+- [Schema Overview](#schema-overview)
+- [Data Sources](#data-sources)
+- [Detailed Schema](#detailed-schema)
 - [ML Model Configurations](#ml-model-configurations)
 - [Accuracy Metrics](#accuracy-metrics)
 - [Graph Structure](#graph-structure)
+- [Measures](#measures)
+- [How-To Guides](#how-to-guides)
 - [Usage Examples](#usage-examples)
 - [Design Decisions](#design-decisions)
 
 ---
 
 ## Overview
+
+---
 
 ### Purpose
 
@@ -47,7 +68,7 @@ The Forecast model provides:
 |-----------|-------|
 | **Model Name** | `forecast` |
 | **Tags** | `timeseries`, `forecast`, `ml` |
-| **Dependencies** | `core` (calendar), `company` (training data) |
+| **Dependencies** | [[Core Model]] (calendar), [[Company Model]] (training data) |
 | **Storage Root** | `storage/silver/forecast` |
 | **Format** | Parquet |
 | **Tables** | 4 (all facts, 1 registry dimension) |
@@ -57,7 +78,116 @@ The Forecast model provides:
 
 ---
 
-## Schema
+## Schema Overview
+
+---
+
+### High-Level Summary
+
+The Forecast model implements a **fact-based schema** with forecasting outputs and model metadata. All predictions are sourced from [[Company Model]] training data and include confidence intervals for uncertainty quantification.
+
+**Quick Reference:**
+
+| Table Type | Count | Purpose |
+|------------|-------|---------|
+| **Facts** | 3 | Predictions and performance metrics |
+| **Registry** | 1 | Model metadata and parameters |
+| **Measures** | 3 | Pre-defined accuracy calculations |
+
+### Facts (Predictions)
+
+| Fact | Grain | Partitions | Purpose |
+|------|-------|------------|---------|
+| **forecast_price** | Daily per ticker per model | forecast_date | Price predictions with confidence intervals |
+| **forecast_volume** | Daily per ticker per model | forecast_date | Volume predictions with confidence intervals |
+| **forecast_metrics** | Per model per evaluation | metric_date | Accuracy metrics (MAE, RMSE, MAPE, R²) |
+
+### Registry (Metadata)
+
+| Table | Purpose | Grain |
+|-------|---------|-------|
+| **model_registry** | Track trained models and parameters | One row per model training instance |
+
+### Forecast Diagram
+
+```
+Training Flow:
+┌─────────────┐      ┌──────────────┐      ┌──────────────┐
+│  [[Company  │      │   Train ML   │      │   Generate   │
+│   Model]]   │ ───▶ │    Models    │ ───▶ │  Forecasts   │
+│fact_prices  │      │              │      │              │
+└─────────────┘      └──────┬───────┘      └──────────────┘
+                            │
+                            ↓
+                     ┌──────────────┐
+                     │   Evaluate   │
+                     │   Accuracy   │
+                     └──────┬───────┘
+                            │
+                            ↓
+                     ┌──────────────┐
+                     │   Register   │
+                     │    Model     │
+                     └──────────────┘
+```
+
+---
+
+## Data Sources
+
+---
+
+### Training Data Source
+
+**Source:** [[Company Model]] fact_prices table
+**Provider:** Polygon.io (via Company Model)
+**Data Coverage:** Historical stock prices (OHLC, volume)
+
+### Training Pipeline
+
+```
+[[Company Model]].fact_prices
+    ↓
+Feature Engineering
+    ├─→ Lag features (1, 7, 14, 30 days)
+    ├─→ Rolling statistics (mean, std)
+    └─→ Day-of-week indicators
+    ↓
+Model Training
+    ├─→ ARIMA (auto-tuned)
+    ├─→ Prophet (seasonality)
+    └─→ Random Forest (ensemble)
+    ↓
+Prediction Generation
+    ├─→ forecast_price (confidence intervals)
+    └─→ forecast_volume (confidence intervals)
+    ↓
+Model Evaluation
+    ├─→ forecast_metrics (MAE, RMSE, MAPE, R²)
+    └─→ model_registry (parameters, metadata)
+    ↓
+Silver Storage (forecast model tables)
+```
+
+### Update Schedule
+
+- **Training** - Daily after market close
+- **Prediction Generation** - Immediately after training
+- **Accuracy Evaluation** - Weekly rolling window
+- **Model Retraining** - Daily with latest data
+
+### Data Quality
+
+- **Training Window** - Configurable (7-60 days)
+- **Test Window** - Configurable (7-30 days)
+- **Validation** - Cross-validation for hyperparameter tuning
+- **Monitoring** - Continuous accuracy tracking
+
+---
+
+## Detailed Schema
+
+---
 
 ### Facts
 
@@ -201,53 +331,11 @@ Registry of trained models and their parameters.
 +---------------------+--------------+------------------+--------+
 ```
 
-### Measures
-
-#### avg_forecast_error
-
-Average forecast error (MAE) across models.
-
-```yaml
-avg_forecast_error:
-  description: "Average forecast error (MAE)"
-  source: forecast_metrics.mae
-  aggregation: avg
-  data_type: double
-  format: "$#,##0.00"
-  tags: [error, accuracy]
-```
-
-#### avg_forecast_mape
-
-Average Mean Absolute Percentage Error across models.
-
-```yaml
-avg_forecast_mape:
-  description: "Average Mean Absolute Percentage Error"
-  source: forecast_metrics.mape
-  aggregation: avg
-  data_type: double
-  format: "#,##0.00%"
-  tags: [error, percentage]
-```
-
-#### best_model_r2
-
-Best R-squared score across all models.
-
-```yaml
-best_model_r2:
-  description: "Best R-squared score across models"
-  source: forecast_metrics.r2_score
-  aggregation: max
-  data_type: double
-  format: "#,##0.0000"
-  tags: [accuracy, r2]
-```
-
 ---
 
 ## ML Model Configurations
+
+---
 
 The Forecast model supports multiple algorithm types with different configurations.
 
@@ -457,6 +545,8 @@ random_forest_30d:
 
 ## Accuracy Metrics
 
+---
+
 ### MAE (Mean Absolute Error)
 
 **Formula:** `MAE = (1/n) × Σ|actual - predicted|`
@@ -563,6 +653,8 @@ R² = 1 - (5.0 / 20.8) = 0.76
 
 ## Graph Structure
 
+---
+
 ### ASCII Diagram
 
 ```
@@ -609,15 +701,16 @@ R² = 1 - (5.0 / 20.8) = 0.76
 
 Training Flow:
 ┌─────────────┐      ┌──────────────┐      ┌──────────────┐
-│  company    │      │   Train ML   │      │   Generate   │
-│fact_prices  │ ───▶ │    Models    │ ───▶ │  Forecasts   │
-└─────────────┘      └──────────────┘      └──────────────┘
+│ [[Company   │      │   Train ML   │      │   Generate   │
+│  Model]]    │ ───▶ │    Models    │ ───▶ │  Forecasts   │
+│fact_prices  │      │              │      │              │
+└─────────────┘      └──────┬───────┘      └──────────────┘
                             │
                             ↓
                      ┌──────────────┐
                      │   Evaluate   │
                      │   Accuracy   │
-                     └──────────────┘
+                     └──────┬───────┘
                             │
                             ↓
                      ┌──────────────┐
@@ -634,13 +727,309 @@ depends_on:
   - company  # Forecast model reads from company model for training data
 ```
 
-**Training Data Source:** `company.fact_prices`
+**Training Data Source:** [[Company Model]].fact_prices
 
-**Prediction Output:** `forecast.forecast_price`, `forecast.forecast_volume`
+**Prediction Output:** forecast.forecast_price, forecast.forecast_volume
+
+---
+
+## Measures
+
+---
+
+### Simple Aggregations
+
+| Measure | Source | Aggregation | Format | Purpose |
+|---------|--------|-------------|--------|---------|
+| **avg_forecast_error** | forecast_metrics.mae | avg | $#,##0.00 | Average forecast error (MAE) |
+| **avg_forecast_mape** | forecast_metrics.mape | avg | #,##0.00% | Average MAPE across models |
+| **best_model_r2** | forecast_metrics.r2_score | max | #,##0.0000 | Best R² score across models |
+
+**Example YAML Definition:**
+```yaml
+measures:
+  avg_forecast_error:
+    description: "Average forecast error (MAE)"
+    source: forecast_metrics.mae
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00"
+    tags: [error, accuracy]
+
+  avg_forecast_mape:
+    description: "Average Mean Absolute Percentage Error"
+    source: forecast_metrics.mape
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00%"
+    tags: [error, percentage]
+
+  best_model_r2:
+    description: "Best R-squared score across models"
+    source: forecast_metrics.r2_score
+    aggregation: max
+    data_type: double
+    format: "#,##0.0000"
+    tags: [accuracy, r2]
+```
+
+---
+
+## How-To Guides
+
+---
+
+### How to Generate Forecasts
+
+**Step 1:** Load the models
+
+```python
+from core.context import RepoContext
+from models.api.session import UniversalSession
+
+# Initialize
+ctx = RepoContext.from_repo_root()
+session = UniversalSession(ctx.connection, ctx.config_root, ctx.storage_cfg)
+
+# Load models
+company = session.load_model('company')
+forecast = session.load_model('forecast')
+```
+
+**Step 2:** Get training data from Company Model
+
+```python
+# Get recent price history for training
+training_data = company.get_fact_df('fact_prices').filter(
+    (F.col('ticker') == 'AAPL') &
+    (F.col('trade_date') >= '2024-09-01')
+).orderBy('trade_date')
+
+training_df = training_data.to_pandas()
+```
+
+**Step 3:** Train a forecasting model
+
+```python
+from statsmodels.tsa.arima.model import ARIMA
+
+# Prepare data
+prices = training_df['close'].values
+
+# Train ARIMA model (example)
+model = ARIMA(prices, order=(2, 1, 2))
+fitted_model = model.fit()
+
+# Generate 7-day forecast
+forecast_output = fitted_model.forecast(steps=7)
+confidence_intervals = fitted_model.get_forecast(steps=7).conf_int()
+```
+
+**Step 4:** Store predictions
+
+```python
+# Create forecast DataFrame
+import pandas as pd
+from datetime import datetime, timedelta
+
+forecast_date = datetime.now().date()
+forecast_records = []
+
+for i, pred in enumerate(forecast_output):
+    forecast_records.append({
+        'ticker': 'AAPL',
+        'forecast_date': forecast_date,
+        'prediction_date': forecast_date + timedelta(days=i+1),
+        'horizon': i + 1,
+        'model_name': 'ARIMA_7d',
+        'predicted_close': pred,
+        'lower_bound': confidence_intervals[i, 0],
+        'upper_bound': confidence_intervals[i, 1],
+        'confidence': 0.95
+    })
+
+# Convert to Spark DataFrame and write
+forecast_df = spark.createDataFrame(pd.DataFrame(forecast_records))
+# Write to silver/forecast/facts/forecast_price
+```
+
+---
+
+### How to Compare Models
+
+**Step 1:** Get metrics for all models
+
+```python
+# Load forecast metrics
+metrics = forecast.get_fact_df('forecast_metrics').filter(
+    F.col('metric_date') == '2024-11-08'
+)
+
+# Convert to pandas for analysis
+metrics_df = metrics.to_pandas()
+```
+
+**Step 2:** Compare accuracy by model type
+
+```python
+import pandas as pd
+
+# Group by model type
+comparison = metrics_df.groupby('model_name').agg({
+    'mae': 'mean',
+    'rmse': 'mean',
+    'mape': 'mean',
+    'r2_score': 'mean'
+}).round(4)
+
+print("\nModel Comparison:")
+print(comparison.sort_values('mae'))
+```
+
+**Step 3:** Visualize model performance
+
+```python
+import matplotlib.pyplot as plt
+
+# Create comparison plot
+fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+
+# MAE comparison
+axes[0, 0].bar(comparison.index, comparison['mae'])
+axes[0, 0].set_title('Mean Absolute Error by Model')
+axes[0, 0].set_ylabel('MAE ($)')
+
+# RMSE comparison
+axes[0, 1].bar(comparison.index, comparison['rmse'])
+axes[0, 1].set_title('RMSE by Model')
+axes[0, 1].set_ylabel('RMSE ($)')
+
+# MAPE comparison
+axes[1, 0].bar(comparison.index, comparison['mape'])
+axes[1, 0].set_title('MAPE by Model')
+axes[1, 0].set_ylabel('MAPE (%)')
+
+# R² comparison
+axes[1, 1].bar(comparison.index, comparison['r2_score'])
+axes[1, 1].set_title('R² Score by Model')
+axes[1, 1].set_ylabel('R²')
+
+plt.tight_layout()
+plt.show()
+```
+
+**Step 4:** Select best model
+
+```python
+# Find best model by R² score
+best_model = metrics_df.loc[metrics_df['r2_score'].idxmax()]
+
+print(f"\nBest Model: {best_model['model_name']}")
+print(f"MAE: ${best_model['mae']:.2f}")
+print(f"MAPE: {best_model['mape']:.2f}%")
+print(f"R²: {best_model['r2_score']:.4f}")
+```
+
+---
+
+### How to Validate Accuracy
+
+**Step 1:** Get forecasts and actuals
+
+```python
+# Get forecasts made 7 days ago
+forecast_date = '2024-11-01'
+forecasts = forecast.get_fact_df('forecast_price').filter(
+    (F.col('forecast_date') == forecast_date) &
+    (F.col('ticker') == 'AAPL')
+)
+
+# Get actual prices
+actuals = company.get_fact_df('fact_prices').filter(
+    (F.col('ticker') == 'AAPL') &
+    (F.col('trade_date') >= forecast_date)
+)
+
+# Join forecasts with actuals
+comparison = forecasts.join(
+    actuals.select(
+        F.col('trade_date').alias('prediction_date'),
+        F.col('close').alias('actual_close')
+    ),
+    on='prediction_date',
+    how='inner'
+)
+```
+
+**Step 2:** Calculate errors
+
+```python
+# Calculate forecast errors
+comparison_df = comparison.withColumn(
+    'error',
+    F.abs(F.col('predicted_close') - F.col('actual_close'))
+).withColumn(
+    'error_pct',
+    (F.abs(F.col('predicted_close') - F.col('actual_close')) / F.col('actual_close')) * 100
+).withColumn(
+    'within_bounds',
+    (F.col('actual_close') >= F.col('lower_bound')) & (F.col('actual_close') <= F.col('upper_bound'))
+)
+
+# Show results
+comparison_df.select(
+    'prediction_date', 'model_name', 'predicted_close', 'actual_close',
+    'error', 'error_pct', 'within_bounds'
+).orderBy('prediction_date').show()
+```
+
+**Step 3:** Calculate validation metrics
+
+```python
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import numpy as np
+
+# Convert to pandas
+comparison_pd = comparison_df.to_pandas()
+
+# Calculate metrics
+mae = mean_absolute_error(comparison_pd['actual_close'], comparison_pd['predicted_close'])
+rmse = np.sqrt(mean_squared_error(comparison_pd['actual_close'], comparison_pd['predicted_close']))
+mape = (comparison_pd['error_pct'].mean())
+r2 = r2_score(comparison_pd['actual_close'], comparison_pd['predicted_close'])
+
+# Check confidence interval coverage
+coverage = comparison_pd['within_bounds'].mean() * 100
+
+print(f"\nValidation Metrics:")
+print(f"MAE: ${mae:.2f}")
+print(f"RMSE: ${rmse:.2f}")
+print(f"MAPE: {mape:.2f}%")
+print(f"R²: {r2:.4f}")
+print(f"95% CI Coverage: {coverage:.1f}%")
+```
+
+**Step 4:** Identify problematic predictions
+
+```python
+# Find predictions with high error
+high_error = comparison_pd[comparison_pd['error_pct'] > 5.0].copy()
+
+print(f"\nHigh Error Predictions (>5%):")
+print(high_error[['prediction_date', 'model_name', 'predicted_close', 'actual_close', 'error_pct']])
+
+# Find predictions outside confidence bounds
+outside_bounds = comparison_pd[~comparison_pd['within_bounds']].copy()
+
+print(f"\nPredictions Outside 95% CI:")
+print(outside_bounds[['prediction_date', 'predicted_close', 'actual_close', 'lower_bound', 'upper_bound']])
+```
 
 ---
 
 ## Usage Examples
+
+---
 
 ### 1. Load Forecast Model
 
@@ -835,6 +1224,8 @@ comparison.show()
 
 ## Design Decisions
 
+---
+
 ### 1. Multiple Model Types
 
 **Decision:** Support ARIMA, Prophet, and Random Forest
@@ -904,29 +1295,21 @@ comparison.show()
 
 ---
 
-## Summary
-
-The Forecast model provides comprehensive ML-based predictions with:
-
-- **3 Algorithm Types** - ARIMA, Prophet, Random Forest
-- **Multiple Horizons** - 7, 14, 30 day forecasts
-- **Confidence Intervals** - 95% bounds for risk management
-- **Accuracy Tracking** - MAE, RMSE, MAPE, R² metrics
-- **Model Registry** - Version control and reproducibility
-- **Production Ready** - Daily retraining and evaluation
-
-This model enables data-driven trading decisions with quantified uncertainty.
+## Related Documentation
 
 ---
 
-**Next Steps:**
-- See [Company Model](company-model.md) for training data source
-- See [Macro Model](macro-model.md) for economic indicators
-- See [Overview](../overview.md) for framework concepts
+- [[Core Model]] - Shared calendar dimension
+- [[Company Model]] - Training data source for forecasts
+- [[Macro Model]] - Economic indicators for feature engineering
+- [[Data Pipeline]] - How models are trained and predictions generated
+- [[Universal Session]] - Cross-model query examples
 
 ---
 
-**Related Documentation:**
-- [Models Framework Overview](../overview.md)
-- [ML Model Training Pipeline](../../3-architecture/pipelines/ml-training.md)
-- [Forecast API](../../4-api-reference/forecast-api.md)
+**Tags:** #finance/forecast #component/model #concept/analytics #status/stable
+
+**Last Updated:** 2024-11-08
+**Model Version:** 1.0
+**Dependencies:** [[Core Model]], [[Company Model]]
+**Used By:** N/A

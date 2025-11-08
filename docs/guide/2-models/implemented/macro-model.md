@@ -1,4 +1,17 @@
+---
+title: "Macro Model"
+tags: [economics/bls, component/model, source/bls, status/stable]
+aliases: ["Macro", "Economics Model", "BLS Model"]
+created: 2024-11-08
+updated: 2024-11-08
+status: stable
+dependencies: ["[[Core Model]]"]
+used_by: ["[[Company Model]]"]
+---
+
 # Macro Model
+
+---
 
 > **Macroeconomic indicators from the Bureau of Labor Statistics (BLS)**
 
@@ -11,11 +24,16 @@ The Macro model provides comprehensive economic indicators from the BLS, includi
 
 ## Table of Contents
 
+---
+
 - [Overview](#overview)
-- [Schema](#schema)
-- [BLS Data Sources](#bls-data-sources)
+- [Schema Overview](#schema-overview)
+- [Data Sources](#data-sources)
+- [Detailed Schema](#detailed-schema)
 - [Economic Indicators](#economic-indicators)
 - [Graph Structure](#graph-structure)
+- [Measures](#measures)
+- [How-To Guides](#how-to-guides)
 - [Usage Examples](#usage-examples)
 - [Integration Examples](#integration-examples)
 - [Design Decisions](#design-decisions)
@@ -23,6 +41,8 @@ The Macro model provides comprehensive economic indicators from the BLS, includi
 ---
 
 ## Overview
+
+---
 
 ### Purpose
 
@@ -48,7 +68,7 @@ The Macro model provides:
 |-----------|-------|
 | **Model Name** | `macro` |
 | **Tags** | `macro`, `economics`, `bls`, `timeseries` |
-| **Dependencies** | `core` (calendar dimension) |
+| **Dependencies** | [[Core Model]] (calendar dimension) |
 | **Data Source** | Bureau of Labor Statistics API |
 | **Storage Root** | `storage/silver/macro` |
 | **Format** | Parquet |
@@ -60,7 +80,252 @@ The Macro model provides:
 
 ---
 
-## Schema
+## Schema Overview
+
+---
+
+### High-Level Summary
+
+The Macro model implements a **star schema** with economic series dimension connected to indicator facts. All data is sourced from the Bureau of Labor Statistics API and partitioned by year for optimal query performance.
+
+**Quick Reference:**
+
+| Table Type | Count | Purpose |
+|------------|-------|---------|
+| **Dimensions** | 1 | Economic series metadata |
+| **Facts** | 4 | Individual economic indicators |
+| **Wide Views** | 1 | All indicators pivoted by date |
+| **Measures** | 4 | Pre-defined economic calculations |
+
+### Dimensions (Metadata)
+
+| Dimension | Rows | Primary Key | Purpose |
+|-----------|------|-------------|---------|
+| **dim_economic_series** | ~4-10 | series_id | BLS series metadata and categorization |
+
+### Facts (Economic Data)
+
+| Fact | Grain | Partitions | Purpose |
+|------|-------|------------|---------|
+| **fact_unemployment** | Monthly national | year | Unemployment rate (percent) |
+| **fact_cpi** | Monthly national | year | Consumer Price Index (inflation) |
+| **fact_employment** | Monthly national | year | Total nonfarm employment (thousands) |
+| **fact_wages** | Monthly national | year | Average hourly earnings (dollars) |
+
+### Wide Views (Analytics)
+
+| View | Purpose | Grain |
+|------|---------|-------|
+| **economic_indicators_wide** | All indicators in one table | Monthly (one row per month) |
+
+### Star Schema Diagram
+
+```
+                    ┌─────────────────────────┐
+                    │  dim_economic_series    │
+                    │  ───────────────────────│
+                    │  series_id (PK)         │
+                    │  series_name            │
+                    │  category               │
+                    │  frequency              │
+                    │  units                  │
+                    └────────┬────────────────┘
+                             │
+                             │ (series_id)
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+        │                    │                    │
+┌───────▼───────────┐ ┌──────▼──────────┐ ┌──────▼──────────┐
+│fact_unemployment  │ │   fact_cpi      │ │fact_employment  │
+│                   │ │                 │ │                 │
+│  • series_id (FK) │ │  • series_id    │ │  • series_id    │
+│  • date           │ │  • date         │ │  • date         │
+│  • year (part)    │ │  • year (part)  │ │  • year (part)  │
+│  • value (%)      │ │  • value (index)│ │  • value (000s) │
+│                   │ │                 │ │                 │
+└───────────────────┘ └─────────────────┘ └─────────────────┘
+        │
+        │ (series_id)
+        │
+┌───────▼───────────┐
+│   fact_wages      │
+│                   │
+│  • series_id (FK) │
+│  • date           │
+│  • year (part)    │
+│  • value ($)      │
+│                   │
+└───────────────────┘
+
+Analytics View:
+┌─────────────────────────────────────────┐
+│    economic_indicators_wide             │
+│  ───────────────────────────────────────│
+│  • date                                 │
+│  • unemployment_rate                    │
+│  • cpi_value                            │
+│  • total_employment                     │
+│  • avg_hourly_earnings                  │
+│                                         │
+│  All indicators in one row per month    │
+└─────────────────────────────────────────┘
+```
+
+**Relationships:**
+- `fact_unemployment.series_id` → `dim_economic_series.series_id` (many-to-one)
+- `fact_cpi.series_id` → `dim_economic_series.series_id` (many-to-one)
+- `fact_employment.series_id` → `dim_economic_series.series_id` (many-to-one)
+- `fact_wages.series_id` → `dim_economic_series.series_id` (many-to-one)
+- All facts can join to [[Core Model]].dim_calendar on date
+
+---
+
+## Data Sources
+
+---
+
+### Bureau of Labor Statistics API
+
+**Provider:** Bureau of Labor Statistics (https://www.bls.gov)
+**API Endpoint:** `https://api.bls.gov/publicAPI/v2/timeseries/data/`
+**Authentication:** API key (optional, recommended for higher rate limits)
+
+### API Access Tiers
+
+| Tier | Requests/Day | Years/Request | Best For |
+|------|--------------|---------------|----------|
+| **Free** | 25 | 10 | Development, testing |
+| **Registered** | 500 | 20 | Production use |
+
+### BLS Series IDs
+
+#### Unemployment Rate
+```yaml
+unemployment:
+  series_id: "LNS14000000"
+  name: "Unemployment Rate - Civilian Labor Force"
+  category: "unemployment"
+  frequency: "monthly"
+  units: "percent"
+  seasonal_adjustment: "seasonally_adjusted"
+```
+
+**Description:**
+- Percent of civilian labor force that is unemployed
+- Seasonally adjusted
+- Based on Current Population Survey (CPS)
+
+#### Consumer Price Index (CPI)
+```yaml
+cpi:
+  series_id: "CUUR0000SA0"
+  name: "Consumer Price Index - All Urban Consumers"
+  category: "inflation"
+  frequency: "monthly"
+  units: "index"
+  base_period: "1982-84 = 100"
+```
+
+**Description:**
+- All items, U.S. city average
+- Base period: 1982-84 = 100
+- Measures inflation in consumer goods and services
+
+#### Total Nonfarm Employment
+```yaml
+employment:
+  series_id: "CES0000000001"
+  name: "Total Nonfarm Employment"
+  category: "employment"
+  frequency: "monthly"
+  units: "thousands"
+  seasonal_adjustment: "seasonally_adjusted"
+```
+
+**Description:**
+- Total employed in nonfarm payroll jobs
+- Seasonally adjusted
+- In thousands of jobs
+- From Current Employment Statistics (CES)
+
+#### Average Hourly Earnings
+```yaml
+wages:
+  series_id: "CES0500000003"
+  name: "Average Hourly Earnings - Total Private"
+  category: "wages"
+  frequency: "monthly"
+  units: "dollars"
+  seasonal_adjustment: "seasonally_adjusted"
+```
+
+**Description:**
+- Average hourly earnings for all private employees
+- Seasonally adjusted
+- In current dollars (not inflation-adjusted)
+
+### Bronze → Silver Transformation
+
+**Pipeline:** `datapipelines/providers/bls/`
+
+```
+BLS API
+    ↓
+Facets (normalize responses)
+    ├─→ UnemploymentFacet
+    ├─→ CPIFacet
+    ├─→ EmploymentFacet
+    └─→ WagesFacet
+    ↓
+Bronze Storage (partitioned Parquet)
+    ├─→ bronze/bls_unemployment/ (partitioned by year)
+    ├─→ bronze/bls_cpi/ (partitioned by year)
+    ├─→ bronze/bls_employment/ (partitioned by year)
+    └─→ bronze/bls_wages/ (partitioned by year)
+    ↓
+BaseModel.build() (YAML-driven graph transformation)
+    ↓
+Silver Storage (dimensional model)
+    ├─→ silver/macro/dims/dim_economic_series/
+    ├─→ silver/macro/facts/fact_unemployment/
+    ├─→ silver/macro/facts/fact_cpi/
+    ├─→ silver/macro/facts/fact_employment/
+    ├─→ silver/macro/facts/fact_wages/
+    └─→ silver/macro/facts/economic_indicators_wide/
+```
+
+### Update Schedule
+
+**BLS Release Calendar:**
+- **Employment Situation Report** - First Friday of month (8:30 AM ET)
+  - Unemployment rate
+  - Nonfarm employment
+  - Average hourly earnings
+
+- **CPI Report** - Mid-month, typically 8:30 AM ET
+  - Consumer Price Index
+
+**Data Pipeline:**
+1. BLS publishes data (scheduled releases)
+2. API fetch within 24 hours
+3. Bronze layer update
+4. Silver layer rebuild
+5. Available for queries
+
+### Data Quality
+
+- **Completeness:** All months covered (no gaps)
+- **Accuracy:** Official government statistics
+- **Timeliness:** Updated monthly after BLS release
+- **Consistency:** Schema validated via facets
+- **Revisions:** BLS may revise prior months (we capture latest)
+
+---
+
+## Detailed Schema
+
+---
 
 ### Dimensions
 
@@ -268,179 +533,11 @@ All indicators pivoted wide by date (analytics-ready format).
 - Ready for visualization
 - No joins needed
 
-### Measures
-
-#### avg_unemployment_rate
-
-Average unemployment rate over period.
-
-```yaml
-avg_unemployment_rate:
-  description: "Average unemployment rate"
-  source: fact_unemployment.value
-  aggregation: avg
-  data_type: double
-  format: "#,##0.00%"
-  tags: [unemployment, average]
-```
-
-#### latest_cpi
-
-Latest CPI value (most recent month).
-
-```yaml
-latest_cpi:
-  description: "Latest CPI value"
-  source: fact_cpi.value
-  aggregation: max
-  data_type: double
-  format: "#,##0.00"
-  tags: [cpi, latest]
-```
-
-#### employment_growth
-
-Total employment growth (sum).
-
-```yaml
-employment_growth:
-  description: "Total employment growth"
-  source: fact_employment.value
-  aggregation: sum
-  data_type: double
-  format: "#,##0"
-  tags: [employment, growth]
-```
-
-#### wage_trend
-
-Average wage trend over period.
-
-```yaml
-wage_trend:
-  description: "Average wage trend"
-  source: fact_wages.value
-  aggregation: avg
-  data_type: double
-  format: "$#,##0.00"
-  tags: [wages, average]
-```
-
----
-
-## BLS Data Sources
-
-### Bureau of Labor Statistics API
-
-The Macro model sources data from the BLS Public Data API.
-
-**API Endpoint:** `https://api.bls.gov/publicAPI/v2/timeseries/data/`
-
-**API Access:**
-- **Free Tier:** 25 requests/day, 10 years per request
-- **Registered:** 500 requests/day, 20 years per request
-
-### BLS Series IDs
-
-#### Unemployment Rate
-```yaml
-unemployment:
-  series_id: "LNS14000000"
-  name: "Unemployment Rate - Civilian Labor Force"
-  category: "unemployment"
-```
-
-**Description:**
-- Percent of civilian labor force that is unemployed
-- Seasonally adjusted
-- Based on Current Population Survey (CPS)
-
-#### Consumer Price Index (CPI)
-```yaml
-cpi:
-  series_id: "CUUR0000SA0"
-  name: "Consumer Price Index - All Urban Consumers"
-  category: "inflation"
-```
-
-**Description:**
-- All items, U.S. city average
-- Base period: 1982-84 = 100
-- Measures inflation in consumer goods and services
-
-#### Total Nonfarm Employment
-```yaml
-employment:
-  series_id: "CES0000000001"
-  name: "Total Nonfarm Employment"
-  category: "employment"
-```
-
-**Description:**
-- Total employed in nonfarm payroll jobs
-- Seasonally adjusted
-- In thousands of jobs
-- From Current Employment Statistics (CES)
-
-#### Average Hourly Earnings
-```yaml
-wages:
-  series_id: "CES0500000003"
-  name: "Average Hourly Earnings - Total Private"
-  category: "wages"
-```
-
-**Description:**
-- Average hourly earnings for all private employees
-- Seasonally adjusted
-- In current dollars (not inflation-adjusted)
-
-### Bronze Layer Mapping
-
-| Bronze Table | BLS Series ID | Silver Table |
-|--------------|---------------|--------------|
-| `bronze.bls_unemployment` | LNS14000000 | `fact_unemployment` |
-| `bronze.bls_cpi` | CUUR0000SA0 | `fact_cpi` |
-| `bronze.bls_employment` | CES0000000001 | `fact_employment` |
-| `bronze.bls_wages` | CES0500000003 | `fact_wages` |
-
-### Data Transformations
-
-```python
-# Example: Unemployment data
-bronze.bls_unemployment
-  .select(
-    series_id=series_id,
-    date=date,
-    year=year,
-    period=period,
-    value=value,
-    period_name=period_name
-  )
-  .partition_by(year)  # Partition by year
-```
-
-### Update Schedule
-
-**BLS Release Calendar:**
-- **Employment Situation Report** - First Friday of month
-  - Unemployment rate
-  - Nonfarm employment
-  - Average hourly earnings
-
-- **CPI Report** - Mid-month (around 8:30 AM ET)
-  - Consumer Price Index
-
-**Data Pipeline:**
-1. BLS publishes data (scheduled releases)
-2. API fetch within 24 hours
-3. Bronze layer update
-4. Silver layer rebuild
-5. Available for queries
-
 ---
 
 ## Economic Indicators
+
+---
 
 ### Unemployment Rate
 
@@ -531,71 +628,7 @@ real_wage_growth = wage_growth - inflation_rate
 
 ## Graph Structure
 
-### ASCII Diagram
-
-```
-                    ┌─────────────────────────┐
-                    │  dim_economic_series    │
-                    │                         │
-                    │  • series_id (PK)       │
-                    │  • series_name          │
-                    │  • category             │
-                    │  • frequency            │
-                    │  • units                │
-                    │  • seasonal_adjustment  │
-                    └────────┬────────────────┘
-                             │
-                             │ series_id
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-        │                    │                    │
-┌───────▼───────────┐ ┌──────▼──────────┐ ┌──────▼──────────┐
-│fact_unemployment  │ │   fact_cpi      │ │fact_employment  │
-│                   │ │                 │ │                 │
-│  • series_id      │ │  • series_id    │ │  • series_id    │
-│  • date           │ │  • date         │ │  • date         │
-│  • year           │ │  • year         │ │  • year         │
-│  • value (%)      │ │  • value (index)│ │  • value (000s) │
-│                   │ │                 │ │                 │
-│  Partitioned by   │ │  Partitioned by │ │  Partitioned by │
-│  year             │ │  year           │ │  year           │
-└───────────────────┘ └─────────────────┘ └─────────────────┘
-        │
-        │ series_id
-        │
-┌───────▼───────────┐
-│   fact_wages      │
-│                   │
-│  • series_id      │
-│  • date           │
-│  • year           │
-│  • value ($)      │
-│                   │
-│  Partitioned by   │
-│  year             │
-└───────────────────┘
-
-Wide Format (Analytics):
-┌─────────────────────────────────────────┐
-│    economic_indicators_wide             │
-│                                         │
-│  • date                                 │
-│  • unemployment_rate                    │
-│  • cpi_value                            │
-│  • total_employment                     │
-│  • avg_hourly_earnings                  │
-│                                         │
-│  All indicators in one row per month    │
-└─────────────────────────────────────────┘
-
-Legend:
-  ┌─────┐
-  │     │  = Table (dimension or fact)
-  └─────┘
-
-  ──▶    = Foreign key relationship
-```
+---
 
 ### Nodes, Edges, Paths
 
@@ -617,7 +650,284 @@ Legend:
 
 ---
 
+## Measures
+
+---
+
+### Simple Aggregations
+
+| Measure | Source | Aggregation | Format | Purpose |
+|---------|--------|-------------|--------|---------|
+| **avg_unemployment_rate** | fact_unemployment.value | avg | #,##0.00% | Average unemployment rate over period |
+| **latest_cpi** | fact_cpi.value | max | #,##0.00 | Latest CPI value (most recent month) |
+| **employment_growth** | fact_employment.value | sum | #,##0 | Total employment growth |
+| **wage_trend** | fact_wages.value | avg | $#,##0.00 | Average wage trend over period |
+
+**Example YAML Definition:**
+```yaml
+measures:
+  avg_unemployment_rate:
+    description: "Average unemployment rate"
+    source: fact_unemployment.value
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00%"
+    tags: [unemployment, average]
+
+  latest_cpi:
+    description: "Latest CPI value"
+    source: fact_cpi.value
+    aggregation: max
+    data_type: double
+    format: "#,##0.00"
+    tags: [cpi, latest]
+
+  employment_growth:
+    description: "Total employment growth"
+    source: fact_employment.value
+    aggregation: sum
+    data_type: double
+    format: "#,##0"
+    tags: [employment, growth]
+
+  wage_trend:
+    description: "Average wage trend"
+    source: fact_wages.value
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00"
+    tags: [wages, average]
+```
+
+---
+
+## How-To Guides
+
+---
+
+### How to Query Economic Indicators
+
+**Step 1:** Load the macro model
+
+```python
+from core.context import RepoContext
+from models.api.session import UniversalSession
+
+# Initialize
+ctx = RepoContext.from_repo_root()
+session = UniversalSession(ctx.connection, ctx.config_root, ctx.storage_cfg)
+
+# Load macro model
+macro = session.load_model('macro')
+```
+
+**Step 2:** Get unemployment data
+
+```python
+# Get all unemployment data
+unemployment = macro.get_fact_df('fact_unemployment')
+
+# Filter for 2024
+unemployment_2024 = unemployment.filter(F.col('year') == 2024).orderBy('date')
+
+unemployment_2024.select('date', 'value', 'period_name').show()
+
+# +------------+-------+-------------+
+# | date       | value | period_name |
+# +------------+-------+-------------+
+# | 2024-01-01 |  3.7  | January     |
+# | 2024-02-01 |  3.9  | February    |
+# | 2024-03-01 |  3.8  | March       |
+# | ...
+# +------------+-------+-------------+
+```
+
+**Step 3:** Get all indicators in wide format
+
+```python
+# Get wide format table
+indicators = macro.get_fact_df('economic_indicators_wide')
+
+# Get latest month
+latest = indicators.orderBy(F.desc('date')).limit(1)
+latest.show()
+
+# +------------+-------------------+-----------+------------------+---------------------+
+# | date       | unemployment_rate | cpi_value | total_employment | avg_hourly_earnings |
+# +------------+-------------------+-----------+------------------+---------------------+
+# | 2024-11-01 |       3.9         |  314.540  |    158935.0      |       34.92         |
+# +------------+-------------------+-----------+------------------+---------------------+
+```
+
+---
+
+### How to Calculate Inflation
+
+**Step 1:** Get CPI data
+
+```python
+from pyspark.sql import Window
+import pyspark.sql.functions as F
+
+# Get CPI data
+cpi = macro.get_fact_df('fact_cpi')
+
+# Filter for recent years
+cpi_recent = cpi.filter(F.col('year') >= 2020).orderBy('date')
+```
+
+**Step 2:** Calculate year-over-year inflation
+
+```python
+# Calculate year-over-year inflation
+window_spec = Window.orderBy('date')
+
+inflation = cpi_recent.withColumn(
+    'cpi_year_ago',
+    F.lag('value', 12).over(window_spec)
+).withColumn(
+    'inflation_rate',
+    ((F.col('value') - F.col('cpi_year_ago')) / F.col('cpi_year_ago')) * 100
+)
+
+# Show recent inflation rates
+inflation.filter(F.col('year') == 2024).select(
+    'date', 'period_name', 'value', 'cpi_year_ago', 'inflation_rate'
+).show()
+
+# +------------+-------------+---------+-------------+---------------+
+# | date       | period_name | value   | cpi_year_ago| inflation_rate|
+# +------------+-------------+---------+-------------+---------------+
+# | 2024-01-01 | January     | 308.417 |   302.480   |     1.96%     |
+# | 2024-02-01 | February    | 310.326 |   304.702   |     1.85%     |
+# | 2024-03-01 | March       | 312.230 |   305.361   |     2.25%     |
+# | ...
+# +------------+-------------+---------+-------------+---------------+
+```
+
+**Step 3:** Calculate month-over-month change (annualized)
+
+```python
+# Calculate month-over-month inflation (annualized)
+mom_inflation = cpi_recent.withColumn(
+    'cpi_prev_month',
+    F.lag('value', 1).over(window_spec)
+).withColumn(
+    'monthly_change',
+    ((F.col('value') - F.col('cpi_prev_month')) / F.col('cpi_prev_month')) * 100
+).withColumn(
+    'annualized_monthly',
+    F.col('monthly_change') * 12  # Annualize
+)
+
+mom_inflation.filter(F.col('year') == 2024).select(
+    'date', 'monthly_change', 'annualized_monthly'
+).show()
+```
+
+**Step 4:** Visualize inflation trends
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Convert to pandas
+inflation_df = inflation.filter(F.col('inflation_rate').isNotNull()).toPandas()
+
+# Plot
+plt.figure(figsize=(12, 6))
+plt.plot(inflation_df['date'], inflation_df['inflation_rate'], marker='o')
+plt.axhline(y=2.0, color='r', linestyle='--', label='Fed Target (2%)')
+plt.xlabel('Date')
+plt.ylabel('Year-over-Year Inflation (%)')
+plt.title('US Inflation Rate (CPI)')
+plt.legend()
+plt.grid(True, alpha=0.3)
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
+```
+
+---
+
+### How to Join with Company Data
+
+**Step 1:** Load both models
+
+```python
+# Load models
+company = session.load_model('company')
+macro = session.load_model('macro')
+
+# Get stock prices
+prices = company.get_fact_df('fact_prices')
+
+# Get unemployment rate
+unemployment = macro.get_fact_df('fact_unemployment')
+```
+
+**Step 2:** Aggregate prices to monthly
+
+```python
+# Aggregate prices to monthly
+monthly_prices = prices.groupBy(
+    F.date_trunc('month', 'trade_date').alias('month'),
+    'ticker'
+).agg(
+    F.avg('close').alias('avg_close')
+)
+```
+
+**Step 3:** Join with unemployment
+
+```python
+# Join with unemployment
+prices_with_unemp = monthly_prices.join(
+    unemployment.select(
+        F.col('date').alias('month'),
+        F.col('value').alias('unemployment_rate')
+    ),
+    on='month',
+    how='left'
+)
+
+# Analyze correlation
+aapl_unemp = prices_with_unemp.filter(F.col('ticker') == 'AAPL')
+correlation = aapl_unemp.select(
+    F.corr('avg_close', 'unemployment_rate').alias('correlation')
+).first()['correlation']
+
+print(f"AAPL price vs unemployment correlation: {correlation:.3f}")
+```
+
+**Step 4:** Visualize relationship
+
+```python
+import plotly.express as px
+
+# Convert to pandas
+aapl_df = aapl_unemp.to_pandas()
+
+# Create scatter plot
+fig = px.scatter(
+    aapl_df,
+    x='unemployment_rate',
+    y='avg_close',
+    trendline='ols',
+    title='AAPL Stock Price vs Unemployment Rate',
+    labels={
+        'unemployment_rate': 'Unemployment Rate (%)',
+        'avg_close': 'Average Stock Price ($)'
+    }
+)
+fig.show()
+```
+
+---
+
 ## Usage Examples
+
+---
 
 ### 1. Load Macro Model
 
@@ -643,15 +953,6 @@ unemployment = macro_model.get_fact_df('fact_unemployment')
 unemployment_2024 = unemployment.filter(F.col('year') == 2024).orderBy('date')
 
 unemployment_2024.select('date', 'value', 'period_name').show()
-
-# +------------+-------+-------------+
-# | date       | value | period_name |
-# +------------+-------+-------------+
-# | 2024-01-01 |  3.7  | January     |
-# | 2024-02-01 |  3.9  | February    |
-# | 2024-03-01 |  3.8  | March       |
-# | ...
-# +------------+-------+-------------+
 ```
 
 ### 3. Calculate Year-over-Year Inflation
@@ -702,14 +1003,6 @@ employment_growth = employment.withColumn(
 employment_growth.filter(F.col('year') == 2024).select(
     'date', 'period_name', 'value', 'jobs_added'
 ).show()
-
-# +------------+-------------+----------+------------+
-# | date       | period_name | value    | jobs_added |
-# +------------+-------------+----------+------------+
-# | 2024-01-01 | January     | 157485.0 |   265.0    |
-# | 2024-02-01 | February    | 157750.0 |   265.0    |
-# | 2024-03-01 | March       | 158012.0 |   262.0    |
-# +------------+-------------+----------+------------+
 ```
 
 ### 5. Calculate Real Wage Growth
@@ -762,12 +1055,6 @@ indicators = macro_model.get_fact_df('economic_indicators_wide')
 latest = indicators.orderBy(F.desc('date')).limit(1)
 latest.show()
 
-# +------------+-------------------+-----------+------------------+---------------------+
-# | date       | unemployment_rate | cpi_value | total_employment | avg_hourly_earnings |
-# +------------+-------------------+-----------+------------------+---------------------+
-# | 2024-11-01 |       3.9         |  314.540  |    158935.0      |       34.92         |
-# +------------+-------------------+-----------+------------------+---------------------+
-
 # Easy to analyze correlations
 correlation = indicators.select(
     F.corr('unemployment_rate', 'cpi_value').alias('unemp_cpi_corr'),
@@ -818,6 +1105,8 @@ plt.show()
 
 ## Integration Examples
 
+---
+
 ### Company + Macro: Stocks vs Unemployment
 
 ```python
@@ -856,46 +1145,13 @@ correlation = aapl_unemp.select(
 print(f"AAPL price vs unemployment correlation: {correlation:.3f}")
 ```
 
-### Macro + Forecast: Economic Indicators as Features
-
-```python
-# Could use macro indicators as features for stock forecasts
-
-# Get macro wide format
-macro_features = macro_model.get_fact_df('economic_indicators_wide')
-
-# Get forecast training data
-forecast_model = session.load_model('forecast')
-
-# Join macro features with prices for training
-# (This would be done in ML pipeline)
-```
-
-### Macro + City Finance: National vs Local
-
-```python
-# Compare national unemployment with Chicago unemployment
-city_finance_model = session.load_model('city_finance')
-
-national_unemp = macro_model.get_fact_df('fact_unemployment')
-chicago_unemp = city_finance_model.get_fact_df('fact_local_unemployment')
-
-comparison = national_unemp.select(
-    F.col('date'),
-    F.col('value').alias('national_rate')
-).join(
-    chicago_unemp.filter(F.col('geography') == 'Chicago, IL')
-                 .select('date', F.col('unemployment_rate').alias('chicago_rate')),
-    on='date',
-    how='inner'
-)
-
-comparison.select('date', 'national_rate', 'chicago_rate').show()
-```
+See [[Company Model]] for stock market data.
 
 ---
 
 ## Design Decisions
+
+---
 
 ### 1. Partition by Year
 
@@ -944,29 +1200,21 @@ comparison.select('date', 'national_rate', 'chicago_rate').show()
 
 ---
 
-## Summary
-
-The Macro model provides authoritative economic indicators with:
-
-- **4 Key Metrics** - Unemployment, CPI, Employment, Wages
-- **BLS Official Data** - Government statistics
-- **Monthly Updates** - Regular data refresh
-- **Historical Depth** - Back to 1990s
-- **Wide Format** - Easy correlation analysis
-- **Integration Ready** - Joins with Company, City Finance models
-
-Essential for understanding economic trends and market context.
+## Related Documentation
 
 ---
 
-**Next Steps:**
-- See [City Finance Model](city-finance-model.md) for local economic data
-- See [Company Model](company-model.md) for market correlation analysis
-- See [Overview](../overview.md) for framework concepts
+- [[Core Model]] - Shared calendar dimension
+- [[City Finance Model]] - Local economic data (Chicago)
+- [[Company Model]] - Market correlation analysis
+- [[Forecast Model]] - Economic indicators as ML features
+- [[Universal Session]] - Cross-model query examples
 
 ---
 
-**Related Documentation:**
-- [BLS API Documentation](https://www.bls.gov/developers/api_signature_v2.htm)
-- [Economic Indicators Guide](../../5-domain-guides/economics/indicators.md)
-- [Cross-Model Analysis](../../1-getting-started/how-to/cross-model-queries.md)
+**Tags:** #economics/bls #component/model #source/bls #status/stable
+
+**Last Updated:** 2024-11-08
+**Model Version:** 1.0
+**Dependencies:** [[Core Model]]
+**Used By:** [[Company Model]]

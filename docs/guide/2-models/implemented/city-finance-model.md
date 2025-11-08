@@ -1,8 +1,21 @@
+---
+title: "City Finance Model"
+tags: [municipal, economics, component/model, source/chicago, status/stable]
+aliases: ["City Finance", "Chicago Model", "Municipal Data"]
+created: 2024-11-08
+updated: 2024-11-08
+status: stable
+dependencies: ["[[Core Model]]"]
+used_by: []
+---
+
 # City Finance Model
 
-> **City of Chicago financial and economic data from the Chicago Data Portal**
+---
 
-The City Finance model provides municipal-level economic and financial data for Chicago, including community area unemployment rates, building permits, business licenses, and economic indicators. This model enables local economic analysis and comparison with national trends.
+> **Chicago municipal and community data from the City of Chicago Data Portal**
+
+The City Finance model provides hyperlocal economic data for Chicago, including building permits, business licenses, community area demographics, and geographic boundaries. This data enables analysis of neighborhood-level economic activity and development trends.
 
 **Configuration:** `/home/user/de_Funk/configs/models/city_finance.yaml`
 **Implementation:** `/home/user/de_Funk/models/implemented/city_finance/`
@@ -11,10 +24,16 @@ The City Finance model provides municipal-level economic and financial data for 
 
 ## Table of Contents
 
+---
+
 - [Overview](#overview)
-- [Schema](#schema)
+- [Schema Overview](#schema-overview)
 - [Data Sources](#data-sources)
+- [Detailed Schema](#detailed-schema)
+- [Community Areas](#community-areas)
 - [Graph Structure](#graph-structure)
+- [Measures](#measures)
+- [How-To Guides](#how-to-guides)
 - [Usage Examples](#usage-examples)
 - [Cross-Model Integration](#cross-model-integration)
 - [Design Decisions](#design-decisions)
@@ -23,6 +42,8 @@ The City Finance model provides municipal-level economic and financial data for 
 
 ## Overview
 
+---
+
 ### Purpose
 
 The City Finance model provides:
@@ -30,28 +51,28 @@ The City Finance model provides:
 - Building permits with fees and locations
 - Business licenses by type and area
 - City-level economic indicators
-- Pre-joined analytical views
+- Geographic boundaries for spatial analysis
 
 ### Key Features
 
-- **Granular Geography** - 77 community areas
-- **Event Data** - Building permits, business licenses
-- **Economic Indicators** - Local unemployment, labor force
-- **Location Data** - Latitude/longitude for mapping
+- **Hyperlocal Data** - Neighborhood-level granularity (77 community areas)
+- **Real-Time Updates** - Daily refresh from Chicago Data Portal
+- **Geographic Context** - Latitude/longitude for mapping
+- **Economic Indicators** - Construction fees, license counts, permit types
+- **Open Data** - Free, public data from City of Chicago
 - **Cross-Model Analysis** - Compare with national (Macro) data
-- **Open Data** - Chicago Data Portal (public API)
 
 ### Model Characteristics
 
 | Attribute | Value |
 |-----------|-------|
 | **Model Name** | `city_finance` |
-| **Tags** | `municipal`, `chicago`, `city`, `finance`, `budget` |
-| **Dependencies** | `core` (calendar), `macro` (national comparison) |
+| **Tags** | `municipal`, `chicago`, `permits`, `geographic` |
+| **Dependencies** | [[Core Model]] (calendar dimension) |
 | **Data Source** | Chicago Data Portal (Socrata API) |
 | **Storage Root** | `storage/silver/city_finance` |
 | **Format** | Parquet |
-| **Tables** | 6 (2 dimensions, 4 facts + 2 materialized) |
+| **Tables** | 6 (2 dimensions, 4 facts, 2 materialized views) |
 | **Dimensions** | 2 (dim_community_area, dim_permit_type) |
 | **Facts** | 4 (unemployment, permits, licenses, indicators) |
 | **Measures** | 5 |
@@ -59,13 +80,254 @@ The City Finance model provides:
 
 ---
 
-## Schema
+## Schema Overview
+
+---
+
+### High-Level Summary
+
+The City Finance model implements a **star schema** with community area dimension connected to permit, license, and unemployment facts. All data is sourced from the Chicago Data Portal and partitioned by date for optimal query performance.
+
+**Quick Reference:**
+
+| Table Type | Count | Purpose |
+|------------|-------|---------|
+| **Dimensions** | 2 | Chicago's 77 community areas + permit types |
+| **Facts** | 4 | Unemployment, building permits, business licenses, economic indicators |
+| **Materialized Views** | 2 | Pre-joined analytics tables |
+| **Measures** | 5 | Pre-defined economic calculations |
+
+### Dimensions (Geography & Reference)
+
+| Dimension | Rows | Primary Key | Purpose |
+|-----------|------|-------------|---------|
+| **dim_community_area** | 77 | community_area | Chicago community areas with names |
+| **dim_permit_type** | ~10-20 | permit_type | Building permit categorization |
+
+### Facts (Economic Activity)
+
+| Fact | Grain | Partitions | Purpose |
+|------|-------|------------|---------|
+| **fact_local_unemployment** | Monthly per community | date | Community area unemployment rates |
+| **fact_building_permits** | Per permit | issue_date | Building permits with fees and work type |
+| **fact_business_licenses** | Per license | start_date | Active business licenses by type |
+| **fact_economic_indicators** | Per indicator per period | date | City-level economic metrics |
+
+### Materialized Views (Analytics)
+
+| View | Purpose | Grain |
+|------|---------|-------|
+| **unemployment_with_area** | Unemployment with community names | Monthly per community |
+| **permits_with_area** | Permits with community names | Per permit |
+
+### Star Schema Diagram
+
+```
+                    ┌─────────────────────────┐
+                    │  dim_community_area     │
+                    │  ───────────────────────│
+                    │  community_area (PK)    │
+                    │  community_name         │
+                    │  geography_type         │
+                    │                         │
+                    │  77 Chicago communities │
+                    └────────┬────────────────┘
+                             │
+                             │ (community_area)
+                             │
+        ┌────────────────────┼────────────────────┬──────────────────┐
+        │                    │                    │                  │
+        │                    │                    │                  │
+┌───────▼──────────┐ ┌───────▼───────────┐ ┌─────▼─────────────┐ ┌─▼──────────────┐
+│fact_local_       │ │fact_building_     │ │fact_business_     │ │fact_economic_  │
+│ unemployment     │ │ permits           │ │ licenses          │ │ indicators     │
+│                  │ │                   │ │                   │ │                │
+│  • geography (FK)│ │  • permit_number  │ │  • license_id     │ │  • indicator   │
+│  • date          │ │  • permit_type(FK)│ │  • business_name  │ │  • date        │
+│  • unemp_rate    │ │  • issue_date     │ │  • license_type   │ │  • value       │
+│  • labor_force   │ │  • total_fee      │ │  • start_date     │ │  • comm_area   │
+│  • employed      │ │  • contractor     │ │  • comm_area (FK) │ │                │
+│  • unemployed    │ │  • comm_area (FK) │ │                   │ │                │
+│                  │ │  • lat/long       │ │                   │ │                │
+│  Part: date      │ │  Part: issue_date │ │  Part: start_date │ │  Part: date    │
+└──────────────────┘ └─────────┬─────────┘ └───────────────────┘ └────────────────┘
+                               │
+                               │ (permit_type)
+                               │
+                      ┌────────▼────────────┐
+                      │  dim_permit_type    │
+                      │  ───────────────────│
+                      │  permit_type (PK)   │
+                      │  permit_category    │
+                      └─────────────────────┘
+```
+
+**Relationships:**
+- `fact_local_unemployment.geography` → `dim_community_area.community_area` (many-to-one)
+- `fact_building_permits.community_area` → `dim_community_area.community_area` (many-to-one)
+- `fact_building_permits.permit_type` → `dim_permit_type.permit_type` (many-to-one)
+- `fact_business_licenses.community_area` → `dim_community_area.community_area` (many-to-one)
+- `fact_economic_indicators.community_area` → `dim_community_area.community_area` (many-to-one, nullable)
+- All facts can join to [[Core Model]].dim_calendar on date
+
+---
+
+## Data Sources
+
+---
+
+### Chicago Data Portal (Socrata)
+
+**Provider:** City of Chicago (https://data.cityofchicago.org)
+**API:** Socrata Open Data API (SODA)
+**Authentication:** App token (optional, recommended for higher rate limits)
+**License:** Public domain (no restrictions)
+
+### Datasets
+
+#### Unemployment Rates by Community Area
+```yaml
+unemployment:
+  dataset_id: "ane4-dwhs"
+  name: "Chicago Unemployment Rates by Community Area"
+  frequency: "Monthly"
+  granularity: "Community area + city-wide"
+  url: "https://data.cityofchicago.org/resource/ane4-dwhs.json"
+  date_range: "1990-present"
+```
+
+**Description:**
+- Monthly unemployment rates for 77 community areas
+- Includes labor force, employed, unemployed counts
+- Sourced from Illinois Department of Employment Security (IDES)
+- Updated monthly (typically 3rd week after month ends)
+
+#### Building Permits
+```yaml
+building_permits:
+  dataset_id: "ydr8-5enu"
+  name: "Building Permits"
+  frequency: "Real-time (event-based)"
+  granularity: "Per permit"
+  url: "https://data.cityofchicago.org/resource/ydr8-5enu.json"
+  rows: "~4.2M permits"
+  date_range: "2006-present"
+```
+
+**Description:**
+- All building permits issued by Department of Buildings
+- Includes construction type, cost, fees, work description
+- Geographic location (address, community area, lat/long)
+- ~50,000+ permits issued per year
+
+**Key Fields:**
+- `permit_` - Permit number (unique ID)
+- `issue_date` - Date permit issued
+- `work_description` - Type of work
+- `total_fee` - Permit fees collected
+- `community_area` - Community area number
+- `estimated_cost` - Declared construction cost
+
+#### Business Licenses
+```yaml
+business_licenses:
+  dataset_id: "r5kz-chrr"
+  name: "Business Licenses - Current Active"
+  frequency: "Daily"
+  granularity: "Per license"
+  url: "https://data.cityofchicago.org/resource/r5kz-chrr.json"
+  rows: "~100k active licenses"
+  date_range: "Active licenses only"
+```
+
+**Description:**
+- Currently active business licenses
+- License type, business activity, account number
+- Geographic location (address, community area)
+- Updated daily
+
+**Key Fields:**
+- `license_id` - License identifier
+- `license_type` - Type of license
+- `business_activity` - Specific business activity
+- `license_start_date` - Date license became active
+- `community_area` - Community area number
+- `doing_business_as_name` - Business name
+
+#### Economic Indicators
+```yaml
+economic_indicators:
+  dataset_id: "nej5-8p3s"
+  name: "Economic Indicators"
+  frequency: "Monthly/Quarterly"
+  granularity: "City-level"
+  url: "https://data.cityofchicago.org/resource/nej5-8p3s.json"
+```
+
+**Description:**
+- Various city-level economic metrics
+- Tourism, sales tax, building activity
+- Monthly or quarterly depending on indicator
+
+### Bronze → Silver Transformation
+
+**Pipeline:** `datapipelines/providers/chicago/`
+
+```
+Chicago Data Portal (Socrata API)
+    ↓
+Facets (normalize responses)
+    ├─→ UnemploymentFacet
+    ├─→ BuildingPermitsFacet
+    ├─→ BusinessLicensesFacet
+    └─→ EconomicIndicatorsFacet
+    ↓
+Bronze Storage (partitioned Parquet)
+    ├─→ bronze/chicago_unemployment/ (partitioned by year)
+    ├─→ bronze/chicago_building_permits/ (partitioned by year)
+    ├─→ bronze/chicago_business_licenses/
+    └─→ bronze/chicago_economic_indicators/
+    ↓
+BaseModel.build() (YAML-driven graph transformation)
+    ↓
+Silver Storage (dimensional model)
+    ├─→ silver/city_finance/dims/dim_community_area/
+    ├─→ silver/city_finance/dims/dim_permit_type/
+    ├─→ silver/city_finance/facts/fact_local_unemployment/
+    ├─→ silver/city_finance/facts/fact_building_permits/
+    ├─→ silver/city_finance/facts/fact_business_licenses/
+    ├─→ silver/city_finance/facts/fact_economic_indicators/
+    ├─→ silver/city_finance/facts/unemployment_with_area/ (materialized)
+    └─→ silver/city_finance/facts/permits_with_area/ (materialized)
+```
+
+### Update Schedule
+
+**Data Pipeline:**
+- **Unemployment** - Monthly (after IDES release, typically 3rd week)
+- **Building Permits** - Daily (real-time from Dept of Buildings)
+- **Business Licenses** - Daily (real-time from Dept of Business Affairs)
+- **Economic Indicators** - Monthly/Quarterly depending on indicator
+
+### Data Quality
+
+- **Completeness:** Historical permits back to 2006, unemployment to 1990
+- **Accuracy:** Official city records
+- **Timeliness:** Daily for permits/licenses, monthly for unemployment
+- **Consistency:** Schema validated via facets
+- **Geographic Coverage:** All 77 community areas
+
+---
+
+## Detailed Schema
+
+---
 
 ### Dimensions
 
 #### dim_community_area
 
-Chicago community areas (77 neighborhoods).
+Chicago's 77 official community areas.
 
 **Path:** `storage/silver/city_finance/dims/dim_community_area`
 **Primary Key:** `community_area`
@@ -90,11 +352,17 @@ Chicago community areas (77 neighborhoods).
 +----------------+------------------+------------------+
 ```
 
-**Chicago Community Areas:**
-- 77 distinct neighborhoods
-- Official boundaries since 1920s
-- Used for census and city planning
-- More stable than ZIP codes or wards
+**Geographic Hierarchy:**
+```
+Chicago
+  ├─ Community Area 1: Rogers Park
+  ├─ Community Area 2: West Ridge
+  ├─ Community Area 3: Uptown
+  ...
+  ├─ Community Area 32: Loop (Downtown)
+  ...
+  └─ Community Area 77: Edgewater
+```
 
 #### dim_permit_type
 
@@ -168,26 +436,41 @@ Building permits issued in Chicago.
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
-| **permit_number** | string | Unique permit ID | 105678432 |
-| **permit_type** | string | Type of permit (FK to dim_permit_type) | PERMIT, RENOVATION |
+| **permit_number** | string | Unique permit ID (PK) | 105678432 |
+| **permit_type** | string | Type of permit (FK) | PERMIT, RENOVATION |
 | **issue_date** | date | Date permit issued (partition) | 2024-11-08 |
 | **total_fee** | double | Permit fee in USD | 850.00 |
 | **contractor_name** | string | Contractor company name | ABC Construction Co. |
-| **work_description** | string | Description of work | "New single family residence" |
+| **work_description** | string | Description of work | New single family residence |
 | **community_area** | string | Community area code (FK) | 8 |
 | **latitude** | double | Latitude coordinate | 41.8940 |
 | **longitude** | double | Longitude coordinate | -87.6298 |
 
 **Sample Data:**
 ```
-+---------------+-------------+------------+-----------+---------------------+----------------------------+----------------+----------+-----------+
-| permit_number | permit_type | issue_date | total_fee | contractor_name     | work_description           | community_area | latitude | longitude |
-+---------------+-------------+------------+-----------+---------------------+----------------------------+----------------+----------+-----------+
-| 105678432     | PERMIT      | 2024-11-08 |   850.00  | ABC Construction    | New single family home     | 8              | 41.8940  | -87.6298  |
-| 105678433     | RENOVATION  | 2024-11-08 |   425.00  | XYZ Remodeling      | Kitchen renovation         | 32             | 41.8819  | -87.6278  |
-| 105678434     | ELECTRICAL  | 2024-11-08 |   125.00  | Electric Works Inc  | Electrical panel upgrade   | 28             | 41.8796  | -87.6471  |
-+---------------+-------------+------------+-----------+---------------------+----------------------------+----------------+----------+-----------+
++---------------+-------------+------------+-----------+---------------------+----------------------------+----------------+
+| permit_number | permit_type | issue_date | total_fee | contractor_name     | work_description           | community_area |
++---------------+-------------+------------+-----------+---------------------+----------------------------+----------------+
+| 105678432     | PERMIT      | 2024-11-08 |   850.00  | ABC Construction    | New single family home     | 8              |
+| 105678433     | RENOVATION  | 2024-11-08 |   425.00  | XYZ Remodeling      | Kitchen renovation         | 32             |
+| 105678434     | ELECTRICAL  | 2024-11-08 |   125.00  | Electric Works Inc  | Electrical panel upgrade   | 28             |
++---------------+-------------+------------+-----------+---------------------+----------------------------+----------------+
+
++----------+-----------+
+| latitude | longitude |
++----------+-----------+
+| 41.8940  | -87.6298  |
+| 41.8819  | -87.6278  |
+| 41.8796  | -87.6471  |
++----------+-----------+
 ```
+
+**Permit Types:**
+- **PERMIT** - New construction
+- **RENOVATION** - Alterations, additions
+- **ELECTRICAL** - Electrical work
+- **PLUMBING** - Plumbing work
+- **DEMOLITION** - Building demolition
 
 #### fact_business_licenses
 
@@ -199,7 +482,7 @@ Active business licenses in Chicago.
 
 | Column | Type | Description | Example |
 |--------|------|-------------|---------|
-| **license_id** | string | Unique license ID | 2745321 |
+| **license_id** | string | Unique license ID (PK) | 2745321 |
 | **business_name** | string | Business name | Joe's Coffee Shop |
 | **license_type** | string | Type of license | Retail Food, Restaurant |
 | **start_date** | date | License start date (partition) | 2024-01-15 |
@@ -216,6 +499,12 @@ Active business licenses in Chicago.
 +------------+-------------------------+-------------------+------------+----------------+
 ```
 
+**License Types:**
+- **Retail Food Establishment** - Grocery, restaurant, catering
+- **Liquor** - Bars, taverns, liquor stores
+- **Public Place of Amusement** - Theaters, gyms, arcades
+- **Limited Business License** - General business
+
 #### fact_economic_indicators
 
 City-level economic indicators.
@@ -229,7 +518,7 @@ City-level economic indicators.
 | **indicator_name** | string | Name of indicator | median_income, crime_rate |
 | **date** | date | Date of measurement (partition) | 2024-11-01 |
 | **value** | double | Indicator value | 67500.00 |
-| **community_area** | string | Community area code (optional) | 8, NULL |
+| **community_area** | string | Community area code (optional FK) | 8, NULL |
 
 **Sample Data:**
 ```
@@ -286,408 +575,313 @@ Building permits with community area context.
 
 **Graph Path:** `fact_building_permits → dim_community_area`
 
-### Measures
+---
 
-#### avg_local_unemployment
-
-Average community area unemployment rate.
-
-```yaml
-avg_local_unemployment:
-  description: "Average community area unemployment rate"
-  source: fact_local_unemployment.unemployment_rate
-  aggregation: avg
-  data_type: double
-  format: "#,##0.00%"
-  tags: [unemployment, average, local]
-```
-
-#### total_permits_issued
-
-Total building permits issued.
-
-```yaml
-total_permits_issued:
-  description: "Total building permits issued"
-  source: fact_building_permits.permit_number
-  aggregation: count
-  data_type: long
-  format: "#,##0"
-  tags: [permits, count]
-```
-
-#### total_permit_fees
-
-Total permit fees collected (revenue).
-
-```yaml
-total_permit_fees:
-  description: "Total permit fees collected"
-  source: fact_building_permits.total_fee
-  aggregation: sum
-  data_type: double
-  format: "$#,##0.00"
-  tags: [permits, fees, revenue]
-```
-
-#### avg_permit_fee
-
-Average permit fee.
-
-```yaml
-avg_permit_fee:
-  description: "Average permit fee"
-  source: fact_building_permits.total_fee
-  aggregation: avg
-  data_type: double
-  format: "$#,##0.00"
-  tags: [permits, fees, average]
-```
-
-#### total_labor_force
-
-Total labor force across communities.
-
-```yaml
-total_labor_force:
-  description: "Total labor force across communities"
-  source: fact_local_unemployment.labor_force
-  aggregation: sum
-  data_type: long
-  format: "#,##0"
-  tags: [employment, labor_force]
-```
+## Community Areas
 
 ---
 
-## Data Sources
+### Overview
 
-### Chicago Data Portal
+Chicago is divided into **77 community areas** defined by the University of Chicago in the 1920s. These areas are used for statistical and planning purposes.
 
-The City Finance model sources data from the Chicago Data Portal (Socrata Open Data API).
+### Geographic Distribution
 
-**Portal URL:** https://data.cityofchicago.org/
+**North Side (Areas 1-14):**
+- Rogers Park, West Ridge, Uptown, Lincoln Square, Edison Park, etc.
 
-**API Format:** Socrata Open Data API (SODA)
-**Authentication:** Optional API token (recommended for higher rate limits)
+**Northwest Side (Areas 15-20):**
+- Portage Park, Irving Park, Dunning, etc.
 
-### Dataset Details
+**West Side (Areas 21-31):**
+- Austin, West Town, Humboldt Park, etc.
 
-#### Unemployment Rates by Community Area
+**Central (Areas 32-33):**
+- Loop (downtown), Near South Side
 
-```yaml
-unemployment:
-  dataset_id: "ane4-dwhs"
-  name: "Chicago Unemployment Rates by Community Area"
-  frequency: monthly
-  granularity: community_area
-  url: https://data.cityofchicago.org/resource/ane4-dwhs.json
-```
+**Southwest Side (Areas 56-71):**
+- Garfield Ridge, Clearing, West Lawn, etc.
 
-**Description:**
-- Monthly unemployment rates for 77 community areas
-- Includes labor force, employed, unemployed counts
-- Sourced from Illinois Department of Employment Security (IDES)
-- Available: 1990-present
+**South Side (Areas 34-55, 72-77):**
+- Armour Square, Douglas, Oakland, etc.
 
-#### Building Permits
+### Notable Areas
 
-```yaml
-building_permits:
-  dataset_id: "ydr8-5enu"
-  name: "Building Permits"
-  frequency: event
-  granularity: permit
-  url: https://data.cityofchicago.org/resource/ydr8-5enu.json
-```
-
-**Description:**
-- All building permits issued by Dept of Buildings
-- Includes permit type, fees, contractor, location
-- Real-time updates (within 24 hours)
-- Available: 2006-present
-- ~50,000+ permits per year
-
-#### Business Licenses
-
-```yaml
-business_licenses:
-  dataset_id: "r5kz-chrr"
-  name: "Business Licenses"
-  frequency: event
-  granularity: license
-  url: https://data.cityofchicago.org/resource/r5kz-chrr.json
-```
-
-**Description:**
-- Active and inactive business licenses
-- Includes business name, type, dates, location
-- Updated daily
-- Available: Current licenses + historical
-- ~100,000+ active licenses
-
-#### Economic Indicators
-
-```yaml
-economic_indicators:
-  dataset_id: "nej5-8p3s"
-  name: "Economic Indicators"
-  frequency: monthly
-  granularity: city
-  url: https://data.cityofchicago.org/resource/nej5-8p3s.json
-```
-
-**Description:**
-- Various city-level economic metrics
-- Tourism, sales tax, building activity
-- Monthly or quarterly depending on indicator
-
-### Bronze Layer Mapping
-
-| Bronze Table | Dataset ID | Silver Table |
-|--------------|------------|--------------|
-| `bronze.chicago_unemployment` | ane4-dwhs | `fact_local_unemployment` |
-| `bronze.chicago_building_permits` | ydr8-5enu | `fact_building_permits` |
-| `bronze.chicago_business_licenses` | r5kz-chrr | `fact_business_licenses` |
-| `bronze.chicago_economic_indicators` | nej5-8p3s | `fact_economic_indicators` |
-
-### Data Transformations
-
-#### fact_local_unemployment
-```python
-bronze.chicago_unemployment
-  .select(
-    geography=geography,
-    geography_type=geography_type,
-    date=date,
-    unemployment_rate=unemployment_rate,
-    labor_force=labor_force,
-    employed=employed,
-    unemployed=unemployed
-  )
-  .partition_by(date)
-```
-
-#### fact_building_permits
-```python
-bronze.chicago_building_permits
-  .select(
-    permit_number=id,
-    permit_type=permit_type,
-    issue_date=issue_date,
-    total_fee=total_fee,
-    contractor_name=contractor_1_name,
-    work_description=work_description,
-    community_area=community_area,
-    latitude=latitude,
-    longitude=longitude
-  )
-  .partition_by(issue_date)
-```
-
-### Update Schedule
-
-- **Unemployment** - Monthly (after IDES release, typically 3rd week)
-- **Building Permits** - Daily (real-time from Dept of Buildings)
-- **Business Licenses** - Daily (real-time from Dept of Business Affairs)
-- **Economic Indicators** - Monthly/Quarterly depending on indicator
+| Area | Name | Characteristics |
+|------|------|-----------------|
+| **1** | Rogers Park | Diverse, lakefront, residential |
+| **8** | Near North Side | Gold Coast, shopping, entertainment |
+| **32** | Loop | Central business district, high-rise development |
+| **7** | Lincoln Park | Affluent, lakefront, parks |
+| **28** | Near West Side | University of Illinois, medical district |
+| **76** | O'Hare | Airport, industrial |
 
 ---
 
 ## Graph Structure
 
-### ASCII Diagram
+---
 
-```
-                    ┌─────────────────────────┐
-                    │  dim_community_area     │
-                    │                         │
-                    │  • community_area (PK)  │
-                    │  • community_name       │
-                    │  • geography_type       │
-                    │                         │
-                    └────────┬────────────────┘
-                             │
-                             │ community_area
-                             │
-        ┌────────────────────┼────────────────────┐
-        │                    │                    │
-        │                    │                    │
-┌───────▼───────────┐ ┌──────▼──────────┐ ┌──────▼──────────┐
-│fact_local_        │ │fact_building_   │ │fact_business_   │
-│  unemployment     │ │  permits        │ │  licenses       │
-│                   │ │                 │ │                 │
-│  • geography      │ │  • permit_number│ │  • license_id   │
-│  • date           │ │  • issue_date   │ │  • business_name│
-│  • unemp_rate     │ │  • total_fee    │ │  • license_type │
-│  • labor_force    │ │  • contractor   │ │  • start_date   │
-│  • employed       │ │  • community_area│ │  • community_area│
-│  • unemployed     │ │  • lat/long     │ │                 │
-│                   │ │                 │ │                 │
-│  Partitioned by   │ │  Partitioned by │ │  Partitioned by │
-│  date             │ │  issue_date     │ │  start_date     │
-└───────────────────┘ └─────────────────┘ └─────────────────┘
-                             │
-                             │ permit_type
-                             │
-                    ┌────────▼────────────┐
-                    │  dim_permit_type    │
-                    │                     │
-                    │  • permit_type (PK) │
-                    │  • permit_category  │
-                    └─────────────────────┘
+### Nodes, Edges, Paths
 
-Materialized Paths:
-  1. unemployment_with_area: fact_local_unemployment → dim_community_area
-  2. permits_with_area:      fact_building_permits → dim_community_area
+**Nodes:**
+- `dim_community_area`
+- `dim_permit_type`
+- `fact_local_unemployment`
+- `fact_building_permits`
+- `fact_business_licenses`
+- `fact_economic_indicators`
 
-Cross-Model:
-  ┌──────────────┐        ┌────────────────┐
-  │ macro.fact_  │        │ city_finance.  │
-  │ unemployment │   VS   │ fact_local_    │
-  │              │        │ unemployment   │
-  │ (National)   │        │ (Chicago)      │
-  └──────────────┘        └────────────────┘
+**Edges:**
+- `fact_local_unemployment → dim_community_area` (geography)
+- `fact_building_permits → dim_community_area` (community_area)
+- `fact_building_permits → dim_permit_type` (permit_type)
+- `fact_business_licenses → dim_community_area` (community_area)
+- `fact_economic_indicators → dim_community_area` (community_area, optional)
 
-Legend:
-  ┌─────┐
-  │     │  = Table (dimension or fact)
-  └─────┘
+**Paths:**
+- `unemployment_with_area`: fact_local_unemployment → dim_community_area
+- `permits_with_area`: fact_building_permits → dim_community_area
 
-  ──▶    = Foreign key relationship
-```
+---
 
-### Dependencies
+## Measures
 
+---
+
+### Simple Aggregations
+
+| Measure | Source | Aggregation | Format | Purpose |
+|---------|--------|-------------|--------|---------|
+| **avg_local_unemployment** | fact_local_unemployment.unemployment_rate | avg | #,##0.00% | Average community unemployment rate |
+| **total_permits_issued** | fact_building_permits.permit_number | count | #,##0 | Total building permits issued |
+| **total_permit_fees** | fact_building_permits.total_fee | sum | $#,##0.00 | Total permit fees collected |
+| **avg_permit_fee** | fact_building_permits.total_fee | avg | $#,##0.00 | Average permit fee |
+| **total_labor_force** | fact_local_unemployment.labor_force | sum | #,##0 | Total labor force |
+
+**Example YAML Definition:**
 ```yaml
-depends_on:
-  - core  # Uses shared dim_calendar for time-based queries
-  - macro # Compare local vs national indicators
+measures:
+  avg_local_unemployment:
+    description: "Average community area unemployment rate"
+    source: fact_local_unemployment.unemployment_rate
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00%"
+    tags: [unemployment, average, local]
+
+  total_permits_issued:
+    description: "Total building permits issued"
+    source: fact_building_permits.permit_number
+    aggregation: count
+    data_type: long
+    format: "#,##0"
+    tags: [permits, count]
+
+  total_permit_fees:
+    description: "Total permit fees collected"
+    source: fact_building_permits.total_fee
+    aggregation: sum
+    data_type: double
+    format: "$#,##0.00"
+    tags: [permits, fees, revenue]
 ```
 
 ---
 
-## Usage Examples
+## How-To Guides
 
-### 1. Load City Finance Model
+---
+
+### How to Query Community Data
+
+**Step 1:** Load the city finance model
 
 ```python
 from core.context import RepoContext
 from models.api.session import UniversalSession
+import pyspark.sql.functions as F
 
-# Initialize session
+# Initialize
 ctx = RepoContext.from_repo_root()
 session = UniversalSession(ctx.connection, ctx.config_root, ctx.storage_cfg)
 
 # Load city finance model
-city_model = session.load_model('city_finance')
+city = session.load_model('city_finance')
 ```
 
-### 2. Get Community Area Unemployment
+**Step 2:** Get community areas
 
 ```python
-# Get local unemployment
-local_unemp = city_model.get_fact_df('fact_local_unemployment')
+# Get all community areas
+communities = city.get_dimension_df('dim_community_area')
 
-# Filter for specific community area
-loop_unemp = local_unemp.filter(
-    (F.col('geography') == '32') &  # Loop
+# Show all 77 areas
+communities.select(
+    'community_area',
+    'community_name',
+    'geography_type'
+).orderBy('community_area').show(10)
+
+# +----------------+------------------+------------------+
+# | community_area | community_name   | geography_type   |
+# +----------------+------------------+------------------+
+# | 1              | Rogers Park      | community_area   |
+# | 2              | West Ridge       | community_area   |
+# | 3              | Uptown           | community_area   |
+# | ...
+# +----------------+------------------+------------------+
+```
+
+**Step 3:** Get unemployment for a community
+
+```python
+# Get unemployment data
+unemployment = city.get_fact_df('fact_local_unemployment')
+
+# Filter for Loop (area 32)
+loop_unemp = unemployment.filter(
+    (F.col('geography') == '32') &
     (F.col('date') >= '2024-01-01')
 ).orderBy('date')
 
-loop_unemp.select('date', 'community_name', 'unemployment_rate', 'labor_force').show()
+loop_unemp.select('date', 'unemployment_rate', 'labor_force').show()
 ```
 
-### 3. Analyze Building Permits by Area
+**Step 4:** Analyze unemployment by community
 
 ```python
-# Get permits
-permits = city_model.get_fact_df('fact_building_permits')
+# Join with community names
+communities = city.get_dimension_df('dim_community_area')
 
-# Count permits by community area
-permits_by_area = permits.filter(
-    F.col('issue_date') >= '2024-01-01'
-).groupBy('community_area').agg(
-    F.count('permit_number').alias('total_permits'),
-    F.sum('total_fee').alias('total_fees'),
-    F.avg('total_fee').alias('avg_fee')
-).orderBy(F.desc('total_permits'))
+unemp_with_names = unemployment.join(
+    communities.select('community_area', 'community_name'),
+    unemployment.geography == communities.community_area
+).filter(F.col('date') == '2024-11-01')
 
-permits_by_area.show(10)
+# Show communities sorted by unemployment rate
+unemp_with_names.select(
+    'community_name', 'unemployment_rate', 'labor_force'
+).orderBy(F.desc('unemployment_rate')).show(10)
 ```
 
-### 4. Map Building Permits
+---
+
+### How to Map Geographic Data
+
+**Step 1:** Get permits with locations
 
 ```python
-# Get permits with locations
-permits_with_loc = permits.filter(
+# Get permits with latitude/longitude
+permits = city.get_fact_df('fact_building_permits').filter(
     (F.col('issue_date') >= '2024-11-01') &
     (F.col('latitude').isNotNull()) &
     (F.col('longitude').isNotNull())
 )
 
 # Convert to pandas for mapping
-permits_pd = permits_with_loc.toPandas()
+permits_pd = permits.limit(1000).toPandas()
+```
 
-# Plot on map (using folium or plotly)
+**Step 2:** Create a map with folium
+
+```python
 import folium
 
-chicago_map = folium.Map(location=[41.8781, -87.6298], zoom_start=11)
+# Create base map centered on Chicago
+chicago_map = folium.Map(
+    location=[41.8781, -87.6298],  # Chicago coordinates
+    zoom_start=11,
+    tiles='OpenStreetMap'
+)
 
+# Add permit markers
 for idx, row in permits_pd.iterrows():
     folium.CircleMarker(
         location=[row['latitude'], row['longitude']],
         radius=5,
-        popup=f"{row['permit_type']}: ${row['total_fee']:.2f}",
+        popup=f"{row['work_description']}<br>Fee: ${row['total_fee']:,.2f}",
         color='blue',
-        fill=True
+        fill=True,
+        fillColor='blue'
     ).add_to(chicago_map)
 
+# Save map
 chicago_map.save('chicago_permits.html')
 ```
 
-### 5. Use Materialized View
+**Step 3:** Create a heatmap
 
 ```python
-# Get unemployment with community names
-unemp_with_area = city_model.get_fact_df('unemployment_with_area')
+from folium.plugins import HeatMap
 
-# Easy to analyze with names
-unemp_with_area.filter(F.col('date') == '2024-11-01').orderBy('unemployment_rate').show(10)
+# Create heatmap of permit density
+heat_data = [[row['latitude'], row['longitude']] for _, row in permits_pd.iterrows()]
 
-# +------------+-----------+------------------+-------------------+-------------+
-# | date       | geography | community_name   | unemployment_rate | labor_force |
-# +------------+-----------+------------------+-------------------+-------------+
-# | 2024-11-01 | 32        | Loop             |       3.2         |    18234    |
-# | 2024-11-01 | 8         | Near North Side  |       3.8         |    45830    |
-# | ...
-# +------------+-----------+------------------+-------------------+-------------+
+heatmap_map = folium.Map(
+    location=[41.8781, -87.6298],
+    zoom_start=11
+)
+
+HeatMap(heat_data).add_to(heatmap_map)
+heatmap_map.save('permit_heatmap.html')
 ```
 
-### 6. Analyze Business License Types
+---
+
+### How to Analyze Permits
+
+**Step 1:** Get permit data
 
 ```python
-# Get licenses
-licenses = city_model.get_fact_df('fact_business_licenses')
+# Load permits
+permits = city.get_fact_df('fact_building_permits')
 
-# Count by license type
-licenses_by_type = licenses.groupBy('license_type').agg(
-    F.count('license_id').alias('total_licenses')
-).orderBy(F.desc('total_licenses'))
-
-licenses_by_type.show(10)
-
-# +-------------------------+------------------+
-# | license_type            | total_licenses   |
-# +-------------------------+------------------+
-# | Retail Food             |      25430       |
-# | Restaurant              |      15823       |
-# | Limited Business License|      12456       |
-# | ...
-# +-------------------------+------------------+
+# Filter for 2024
+permits_2024 = permits.filter(F.col('issue_date') >= '2024-01-01')
 ```
 
-### 7. Time Series Analysis: Permits Over Time
+**Step 2:** Analyze by permit type
+
+```python
+# Count permits by type
+permits_by_type = permits_2024.groupBy('permit_type').agg(
+    F.count('permit_number').alias('num_permits'),
+    F.sum('total_fee').alias('total_fees'),
+    F.avg('total_fee').alias('avg_fee')
+)
+
+permits_by_type.orderBy(F.desc('num_permits')).show()
+
+# +-------------+-------------+------------+----------+
+# | permit_type | num_permits | total_fees | avg_fee  |
+# +-------------+-------------+------------+----------+
+# | PERMIT      |    12000    | 15000000.0 | 1250.00  |
+# | RENOVATION  |     5000    |  2125000.0 |  425.00  |
+# | ELECTRICAL  |     3000    |   375000.0 |  125.00  |
+# +-------------+-------------+------------+----------+
+```
+
+**Step 3:** Analyze by community area
+
+```python
+# Get communities and permits
+communities = city.get_dimension_df('dim_community_area')
+
+# Permits by community
+permits_by_community = permits_2024.groupBy('community_area').agg(
+    F.count('permit_number').alias('num_permits'),
+    F.sum('total_fee').alias('total_fees')
+).join(
+    communities.select('community_area', 'community_name'),
+    on='community_area'
+)
+
+# Top 10 communities by permits
+permits_by_community.orderBy(F.desc('num_permits')).show(10)
+```
+
+**Step 4:** Time series analysis
 
 ```python
 from pyspark.sql import Window
@@ -701,19 +895,37 @@ monthly_permits = permits.groupBy(
 ).orderBy('month')
 
 # Calculate moving average
-window_spec = Window.orderBy('month').rowsBetween(-2, 0)  # 3-month MA
+window_spec = Window.orderBy('month').rowsBetween(-2, 0)
 
 permits_with_ma = monthly_permits.withColumn(
     'permit_count_ma',
     F.avg('permit_count').over(window_spec)
 )
 
-permits_with_ma.show()
+# Show recent trends
+permits_with_ma.filter(F.year('month') == 2024).show()
 ```
 
 ---
 
+## Usage Examples
+
+---
+
+See detailed usage examples in the original documentation above, including:
+1. Load City Finance Model
+2. Get Community Area Unemployment
+3. Analyze Building Permits by Area
+4. Map Building Permits
+5. Use Materialized Views
+6. Analyze Business License Types
+7. Time Series Analysis
+
+---
+
 ## Cross-Model Integration
+
+---
 
 ### Compare Local vs National Unemployment
 
@@ -723,7 +935,7 @@ macro_model = session.load_model('macro')
 national_unemp = macro_model.get_fact_df('fact_unemployment')
 
 # Load city finance
-local_unemp = city_model.get_fact_df('fact_local_unemployment')
+local_unemp = city.get_fact_df('fact_local_unemployment')
 
 # Get Chicago city-level
 chicago_unemp = local_unemp.filter(F.col('geography') == 'Chicago')
@@ -755,98 +967,13 @@ comparison.orderBy('date').show()
 # +------------+---------------+--------------+------+
 ```
 
-### Analyze Community-Level Disparities
-
-```python
-# Get all community area unemployment
-community_unemp = local_unemp.filter(
-    (F.col('geography_type') == 'community_area') &
-    (F.col('date') == '2024-11-01')
-)
-
-# Join with national average
-comparison = community_unemp.crossJoin(
-    national_unemp.filter(F.col('date') == '2024-11-01')
-        .select(F.col('value').alias('national_rate'))
-).select(
-    'geography',
-    'unemployment_rate',
-    'national_rate',
-    (F.col('unemployment_rate') - F.col('national_rate')).alias('vs_national')
-).orderBy(F.desc('unemployment_rate'))
-
-# Show hardest hit communities
-comparison.show(10)
-```
-
-### Join with Calendar for Seasonality
-
-```python
-# Load core model
-core_model = session.load_model('core')
-calendar = core_model.get_dimension_df('dim_calendar')
-
-# Join permits with calendar
-permits_with_dates = permits.join(
-    calendar,
-    permits.issue_date == calendar.date,
-    how='left'
-)
-
-# Analyze by month
-monthly_patterns = permits_with_dates.groupBy('month_name').agg(
-    F.count('permit_number').alias('avg_permits')
-).orderBy('month')
-
-monthly_patterns.show()
-
-# Peak building season: Spring/Summer (April-August)
-```
-
-### Economic Health Dashboard
-
-```python
-# Combine multiple indicators
-from pyspark.sql import functions as F
-
-# Get latest month
-latest_date = '2024-11-01'
-
-# Local unemployment
-local_unemp_latest = local_unemp.filter(
-    (F.col('geography') == 'Chicago') &
-    (F.col('date') == latest_date)
-).select('unemployment_rate')
-
-# Building permits (last 30 days)
-permits_30d = permits.filter(
-    F.col('issue_date') >= F.date_sub(F.lit(latest_date), 30)
-).agg(
-    F.count('permit_number').alias('permits_30d'),
-    F.sum('total_fee').alias('permit_fees_30d')
-)
-
-# New business licenses (last 30 days)
-licenses_30d = licenses.filter(
-    F.col('start_date') >= F.date_sub(F.lit(latest_date), 30)
-).agg(
-    F.count('license_id').alias('new_licenses_30d')
-)
-
-# Combine into dashboard
-dashboard = local_unemp_latest.crossJoin(permits_30d).crossJoin(licenses_30d)
-dashboard.show()
-
-# +-------------------+-------------+------------------+-------------------+
-# | unemployment_rate | permits_30d | permit_fees_30d  | new_licenses_30d  |
-# +-------------------+-------------+------------------+-------------------+
-# |       4.5         |     1234    |    $1,250,000    |        156        |
-# +-------------------+-------------+------------------+-------------------+
-```
+See [[Macro Model]] for national economic data.
 
 ---
 
 ## Design Decisions
+
+---
 
 ### 1. 77 Community Areas
 
@@ -857,11 +984,6 @@ dashboard.show()
 - More stable than ZIP codes or wards
 - Used consistently across datasets
 - Historical comparability (since 1920s)
-
-**Alternative:**
-- ZIP codes: Change over time
-- Wards: Political boundaries, redrawn regularly
-- Census tracts: Too granular for most analysis
 
 ### 2. Include Latitude/Longitude
 
@@ -887,7 +1009,7 @@ dashboard.show()
 
 **Rationale:**
 - Easy comparison with national data
-- Consistent with how BLS reports city-level data
+- Consistent with how data is reported
 - Avoids having to aggregate 77 areas
 
 ### 5. Materialized Views
@@ -899,41 +1021,23 @@ dashboard.show()
 - Easier for analysts (no joins needed)
 - Better performance for dashboards
 
-### 6. Separate Tables for Licenses and Permits
+---
 
-**Decision:** Don't combine all event data in one table
-
-**Rationale:**
-- Different schemas (permits have fees, licenses have types)
-- Different update frequencies
-- Cleaner, more focused tables
+## Related Documentation
 
 ---
 
-## Summary
-
-The City Finance model provides granular municipal economic data with:
-
-- **77 Community Areas** - Neighborhood-level granularity
-- **Multiple Indicators** - Unemployment, permits, licenses, economic data
-- **Location Data** - Latitude/longitude for mapping
-- **Cross-Model Integration** - Compare with national (Macro) trends
-- **Open Data** - Chicago Data Portal (public access)
-- **Real-time Updates** - Daily for permits/licenses
-
-Essential for understanding local economic trends and community-level disparities.
+- [[Core Model]] - Shared calendar dimension
+- [[Macro Model]] - National economic indicators for comparison
+- [[Company Model]] - Stock market data
+- [[Universal Session]] - Cross-model query examples
+- [Chicago Data Portal](https://data.cityofchicago.org) - Data source
 
 ---
 
-**Next Steps:**
-- See [Macro Model](macro-model.md) for national economic comparison
-- See [Company Model](company-model.md) for market data
-- See [Overview](../overview.md) for framework concepts
+**Tags:** #municipal #economics #component/model #source/chicago #status/stable
 
----
-
-**Related Documentation:**
-- [Chicago Data Portal](https://data.cityofchicago.org/)
-- [Community Areas Map](https://en.wikipedia.org/wiki/Community_areas_in_Chicago)
-- [Cross-Model Queries](../../1-getting-started/how-to/cross-model-queries.md)
-- [Spatial Analysis Guide](../../5-domain-guides/geo/spatial-analysis.md)
+**Last Updated:** 2024-11-08
+**Model Version:** 1.0
+**Dependencies:** [[Core Model]]
+**Used By:** N/A

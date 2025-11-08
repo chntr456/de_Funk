@@ -1,4 +1,21 @@
+---
+title: "Core Model"
+tags: [reference, component/model, source/generated, status/stable]
+aliases: ["Core", "Calendar Model", "Foundation Model"]
+created: 2024-11-08
+updated: 2024-11-08
+status: stable
+dependencies: []
+used_by:
+  - "[[Company Model]]"
+  - "[[Forecast Model]]"
+  - "[[Macro Model]]"
+  - "[[City Finance Model]]"
+---
+
 # Core Model
+
+---
 
 > **Foundation model providing shared reference data and calendar dimension**
 
@@ -11,10 +28,15 @@ The Core model is the foundational model in de_Funk. It provides shared dimensio
 
 ## Table of Contents
 
+---
+
 - [Overview](#overview)
-- [Schema](#schema)
+- [Schema Overview](#schema-overview)
+- [Data Sources](#data-sources)
+- [Detailed Schema](#detailed-schema)
 - [Calendar Generation Logic](#calendar-generation-logic)
 - [Graph Structure](#graph-structure)
+- [How-To Guides](#how-to-guides)
 - [Usage Examples](#usage-examples)
 - [Integration with Other Models](#integration-with-other-models)
 - [Design Decisions](#design-decisions)
@@ -22,6 +44,8 @@ The Core model is the foundational model in de_Funk. It provides shared dimensio
 ---
 
 ## Overview
+
+---
 
 ### Purpose
 
@@ -57,17 +81,148 @@ The Core model serves as the **foundation layer** for all other models in de_Fun
 
 ---
 
-## Schema
+## Schema Overview
 
-### dim_calendar
+---
+
+### High-Level Summary
+
+The Core model implements a **single shared dimension** pattern with a comprehensive calendar table. All data is generated programmatically and provides the foundation for time-based analysis across all models.
+
+**Quick Reference:**
+
+| Table Type | Count | Purpose |
+|------------|-------|---------|
+| **Dimensions** | 1 | Date attributes and time intelligence |
+| **Facts** | 0 | No transactional data (reference only) |
+| **Measures** | 0 | Reference data only |
+
+### Dimensions (Reference Data)
+
+| Dimension | Rows | Primary Key | Purpose |
+|-----------|------|-------------|---------|
+| **dim_calendar** | ~18,627 | date | Universal calendar with 27 date attributes |
+
+### Calendar Schema Diagram
+
+```
+┌─────────────────────────────────────┐
+│         dim_calendar                │
+│                                     │
+│  • 27 date attributes               │
+│  • 2000-01-01 to 2050-12-31        │
+│  • ~18,627 rows (50+ years)        │
+│                                     │
+│  Used by ALL other models          │
+└─────────────────────────────────────┘
+         ↓           ↓           ↓
+    ┌────────┐  ┌────────┐  ┌────────┐
+    │Company │  │ Macro  │  │Forecast│
+    │ Model  │  │ Model  │  │ Model  │
+    └────────┘  └────────┘  └────────┘
+```
+
+**Relationships:**
+- All models can join to `dim_calendar.date` for date-based filtering
+- No foreign keys in dim_calendar (standalone dimension)
+- Optional relationship (models can work without calendar joins)
+
+---
+
+## Data Sources
+
+---
+
+### Generated Data
+
+**Provider:** Programmatically generated
+**Authentication:** None required
+**Data Coverage:** 2000-01-01 to 2050-12-31 (configurable)
+
+### Generation Configuration
+
+The calendar is generated using configuration in the YAML file:
+
+```yaml
+calendar_config:
+  start_date: "2000-01-01"
+  end_date: "2050-12-31"
+  fiscal_year_start_month: 1  # January (can be changed to July for fiscal year starting in July)
+
+  # Weekend days (1=Monday, 7=Sunday)
+  weekend_days: [6, 7]  # Saturday, Sunday
+
+  # Holidays (optional - can be added later)
+  holidays:
+    - name: "New Year's Day"
+      type: "fixed"
+      month: 1
+      day: 1
+
+    - name: "Independence Day"
+      type: "fixed"
+      month: 7
+      day: 4
+
+    - name: "Christmas Day"
+      type: "fixed"
+      month: 12
+      day: 25
+```
+
+### Bronze → Silver Transformation
+
+**Pipeline:** `models/implemented/core/model.py`
+
+```
+Python Date Generation
+    ↓
+Date Range (2000-01-01 to 2050-12-31)
+    ↓
+Calendar Attributes Calculation
+    ├─→ Basic: year, quarter, month, day
+    ├─→ Names: month_name, day_of_week_name
+    ├─→ ISO: week_of_year
+    ├─→ Flags: is_weekend, is_weekday, period flags
+    ├─→ Fiscal: fiscal_year, fiscal_quarter
+    └─→ Strings: year_month, year_quarter
+    ↓
+Silver Storage (dimensional model)
+    └─→ silver/core/dims/dim_calendar/
+```
+
+### Data Quality
+
+- **Completeness:** All dates from 2000-2050 (no gaps)
+- **Accuracy:** Algorithmically generated (deterministic)
+- **Timeliness:** Static dimension (no updates needed)
+- **Consistency:** Schema validated during generation
+
+### Expandability
+
+The Core model can be extended with additional reference dimensions:
+
+**Potential Extensions:**
+- Time dimension (hour, minute, second for intraday)
+- Holiday dimension (country-specific holidays)
+- Fiscal calendar variants (different fiscal year starts)
+- Business calendar (trading days only)
+
+---
+
+## Detailed Schema
+
+---
+
+### Dimensions
+
+#### dim_calendar
 
 Universal calendar dimension with rich date attributes for time-based analysis.
 
 **Path:** `storage/silver/core/dims/dim_calendar`
 **Primary Key:** `date`
 **Grain:** One row per date (2000-01-01 to 2050-12-31)
-
-#### Column Definitions
 
 | Column | Type | Description | Example Values |
 |--------|------|-------------|----------------|
@@ -99,8 +254,7 @@ Universal calendar dimension with rich date attributes for time-based analysis.
 | **year_quarter** | string | YYYY-Q1 format | 2024-Q1, 2024-Q2 |
 | **date_str** | string | YYYY-MM-DD as string | "2024-11-08" |
 
-#### Sample Data
-
+**Sample Data:**
 ```
 +------------+------+--------+------+------------+-----------+--------------+
 |   date     | year | quarter| month| month_name | month_abbr| day_of_month |
@@ -167,36 +321,7 @@ Universal calendar dimension with rich date attributes for time-based analysis.
 
 ## Calendar Generation Logic
 
-### Configuration
-
-The calendar is generated using configuration in the YAML file:
-
-```yaml
-calendar_config:
-  start_date: "2000-01-01"
-  end_date: "2050-12-31"
-  fiscal_year_start_month: 1  # January (can be changed to July for fiscal year starting in July)
-
-  # Weekend days (1=Monday, 7=Sunday)
-  weekend_days: [6, 7]  # Saturday, Sunday
-
-  # Holidays (optional - can be added later)
-  holidays:
-    - name: "New Year's Day"
-      type: "fixed"
-      month: 1
-      day: 1
-
-    - name: "Independence Day"
-      type: "fixed"
-      month: 7
-      day: 4
-
-    - name: "Christmas Day"
-      type: "fixed"
-      month: 12
-      day: 25
-```
+---
 
 ### Generation Process
 
@@ -266,6 +391,8 @@ is_year_end = (month == 12) and (day_of_month == 31)
 
 ## Graph Structure
 
+---
+
 The Core model has a simple graph structure with no relationships (it's a standalone reference dimension).
 
 ### Nodes
@@ -296,28 +423,178 @@ edges: []  # No edges - calendar is a standalone dimension
 paths: []  # No paths - no joins needed
 ```
 
-### ASCII Diagram
+---
 
+## How-To Guides
+
+---
+
+### How to Filter by Date Range
+
+**Step 1:** Load the core model
+
+```python
+from core.context import RepoContext
+from models.api.session import UniversalSession
+
+# Initialize
+ctx = RepoContext.from_repo_root()
+session = UniversalSession(ctx.connection, ctx.config_root, ctx.storage_cfg)
+
+# Load core model
+core_model = session.load_model('core')
 ```
-┌─────────────────────────────────────┐
-│         dim_calendar                │
-│                                     │
-│  • 27 date attributes               │
-│  • 2000-01-01 to 2050-12-31        │
-│  • ~18,627 rows (50+ years)        │
-│                                     │
-│  Used by ALL other models          │
-└─────────────────────────────────────┘
-         ↓           ↓           ↓
-    ┌────────┐  ┌────────┐  ┌────────┐
-    │Company │  │ Macro  │  │Forecast│
-    │ Model  │  │ Model  │  │ Model  │
-    └────────┘  └────────┘  └────────┘
+
+**Step 2:** Get calendar for specific date range
+
+```python
+# Get calendar dimension
+calendar = core_model.get_dimension_df('dim_calendar')
+
+# Filter for 2024
+calendar_2024 = calendar.filter(F.col('year') == 2024).orderBy('date')
+
+print(f"Days in 2024: {calendar_2024.count()}")
+# Days in 2024: 366 (leap year)
+
+calendar_2024.select('date', 'month_name', 'day_of_week_name').show(10)
+```
+
+**Step 3:** Use with other models
+
+```python
+# Load company model
+company_model = session.load_model('company')
+prices = company_model.get_fact_df('fact_prices')
+
+# Join prices with calendar to add date attributes
+prices_with_dates = prices.join(
+    calendar,
+    prices.trade_date == calendar.date,
+    how='left'
+)
+
+# Now can filter by day of week
+monday_prices = prices_with_dates.filter(F.col('day_of_week') == 1)
+
+# Or by month
+jan_prices = prices_with_dates.filter(F.col('month') == 1)
+```
+
+---
+
+### How to Get Business Days Only
+
+**Step 1:** Load calendar
+
+```python
+# Get calendar
+calendar = core_model.get_dimension_df('dim_calendar')
+```
+
+**Step 2:** Filter for weekdays
+
+```python
+# Get weekdays (Monday-Friday) for 2024
+weekdays_2024 = calendar.filter(
+    (F.col('year') == 2024) &
+    (F.col('is_weekday') == True)
+).orderBy('date')
+
+print(f"Weekdays in 2024: {weekdays_2024.count()}")
+# Weekdays in 2024: 262
+
+weekdays_2024.select('date', 'day_of_week_name').show(10)
+```
+
+**Step 3:** Join with business data
+
+```python
+# Get company prices
+prices = company_model.get_fact_df('fact_prices')
+
+# Join with weekdays only
+prices_weekdays = prices.join(
+    weekdays_2024.select('date'),
+    prices.trade_date == weekdays_2024.date,
+    how='inner'  # Inner join keeps only weekdays
+)
+
+# All prices are now weekdays only
+print(f"Weekday prices: {prices_weekdays.count()}")
+```
+
+---
+
+### How to Calculate Fiscal Year Metrics
+
+**Step 1:** Get calendar with fiscal year
+
+```python
+# Get all dates in fiscal year 2024
+calendar = core_model.get_dimension_df('dim_calendar')
+
+fy2024 = calendar.filter(F.col('fiscal_year') == 2024)
+
+print(f"Days in FY 2024: {fy2024.count()}")
+
+# Show start and end dates
+fy2024.select('date', 'fiscal_year', 'fiscal_quarter', 'fiscal_month') \
+    .orderBy('date') \
+    .show(5)
+```
+
+**Step 2:** Aggregate by fiscal quarter
+
+```python
+# Load macro unemployment data
+macro_model = session.load_model('macro')
+unemployment = macro_model.get_fact_df('fact_unemployment')
+
+# Join with calendar
+unemployment_with_fiscal = unemployment.join(
+    calendar,
+    unemployment.date == calendar.date,
+    how='left'
+)
+
+# Aggregate by fiscal quarter
+fiscal_quarterly = unemployment_with_fiscal.groupBy(
+    'fiscal_year',
+    'fiscal_quarter'
+).agg(
+    F.avg('value').alias('avg_unemployment_rate')
+).orderBy('fiscal_year', 'fiscal_quarter')
+
+fiscal_quarterly.show()
+```
+
+**Step 3:** Compare calendar vs fiscal
+
+```python
+# Calendar year average
+calendar_avg = unemployment.filter(
+    F.year('date') == 2024
+).agg(
+    F.avg('value').alias('calendar_avg')
+).first()['calendar_avg']
+
+# Fiscal year average
+fiscal_avg = unemployment_with_fiscal.filter(
+    F.col('fiscal_year') == 2024
+).agg(
+    F.avg('value').alias('fiscal_avg')
+).first()['fiscal_avg']
+
+print(f"Calendar Year 2024 Average: {calendar_avg:.2f}%")
+print(f"Fiscal Year 2024 Average: {fiscal_avg:.2f}%")
 ```
 
 ---
 
 ## Usage Examples
+
+---
 
 ### 1. Load Core Model
 
@@ -350,9 +627,9 @@ calendar.orderBy('date').show(10)
 
 ```python
 # Get specific date range
-calendar_2024 = core_model.get_calendar(
-    date_from='2024-01-01',
-    date_to='2024-12-31'
+calendar_2024 = calendar.filter(
+    (F.col('date') >= '2024-01-01') &
+    (F.col('date') <= '2024-12-31')
 )
 
 print(f"Days in 2024: {calendar_2024.count()}")
@@ -363,9 +640,9 @@ print(f"Days in 2024: {calendar_2024.count()}")
 
 ```python
 # Get weekdays (Monday-Friday) for 2024
-weekdays_2024 = core_model.get_weekdays(
-    date_from='2024-01-01',
-    date_to='2024-12-31'
+weekdays_2024 = calendar.filter(
+    (F.col('year') == 2024) &
+    (F.col('is_weekday') == True)
 )
 
 print(f"Weekdays in 2024: {weekdays_2024.count()}")
@@ -376,9 +653,9 @@ print(f"Weekdays in 2024: {weekdays_2024.count()}")
 
 ```python
 # Get weekends (Saturday-Sunday) for 2024
-weekends_2024 = core_model.get_weekends(
-    date_from='2024-01-01',
-    date_to='2024-12-31'
+weekends_2024 = calendar.filter(
+    (F.col('year') == 2024) &
+    (F.col('is_weekend') == True)
 )
 
 print(f"Weekends in 2024: {weekends_2024.count()}")
@@ -389,7 +666,7 @@ print(f"Weekends in 2024: {weekends_2024.count()}")
 
 ```python
 # Get all dates in fiscal year 2024
-fy2024 = core_model.get_fiscal_year_dates(fiscal_year=2024)
+fy2024 = calendar.filter(F.col('fiscal_year') == 2024)
 
 print(f"Days in FY 2024: {fy2024.count()}")
 
@@ -403,7 +680,10 @@ fy2024.select('date', 'fiscal_year', 'fiscal_quarter', 'fiscal_month') \
 
 ```python
 # Get Q1 2024 (Jan-Mar)
-q1_2024 = core_model.get_quarter_dates(year=2024, quarter=1)
+q1_2024 = calendar.filter(
+    (F.col('year') == 2024) &
+    (F.col('quarter') == 1)
+)
 
 print(f"Days in Q1 2024: {q1_2024.count()}")
 # Days in Q1 2024: 91
@@ -413,35 +693,16 @@ print(f"Days in Q1 2024: {q1_2024.count()}")
 
 ```python
 # Get January 2024
-jan_2024 = core_model.get_month_dates(year=2024, month=1)
+jan_2024 = calendar.filter(
+    (F.col('year') == 2024) &
+    (F.col('month') == 1)
+)
 
 print(f"Days in January 2024: {jan_2024.count()}")
 # Days in January 2024: 31
 ```
 
-### 9. Get Date Range Summary
-
-```python
-# Get summary statistics for date range
-summary = core_model.get_date_range_info(
-    date_from='2024-01-01',
-    date_to='2024-12-31'
-)
-
-print(summary)
-# {
-#     'date_from': '2024-01-01',
-#     'date_to': '2024-12-31',
-#     'total_days': 366,
-#     'weekdays': 262,
-#     'weekends': 104,
-#     'num_years': 1,
-#     'num_quarters': 4,
-#     'num_months': 12
-# }
-```
-
-### 10. Filter by Period Flags
+### 9. Filter by Period Flags
 
 ```python
 # Get month-end dates for 2024
@@ -461,7 +722,7 @@ month_ends.select('date', 'month_name', 'day_of_month', 'days_in_month').show()
 # | ...
 ```
 
-### 11. Get Quarter Boundaries
+### 10. Get Quarter Boundaries
 
 ```python
 # Get quarter-start dates for 2024
@@ -482,7 +743,7 @@ quarter_starts.select('date', 'year_quarter', 'quarter').show()
 # +------------+--------------+---------+
 ```
 
-### 12. Join with Fact Tables
+### 11. Join with Fact Tables
 
 ```python
 # Load company model
@@ -507,9 +768,13 @@ jan_prices = prices_with_dates.filter(F.col('month') == 1)
 
 ## Integration with Other Models
 
+---
+
 All models in de_Funk depend on the Core model for date-based filtering and analysis.
 
 ### Company Model Integration
+
+See [[Company Model]] for integration example.
 
 ```yaml
 # configs/models/company.yaml
@@ -536,6 +801,8 @@ prices_with_calendar = session.query("""
 
 ### Macro Model Integration
 
+See [[Macro Model]] for integration example.
+
 ```yaml
 # configs/models/macro.yaml
 depends_on:
@@ -560,6 +827,8 @@ unemployment_with_calendar = session.query("""
 
 ### Forecast Model Integration
 
+See [[Forecast Model]] for integration example.
+
 ```yaml
 # configs/models/forecast.yaml
 depends_on:
@@ -582,6 +851,8 @@ weekday_forecasts = session.query("""
 ```
 
 ### City Finance Model Integration
+
+See [[City Finance Model]] for integration example.
 
 ```yaml
 # configs/models/city_finance.yaml
@@ -608,6 +879,8 @@ permits_by_quarter = session.query("""
 ---
 
 ## Design Decisions
+
+---
 
 ### 1. Date Range: 2000-2050
 
@@ -757,6 +1030,8 @@ holidays:
 
 ## Summary
 
+---
+
 The Core model provides the foundation for all date-based analysis in de_Funk:
 
 - **Comprehensive** - 27 attributes cover all common use cases
@@ -772,14 +1047,21 @@ By centralizing date logic in a shared dimension, we ensure:
 
 ---
 
-**Next Steps:**
-- See [Company Model](company-model.md) for integration example
-- See [Overview](../overview.md) for dimensional modeling concepts
-- See [How to Use Calendar](../../1-getting-started/how-to/use-calendar.md) for more examples
+## Related Documentation
 
 ---
 
-**Related Documentation:**
-- [Models Framework Overview](../overview.md)
-- [Dimensional Modeling Concepts](../overview.md#dimensional-modeling-concepts)
-- [UniversalSession API](../../4-api-reference/universal-session.md)
+- [[Company Model]] - Integration example
+- [[Macro Model]] - Economic indicators
+- [[Forecast Model]] - ML predictions
+- [[City Finance Model]] - Municipal data
+- [[Models Framework Overview]] - Framework concepts
+
+---
+
+**Tags:** #reference #component/model #source/generated #status/stable
+
+**Last Updated:** 2024-11-08
+**Model Version:** 1.0
+**Dependencies:** None (foundation model)
+**Used By:** All other models

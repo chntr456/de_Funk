@@ -1,4 +1,17 @@
+---
+title: "Models Framework Overview"
+tags: [type/reference, component/model, concept/dimensional-modeling, status/stable]
+aliases: ["Model Framework", "Dimensional Modeling", "YAML Models"]
+created: 2024-11-08
+updated: 2024-11-08
+status: stable
+dependencies: []
+used_by: ["[[Core Model]]", "[[Company Model]]", "[[Macro Model]]", "[[Forecast Model]]", "[[City Finance Model]]"]
+---
+
 # Models Framework Overview
+
+---
 
 > **Comprehensive guide to dimensional modeling and the YAML-driven model framework in de_Funk**
 
@@ -8,16 +21,37 @@ This document explains the core concepts, architecture, and design patterns used
 
 ## Table of Contents
 
+---
+
+- [Overview](#overview)
 - [Dimensional Modeling Concepts](#dimensional-modeling-concepts)
 - [YAML-Driven Model Framework](#yaml-driven-model-framework)
 - [BaseModel Architecture](#basemodel-architecture)
 - [Graph Building](#graph-building)
 - [Model Lifecycle](#model-lifecycle)
+- [How-To Guides](#how-to-guides)
 - [Best Practices](#best-practices)
 
 ---
 
+## Overview
+
+---
+
+The de_Funk model framework provides a powerful, flexible foundation for dimensional modeling:
+
+- **Declarative** - Models defined in YAML, not code
+- **Generic** - BaseModel handles all common logic
+- **Extensible** - Override hooks for customization
+- **Validated** - Schema enforcement and consistency checks
+- **Performant** - Lazy loading, optimized writes, partitioning
+- **Portable** - Backend abstraction (Spark, DuckDB)
+
+---
+
 ## Dimensional Modeling Concepts
+
+---
 
 ### What is Dimensional Modeling?
 
@@ -139,6 +173,8 @@ The **star schema** is a dimensional modeling pattern where:
 ---
 
 ## YAML-Driven Model Framework
+
+---
 
 ### Philosophy
 
@@ -265,6 +301,8 @@ Defines relationships as a graph:
 ---
 
 ## BaseModel Architecture
+
+---
 
 ### Overview
 
@@ -492,6 +530,8 @@ tables = model.list_tables()
 
 ## Graph Building
 
+---
+
 ### Nodes, Edges, and Paths
 
 The graph-based model structure provides a clear, visual way to understand data relationships.
@@ -637,6 +677,8 @@ Legend:
 ---
 
 ## Model Lifecycle
+
+---
 
 ### 1. Definition Phase
 
@@ -842,7 +884,350 @@ results.toPandas()  # Convert to pandas for analysis
 
 ---
 
+## How-To Guides
+
+---
+
+### How to Create a New Model
+
+**Step 1:** Create YAML configuration
+
+```bash
+# Navigate to configs directory
+cd configs/models
+
+# Create new model file
+touch my_new_model.yaml
+```
+
+**Step 2:** Define model configuration
+
+```yaml
+version: 1
+model: my_new_model
+tags: [domain, source]
+description: "Description of your model"
+
+depends_on:
+  - core  # Always depend on core for dim_calendar
+
+storage:
+  root: storage/silver/my_new_model
+  format: parquet
+
+schema:
+  dimensions:
+    dim_my_entity:
+      path: dims/dim_my_entity
+      description: "Entity dimension"
+      columns:
+        entity_id: string
+        entity_name: string
+      primary_key: [entity_id]
+
+  facts:
+    fact_my_data:
+      path: facts/fact_my_data
+      description: "My fact table"
+      columns:
+        date: date
+        entity_id: string
+        metric_value: double
+      partitions: [date]
+
+graph:
+  nodes:
+    - id: dim_my_entity
+      from: bronze.my_entities
+      select:
+        entity_id: id
+        entity_name: name
+
+    - id: fact_my_data
+      from: bronze.my_data
+      select:
+        date: date
+        entity_id: entity_id
+        metric_value: value
+
+  edges:
+    - from: fact_my_data
+      to: dim_my_entity
+      on: ["entity_id=entity_id"]
+      type: many_to_one
+
+measures:
+  avg_metric:
+    source: fact_my_data.metric_value
+    aggregation: avg
+    data_type: double
+```
+
+**Step 3:** Create Python model class
+
+```python
+# Create file: models/implemented/my_new_model/model.py
+from models.base.model import BaseModel
+
+class MyNewModel(BaseModel):
+    """
+    My new model.
+
+    Inherits all standard functionality from BaseModel.
+    Override hooks only if custom processing is needed.
+    """
+
+    def before_build(self):
+        """Optional: Custom pre-processing before build"""
+        self.logger.info("Building my new model...")
+
+    def after_build(self, dims, facts):
+        """Optional: Custom post-processing after build"""
+        # Add any custom transformations here
+        return dims, facts
+```
+
+**Step 4:** Register model
+
+```python
+# Edit: models/registry.py
+from models.implemented.my_new_model.model import MyNewModel
+
+MODEL_REGISTRY = {
+    'core': CoreModel,
+    'company': CompanyModel,
+    'my_new_model': MyNewModel,  # Add your model here
+}
+```
+
+**Step 5:** Test your model
+
+```python
+from core.context import RepoContext
+from models.api.session import UniversalSession
+
+# Initialize
+ctx = RepoContext.from_repo_root()
+session = UniversalSession(ctx.connection, ctx.config_root, ctx.storage_cfg)
+
+# Load and build
+model = session.load_model('my_new_model')
+dims, facts = model.build()
+
+# Validate
+print(f"Dimensions: {list(dims.keys())}")
+print(f"Facts: {list(facts.keys())}")
+
+# Show data
+model.get_dimension_df('dim_my_entity').show(5)
+model.get_fact_df('fact_my_data').show(5)
+```
+
+---
+
+### How to Define Measures
+
+**Step 1:** Add measure to YAML config
+
+```yaml
+measures:
+  # Simple aggregation
+  total_revenue:
+    description: "Total revenue"
+    source: fact_sales.revenue
+    aggregation: sum
+    data_type: double
+    format: "$#,##0.00"
+    tags: [revenue, total]
+
+  # Average calculation
+  avg_order_value:
+    description: "Average order value"
+    source: fact_orders.order_amount
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00"
+    tags: [orders, average]
+
+  # Count aggregation
+  total_orders:
+    description: "Total number of orders"
+    source: fact_orders.order_id
+    aggregation: count
+    data_type: long
+    format: "#,##0"
+    tags: [orders, count]
+```
+
+**Step 2:** Use measures in queries
+
+```python
+# Load model
+model = session.load_model('my_model')
+
+# Calculate measure by entity
+revenue_by_product = model.calculate_measure_by_entity(
+    measure_name='total_revenue',
+    entity_column='product_id',
+    limit=10
+)
+
+revenue_by_product.show()
+# +-----------+--------------+
+# | product_id| total_revenue|
+# +-----------+--------------+
+# | PROD-001  |    125000.00 |
+# | PROD-002  |     98500.00 |
+# | ...
+# +-----------+--------------+
+```
+
+**Step 3:** Define computed measures
+
+```yaml
+measures:
+  # Computed measure (uses expression)
+  profit:
+    description: "Profit (revenue - cost)"
+    type: computed
+    source: fact_sales.revenue
+    expression: "revenue - cost"
+    aggregation: sum
+    data_type: double
+    format: "$#,##0.00"
+
+  # Weighted measure
+  market_cap_weighted_index:
+    description: "Market cap weighted index"
+    type: weighted_aggregate
+    source: fact_prices.close
+    weighting_method: market_cap
+    group_by: [trade_date]
+    data_type: double
+```
+
+**Step 4:** Access measures programmatically
+
+```python
+# Get measure configuration
+measure_config = model.model_cfg['measures']['total_revenue']
+
+# Use in custom calculations
+source_table = model.get_table(measure_config['source'].split('.')[0])
+column_name = measure_config['source'].split('.')[1]
+agg_func = measure_config['aggregation']
+
+result = source_table.agg(
+    getattr(F, agg_func)(F.col(column_name)).alias('total_revenue')
+)
+result.show()
+```
+
+---
+
+### How to Build Graph Relationships
+
+**Step 1:** Define nodes (tables)
+
+```yaml
+graph:
+  nodes:
+    # Dimension node
+    - id: dim_customer
+      from: bronze.customers
+      select:
+        customer_id: id
+        customer_name: name
+        customer_tier: tier
+      tags: [dim, customer]
+
+    # Fact node
+    - id: fact_orders
+      from: bronze.orders
+      select:
+        order_id: id
+        order_date: date
+        customer_id: customer_id
+        order_amount: amount
+      tags: [fact, orders]
+```
+
+**Step 2:** Define edges (relationships)
+
+```yaml
+  edges:
+    # Many-to-one relationship (many orders to one customer)
+    - from: fact_orders
+      to: dim_customer
+      on: ["customer_id=customer_id"]
+      type: many_to_one
+      description: "Orders belong to a customer"
+
+    # Multiple join keys
+    - from: fact_transactions
+      to: dim_account
+      on: ["account_id=account_id", "account_type=account_type"]
+      type: many_to_one
+```
+
+**Step 3:** Define paths (materialized views)
+
+```yaml
+  paths:
+    # Simple path (one join)
+    - id: orders_with_customer
+      hops: "fact_orders -> dim_customer"
+      description: "Orders with customer details"
+      tags: [analytics, denormalized]
+
+    # Multi-hop path (multiple joins)
+    - id: orders_full_context
+      hops: "fact_orders -> dim_customer -> dim_customer_segment -> dim_region"
+      description: "Orders with full customer and region context"
+      tags: [canonical, analytics]
+```
+
+**Step 4:** Use materialized paths
+
+```python
+# Load model
+model = session.load_model('my_model')
+
+# Get materialized path (already joined)
+orders_with_customer = model.get_fact_df('orders_with_customer')
+
+# Query without additional joins
+orders_with_customer.filter(
+    F.col('customer_tier') == 'platinum'
+).groupBy('customer_name').agg(
+    F.sum('order_amount').alias('total_revenue')
+).orderBy(F.desc('total_revenue')).show()
+```
+
+**Step 5:** Validate graph structure
+
+```python
+# Get model relationships
+relations = model.get_relations()
+
+print("Graph Structure:")
+for source, targets in relations.items():
+    print(f"{source} connects to:")
+    for target in targets:
+        print(f"  - {target}")
+
+# Example output:
+# fact_orders connects to:
+#   - dim_customer
+#   - dim_product
+#   - dim_calendar
+```
+
+---
+
 ## Best Practices
+
+---
 
 ### 1. Model Design
 
@@ -1058,6 +1443,8 @@ Update model counts and stats:
 
 ## Summary
 
+---
+
 The de_Funk model framework provides a powerful, flexible foundation for dimensional modeling:
 
 - **Declarative** - Models defined in YAML, not code
@@ -1071,15 +1458,20 @@ By following these patterns and best practices, you can create robust, maintaina
 
 ---
 
-**Next Steps:**
-- See [Core Model](implemented/core-model.md) for the foundation model
-- See [Company Model](implemented/company-model.md) for a full-featured example
-- See [How to Create a Model](../1-getting-started/how-to/create-a-model.md) for step-by-step guide
+## Related Documentation
 
 ---
 
-**Related Documentation:**
-- [Models System Architecture](../3-architecture/components/models-system/overview.md)
-- [Bronze Layer](../3-architecture/layers/bronze.md)
-- [Silver Layer](../3-architecture/layers/silver.md)
-- [UniversalSession API](../4-api-reference/universal-session.md)
+- [[Core Model]] - Foundation model with calendar dimension
+- [[Company Model]] - Full-featured example with equities data
+- [[Macro Model]] - Economic indicators from BLS
+- [[Forecast Model]] - ML predictions and accuracy tracking
+- [[City Finance Model]] - Municipal data from Chicago
+
+---
+
+**Tags:** #type/reference #component/model #concept/dimensional-modeling #status/stable
+
+**Last Updated:** 2024-11-08
+**Framework Version:** 1.0
+**Used By:** All models in de_Funk
