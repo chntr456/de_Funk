@@ -1,177 +1,58 @@
 """
-Forecast chart exhibit component for displaying time series predictions.
+Time series prediction chart exhibit component.
 
-Renders forecast data with:
-- Historical actual values
-- Predicted values from multiple models
+Renders time series data with predictions and confidence intervals:
+- Historical actual values (solid line)
+- Predicted values (dashed line)
 - Confidence intervals (shaded areas)
 - Interactive hover tooltips
-- Model comparison
+- Multiple model comparison via dimension selector
 - Theme support
-- BaseExhibitRenderer pattern with tabbed configuration
+- Standard BaseExhibitRenderer pattern
+
+This is a general-purpose prediction chart that works with any time series
+data with actuals and predictions, not just stock forecasts.
 """
 
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from datetime import datetime, timedelta
-import duckdb
 from .base_renderer import BaseExhibitRenderer
 
 
-def load_forecast_data(ticker: str, target: str = "price") -> pd.DataFrame:
+class PredictionChartRenderer(BaseExhibitRenderer):
     """
-    Load forecast data for a ticker (case-insensitive).
+    General-purpose time series prediction chart renderer.
 
-    Args:
-        ticker: Stock ticker symbol (case-insensitive)
-        target: "price" or "volume"
+    Expects data with a unified schema containing both actuals and predictions
+    in the same DataFrame. Example schema:
 
-    Returns:
-        DataFrame with forecast data
+    date       | ticker | model_name | actual | predicted | upper_bound | lower_bound
+    -----------|--------|------------|--------|-----------|-------------|------------
+    2024-01-01 | AAPL   | ARIMA_30d  | 150.0  | null      | null        | null
+    2024-01-02 | AAPL   | ARIMA_30d  | 152.0  | null      | null        | null
+    2024-01-03 | AAPL   | ARIMA_30d  | null   | 153.5     | 155.0       | 152.0
     """
-    forecast_path = f"storage/silver/forecast/facts/forecast_{target}"
 
-    try:
-        con = duckdb.connect(database=':memory:')
-        # Use UPPER() for case-insensitive ticker matching
-        query = f"""
-        SELECT *
-        FROM read_parquet('{forecast_path}/**/*.parquet')
-        WHERE UPPER(ticker) = UPPER('{ticker}')
-        ORDER BY prediction_date, model_name
+    def __init__(self, exhibit, pdf: pd.DataFrame, in_collapsible: bool = False):
         """
-        df = con.execute(query).fetchdf()
-        con.close()
-        return df
-    except Exception as e:
-        st.warning(f"Could not load forecast data: {e}")
-        return pd.DataFrame()
-
-
-def load_actual_data(ticker: str, days: int = 90, start_date: str = None, end_date: str = None) -> pd.DataFrame:
-    """
-    Load actual historical data for comparison (case-insensitive).
-
-    Args:
-        ticker: Stock ticker symbol (case-insensitive)
-        days: Number of days of history to load (used if start_date/end_date not provided)
-        start_date: Optional start date (YYYY-MM-DD format or date object)
-        end_date: Optional end date (YYYY-MM-DD format or date object)
-
-    Returns:
-        DataFrame with actual prices/volumes
-    """
-    # Try Silver layer first, fallback to Bronze
-    silver_path = "storage/silver/company/facts/fact_prices"
-    bronze_path = "storage/bronze/prices_daily"
-
-    try:
-        con = duckdb.connect(database=':memory:')
-
-        # Try Silver layer first
-        try:
-            query_check = f"""
-            SELECT COUNT(*) as cnt FROM read_parquet('{silver_path}/**/*.parquet')
-            WHERE UPPER(ticker) = UPPER('{ticker}')
-            """
-            con.execute(query_check)
-            prices_path = silver_path
-        except:
-            # Fallback to Bronze
-            prices_path = bronze_path
-
-        # Build query based on date parameters
-        if start_date and end_date:
-            # Use explicit date range from filter
-            query = f"""
-            SELECT trade_date, ticker, close, volume
-            FROM read_parquet('{prices_path}/**/*.parquet')
-            WHERE UPPER(ticker) = UPPER('{ticker}')
-              AND trade_date >= DATE '{start_date}'
-              AND trade_date <= DATE '{end_date}'
-            ORDER BY trade_date
-            """
-        else:
-            # Get the latest N days of data (don't use datetime.now() - use actual data max date)
-            query = f"""
-            WITH ticker_data AS (
-                SELECT trade_date, ticker, close, volume
-                FROM read_parquet('{prices_path}/**/*.parquet')
-                WHERE UPPER(ticker) = UPPER('{ticker}')
-            ),
-            date_range AS (
-                SELECT MAX(trade_date) as max_date FROM ticker_data
-            )
-            SELECT t.trade_date, t.ticker, t.close, t.volume
-            FROM ticker_data t
-            CROSS JOIN date_range dr
-            WHERE t.trade_date >= DATE_SUB(dr.max_date, INTERVAL {days} DAYS)
-            ORDER BY t.trade_date
-            """
-        df = con.execute(query).fetchdf()
-        con.close()
-        return df
-    except Exception as e:
-        st.warning(f"Could not load actual data from {prices_path}: {e}")
-        return pd.DataFrame()
-
-
-def load_forecast_metrics(ticker: str = None) -> pd.DataFrame:
-    """
-    Load forecast accuracy metrics (case-insensitive).
-
-    Args:
-        ticker: Optional ticker filter (case-insensitive)
-
-    Returns:
-        DataFrame with metrics
-    """
-    metrics_path = "storage/silver/forecast/facts/forecast_metrics"
-
-    try:
-        con = duckdb.connect(database=':memory:')
-        query = f"""
-        SELECT *
-        FROM read_parquet('{metrics_path}/**/*.parquet')
-        """
-        if ticker:
-            # Use UPPER() for case-insensitive ticker matching
-            query += f" WHERE UPPER(ticker) = UPPER('{ticker}')"
-        query += " ORDER BY metric_date DESC, ticker, model_name"
-
-        df = con.execute(query).fetchdf()
-        con.close()
-        return df
-    except Exception as e:
-        st.warning(f"Could not load metrics: {e}")
-        return pd.DataFrame()
-
-
-class ForecastChartRenderer(BaseExhibitRenderer):
-    """Forecast chart renderer with BaseExhibitRenderer pattern."""
-
-    def __init__(self, exhibit, pdf: pd.DataFrame = None, in_collapsible: bool = False):
-        """
-        Initialize forecast chart renderer.
+        Initialize prediction chart renderer.
 
         Args:
             exhibit: Exhibit configuration
-            pdf: Optional pre-loaded data (not used, we load forecast data directly)
+            pdf: DataFrame with unified time series + predictions
             in_collapsible: True if already rendering inside a collapsible section
         """
-        # Create empty DataFrame for base class
-        super().__init__(exhibit, pd.DataFrame())
-        self.ticker = None
-        self.target = getattr(exhibit, 'target', 'price')
-        self.selected_models = []
+        super().__init__(exhibit, pdf)
         self.in_collapsible = in_collapsible
-        # Configurable parameters
-        self.history_days = getattr(exhibit, 'history_days', 90)  # Days of historical data to show
-        self.default_ticker = getattr(exhibit, 'default_ticker', None)  # Optional default ticker
+
+        # Optional styling configuration
+        self.actual_column = getattr(exhibit, 'actual_column', None)
+        self.predicted_column = getattr(exhibit, 'predicted_column', None)
+        self.confidence_bounds = getattr(exhibit, 'confidence_bounds', None)
 
     def render(self):
-        """Override render to add custom ticker/target selection."""
+        """Override render to handle collapsible sections."""
         # Render title and description
         if self.exhibit.title:
             st.subheader(self.exhibit.title)
@@ -179,323 +60,249 @@ class ForecastChartRenderer(BaseExhibitRenderer):
         if self.exhibit.description:
             st.caption(self.exhibit.description)
 
+        # Validate data
+        if self.pdf.empty:
+            st.info("No data available for selected filters")
+            return
+
+        # Check if we have selectors
+        has_measure_selector = hasattr(self.exhibit, 'measure_selector') and self.exhibit.measure_selector
+        has_dimension_selector = hasattr(self.exhibit, 'dimension_selector') and self.exhibit.dimension_selector
+
         # Define the configuration UI rendering function
         def render_configuration_ui():
+            # Build tab list with empty "Hide" tab first
+            tab_names = ["➖ Hide"]
+
+            if has_measure_selector:
+                tab_names.append("📊 Measures")
+
+            if has_dimension_selector:
+                tab_names.append("🔀 Dimensions")
+
             # Create tabs
-            tabs = st.tabs(["➖ Hide", "🎯 Stock & Target", "📊 Models"])
+            tabs = st.tabs(tab_names)
 
-            # Tab 0: Hide (empty)
+            # Tab 0: Hide (empty - creates collapse effect)
             with tabs[0]:
-                pass
+                pass  # Empty tab for hide effect
 
-            # Tab 1: Stock & Target selection
-            with tabs[1]:
-                # Get available tickers from actual data
-                available_tickers = self._get_available_tickers()
+            # Tab 1: Measures (if present)
+            current_tab = 1
+            if has_measure_selector:
+                with tabs[current_tab]:
+                    self.selected_measures = self._process_measures()
+                current_tab += 1
+            else:
+                self.selected_measures = self._process_measures()
 
-                col1, col2 = st.columns([2, 1])
+            # Tab 2 or 1: Dimensions (if present)
+            if has_dimension_selector:
+                with tabs[current_tab]:
+                    self.selected_dimension = self._process_dimension()
+            else:
+                self.selected_dimension = self._process_dimension()
 
-                with col1:
-                    # Determine default ticker from multiple sources (priority order):
-                    # 1. Session state (user's last selection)
-                    # 2. Global filter
-                    # 3. Exhibit config default_ticker
-                    # 4. First available ticker
-                    default_ticker = st.session_state.get('selected_ticker')
-
-                    if not default_ticker and 'filter_ticker' in st.session_state and st.session_state['filter_ticker']:
-                        # Use first ticker from global filter
-                        ticker_options = st.session_state['filter_ticker']
-                        if isinstance(ticker_options, list) and ticker_options:
-                            default_ticker = ticker_options[0]
-                        elif isinstance(ticker_options, str):
-                            default_ticker = ticker_options
-
-                    if not default_ticker:
-                        # Use exhibit config default
-                        default_ticker = self.default_ticker
-
-                    if not default_ticker and available_tickers:
-                        # Use first available ticker
-                        default_ticker = available_tickers[0]
-
-                    # Use selectbox if we have available tickers, otherwise text input
-                    if available_tickers:
-                        # Ensure default is in available tickers
-                        if default_ticker and default_ticker not in available_tickers:
-                            default_ticker = available_tickers[0]
-
-                        self.ticker = st.selectbox(
-                            "Ticker Symbol",
-                            options=available_tickers,
-                            index=available_tickers.index(default_ticker) if default_ticker and default_ticker in available_tickers else 0,
-                            key=f"ticker_{self.exhibit.id}",
-                            help=f"Select from {len(available_tickers)} available tickers with historical data"
-                        )
-                    else:
-                        self.ticker = st.text_input(
-                            "Ticker Symbol",
-                            value=default_ticker or "",
-                            key=f"ticker_{self.exhibit.id}",
-                            help="Enter a ticker symbol"
-                        )
-
-                    st.session_state['selected_ticker'] = self.ticker
-
-                with col2:
-                    target_options = ["price", "volume"]
-                    default_idx = target_options.index(self.target) if self.target in target_options else 0
-                    self.target = st.selectbox(
-                        "Forecast Target",
-                        target_options,
-                        index=default_idx,
-                        key=f"target_{self.exhibit.id}"
-                    )
-
-            # Tab 2: Model selection
-            with tabs[2]:
-                # Load forecast data to get available models
-                forecast_df = load_forecast_data(self.ticker, self.target)
-
-                if forecast_df.empty:
-                    st.info(f"No forecast data available for {self.ticker}. Run forecasts first using: python scripts/run_forecasts.py --tickers {self.ticker}")
-                    return
-
-                # Get available models
-                available_models = forecast_df['model_name'].unique().tolist()
-
-                # Check for global model filter
-                default_models = available_models[:3] if len(available_models) > 3 else available_models
-                if 'filter_model_name' in st.session_state and st.session_state['filter_model_name']:
-                    global_models = st.session_state['filter_model_name']
-                    if isinstance(global_models, list):
-                        default_models = [m for m in global_models if m in available_models]
-                    elif isinstance(global_models, str) and global_models in available_models:
-                        default_models = [global_models]
-
-                self.selected_models = st.multiselect(
-                    "Select Models to Display",
-                    options=available_models,
-                    default=default_models,
-                    key=f"models_{self.exhibit.id}",
-                    help="Choose which forecast models to compare"
-                )
-
-                if not self.selected_models:
-                    st.warning("Please select at least one model to display")
-                    return
+            # Validate measures
+            if not self.selected_measures:
+                st.warning("No valid measures configured")
+                return
 
             # Render chart
-            if self.ticker and self.selected_models:
-                self.render_chart()
+            self.render_chart()
 
         # If already in a collapsible section, don't create another expander
         if self.in_collapsible:
             render_configuration_ui()
-        else:
+        elif has_measure_selector or has_dimension_selector:
             # Create configuration expander
             with st.expander("⚙️ Configuration", expanded=True):
                 render_configuration_ui()
+        else:
+            # No selectors - process and render directly
+            self.selected_measures = self._process_measures()
+            self.selected_dimension = self._process_dimension()
 
-    def _get_available_tickers(self) -> list:
-        """
-        Get list of available tickers from historical price data.
+            if not self.selected_measures:
+                st.warning("No valid measures configured")
+                return
 
-        Returns:
-            List of ticker symbols
-        """
-        try:
-            con = duckdb.connect(database=':memory:')
-
-            # Try Silver first, fallback to Bronze
-            for path in ["storage/silver/company/facts/fact_prices", "storage/bronze/prices_daily"]:
-                try:
-                    query = f"""
-                    SELECT DISTINCT ticker
-                    FROM read_parquet('{path}/**/*.parquet')
-                    ORDER BY ticker
-                    """
-                    df = con.execute(query).fetchdf()
-                    con.close()
-                    return df['ticker'].tolist()
-                except:
-                    continue
-
-            con.close()
-            return []
-        except:
-            return []
+            self.render_chart()
 
     def render_chart(self):
-        """Render the forecast chart with confidence intervals."""
-        # Check for global date range filter
-        start_date = None
-        end_date = None
-
-        # Check session state for date filters (multiple possible keys)
-        date_filter_keys = ['filter_trade_date', 'filter_date_range', 'date_range']
-        for key in date_filter_keys:
-            if key in st.session_state:
-                date_filter = st.session_state[key]
-                if isinstance(date_filter, dict):
-                    start_date = date_filter.get('start')
-                    end_date = date_filter.get('end')
-                    # Convert to string if date object
-                    if start_date and hasattr(start_date, 'isoformat'):
-                        start_date = start_date.isoformat()
-                    if end_date and hasattr(end_date, 'isoformat'):
-                        end_date = end_date.isoformat()
-                    break
-
-        # Load actual historical data
-        actual_df = load_actual_data(
-            self.ticker,
-            days=self.history_days,
-            start_date=start_date,
-            end_date=end_date
-        )
-
-        if actual_df.empty:
-            st.warning(f"No historical data available for {self.ticker}")
-            st.info("Please ensure price data exists in storage/bronze/prices_daily or storage/silver/company/facts/fact_prices")
+        """Render the time series prediction chart with confidence intervals."""
+        if not hasattr(self.exhibit, 'x_axis') or not self.exhibit.x_axis:
+            st.warning("Prediction chart requires x_axis configuration")
             return
 
-        # Load forecast data
-        forecast_df = load_forecast_data(self.ticker, self.target)
+        x_col = self.exhibit.x_axis.dimension
 
-        # Check if we have forecast data
-        has_forecasts = not forecast_df.empty
-
-        if not has_forecasts:
-            st.info(f"ℹ️ No forecast data available for {self.ticker}. Showing historical data only.")
-            st.caption(f"To generate forecasts, run: `python scripts/run_forecasts.py --tickers {self.ticker}`")
-
-        # Filter to selected models if we have forecasts
-        if has_forecasts and self.selected_models:
-            forecast_df = forecast_df[forecast_df['model_name'].isin(self.selected_models)]
-            if forecast_df.empty:
-                st.info(f"No data available for selected models. Showing historical data only.")
-                has_forecasts = False
+        # Sort by x-axis for proper time ordering
+        pdf_sorted = self.pdf.sort_values(by=x_col)
 
         # Create plotly figure
         fig = go.Figure()
 
-        # Add actual historical data
-        y_col = 'close' if self.target == 'price' else 'volume'
-        fig.add_trace(go.Scatter(
-            x=actual_df['trade_date'],
-            y=actual_df[y_col],
-            mode='lines',
-            name='Actual',
-            line=dict(color='#2E86AB', width=2),
-            hovertemplate='<b>Actual</b><br>Date: %{x}<br>Value: %{y:,.2f}<extra></extra>'
-        ))
+        # Color palette
+        colors = ['#2E86AB', '#A23B72', '#F18F01', '#C73E1D', '#6A994E', '#BC4B51', '#8B5A3C']
 
-        # Add forecast lines with confidence intervals if we have forecasts
-        if has_forecasts:
-            # Color palette for different models
-            colors = ['#A23B72', '#F18F01', '#C73E1D', '#6A994E', '#BC4B51', '#8B5A3C']
+        # Determine which measures get special styling
+        actual_measures = [self.actual_column] if self.actual_column and self.actual_column in self.selected_measures else []
+        predicted_measures = [self.predicted_column] if self.predicted_column and self.predicted_column in self.selected_measures else []
 
-            # Add forecast lines with confidence intervals for each model
-            for i, model in enumerate(self.selected_models):
-                model_data = forecast_df[forecast_df['model_name'] == model].copy()
-                model_data = model_data.sort_values('prediction_date')
+        # Remaining measures (neither actual nor predicted)
+        other_measures = [m for m in self.selected_measures
+                         if m not in actual_measures and m not in predicted_measures]
 
-                if model_data.empty:
-                    continue
+        # Add confidence interval bands if configured
+        if self.confidence_bounds and len(self.confidence_bounds) == 2:
+            lower_col, upper_col = self.confidence_bounds
 
-                color = colors[i % len(colors)]
+            if lower_col in pdf_sorted.columns and upper_col in pdf_sorted.columns:
+                if self.selected_dimension and self.selected_dimension in pdf_sorted.columns:
+                    # Create confidence bands for each dimension value
+                    for dim_val in pdf_sorted[self.selected_dimension].unique():
+                        df_subset = pdf_sorted[pdf_sorted[self.selected_dimension] == dim_val].copy()
 
-                # Confidence interval (shaded area)
-                y_col_pred = 'predicted_close' if self.target == 'price' else 'predicted_volume'
+                        # Filter out nulls for confidence bands
+                        df_subset = df_subset.dropna(subset=[lower_col, upper_col])
 
-                # Check if confidence bounds exist
-                if 'upper_bound' in model_data.columns and 'lower_bound' in model_data.columns:
-                    fig.add_trace(go.Scatter(
-                        x=pd.concat([model_data['prediction_date'], model_data['prediction_date'][::-1]]),
-                        y=pd.concat([model_data['upper_bound'], model_data['lower_bound'][::-1]]),
-                        fill='toself',
-                        fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)',
-                        line=dict(color='rgba(255,255,255,0)'),
-                        showlegend=False,
-                        name=f'{model} CI',
-                        hoverinfo='skip'
-                    ))
+                        if not df_subset.empty:
+                            fig.add_trace(go.Scatter(
+                                x=pd.concat([df_subset[x_col], df_subset[x_col][::-1]]),
+                                y=pd.concat([df_subset[upper_col], df_subset[lower_col][::-1]]),
+                                fill='toself',
+                                fillcolor='rgba(174, 174, 174, 0.2)',
+                                line=dict(color='rgba(255,255,255,0)'),
+                                showlegend=False,
+                                name=f'{dim_val} CI',
+                                hoverinfo='skip'
+                            ))
+                else:
+                    # Single confidence band
+                    df_ci = pdf_sorted.dropna(subset=[lower_col, upper_col])
 
-                # Forecast line
-                customdata = model_data['confidence'] if 'confidence' in model_data.columns else None
-                fig.add_trace(go.Scatter(
-                    x=model_data['prediction_date'],
-                    y=model_data[y_col_pred],
-                    mode='lines+markers',
-                    name=model,
-                    line=dict(color=color, width=2, dash='dash'),
-                    marker=dict(size=6),
-                    hovertemplate=f'<b>{model}</b><br>Date: %{{x}}<br>Predicted: %{{y:,.2f}}<extra></extra>',
-                    customdata=customdata
-                ))
+                    if not df_ci.empty:
+                        fig.add_trace(go.Scatter(
+                            x=pd.concat([df_ci[x_col], df_ci[x_col][::-1]]),
+                            y=pd.concat([df_ci[upper_col], df_ci[lower_col][::-1]]),
+                            fill='toself',
+                            fillcolor='rgba(174, 174, 174, 0.2)',
+                            line=dict(color='rgba(255,255,255,0)'),
+                            showlegend=False,
+                            name='Confidence Interval',
+                            hoverinfo='skip'
+                        ))
+
+        # Render actual values (solid lines)
+        for measure in actual_measures:
+            self._add_line_trace(
+                fig, pdf_sorted, x_col, measure,
+                line_style='solid',
+                line_width=2.5,
+                color=colors[0]
+            )
+
+        # Render predicted values (dashed lines)
+        color_offset = len(actual_measures)
+        for i, measure in enumerate(predicted_measures):
+            self._add_line_trace(
+                fig, pdf_sorted, x_col, measure,
+                line_style='dash',
+                line_width=2.5,
+                color=colors[(color_offset + i) % len(colors)]
+            )
+
+        # Render other measures (normal lines)
+        color_offset = len(actual_measures) + len(predicted_measures)
+        for i, measure in enumerate(other_measures):
+            self._add_line_trace(
+                fig, pdf_sorted, x_col, measure,
+                line_style='solid',
+                line_width=2,
+                color=colors[(color_offset + i) % len(colors)]
+            )
 
         # Apply theme from base class
         fig = self.apply_theme_to_figure(fig)
 
-        # Update specific settings for forecast chart
+        # Update axis labels
+        x_label = self.exhibit.x_axis.label or x_col.replace('_', ' ').title()
+        y_label = self.exhibit.y_axis.label if hasattr(self.exhibit, 'y_axis') and self.exhibit.y_axis and self.exhibit.y_axis.label else "Value"
+
         fig.update_layout(
-            xaxis_title='Date',
-            yaxis_title='Price ($)' if self.target == 'price' else 'Volume',
+            xaxis_title=x_label,
+            yaxis_title=y_label,
             hovermode='x unified',
             height=500,
             legend=dict(x=0.01, y=0.99)
         )
 
+        # Enable interactivity
+        if hasattr(self.exhibit, 'interactive') and self.exhibit.interactive:
+            fig = self.enable_interactivity(fig)
+
         # Render chart
         config = self.get_plotly_config()
         st.plotly_chart(fig, use_container_width=True, config=config, key=f"chart_{self.exhibit.id}")
 
-        # Display forecast metrics only if we have forecasts
-        if has_forecasts:
-            st.subheader("Forecast Accuracy Metrics")
+    def _add_line_trace(self, fig, pdf_sorted, x_col, measure, line_style='solid', line_width=2, color=None):
+        """
+        Add a line trace to the figure.
 
-            metrics_df = load_forecast_metrics(self.ticker)
+        Args:
+            fig: Plotly figure
+            pdf_sorted: Sorted DataFrame
+            x_col: X-axis column name
+            measure: Measure column name
+            line_style: 'solid', 'dash', 'dot', etc.
+            line_width: Line width
+            color: Line color (hex or rgb)
+        """
+        if self.selected_dimension and self.selected_dimension in pdf_sorted.columns:
+            # Create separate lines for each dimension value
+            for dim_val in pdf_sorted[self.selected_dimension].unique():
+                df_subset = pdf_sorted[pdf_sorted[self.selected_dimension] == dim_val].copy()
 
-            if not metrics_df.empty and self.selected_models:
-                # Filter to selected models
-                metrics_display = metrics_df[metrics_df['model_name'].isin(self.selected_models)].copy()
+                # Filter out nulls
+                df_subset = df_subset.dropna(subset=[measure])
 
-                if not metrics_display.empty:
-                    # Format metrics for display
-                    metrics_display = metrics_display[[
-                        'model_name', 'mae', 'rmse', 'mape', 'r2_score', 'num_predictions'
-                    ]].round(4)
+                if not df_subset.empty:
+                    fig.add_trace(go.Scatter(
+                        x=df_subset[x_col],
+                        y=df_subset[measure],
+                        name=f"{dim_val} - {measure.replace('_', ' ').title()}",
+                        mode='lines+markers',
+                        line=dict(color=color, width=line_width, dash=line_style),
+                        marker=dict(size=4),
+                        hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
+                    ))
+        else:
+            # Single line for the measure
+            df_measure = pdf_sorted.dropna(subset=[measure])
 
-                    metrics_display.columns = [
-                        'Model', 'MAE', 'RMSE', 'MAPE (%)', 'R²', 'Predictions'
-                    ]
-
-                    st.dataframe(
-                        metrics_display,
-                        use_container_width=True,
-                        hide_index=True
-                    )
-
-                    # Show best model
-                    best_model = metrics_display.loc[metrics_display['R²'].idxmax(), 'Model']
-                    st.success(f"Best performing model: **{best_model}** (highest R² score)")
-                else:
-                    st.info("No accuracy metrics available for selected models")
-            else:
-                st.info("No accuracy metrics available. Metrics are calculated during forecast generation.")
+            if not df_measure.empty:
+                fig.add_trace(go.Scatter(
+                    x=df_measure[x_col],
+                    y=df_measure[measure],
+                    name=measure.replace('_', ' ').title(),
+                    mode='lines+markers',
+                    line=dict(color=color, width=line_width, dash=line_style),
+                    marker=dict(size=4),
+                    hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
+                ))
 
 
 def render_forecast_chart(exhibit, pdf: pd.DataFrame = None, in_collapsible: bool = False):
     """
-    Render forecast chart with confidence intervals.
+    Render time series prediction chart.
 
     Args:
         exhibit: Exhibit configuration
-        pdf: Optional pre-loaded data (not used, we load forecast-specific data)
+        pdf: DataFrame with unified time series + predictions
         in_collapsible: True if already rendering inside a collapsible section
     """
-    renderer = ForecastChartRenderer(exhibit, pdf, in_collapsible=in_collapsible)
+    renderer = PredictionChartRenderer(exhibit, pdf, in_collapsible=in_collapsible)
     renderer.render()
 
 
@@ -505,83 +312,32 @@ def render_forecast_metrics_table(exhibit, pdf: pd.DataFrame = None):
 
     Args:
         exhibit: Exhibit configuration
-        pdf: Optional pre-loaded data
+        pdf: DataFrame with forecast metrics
     """
-    st.subheader(exhibit.title)
+    st.subheader(exhibit.title if hasattr(exhibit, 'title') and exhibit.title else "Forecast Metrics")
 
-    if exhibit.description:
+    if hasattr(exhibit, 'description') and exhibit.description:
         st.caption(exhibit.description)
 
-    # Load metrics
-    metrics_df = load_forecast_metrics()
-
-    if metrics_df.empty:
-        st.info("No forecast metrics available. Run forecasts first using: python scripts/run_forecasts.py")
+    if pdf is None or pdf.empty:
+        st.info("No metrics data available")
         return
 
-    # Add filters
-    col1, col2 = st.columns(2)
-
-    with col1:
-        tickers = metrics_df['ticker'].unique().tolist()
-        selected_ticker = st.selectbox(
-            "Filter by Ticker",
-            options=['All'] + tickers,
-            key=f"metrics_ticker_{exhibit.id}"
-        )
-
-    with col2:
-        models = metrics_df['model_name'].unique().tolist()
-        selected_model = st.selectbox(
-            "Filter by Model",
-            options=['All'] + models,
-            key=f"metrics_model_{exhibit.id}"
-        )
-
-    # Apply filters
-    if selected_ticker != 'All':
-        metrics_df = metrics_df[metrics_df['ticker'] == selected_ticker]
-
-    if selected_model != 'All':
-        metrics_df = metrics_df[metrics_df['model_name'] == selected_model]
-
-    # Format for display
-    display_df = metrics_df[[
-        'ticker', 'model_name', 'mae', 'rmse', 'mape', 'r2_score',
-        'num_predictions', 'avg_error_pct', 'metric_date'
-    ]].copy()
-
-    display_df.columns = [
-        'Ticker', 'Model', 'MAE', 'RMSE', 'MAPE (%)', 'R²',
-        'Predictions', 'Avg Error (%)', 'Date'
-    ]
-
-    # Round numeric columns
-    numeric_cols = ['MAE', 'RMSE', 'MAPE (%)', 'R²', 'Avg Error (%)']
-    for col in numeric_cols:
-        if col in display_df.columns:
-            display_df[col] = display_df[col].round(4)
-
-    # Display table
+    # Display metrics table
     st.dataframe(
-        display_df,
+        pdf,
         use_container_width=True,
         hide_index=True
     )
 
-    # Summary statistics
-    st.subheader("Summary Statistics")
+    # Show summary statistics if numeric columns exist
+    numeric_cols = pdf.select_dtypes(include=['float64', 'int64']).columns.tolist()
 
-    col1, col2, col3, col4 = st.columns(4)
+    if numeric_cols and len(numeric_cols) >= 4:
+        st.subheader("Summary Statistics")
 
-    with col1:
-        st.metric("Avg MAE", f"{display_df['MAE'].mean():.2f}")
+        cols = st.columns(min(4, len(numeric_cols)))
 
-    with col2:
-        st.metric("Avg RMSE", f"{display_df['RMSE'].mean():.2f}")
-
-    with col3:
-        st.metric("Avg MAPE", f"{display_df['MAPE (%)'].mean():.2f}%")
-
-    with col4:
-        st.metric("Avg R²", f"{display_df['R²'].mean():.4f}")
+        for i, col in enumerate(numeric_cols[:4]):
+            with cols[i]:
+                st.metric(f"Avg {col.replace('_', ' ').title()}", f"{pdf[col].mean():.4f}")
