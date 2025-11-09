@@ -44,30 +44,28 @@
 │  │   • list_models() → List[str]                                       │   │
 │  │   • list_tables(model) → Dict                                       │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
-└──────┬───────────────────────────────────┬──────────────────────────────────┘
-       │                                   │
-       │                                   │
-       ↓                                   ↓
-┌──────────────────────┐      ┌────────────────────────────────────────┐
-│   MODEL REGISTRY     │      │       FILTER ENGINE                    │
-│  ┌──────────────┐    │      │  ┌──────────────────────────────────┐ │
-│  │ Discovers &  │    │      │  │ Backend-agnostic filters         │ │
-│  │ Loads Models │    │      │  │                                  │ │
-│  │              │    │      │  │ Methods:                         │ │
-│  │ Sources:     │    │      │  │  • apply_filters(df, filters,   │ │
-│  │  - YAML      │    │      │  │      backend) → Filtered DF     │ │
-│  │    configs   │    │      │  │  • apply_from_session(...)      │ │
-│  │  - Python    │    │      │  │  • build_filter_sql(...)        │ │
-│  │    classes   │    │      │  │                                  │ │
-│  │              │    │      │  │ Supports:                        │ │
-│  │ Returns:     │    │      │  │  - Exact match                   │ │
-│  │  - ModelCfg  │    │      │  │  - IN clause                     │ │
-│  │  - ModelCls  │    │      │  │  - Range filters                 │ │
-│  └──────────────┘    │      │  │  - Spark & DuckDB backends       │ │
-└──────────────────────┘      │  └──────────────────────────────────┘ │
-                              └────────────────────────────────────────┘
-       │
-       ↓
+└────────────────────────────────────┬────────────────────────────────────────┘
+                                     │
+                                     ↓
+                          ┌──────────────────────┐
+                          │   MODEL REGISTRY     │
+                          │  ┌──────────────┐    │
+                          │  │ Discovers &  │    │
+                          │  │ Loads Models │    │
+                          │  │              │    │
+                          │  │ Sources:     │    │
+                          │  │  - YAML      │    │
+                          │  │    configs   │    │
+                          │  │  - Python    │    │
+                          │  │    classes   │    │
+                          │  │              │    │
+                          │  │ Returns:     │    │
+                          │  │  - ModelCfg  │    │
+                          │  │  - ModelCls  │    │
+                          │  └──────────────┘    │
+                          └──────────────────────┘
+                                     │
+                                     ↓
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                          MODEL LAYER: BaseModel                             │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
@@ -156,6 +154,43 @@
 │  └── duckdb/                    ← DuckDB database (optional)                │
 │      └── analytics.db           ← Persistent DuckDB file                    │
 └─────────────────────────────────────────────────────────────────────────────┘
+
+
+═════════════════════════════════════════════════════════════════════════════
+   CROSS-CUTTING UTILITIES (callable from any layer)
+═════════════════════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                             FILTER ENGINE                                   │
+│  ┌─────────────────────────────────────────────────────────────────────┐   │
+│  │ Static utility class for backend-agnostic filtering                 │   │
+│  │                                                                      │   │
+│  │  Methods:                                                            │   │
+│  │   • apply_filters(df, filters, backend) → Filtered DF               │   │
+│  │   • apply_from_session(df, filters, session)                        │   │
+│  │   • build_filter_sql(filters) → SQL WHERE clause                    │   │
+│  │                                                                      │   │
+│  │  Filter Types:                                                       │   │
+│  │   • Exact match: {'ticker': 'AAPL'}                                 │   │
+│  │   • IN clause: {'ticker': ['AAPL', 'MSFT']}                         │   │
+│  │   • Range: {'trade_date': {'min': '2024-01-01', 'max': '...'}}     │   │
+│  │   • Operators: min, max, gt, lt, gte, lte                           │   │
+│  │                                                                      │   │
+│  │  Backends Supported:                                                 │   │
+│  │   • Spark: Uses F.col() and DataFrame.filter()                      │   │
+│  │   • DuckDB: Uses SQL WHERE clauses                                  │   │
+│  │                                                                      │   │
+│  │  Usage Locations:                                                    │   │
+│  │   ✓ User notebooks and scripts                                      │   │
+│  │   ✓ UniversalSession methods                                        │   │
+│  │   ✓ Individual model methods                                        │   │
+│  │   ✓ UI components                                                   │   │
+│  │   ✓ Any code with a DataFrame                                       │   │
+│  └─────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Note: FilterEngine is NOT owned by any component - it's a standalone utility
+      that can be imported and used anywhere in the codebase.
 ```
 
 ---
@@ -167,6 +202,7 @@
    ┌────────────────────────────────────────────────────────────┐
    │ from core.context import RepoContext                       │
    │ from models.api.session import UniversalSession            │
+   │ from core.session.filters import FilterEngine              │
    │                                                             │
    │ ctx = RepoContext.from_repo_root()                         │
    │ session = UniversalSession(ctx.connection, ctx.storage,    │
@@ -174,10 +210,10 @@
    │                                                             │
    │ # Query with filters                                       │
    │ prices = session.get_fact_df('company', 'fact_prices')     │
+   │                                                             │
+   │ # Apply filters using FilterEngine (user can call directly)│
    │ filters = {'ticker': ['AAPL', 'MSFT'],                     │
    │            'trade_date': {'min': '2024-01-01'}}            │
-   │                                                             │
-   │ from core.session.filters import FilterEngine              │
    │ filtered = FilterEngine.apply_from_session(prices,         │
    │                                            filters, session)│
    └────────────────────────────────────────────────────────────┘
@@ -264,14 +300,22 @@
   - Lazy-import model classes
   - Provide model metadata (tables, measures, schema)
 - **Registration**: Automatic by convention or manual
+- **Ownership**: Created and owned by UniversalSession
 
-### **FilterEngine** (Query Optimization)
+### **FilterEngine** (Cross-Cutting Utility)
 - **Purpose**: Backend-agnostic filtering
 - **Responsibilities**:
   - Detect backend type from session
   - Apply filters (exact, range, IN clause)
   - Translate filters to Spark or DuckDB syntax
   - Build SQL WHERE clauses
+- **Key Characteristic**: **Standalone static utility** - not owned by any component
+- **Usage**: Can be imported and called from anywhere:
+  - User notebooks
+  - UniversalSession
+  - Individual models
+  - UI components
+  - Any code with a DataFrame
 - **Benefits**: Eliminates code duplication across codebase
 
 ### **BaseModel** (Model Foundation)
@@ -338,8 +382,11 @@ Silver Storage (Input) → Model.build()
 ### **Query Pattern**
 ```
 User → UniversalSession → Model → StorageRouter → Physical Storage
-         ↓                  ↓
-    FilterEngine      Cached DataFrames
+         ↓                  ↓            ↑
+    FilterEngine      Cached DFs        │
+         │                               │
+         └───────────────────────────────┘
+    (FilterEngine can be called anywhere in the flow)
 ```
 
 ---
@@ -351,8 +398,9 @@ User → UniversalSession → Model → StorageRouter → Physical Storage
 3. **Backend Agnostic**: Works with Spark or DuckDB transparently
 4. **YAML-Driven**: Model structure defined in configs, not code
 5. **Cross-Model Access**: Models can query other models via session injection
-6. **Filter Centralization**: Single FilterEngine for all filtering logic
+6. **Filter Centralization**: Single FilterEngine utility for all filtering logic
 7. **Convention Over Configuration**: Auto-discovery of models by naming convention
+8. **Utility Pattern**: FilterEngine is a standalone cross-cutting utility
 
 ---
 
@@ -441,19 +489,30 @@ class YourModel(BaseModel):
         return dims, facts
 ```
 
-### Custom Filtering
+### Using FilterEngine Anywhere
 
 ```python
-# Extend FilterEngine for complex filters
+# Import and use FilterEngine from any layer
+from core.session.filters import FilterEngine
+
+# Define filters
 filters = {
     'ticker': ['AAPL', 'MSFT'],
     'volume': {'min': 1000000},
     'trade_date': {'start': '2024-01-01', 'end': '2024-12-31'}
 }
 
+# Option 1: Use with session (auto-detects backend)
+filtered_df = FilterEngine.apply_from_session(df, filters, session)
+
+# Option 2: Specify backend explicitly
 filtered_df = FilterEngine.apply_filters(df, filters, backend='spark')
+
+# Option 3: Build SQL for manual queries
+where_clause = FilterEngine.build_filter_sql(filters)
+# Returns: "ticker IN ('AAPL', 'MSFT') AND volume >= 1000000 AND ..."
 ```
 
 ---
 
-This architecture provides a clean separation of concerns, enables code reuse, and supports both Spark and DuckDB backends transparently.
+This architecture provides a clean separation of concerns, enables code reuse, and supports both Spark and DuckDB backends transparently. FilterEngine is positioned as a true utility that any component can leverage, rather than being owned by a specific layer.
