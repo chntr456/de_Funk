@@ -14,7 +14,7 @@ $filter${
   label: Stock Tickers
   type: select
   multi: true
-  source: {model: forecast, table: vw_price_predictions, column: ticker}
+  source: {model: forecast, table: fact_forecasts, column: ticker}
   default: ["AAPL"]
   help_text: Select stocks to view
 }
@@ -36,34 +36,29 @@ Compare actual stock prices with model predictions and confidence intervals.
 
 $exhibits${
   type: forecast_chart
-  source: forecast.vw_price_predictions
-  title: "Stock Price - Actual vs Predicted"
-  description: "Actuals (solid) vs Predictions (dashed) with confidence intervals"
+  source: forecast.fact_forecasts
+  title: "Stock Price - Predictions"
+  description: "Model predictions with confidence intervals"
 
-  x_axis: {dimension: date, label: "Date"}
-  y_axis: {
-    measures: [actual, predicted]
-    label: "Price ($)"
-  }
+  x_axis: {dimension: prediction_date, label: "Date"}
+  y_axis: {label: "Price ($)", measures: [predicted_close]}
 
   measure_selector: {
-    available_measures: [actual, predicted, upper_bound, lower_bound]
-    default_measures: [actual, predicted]
-    selector_type: multiselect
-    label: "Select Metrics"
+    available_measures: [predicted_close, predicted_volume, upper_bound, lower_bound],
+    default_measures: [predicted_close],
+    selector_type: multiselect,
+    label: "Select Metrics",
     help_text: "Choose which values to display"
   }
 
   dimension_selector: {
-    available_dimensions: [ticker, model_name]
-    default_dimension: model_name
-    label: "Group By"
+    available_dimensions: [ticker, model_name],
+    default_dimension: model_name,
+    label: "Group By",
     help_text: "Group lines by ticker or model"
   }
 
-  # Styling hints
-  actual_column: actual
-  predicted_column: predicted
+  predicted_column: predicted_close
   confidence_bounds: [lower_bound, upper_bound]
 }
 
@@ -82,16 +77,7 @@ $exhibits${
 
 ---
 
-**Setup Required:**
-
-Create a view `vw_price_predictions` in your forecast model with this schema:
-
-```sql
-date       | ticker | model_name | actual | predicted | upper_bound | lower_bound
------------|--------|------------|--------|-----------|-------------|------------
-2024-01-01 | AAPL   | ARIMA_30d  | 150.0  | null      | null        | null
-2024-01-02 | AAPL   | ARIMA_30d  | 152.0  | null      | null        | null
-2024-01-03 | AAPL   | ARIMA_30d  | null   | 153.5     | 155.0       | 152.0
+**Note:** To generate forecast data, run:
+```bash
+python scripts/run_forecasts.py --tickers AAPL GOOGL MSFT
 ```
-
-This combines historical actuals with future predictions in a single view.
