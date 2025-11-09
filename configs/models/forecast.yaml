@@ -10,39 +10,25 @@ storage:
 # Schema definitions for forecast outputs
 schema:
   facts:
-    forecast_price:
+    fact_forecasts:
       path: facts/forecast_price
-      description: "Price forecasts with confidence intervals"
+      description: "Price and volume forecasts with confidence intervals"
       columns:
         ticker: string
+        target: string                # 'close' or 'volume'
         forecast_date: date          # Date of the forecast
         prediction_date: date         # Date being predicted
         horizon: int                  # Days ahead (1-30)
         model_name: string            # ARIMA_7d, Prophet_30d, etc.
-        predicted_close: double       # Predicted closing price
+        predicted_close: double       # Predicted closing price (null for volume)
+        predicted_volume: long        # Predicted volume (null for price)
         lower_bound: double           # Lower confidence interval (95%)
         upper_bound: double           # Upper confidence interval (95%)
         confidence: double            # Confidence level (0-1)
       partitions: [forecast_date]
-      tags: [fact, forecast, price]
+      tags: [fact, forecast, price, volume]
 
-    forecast_volume:
-      path: facts/forecast_volume
-      description: "Volume forecasts with confidence intervals"
-      columns:
-        ticker: string
-        forecast_date: date
-        prediction_date: date
-        horizon: int
-        model_name: string
-        predicted_volume: long
-        lower_bound: long
-        upper_bound: long
-        confidence: double
-      partitions: [forecast_date]
-      tags: [fact, forecast, volume]
-
-    forecast_metrics:
+    fact_forecast_metrics:
       path: facts/forecast_metrics
       description: "Forecast accuracy metrics and errors"
       columns:
@@ -62,7 +48,7 @@ schema:
       partitions: [metric_date]
       tags: [fact, metrics, accuracy]
 
-    model_registry:
+    fact_model_registry:
       path: facts/model_registry
       description: "Registry of trained models and parameters"
       columns:
