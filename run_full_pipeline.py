@@ -235,7 +235,7 @@ def generate_forecasts(spark, repo_root: Path, storage_cfg: dict, top_n: int = 1
             print(f"  [{i}/{len(tickers)}] Training forecasts for {ticker}...")
 
             # Run all configured forecast models for this ticker
-            ticker_results = forecast_model.run_forecast_for_ticker(ticker)
+            ticker_results = forecast_model.run_forecast_for_entity(ticker)
 
             results['tickers_processed'] += 1
             results['total_models_trained'] += ticker_results['models_trained']
