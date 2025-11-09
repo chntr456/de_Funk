@@ -222,8 +222,9 @@ class UniversalSession:
             if edge_from == table_name and 'dim_calendar' in edge_to:
                 print(f"DEBUG: FOUND MATCHING EDGE!")
                 # Extract column mapping from 'on' condition
-                # Format: [column1 = column2] or [[column1, column2]]
-                on_conditions = edge.get('on', [])
+                # Note: YAML parser converts 'on:' to boolean True (reserved word)
+                # So we need to check both 'on' and True keys
+                on_conditions = edge.get('on', edge.get(True, []))
                 print(f"DEBUG: on_conditions={on_conditions}, type={type(on_conditions)}")
 
                 for condition in on_conditions:
