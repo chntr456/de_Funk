@@ -14,7 +14,7 @@ $filter${
   label: Stock Tickers
   type: select
   multi: true
-  source: {model: forecast, table: fact_forecasts, column: ticker}
+  source: {model: forecast, table: forecast_price, column: ticker}
   default: ["AAPL"]
   help_text: Select stocks to view
 }
@@ -37,7 +37,7 @@ Compare actual stock prices with model predictions and confidence intervals.
 
 $exhibits${
   type: forecast_chart
-  source: forecast.fact_forecasts
+  source: forecast.forecast_price
   title: "Stock Price - Predictions"
   description: "Model predictions with confidence intervals"
 
@@ -45,7 +45,7 @@ $exhibits${
   y_axis: {label: "Price ($)", measures: [predicted_close]}
 
   measure_selector: {
-    available_measures: [predicted_close, predicted_volume, upper_bound, lower_bound],
+    available_measures: [predicted_close, upper_bound, lower_bound],
     default_measures: [predicted_close],
     selector_type: multiselect,
     label: "Select Metrics",
@@ -70,7 +70,7 @@ $exhibits${
 
 $exhibits${
   type: forecast_metrics_table
-  source: forecast.fact_forecast_metrics
+  source: forecast.forecast_metrics
   title: Model Performance
 }
 
