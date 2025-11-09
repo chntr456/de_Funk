@@ -10,6 +10,7 @@ Specific implementations (CompanyForecastModel, MacroForecastModel, etc.) specif
 
 from typing import Dict, Optional, Tuple, List
 from abc import abstractmethod
+import pandas as pd
 from pyspark.sql import DataFrame
 from models.base.model import BaseModel
 from models.implemented.forecast import training_methods
