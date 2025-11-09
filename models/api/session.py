@@ -192,11 +192,23 @@ class UniversalSession:
         # Get model config
         try:
             model_config = self.registry.get_model_config(model_name)
-        except Exception:
+        except Exception as e:
+            print(f"DEBUG: Failed to get model config for {model_name}: {e}")
             return mappings  # No model config, no mappings
+
+        # DEBUG
+        print(f"\nDEBUG get_filter_column_mappings: model_name={model_name}, table_name={table_name}")
+        print(f"DEBUG: Has 'graph' in config: {'graph' in model_config}")
+        if 'graph' in model_config:
+            print(f"DEBUG: Has 'edges' in graph: {'edges' in model_config['graph']}")
+            if 'edges' in model_config['graph']:
+                print(f"DEBUG: Number of edges: {len(model_config['graph']['edges'])}")
+                for i, e in enumerate(model_config['graph']['edges']):
+                    print(f"DEBUG: Edge {i}: {e}")
 
         # Check if model has graph metadata
         if 'graph' not in model_config or 'edges' not in model_config['graph']:
+            print(f"DEBUG: No graph or edges found")
             return mappings
 
         # Look for edges from this table to dim_calendar
@@ -204,13 +216,18 @@ class UniversalSession:
             edge_from = edge.get('from', '')
             edge_to = edge.get('to', '')
 
+            print(f"DEBUG: Checking edge: from='{edge_from}', to='{edge_to}' (looking for table_name='{table_name}')")
+
             # Check if this edge is from our table to dim_calendar
             if edge_from == table_name and 'dim_calendar' in edge_to:
+                print(f"DEBUG: FOUND MATCHING EDGE!")
                 # Extract column mapping from 'on' condition
                 # Format: [column1 = column2] or [[column1, column2]]
                 on_conditions = edge.get('on', [])
+                print(f"DEBUG: on_conditions={on_conditions}, type={type(on_conditions)}")
 
                 for condition in on_conditions:
+                    print(f"DEBUG: Processing condition={condition}, type={type(condition)}")
                     if isinstance(condition, str):
                         # Format: "metric_date = trade_date"
                         parts = condition.split('=')
@@ -220,7 +237,9 @@ class UniversalSession:
                             # Map calendar column to table column
                             # e.g., trade_date → metric_date
                             mappings[calendar_col] = table_col
+                            print(f"DEBUG: Added mapping: {calendar_col} -> {table_col}")
 
+        print(f"DEBUG: Final mappings: {mappings}\n")
         return mappings
 
     def get_dimension_df(self, model_name: str, dim_id: str) -> DataFrame:
