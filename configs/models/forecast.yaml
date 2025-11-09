@@ -216,8 +216,7 @@ depends_on:
   - company  # Forecast model reads from company model for training data
 
 # Graph structure for forecast model
-# Note: Forecast model loads from Silver (pre-computed forecasts)
-# rather than building from Bronze like company model
+# Joins to dim_calendar for standard date filtering
 graph:
   nodes:
     - id: fact_forecasts
@@ -235,7 +234,26 @@ graph:
       description: "Registry of trained models"
       tags: [dim, registry]
 
-  # Forecast model typically doesn't have edges/paths like company model
-  # It's more focused on ML training and prediction
-  edges: []
-  paths: []
+  # Join forecast tables to dim_calendar for standard date filtering
+  edges:
+    - from: fact_forecasts
+      to: core.dim_calendar
+      on: [prediction_date = trade_date]
+      type: left
+      description: "Join forecasts to calendar on prediction date"
+
+    - from: fact_forecast_metrics
+      to: core.dim_calendar
+      on: [metric_date = trade_date]
+      type: left
+      description: "Join metrics to calendar on metric date"
+
+  # Define paths for common queries
+  paths:
+    - id: forecasts_with_calendar
+      nodes: [fact_forecasts, core.dim_calendar]
+      description: "Forecasts with calendar attributes for date filtering"
+
+    - id: metrics_with_calendar
+      nodes: [fact_forecast_metrics, core.dim_calendar]
+      description: "Metrics with calendar attributes for date filtering"
