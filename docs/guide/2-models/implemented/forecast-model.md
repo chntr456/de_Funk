@@ -7,6 +7,10 @@ updated: 2024-11-08
 status: stable
 dependencies: ["[[Core Model]]", "[[Company Model]]"]
 used_by: []
+architecture_components:
+  - "[[Models System]]"
+  - "[[Silver Storage]]"
+  - "[[Universal Session]]"
 ---
 
 # Forecast Model
@@ -75,6 +79,30 @@ The Forecast model provides:
 | **Facts** | 3 (price forecasts, volume forecasts, metrics) |
 | **Measures** | 3 (avg error, MAPE, best R²) |
 | **Update Frequency** | Daily (after market close + model retraining) |
+
+---
+
+## Architecture Components Used
+
+---
+
+This model uses the following architecture components:
+
+### Primary Components
+
+| Component | Purpose | Documentation |
+|-----------|---------|---------------|
+| **[[Models System/ML]]** | ML model framework with forecast-specific extensions | [[Base Model]] |
+| **[[Universal Session]]** | Access training data from Company Model across models | [[Universal Session]] |
+| **[[Silver Storage]]** | Store prediction outputs and model registry | [[Silver Layer]] |
+
+### Data Flow
+
+The Forecast model reads training data from the Company model via Universal Session, trains ML models (ARIMA, Prophet, Random Forest), generates predictions with confidence intervals, and stores results in Silver storage.
+
+**Flow:** Company.fact_prices (via UniversalSession) → ML Training → Prediction Generation → Silver/forecast
+
+See [[MODEL_ARCHITECTURE_MAPPING]] for complete architecture mapping.
 
 ---
 
@@ -1299,15 +1327,20 @@ comparison.show()
 
 ---
 
+### Model Documentation
 - [[Core Model]] - Shared calendar dimension
 - [[Company Model]] - Training data source for forecasts
 - [[Macro Model]] - Economic indicators for feature engineering
-- [[Data Pipeline]] - How models are trained and predictions generated
-- [[Universal Session]] - Cross-model query examples
+
+### Architecture Documentation
+- [[MODEL_ARCHITECTURE_MAPPING]] - Complete architecture mapping
+- [[Models System/ML]] - ML model framework
+- [[Universal Session]] - Cross-model data access
+- [[Silver Storage]] - Prediction output storage
 
 ---
 
-**Tags:** #finance/forecast #component/model #concept/analytics #status/stable
+**Tags:** #finance/forecast #component/model #concept/analytics #status/stable #component/models-system/ml #component/storage/silver #component/session/cross-model #architecture/analytics #pattern/ml-predictions #pattern/time-series
 
 **Last Updated:** 2024-11-08
 **Model Version:** 1.0

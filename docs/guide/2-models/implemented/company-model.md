@@ -9,6 +9,13 @@ dependencies:
   - "[[Core Model]]"
 used_by:
   - "[[Forecast Model]]"
+architecture_components:
+  - "[[Data Pipeline]]"
+  - "[[Facets]]"
+  - "[[Providers]]"
+  - "[[Bronze Storage]]"
+  - "[[Silver Storage]]"
+  - "[[Models System]]"
 ---
 
 # Company Model
@@ -79,6 +86,34 @@ The Company model provides:
 | **Facts** | 4 (fact_prices, fact_news, + 2 materialized) |
 | **Measures** | 10 |
 | **Update Frequency** | Daily (after market close) |
+
+---
+
+## Architecture Components Used
+
+---
+
+This model uses the following architecture components:
+
+### Primary Components
+
+| Component | Purpose | Documentation |
+|-----------|---------|---------------|
+| **[[Data Pipeline/Polygon]]** | Ingest stock prices, news, and company data from Polygon.io API | [[Data Pipeline Overview]] |
+| **[[Facets/Prices]]** | Normalize price data (OHLC, volume, VWAP) | [[Facets]] |
+| **[[Facets/News]]** | Normalize news articles with sentiment | [[Facets]] |
+| **[[Providers/Polygon]]** | Polygon API provider implementation | [[Providers]] |
+| **[[Bronze Storage]]** | Raw market data from Polygon API | [[Bronze Layer]] |
+| **[[Silver Storage]]** | Dimensional stock market data (star schema) | [[Silver Layer]] |
+| **[[Models System/Dimensional]]** | Graph-based dimensional model building | [[Base Model]] |
+
+### Data Flow
+
+Market data flows from Polygon API through facets for normalization, into Bronze storage, then transformed via the models system into a dimensional star schema in Silver storage.
+
+**Flow:** Polygon API → Facets (Prices/News) → Bronze/polygon → BaseModel.build() → Silver/company
+
+See [[MODEL_ARCHITECTURE_MAPPING]] for complete architecture mapping.
 
 ---
 
@@ -981,15 +1016,23 @@ storage/silver/company/facts/fact_prices/
 
 ---
 
+### Model Documentation
 - [[Core Model]] - Shared calendar dimension
 - [[Forecast Model]] - Uses company prices for training
 - [[Macro Model]] - Economic indicators for correlation analysis
-- [[Data Pipeline]] - How data is ingested from Polygon API
+
+### Architecture Documentation
+- [[MODEL_ARCHITECTURE_MAPPING]] - Complete architecture mapping
+- [[Data Pipeline]] - Polygon API ingestion pipeline
+- [[Facets]] - Price and news data normalization
+- [[Providers]] - Polygon provider implementation
+- [[Bronze Storage]] - Raw market data storage
+- [[Silver Storage]] - Dimensional model storage
 - [[Universal Session]] - Cross-model query examples
 
 ---
 
-**Tags:** #finance/equities #component/model #concept/dimensional-modeling #source/polygon #status/stable
+**Tags:** #finance/equities #component/model #concept/dimensional-modeling #source/polygon #status/stable #component/data-pipeline/polygon #component/facets/prices #component/facets/news #component/providers/polygon #component/storage/bronze #component/storage/silver #component/models-system/dimensional #architecture/ingestion-to-analytics #pattern/star-schema #pattern/time-series
 
 **Last Updated:** 2024-11-08
 **Model Version:** 1.0

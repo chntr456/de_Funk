@@ -7,6 +7,13 @@ updated: 2024-11-08
 status: stable
 dependencies: ["[[Core Model]]"]
 used_by: ["[[Company Model]]"]
+architecture_components:
+  - "[[Data Pipeline]]"
+  - "[[Facets]]"
+  - "[[Providers]]"
+  - "[[Bronze Storage]]"
+  - "[[Silver Storage]]"
+  - "[[Models System]]"
 ---
 
 # Macro Model
@@ -77,6 +84,33 @@ The Macro model provides:
 | **Facts** | 5 (4 indicators + 1 wide view) |
 | **Measures** | 4 |
 | **Update Frequency** | Monthly (after BLS release) |
+
+---
+
+## Architecture Components Used
+
+---
+
+This model uses the following architecture components:
+
+### Primary Components
+
+| Component | Purpose | Documentation |
+|-----------|---------|---------------|
+| **[[Data Pipeline/BLS]]** | Ingest economic indicators from Bureau of Labor Statistics API | [[Data Pipeline Overview]] |
+| **[[Facets/Economics]]** | Normalize unemployment, CPI, employment, and wage data | [[Facets]] |
+| **[[Providers/BLS]]** | BLS API provider implementation | [[Providers]] |
+| **[[Bronze Storage]]** | Raw economic data from BLS | [[Bronze Layer]] |
+| **[[Silver Storage]]** | Dimensional economic indicators (star schema) | [[Silver Layer]] |
+| **[[Models System/Dimensional]]** | Time series dimensional modeling | [[Base Model]] |
+
+### Data Flow
+
+Economic data flows from BLS API through facets for normalization, into Bronze storage, then transformed via the models system into dimensional time series tables in Silver storage.
+
+**Flow:** BLS API → Facets (Economics) → Bronze/bls → BaseModel.build() → Silver/macro
+
+See [[MODEL_ARCHITECTURE_MAPPING]] for complete architecture mapping.
 
 ---
 
@@ -1204,15 +1238,24 @@ See [[Company Model]] for stock market data.
 
 ---
 
+### Model Documentation
 - [[Core Model]] - Shared calendar dimension
 - [[City Finance Model]] - Local economic data (Chicago)
 - [[Company Model]] - Market correlation analysis
 - [[Forecast Model]] - Economic indicators as ML features
+
+### Architecture Documentation
+- [[MODEL_ARCHITECTURE_MAPPING]] - Complete architecture mapping
+- [[Data Pipeline]] - BLS API ingestion pipeline
+- [[Facets]] - Economic indicator normalization
+- [[Providers]] - BLS provider implementation
+- [[Bronze Storage]] - Raw BLS data storage
+- [[Silver Storage]] - Dimensional time series storage
 - [[Universal Session]] - Cross-model query examples
 
 ---
 
-**Tags:** #economics/bls #component/model #source/bls #status/stable
+**Tags:** #economics/bls #component/model #source/bls #status/stable #component/data-pipeline/bls #component/facets/economics #component/providers/bls #component/storage/bronze #component/storage/silver #component/models-system/dimensional #architecture/ingestion-to-analytics #pattern/star-schema #pattern/time-series
 
 **Last Updated:** 2024-11-08
 **Model Version:** 1.0

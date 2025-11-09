@@ -7,6 +7,13 @@ updated: 2024-11-08
 status: stable
 dependencies: ["[[Core Model]]"]
 used_by: []
+architecture_components:
+  - "[[Data Pipeline]]"
+  - "[[Facets]]"
+  - "[[Providers]]"
+  - "[[Bronze Storage]]"
+  - "[[Silver Storage]]"
+  - "[[Models System]]"
 ---
 
 # City Finance Model
@@ -77,6 +84,33 @@ The City Finance model provides:
 | **Facts** | 4 (unemployment, permits, licenses, indicators) |
 | **Measures** | 5 |
 | **Update Frequency** | Daily for permits/licenses, Monthly for unemployment |
+
+---
+
+## Architecture Components Used
+
+---
+
+This model uses the following architecture components:
+
+### Primary Components
+
+| Component | Purpose | Documentation |
+|-----------|---------|---------------|
+| **[[Data Pipeline/Chicago]]** | Ingest municipal data from Chicago Data Portal (Socrata API) | [[Data Pipeline Overview]] |
+| **[[Facets/Municipal]]** | Normalize permits, licenses, unemployment, and community area data | [[Facets]] |
+| **[[Providers/Chicago]]** | Chicago Data Portal provider implementation | [[Providers]] |
+| **[[Bronze Storage]]** | Raw municipal data from Chicago | [[Bronze Layer]] |
+| **[[Silver Storage]]** | Dimensional geographic/financial data (star schema) | [[Silver Layer]] |
+| **[[Models System/Dimensional]]** | Multi-level dimensional modeling with geography | [[Base Model]] |
+
+### Data Flow
+
+Municipal data flows from Chicago Data Portal through facets for normalization, into Bronze storage, then transformed via the models system into geographic dimensional tables in Silver storage.
+
+**Flow:** Chicago API → Facets (Municipal) → Bronze/chicago → BaseModel.build() → Silver/city_finance
+
+See [[MODEL_ARCHITECTURE_MAPPING]] for complete architecture mapping.
 
 ---
 
@@ -1027,15 +1061,24 @@ See [[Macro Model]] for national economic data.
 
 ---
 
+### Model Documentation
 - [[Core Model]] - Shared calendar dimension
 - [[Macro Model]] - National economic indicators for comparison
 - [[Company Model]] - Stock market data
-- [[Universal Session]] - Cross-model query examples
 - [Chicago Data Portal](https://data.cityofchicago.org) - Data source
+
+### Architecture Documentation
+- [[MODEL_ARCHITECTURE_MAPPING]] - Complete architecture mapping
+- [[Data Pipeline]] - Chicago Data Portal ingestion pipeline
+- [[Facets]] - Municipal data normalization
+- [[Providers]] - Chicago provider implementation
+- [[Bronze Storage]] - Raw municipal data storage
+- [[Silver Storage]] - Geographic dimensional storage
+- [[Universal Session]] - Cross-model query examples
 
 ---
 
-**Tags:** #municipal #economics #component/model #source/chicago #status/stable
+**Tags:** #municipal #economics #component/model #source/chicago #status/stable #component/data-pipeline/chicago #component/facets/municipal #component/providers/chicago #component/storage/bronze #component/storage/silver #component/models-system/dimensional #architecture/ingestion-to-analytics #pattern/star-schema #pattern/geographic
 
 **Last Updated:** 2024-11-08
 **Model Version:** 1.0

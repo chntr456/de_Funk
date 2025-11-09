@@ -11,6 +11,10 @@ used_by:
   - "[[Forecast Model]]"
   - "[[Macro Model]]"
   - "[[City Finance Model]]"
+architecture_components:
+  - "[[Storage]]"
+  - "[[Models System]]"
+  - "[[Bronze Storage]]"
 ---
 
 # Core Model
@@ -78,6 +82,30 @@ The Core model serves as the **foundation layer** for all other models in de_Fun
 | **Facts** | 0 |
 | **Measures** | 0 (reference data only) |
 | **Update Frequency** | Static (generated once) |
+
+---
+
+## Architecture Components Used
+
+---
+
+This model uses the following architecture components:
+
+### Primary Components
+
+| Component | Purpose | Documentation |
+|-----------|---------|---------------|
+| **[[Storage/Silver]]** | Stores dimensional calendar data in Parquet format | [[Silver Layer]] |
+| **[[Models System/Base Model]]** | Foundation model framework implementation | [[Base Model]] |
+| **[[Bronze Storage]]** | Seed data for calendar generation | [[Bronze Layer]] |
+
+### Data Flow
+
+The Core model generates calendar data from seed configuration and writes directly to Silver storage. It serves as the foundation layer for all other models, providing a shared time dimension.
+
+**Flow:** Configuration → Calendar Generation → Silver/core/dims/dim_calendar
+
+See [[MODEL_ARCHITECTURE_MAPPING]] for complete architecture mapping.
 
 ---
 
@@ -1051,15 +1079,22 @@ By centralizing date logic in a shared dimension, we ensure:
 
 ---
 
+### Model Documentation
 - [[Company Model]] - Integration example
 - [[Macro Model]] - Economic indicators
 - [[Forecast Model]] - ML predictions
 - [[City Finance Model]] - Municipal data
 - [[Models Framework Overview]] - Framework concepts
 
+### Architecture Documentation
+- [[MODEL_ARCHITECTURE_MAPPING]] - Complete architecture mapping
+- [[Storage/Silver Layer]] - Silver layer storage strategy
+- [[Models System/Base Model]] - Base model framework
+- [[Bronze Storage]] - Seed data storage
+
 ---
 
-**Tags:** #reference #component/model #source/generated #status/stable
+**Tags:** #reference #component/model #source/generated #status/stable #component/storage/silver #component/models-system/base #architecture/foundation #pattern/reference-only
 
 **Last Updated:** 2024-11-08
 **Model Version:** 1.0
