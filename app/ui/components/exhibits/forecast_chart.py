@@ -49,13 +49,15 @@ def load_forecast_data(ticker: str, target: str = "price") -> pd.DataFrame:
         return pd.DataFrame()
 
 
-def load_actual_data(ticker: str, days: int = 90) -> pd.DataFrame:
+def load_actual_data(ticker: str, days: int = 90, start_date: str = None, end_date: str = None) -> pd.DataFrame:
     """
     Load actual historical data for comparison (case-insensitive).
 
     Args:
         ticker: Stock ticker symbol (case-insensitive)
-        days: Number of days of history to load
+        days: Number of days of history to load (used if start_date/end_date not provided)
+        start_date: Optional start date (YYYY-MM-DD format or date object)
+        end_date: Optional end date (YYYY-MM-DD format or date object)
 
     Returns:
         DataFrame with actual prices/volumes
@@ -79,22 +81,34 @@ def load_actual_data(ticker: str, days: int = 90) -> pd.DataFrame:
             # Fallback to Bronze
             prices_path = bronze_path
 
-        # Get the latest N days of data (don't use datetime.now() - use actual data max date)
-        query = f"""
-        WITH ticker_data AS (
+        # Build query based on date parameters
+        if start_date and end_date:
+            # Use explicit date range from filter
+            query = f"""
             SELECT trade_date, ticker, close, volume
             FROM read_parquet('{prices_path}/**/*.parquet')
             WHERE UPPER(ticker) = UPPER('{ticker}')
-        ),
-        date_range AS (
-            SELECT MAX(trade_date) as max_date FROM ticker_data
-        )
-        SELECT t.trade_date, t.ticker, t.close, t.volume
-        FROM ticker_data t
-        CROSS JOIN date_range dr
-        WHERE t.trade_date >= DATE_SUB(dr.max_date, INTERVAL {days} DAYS)
-        ORDER BY t.trade_date
-        """
+              AND trade_date >= DATE '{start_date}'
+              AND trade_date <= DATE '{end_date}'
+            ORDER BY trade_date
+            """
+        else:
+            # Get the latest N days of data (don't use datetime.now() - use actual data max date)
+            query = f"""
+            WITH ticker_data AS (
+                SELECT trade_date, ticker, close, volume
+                FROM read_parquet('{prices_path}/**/*.parquet')
+                WHERE UPPER(ticker) = UPPER('{ticker}')
+            ),
+            date_range AS (
+                SELECT MAX(trade_date) as max_date FROM ticker_data
+            )
+            SELECT t.trade_date, t.ticker, t.close, t.volume
+            FROM ticker_data t
+            CROSS JOIN date_range dr
+            WHERE t.trade_date >= DATE_SUB(dr.max_date, INTERVAL {days} DAYS)
+            ORDER BY t.trade_date
+            """
         df = con.execute(query).fetchdf()
         con.close()
         return df
@@ -314,8 +328,32 @@ class ForecastChartRenderer(BaseExhibitRenderer):
 
     def render_chart(self):
         """Render the forecast chart with confidence intervals."""
-        # Load actual historical data first
-        actual_df = load_actual_data(self.ticker, days=self.history_days)
+        # Check for global date range filter
+        start_date = None
+        end_date = None
+
+        # Check session state for date filters (multiple possible keys)
+        date_filter_keys = ['filter_trade_date', 'filter_date_range', 'date_range']
+        for key in date_filter_keys:
+            if key in st.session_state:
+                date_filter = st.session_state[key]
+                if isinstance(date_filter, dict):
+                    start_date = date_filter.get('start')
+                    end_date = date_filter.get('end')
+                    # Convert to string if date object
+                    if start_date and hasattr(start_date, 'isoformat'):
+                        start_date = start_date.isoformat()
+                    if end_date and hasattr(end_date, 'isoformat'):
+                        end_date = end_date.isoformat()
+                    break
+
+        # Load actual historical data
+        actual_df = load_actual_data(
+            self.ticker,
+            days=self.history_days,
+            start_date=start_date,
+            end_date=end_date
+        )
 
         if actual_df.empty:
             st.warning(f"No historical data available for {self.ticker}")
