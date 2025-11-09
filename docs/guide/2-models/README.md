@@ -22,9 +22,9 @@ Learn about dimensional modeling concepts, the model framework, and how models w
 
 ### **Implemented Models**
 
-All production data models currently available in the platform:
+All production data models currently available in the platform. Each model has its own directory with comprehensive documentation.
 
-#### **[Core Model](implemented/core-model.md)**
+#### **[Core Model](implemented/core/)**
 **Purpose:** Shared reference data and calendar dimension
 **Key Tables:** `dim_calendar` (27 date attributes)
 **Dependencies:** None (foundation model)
@@ -33,7 +33,7 @@ All production data models currently available in the platform:
 
 ---
 
-#### **[Company Model](implemented/company-model.md)**
+#### **[Company Model](implemented/company/)**
 **Purpose:** Financial market and company data
 **Key Tables:** `dim_company`, `dim_exchange`, `fact_prices`, `fact_news`
 **Dependencies:** Core model
@@ -42,7 +42,7 @@ All production data models currently available in the platform:
 
 ---
 
-#### **[Forecast Model](implemented/forecast-model.md)**
+#### **[Forecast Model](implemented/forecast/)**
 **Purpose:** Time series predictions and accuracy metrics
 **Key Tables:** `fact_forecasts`, `fact_forecast_metrics`, `model_registry`
 **Dependencies:** Core, Company models
@@ -51,7 +51,7 @@ All production data models currently available in the platform:
 
 ---
 
-#### **[Macro Model](implemented/macro-model.md)**
+#### **[Macro Model](implemented/macro/)**
 **Purpose:** Macroeconomic indicators
 **Key Tables:** `fact_unemployment`, `fact_cpi`, `fact_employment`, `fact_wages`
 **Dependencies:** Core model
@@ -60,7 +60,7 @@ All production data models currently available in the platform:
 
 ---
 
-#### **[City Finance Model](implemented/city-finance-model.md)**
+#### **[City Finance Model](implemented/city-finance/)**
 **Purpose:** Municipal finance and economic data
 **Key Tables:** `fact_local_unemployment`, `fact_building_permits`, `dim_community_area`
 **Dependencies:** Core, Macro models
@@ -245,11 +245,11 @@ Each model document includes:
 **New to models?** Start with **[Overview](overview.md)** to learn the concepts.
 
 **Want to see a specific model?** Jump to:
-- [Core Model](implemented/core-model.md)
-- [Company Model](implemented/company-model.md)
-- [Forecast Model](implemented/forecast-model.md)
-- [Macro Model](implemented/macro-model.md)
-- [City Finance Model](implemented/city-finance-model.md)
+- [Core Model](implemented/core/)
+- [Company Model](implemented/company/)
+- [Forecast Model](implemented/forecast/)
+- [Macro Model](implemented/macro/)
+- [City Finance Model](implemented/city-finance/)
 
 **Want to create your own?** See **[How to Create a Model](../1-getting-started/how-to/create-a-model.md)**
 
