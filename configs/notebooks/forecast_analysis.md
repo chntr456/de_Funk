@@ -20,12 +20,12 @@ $filter${
 }
 
 $filter${
-  id: date
+  id: prediction_date
   type: date_range
   label: Date Range
   operator: between
   default: {start: "2024-01-01", end: "2024-01-05"}
-  help_text: Select date range
+  help_text: Select date range for predictions
 }
 
 # Time Series Forecast Analysis
