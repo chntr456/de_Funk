@@ -162,6 +162,67 @@ class UniversalSession:
         model = self.load_model(model_name)
         return model.get_table(table_name)
 
+    def get_filter_column_mappings(self, model_name: str, table_name: str) -> Dict[str, str]:
+        """
+        Get automatic filter column mappings based on model graph edges.
+
+        Examines graph edges to find joins to dim_calendar and extracts
+        column mappings. This allows filters like 'trade_date' to be
+        automatically mapped to table-specific columns like 'metric_date'.
+
+        Args:
+            model_name: Name of the model
+            table_name: Name of the table
+
+        Returns:
+            Dictionary mapping standard filter columns to table columns
+            Example: {'trade_date': 'metric_date'}
+
+        Example:
+            If forecast model has this edge:
+                from: fact_forecast_metrics
+                to: core.dim_calendar
+                on: [metric_date = trade_date]
+
+            Then get_filter_column_mappings('forecast', 'fact_forecast_metrics')
+            returns: {'trade_date': 'metric_date'}
+        """
+        mappings = {}
+
+        # Get model config
+        try:
+            model_config = self.registry.get_model_config(model_name)
+        except Exception:
+            return mappings  # No model config, no mappings
+
+        # Check if model has graph metadata
+        if 'graph' not in model_config or 'edges' not in model_config['graph']:
+            return mappings
+
+        # Look for edges from this table to dim_calendar
+        for edge in model_config['graph']['edges']:
+            edge_from = edge.get('from', '')
+            edge_to = edge.get('to', '')
+
+            # Check if this edge is from our table to dim_calendar
+            if edge_from == table_name and 'dim_calendar' in edge_to:
+                # Extract column mapping from 'on' condition
+                # Format: [column1 = column2] or [[column1, column2]]
+                on_conditions = edge.get('on', [])
+
+                for condition in on_conditions:
+                    if isinstance(condition, str):
+                        # Format: "metric_date = trade_date"
+                        parts = condition.split('=')
+                        if len(parts) == 2:
+                            table_col = parts[0].strip()
+                            calendar_col = parts[1].strip()
+                            # Map calendar column to table column
+                            # e.g., trade_date → metric_date
+                            mappings[calendar_col] = table_col
+
+        return mappings
+
     def get_dimension_df(self, model_name: str, dim_id: str) -> DataFrame:
         """Get a dimension table from a model"""
         model = self.load_model(model_name)

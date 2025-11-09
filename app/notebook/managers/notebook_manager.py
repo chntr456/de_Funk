@@ -560,6 +560,32 @@ class NotebookManager:
         if hasattr(exhibit, 'filters') and exhibit.filters:
             filters.update(exhibit.filters)
 
+        # Apply automatic column mappings from graph metadata
+        # This allows tables with different date columns to use standard filters
+        # Example: fact_forecast_metrics uses metric_date, but filter is trade_date
+        # The mapping {'trade_date': 'metric_date'} is extracted from graph edges
+        if exhibit.source:
+            try:
+                model_name, table_name = self._parse_source(exhibit.source)
+                # Get automatic mappings from UniversalSession based on graph edges
+                column_mappings = self.session.get_filter_column_mappings(model_name, table_name)
+
+                if column_mappings:
+                    # Remap filter columns
+                    mapped_filters = {}
+                    for filter_column, filter_value in filters.items():
+                        if filter_column in column_mappings:
+                            # Use mapped column name
+                            mapped_column = column_mappings[filter_column]
+                            mapped_filters[mapped_column] = filter_value
+                        else:
+                            # Keep original column name
+                            mapped_filters[filter_column] = filter_value
+                    filters = mapped_filters
+            except Exception:
+                # If mapping fails, continue with original filters
+                pass
+
         return filters
 
     def _get_weighted_aggregate_data(self, exhibit: Exhibit) -> Any:
