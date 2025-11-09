@@ -14,7 +14,7 @@ $filter${
   label: Stock Tickers
   type: select
   multi: true
-  source: {model: forecast, table: forecast_price, column: ticker}
+  source: {model: forecast, table: fact_forecasts, column: ticker}
   default: ["AAPL"]
   help_text: Select stocks to view forecasts
 }
@@ -24,7 +24,7 @@ $filter${
   label: Forecast Models
   type: select
   multi: true
-  source: {model: forecast, table: forecast_metrics, column: model_name}
+  source: {model: forecast, table: fact_forecast_metrics, column: model_name}
   default: ["ARIMA_30d", "Prophet_30d"]
   help_text: Select forecast models to compare
 }
@@ -39,7 +39,7 @@ Overview of forecast model accuracy across all selected models:
 
 $exhibits${
   type: metric_cards
-  source: forecast.forecast_metrics
+  source: forecast.fact_forecast_metrics
   metrics: [
     { measure: mae, label: "Avg MAE", aggregation: avg },
     { measure: rmse, label: "Avg RMSE", aggregation: avg },
@@ -62,7 +62,7 @@ Predicted closing prices with 95% confidence intervals showing forecast uncertai
 
 $exhibits${
   type: forecast_chart
-  source: forecast.forecast_price
+  source: forecast.fact_forecasts
   target: price
   title: Price Forecast with Confidence Intervals
 }
@@ -78,7 +78,7 @@ Predicted trading volumes with 95% confidence intervals.
 
 $exhibits${
   type: forecast_chart
-  source: forecast.forecast_volume
+  source: forecast.fact_forecasts
   target: volume
   title: Volume Forecast with Confidence Intervals
 }
@@ -98,7 +98,7 @@ Comprehensive accuracy comparison across all forecast models:
 
 $exhibits${
   type: forecast_metrics_table
-  source: forecast.forecast_metrics
+  source: forecast.fact_forecast_metrics
   title: Model Accuracy Metrics
 }
 
@@ -113,27 +113,14 @@ Each with different forecast horizons (7d, 14d, 30d, 60d).
 
 ## Detailed Data
 
-### Price Forecast Data
+### Forecast Data
 
 <details>
-<summary>View and download price forecast data</summary>
+<summary>View and download forecast data</summary>
 
 $exhibits${
   type: data_table
-  source: forecast.forecast_price
-  download: true
-}
-
-</details>
-
-### Volume Forecast Data
-
-<details>
-<summary>View and download volume forecast data</summary>
-
-$exhibits${
-  type: data_table
-  source: forecast.forecast_volume
+  source: forecast.fact_forecasts
   download: true
 }
 
