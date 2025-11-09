@@ -459,6 +459,7 @@ class MarkdownNotebookParser:
             description=data.get('description'),
             source=data.get('source'),
             filters=data.get('filters'),
+            filter_column_mappings=data.get('filter_column_mappings'),
             x_axis=x_axis,
             y_axis=y_axis,
             y_axis_left=y_axis_left,

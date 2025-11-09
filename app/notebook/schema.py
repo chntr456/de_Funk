@@ -251,6 +251,7 @@ class Exhibit:
     description: Optional[str] = None
     source: Optional[str] = None  # model.table reference (e.g., "company.prices_with_company")
     filters: Optional[Dict[str, str]] = None  # filter_id: variable_ref
+    filter_column_mappings: Optional[Dict[str, str]] = None  # Map filter columns to table columns (e.g., trade_date: metric_date)
 
     # Chart configurations
     x_axis: Optional[AxisConfig] = None
