@@ -151,7 +151,8 @@ def render_collapsible_section(block: Dict[str, Any], notebook_session, connecti
             inner_type = inner_block['type']
 
             if inner_type == 'markdown':
-                render_markdown_block(inner_block['content'])
+                # Pass in_collapsible=True to prevent nested expanders
+                render_markdown_block(inner_block['content'], in_collapsible=True)
 
             elif inner_type == 'exhibit':
                 render_exhibit_block(inner_block, notebook_session, connection)
@@ -163,12 +164,13 @@ def render_collapsible_section(block: Dict[str, Any], notebook_session, connecti
                 st.code(inner_block['content'], language='yaml')
 
 
-def render_markdown_block(content: str):
+def render_markdown_block(content: str, in_collapsible: bool = False):
     """
     Render a markdown content block.
 
     Text paragraphs are wrapped in a collapsible "📄 Details" expander
-    to enable a clean view of just exhibits and headers.
+    to enable a clean view of just exhibits and headers (unless already
+    inside a collapsible section to avoid nesting).
 
     Supports:
     - Standard markdown (headers, bold, italic, lists, etc.)
@@ -179,6 +181,7 @@ def render_markdown_block(content: str):
 
     Args:
         content: Markdown content string
+        in_collapsible: True if already rendering inside a collapsible section
     """
     # Check if this content is substantial text (more than just a header)
     lines = content.strip().split('\n')
@@ -206,6 +209,9 @@ def render_markdown_block(content: str):
 
     # If it's just a header, render directly
     if is_header_only:
+        st.markdown(html, unsafe_allow_html=True)
+    elif in_collapsible:
+        # Already inside a collapsible section - don't nest expanders
         st.markdown(html, unsafe_allow_html=True)
     else:
         # Wrap text paragraphs in collapsible section for clean view

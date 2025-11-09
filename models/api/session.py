@@ -162,6 +162,87 @@ class UniversalSession:
         model = self.load_model(model_name)
         return model.get_table(table_name)
 
+    def get_filter_column_mappings(self, model_name: str, table_name: str) -> Dict[str, str]:
+        """
+        Get automatic filter column mappings based on model graph edges.
+
+        Examines graph edges to find joins to dim_calendar and extracts
+        column mappings. This allows filters like 'trade_date' to be
+        automatically mapped to table-specific columns like 'metric_date'.
+
+        Args:
+            model_name: Name of the model
+            table_name: Name of the table
+
+        Returns:
+            Dictionary mapping standard filter columns to table columns
+            Example: {'trade_date': 'metric_date'}
+
+        Example:
+            If forecast model has this edge:
+                from: fact_forecast_metrics
+                to: core.dim_calendar
+                on: [metric_date = trade_date]
+
+            Then get_filter_column_mappings('forecast', 'fact_forecast_metrics')
+            returns: {'trade_date': 'metric_date'}
+        """
+        mappings = {}
+
+        # Get model config
+        try:
+            model_config = self.registry.get_model_config(model_name)
+        except Exception as e:
+            print(f"DEBUG: Failed to get model config for {model_name}: {e}")
+            return mappings  # No model config, no mappings
+
+        # DEBUG
+        print(f"\nDEBUG get_filter_column_mappings: model_name={model_name}, table_name={table_name}")
+        print(f"DEBUG: Has 'graph' in config: {'graph' in model_config}")
+        if 'graph' in model_config:
+            print(f"DEBUG: Has 'edges' in graph: {'edges' in model_config['graph']}")
+            if 'edges' in model_config['graph']:
+                print(f"DEBUG: Number of edges: {len(model_config['graph']['edges'])}")
+                for i, e in enumerate(model_config['graph']['edges']):
+                    print(f"DEBUG: Edge {i}: {e}")
+
+        # Check if model has graph metadata
+        if 'graph' not in model_config or 'edges' not in model_config['graph']:
+            print(f"DEBUG: No graph or edges found")
+            return mappings
+
+        # Look for edges from this table to dim_calendar
+        for edge in model_config['graph']['edges']:
+            edge_from = edge.get('from', '')
+            edge_to = edge.get('to', '')
+
+            print(f"DEBUG: Checking edge: from='{edge_from}', to='{edge_to}' (looking for table_name='{table_name}')")
+
+            # Check if this edge is from our table to dim_calendar
+            if edge_from == table_name and 'dim_calendar' in edge_to:
+                print(f"DEBUG: FOUND MATCHING EDGE!")
+                # Extract column mapping from 'on' condition
+                # Note: YAML parser converts 'on:' to boolean True (reserved word)
+                # So we need to check both 'on' and True keys
+                on_conditions = edge.get('on', edge.get(True, []))
+                print(f"DEBUG: on_conditions={on_conditions}, type={type(on_conditions)}")
+
+                for condition in on_conditions:
+                    print(f"DEBUG: Processing condition={condition}, type={type(condition)}")
+                    if isinstance(condition, str):
+                        # Format: "metric_date = trade_date"
+                        parts = condition.split('=')
+                        if len(parts) == 2:
+                            table_col = parts[0].strip()
+                            calendar_col = parts[1].strip()
+                            # Map calendar column to table column
+                            # e.g., trade_date → metric_date
+                            mappings[calendar_col] = table_col
+                            print(f"DEBUG: Added mapping: {calendar_col} -> {table_col}")
+
+        print(f"DEBUG: Final mappings: {mappings}\n")
+        return mappings
+
     def get_dimension_df(self, model_name: str, dim_id: str) -> DataFrame:
         """Get a dimension table from a model"""
         model = self.load_model(model_name)
