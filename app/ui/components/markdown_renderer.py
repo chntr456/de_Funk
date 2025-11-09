@@ -56,7 +56,7 @@ def render_markdown_notebook(notebook_config: NotebookConfig, notebook_session, 
                 st.code(block['content'], language='yaml')
 
 
-def render_exhibit_block(block: Dict[str, Any], notebook_session, connection):
+def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in_collapsible: bool = False):
     """
     Render a single exhibit block.
 
@@ -67,6 +67,7 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection):
         block: Content block with exhibit data
         notebook_session: NotebookSession for data retrieval
         connection: DataConnection for converting to pandas
+        in_collapsible: True if already rendering inside a collapsible section
     """
     exhibit = block['exhibit']
     exhibit_id = block['id']
@@ -113,7 +114,7 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection):
             elif exhibit.type == ExhibitType.WEIGHTED_AGGREGATE_CHART:
                 render_weighted_aggregate_chart(exhibit, pdf)
             elif exhibit.type == ExhibitType.FORECAST_CHART:
-                render_forecast_chart(exhibit, pdf)
+                render_forecast_chart(exhibit, pdf, in_collapsible=in_collapsible)
             elif exhibit.type == ExhibitType.FORECAST_METRICS_TABLE:
                 render_forecast_metrics_table(exhibit, pdf)
             else:
@@ -155,7 +156,7 @@ def render_collapsible_section(block: Dict[str, Any], notebook_session, connecti
                 render_markdown_block(inner_block['content'], in_collapsible=True)
 
             elif inner_type == 'exhibit':
-                render_exhibit_block(inner_block, notebook_session, connection)
+                render_exhibit_block(inner_block, notebook_session, connection, in_collapsible=True)
 
             elif inner_type == 'error':
                 st.error(f"Error: {inner_block['message']}")

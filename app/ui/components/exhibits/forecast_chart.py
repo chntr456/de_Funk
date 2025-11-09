@@ -60,26 +60,46 @@ def load_actual_data(ticker: str, days: int = 90) -> pd.DataFrame:
     Returns:
         DataFrame with actual prices/volumes
     """
-    prices_path = "storage/silver/company/facts/fact_prices"
+    # Try Silver layer first, fallback to Bronze
+    silver_path = "storage/silver/company/facts/fact_prices"
+    bronze_path = "storage/bronze/prices_daily"
 
     try:
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=days)
-
         con = duckdb.connect(database=':memory:')
-        # Use UPPER() for case-insensitive ticker matching
+
+        # Try Silver layer first
+        try:
+            query_check = f"""
+            SELECT COUNT(*) as cnt FROM read_parquet('{silver_path}/**/*.parquet')
+            WHERE UPPER(ticker) = UPPER('{ticker}')
+            """
+            con.execute(query_check)
+            prices_path = silver_path
+        except:
+            # Fallback to Bronze
+            prices_path = bronze_path
+
+        # Get the latest N days of data (don't use datetime.now() - use actual data max date)
         query = f"""
-        SELECT trade_date, ticker, close, volume
-        FROM read_parquet('{prices_path}/**/*.parquet')
-        WHERE UPPER(ticker) = UPPER('{ticker}')
-          AND trade_date >= DATE '{start_date.strftime('%Y-%m-%d')}'
-        ORDER BY trade_date
+        WITH ticker_data AS (
+            SELECT trade_date, ticker, close, volume
+            FROM read_parquet('{prices_path}/**/*.parquet')
+            WHERE UPPER(ticker) = UPPER('{ticker}')
+        ),
+        date_range AS (
+            SELECT MAX(trade_date) as max_date FROM ticker_data
+        )
+        SELECT t.trade_date, t.ticker, t.close, t.volume
+        FROM ticker_data t
+        CROSS JOIN date_range dr
+        WHERE t.trade_date >= DATE_SUB(dr.max_date, INTERVAL {days} DAYS)
+        ORDER BY t.trade_date
         """
         df = con.execute(query).fetchdf()
         con.close()
         return df
     except Exception as e:
-        st.warning(f"Could not load actual data: {e}")
+        st.warning(f"Could not load actual data from {prices_path}: {e}")
         return pd.DataFrame()
 
 
@@ -117,17 +137,24 @@ def load_forecast_metrics(ticker: str = None) -> pd.DataFrame:
 class ForecastChartRenderer(BaseExhibitRenderer):
     """Forecast chart renderer with BaseExhibitRenderer pattern."""
 
-    def __init__(self, exhibit, pdf: pd.DataFrame = None):
+    def __init__(self, exhibit, pdf: pd.DataFrame = None, in_collapsible: bool = False):
         """
         Initialize forecast chart renderer.
 
-        Note: pdf parameter is not used as we load forecast data directly.
+        Args:
+            exhibit: Exhibit configuration
+            pdf: Optional pre-loaded data (not used, we load forecast data directly)
+            in_collapsible: True if already rendering inside a collapsible section
         """
         # Create empty DataFrame for base class
         super().__init__(exhibit, pd.DataFrame())
         self.ticker = None
         self.target = getattr(exhibit, 'target', 'price')
         self.selected_models = []
+        self.in_collapsible = in_collapsible
+        # Configurable parameters
+        self.history_days = getattr(exhibit, 'history_days', 90)  # Days of historical data to show
+        self.default_ticker = getattr(exhibit, 'default_ticker', None)  # Optional default ticker
 
     def render(self):
         """Override render to add custom ticker/target selection."""
@@ -138,8 +165,8 @@ class ForecastChartRenderer(BaseExhibitRenderer):
         if self.exhibit.description:
             st.caption(self.exhibit.description)
 
-        # Configuration expander
-        with st.expander("⚙️ Configuration", expanded=True):
+        # Define the configuration UI rendering function
+        def render_configuration_ui():
             # Create tabs
             tabs = st.tabs(["➖ Hide", "🎯 Stock & Target", "📊 Models"])
 
@@ -149,14 +176,20 @@ class ForecastChartRenderer(BaseExhibitRenderer):
 
             # Tab 1: Stock & Target selection
             with tabs[1]:
+                # Get available tickers from actual data
+                available_tickers = self._get_available_tickers()
+
                 col1, col2 = st.columns([2, 1])
 
                 with col1:
-                    # Get ticker from global filter or use default
-                    default_ticker = st.session_state.get('selected_ticker', 'AAPL')
+                    # Determine default ticker from multiple sources (priority order):
+                    # 1. Session state (user's last selection)
+                    # 2. Global filter
+                    # 3. Exhibit config default_ticker
+                    # 4. First available ticker
+                    default_ticker = st.session_state.get('selected_ticker')
 
-                    # Check if there's a global ticker filter
-                    if 'filter_ticker' in st.session_state and st.session_state['filter_ticker']:
+                    if not default_ticker and 'filter_ticker' in st.session_state and st.session_state['filter_ticker']:
                         # Use first ticker from global filter
                         ticker_options = st.session_state['filter_ticker']
                         if isinstance(ticker_options, list) and ticker_options:
@@ -164,11 +197,35 @@ class ForecastChartRenderer(BaseExhibitRenderer):
                         elif isinstance(ticker_options, str):
                             default_ticker = ticker_options
 
-                    self.ticker = st.text_input(
-                        "Ticker Symbol",
-                        value=default_ticker,
-                        key=f"ticker_{self.exhibit.id}"
-                    )
+                    if not default_ticker:
+                        # Use exhibit config default
+                        default_ticker = self.default_ticker
+
+                    if not default_ticker and available_tickers:
+                        # Use first available ticker
+                        default_ticker = available_tickers[0]
+
+                    # Use selectbox if we have available tickers, otherwise text input
+                    if available_tickers:
+                        # Ensure default is in available tickers
+                        if default_ticker and default_ticker not in available_tickers:
+                            default_ticker = available_tickers[0]
+
+                        self.ticker = st.selectbox(
+                            "Ticker Symbol",
+                            options=available_tickers,
+                            index=available_tickers.index(default_ticker) if default_ticker and default_ticker in available_tickers else 0,
+                            key=f"ticker_{self.exhibit.id}",
+                            help=f"Select from {len(available_tickers)} available tickers with historical data"
+                        )
+                    else:
+                        self.ticker = st.text_input(
+                            "Ticker Symbol",
+                            value=default_ticker or "",
+                            key=f"ticker_{self.exhibit.id}",
+                            help="Enter a ticker symbol"
+                        )
+
                     st.session_state['selected_ticker'] = self.ticker
 
                 with col2:
@@ -214,85 +271,131 @@ class ForecastChartRenderer(BaseExhibitRenderer):
                     st.warning("Please select at least one model to display")
                     return
 
-            # Render chart inside the expander
+            # Render chart
             if self.ticker and self.selected_models:
                 self.render_chart()
 
+        # If already in a collapsible section, don't create another expander
+        if self.in_collapsible:
+            render_configuration_ui()
+        else:
+            # Create configuration expander
+            with st.expander("⚙️ Configuration", expanded=True):
+                render_configuration_ui()
+
+    def _get_available_tickers(self) -> list:
+        """
+        Get list of available tickers from historical price data.
+
+        Returns:
+            List of ticker symbols
+        """
+        try:
+            con = duckdb.connect(database=':memory:')
+
+            # Try Silver first, fallback to Bronze
+            for path in ["storage/silver/company/facts/fact_prices", "storage/bronze/prices_daily"]:
+                try:
+                    query = f"""
+                    SELECT DISTINCT ticker
+                    FROM read_parquet('{path}/**/*.parquet')
+                    ORDER BY ticker
+                    """
+                    df = con.execute(query).fetchdf()
+                    con.close()
+                    return df['ticker'].tolist()
+                except:
+                    continue
+
+            con.close()
+            return []
+        except:
+            return []
+
     def render_chart(self):
         """Render the forecast chart with confidence intervals."""
-        # Load data
+        # Load actual historical data first
+        actual_df = load_actual_data(self.ticker, days=self.history_days)
+
+        if actual_df.empty:
+            st.warning(f"No historical data available for {self.ticker}")
+            st.info("Please ensure price data exists in storage/bronze/prices_daily or storage/silver/company/facts/fact_prices")
+            return
+
+        # Load forecast data
         forecast_df = load_forecast_data(self.ticker, self.target)
 
-        if forecast_df.empty:
-            st.info(f"No forecast data available for {self.ticker}")
-            return
+        # Check if we have forecast data
+        has_forecasts = not forecast_df.empty
 
-        # Filter to selected models
-        forecast_df = forecast_df[forecast_df['model_name'].isin(self.selected_models)]
+        if not has_forecasts:
+            st.info(f"ℹ️ No forecast data available for {self.ticker}. Showing historical data only.")
+            st.caption(f"To generate forecasts, run: `python scripts/run_forecasts.py --tickers {self.ticker}`")
 
-        if forecast_df.empty:
-            st.info(f"No data available for selected models")
-            return
-
-        # Load actual historical data
-        actual_df = load_actual_data(self.ticker, days=90)
+        # Filter to selected models if we have forecasts
+        if has_forecasts and self.selected_models:
+            forecast_df = forecast_df[forecast_df['model_name'].isin(self.selected_models)]
+            if forecast_df.empty:
+                st.info(f"No data available for selected models. Showing historical data only.")
+                has_forecasts = False
 
         # Create plotly figure
         fig = go.Figure()
 
         # Add actual historical data
-        if not actual_df.empty:
-            y_col = 'close' if self.target == 'price' else 'volume'
-            fig.add_trace(go.Scatter(
-                x=actual_df['trade_date'],
-                y=actual_df[y_col],
-                mode='lines',
-                name='Actual',
-                line=dict(color='#2E86AB', width=2),
-                hovertemplate='<b>Actual</b><br>Date: %{x}<br>Value: %{y:,.2f}<extra></extra>'
-            ))
+        y_col = 'close' if self.target == 'price' else 'volume'
+        fig.add_trace(go.Scatter(
+            x=actual_df['trade_date'],
+            y=actual_df[y_col],
+            mode='lines',
+            name='Actual',
+            line=dict(color='#2E86AB', width=2),
+            hovertemplate='<b>Actual</b><br>Date: %{x}<br>Value: %{y:,.2f}<extra></extra>'
+        ))
 
-        # Color palette for different models
-        colors = ['#A23B72', '#F18F01', '#C73E1D', '#6A994E', '#BC4B51', '#8B5A3C']
+        # Add forecast lines with confidence intervals if we have forecasts
+        if has_forecasts:
+            # Color palette for different models
+            colors = ['#A23B72', '#F18F01', '#C73E1D', '#6A994E', '#BC4B51', '#8B5A3C']
 
-        # Add forecast lines with confidence intervals for each model
-        for i, model in enumerate(self.selected_models):
-            model_data = forecast_df[forecast_df['model_name'] == model].copy()
-            model_data = model_data.sort_values('prediction_date')
+            # Add forecast lines with confidence intervals for each model
+            for i, model in enumerate(self.selected_models):
+                model_data = forecast_df[forecast_df['model_name'] == model].copy()
+                model_data = model_data.sort_values('prediction_date')
 
-            if model_data.empty:
-                continue
+                if model_data.empty:
+                    continue
 
-            color = colors[i % len(colors)]
+                color = colors[i % len(colors)]
 
-            # Confidence interval (shaded area)
-            y_col_pred = 'predicted_close' if self.target == 'price' else 'predicted_volume'
+                # Confidence interval (shaded area)
+                y_col_pred = 'predicted_close' if self.target == 'price' else 'predicted_volume'
 
-            # Check if confidence bounds exist
-            if 'upper_bound' in model_data.columns and 'lower_bound' in model_data.columns:
+                # Check if confidence bounds exist
+                if 'upper_bound' in model_data.columns and 'lower_bound' in model_data.columns:
+                    fig.add_trace(go.Scatter(
+                        x=pd.concat([model_data['prediction_date'], model_data['prediction_date'][::-1]]),
+                        y=pd.concat([model_data['upper_bound'], model_data['lower_bound'][::-1]]),
+                        fill='toself',
+                        fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)',
+                        line=dict(color='rgba(255,255,255,0)'),
+                        showlegend=False,
+                        name=f'{model} CI',
+                        hoverinfo='skip'
+                    ))
+
+                # Forecast line
+                customdata = model_data['confidence'] if 'confidence' in model_data.columns else None
                 fig.add_trace(go.Scatter(
-                    x=pd.concat([model_data['prediction_date'], model_data['prediction_date'][::-1]]),
-                    y=pd.concat([model_data['upper_bound'], model_data['lower_bound'][::-1]]),
-                    fill='toself',
-                    fillcolor=f'rgba({int(color[1:3], 16)}, {int(color[3:5], 16)}, {int(color[5:7], 16)}, 0.2)',
-                    line=dict(color='rgba(255,255,255,0)'),
-                    showlegend=False,
-                    name=f'{model} CI',
-                    hoverinfo='skip'
+                    x=model_data['prediction_date'],
+                    y=model_data[y_col_pred],
+                    mode='lines+markers',
+                    name=model,
+                    line=dict(color=color, width=2, dash='dash'),
+                    marker=dict(size=6),
+                    hovertemplate=f'<b>{model}</b><br>Date: %{{x}}<br>Predicted: %{{y:,.2f}}<extra></extra>',
+                    customdata=customdata
                 ))
-
-            # Forecast line
-            customdata = model_data['confidence'] if 'confidence' in model_data.columns else None
-            fig.add_trace(go.Scatter(
-                x=model_data['prediction_date'],
-                y=model_data[y_col_pred],
-                mode='lines+markers',
-                name=model,
-                line=dict(color=color, width=2, dash='dash'),
-                marker=dict(size=6),
-                hovertemplate=f'<b>{model}</b><br>Date: %{{x}}<br>Predicted: %{{y:,.2f}}<extra></extra>',
-                customdata=customdata
-            ))
 
         # Apply theme from base class
         fig = self.apply_theme_to_figure(fig)
@@ -310,49 +413,51 @@ class ForecastChartRenderer(BaseExhibitRenderer):
         config = self.get_plotly_config()
         st.plotly_chart(fig, use_container_width=True, config=config, key=f"chart_{self.exhibit.id}")
 
-        # Display forecast metrics
-        st.subheader("Forecast Accuracy Metrics")
+        # Display forecast metrics only if we have forecasts
+        if has_forecasts:
+            st.subheader("Forecast Accuracy Metrics")
 
-        metrics_df = load_forecast_metrics(self.ticker)
+            metrics_df = load_forecast_metrics(self.ticker)
 
-        if not metrics_df.empty:
-            # Filter to selected models
-            metrics_display = metrics_df[metrics_df['model_name'].isin(self.selected_models)].copy()
+            if not metrics_df.empty and self.selected_models:
+                # Filter to selected models
+                metrics_display = metrics_df[metrics_df['model_name'].isin(self.selected_models)].copy()
 
-            if not metrics_display.empty:
-                # Format metrics for display
-                metrics_display = metrics_display[[
-                    'model_name', 'mae', 'rmse', 'mape', 'r2_score', 'num_predictions'
-                ]].round(4)
+                if not metrics_display.empty:
+                    # Format metrics for display
+                    metrics_display = metrics_display[[
+                        'model_name', 'mae', 'rmse', 'mape', 'r2_score', 'num_predictions'
+                    ]].round(4)
 
-                metrics_display.columns = [
-                    'Model', 'MAE', 'RMSE', 'MAPE (%)', 'R²', 'Predictions'
-                ]
+                    metrics_display.columns = [
+                        'Model', 'MAE', 'RMSE', 'MAPE (%)', 'R²', 'Predictions'
+                    ]
 
-                st.dataframe(
-                    metrics_display,
-                    use_container_width=True,
-                    hide_index=True
-                )
+                    st.dataframe(
+                        metrics_display,
+                        use_container_width=True,
+                        hide_index=True
+                    )
 
-                # Show best model
-                best_model = metrics_display.loc[metrics_display['R²'].idxmax(), 'Model']
-                st.success(f"Best performing model: **{best_model}** (highest R² score)")
+                    # Show best model
+                    best_model = metrics_display.loc[metrics_display['R²'].idxmax(), 'Model']
+                    st.success(f"Best performing model: **{best_model}** (highest R² score)")
+                else:
+                    st.info("No accuracy metrics available for selected models")
             else:
-                st.info("No accuracy metrics available for selected models")
-        else:
-            st.info("No accuracy metrics available. Metrics are calculated during forecast generation.")
+                st.info("No accuracy metrics available. Metrics are calculated during forecast generation.")
 
 
-def render_forecast_chart(exhibit, pdf: pd.DataFrame = None):
+def render_forecast_chart(exhibit, pdf: pd.DataFrame = None, in_collapsible: bool = False):
     """
     Render forecast chart with confidence intervals.
 
     Args:
         exhibit: Exhibit configuration
         pdf: Optional pre-loaded data (not used, we load forecast-specific data)
+        in_collapsible: True if already rendering inside a collapsible section
     """
-    renderer = ForecastChartRenderer(exhibit, pdf)
+    renderer = ForecastChartRenderer(exhibit, pdf, in_collapsible=in_collapsible)
     renderer.render()
 
 
