@@ -40,7 +40,6 @@ Overview of forecast model accuracy across all selected models:
 $exhibits${
   type: metric_cards
   source: forecast.fact_forecast_metrics
-  filter_column_mappings: {trade_date: metric_date}
   metrics: [
     { measure: mae, label: "Avg MAE", aggregation: avg },
     { measure: rmse, label: "Avg RMSE", aggregation: avg },
@@ -64,7 +63,6 @@ Predicted closing prices with 95% confidence intervals showing forecast uncertai
 $exhibits${
   type: forecast_chart
   source: forecast.fact_forecasts
-  filter_column_mappings: {trade_date: prediction_date}
   target: price
   title: Price Forecast with Confidence Intervals
 }
@@ -81,7 +79,6 @@ Predicted trading volumes with 95% confidence intervals.
 $exhibits${
   type: forecast_chart
   source: forecast.fact_forecasts
-  filter_column_mappings: {trade_date: prediction_date}
   target: volume
   title: Volume Forecast with Confidence Intervals
 }
@@ -102,7 +99,6 @@ Comprehensive accuracy comparison across all forecast models:
 $exhibits${
   type: forecast_metrics_table
   source: forecast.fact_forecast_metrics
-  filter_column_mappings: {trade_date: metric_date}
   title: Model Accuracy Metrics
 }
 
@@ -125,7 +121,6 @@ Each with different forecast horizons (7d, 14d, 30d, 60d).
 $exhibits${
   type: data_table
   source: forecast.fact_forecasts
-  filter_column_mappings: {trade_date: prediction_date}
   download: true
 }
 

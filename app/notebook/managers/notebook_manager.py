@@ -560,20 +560,6 @@ class NotebookManager:
         if hasattr(exhibit, 'filters') and exhibit.filters:
             filters.update(exhibit.filters)
 
-        # Apply column mappings if exhibit specifies them
-        # This allows exhibits to remap filter columns to match their table schema
-        # Example: {trade_date: metric_date} maps trade_date filter to metric_date column
-        if hasattr(exhibit, 'filter_column_mappings') and exhibit.filter_column_mappings:
-            mapped_filters = {}
-            for filter_column, filter_value in filters.items():
-                # Check if this column should be mapped to a different name
-                if filter_column in exhibit.filter_column_mappings:
-                    mapped_column = exhibit.filter_column_mappings[filter_column]
-                    mapped_filters[mapped_column] = filter_value
-                else:
-                    mapped_filters[filter_column] = filter_value
-            filters = mapped_filters
-
         return filters
 
     def _get_weighted_aggregate_data(self, exhibit: Exhibit) -> Any:
