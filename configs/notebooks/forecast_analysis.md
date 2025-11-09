@@ -14,52 +14,53 @@ $filter${
   label: Stock Tickers
   type: select
   multi: true
-  source: {model: forecast, table: fact_forecasts, column: ticker}
+  source: {model: forecast, table: vw_price_predictions, column: ticker}
   default: ["AAPL"]
   help_text: Select stocks to view
 }
 
 $filter${
-  id: trade_date
+  id: date
   type: date_range
   label: Date Range
   operator: between
-  default: {start: "2024-01-01", end: "2024-01-05"}
-  help_text: Select date range for analysis
-  source: {model: core, table: dim_calendar, column: trade_date}
+  default: {start: "2024-01-01", end: "2024-12-31"}
+  help_text: Select date range (includes actuals and predictions)
+  source: {model: forecast, table: vw_price_predictions, column: date}
 }
 
 # Time Series Forecast Analysis
 
 Compare actual stock prices with model predictions and confidence intervals.
 
-## Price Forecast
+## Price Forecast - Actuals vs Predictions
 
 $exhibits${
   type: forecast_chart
-  source: forecast.fact_forecasts
-  title: "Stock Price - Predictions"
-  description: "Model predictions with confidence intervals"
+  source: forecast.vw_price_predictions
+  title: "Stock Price - Actuals vs Predictions"
+  description: "Historical actuals with model predictions and confidence intervals"
 
-  x_axis: {dimension: prediction_date, label: "Date"}
-  y_axis: {label: "Price ($)", measures: [predicted_close]}
+  x_axis: {dimension: date, label: "Date"}
+  y_axis: {label: "Price ($)", measures: [actual, predicted]}
 
   measure_selector: {
-    available_measures: [predicted_close, predicted_volume, upper_bound, lower_bound],
-    default_measures: [predicted_close],
+    available_measures: [actual, predicted, upper_bound, lower_bound],
+    default_measures: [actual, predicted],
     selector_type: multiselect,
     label: "Select Metrics",
     help_text: "Choose which values to display"
   }
 
   dimension_selector: {
-    available_dimensions: [ticker, model_name, target],
+    available_dimensions: [ticker, model_name],
     default_dimension: model_name,
     label: "Group By",
     help_text: "Group lines by ticker or model"
   }
 
-  predicted_column: predicted_close
+  actual_column: actual
+  predicted_column: predicted
   confidence_bounds: [lower_bound, upper_bound]
 }
 

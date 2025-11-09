@@ -150,6 +150,70 @@ class CompanyForecastModel(TimeSeriesForecastModel):
         return self.connection.createDataFrame([], StructType([]))
 
     # ============================================================
+    # VIEW REGISTRATION
+    # ============================================================
+
+    def register_views(self):
+        """
+        Register SQL views for forecast model.
+
+        Creates unified views that combine actuals from company model
+        with predictions from forecast model.
+        """
+        # Only works with DuckDB (has execute method)
+        if not hasattr(self.connection, 'execute'):
+            return
+
+        # Register vw_price_predictions - combines actuals and predictions
+        view_sql = """
+        CREATE OR REPLACE VIEW vw_price_predictions AS
+
+        -- Historical actuals (from company model)
+        WITH actuals AS (
+            SELECT
+                trade_date as date,
+                ticker,
+                NULL as model_name,
+                close as actual,
+                NULL as predicted,
+                NULL as upper_bound,
+                NULL as lower_bound
+            FROM company.fact_prices
+        ),
+
+        -- Future predictions (from forecast model)
+        predictions AS (
+            SELECT
+                prediction_date as date,
+                ticker,
+                model_name,
+                NULL as actual,
+                predicted_close as predicted,
+                upper_bound,
+                lower_bound
+            FROM forecast.fact_forecasts
+            WHERE target = 'close'
+        )
+
+        -- Combine both
+        SELECT * FROM actuals
+        UNION ALL
+        SELECT * FROM predictions
+        ORDER BY date, ticker, model_name
+        """
+
+        try:
+            self.connection.execute(view_sql)
+        except Exception as e:
+            # View registration is optional (tables might not exist yet)
+            pass
+
+    def ensure_built(self):
+        """Override to register views after building."""
+        super().ensure_built()
+        self.register_views()
+
+    # ============================================================
     # CONVENIENCE METHODS (company-specific)
     # ============================================================
 
