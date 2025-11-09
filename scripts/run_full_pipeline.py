@@ -38,6 +38,7 @@ def run_full_pipeline(
     days: int = None,
     max_tickers: int = None,
     skip_data_refresh: bool = False,
+    skip_forecasts: bool = False,
     include_news: bool = False,
     forecast_models: list = None
 ) -> dict:
@@ -50,6 +51,7 @@ def run_full_pipeline(
         days: Number of recent days (alternative to date_from/date_to)
         max_tickers: Optional limit on number of tickers
         skip_data_refresh: Skip data ingestion step
+        skip_forecasts: Skip forecast generation step
         include_news: Whether to include news in data ingestion
         forecast_models: List of model names to run
 
@@ -95,6 +97,7 @@ def run_full_pipeline(
     else:
         print(f"  Max tickers: All active tickers")
     print(f"  Skip data refresh: {skip_data_refresh}")
+    print(f"  Skip forecasts: {skip_forecasts}")
     print(f"  Include news: {include_news}")
     if forecast_models:
         print(f"  Forecast models: {', '.join(forecast_models)}")
@@ -170,45 +173,54 @@ def run_full_pipeline(
     # =========================================================================
     # STEP 2: FORECASTING
     # =========================================================================
-    print("=" * 80)
-    print("STEP 2: TIME SERIES FORECASTING")
-    print("=" * 80)
-    print()
-
-    try:
-        # Import forecast pipeline
-        from scripts.run_forecasts import run_forecast_pipeline
-
-        print("Running forecast pipeline...")
-        forecast_results = run_forecast_pipeline(
-            tickers=None,  # Use all available tickers
-            refresh_data=False,  # We already refreshed in Step 1
-            refresh_days=0,
-            models=forecast_models,
-            max_tickers=max_tickers
-        )
-
+    if not skip_forecasts:
+        print("=" * 80)
+        print("STEP 2: TIME SERIES FORECASTING")
+        print("=" * 80)
         print()
-        print(f"✓ Forecasting completed!")
-        print(f"  Tickers processed: {forecast_results['tickers_processed']}")
-        print(f"  Models trained: {forecast_results['total_models']}")
-        print(f"  Forecasts generated: {forecast_results['total_forecasts']}")
 
-        if forecast_results['errors']:
-            print(f"  Errors: {len(forecast_results['errors'])}")
+        try:
+            # Import forecast pipeline
+            from scripts.run_forecasts import run_forecast_pipeline
 
-        results['forecasting'] = forecast_results
+            print("Running forecast pipeline...")
+            forecast_results = run_forecast_pipeline(
+                tickers=None,  # Use all available tickers
+                refresh_data=False,  # We already refreshed in Step 1
+                refresh_days=0,
+                models=forecast_models,
+                max_tickers=max_tickers
+            )
 
-    except Exception as e:
-        error_msg = f"Forecasting failed: {str(e)}"
-        print(f"✗ {error_msg}")
-        import traceback
-        traceback.print_exc()
+            print()
+            print(f"✓ Forecasting completed!")
+            print(f"  Tickers processed: {forecast_results['tickers_processed']}")
+            print(f"  Models trained: {forecast_results['total_models']}")
+            print(f"  Forecasts generated: {forecast_results['total_forecasts']}")
+
+            if forecast_results['errors']:
+                print(f"  Errors: {len(forecast_results['errors'])}")
+
+            results['forecasting'] = forecast_results
+
+        except Exception as e:
+            error_msg = f"Forecasting failed: {str(e)}"
+            print(f"✗ {error_msg}")
+            import traceback
+            traceback.print_exc()
+            results['forecasting'] = {
+                'status': 'failed',
+                'error': error_msg
+            }
+            results['errors'].append(error_msg)
+    else:
+        print("=" * 80)
+        print("STEP 2: FORECASTING - SKIPPED")
+        print("=" * 80)
+        print()
         results['forecasting'] = {
-            'status': 'failed',
-            'error': error_msg
+            'status': 'skipped'
         }
-        results['errors'].append(error_msg)
 
     # =========================================================================
     # SUMMARY
@@ -339,6 +351,11 @@ Examples:
 
     # Forecasting options
     parser.add_argument(
+        '--skip-forecasts',
+        action='store_true',
+        help='Skip forecast generation step'
+    )
+    parser.add_argument(
         '--models',
         type=str,
         default=None,
@@ -358,6 +375,7 @@ Examples:
             days=args.days,
             max_tickers=args.max_tickers,
             skip_data_refresh=args.skip_data_refresh,
+            skip_forecasts=args.skip_forecasts,
             include_news=args.include_news,
             forecast_models=models
         )
