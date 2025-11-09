@@ -9,6 +9,7 @@ from .line_chart import render_line_chart
 from .bar_chart import render_bar_chart
 from .data_table import render_data_table
 from .weighted_aggregate_chart import render_weighted_aggregate_chart
+from .forecast_chart import render_forecast_chart, render_forecast_metrics_table
 
 __all__ = [
     'render_metric_cards',
@@ -16,4 +17,6 @@ __all__ = [
     'render_bar_chart',
     'render_data_table',
     'render_weighted_aggregate_chart',
+    'render_forecast_chart',
+    'render_forecast_metrics_table',
 ]
