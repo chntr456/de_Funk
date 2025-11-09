@@ -29,6 +29,14 @@ $filter${
   help_text: Select forecast models to compare
 }
 
+$filter${
+  id: metric_date
+  label: Metric Date Range
+  type: date_range
+  default: {start: "2024-07-01", end: "2024-12-31"}
+  help_text: Date range for forecast metrics
+}
+
 # Time Series Forecast Analysis
 
 This notebook analyzes stock price and volume forecasts using multiple machine learning and statistical models. Compare model accuracy, view confidence intervals, and explore detailed predictions.

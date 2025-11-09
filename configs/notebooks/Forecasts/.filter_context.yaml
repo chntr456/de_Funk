@@ -1,0 +1,18 @@
+# Folder Filter Context for Forecast Notebooks
+# Uses forecast-specific date columns
+
+filters:
+  # Ticker filter - works with forecast tables
+  ticker: AAPL
+
+  # Date range using metric_date (for forecast metrics)
+  # Note: forecast tables use metric_date and prediction_date, not trade_date
+  metric_date:
+    start: "2024-07-01"
+    end: "2024-12-31"
+
+metadata:
+  created: "2025-11-09T00:00:00"
+  last_updated: "2025-11-09T00:00:00"
+  folder: "Forecasts"
+  description: "Forecast-specific filter context using metric_date instead of trade_date"
