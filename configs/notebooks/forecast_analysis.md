@@ -20,12 +20,13 @@ $filter${
 }
 
 $filter${
-  id: prediction_date
+  id: trade_date
   type: date_range
   label: Date Range
   operator: between
   default: {start: "2024-01-01", end: "2024-01-05"}
-  help_text: Select date range for predictions
+  help_text: Select date range for analysis
+  source: {model: core, table: dim_calendar, column: trade_date}
 }
 
 # Time Series Forecast Analysis
