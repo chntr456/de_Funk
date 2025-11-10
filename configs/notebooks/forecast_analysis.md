@@ -15,18 +15,19 @@ $filter${
   type: select
   multi: false
   source: {model: forecast, table: vw_price_predictions, column: ticker}
-  default: "GOOG"
+  default: ["GOOG"]
   help_text: Select a stock to view (single ticker for cleaner visualization)
 }
 
 $filter${
-  id: date
+  id: trade_date
   type: date_range
   label: Date Range
   operator: between
   default: {start: "2024-10-01", end: "2025-12-31"}
-  help_text: Select date range (includes actuals and predictions)
-  source: {model: forecast, table: vw_price_predictions, column: date}
+  help_text: Filter by date (unified across actuals and predictions via calendar)
+  source: {model: core, table: dim_calendar, column: trade_date}
+  applies_to: [forecast.vw_price_predictions.date, company.fact_prices.trade_date]
 }
 
 # Time Series Forecast Analysis
