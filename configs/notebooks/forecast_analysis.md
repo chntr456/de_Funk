@@ -29,17 +29,6 @@ $filter${
   source: {model: forecast, table: vw_price_predictions, column: date}
 }
 
-$filter${
-  id: model_name
-  label: Forecast Models
-  type: select
-  multi: true
-  source: {model: forecast, table: vw_price_predictions, column: model_name}
-  default: ["ARIMA_30d", "Prophet_30d"]
-  help_text: Select which forecast models to display (actuals always shown)
-  allow_null: true
-}
-
 # Time Series Forecast Analysis
 
 Compare actual stock prices with model predictions and confidence intervals.
@@ -59,6 +48,15 @@ $exhibits${
   y_axis:
     label: "Price ($)"
     measures: [actual, predicted]
+
+  dimension_selector:
+    available_dimensions: [model_name]
+    default_dimension: model_name
+    selector_type: multiselect
+    default_values: ["ARIMA_30d", "Prophet_30d"]
+    label: "Select Forecast Models"
+    help_text: "Choose which models to display (actuals always shown)"
+    show_all_option: true
 
   actual_column: actual
   predicted_column: predicted

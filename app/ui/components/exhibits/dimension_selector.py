@@ -12,19 +12,22 @@ from app.notebook.schema import DimensionSelectorConfig
 def render_dimension_selector(
     exhibit_id: str,
     dimension_selector_config: DimensionSelectorConfig,
-    available_columns: Optional[List[str]] = None
-) -> str:
+    available_columns: Optional[List[str]] = None,
+    pdf = None
+):
     """
-    Render dimension selector UI and return selected dimension.
+    Render dimension selector UI and return selected dimension and/or values.
 
     Args:
         exhibit_id: Unique exhibit ID for session state key
         dimension_selector_config: Configuration for the dimension selector
         available_columns: Optional list of columns available in the data
                           (used to validate dimension existence)
+        pdf: DataFrame for extracting dimension values (required for multiselect)
 
     Returns:
-        Selected dimension name
+        - For radio/selectbox: Selected dimension name (str)
+        - For multiselect: Tuple of (dimension_name, selected_values)
     """
     # Generate unique session state key for this exhibit
     session_key = f"dimension_selector_{exhibit_id}"
@@ -85,6 +88,51 @@ def render_dimension_selector(
             key=f"{session_key}_selectbox"
         )
         st.session_state[session_key] = selected_dimension
+
+    elif selector_type == "multiselect":
+        # Render multiselect for dimension VALUES (not dimensions themselves)
+        # This assumes available_dimensions has only one dimension
+        if not available_dimensions:
+            st.warning("No dimensions available for multiselect")
+            return (None, [])
+
+        dimension_name = available_dimensions[0]  # Use first (and typically only) dimension
+
+        # Get available values for this dimension from the dataframe
+        if pdf is None or dimension_name not in pdf.columns:
+            st.warning(f"Cannot render multiselect: dimension '{dimension_name}' not found in data")
+            return (dimension_name, [])
+
+        # Get unique values (excluding nulls) and sort
+        import pandas as pd
+        available_values = sorted([v for v in pdf[dimension_name].unique() if pd.notna(v)])
+
+        if not available_values:
+            st.info(f"No values available for dimension '{dimension_name}'")
+            return (dimension_name, [])
+
+        # Get default values
+        default_values = getattr(dimension_selector_config, 'default_values', None) or []
+        # Filter to only valid values
+        default_values = [v for v in default_values if v in available_values]
+
+        # Initialize session state with defaults
+        values_key = f"{session_key}_values"
+        if values_key not in st.session_state:
+            st.session_state[values_key] = default_values if default_values else available_values[:2]
+
+        # Render multiselect
+        selected_values = st.multiselect(
+            label=label,
+            options=available_values,
+            default=st.session_state[values_key],
+            help=dimension_selector_config.help_text,
+            format_func=lambda x: x.replace('_', ' ').title(),
+            key=f"{session_key}_multiselect"
+        )
+        st.session_state[values_key] = selected_values
+
+        return (dimension_name, selected_values)
 
     else:
         # Default to selectbox if unknown type

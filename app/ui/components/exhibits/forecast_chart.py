@@ -51,6 +51,58 @@ class PredictionChartRenderer(BaseExhibitRenderer):
         self.predicted_column = getattr(exhibit, 'predicted_column', None)
         self.confidence_bounds = getattr(exhibit, 'confidence_bounds', None)
 
+        # For multiselect dimension filtering
+        self.selected_dimension_values = None
+
+    def _process_dimension(self):
+        """
+        Override to handle multiselect dimension values for forecast filtering.
+
+        Returns:
+            Selected dimension name (str) or tuple of (dimension_name, selected_values)
+        """
+        from .dimension_selector import render_dimension_selector
+
+        dimension = None
+
+        # Check if dynamic dimension selector is configured
+        if hasattr(self.exhibit, 'dimension_selector') and self.exhibit.dimension_selector:
+            # Check if this is multiselect type
+            selector_type = self.exhibit.dimension_selector.selector_type
+
+            if selector_type == "multiselect":
+                # Render dimension selector and get dimension + selected values
+                result = render_dimension_selector(
+                    exhibit_id=self.exhibit.id,
+                    dimension_selector_config=self.exhibit.dimension_selector,
+                    available_columns=self.pdf.columns.tolist(),
+                    pdf=self.pdf  # Pass dataframe for value extraction
+                )
+                if isinstance(result, tuple):
+                    dimension, self.selected_dimension_values = result
+                else:
+                    dimension = result
+            else:
+                # Standard selector (radio/selectbox)
+                dimension = render_dimension_selector(
+                    exhibit_id=self.exhibit.id,
+                    dimension_selector_config=self.exhibit.dimension_selector,
+                    available_columns=self.pdf.columns.tolist()
+                )
+        else:
+            # Use static color_by if no dimension selector
+            dimension = self.exhibit.color_by if hasattr(self.exhibit, 'color_by') else None
+
+        # Auto-detect dimension if not specified
+        if not dimension:
+            auto_detect_dimensions = ['model_name', 'ticker', 'symbol', 'stock']
+            for dim in auto_detect_dimensions:
+                if dim in self.pdf.columns:
+                    dimension = dim
+                    break
+
+        return dimension
+
     def render(self):
         """Override render to handle collapsible sections."""
         # Render title and description
@@ -160,8 +212,17 @@ class PredictionChartRenderer(BaseExhibitRenderer):
 
             if lower_col in pdf_sorted.columns and upper_col in pdf_sorted.columns:
                 if self.selected_dimension and self.selected_dimension in pdf_sorted.columns:
-                    # Create confidence bands for each dimension value
-                    for dim_val in pdf_sorted[self.selected_dimension].unique():
+                    # Get dimension values to render (same filtering as predictions)
+                    all_dim_values = pdf_sorted[self.selected_dimension].unique()
+
+                    if self.selected_dimension_values:
+                        dim_values_to_render = [v for v in all_dim_values
+                                               if pd.notna(v) and v in self.selected_dimension_values]
+                    else:
+                        dim_values_to_render = [v for v in all_dim_values if pd.notna(v)]
+
+                    # Create confidence bands for each selected dimension value
+                    for dim_val in dim_values_to_render:
                         df_subset = pdf_sorted[pdf_sorted[self.selected_dimension] == dim_val].copy()
 
                         # Filter out nulls for confidence bands
@@ -263,12 +324,18 @@ class PredictionChartRenderer(BaseExhibitRenderer):
         is_actual = (measure == self.actual_column)
 
         if self.selected_dimension and self.selected_dimension in pdf_sorted.columns and not is_actual:
-            # Create separate lines for each dimension value (for predictions)
-            for dim_val in pdf_sorted[self.selected_dimension].unique():
-                # Skip null dimension values (these are actuals with no model)
-                if pd.isna(dim_val):
-                    continue
+            # Get dimension values to render
+            all_dim_values = pdf_sorted[self.selected_dimension].unique()
 
+            # Filter by selected values if multiselect is active
+            if self.selected_dimension_values:
+                dim_values_to_render = [v for v in all_dim_values
+                                       if not pd.isna(v) and v in self.selected_dimension_values]
+            else:
+                dim_values_to_render = [v for v in all_dim_values if not pd.isna(v)]
+
+            # Create separate lines for each dimension value (for predictions)
+            for dim_val in dim_values_to_render:
                 df_subset = pdf_sorted[pdf_sorted[self.selected_dimension] == dim_val].copy()
 
                 # Filter out nulls
