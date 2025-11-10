@@ -256,6 +256,19 @@ graph:
       tags: [fact, news]
 
   edges:
+    # Cross-model edge: company data uses core calendar for time-based filtering
+    - from: fact_prices
+      to: core.dim_calendar
+      on: ["trade_date=trade_date"]
+      type: left
+      description: "Join prices to calendar for date-based filtering and attributes"
+
+    - from: fact_news
+      to: core.dim_calendar
+      on: ["publish_date=trade_date"]
+      type: left
+      description: "Join news to calendar for date-based filtering"
+
     - from: fact_prices
       to: dim_company
       on: ["ticker=ticker"]
@@ -280,7 +293,17 @@ graph:
       description: "Prices with full company and exchange context"
       tags: [canonical, analytics]
 
+    - id: prices_with_calendar
+      hops: "fact_prices -> core.dim_calendar"
+      description: "Prices with calendar attributes for time-based analysis"
+      tags: [time, analytics]
+
     - id: news_with_company
       hops: "fact_news -> dim_company"
       description: "News with company context"
       tags: [news, analytics]
+
+    - id: news_with_calendar
+      hops: "fact_news -> core.dim_calendar"
+      description: "News with calendar attributes for time-based analysis"
+      tags: [time, analytics]
