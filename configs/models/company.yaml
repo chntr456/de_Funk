@@ -259,13 +259,13 @@ graph:
     # Cross-model edge: company data uses core calendar for time-based filtering
     - from: fact_prices
       to: core.dim_calendar
-      on: ["trade_date=trade_date"]
+      on: ["trade_date=date"]
       type: left
       description: "Join prices to calendar for date-based filtering and attributes"
 
     - from: fact_news
       to: core.dim_calendar
-      on: ["publish_date=trade_date"]
+      on: ["publish_date=date"]
       type: left
       description: "Join news to calendar for date-based filtering"
 
