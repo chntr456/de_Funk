@@ -259,9 +259,16 @@ class PredictionChartRenderer(BaseExhibitRenderer):
             line_width: Line width
             color: Line color (hex or rgb)
         """
-        if self.selected_dimension and self.selected_dimension in pdf_sorted.columns:
-            # Create separate lines for each dimension value
+        # Special handling for actuals - always show regardless of dimension filter
+        is_actual = (measure == self.actual_column)
+
+        if self.selected_dimension and self.selected_dimension in pdf_sorted.columns and not is_actual:
+            # Create separate lines for each dimension value (for predictions)
             for dim_val in pdf_sorted[self.selected_dimension].unique():
+                # Skip null dimension values (these are actuals with no model)
+                if pd.isna(dim_val):
+                    continue
+
                 df_subset = pdf_sorted[pdf_sorted[self.selected_dimension] == dim_val].copy()
 
                 # Filter out nulls
@@ -278,7 +285,7 @@ class PredictionChartRenderer(BaseExhibitRenderer):
                         hovertemplate='<b>%{x}</b><br>%{y:.2f}<extra></extra>'
                     ))
         else:
-            # Single line for the measure
+            # Single line for the measure (actuals or no dimension selected)
             df_measure = pdf_sorted.dropna(subset=[measure])
 
             if not df_measure.empty:

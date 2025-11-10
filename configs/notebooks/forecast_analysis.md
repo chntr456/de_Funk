@@ -13,10 +13,10 @@ $filter${
   id: ticker
   label: Stock Tickers
   type: select
-  multi: true
+  multi: false
   source: {model: forecast, table: vw_price_predictions, column: ticker}
-  default: ["AAPL"]
-  help_text: Select stocks to view
+  default: "GOOG"
+  help_text: Select a stock to view (single ticker for cleaner visualization)
 }
 
 $filter${
@@ -24,9 +24,20 @@ $filter${
   type: date_range
   label: Date Range
   operator: between
-  default: {start: "2024-01-01", end: "2024-12-31"}
+  default: {start: "2024-10-01", end: "2025-12-31"}
   help_text: Select date range (includes actuals and predictions)
   source: {model: forecast, table: vw_price_predictions, column: date}
+}
+
+$filter${
+  id: model_name
+  label: Forecast Models
+  type: select
+  multi: true
+  source: {model: forecast, table: vw_price_predictions, column: model_name}
+  default: ["ARIMA_30d", "Prophet_30d"]
+  help_text: Select which forecast models to display (actuals always shown)
+  allow_null: true
 }
 
 # Time Series Forecast Analysis
@@ -39,7 +50,7 @@ $exhibits${
   type: forecast_chart
   source: forecast.vw_price_predictions
   title: "Stock Price - Actuals vs Predictions"
-  description: "Historical actuals with model predictions and confidence intervals"
+  description: "Historical actuals with model predictions and 95% confidence intervals"
 
   x_axis:
     dimension: date
@@ -49,22 +60,34 @@ $exhibits${
     label: "Price ($)"
     measures: [actual, predicted]
 
-  measure_selector:
-    available_measures: [actual, predicted, upper_bound, lower_bound]
-    default_measures: [actual, predicted]
-    selector_type: multiselect
-    label: "Select Metrics"
-    help_text: "Choose which values to display"
-
-  dimension_selector:
-    available_dimensions: [ticker, model_name]
-    default_dimension: model_name
-    label: "Group By"
-    help_text: "Group lines by ticker or model"
-
   actual_column: actual
   predicted_column: predicted
   confidence_bounds: [lower_bound, upper_bound]
+
+  series_column: model_name
+  show_confidence_bands: true
+  confidence_opacity: 0.15
+
+  line_styles:
+    actual:
+      color: "#1f77b4"
+      width: 2.5
+      style: solid
+      name: "Actual"
+    predicted:
+      width: 2
+      style: solid
+    confidence:
+      opacity: 0.15
+
+  legend:
+    show: true
+    position: top_right
+
+  chart_config:
+    height: 500
+    show_grid: true
+    interactive: true
 }
 
 ## Model Accuracy Metrics
