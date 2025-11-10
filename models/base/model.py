@@ -281,6 +281,47 @@ class BaseModel:
             existing_cols = ', '.join([f'"{c}"' for c in df.columns])
             return df.project(f'{existing_cols}, {sql_expr} AS {col_name}')
 
+    def _resolve_node(self, node_id: str, nodes: Dict[str, DataFrame]) -> DataFrame:
+        """
+        Resolve a node DataFrame, supporting cross-model references.
+
+        Args:
+            node_id: Node identifier (e.g., 'dim_company' or 'core.dim_calendar')
+            nodes: Local nodes dictionary
+
+        Returns:
+            DataFrame for the node
+
+        Raises:
+            ValueError: If node not found
+        """
+        # Check if it's a cross-model reference (contains dot)
+        if '.' in node_id and node_id not in nodes:
+            # Cross-model reference: modelname.nodename
+            if not self.session:
+                raise ValueError(
+                    f"Cross-model reference '{node_id}' requires session, "
+                    f"but model.session is None. Call model.set_session(session) first."
+                )
+
+            model_name, table_name = node_id.split('.', 1)
+
+            # Get the other model from session
+            try:
+                other_model = self.session.get_model_instance(model_name)
+                other_model.ensure_built()
+                return other_model.get_dimension_df(table_name)
+            except Exception as e:
+                raise ValueError(
+                    f"Cross-model reference '{node_id}' failed: {e}"
+                ) from e
+
+        # Local node
+        if node_id in nodes:
+            return nodes[node_id]
+
+        raise ValueError(f"Node '{node_id}' not found in local nodes or cross-model refs")
+
     def _apply_edges(self, nodes: Dict[str, DataFrame]) -> None:
         """
         Validate that edges exist between nodes.
@@ -289,6 +330,8 @@ class BaseModel:
         - Both nodes exist
         - Join columns exist
         - Join is valid
+
+        Supports cross-model references (e.g., 'core.dim_calendar').
 
         Note: Skipped for DuckDB backend (joins not yet implemented)
 
@@ -305,15 +348,12 @@ class BaseModel:
             from_id = edge['from']
             to_id = edge['to']
 
-            # Validate nodes exist
-            if from_id not in nodes:
-                raise ValueError(f"Edge source '{from_id}' not found in nodes")
-            if to_id not in nodes:
-                raise ValueError(f"Edge target '{to_id}' not found in nodes")
-
-            # Get DataFrames
-            left = nodes[from_id]
-            right = nodes[to_id]
+            # Resolve nodes (supports cross-model references)
+            try:
+                left = self._resolve_node(from_id, nodes)
+                right = self._resolve_node(to_id, nodes)
+            except ValueError as e:
+                raise ValueError(f"Edge resolution failed: {from_id} -> {to_id}. {e}") from e
 
             # Get join keys
             pairs = (
@@ -373,21 +413,22 @@ class BaseModel:
             else:
                 raise ValueError(f"Invalid hops format for path {path_id}: {hops_spec}")
 
-            # Start with first node
-            if chain[0] not in nodes:
-                raise ValueError(f"Path base '{chain[0]}' not found in nodes")
-
-            df = nodes[chain[0]]
+            # Start with first node (supports cross-model refs)
+            try:
+                df = self._resolve_node(chain[0], nodes)
+            except ValueError as e:
+                raise ValueError(f"Path base '{chain[0]}' not found: {e}") from e
 
             # Join remaining nodes in sequence
             for i in range(len(chain) - 1):
                 left_id = chain[i]
                 right_id = chain[i + 1]
 
-                if right_id not in nodes:
-                    raise ValueError(f"Path node '{right_id}' not found in nodes")
-
-                right_df = nodes[right_id]
+                # Resolve right node (supports cross-model refs)
+                try:
+                    right_df = self._resolve_node(right_id, nodes)
+                except ValueError as e:
+                    raise ValueError(f"Path node '{right_id}' not found: {e}") from e
 
                 # Find edge definition for join keys
                 edge = self._find_edge(left_id, right_id)
