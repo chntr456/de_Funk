@@ -173,63 +173,53 @@ class CompanyForecastModel(TimeSeriesForecastModel):
             print(f"⚠ Could not create schemas: {e}")
             return
 
-        # CRITICAL: Register the _facts relations in DuckDB's catalog
-        # Tables loaded from Parquet exist as relation objects but aren't in SQL catalog
+        # CRITICAL: Create persistent DuckDB tables from Parquet files
+        # This makes the tables available in the catalog for views
         try:
             # Get the underlying DuckDB connection
             duckdb_conn = self.connection.conn if hasattr(self.connection, 'conn') else self.connection
 
-            # Register fact_prices from company model
-            fact_prices_registered = False
-            if 'fact_prices' in self._facts:
-                print(f"DEBUG: Registering fact_prices from local _facts")
-                duckdb_conn.register('fact_prices', self._facts['fact_prices'])
-                fact_prices_registered = True
-            else:
-                # Try to get it from company model via session
-                try:
-                    # Debug session state
-                    print(f"DEBUG: Checking session availability...")
-                    print(f"  - hasattr(self, 'session'): {hasattr(self, 'session')}")
-                    if hasattr(self, 'session'):
-                        print(f"  - self.session is None: {self.session is None}")
-                        print(f"  - self.session type: {type(self.session)}")
-
-                    if hasattr(self, 'session') and self.session:
-                        print(f"DEBUG: ✓ Session available, loading company model...")
-                        company_model = self.session.load_model('company')
-                        if company_model:
-                            # Ensure company model is built
-                            company_model.ensure_built()
-                            if hasattr(company_model, '_facts') and 'fact_prices' in company_model._facts:
-                                duckdb_conn.register('fact_prices', company_model._facts['fact_prices'])
-                                print(f"✓ Registered fact_prices from company model")
-                                fact_prices_registered = True
-                            else:
-                                print(f"⚠ fact_prices not in company model _facts")
-                        else:
-                            print(f"⚠ Could not load company model")
-                    else:
-                        if not hasattr(self, 'session'):
-                            print(f"⚠ No 'session' attribute - need to update BaseModel with set_session()")
-                        else:
-                            print(f"⚠ session is None - set_session() was not called by UniversalSession")
-                except Exception as e:
-                    print(f"⚠ Could not get fact_prices from company model: {e}")
-                    import traceback
-                    traceback.print_exc()
-
-            if not fact_prices_registered:
-                print(f"⚠ fact_prices could not be registered - view will only show predictions")
-
-            # Register fact_forecasts from forecast model
+            # Create fact_forecasts table - register then materialize
             if 'fact_forecasts' in self._facts:
-                print(f"DEBUG: Registering fact_forecasts in DuckDB catalog")
-                duckdb_conn.register('fact_forecasts', self._facts['fact_forecasts'])
-                print(f"✓ Registered fact_forecasts")
+                print(f"DEBUG: Creating persistent fact_forecasts table")
+                # Step 1: Register temporarily
+                duckdb_conn.register('temp_fact_forecasts', self._facts['fact_forecasts'])
+                # Step 2: Create permanent table from temporary registration
+                duckdb_conn.execute("CREATE OR REPLACE TABLE fact_forecasts AS SELECT * FROM temp_fact_forecasts")
+                print(f"✓ Created fact_forecasts table")
             else:
                 print(f"⚠ fact_forecasts not found in _facts, cannot create view")
                 return
+
+            # Create fact_prices table from company model
+            fact_prices_registered = False
+            if hasattr(self, 'session') and self.session:
+                print(f"DEBUG: ✓ Session available, loading company model...")
+                try:
+                    company_model = self.session.load_model('company')
+                    if company_model:
+                        # Ensure company model is built
+                        company_model.ensure_built()
+                        if hasattr(company_model, '_facts') and 'fact_prices' in company_model._facts:
+                            # Step 1: Register temporarily
+                            duckdb_conn.register('temp_fact_prices', company_model._facts['fact_prices'])
+                            # Step 2: Create permanent table from temporary registration
+                            duckdb_conn.execute("CREATE OR REPLACE TABLE fact_prices AS SELECT * FROM temp_fact_prices")
+                            print(f"✓ Created fact_prices table from company model")
+                            fact_prices_registered = True
+                        else:
+                            print(f"⚠ fact_prices not in company model _facts")
+                    else:
+                        print(f"⚠ Could not load company model")
+                except Exception as e:
+                    print(f"⚠ Could not create fact_prices table: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"⚠ No session available to load company model")
+
+            if not fact_prices_registered:
+                print(f"⚠ fact_prices could not be created - view will only show predictions")
 
         except Exception as e:
             print(f"⚠ Could not register tables in DuckDB catalog: {e}")
