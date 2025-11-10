@@ -1,0 +1,1140 @@
+<mxfile host="app.diagrams.net" modified="2024-11-10T00:00:00.000Z" agent="de_Funk Architecture" version="22.0.0" type="device" pages="7">
+  <diagram id="overview" name="1. Architecture Overview">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="de_Funk Architecture - High Level Overview" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="284.5" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- User Layer -->
+        <mxCell id="user-layer" value="USER / APPLICATION LAYER" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=14;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="1000" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="user-apps" value="Notebooks    |    UI Applications    |    CLI Scripts    |    Ad-hoc Analysis" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="280" y="110" width="600" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow 1 -->
+        <mxCell id="arrow1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="user-layer" target="repocontext">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="580" y="160" as="sourcePoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- RepoContext -->
+        <mxCell id="repocontext" value="ENTRY POINT: RepoContext" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="80" y="200" width="1000" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="repocontext-details" value="• Loads configs (storage.json, polygon_endpoints.json)&#xa;• Creates Connection (Spark or DuckDB)&#xa;• Returns: {connection, storage_cfg, polygon_cfg, repo_root}" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="230" width="960" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow 2 -->
+        <mxCell id="arrow2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="repocontext" target="universal-session">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- UniversalSession -->
+        <mxCell id="universal-session" value="CORE SESSION: UniversalSession" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="80" y="360" width="1000" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="session-details" value="Properties: connection, storage_cfg, registry, backend, _models&#xa;&#xa;Methods: load_model(), get_table(), get_dimension_df(), get_fact_df(),&#xa;         list_models(), list_tables()" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="390" width="960" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow 3 -->
+        <mxCell id="arrow3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="universal-session" target="model-registry">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ModelRegistry -->
+        <mxCell id="model-registry" value="MODEL REGISTRY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="400" y="540" width="360" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="registry-details" value="• Discovers YAML configs&#xa;• Maps to Python classes&#xa;• Returns: ModelConfig, ModelClass" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="410" y="565" width="340" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow 4 -->
+        <mxCell id="arrow4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="model-registry" target="base-model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- BaseModel -->
+        <mxCell id="base-model" value="MODEL LAYER: BaseModel (Graph-Based)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="80" y="680" width="1000" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="basemodel-details" value="Graph Build: PHASE 1: _build_nodes() (load from Bronze + transforms)  →  PHASE 2: _apply_edges() (validate relationships)  →  PHASE 3: _materialize_paths() (multi-hop joins)&#xa;Methods: get_table(), get_dimension_df(), get_fact_df()  |  See Sheet 6 for detailed graph architecture" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="710" width="960" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- FilterEngine (Cross-cutting) -->
+        <mxCell id="filter-engine-box" value="CROSS-CUTTING UTILITY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;verticalAlign=top;dashed=1;dashPattern=8 8;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="360" width="280" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="filter-engine" value="FilterEngine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="390" width="240" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="filter-details" value="• Backend-agnostic filtering&#xa;• Spark &amp; DuckDB support&#xa;• Callable from any layer" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1150" y="430" width="220" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend-box" value="Legend" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;fontSize=11;fontStyle=1;verticalAlign=top;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="80" width="280" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="legend1" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="105" width="80" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend1-text" value="User Interface" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="105" width="160" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend2" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="130" width="80" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend2-text" value="Core Session" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="130" width="160" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend3" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="1140" y="155" width="80" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legend3-text" value="Model Layer" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1230" y="155" width="160" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="models" name="2. Model Architecture">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title2" value="Model Layer - Domain Models" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="284.5" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- BaseModel (top) -->
+        <mxCell id="base-model-top" value="BaseModel (Foundation)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="350" y="100" width="460" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="base-details" value="• YAML-driven graph building&#xa;• Node/Edge/Path materialization&#xa;• Backend abstraction (Spark/DuckDB)&#xa;• Table caching" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="365" y="125" width="430" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Arrows from BaseModel -->
+        <mxCell id="arrow-company" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=0;dashed=1;" edge="1" parent="1" source="base-model-top" target="company-model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-macro" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=0;dashed=1;" edge="1" parent="1" source="base-model-top" target="macro-model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-forecast" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=0;dashed=1;" edge="1" parent="1" source="base-model-top" target="forecast-model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-city" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=0;dashed=1;" edge="1" parent="1" source="base-model-top" target="city-model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Company Model -->
+        <mxCell id="company-model" value="CompanyModel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="80" y="280" width="240" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="company-source" value="Source: Polygon.io API" style="text;html=1;strokeColor=none;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="90" y="305" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="company-dims" value="Dimensions:&#xa;• dim_company&#xa;• dim_exchange" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="95" y="335" width="210" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="company-facts" value="Facts:&#xa;• fact_prices&#xa;• fact_news" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="95" y="385" width="210" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="company-type" value="Type: Ingestion (Bronze→Silver)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="90" y="435" width="220" height="15" as="geometry" />
+        </mxCell>
+
+        <!-- Macro Model -->
+        <mxCell id="macro-model" value="MacroModel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="350" y="280" width="240" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-source" value="Source: BLS API" style="text;html=1;strokeColor=none;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="360" y="305" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-dims" value="Dimensions:&#xa;• dim_economic_series" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="365" y="335" width="210" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-facts" value="Facts:&#xa;• fact_unemployment&#xa;• fact_cpi&#xa;• fact_employment&#xa;• fact_wages" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="365" y="370" width="210" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-type" value="Type: Ingestion (Bronze→Silver)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="360" y="435" width="220" height="15" as="geometry" />
+        </mxCell>
+
+        <!-- Forecast Model -->
+        <mxCell id="forecast-model" value="ForecastModel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=13;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="620" y="280" width="240" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="forecast-source" value="Source: Company Model (Silver)" style="text;html=1;strokeColor=none;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="630" y="305" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="forecast-facts" value="Facts:&#xa;• forecast_price&#xa;• forecast_volume&#xa;• forecast_metrics&#xa;• model_registry" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="635" y="335" width="210" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="forecast-type" value="Type: Analytics (Silver→Silver)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="630" y="435" width="220" height="15" as="geometry" />
+        </mxCell>
+
+        <!-- City Finance Model -->
+        <mxCell id="city-model" value="CityFinanceModel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="890" y="280" width="240" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="city-source" value="Source: Chicago Data Portal" style="text;html=1;strokeColor=none;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="900" y="305" width="220" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="city-dims" value="Dimensions:&#xa;• dim_community_area" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="905" y="335" width="210" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="city-facts" value="Facts:&#xa;• (To be defined)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="905" y="370" width="210" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="city-type" value="Type: Ingestion (Bronze→Silver)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=9;fontStyle=2;" vertex="1" parent="1">
+          <mxGeometry x="900" y="435" width="220" height="15" as="geometry" />
+        </mxCell>
+
+        <!-- Core Model (Calendar) -->
+        <mxCell id="core-model" value="Core Model" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontSize=13;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="420" y="520" width="320" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="core-details2" value="Dimensions: dim_calendar (27 attributes)&#xa;&#xa;Used by: ALL models for time-based queries" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="435" y="545" width="290" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Dependency arrows -->
+        <mxCell id="dep-company" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1;endArrow=classic;endFill=1;dashed=1;dashPattern=4 4;strokeColor=#999999;" edge="1" parent="1" source="company-model" target="core-model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dep-macro" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1;endArrow=classic;endFill=1;dashed=1;dashPattern=4 4;strokeColor=#999999;" edge="1" parent="1" source="macro-model" target="core-model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dep-forecast" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1;endArrow=classic;endFill=1;dashed=1;dashPattern=4 4;strokeColor=#999999;" edge="1" parent="1" source="forecast-model" target="core-model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="dep-city" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1;endArrow=classic;endFill=1;dashed=1;dashPattern=4 4;strokeColor=#999999;" edge="1" parent="1" source="city-model" target="core-model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Forecast depends on Company -->
+        <mxCell id="dep-forecast-company" value="Trains on&#xa;Company data" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;strokeColor=#9673a6;fontSize=10;" edge="1" parent="1" source="forecast-model" target="company-model">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="740" y="500" />
+              <mxPoint x="200" y="500" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend-box2" value="Legend" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;fontSize=11;fontStyle=1;verticalAlign=top;align=left;" vertex="1" parent="1">
+          <mxGeometry x="80" y="660" width="320" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-inherit" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=0;dashed=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="100" y="690" as="sourcePoint" />
+            <mxPoint x="150" y="690" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg-inherit-text" value="Inherits from" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="160" y="680" width="230" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-depends" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=1;endArrow=classic;endFill=1;dashed=1;dashPattern=4 4;strokeColor=#999999;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="100" y="715" as="sourcePoint" />
+            <mxPoint x="150" y="715" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg-depends-text" value="Depends on (uses calendar)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="160" y="705" width="230" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg-trains" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;strokeColor=#9673a6;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="100" y="740" as="sourcePoint" />
+            <mxPoint x="150" y="740" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="leg-trains-text" value="Uses data from (cross-model)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="160" y="730" width="230" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="dataflow" name="3. Data Flow">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title3" value="Data Flow Patterns" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="284.5" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Ingestion Flow Title -->
+        <mxCell id="ingestion-title" value="Ingestion Models (Bronze → Silver)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="400" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="ingestion-subtitle" value="Examples: Company, Macro, CityFinance" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="80" y="105" width="400" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- API Source -->
+        <mxCell id="api-source" value="External API&#xa;(Polygon, BLS, etc.)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="150" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow -->
+        <mxCell id="arrow-ingest1" value="Ingestor&#xa;fetches" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;fontSize=10;" edge="1" parent="1" source="api-source" target="bronze-storage">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Bronze Storage -->
+        <mxCell id="bronze-storage" value="BRONZE STORAGE&#xa;(Raw Parquet Files)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="280" y="150" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow -->
+        <mxCell id="arrow-ingest2" value="Model.build()&#xa;transforms" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;fontSize=10;" edge="1" parent="1" source="bronze-storage" target="silver-storage1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Silver Storage -->
+        <mxCell id="silver-storage1" value="SILVER STORAGE&#xa;(Dimensional Tables)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="480" y="150" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Analytics Flow Title -->
+        <mxCell id="analytics-title" value="Analytics Models (Silver → Silver)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="270" width="400" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="analytics-subtitle" value="Example: Forecast" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="80" y="295" width="400" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Silver Input -->
+        <mxCell id="silver-input" value="SILVER STORAGE&#xa;(Company Model)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="340" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow -->
+        <mxCell id="arrow-analytics1" value="ML Training&#xa;Model.build()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;fontSize=10;" edge="1" parent="1" source="silver-input" target="ml-model">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ML Model -->
+        <mxCell id="ml-model" value="ML Model&#xa;(ARIMA, Prophet, RF)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="340" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow -->
+        <mxCell id="arrow-analytics2" value="Predictions" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;fontSize=10;" edge="1" parent="1" source="ml-model" target="silver-output">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Silver Output -->
+        <mxCell id="silver-output" value="SILVER STORAGE&#xa;(Forecast Model)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="500" y="340" width="180" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Query Flow Title -->
+        <mxCell id="query-title" value="Query Pattern (Read Path)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="460" width="400" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- User -->
+        <mxCell id="user-query" value="User Code" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="510" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow -->
+        <mxCell id="arrow-query1" value="session.&#xa;get_table()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;fontSize=9;" edge="1" parent="1" source="user-query" target="session-query">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- UniversalSession -->
+        <mxCell id="session-query" value="Universal&#xa;Session" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="240" y="510" width="100" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow -->
+        <mxCell id="arrow-query2" value="load_model()" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;fontSize=9;" edge="1" parent="1" source="session-query" target="model-query">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Model -->
+        <mxCell id="model-query" value="Model" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="380" y="510" width="100" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow -->
+        <mxCell id="arrow-query3" value="read&#xa;parquet" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;fontSize=9;" edge="1" parent="1" source="model-query" target="storage-query">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Storage -->
+        <mxCell id="storage-query" value="Physical&#xa;Storage" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="510" width="100" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- FilterEngine (cross-cutting) -->
+        <mxCell id="filter-box" value="FilterEngine&#xa;(can be called at any step)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=11;fontStyle=1;dashed=1;dashPattern=8 8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="600" width="540" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Return arrow -->
+        <mxCell id="arrow-return" value="DataFrame" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;fontSize=9;strokeColor=#666666;dashed=1;dashPattern=4 4;" edge="1" parent="1" source="storage-query" target="user-query">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="570" y="580" />
+              <mxPoint x="140" y="580" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Storage Structure -->
+        <mxCell id="storage-title" value="Physical Storage Structure" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="720" y="80" width="400" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Storage Tree -->
+        <mxCell id="storage-tree" value="storage/&#xa;├── bronze/&#xa;│   ├── polygon/&#xa;│   │   ├── prices_daily/&#xa;│   │   └── news/&#xa;│   ├── bls/&#xa;│   │   ├── unemployment/&#xa;│   │   └── cpi/&#xa;│   └── chicago/&#xa;│&#xa;├── silver/&#xa;│   ├── company/&#xa;│   │   ├── dims/&#xa;│   │   │   ├── dim_company/&#xa;│   │   │   └── dim_exchange/&#xa;│   │   └── facts/&#xa;│   │       ├── fact_prices/&#xa;│   │       └── fact_news/&#xa;│   ├── macro/&#xa;│   ├── forecast/&#xa;│   └── city_finance/&#xa;│&#xa;└── duckdb/&#xa;    └── analytics.db" style="text;html=1;strokeColor=#666666;fillColor=#f5f5f5;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="720" y="120" width="400" height="390" as="geometry" />
+        </mxCell>
+
+        <!-- Partitioning Note -->
+        <mxCell id="partition-note" value="Note: Fact tables partitioned by date (year/month)&#xa;for efficient time-range queries" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=10;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="720" y="540" width="400" height="50" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="session" name="4. UniversalSession Detail">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title4" value="UniversalSession - Detailed Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="234.5" y="20" width="700" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- UniversalSession Main -->
+        <mxCell id="session-main" value="UniversalSession" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=16;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="1000" height="280" as="geometry" />
+        </mxCell>
+
+        <!-- Properties Section -->
+        <mxCell id="props-header" value="Properties" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="100" y="110" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="prop1" value="• connection: Database connection (Spark or DuckDB)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="135" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="prop2" value="• storage_cfg: Dict[str, Any] - Storage configuration" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="155" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="prop3" value="• repo_root: Path - Repository root directory" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="175" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="prop4" value="• registry: ModelRegistry - Model discovery engine" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="195" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="prop5" value="• backend: str - 'spark' or 'duckdb' (auto-detected)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="215" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="prop6" value="• _models: Dict[str, BaseModel] - Cache of loaded models" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="235" width="460" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section -->
+        <mxCell id="methods-header" value="Key Methods" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="100" y="265" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="method1" value="• load_model(model_name: str) → BaseModel" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="285" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="method2" value="• get_table(model: str, table: str) → DataFrame" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="305" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="method3" value="• get_dimension_df(model: str, dim: str) → DataFrame" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="325" width="460" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Collaborators Section -->
+        <mxCell id="collab-header" value="Collaborators" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="600" y="110" width="460" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- ModelRegistry Box -->
+        <mxCell id="registry-box" value="ModelRegistry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="610" y="140" width="220" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="registry-methods" value="• list_models()&#xa;• get_model_config(name)&#xa;• get_model_class(name)&#xa;• Auto-discovery" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="620" y="165" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Connection Box -->
+        <mxCell id="connection-box" value="Connection" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="850" y="140" width="220" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="connection-types" value="Spark:&#xa;• SparkSession&#xa;&#xa;DuckDB:&#xa;• DuckDBConnection" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="860" y="165" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Model Cache Box -->
+        <mxCell id="cache-box" value="Model Cache (_models)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="610" y="260" width="460" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="cache-content" value="'company' → CompanyModel instance&#xa;'macro' → MacroModel instance&#xa;'forecast' → ForecastModel instance" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="620" y="285" width="440" height="45" as="geometry" />
+        </mxCell>
+
+        <!-- Load Model Flow -->
+        <mxCell id="flow-title" value="Model Loading Flow" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="400" width="400" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Step 1 -->
+        <mxCell id="step1" value="1. load_model('company')" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="450" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-flow1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="step1" target="step2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 2 -->
+        <mxCell id="step2" value="2. Check cache&#xa;(_models)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="520" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-flow2" value="Not cached" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;fontSize=9;" edge="1" parent="1" source="step2" target="step3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 3 -->
+        <mxCell id="step3" value="3. Registry.get_model_config()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="590" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-flow3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="step3" target="step4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 4 -->
+        <mxCell id="step4" value="4. Registry.get_model_class()" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="660" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-flow4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="step4" target="step5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 5 -->
+        <mxCell id="step5" value="5. Instantiate Model" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="300" y="660" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-flow5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="step5" target="step6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 6 -->
+        <mxCell id="step6" value="6. Inject Session Reference" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="660" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-flow6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="step6" target="step7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 7 -->
+        <mxCell id="step7" value="7. Cache in _models" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="740" y="660" width="180" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Return -->
+        <mxCell id="step8" value="8. Return Model Instance" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="960" y="660" width="180" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-flow7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;" edge="1" parent="1" source="step7" target="step8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Note on caching -->
+        <mxCell id="cache-note" value="Note: Subsequent calls return cached instance&#xa;without re-initialization" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=10;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="300" y="450" width="280" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Session injection note -->
+        <mxCell id="injection-note" value="Session Injection enables cross-model queries:&#xa;&#xa;Model can call:&#xa;  self.session.get_dimension_df('core', 'dim_calendar')" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;align=left;verticalAlign=top;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="620" y="450" width="480" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+  <diagram id="filterengine" name="5. FilterEngine Utility">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title5" value="FilterEngine - Cross-Cutting Utility" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="234.5" y="20" width="700" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- FilterEngine Main -->
+        <mxCell id="filter-main" value="FilterEngine (Static Utility Class)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=16;fontStyle=1;verticalAlign=top;dashed=1;dashPattern=8 8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="1000" height="180" as="geometry" />
+        </mxCell>
+
+        <!-- Key characteristic -->
+        <mxCell id="filter-char" value="NOT owned by any component - can be imported anywhere" style="text;html=1;strokeColor=none;fillColor=#fff2cc;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=1;fontSize=12;fontStyle=1;fontColor=#d79b00;" vertex="1" parent="1">
+          <mxGeometry x="100" y="110" width="960" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- Methods -->
+        <mxCell id="filter-methods-header" value="Static Methods" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="100" y="150" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="filter-method1" value="• apply_filters(df, filters, backend) → Filtered DataFrame" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="175" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="filter-method2" value="• apply_from_session(df, filters, session) → Filtered DF" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="195" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="filter-method3" value="• build_filter_sql(filters) → SQL WHERE clause" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="100" y="215" width="460" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Backends -->
+        <mxCell id="backends-header" value="Supported Backends" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="600" y="150" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="backend1" value="• Spark: F.col().isin(), DataFrame.filter()" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="600" y="175" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="backend2" value="• DuckDB: SQL WHERE clauses" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="600" y="195" width="460" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="backend3" value="• Auto-detection from session.backend" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="600" y="215" width="460" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Usage Locations -->
+        <mxCell id="usage-title" value="Can Be Called From Any Layer" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="290" width="400" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- User Layer -->
+        <mxCell id="user-layer-f" value="User Notebooks / Scripts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="340" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-user" value="import&#xa;FilterEngine" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;dashed=1;dashPattern=4 4;fontSize=9;" edge="1" parent="1" source="user-layer-f" target="filter-center">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Session Layer -->
+        <mxCell id="session-layer-f" value="UniversalSession" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="320" y="340" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-session" value="import&#xa;FilterEngine" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;dashed=1;dashPattern=4 4;fontSize=9;" edge="1" parent="1" source="session-layer-f" target="filter-center">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Model Layer -->
+        <mxCell id="model-layer-f" value="Individual Models" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="560" y="340" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-model" value="import&#xa;FilterEngine" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;dashed=1;dashPattern=4 4;fontSize=9;" edge="1" parent="1" source="model-layer-f" target="filter-center">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- UI Layer -->
+        <mxCell id="ui-layer-f" value="UI Components" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="800" y="340" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow-ui" value="import&#xa;FilterEngine" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=classic;endFill=1;dashed=1;dashPattern=4 4;fontSize=9;" edge="1" parent="1" source="ui-layer-f" target="filter-center">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- FilterEngine Center -->
+        <mxCell id="filter-center" value="FilterEngine" style="ellipse;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="410" y="460" width="180" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Filter Types -->
+        <mxCell id="types-title" value="Supported Filter Types" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="600" width="400" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Filter examples -->
+        <mxCell id="filter-exact" value="Exact Match" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="80" y="650" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="filter-exact-ex" value="{'ticker': 'AAPL'}" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="90" y="680" width="220" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="filter-in" value="IN Clause" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="350" y="650" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="filter-in-ex" value="{'ticker': ['AAPL', 'MSFT']}" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="360" y="680" width="220" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="filter-range" value="Range Filter" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;fontStyle=1;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="620" y="650" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="filter-range-ex" value="{'trade_date': {&#xa;  'min': '2024-01-01'&#xa;}}" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="630" y="680" width="220" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Example Code -->
+        <mxCell id="example-title" value="Example Usage" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="80" y="760" width="400" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="example-code" value="from core.session.filters import FilterEngine&#xa;&#xa;# Define filters&#xa;filters = {&#xa;    'ticker': ['AAPL', 'MSFT'],&#xa;    'volume': {'min': 1000000},&#xa;    'trade_date': {'start': '2024-01-01'}&#xa;}&#xa;&#xa;# Apply with auto-detection&#xa;filtered = FilterEngine.apply_from_session(df, filters, session)&#xa;&#xa;# Or specify backend explicitly&#xa;filtered = FilterEngine.apply_filters(df, filters, 'spark')" style="text;html=1;strokeColor=#666666;fillColor=#f5f5f5;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="80" y="800" width="540" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- Benefits -->
+        <mxCell id="benefits-box" value="Benefits of FilterEngine" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;verticalAlign=top;align=left;" vertex="1" parent="1">
+          <mxGeometry x="650" y="800" width="430" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="benefit1" value="✓ Single source of truth for filtering logic" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="670" y="830" width="390" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="benefit2" value="✓ Eliminates code duplication across codebase" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="670" y="855" width="390" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="benefit3" value="✓ Backend-agnostic (works with Spark &amp; DuckDB)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="670" y="880" width="390" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="benefit4" value="✓ Consistent filter syntax across all layers" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="670" y="905" width="390" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="benefit5" value="✓ Easy to test and maintain in one place" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="670" y="930" width="390" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="benefit6" value="✓ Can be called from any layer (notebooks, models, UI)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="670" y="955" width="390" height="20" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="graph" name="6. Graph-Based Architecture">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="graph-title" value="Graph-Based Model Architecture" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="284.5" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Subtitle -->
+        <mxCell id="subtitle" value="Declarative YAML-driven graph with nodes, edges, and paths" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="284.5" y="55" width="600" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- YAML Config Box -->
+        <mxCell id="yaml-box" value="YAML Configuration (company.yaml)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;verticalAlign=top;align=left;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="480" height="680" as="geometry" />
+        </mxCell>
+
+        <!-- graph: header -->
+        <mxCell id="graph-header" value="graph:" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="60" y="130" width="440" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- nodes: section -->
+        <mxCell id="nodes-section" value="  nodes:" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;verticalAlign=top;align=left;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="60" y="160" width="440" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="node1" value="    - id: dim_company&#xa;      from: bronze.ref_ticker&#xa;      select:&#xa;        ticker: ticker&#xa;        company_name: name&#xa;      derive:&#xa;        company_id: sha1(ticker)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="80" y="190" width="400" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="node2" value="    - id: fact_prices&#xa;      from: bronze.prices_daily&#xa;      select:&#xa;        trade_date: trade_date&#xa;        ticker: ticker&#xa;        close: close" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="80" y="265" width="400" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- edges: section -->
+        <mxCell id="edges-section" value="  edges:" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;verticalAlign=top;align=left;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="60" y="360" width="440" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="edge1" value="    - from: fact_prices&#xa;      to: dim_company&#xa;      on: [&quot;ticker=ticker&quot;]&#xa;      type: many_to_one&#xa;      description: &quot;Prices belong to company&quot;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="80" y="390" width="400" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- paths: section -->
+        <mxCell id="paths-section" value="  paths:" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;verticalAlign=top;align=left;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="60" y="500" width="440" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="path1" value="    - id: prices_with_company&#xa;      hops: &quot;fact_prices -&gt; dim_company&quot;&#xa;      description: &quot;Joined view&quot;&#xa;      tags: [canonical, analytics]" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="80" y="530" width="400" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- measures: section -->
+        <mxCell id="measures-section" value="  measures:" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;fontStyle=1;verticalAlign=top;align=left;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="60" y="620" width="440" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="measure1" value="    market_cap:&#xa;      description: &quot;Market cap proxy&quot;&#xa;      type: computed&#xa;      source: fact_prices.close&#xa;      expression: &quot;close * volume&quot;&#xa;      aggregation: avg" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="80" y="650" width="400" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- 3-Phase Build Process -->
+        <mxCell id="build-title" value="3-Phase Graph Building Process" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="580" y="100" width="550" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Phase 1 -->
+        <mxCell id="phase1-box" value="PHASE 1: Build Nodes" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=top;align=left;" vertex="1" parent="1">
+          <mxGeometry x="580" y="150" width="550" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="phase1-details" value="For each node in graph.nodes:&#xa;&#xa;1. Load from Bronze layer&#xa;   • StorageRouter.bronze_path(table_name)&#xa;   • BronzeTable.read() → DataFrame&#xa;&#xa;2. Apply 'select' transformations&#xa;   • Column selection and aliasing&#xa;&#xa;3. Apply 'derive' transformations&#xa;   • Computed columns (SHA1, concat, etc.)&#xa;&#xa;Result: nodes = {node_id: DataFrame, ...}" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="600" y="180" width="510" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow phase1 to phase2 -->
+        <mxCell id="arrow-p1-p2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;endArrow=classic;endFill=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="phase1-box" target="phase2-box">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Phase 2 -->
+        <mxCell id="phase2-box" value="PHASE 2: Validate Edges" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=13;fontStyle=1;verticalAlign=top;align=left;" vertex="1" parent="1">
+          <mxGeometry x="580" y="340" width="550" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="phase2-details" value="For each edge in graph.edges:&#xa;&#xa;1. Verify both nodes exist in nodes dict&#xa;&#xa;2. Extract join keys from 'on' specification&#xa;   • Parse: [&quot;ticker=ticker&quot;] → [(ticker, ticker)]&#xa;&#xa;3. Dry-run join validation&#xa;   • left.limit(1).join(right.limit(1))&#xa;   • Raises ValueError if join fails&#xa;&#xa;Result: All edges validated ✓" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="600" y="370" width="510" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow phase2 to phase3 -->
+        <mxCell id="arrow-p2-p3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;endArrow=classic;endFill=1;strokeColor=#82b366;" edge="1" parent="1" source="phase2-box" target="phase3-box">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Phase 3 -->
+        <mxCell id="phase3-box" value="PHASE 3: Materialize Paths" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=13;fontStyle=1;verticalAlign=top;align=left;" vertex="1" parent="1">
+          <mxGeometry x="580" y="510" width="550" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="phase3-details" value="For each path in graph.paths:&#xa;&#xa;1. Parse hops specification&#xa;   • &quot;fact_prices -&gt; dim_company -&gt; dim_exchange&quot;&#xa;&#xa;2. Execute sequential joins&#xa;   • Start: df = nodes[first_hop]&#xa;   • For each hop: left_join(df, nodes[next], on=edge_keys)&#xa;   • Handle column deduplication (prefix duplicates)&#xa;&#xa;3. Store materialized view&#xa;   • paths[path_id] = joined_df&#xa;&#xa;Result: paths = {path_id: DataFrame, ...}" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="600" y="540" width="510" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- Final Result -->
+        <mxCell id="result-box" value="Final Result: dims + facts" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=13;fontStyle=1;verticalAlign=top;align=center;" vertex="1" parent="1">
+          <mxGeometry x="580" y="700" width="550" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="result-details" value="dims = {k:v for k,v in nodes.items() if k.startswith('dim_')}&#xa;facts = {k:v for k,v in nodes.items() if k.startswith('fact_')} + paths&#xa;&#xa;Cached in _dims and _facts for lazy access" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New;" vertex="1" parent="1">
+          <mxGeometry x="600" y="730" width="510" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Arrow phase3 to result -->
+        <mxCell id="arrow-p3-result" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;endArrow=classic;endFill=1;strokeColor=#b85450;" edge="1" parent="1" source="phase3-box" target="result-box">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="model-entities" name="7. Model Entities (Facts & Dims)">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="entities-title" value="Model Entities: Dimensions &amp; Facts" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="400" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Subtitle -->
+        <mxCell id="entities-subtitle" value="UML-style entity diagrams showing each model's dimensions, facts, and paths" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="300" y="55" width="800" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ========== CORE MODEL ========== -->
+        <mxCell id="core-container" value="CORE MODEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;verticalAlign=top;align=left;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="300" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- Core Dimensions -->
+        <mxCell id="core-dims-title" value="Dimensions" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="60" y="130" width="260" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- dim_calendar -->
+        <mxCell id="core-dim-calendar" value="«dimension»&#xa;dim_calendar" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="160" width="260" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="core-cal-attrs" value="+ date: date [PK]&#xa;+ year, quarter, month: integer&#xa;+ day_of_week, day_of_year: integer&#xa;+ is_weekend, is_weekday: boolean&#xa;+ fiscal_year, fiscal_quarter: integer" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="core-dim-calendar">
+          <mxGeometry y="40" width="260" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ========== COMPANY MODEL ========== -->
+        <mxCell id="company-container" value="COMPANY MODEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;verticalAlign=top;align=left;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="380" y="100" width="480" height="550" as="geometry" />
+        </mxCell>
+
+        <!-- Company Dimensions -->
+        <mxCell id="company-dims-title" value="Dimensions" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="400" y="130" width="440" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- dim_company -->
+        <mxCell id="company-dim-company" value="«dimension»&#xa;dim_company" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="160" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="company-dim-company-attrs" value="+ ticker: string [PK]&#xa;+ company_name: string&#xa;+ exchange_code: string&#xa;+ company_id: string&#xa;+ market_cap_proxy: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-dim-company">
+          <mxGeometry y="40" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- dim_exchange -->
+        <mxCell id="company-dim-exchange" value="«dimension»&#xa;dim_exchange" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="160" width="200" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="company-dim-exchange-attrs" value="+ exchange_code: string [PK]&#xa;+ exchange_name: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-dim-exchange">
+          <mxGeometry y="40" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Company Facts -->
+        <mxCell id="company-facts-title" value="Facts" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="400" y="290" width="440" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- fact_prices -->
+        <mxCell id="company-fact-prices" value="«fact»&#xa;fact_prices" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="320" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="company-fact-prices-attrs" value="+ trade_date: date&#xa;+ ticker: string [FK]&#xa;+ open, high, low: double&#xa;+ close: double&#xa;+ volume: long&#xa;+ volume_weighted: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-fact-prices">
+          <mxGeometry y="40" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- fact_news -->
+        <mxCell id="company-fact-news" value="«fact»&#xa;fact_news" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="320" width="200" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="company-fact-news-attrs" value="+ publish_date: date&#xa;+ ticker: string [FK]&#xa;+ article_id: string&#xa;+ title: string&#xa;+ sentiment: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-fact-news">
+          <mxGeometry y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Company Paths -->
+        <mxCell id="company-paths-title" value="Paths (Materialized Views)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="400" y="470" width="440" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- prices_with_company -->
+        <mxCell id="company-path-prices" value="«path»&#xa;prices_with_company" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="500" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="company-path-prices-attrs" value="Hops: fact_prices →&#xa;  dim_company → dim_exchange&#xa;&#xa;Includes all price fields +&#xa;company_name + exchange_name" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-path-prices">
+          <mxGeometry y="40" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- news_with_company -->
+        <mxCell id="company-path-news" value="«path»&#xa;news_with_company" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="500" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="company-path-news-attrs" value="Hops: fact_news →&#xa;  dim_company&#xa;&#xa;Includes all news fields +&#xa;company_name" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-path-news">
+          <mxGeometry y="40" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ========== MACRO MODEL ========== -->
+        <mxCell id="macro-container" value="MACRO MODEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;verticalAlign=top;align=left;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="900" y="100" width="460" height="550" as="geometry" />
+        </mxCell>
+
+        <!-- Macro Dimensions -->
+        <mxCell id="macro-dims-title" value="Dimensions" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="920" y="130" width="420" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- dim_economic_series -->
+        <mxCell id="macro-dim-series" value="«dimension»&#xa;dim_economic_series" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="920" y="160" width="220" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-dim-series-attrs" value="+ series_id: string [PK]&#xa;+ series_name: string&#xa;+ category: string&#xa;+ frequency: string&#xa;+ units: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="macro-dim-series">
+          <mxGeometry y="40" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Macro Facts -->
+        <mxCell id="macro-facts-title" value="Facts" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="920" y="300" width="420" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- fact_unemployment -->
+        <mxCell id="macro-fact-unemp" value="«fact»&#xa;fact_unemployment" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="920" y="330" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-fact-unemp-attrs" value="+ series_id: string [FK]&#xa;+ date: date&#xa;+ year: integer&#xa;+ period: string&#xa;+ value: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="macro-fact-unemp">
+          <mxGeometry y="40" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- fact_cpi -->
+        <mxCell id="macro-fact-cpi" value="«fact»&#xa;fact_cpi" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="330" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-fact-cpi-attrs" value="+ series_id: string [FK]&#xa;+ date: date&#xa;+ year: integer&#xa;+ period: string&#xa;+ value: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="macro-fact-cpi">
+          <mxGeometry y="40" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- fact_employment -->
+        <mxCell id="macro-fact-emp" value="«fact»&#xa;fact_employment" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="920" y="470" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-fact-emp-attrs" value="+ series_id: string [FK]&#xa;+ date: date&#xa;+ year: integer&#xa;+ period: string&#xa;+ value: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="macro-fact-emp">
+          <mxGeometry y="40" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- fact_wages -->
+        <mxCell id="macro-fact-wages" value="«fact»&#xa;fact_wages" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="470" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-fact-wages-attrs" value="+ series_id: string [FK]&#xa;+ date: date&#xa;+ year: integer&#xa;+ period: string&#xa;+ value: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="macro-fact-wages">
+          <mxGeometry y="40" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ========== FORECAST MODEL ========== -->
+        <mxCell id="forecast-container" value="FORECAST MODEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;fontStyle=1;verticalAlign=top;align=left;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="340" width="300" height="310" as="geometry" />
+        </mxCell>
+
+        <!-- Forecast Facts -->
+        <mxCell id="forecast-facts-title" value="Facts" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="60" y="370" width="260" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- forecast_price -->
+        <mxCell id="forecast-fact-price" value="«fact»&#xa;forecast_price" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="400" width="260" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="forecast-fact-price-attrs" value="+ ticker: string&#xa;+ forecast_date, prediction_date: date&#xa;+ horizon: int, model_name: string&#xa;+ predicted_close: double&#xa;+ lower_bound, upper_bound: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="forecast-fact-price">
+          <mxGeometry y="40" width="260" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- forecast_metrics -->
+        <mxCell id="forecast-fact-metrics" value="«fact»&#xa;forecast_metrics" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="530" width="260" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="forecast-fact-metrics-attrs" value="+ ticker, model_name: string&#xa;+ metric_date: date&#xa;+ mae, rmse, mape: double&#xa;+ r2_score: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="forecast-fact-metrics">
+          <mxGeometry y="40" width="260" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ========== CITY FINANCE MODEL ========== -->
+        <mxCell id="cityfinance-container" value="CITY FINANCE MODEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;verticalAlign=top;align=left;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="690" width="820" height="280" as="geometry" />
+        </mxCell>
+
+        <!-- CityFinance Dimensions -->
+        <mxCell id="cityfinance-dims-title" value="Dimensions" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="60" y="720" width="780" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- dim_community_area -->
+        <mxCell id="cityfinance-dim-area" value="«dimension»&#xa;dim_community_area" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="750" width="220" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-dim-area-attrs" value="+ community_area: string [PK]&#xa;+ community_name: string&#xa;+ geography_type: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-dim-area">
+          <mxGeometry y="40" width="220" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- dim_permit_type -->
+        <mxCell id="cityfinance-dim-permit" value="«dimension»&#xa;dim_permit_type" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="320" y="750" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-dim-permit-attrs" value="+ permit_type: string [PK]&#xa;+ permit_category: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-dim-permit">
+          <mxGeometry y="40" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- CityFinance Facts -->
+        <mxCell id="cityfinance-facts-title" value="Facts" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="560" y="720" width="280" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- fact_local_unemployment -->
+        <mxCell id="cityfinance-fact-unemp" value="«fact»&#xa;fact_local_unemployment" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="560" y="750" width="240" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-fact-unemp-attrs" value="+ geography: string [FK]&#xa;+ date: date&#xa;+ unemployment_rate: double&#xa;+ labor_force, employed: long&#xa;+ unemployed: long" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-fact-unemp">
+          <mxGeometry y="40" width="240" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- fact_building_permits -->
+        <mxCell id="cityfinance-fact-permits" value="«fact»&#xa;fact_building_permits" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="870" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-fact-permits-attrs" value="+ permit_number: string&#xa;+ issue_date: date&#xa;+ total_fee: double&#xa;+ community_area: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-fact-permits">
+          <mxGeometry y="40" width="240" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Paths -->
+        <mxCell id="cityfinance-paths-title" value="Paths (Materialized)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="320" y="870" width="280" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- unemployment_with_area -->
+        <mxCell id="cityfinance-path-unemp" value="«path»&#xa;unemployment_with_area" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="320" y="900" width="260" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-path-unemp-attrs" value="Hops: fact_local_unemployment →&#xa;  dim_community_area" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-path-unemp">
+          <mxGeometry y="40" width="260" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- permits_with_area -->
+        <mxCell id="cityfinance-path-permits" value="«path»&#xa;permits_with_area" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="600" y="900" width="240" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-path-permits-attrs" value="Hops: fact_building_permits →&#xa;  dim_community_area" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-path-permits">
+          <mxGeometry y="40" width="240" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend-entities" value="Legend" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;fontSize=11;fontStyle=1;verticalAlign=top;align=left;" vertex="1" parent="1">
+          <mxGeometry x="900" y="690" width="460" height="280" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-dim-box" value="«dimension»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="720" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dim-text" value="Dimension: Entity/Lookup table&#xa;(dim_*)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="720" width="290" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-fact-box" value="«fact»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="770" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-fact-text" value="Fact: Event/Transaction table&#xa;(fact_*)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="770" width="290" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-path-box" value="«path»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="820" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-path-text" value="Path: Materialized view (joined)&#xa;Created by multi-hop joins" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="820" width="290" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-note" value="Notes:&#xa;• [PK] = Primary Key&#xa;• [FK] = Foreign Key (references dimension)&#xa;• Paths are built from graph.paths definitions&#xa;• All tables loaded from Bronze via graph.nodes&#xa;• Edges validated during model build" style="text;html=1;strokeColor=none;fillColor=#e1d5e7;align=left;verticalAlign=top;whiteSpace=wrap;rounded=1;fontSize=10;strokeColor=#9673a6;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="920" y="870" width="420" height="90" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
