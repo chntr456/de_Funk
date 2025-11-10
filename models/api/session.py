@@ -143,7 +143,11 @@ class UniversalSession:
 
         # Inject session for cross-model access
         if hasattr(model, 'set_session'):
+            print(f"DEBUG: Injecting session into {model_name} model via set_session()")
             model.set_session(self)
+            print(f"DEBUG: Session injected successfully, model.session = {model.session}")
+        else:
+            print(f"⚠ Model {model_name} has no set_session() method - need to update BaseModel")
 
         # Cache
         self._models[model_name] = model
