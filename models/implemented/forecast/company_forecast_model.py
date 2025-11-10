@@ -311,14 +311,10 @@ class CompanyForecastModel(TimeSeriesForecastModel):
             # Register the view in the model's _facts dictionary so it's discoverable
             # via get_table() and can be used as a filter source
             if hasattr(self, '_facts'):
-                # Query the view to make it available as a table
+                # Query the view to make it available as a DuckDB relation
                 try:
-                    if hasattr(self.connection, 'table'):
-                        view_df = self.connection.table('forecast.vw_price_predictions')
-                    else:
-                        # Fallback: execute a SELECT to get the relation
-                        view_df = self.connection.execute("SELECT * FROM forecast.vw_price_predictions LIMIT 0").fetchdf()
-
+                    # Use SQL query to get relation (DuckDB's .table() doesn't support schema-qualified names)
+                    view_df = duckdb_conn.sql("SELECT * FROM forecast.vw_price_predictions")
                     self._facts['vw_price_predictions'] = view_df
                     print(f"✓ Registered view in _facts: vw_price_predictions")
                 except Exception as e:

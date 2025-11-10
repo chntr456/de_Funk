@@ -56,6 +56,9 @@ class BaseModel:
         self.params = params or {}
         self.model_name = model_cfg.get('model', 'unknown')
 
+        # Session reference for cross-model access (injected by UniversalSession)
+        self.session = None
+
         # Lazy-loaded caches
         self._dims: Optional[Dict[str, DataFrame]] = None
         self._facts: Optional[Dict[str, DataFrame]] = None
@@ -86,6 +89,18 @@ class BaseModel:
             return 'duckdb'
 
         raise ValueError(f"Unknown connection type: {connection_type}")
+
+    def set_session(self, session):
+        """
+        Inject session reference for cross-model access.
+
+        Called by UniversalSession after model instantiation.
+        Allows models to load tables from other models via session.load_model().
+
+        Args:
+            session: UniversalSession instance
+        """
+        self.session = session
 
     def _select_columns(self, df: DataFrame, select_config: Dict[str, str]) -> DataFrame:
         """
