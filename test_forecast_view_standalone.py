@@ -14,15 +14,37 @@ sys.path.insert(0, str(project_root))
 print("=" * 80)
 print("FORECAST VIEW STANDALONE TEST")
 print("=" * 80)
+print()
+print("PURPOSE: Test session injection and view registration logic")
+print("This runs in READ-ONLY mode so it can run alongside Streamlit.")
+print("The goal is to see the DEBUG output showing session availability.")
+print("=" * 80)
 
-# Step 1: Initialize repo context
-print("\n[1] Initializing repository context...")
+# Step 1: Initialize repo context with read-only access
+print("\n[1] Initializing repository context (read-only)...")
+print("    Note: Using read-only mode so this can run alongside Streamlit")
 try:
     from core.context import RepoContext
-    ctx = RepoContext.from_repo_root(connection_type="duckdb")
-    print("✓ Context initialized")
-    print(f"  - Connection type: {type(ctx.connection)}")
-    print(f"  - Repo root: {ctx.repo}")
+    from core.connection import ConnectionFactory
+    from pathlib import Path
+
+    # Get repo root
+    repo_root = Path(__file__).parent
+
+    # Create read-only DuckDB connection
+    duckdb_path = repo_root / "storage" / "duckdb" / "analytics.db"
+    connection = ConnectionFactory.create("duckdb", db_path=str(duckdb_path), read_only=True)
+
+    # Load storage config
+    import yaml
+    with open(repo_root / "configs" / "main_config.yaml", 'r') as f:
+        config = yaml.safe_load(f)
+    storage_cfg = config['storage']
+
+    print("✓ Context initialized (read-only)")
+    print(f"  - Connection type: {type(connection)}")
+    print(f"  - Repo root: {repo_root}")
+    print(f"  - Database: {duckdb_path}")
 except Exception as e:
     print(f"✗ Failed to initialize context: {e}")
     import traceback
@@ -34,9 +56,9 @@ print("\n[2] Creating UniversalSession...")
 try:
     from models.api.session import UniversalSession
     session = UniversalSession(
-        connection=ctx.connection,
-        storage_cfg=ctx.storage,
-        repo_root=ctx.repo
+        connection=connection,
+        storage_cfg=storage_cfg,
+        repo_root=repo_root
     )
     print("✓ Session created")
     print(f"  - Session type: {type(session)}")
@@ -71,6 +93,7 @@ except Exception as e:
 
 # Step 4: Build forecast model (triggers register_views)
 print("\n[4] Building forecast model (triggers register_views)...")
+print("    Note: Read-only mode means CREATE VIEW will fail, but we can see debug output")
 print("-" * 80)
 try:
     forecast_model.ensure_built()
@@ -85,10 +108,15 @@ try:
 
 except Exception as e:
     print("-" * 80)
-    print(f"✗ Failed to build forecast model: {e}")
-    import traceback
-    traceback.print_exc()
-    sys.exit(1)
+    print(f"⚠ Build completed with errors (expected in read-only mode)")
+    print(f"  Error: {e}")
+
+    # Still check if _facts was populated
+    if hasattr(forecast_model, '_facts'):
+        print(f"  - _facts keys: {list(forecast_model._facts.keys())}")
+        print(f"  - Has vw_price_predictions: {'vw_price_predictions' in forecast_model._facts}")
+
+    # Don't exit - continue to see what we can inspect
 
 # Step 5: Try to access the view
 print("\n[5] Testing view access...")
