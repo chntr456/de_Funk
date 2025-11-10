@@ -22,9 +22,9 @@ conn = ctx.connection.conn
 print("\n[1] Checking if view exists...")
 try:
     views = conn.execute("""
-        SELECT schema_name, view_name
+        SELECT table_schema, table_name
         FROM information_schema.views
-        WHERE schema_name = 'forecast' AND view_name = 'vw_price_predictions'
+        WHERE table_schema = 'forecast' AND table_name = 'vw_price_predictions'
     """).fetchdf()
 
     if len(views) > 0:
