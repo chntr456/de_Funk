@@ -188,8 +188,15 @@ class CompanyForecastModel(TimeSeriesForecastModel):
             else:
                 # Try to get it from company model via session
                 try:
+                    # Debug session state
+                    print(f"DEBUG: Checking session availability...")
+                    print(f"  - hasattr(self, 'session'): {hasattr(self, 'session')}")
+                    if hasattr(self, 'session'):
+                        print(f"  - self.session is None: {self.session is None}")
+                        print(f"  - self.session type: {type(self.session)}")
+
                     if hasattr(self, 'session') and self.session:
-                        print(f"DEBUG: Attempting to load company model via session")
+                        print(f"DEBUG: ✓ Session available, loading company model...")
                         company_model = self.session.load_model('company')
                         if company_model:
                             # Ensure company model is built
@@ -203,7 +210,10 @@ class CompanyForecastModel(TimeSeriesForecastModel):
                         else:
                             print(f"⚠ Could not load company model")
                     else:
-                        print(f"⚠ No session available to load company model")
+                        if not hasattr(self, 'session'):
+                            print(f"⚠ No 'session' attribute - need to update BaseModel with set_session()")
+                        else:
+                            print(f"⚠ session is None - set_session() was not called by UniversalSession")
                 except Exception as e:
                     print(f"⚠ Could not get fact_prices from company model: {e}")
                     import traceback
