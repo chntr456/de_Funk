@@ -204,6 +204,14 @@ class CompanyForecastModel(TimeSeriesForecastModel):
 
         try:
             self.connection.execute(view_sql)
+
+            # Register the view in the model's _facts dictionary so it's discoverable
+            # via get_table() and can be used as a filter source
+            if hasattr(self, '_facts') and hasattr(self.connection, 'table'):
+                # Query the view to make it available as a table
+                view_df = self.connection.table('vw_price_predictions')
+                self._facts['vw_price_predictions'] = view_df
+
         except Exception as e:
             # View registration is optional (tables might not exist yet)
             pass

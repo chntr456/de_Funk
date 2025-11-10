@@ -492,9 +492,9 @@ class NotebookManager:
         All filters (notebook + folder) are now merged in _filter_collection,
         so this method is simplified to a single source of truth.
 
-        IMPORTANT: Only applies filters whose source model matches the exhibit's model.
-        This prevents cross-model filter contamination (e.g., company model filters
-        being applied to forecast model queries).
+        Filters are applied based on column names, allowing shared dimensions
+        (like 'ticker', 'date') to work seamlessly across models. The graph
+        structure and view definitions handle model relationships and column mapping.
 
         Args:
             exhibit: Exhibit configuration
@@ -503,15 +503,6 @@ class NotebookManager:
             Dictionary of filters (column_name -> filter_value) for FilterEngine
         """
         filters = {}
-
-        # Get exhibit's source model for filter scoping
-        exhibit_model = None
-        if hasattr(exhibit, 'source') and exhibit.source:
-            try:
-                exhibit_model, _ = self._parse_source(exhibit.source)
-            except (ValueError, AttributeError):
-                # Can't parse source - apply all filters
-                pass
 
         # Single source of truth: _filter_collection (contains merged notebook + folder filters)
         if (self.notebook_config and
@@ -534,12 +525,6 @@ class NotebookManager:
                     # No config - use raw value
                     filters[filter_id] = value
                     continue
-
-                # MODEL-SCOPED FILTERING: Only apply filters from the same model
-                if exhibit_model and filter_config.source:
-                    if filter_config.source.model != exhibit_model:
-                        # Filter is from a different model - skip it
-                        continue
 
                 # Convert based on filter type
                 if filter_config.type == FilterType.DATE_RANGE:
