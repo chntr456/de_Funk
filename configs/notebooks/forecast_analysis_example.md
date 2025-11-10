@@ -37,7 +37,7 @@ Use standard measure and dimension selectors for interactive filtering:
 
 $exhibits${
   type: forecast_chart
-  source: forecast.vw_time_series_predictions
+  source: forecast.vw_price_predictions
   title: "Stock Price Predictions"
   description: "Interactive time series with predictions and confidence intervals"
 
@@ -69,7 +69,7 @@ Without selectors, using static y_axis configuration:
 
 $exhibits${
   type: forecast_chart
-  source: forecast.vw_time_series_predictions
+  source: forecast.vw_price_predictions
   title: "Price Forecast - ARIMA Model"
 
   x_axis: {dimension: date, label: "Date"}
@@ -144,7 +144,7 @@ $filter${
   label: "Stock Tickers"
   type: select
   multi: true
-  source: {model: forecast, table: vw_time_series_predictions, column: ticker}
+  source: {model: forecast, table: vw_price_predictions, column: ticker}
 }
 ```
 

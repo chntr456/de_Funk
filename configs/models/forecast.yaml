@@ -247,6 +247,13 @@ graph:
       type: left
       description: "Join forecasts to company dimension on ticker"
 
+    # Edge for vw_price_predictions view (unified actuals + predictions)
+    - from: vw_price_predictions
+      to: core.dim_calendar
+      on: [date = trade_date]
+      type: left
+      description: "Join price predictions view to calendar (unified date column)"
+
   # Define paths for common queries
   paths:
     - id: forecasts_with_calendar
