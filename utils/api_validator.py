@@ -26,7 +26,16 @@ class APIValidator:
             polygon_cfg: Polygon API configuration
         """
         self.polygon_cfg = polygon_cfg
-        self.api_key = polygon_cfg.get("api_key", "")
+
+        # Get API key from credentials (supports both formats for backward compatibility)
+        credentials = polygon_cfg.get("credentials", {})
+        api_keys = credentials.get("api_keys", [])
+
+        # Use first key if available, otherwise fall back to deprecated 'api_key' field
+        if api_keys:
+            self.api_key = api_keys[0]
+        else:
+            self.api_key = credentials.get("api_key", "")
 
     def validate_date_range(
         self,

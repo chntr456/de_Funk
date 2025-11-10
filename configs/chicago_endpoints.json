@@ -1,7 +1,6 @@
 {
   "credentials": {
-    "api_keys": ["3on4vbtla2xwgwgidykkz7h4q"],
-    "app_token": "REPLACE_WITH_YOUR_APP_TOKEN"
+    "api_keys": []
   },
   "base_urls": {
     "core": "https://data.cityofchicago.org"

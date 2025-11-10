@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
+from utils.env_loader import inject_credentials_into_config
 
 def _repo_root(start: Path) -> Path:
     # Walk up until we find the repo markers (adjust if you use a different layout)
@@ -45,6 +46,9 @@ class RepoContext:
         # Load configs
         polygon_cfg = json.loads((root / "configs" / "polygon_endpoints.json").read_text())
         storage = json.loads((root / "configs" / "storage.json").read_text())
+
+        # Inject API keys from environment variables
+        polygon_cfg = inject_credentials_into_config(polygon_cfg, 'polygon')
 
         # Determine connection type
         if connection_type is None:

@@ -1,7 +1,6 @@
 {
   "credentials": {
-    "api_keys": ["REPLACE_WITH_YOUR_BLS_API_KEY"],
-    "registration_url": "https://data.bls.gov/registrationEngine/"
+    "api_keys": []
   },
   "base_urls": {
     "core": "https://api.bls.gov/publicAPI/v2"
