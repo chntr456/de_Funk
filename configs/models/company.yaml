@@ -259,31 +259,31 @@ graph:
     # Cross-model edge: company data uses core calendar for time-based filtering
     - from: fact_prices
       to: core.dim_calendar
-      on: ["trade_date=date"]
+      "on": ["trade_date=date"]
       type: left
       description: "Join prices to calendar for date-based filtering and attributes"
 
     - from: fact_news
       to: core.dim_calendar
-      on: ["publish_date=date"]
+      "on": ["publish_date=date"]
       type: left
       description: "Join news to calendar for date-based filtering"
 
     - from: fact_prices
       to: dim_company
-      on: ["ticker=ticker"]
+      "on": ["ticker=ticker"]
       type: many_to_one
       description: "Prices belong to a company"
 
     - from: dim_company
       to: dim_exchange
-      on: ["exchange_code=exchange_code"]
+      "on": ["exchange_code=exchange_code"]
       type: many_to_one
       description: "Company lists on an exchange"
 
     - from: fact_news
       to: dim_company
-      on: ["ticker=ticker"]
+      "on": ["ticker=ticker"]
       type: many_to_one
       description: "News articles about a company"
 
