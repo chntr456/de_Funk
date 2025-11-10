@@ -227,9 +227,9 @@ class CompanyForecastModel(TimeSeriesForecastModel):
                         # Ensure company model is built
                         company_model.ensure_built()
                         if hasattr(company_model, '_facts') and 'fact_prices' in company_model._facts:
-                            # Drop existing view/table if it exists
-                            duckdb_conn.execute("DROP VIEW IF EXISTS fact_prices")
+                            # Drop existing view/table if it exists (try TABLE first, then VIEW)
                             duckdb_conn.execute("DROP TABLE IF EXISTS fact_prices")
+                            duckdb_conn.execute("DROP VIEW IF EXISTS fact_prices")
 
                             # Step 1: Register temporarily
                             duckdb_conn.register('temp_fact_prices', company_model._facts['fact_prices'])
@@ -272,11 +272,19 @@ class CompanyForecastModel(TimeSeriesForecastModel):
                 print(f"⚠ Neither predicted_close nor predicted_value found in fact_forecasts")
                 return
 
+            # Check if target column exists (for filtering price vs volume forecasts)
+            has_target_column = 'target' in columns
+
             print(f"DEBUG: Using predicted column: {predicted_col}")
+            print(f"DEBUG: Has 'target' column: {has_target_column}")
         except Exception as e:
             print(f"⚠ Could not inspect fact_forecasts columns: {e}")
             # Default to predicted_close
             predicted_col = 'predicted_close'
+            has_target_column = False
+
+        # Build WHERE clause for filtering price forecasts (only if target column exists)
+        where_clause = "WHERE target = 'close'" if has_target_column else ""
 
         # Build view SQL with actual or predictions-only based on fact_prices availability
         if fact_prices_registered:
@@ -307,7 +315,7 @@ class CompanyForecastModel(TimeSeriesForecastModel):
                     upper_bound,
                     lower_bound
                 FROM fact_forecasts
-                WHERE target = 'close'
+                {where_clause}
             )
 
             -- Combine both
@@ -329,7 +337,7 @@ class CompanyForecastModel(TimeSeriesForecastModel):
                 upper_bound,
                 lower_bound
             FROM fact_forecasts
-            WHERE target = 'close'
+            {where_clause}
             ORDER BY date, ticker, model_name
             """
             print(f"ℹ Creating predictions-only view (fact_prices not available)")
