@@ -67,26 +67,45 @@
                                      │
                                      ↓
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                          MODEL LAYER: BaseModel                             │
+│                     MODEL LAYER: BaseModel (Graph-Based)                    │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │ BaseModel(connection, storage_cfg, model_cfg, params)              │   │
 │  │                                                                      │   │
 │  │  Properties:                                                         │   │
 │  │   • connection: Database connection                                 │   │
-│  │   • model_cfg: YAML configuration                                   │   │
+│  │   • model_cfg: YAML configuration with graph definition             │   │
 │  │   • storage_router: StorageRouter instance                          │   │
 │  │   • backend: 'spark' or 'duckdb'                                    │   │
-│  │   • _dims: Cached dimensions                                        │   │
-│  │   • _facts: Cached facts                                            │   │
+│  │   • _dims: Cached dimensions (from nodes)                           │   │
+│  │   • _facts: Cached facts (from nodes + paths)                       │   │
 │  │                                                                      │   │
-│  │  Lifecycle:                                                          │   │
-│  │   1. build() → Builds graph from YAML                               │   │
-│  │      • _build_nodes() - Read Bronze, transform                      │   │
-│  │      • _apply_edges() - Validate relationships                      │   │
-│  │      • _materialize_paths() - Create joined views                   │   │
-│  │   2. get_table(name) → Returns DataFrame                            │   │
-│  │   3. get_dimension_df(id) → Returns dimension                       │   │
-│  │   4. get_fact_df(id) → Returns fact                                 │   │
+│  │  GRAPH-DRIVEN BUILD LIFECYCLE:                                      │   │
+│  │   1. build() → 3-Phase Graph Building from YAML                     │   │
+│  │                                                                      │   │
+│  │      PHASE 1: Build Nodes                                           │   │
+│  │      • _build_nodes() - For each node in graph.nodes:               │   │
+│  │        ├─ Load from Bronze (via StorageRouter)                      │   │
+│  │        ├─ Apply 'select' (column mapping/aliasing)                  │   │
+│  │        ├─ Apply 'derive' (computed columns like SHA1)               │   │
+│  │        └─ Return node as DataFrame                                  │   │
+│  │                                                                      │   │
+│  │      PHASE 2: Validate Edges                                        │   │
+│  │      • _apply_edges() - For each edge in graph.edges:               │   │
+│  │        ├─ Check nodes exist                                         │   │
+│  │        ├─ Validate join columns                                     │   │
+│  │        ├─ Dry-run join (limit 1)                                    │   │
+│  │        └─ Raise error if invalid                                    │   │
+│  │                                                                      │   │
+│  │      PHASE 3: Materialize Paths                                     │   │
+│  │      • _materialize_paths() - For each path in graph.paths:         │   │
+│  │        ├─ Parse hops (e.g. "fact_prices -> dim_company -> ...")     │   │
+│  │        ├─ Join nodes in sequence (left joins)                       │   │
+│  │        ├─ Handle column deduplication                               │   │
+│  │        └─ Return joined DataFrame as path                           │   │
+│  │                                                                      │   │
+│  │   2. get_table(name) → Returns dimension or fact DataFrame          │   │
+│  │   3. get_dimension_df(id) → Returns dimension node                  │   │
+│  │   4. get_fact_df(id) → Returns fact node or materialized path       │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 └──────────────┬──────────────────────────────────┬───────────────────────────┘
                │                                  │
@@ -233,18 +252,38 @@ Note: FilterEngine is NOT owned by any component - it's a standalone utility
 3. CompanyModel.get_fact_df('fact_prices'):
    ┌────────────────────────────────────────────────────────────┐
    │ • Checks if model is built (_is_built flag)               │
-   │ • If not built, calls build()                             │
-   │   ├─ _build_nodes() - Read from Bronze                    │
-   │   │   ├─ StorageRouter.bronze_path('prices_daily')        │
-   │   │   ├─ BronzeTable.read() → Spark/DuckDB DataFrame      │
-   │   │   └─ Apply transformations from YAML graph.nodes      │
-   │   │                                                        │
-   │   ├─ _apply_edges() - Validate relationships              │
-   │   │   └─ Check foreign keys between tables                │
-   │   │                                                        │
-   │   └─ _materialize_paths() - Create joined views           │
-   │       └─ Build prices_with_company (price + dims)         │
+   │ • If not built, calls build() - 3-PHASE GRAPH BUILD:      │
    │                                                            │
+   │   PHASE 1: _build_nodes()                                 │
+   │   ├─ For each node in graph.nodes:                        │
+   │   │   ├─ Load from Bronze:                                │
+   │   │   │   ├─ StorageRouter.bronze_path('prices_daily')    │
+   │   │   │   └─ BronzeTable.read() → DataFrame               │
+   │   │   ├─ Apply 'select' (column mapping/aliasing)         │
+   │   │   └─ Apply 'derive' (computed columns)                │
+   │   │                                                        │
+   │   │ Result: nodes = {'dim_company': df1,                  │
+   │   │                  'fact_prices': df2,                  │
+   │   │                  'dim_exchange': df3}                 │
+   │   │                                                        │
+   │   PHASE 2: _apply_edges()                                 │
+   │   ├─ For each edge in graph.edges:                        │
+   │   │   ├─ Verify nodes exist                               │
+   │   │   ├─ Extract join keys from 'on'                      │
+   │   │   └─ Dry-run join (limit 1) to validate              │
+   │   │                                                        │
+   │   │ Result: All edges validated ✓                         │
+   │   │                                                        │
+   │   PHASE 3: _materialize_paths()                           │
+   │   └─ For each path in graph.paths:                        │
+   │       ├─ Parse hops: "fact_prices -> dim_company -> ..."  │
+   │       ├─ Join nodes sequentially (left joins)             │
+   │       └─ Handle column deduplication                      │
+   │                                                            │
+   │     Result: paths = {'prices_with_company': joined_df}    │
+   │                                                            │
+   │ • Separates dims (dim_*) and facts (fact_* + paths)       │
+   │ • Caches results: _dims, _facts, _is_built = True         │
    │ • Returns cached _facts['fact_prices']                    │
    └────────────────────────────────────────────────────────────┘
                                 │
@@ -267,6 +306,199 @@ Note: FilterEngine is NOT owned by any component - it's a standalone utility
    │  - Ready for .to_pandas() or further operations            │
    └────────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## Graph-Based Model Architecture
+
+### Overview
+
+de_Funk uses a **graph-based model architecture** where all models are defined declaratively in YAML using a graph structure with three key components:
+
+1. **Nodes** - Tables (dimensions and facts) loaded from Bronze with transformations
+2. **Edges** - Relationships between tables (foreign keys)
+3. **Paths** - Materialized views created by joining nodes along edges
+
+This approach provides:
+- **Declarative Configuration**: Model structure in YAML, not code
+- **Automatic Validation**: Edge validation ensures referential integrity
+- **Join Materialization**: Complex multi-hop joins defined as paths
+- **Backend Agnostic**: Same graph works with Spark or DuckDB
+- **Code Reuse**: BaseModel implements all graph logic generically
+
+### Graph Structure Example (Company Model)
+
+```yaml
+graph:
+  nodes:
+    - id: dim_company
+      from: bronze.ref_ticker        # Source table in Bronze
+      select:                         # Column mappings
+        ticker: ticker
+        company_name: name
+        exchange_code: exchange_code
+      derive:                         # Computed columns
+        company_id: "sha1(ticker)"
+      tags: [dim, entity]
+      unique_key: [ticker]
+
+    - id: fact_prices
+      from: bronze.prices_daily
+      select:
+        trade_date: trade_date
+        ticker: ticker
+        open: open
+        close: close
+        volume: volume
+      tags: [fact, prices]
+
+    - id: dim_exchange
+      from: bronze.exchanges
+      select:
+        exchange_code: code
+        exchange_name: name
+      tags: [dim, ref]
+
+  edges:                             # Define relationships
+    - from: fact_prices
+      to: dim_company
+      on: ["ticker=ticker"]
+      type: many_to_one
+      description: "Prices belong to a company"
+
+    - from: dim_company
+      to: dim_exchange
+      on: ["exchange_code=exchange_code"]
+      type: many_to_one
+      description: "Company lists on an exchange"
+
+  paths:                             # Multi-hop joins
+    - id: prices_with_company
+      hops: "fact_prices -> dim_company -> dim_exchange"
+      description: "Prices with full company and exchange context"
+      tags: [canonical, analytics]
+```
+
+### 3-Phase Graph Building Process
+
+When a model is first accessed, BaseModel executes a 3-phase build process:
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│  PHASE 1: Build Nodes                                                    │
+│  ──────────────────────────────────────────────────────────────────────  │
+│                                                                           │
+│  For each node in graph.nodes:                                           │
+│    1. Load source table from Bronze                                      │
+│       ├─ StorageRouter resolves logical name → physical path             │
+│       └─ BronzeTable.read() loads Parquet files                          │
+│                                                                           │
+│    2. Apply 'select' transformations                                     │
+│       ├─ Column selection (keep only specified columns)                  │
+│       ├─ Column renaming (alias columns)                                 │
+│       └─ Backend-agnostic (works with Spark or DuckDB)                   │
+│                                                                           │
+│    3. Apply 'derive' transformations                                     │
+│       ├─ Computed columns (e.g., SHA1 hash, concatenation)               │
+│       ├─ Expression evaluation                                           │
+│       └─ Support for: sha1(), concat(), column refs, etc.                │
+│                                                                           │
+│    4. Store in nodes dictionary: nodes[node_id] = DataFrame              │
+│                                                                           │
+│  Result: Dictionary of node_id → DataFrame                               │
+└──────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ↓
+┌──────────────────────────────────────────────────────────────────────────┐
+│  PHASE 2: Validate Edges                                                 │
+│  ──────────────────────────────────────────────────────────────────────  │
+│                                                                           │
+│  For each edge in graph.edges:                                           │
+│    1. Verify both nodes exist                                            │
+│       ├─ Check 'from' node in nodes dictionary                           │
+│       └─ Check 'to' node in nodes dictionary                             │
+│                                                                           │
+│    2. Extract join keys from 'on' specification                          │
+│       ├─ Parse format: ["ticker=ticker", "date=date"]                    │
+│       └─ Or infer from common columns                                    │
+│                                                                           │
+│    3. Dry-run validation join                                            │
+│       ├─ Join left.limit(1) with right.limit(1)                          │
+│       ├─ Check join columns exist                                        │
+│       ├─ Verify join executes without error                              │
+│       └─ Raise ValueError if validation fails                            │
+│                                                                           │
+│  Result: All edges validated, referential integrity confirmed            │
+└──────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ↓
+┌──────────────────────────────────────────────────────────────────────────┐
+│  PHASE 3: Materialize Paths                                              │
+│  ──────────────────────────────────────────────────────────────────────  │
+│                                                                           │
+│  For each path in graph.paths:                                           │
+│    1. Parse hops specification                                           │
+│       ├─ String format: "fact_prices -> dim_company -> dim_exchange"     │
+│       └─ Or list format: ["fact_prices", "dim_company", "dim_exchange"]  │
+│                                                                           │
+│    2. Execute sequential joins                                           │
+│       ├─ Start with first node: df = nodes[fact_prices]                  │
+│       │                                                                   │
+│       ├─ For each hop:                                                   │
+│       │   ├─ Get right DataFrame: nodes[dim_company]                     │
+│       │   ├─ Find edge definition for join keys                          │
+│       │   ├─ Execute left join with dedupe strategy                      │
+│       │   └─ Prefix duplicate columns (e.g., dim_company__name)          │
+│       │                                                                   │
+│       └─ Continue joining remaining nodes in chain                       │
+│                                                                           │
+│    3. Store in paths dictionary: paths[path_id] = joined_df              │
+│                                                                           │
+│  Result: Dictionary of path_id → Materialized view DataFrame             │
+└──────────────────────────────────────────────────────────────────────────┘
+                                     │
+                                     ↓
+                            ┌────────────────────┐
+                            │  Separate by Type  │
+                            │                    │
+                            │  dims = nodes      │
+                            │    where id starts │
+                            │    with "dim_"     │
+                            │                    │
+                            │  facts = nodes +   │
+                            │    paths where id  │
+                            │    starts with     │
+                            │    "fact_"         │
+                            └────────────────────┘
+```
+
+### Benefits of Graph-Based Architecture
+
+1. **Declarative**: Model structure in YAML, minimal code
+2. **Validation**: Automatic referential integrity checking
+3. **Reusability**: BaseModel implements graph logic once for all models
+4. **Maintainability**: Change table relationships without code changes
+5. **Documentation**: Graph structure is self-documenting
+6. **Flexibility**: Easy to add new nodes, edges, or paths
+7. **Backend Agnostic**: Same graph works with Spark or DuckDB
+8. **Type Safety**: Edge validation catches schema mismatches early
+
+### Node Types and Naming Conventions
+
+- **Dimensions** (`dim_*`): Entity tables with unique keys
+  - Examples: `dim_company`, `dim_exchange`, `dim_calendar`
+  - Loaded from Bronze reference tables
+  - Typically small lookup tables
+
+- **Facts** (`fact_*`): Event/transaction tables
+  - Examples: `fact_prices`, `fact_news`, `fact_unemployment`
+  - Loaded from Bronze event tables
+  - Typically large timeseries data
+
+- **Paths** (any name): Materialized joins
+  - Examples: `prices_with_company`, `news_with_company`
+  - Created by joining nodes along edges
+  - Stored as facts (queryable like any fact table)
 
 ---
 
@@ -318,16 +550,21 @@ Note: FilterEngine is NOT owned by any component - it's a standalone utility
   - Any code with a DataFrame
 - **Benefits**: Eliminates code duplication across codebase
 
-### **BaseModel** (Model Foundation)
-- **Purpose**: Generic model implementation
+### **BaseModel** (Graph-Based Model Foundation)
+- **Purpose**: Generic graph-based model implementation
 - **Responsibilities**:
-  - YAML-driven graph building
-  - Node loading from Bronze
-  - Edge validation (foreign keys)
-  - Path materialization (joins)
-  - Table caching
-  - Backend abstraction
+  - **Graph Building**: 3-phase YAML-driven graph construction
+    - Phase 1: Build nodes from Bronze with transformations
+    - Phase 2: Validate edges (referential integrity)
+    - Phase 3: Materialize paths (multi-hop joins)
+  - **Node Loading**: Read from Bronze, apply select/derive transformations
+  - **Edge Validation**: Dry-run joins to verify relationships
+  - **Path Materialization**: Execute multi-table joins with column deduplication
+  - **Table Caching**: Lazy loading with in-memory caching
+  - **Backend Abstraction**: Transparent Spark/DuckDB support
+  - **Metadata**: Expose relations, measures, schema from YAML
 - **Pattern**: All models inherit from BaseModel
+- **Key Innovation**: Graph structure defined in YAML, not code
 
 ### **Specific Models** (Domain Logic)
 - **CompanyModel**: Stock market data (Polygon.io)
@@ -393,14 +630,18 @@ User → UniversalSession → Model → StorageRouter → Physical Storage
 
 ## Key Design Principles
 
-1. **Lazy Loading**: Models built only when first accessed
-2. **Caching**: Loaded models and DataFrames cached in memory
-3. **Backend Agnostic**: Works with Spark or DuckDB transparently
-4. **YAML-Driven**: Model structure defined in configs, not code
-5. **Cross-Model Access**: Models can query other models via session injection
-6. **Filter Centralization**: Single FilterEngine utility for all filtering logic
-7. **Convention Over Configuration**: Auto-discovery of models by naming convention
-8. **Utility Pattern**: FilterEngine is a standalone cross-cutting utility
+1. **Graph-Based Architecture**: Models defined as graphs (nodes, edges, paths) in YAML
+2. **Declarative Configuration**: Model structure in YAML, not imperative code
+3. **3-Phase Build Process**: Nodes → Edges → Paths with validation at each stage
+4. **Lazy Loading**: Models and graphs built only when first accessed
+5. **Caching**: Loaded models, nodes, and paths cached in memory
+6. **Backend Agnostic**: Same graph works with Spark or DuckDB transparently
+7. **Referential Integrity**: Edge validation ensures joins are valid before materialization
+8. **Path Materialization**: Complex multi-hop joins defined declaratively and auto-executed
+9. **Cross-Model Access**: Models can query other models via session injection
+10. **Filter Centralization**: Single FilterEngine utility for all filtering logic
+11. **Convention Over Configuration**: Auto-discovery of models by naming convention
+12. **Utility Pattern**: FilterEngine is a standalone cross-cutting utility
 
 ---
 
