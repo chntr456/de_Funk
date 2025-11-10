@@ -289,6 +289,32 @@ class DuckDBConnection(DataConnection):
         """
         return self.conn.execute(query)
 
+    def execute(self, query: str) -> Any:
+        """
+        Execute raw SQL query (alias for execute_sql).
+
+        Provided for compatibility with code expecting execute() method.
+
+        Args:
+            query: SQL query string
+
+        Returns:
+            DuckDB relation with results
+        """
+        return self.execute_sql(query)
+
+    def table(self, table_name: str) -> Any:
+        """
+        Get a table/view by name.
+
+        Args:
+            table_name: Name of table or view (can include schema: schema.table)
+
+        Returns:
+            DuckDB relation
+        """
+        return self.conn.table(table_name)
+
     def __del__(self):
         """Cleanup on deletion."""
         self.stop()
