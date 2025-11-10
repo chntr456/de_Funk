@@ -201,10 +201,14 @@ class CompanyForecastModel(TimeSeriesForecastModel):
                         # Ensure company model is built
                         company_model.ensure_built()
                         if hasattr(company_model, '_facts') and 'fact_prices' in company_model._facts:
+                            # Drop existing view/table if it exists
+                            duckdb_conn.execute("DROP VIEW IF EXISTS fact_prices")
+                            duckdb_conn.execute("DROP TABLE IF EXISTS fact_prices")
+
                             # Step 1: Register temporarily
                             duckdb_conn.register('temp_fact_prices', company_model._facts['fact_prices'])
                             # Step 2: Create permanent table from temporary registration
-                            duckdb_conn.execute("CREATE OR REPLACE TABLE fact_prices AS SELECT * FROM temp_fact_prices")
+                            duckdb_conn.execute("CREATE TABLE fact_prices AS SELECT * FROM temp_fact_prices")
                             print(f"✓ Created fact_prices table from company model")
                             fact_prices_registered = True
                         else:
