@@ -173,6 +173,47 @@ class CompanyForecastModel(TimeSeriesForecastModel):
             print(f"⚠ Could not create schemas: {e}")
             return
 
+        # CRITICAL: Register the _facts relations in DuckDB's catalog
+        # Tables loaded from Parquet exist as relation objects but aren't in SQL catalog
+        try:
+            # Get the underlying DuckDB connection
+            duckdb_conn = self.connection.conn if hasattr(self.connection, 'conn') else self.connection
+
+            # Register fact_prices from company model if available
+            if 'fact_prices' in self._facts:
+                print(f"DEBUG: Registering fact_prices in DuckDB catalog")
+                duckdb_conn.register('fact_prices', self._facts['fact_prices'])
+            else:
+                print(f"⚠ fact_prices not found in _facts, cannot create view")
+                # Try to get it from company model
+                try:
+                    from models.api.session import UniversalSession
+                    if hasattr(self, 'session') and self.session:
+                        company_model = self.session.get_model_instance('company')
+                        if company_model and hasattr(company_model, '_facts'):
+                            if 'fact_prices' in company_model._facts:
+                                duckdb_conn.register('fact_prices', company_model._facts['fact_prices'])
+                                print(f"✓ Registered fact_prices from company model")
+                            else:
+                                print(f"⚠ fact_prices not in company model either")
+                except Exception as e:
+                    print(f"⚠ Could not get fact_prices from company model: {e}")
+
+            # Register fact_forecasts from forecast model
+            if 'fact_forecasts' in self._facts:
+                print(f"DEBUG: Registering fact_forecasts in DuckDB catalog")
+                duckdb_conn.register('fact_forecasts', self._facts['fact_forecasts'])
+                print(f"✓ Registered fact_forecasts")
+            else:
+                print(f"⚠ fact_forecasts not found in _facts, cannot create view")
+                return
+
+        except Exception as e:
+            print(f"⚠ Could not register tables in DuckDB catalog: {e}")
+            import traceback
+            traceback.print_exc()
+            return
+
         # Register vw_price_predictions - combines actuals and predictions
         view_sql = """
         CREATE OR REPLACE VIEW forecast.vw_price_predictions AS
@@ -236,6 +277,8 @@ class CompanyForecastModel(TimeSeriesForecastModel):
             # Log the error but don't fail - views are optional (tables might not exist yet)
             print(f"⚠ Could not create view vw_price_predictions: {e}")
             print(f"   This is normal if company or forecast tables don't exist yet")
+            import traceback
+            traceback.print_exc()
 
     def ensure_built(self):
         """Override to register views after building."""
