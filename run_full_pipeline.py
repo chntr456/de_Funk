@@ -140,11 +140,13 @@ def build_company_model(spark, repo_root: Path, storage_cfg: dict):
 
     from models.api.session import UniversalSession
 
-    # Create session
+    # Create session with core and company models
+    # Company model depends on core.dim_calendar
     session = UniversalSession(
         connection=spark,
         storage_cfg=storage_cfg,
-        repo_root=repo_root
+        repo_root=repo_root,
+        models=['core', 'company']
     )
 
     # Load company model
@@ -289,11 +291,13 @@ def build_macro_model(spark, repo_root: Path, storage_cfg: dict):
 
     from models.api.session import UniversalSession
 
-    # Create session
+    # Create session with core and macro models
+    # Macro model depends on core.dim_calendar
     session = UniversalSession(
         connection=spark,
         storage_cfg=storage_cfg,
-        repo_root=repo_root
+        repo_root=repo_root,
+        models=['core', 'macro']
     )
 
     # Load macro model
