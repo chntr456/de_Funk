@@ -49,6 +49,28 @@ class SidebarNavigator:
                     for file_path in sorted(files):
                         self._render_notebook_item(file_path)
 
+        # Add model graph viewer at bottom of sidebar
+        st.divider()
+        self._render_model_graph_section()
+
+    def _render_model_graph_section(self):
+        """Render model graph info in sidebar."""
+        with st.expander("🔗 Model Graph", expanded=False):
+            # Get model graph from session
+            if hasattr(self.notebook_session, 'session') and hasattr(self.notebook_session.session, 'model_graph'):
+                model_graph = self.notebook_session.session.model_graph
+                metrics = model_graph.get_metrics()
+
+                # Show basic metrics
+                st.metric("Models", metrics['num_models'])
+                st.metric("Relationships", metrics['num_relationships'])
+                st.metric("Is DAG", "✓" if metrics['is_dag'] else "✗")
+
+                if st.button("View Full Graph", use_container_width=True):
+                    st.session_state.show_graph_viewer = True
+            else:
+                st.info("Graph not available")
+
     def _scan_notebooks(self) -> List[Path]:
         """Scan for markdown notebook files."""
         md_notebooks = list(self.notebooks_root.rglob("*.md"))

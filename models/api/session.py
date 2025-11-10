@@ -69,6 +69,14 @@ class UniversalSession:
         # Cache loaded models
         self._models: Dict[str, Any] = {}  # model_name -> BaseModel instance
 
+        # Build model dependency graph
+        from models.api.graph import ModelGraph
+        self.model_graph = ModelGraph()
+        try:
+            self.model_graph.build_from_config_dir(models_dir)
+        except Exception as e:
+            print(f"Warning: Could not build model graph: {e}")
+
         # Pre-load specified models
         if models:
             for model_name in models:

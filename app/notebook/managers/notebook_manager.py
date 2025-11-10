@@ -468,46 +468,21 @@ class NotebookManager:
         """
         Check if two models have a declared relationship.
 
-        Checks:
-        1. depends_on list in model config
-        2. Graph edges between models
+        Uses NetworkX-based ModelGraph for efficient relationship checking.
+        Handles both direct and transitive dependencies.
 
         Args:
             model_a: First model name (e.g., "forecast")
             model_b: Second model name (e.g., "company")
 
         Returns:
-            True if models are related, False otherwise
+            True if models are related (direct or transitive), False otherwise
         """
-        # Get model_a's config
-        try:
-            model_obj = self.session.get_model(model_a)
-            model_cfg = model_obj.model_cfg if hasattr(model_obj, 'model_cfg') else {}
-        except Exception:
-            # Can't get model config - assume not related
-            return False
+        # Use the NetworkX-based ModelGraph from session
+        if hasattr(self.session, 'model_graph'):
+            return self.session.model_graph.are_related(model_a, model_b)
 
-        # Check depends_on list
-        depends_on = model_cfg.get('depends_on', [])
-        if model_b in depends_on:
-            return True
-
-        # Check graph edges for cross-model relationships
-        graph = model_cfg.get('graph', {})
-        edges = graph.get('edges', [])
-
-        for edge in edges:
-            # Parse edge targets (may be model.table format)
-            from_node = edge.get('from', '')
-            to_node = edge.get('to', '')
-
-            # Extract model names from node references
-            to_model = to_node.split('.')[0] if '.' in to_node else None
-
-            # Check if edge connects to model_b
-            if to_model == model_b:
-                return True
-
+        # Fallback: assume not related if graph not available
         return False
 
     def _parse_source(self, source: str) -> tuple[str, str]:

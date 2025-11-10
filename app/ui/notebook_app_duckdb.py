@@ -670,6 +670,11 @@ class NotebookVaultApp:
 
     def _render_main_content(self):
         """Render main content area."""
+        # Check if graph viewer is open
+        if st.session_state.get('show_graph_viewer', False):
+            self._render_graph_viewer()
+            return
+
         if not st.session_state.open_tabs:
             self._render_welcome()
             return
@@ -683,6 +688,45 @@ class NotebookVaultApp:
         active_notebook = self._get_active_notebook()
         if active_notebook:
             self._render_notebook_content(active_notebook)
+
+    def _render_graph_viewer(self):
+        """Render full model graph viewer."""
+        from app.ui.components.model_graph_viewer import (
+            render_model_graph,
+            render_graph_debug_panel,
+            render_relationship_checker
+        )
+
+        # Header with close button
+        col1, col2 = st.columns([0.9, 0.1])
+        with col1:
+            st.title("🔗 Model Dependency Graph")
+        with col2:
+            if st.button("✕", help="Close", key="close_graph_viewer"):
+                st.session_state.show_graph_viewer = False
+                st.rerun()
+
+        # Get model graph from session
+        if hasattr(self.notebook_manager, 'session') and hasattr(self.notebook_manager.session, 'model_graph'):
+            model_graph = self.notebook_manager.session.model_graph
+
+            # Render main graph visualization
+            render_model_graph(model_graph)
+
+            st.divider()
+
+            # Render relationship checker
+            render_relationship_checker(model_graph)
+
+            st.divider()
+
+            # Render debug panel (collapsed)
+            render_graph_debug_panel(model_graph)
+        else:
+            st.error("Model graph not available")
+            if st.button("Back to Notebooks"):
+                st.session_state.show_graph_viewer = False
+                st.rerun()
 
     def _render_notebook_content(self, notebook_tuple):
         """Render notebook content (edit or view mode)."""
