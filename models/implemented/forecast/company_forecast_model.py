@@ -179,25 +179,38 @@ class CompanyForecastModel(TimeSeriesForecastModel):
             # Get the underlying DuckDB connection
             duckdb_conn = self.connection.conn if hasattr(self.connection, 'conn') else self.connection
 
-            # Register fact_prices from company model if available
+            # Register fact_prices from company model
+            fact_prices_registered = False
             if 'fact_prices' in self._facts:
-                print(f"DEBUG: Registering fact_prices in DuckDB catalog")
+                print(f"DEBUG: Registering fact_prices from local _facts")
                 duckdb_conn.register('fact_prices', self._facts['fact_prices'])
+                fact_prices_registered = True
             else:
-                print(f"⚠ fact_prices not found in _facts, cannot create view")
-                # Try to get it from company model
+                # Try to get it from company model via session
                 try:
-                    from models.api.session import UniversalSession
                     if hasattr(self, 'session') and self.session:
-                        company_model = self.session.get_model_instance('company')
-                        if company_model and hasattr(company_model, '_facts'):
-                            if 'fact_prices' in company_model._facts:
+                        print(f"DEBUG: Attempting to load company model via session")
+                        company_model = self.session.load_model('company')
+                        if company_model:
+                            # Ensure company model is built
+                            company_model.ensure_built()
+                            if hasattr(company_model, '_facts') and 'fact_prices' in company_model._facts:
                                 duckdb_conn.register('fact_prices', company_model._facts['fact_prices'])
                                 print(f"✓ Registered fact_prices from company model")
+                                fact_prices_registered = True
                             else:
-                                print(f"⚠ fact_prices not in company model either")
+                                print(f"⚠ fact_prices not in company model _facts")
+                        else:
+                            print(f"⚠ Could not load company model")
+                    else:
+                        print(f"⚠ No session available to load company model")
                 except Exception as e:
                     print(f"⚠ Could not get fact_prices from company model: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            if not fact_prices_registered:
+                print(f"⚠ fact_prices could not be registered - view will only show predictions")
 
             # Register fact_forecasts from forecast model
             if 'fact_forecasts' in self._facts:
@@ -214,43 +227,82 @@ class CompanyForecastModel(TimeSeriesForecastModel):
             traceback.print_exc()
             return
 
-        # Register vw_price_predictions - combines actuals and predictions
-        view_sql = """
-        CREATE OR REPLACE VIEW forecast.vw_price_predictions AS
+        # Check what columns actually exist in fact_forecasts
+        try:
+            result = duckdb_conn.execute("SELECT * FROM fact_forecasts LIMIT 0").description
+            columns = [col[0] for col in result]
+            print(f"DEBUG: fact_forecasts columns: {columns}")
 
-        -- Historical actuals (from company model)
-        WITH actuals AS (
-            SELECT
-                trade_date as date,
-                ticker,
-                NULL as model_name,
-                close as actual,
-                NULL as predicted,
-                NULL as upper_bound,
-                NULL as lower_bound
-            FROM fact_prices
-        ),
+            # Determine which predicted column to use
+            if 'predicted_close' in columns:
+                predicted_col = 'predicted_close'
+            elif 'predicted_value' in columns:
+                predicted_col = 'predicted_value'
+            else:
+                print(f"⚠ Neither predicted_close nor predicted_value found in fact_forecasts")
+                return
 
-        -- Future predictions (from forecast model)
-        predictions AS (
+            print(f"DEBUG: Using predicted column: {predicted_col}")
+        except Exception as e:
+            print(f"⚠ Could not inspect fact_forecasts columns: {e}")
+            # Default to predicted_close
+            predicted_col = 'predicted_close'
+
+        # Build view SQL with actual or predictions-only based on fact_prices availability
+        if fact_prices_registered:
+            view_sql = f"""
+            CREATE OR REPLACE VIEW forecast.vw_price_predictions AS
+
+            -- Historical actuals (from company model)
+            WITH actuals AS (
+                SELECT
+                    trade_date as date,
+                    ticker,
+                    NULL as model_name,
+                    close as actual,
+                    NULL as predicted,
+                    NULL as upper_bound,
+                    NULL as lower_bound
+                FROM fact_prices
+            ),
+
+            -- Future predictions (from forecast model)
+            predictions AS (
+                SELECT
+                    prediction_date as date,
+                    ticker,
+                    model_name,
+                    NULL as actual,
+                    {predicted_col} as predicted,
+                    upper_bound,
+                    lower_bound
+                FROM fact_forecasts
+                WHERE target = 'close'
+            )
+
+            -- Combine both
+            SELECT * FROM actuals
+            UNION ALL
+            SELECT * FROM predictions
+            ORDER BY date, ticker, model_name
+            """
+        else:
+            # Predictions-only view if we don't have actuals
+            view_sql = f"""
+            CREATE OR REPLACE VIEW forecast.vw_price_predictions AS
             SELECT
                 prediction_date as date,
                 ticker,
                 model_name,
                 NULL as actual,
-                predicted_close as predicted,
+                {predicted_col} as predicted,
                 upper_bound,
                 lower_bound
             FROM fact_forecasts
             WHERE target = 'close'
-        )
-
-        -- Combine both
-        SELECT * FROM actuals
-        UNION ALL
-        SELECT * FROM predictions
-        ORDER BY date, ticker, model_name
-        """
+            ORDER BY date, ticker, model_name
+            """
+            print(f"ℹ Creating predictions-only view (fact_prices not available)")
 
         try:
             self.connection.execute(view_sql)
