@@ -48,24 +48,45 @@ $exhibits${
 
   y_axis:
     label: "Price ($)"
-
-  measure_selector:
-    available_measures: [actual, predicted, upper_bound, lower_bound]
-    default_measures: [actual, predicted]
-    selector_type: multiselect
-    label: "Select Metrics"
-    help_text: "Choose which metrics to display"
+    measures: [actual, predicted]
 
   dimension_selector:
-    available_dimensions: [ticker, model_name]
+    available_dimensions: [model_name]
     default_dimension: model_name
-    selector_type: radio
-    label: "Group By"
-    help_text: "Group predictions by ticker or model"
+    selector_type: multiselect
+    default_values: ["ARIMA_30d", "Prophet_30d"]
+    label: "Select Forecast Models"
+    help_text: "Choose which models to display (actuals always shown)"
+    show_all_option: true
 
   actual_column: actual
   predicted_column: predicted
   confidence_bounds: [lower_bound, upper_bound]
+
+  series_column: model_name
+  show_confidence_bands: true
+  confidence_opacity: 0.15
+
+  line_styles:
+    actual:
+      color: "#1f77b4"
+      width: 2.5
+      style: solid
+      name: "Actual"
+    predicted:
+      width: 2
+      style: solid
+    confidence:
+      opacity: 0.15
+
+  legend:
+    show: true
+    position: top_right
+
+  chart_config:
+    height: 500
+    show_grid: true
+    interactive: true
 }
 
 ## Model Accuracy Metrics
