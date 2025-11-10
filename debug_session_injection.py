@@ -45,7 +45,7 @@ else:
 # Load session and check injection logic
 print("\n[STEP 3] Loading UniversalSession and checking load_model logic...")
 from models.api.session import UniversalSession
-from core.config_loader import load_config
+from core.context import RepoContext
 
 # Check if session.load_model() has the injection code
 load_model_source = inspect.getsource(UniversalSession.load_model)
@@ -59,8 +59,12 @@ else:
 
 # Create session and load forecast model
 print("\n[STEP 4] Creating session and loading forecast model...")
-config = load_config('configs/main_config.yaml')
-session = UniversalSession(config)
+ctx = RepoContext.from_repo_root(connection_type="duckdb")
+session = UniversalSession(
+    connection=ctx.connection,
+    storage_cfg=ctx.storage,
+    repo_root=ctx.repo
+)
 print(f"✓ Session created: {session}")
 
 # Monkey-patch to trace calls

@@ -15,14 +15,16 @@ print("=" * 80)
 print("FORECAST VIEW STANDALONE TEST")
 print("=" * 80)
 
-# Step 1: Load configuration
-print("\n[1] Loading configuration...")
+# Step 1: Initialize repo context
+print("\n[1] Initializing repository context...")
 try:
-    from core.config_loader import load_config
-    config = load_config('configs/main_config.yaml')
-    print("✓ Config loaded")
+    from core.context import RepoContext
+    ctx = RepoContext.from_repo_root(connection_type="duckdb")
+    print("✓ Context initialized")
+    print(f"  - Connection type: {type(ctx.connection)}")
+    print(f"  - Repo root: {ctx.repo}")
 except Exception as e:
-    print(f"✗ Failed to load config: {e}")
+    print(f"✗ Failed to initialize context: {e}")
     import traceback
     traceback.print_exc()
     sys.exit(1)
@@ -31,7 +33,11 @@ except Exception as e:
 print("\n[2] Creating UniversalSession...")
 try:
     from models.api.session import UniversalSession
-    session = UniversalSession(config)
+    session = UniversalSession(
+        connection=ctx.connection,
+        storage_cfg=ctx.storage,
+        repo_root=ctx.repo
+    )
     print("✓ Session created")
     print(f"  - Session type: {type(session)}")
     print(f"  - Has model_graph: {hasattr(session, 'model_graph')}")

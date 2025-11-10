@@ -16,14 +16,18 @@ print("=" * 80)
 print("FORECAST VIEW CREATION DIAGNOSTIC")
 print("=" * 80)
 
-# Step 1: Load the session
+# Step 1: Initialize repo context and create session
 print("\n[STEP 1] Loading UniversalSession...")
 try:
+    from core.context import RepoContext
     from models.api.session import UniversalSession
-    from core.config_loader import load_config
 
-    config = load_config('configs/main_config.yaml')
-    session = UniversalSession(config)
+    ctx = RepoContext.from_repo_root(connection_type="duckdb")
+    session = UniversalSession(
+        connection=ctx.connection,
+        storage_cfg=ctx.storage,
+        repo_root=ctx.repo
+    )
     print("✓ Session loaded successfully")
     print(f"  - Has model_graph: {hasattr(session, 'model_graph')}")
     if hasattr(session, 'model_graph'):
