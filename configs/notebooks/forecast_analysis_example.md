@@ -44,20 +44,18 @@ $exhibits${
   x_axis: {dimension: date, label: "Date"}
   y_axis: {label: "Price ($)"}
 
-  measure_selector: {
+  measure_selector:
     available_measures: [actual, predicted, upper_bound, lower_bound]
     default_measures: [actual, predicted]
     selector_type: multiselect
     label: "Select Metrics"
     help_text: "Choose which metrics to display"
-  }
 
-  dimension_selector: {
+  dimension_selector:
     available_dimensions: [ticker, model_name]
     default_dimension: model_name
     label: "Group By"
     help_text: "Group predictions by ticker or model"
-  }
 
   # Optional: Special styling for actual vs predicted
   actual_column: actual          # Renders as solid line
