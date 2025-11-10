@@ -42,18 +42,8 @@ class TimeSeriesForecastModel(BaseModel):
             params: Runtime parameters
         """
         super().__init__(connection, storage_cfg, model_cfg, params)
-        self._session: Optional['UniversalSession'] = None
-
-    def set_session(self, session):
-        """
-        Inject session for cross-model access.
-
-        Forecast models typically need access to other models for training data.
-
-        Args:
-            session: UniversalSession instance
-        """
-        self._session = session
+        # Note: self.session is already initialized in BaseModel.__init__
+        # No need to re-initialize it here
 
     # ============================================================
     # ABSTRACT METHODS (must be implemented by subclasses)
@@ -138,7 +128,7 @@ class TimeSeriesForecastModel(BaseModel):
         Returns:
             DataFrame with time series data for training
         """
-        if not self._session:
+        if not self.session:
             raise RuntimeError(
                 f"{self.__class__.__name__} requires session for cross-model access. "
                 "Call set_session() first."
@@ -151,7 +141,7 @@ class TimeSeriesForecastModel(BaseModel):
 
         # Get source model
         source_model_name = self.get_source_model_name()
-        source_model = self._session.load_model(source_model_name)
+        source_model = self.session.load_model(source_model_name)
 
         # Get source table
         table_name = self.get_source_table_name()
