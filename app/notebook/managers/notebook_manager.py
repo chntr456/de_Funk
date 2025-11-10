@@ -464,6 +464,52 @@ class NotebookManager:
                 return exhibit
         return None
 
+    def _models_are_related(self, model_a: str, model_b: str) -> bool:
+        """
+        Check if two models have a declared relationship.
+
+        Checks:
+        1. depends_on list in model config
+        2. Graph edges between models
+
+        Args:
+            model_a: First model name (e.g., "forecast")
+            model_b: Second model name (e.g., "company")
+
+        Returns:
+            True if models are related, False otherwise
+        """
+        # Get model_a's config
+        try:
+            model_obj = self.session.get_model(model_a)
+            model_cfg = model_obj.model_cfg if hasattr(model_obj, 'model_cfg') else {}
+        except Exception:
+            # Can't get model config - assume not related
+            return False
+
+        # Check depends_on list
+        depends_on = model_cfg.get('depends_on', [])
+        if model_b in depends_on:
+            return True
+
+        # Check graph edges for cross-model relationships
+        graph = model_cfg.get('graph', {})
+        edges = graph.get('edges', [])
+
+        for edge in edges:
+            # Parse edge targets (may be model.table format)
+            from_node = edge.get('from', '')
+            to_node = edge.get('to', '')
+
+            # Extract model names from node references
+            to_model = to_node.split('.')[0] if '.' in to_node else None
+
+            # Check if edge connects to model_b
+            if to_model == model_b:
+                return True
+
+        return False
+
     def _parse_source(self, source: str) -> tuple[str, str]:
         """
         Parse exhibit source string.
@@ -492,9 +538,10 @@ class NotebookManager:
         All filters (notebook + folder) are now merged in _filter_collection,
         so this method is simplified to a single source of truth.
 
-        Filters are applied based on column names, allowing shared dimensions
-        (like 'ticker', 'date') to work seamlessly across models. The graph
-        structure and view definitions handle model relationships and column mapping.
+        Filters are applied based on DECLARED MODEL RELATIONSHIPS:
+        - Same model filters always apply
+        - Cross-model filters apply if relationship exists (depends_on or graph edge)
+        - This ensures graph structure is respected and prevents arbitrary cross-model contamination
 
         Args:
             exhibit: Exhibit configuration
@@ -503,6 +550,14 @@ class NotebookManager:
             Dictionary of filters (column_name -> filter_value) for FilterEngine
         """
         filters = {}
+
+        # Get exhibit's source model for relationship checking
+        exhibit_model = None
+        if hasattr(exhibit, 'source') and exhibit.source:
+            try:
+                exhibit_model, _ = self._parse_source(exhibit.source)
+            except (ValueError, AttributeError):
+                pass
 
         # Single source of truth: _filter_collection (contains merged notebook + folder filters)
         if (self.notebook_config and
@@ -522,9 +577,22 @@ class NotebookManager:
 
                 filter_config = filter_collection.get_filter(filter_id)
                 if not filter_config:
-                    # No config - use raw value
+                    # No config - use raw value (global filter)
                     filters[filter_id] = value
                     continue
+
+                # Check if filter should apply based on model relationships
+                if exhibit_model and filter_config.source:
+                    filter_model = filter_config.source.model
+
+                    # Same model - always apply
+                    if filter_model == exhibit_model:
+                        pass  # Apply filter
+
+                    # Cross-model - check if relationship exists
+                    elif not self._models_are_related(exhibit_model, filter_model):
+                        # No relationship declared - skip this filter
+                        continue
 
                 # Convert based on filter type
                 if filter_config.type == FilterType.DATE_RANGE:
