@@ -164,6 +164,15 @@ class CompanyForecastModel(TimeSeriesForecastModel):
         if not hasattr(self.connection, 'execute'):
             return
 
+        try:
+            # Ensure schemas exist in DuckDB
+            self.connection.execute("CREATE SCHEMA IF NOT EXISTS company")
+            self.connection.execute("CREATE SCHEMA IF NOT EXISTS forecast")
+            print(f"✓ Ensured schemas exist: company, forecast")
+        except Exception as e:
+            print(f"⚠ Could not create schemas: {e}")
+            return
+
         # Register vw_price_predictions - combines actuals and predictions
         view_sql = """
         CREATE OR REPLACE VIEW forecast.vw_price_predictions AS
