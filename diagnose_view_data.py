@@ -147,6 +147,14 @@ try:
         """).fetchdf()
         print("\nSample from fact_prices:")
         print(sample_prices.to_string())
+
+        # Check if this is the full table or just AADR
+        ticker_count = conn.execute("SELECT COUNT(DISTINCT ticker) as cnt FROM fact_prices").fetchdf()['cnt'][0]
+        print(f"\nDistinct tickers in fact_prices: {ticker_count}")
+
+        if ticker_count == 1:
+            print("⚠ WARNING: fact_prices only has 1 ticker! It should have many.")
+            print("   This means the table creation copied only forecast data, not the full company data.")
 except Exception as e:
     print(f"⚠ Error checking fact_prices: {e}")
 
