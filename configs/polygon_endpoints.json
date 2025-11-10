@@ -3,7 +3,7 @@
 
 {
   "credentials": { "api_keys": [] },
-  "base_urls": { "core": "https://api.massive.com" },
+  "base_urls": { "core": "https://api.polygon.io" },
   "headers": { "Authorization": "Bearer ${API_KEY}" },
   "rate_limit_per_sec": 1.0000,
   "endpoints": {
