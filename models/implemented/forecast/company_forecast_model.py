@@ -81,14 +81,28 @@ class CompanyForecastModel(TimeSeriesForecastModel):
         Returns:
             DataFrame
         """
+        # Map table names to actual schema paths
+        # The graph.yaml uses short names like "forecasts", but schema.yaml has full paths
+        table_path_map = {
+            'forecasts': 'facts/forecast_price',
+            'forecast_price': 'facts/forecast_price',
+            'metrics': 'facts/forecast_metrics',
+            'forecast_metrics': 'facts/forecast_metrics',
+            'model_registry': 'facts/model_registry',
+        }
+
+        # Get the actual path from mapping, or use table_name as fallback
+        actual_path = table_path_map.get(table_name, table_name)
+
         # Get forecast Silver root
         forecast_root = self.storage_cfg['roots'].get(
             'forecast_silver',
             'storage/silver/forecast'
         )
 
-        # Build path
-        path = f"{forecast_root}/{table_name}"
+        # Build full path
+        path = f"{forecast_root}/{actual_path}"
+        print(f"DEBUG: Loading from silver path: {path}")
 
         # Load with connection
         if hasattr(self.connection, 'read'):
@@ -117,34 +131,46 @@ class CompanyForecastModel(TimeSeriesForecastModel):
         Returns:
             Empty DataFrame with schema
         """
+        # Map short names to fact table names
+        name_to_fact_map = {
+            'forecasts': 'fact_forecasts',
+            'forecast_price': 'fact_forecasts',
+            'metrics': 'fact_forecast_metrics',
+            'forecast_metrics': 'fact_forecast_metrics',
+            'model_registry': 'fact_model_registry',
+        }
+
+        # Get the fact table name
+        fact_table_name = name_to_fact_map.get(table_name, f"fact_{table_name}")
+
         # Get schema from config
         schema_config = self.model_cfg.get('schema', {}).get('facts', {})
 
-        # Find matching table
-        for table_id, table_def in schema_config.items():
-            if table_def['path'].endswith(table_name):
-                # Create empty DataFrame with schema
-                from pyspark.sql.types import (
-                    StructType, StructField, StringType, IntegerType,
-                    DoubleType, DateType, LongType, BooleanType
-                )
+        # Find matching table by fact table name
+        table_def = schema_config.get(fact_table_name)
+        if table_def:
+            # Create empty DataFrame with schema
+            from pyspark.sql.types import (
+                StructType, StructField, StringType, IntegerType,
+                DoubleType, DateType, LongType, BooleanType
+            )
 
-                type_map = {
-                    'string': StringType(),
-                    'int': IntegerType(),
-                    'double': DoubleType(),
-                    'date': DateType(),
-                    'long': LongType(),
-                    'boolean': BooleanType(),
-                }
+            type_map = {
+                'string': StringType(),
+                'int': IntegerType(),
+                'double': DoubleType(),
+                'date': DateType(),
+                'long': LongType(),
+                'boolean': BooleanType(),
+            }
 
-                fields = [
-                    StructField(col_name, type_map.get(col_type, StringType()), True)
-                    for col_name, col_type in table_def['columns'].items()
-                ]
+            fields = [
+                StructField(col_name, type_map.get(col_type, StringType()), True)
+                for col_name, col_type in table_def['columns'].items()
+            ]
 
-                schema = StructType(fields)
-                return self.connection.createDataFrame([], schema)
+            schema = StructType(fields)
+            return self.connection.createDataFrame([], schema)
 
         # Fallback: empty DataFrame
         return self.connection.createDataFrame([], StructType([]))
