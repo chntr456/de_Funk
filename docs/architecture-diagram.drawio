@@ -1,4 +1,4 @@
-<mxfile host="app.diagrams.net" modified="2024-11-10T00:00:00.000Z" agent="de_Funk Architecture" version="22.0.0" type="device" pages="6">
+<mxfile host="app.diagrams.net" modified="2024-11-10T00:00:00.000Z" agent="de_Funk Architecture" version="22.0.0" type="device" pages="7">
   <diagram id="overview" name="1. Architecture Overview">
     <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
       <root>
@@ -848,6 +848,290 @@
         <!-- Arrow phase3 to result -->
         <mxCell id="arrow-p3-result" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=3;endArrow=classic;endFill=1;strokeColor=#b85450;" edge="1" parent="1" source="phase3-box" target="result-box">
           <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+  <diagram id="model-entities" name="7. Model Entities (Facts & Dims)">
+    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="entities-title" value="Model Entities: Dimensions &amp; Facts" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="400" y="20" width="600" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Subtitle -->
+        <mxCell id="entities-subtitle" value="UML-style entity diagrams showing each model's dimensions, facts, and paths" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="300" y="55" width="800" height="25" as="geometry" />
+        </mxCell>
+
+        <!-- ========== CORE MODEL ========== -->
+        <mxCell id="core-container" value="CORE MODEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=14;fontStyle=1;verticalAlign=top;align=left;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="300" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- Core Dimensions -->
+        <mxCell id="core-dims-title" value="Dimensions" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="60" y="130" width="260" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- dim_calendar -->
+        <mxCell id="core-dim-calendar" value="«dimension»&#xa;dim_calendar" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="160" width="260" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="core-cal-attrs" value="+ date: date [PK]&#xa;+ year, quarter, month: integer&#xa;+ day_of_week, day_of_year: integer&#xa;+ is_weekend, is_weekday: boolean&#xa;+ fiscal_year, fiscal_quarter: integer" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="core-dim-calendar">
+          <mxGeometry y="40" width="260" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ========== COMPANY MODEL ========== -->
+        <mxCell id="company-container" value="COMPANY MODEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;fontStyle=1;verticalAlign=top;align=left;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="380" y="100" width="480" height="550" as="geometry" />
+        </mxCell>
+
+        <!-- Company Dimensions -->
+        <mxCell id="company-dims-title" value="Dimensions" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="400" y="130" width="440" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- dim_company -->
+        <mxCell id="company-dim-company" value="«dimension»&#xa;dim_company" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="160" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="company-dim-company-attrs" value="+ ticker: string [PK]&#xa;+ company_name: string&#xa;+ exchange_code: string&#xa;+ company_id: string&#xa;+ market_cap_proxy: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-dim-company">
+          <mxGeometry y="40" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- dim_exchange -->
+        <mxCell id="company-dim-exchange" value="«dimension»&#xa;dim_exchange" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="160" width="200" height="90" as="geometry" />
+        </mxCell>
+        <mxCell id="company-dim-exchange-attrs" value="+ exchange_code: string [PK]&#xa;+ exchange_name: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-dim-exchange">
+          <mxGeometry y="40" width="200" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Company Facts -->
+        <mxCell id="company-facts-title" value="Facts" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="400" y="290" width="440" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- fact_prices -->
+        <mxCell id="company-fact-prices" value="«fact»&#xa;fact_prices" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="320" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="company-fact-prices-attrs" value="+ trade_date: date&#xa;+ ticker: string [FK]&#xa;+ open, high, low: double&#xa;+ close: double&#xa;+ volume: long&#xa;+ volume_weighted: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-fact-prices">
+          <mxGeometry y="40" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- fact_news -->
+        <mxCell id="company-fact-news" value="«fact»&#xa;fact_news" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="320" width="200" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="company-fact-news-attrs" value="+ publish_date: date&#xa;+ ticker: string [FK]&#xa;+ article_id: string&#xa;+ title: string&#xa;+ sentiment: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-fact-news">
+          <mxGeometry y="40" width="200" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Company Paths -->
+        <mxCell id="company-paths-title" value="Paths (Materialized Views)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="400" y="470" width="440" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- prices_with_company -->
+        <mxCell id="company-path-prices" value="«path»&#xa;prices_with_company" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="400" y="500" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="company-path-prices-attrs" value="Hops: fact_prices →&#xa;  dim_company → dim_exchange&#xa;&#xa;Includes all price fields +&#xa;company_name + exchange_name" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-path-prices">
+          <mxGeometry y="40" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- news_with_company -->
+        <mxCell id="company-path-news" value="«path»&#xa;news_with_company" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="640" y="500" width="200" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="company-path-news-attrs" value="Hops: fact_news →&#xa;  dim_company&#xa;&#xa;Includes all news fields +&#xa;company_name" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="company-path-news">
+          <mxGeometry y="40" width="200" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- ========== MACRO MODEL ========== -->
+        <mxCell id="macro-container" value="MACRO MODEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;fontStyle=1;verticalAlign=top;align=left;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="900" y="100" width="460" height="550" as="geometry" />
+        </mxCell>
+
+        <!-- Macro Dimensions -->
+        <mxCell id="macro-dims-title" value="Dimensions" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="920" y="130" width="420" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- dim_economic_series -->
+        <mxCell id="macro-dim-series" value="«dimension»&#xa;dim_economic_series" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="920" y="160" width="220" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-dim-series-attrs" value="+ series_id: string [PK]&#xa;+ series_name: string&#xa;+ category: string&#xa;+ frequency: string&#xa;+ units: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="macro-dim-series">
+          <mxGeometry y="40" width="220" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Macro Facts -->
+        <mxCell id="macro-facts-title" value="Facts" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="920" y="300" width="420" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- fact_unemployment -->
+        <mxCell id="macro-fact-unemp" value="«fact»&#xa;fact_unemployment" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="920" y="330" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-fact-unemp-attrs" value="+ series_id: string [FK]&#xa;+ date: date&#xa;+ year: integer&#xa;+ period: string&#xa;+ value: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="macro-fact-unemp">
+          <mxGeometry y="40" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- fact_cpi -->
+        <mxCell id="macro-fact-cpi" value="«fact»&#xa;fact_cpi" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="330" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-fact-cpi-attrs" value="+ series_id: string [FK]&#xa;+ date: date&#xa;+ year: integer&#xa;+ period: string&#xa;+ value: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="macro-fact-cpi">
+          <mxGeometry y="40" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- fact_employment -->
+        <mxCell id="macro-fact-emp" value="«fact»&#xa;fact_employment" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="920" y="470" width="200" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-fact-emp-attrs" value="+ series_id: string [FK]&#xa;+ date: date&#xa;+ year: integer&#xa;+ period: string&#xa;+ value: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="macro-fact-emp">
+          <mxGeometry y="40" width="200" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- fact_wages -->
+        <mxCell id="macro-fact-wages" value="«fact»&#xa;fact_wages" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="470" width="180" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="macro-fact-wages-attrs" value="+ series_id: string [FK]&#xa;+ date: date&#xa;+ year: integer&#xa;+ period: string&#xa;+ value: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="macro-fact-wages">
+          <mxGeometry y="40" width="180" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ========== FORECAST MODEL ========== -->
+        <mxCell id="forecast-container" value="FORECAST MODEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=14;fontStyle=1;verticalAlign=top;align=left;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="340" width="300" height="310" as="geometry" />
+        </mxCell>
+
+        <!-- Forecast Facts -->
+        <mxCell id="forecast-facts-title" value="Facts" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="60" y="370" width="260" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- forecast_price -->
+        <mxCell id="forecast-fact-price" value="«fact»&#xa;forecast_price" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="400" width="260" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="forecast-fact-price-attrs" value="+ ticker: string&#xa;+ forecast_date, prediction_date: date&#xa;+ horizon: int, model_name: string&#xa;+ predicted_close: double&#xa;+ lower_bound, upper_bound: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="forecast-fact-price">
+          <mxGeometry y="40" width="260" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- forecast_metrics -->
+        <mxCell id="forecast-fact-metrics" value="«fact»&#xa;forecast_metrics" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="530" width="260" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="forecast-fact-metrics-attrs" value="+ ticker, model_name: string&#xa;+ metric_date: date&#xa;+ mae, rmse, mape: double&#xa;+ r2_score: double" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="forecast-fact-metrics">
+          <mxGeometry y="40" width="260" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ========== CITY FINANCE MODEL ========== -->
+        <mxCell id="cityfinance-container" value="CITY FINANCE MODEL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;fontStyle=1;verticalAlign=top;align=left;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="690" width="820" height="280" as="geometry" />
+        </mxCell>
+
+        <!-- CityFinance Dimensions -->
+        <mxCell id="cityfinance-dims-title" value="Dimensions" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="60" y="720" width="780" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- dim_community_area -->
+        <mxCell id="cityfinance-dim-area" value="«dimension»&#xa;dim_community_area" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="750" width="220" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-dim-area-attrs" value="+ community_area: string [PK]&#xa;+ community_name: string&#xa;+ geography_type: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-dim-area">
+          <mxGeometry y="40" width="220" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- dim_permit_type -->
+        <mxCell id="cityfinance-dim-permit" value="«dimension»&#xa;dim_permit_type" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="320" y="750" width="200" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-dim-permit-attrs" value="+ permit_type: string [PK]&#xa;+ permit_category: string" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-dim-permit">
+          <mxGeometry y="40" width="200" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- CityFinance Facts -->
+        <mxCell id="cityfinance-facts-title" value="Facts" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="560" y="720" width="280" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- fact_local_unemployment -->
+        <mxCell id="cityfinance-fact-unemp" value="«fact»&#xa;fact_local_unemployment" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="560" y="750" width="240" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-fact-unemp-attrs" value="+ geography: string [FK]&#xa;+ date: date&#xa;+ unemployment_rate: double&#xa;+ labor_force, employed: long&#xa;+ unemployed: long" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-fact-unemp">
+          <mxGeometry y="40" width="240" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- fact_building_permits -->
+        <mxCell id="cityfinance-fact-permits" value="«fact»&#xa;fact_building_permits" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="60" y="870" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-fact-permits-attrs" value="+ permit_number: string&#xa;+ issue_date: date&#xa;+ total_fee: double&#xa;+ community_area: string [FK]" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-fact-permits">
+          <mxGeometry y="40" width="240" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Paths -->
+        <mxCell id="cityfinance-paths-title" value="Paths (Materialized)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=1" vertex="1" parent="1">
+          <mxGeometry x="320" y="870" width="280" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- unemployment_with_area -->
+        <mxCell id="cityfinance-path-unemp" value="«path»&#xa;unemployment_with_area" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="320" y="900" width="260" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-path-unemp-attrs" value="Hops: fact_local_unemployment →&#xa;  dim_community_area" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-path-unemp">
+          <mxGeometry y="40" width="260" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- permits_with_area -->
+        <mxCell id="cityfinance-path-permits" value="«path»&#xa;permits_with_area" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=40;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="600" y="900" width="240" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="cityfinance-path-permits-attrs" value="Hops: fact_building_permits →&#xa;  dim_community_area" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontSize=10;fontFamily=Courier New;" vertex="1" parent="cityfinance-path-permits">
+          <mxGeometry y="40" width="240" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend-entities" value="Legend" style="rounded=0;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#666666;fontSize=11;fontStyle=1;verticalAlign=top;align=left;" vertex="1" parent="1">
+          <mxGeometry x="900" y="690" width="460" height="280" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-dim-box" value="«dimension»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="720" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-dim-text" value="Dimension: Entity/Lookup table&#xa;(dim_*)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="720" width="290" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-fact-box" value="«fact»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="770" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-fact-text" value="Fact: Event/Transaction table&#xa;(fact_*)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="770" width="290" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-path-box" value="«path»" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="920" y="820" width="120" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="legend-path-text" value="Path: Materialized view (joined)&#xa;Created by multi-hop joins" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="820" width="290" height="30" as="geometry" />
+        </mxCell>
+
+        <mxCell id="legend-note" value="Notes:&#xa;• [PK] = Primary Key&#xa;• [FK] = Foreign Key (references dimension)&#xa;• Paths are built from graph.paths definitions&#xa;• All tables loaded from Bronze via graph.nodes&#xa;• Edges validated during model build" style="text;html=1;strokeColor=none;fillColor=#e1d5e7;align=left;verticalAlign=top;whiteSpace=wrap;rounded=1;fontSize=10;strokeColor=#9673a6;fontFamily=Helvetica;" vertex="1" parent="1">
+          <mxGeometry x="920" y="870" width="420" height="90" as="geometry" />
         </mxCell>
 
       </root>
