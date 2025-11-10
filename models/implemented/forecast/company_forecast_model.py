@@ -187,7 +187,7 @@ class CompanyForecastModel(TimeSeriesForecastModel):
                 NULL as predicted,
                 NULL as upper_bound,
                 NULL as lower_bound
-            FROM company.fact_prices
+            FROM fact_prices
         ),
 
         -- Future predictions (from forecast model)
@@ -200,7 +200,7 @@ class CompanyForecastModel(TimeSeriesForecastModel):
                 predicted_close as predicted,
                 upper_bound,
                 lower_bound
-            FROM forecast.fact_forecasts
+            FROM fact_forecasts
             WHERE target = 'close'
         )
 
