@@ -302,6 +302,11 @@ class Exhibit:
     # Additional options
     options: Optional[Dict[str, Any]] = None
 
+    # Forecast chart specific options
+    actual_column: Optional[str] = None  # Column name for actual values
+    predicted_column: Optional[str] = None  # Column name for predicted values
+    confidence_bounds: Optional[List[str]] = None  # [lower_bound_col, upper_bound_col]
+
 
 @dataclass
 class Section:

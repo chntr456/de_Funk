@@ -382,16 +382,36 @@ class MarkdownNotebookParser:
         # Parse streamlined axis parameters
         x_axis = None
         if 'x' in data:
+            # Shorthand syntax: x: dimension_name
             x_axis = AxisConfig(
                 dimension=data['x'],
                 label=data.get('x_label', data['x'])
             )
+        elif 'x_axis' in data and isinstance(data['x_axis'], dict):
+            # Full syntax: x_axis: {dimension: ..., label: ...}
+            x_axis = AxisConfig(
+                dimension=data['x_axis'].get('dimension'),
+                measure=data['x_axis'].get('measure'),
+                measures=data['x_axis'].get('measures'),
+                label=data['x_axis'].get('label'),
+                scale=data['x_axis'].get('scale')
+            )
 
         y_axis = None
         if 'y' in data:
+            # Shorthand syntax: y: measure_name
             y_axis = AxisConfig(
                 measure=data['y'],
                 label=data.get('y_label', data['y'])
+            )
+        elif 'y_axis' in data and isinstance(data['y_axis'], dict):
+            # Full syntax: y_axis: {measures: [...], label: ...}
+            y_axis = AxisConfig(
+                dimension=data['y_axis'].get('dimension'),
+                measure=data['y_axis'].get('measure'),
+                measures=data['y_axis'].get('measures'),
+                label=data['y_axis'].get('label'),
+                scale=data['y_axis'].get('scale')
             )
 
         y_axis_left = None
@@ -492,6 +512,10 @@ class MarkdownNotebookParser:
             component=data.get('component'),
             params=data.get('params'),
             options=data.get('options'),
+            # Forecast chart specific
+            actual_column=data.get('actual_column'),
+            predicted_column=data.get('predicted_column'),
+            confidence_bounds=data.get('confidence_bounds'),
         )
 
     def _build_config(
