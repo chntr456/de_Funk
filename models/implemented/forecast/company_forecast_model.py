@@ -231,7 +231,49 @@ class CompanyForecastModel(TimeSeriesForecastModel):
     def ensure_built(self):
         """Override to register views after building."""
         super().ensure_built()
+
+        # Register views after model is built
+        print(f"DEBUG: CompanyForecastModel.ensure_built() - calling register_views()")
+        print(f"DEBUG: Connection type: {type(self.connection)}")
+        print(f"DEBUG: Has execute: {hasattr(self.connection, 'execute')}")
+        print(f"DEBUG: Has _facts: {hasattr(self, '_facts')}")
+        if hasattr(self, '_facts'):
+            print(f"DEBUG: Current _facts keys: {list(self._facts.keys())}")
+
         self.register_views()
+
+        if hasattr(self, '_facts'):
+            print(f"DEBUG: After register_views, _facts keys: {list(self._facts.keys())}")
+
+    # ============================================================
+    # TABLE ACCESS (override to handle views)
+    # ============================================================
+
+    def get_table(self, table_name: str):
+        """
+        Override get_table to support lazy view registration.
+
+        If view doesn't exist in _facts but is a known view name,
+        try to register it lazily.
+        """
+        # Try parent implementation first
+        try:
+            return super().get_table(table_name)
+        except KeyError:
+            # If it's the view we know about, try to register it
+            if table_name == 'vw_price_predictions':
+                print(f"DEBUG: View '{table_name}' not found, attempting lazy registration")
+                self.register_views()
+
+                # Try again after registration
+                if table_name in self._facts:
+                    return self._facts[table_name]
+                else:
+                    # Registration failed, re-raise original error
+                    raise
+
+            # Not a view we know about, re-raise
+            raise
 
     # ============================================================
     # CONVENIENCE METHODS (company-specific)
