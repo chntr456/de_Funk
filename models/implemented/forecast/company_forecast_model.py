@@ -166,7 +166,7 @@ class CompanyForecastModel(TimeSeriesForecastModel):
 
         # Register vw_price_predictions - combines actuals and predictions
         view_sql = """
-        CREATE OR REPLACE VIEW vw_price_predictions AS
+        CREATE OR REPLACE VIEW forecast.vw_price_predictions AS
 
         -- Historical actuals (from company model)
         WITH actuals AS (
@@ -204,17 +204,29 @@ class CompanyForecastModel(TimeSeriesForecastModel):
 
         try:
             self.connection.execute(view_sql)
+            print(f"✓ Created view: forecast.vw_price_predictions")
 
             # Register the view in the model's _facts dictionary so it's discoverable
             # via get_table() and can be used as a filter source
-            if hasattr(self, '_facts') and hasattr(self.connection, 'table'):
+            if hasattr(self, '_facts'):
                 # Query the view to make it available as a table
-                view_df = self.connection.table('vw_price_predictions')
-                self._facts['vw_price_predictions'] = view_df
+                try:
+                    if hasattr(self.connection, 'table'):
+                        view_df = self.connection.table('forecast.vw_price_predictions')
+                    else:
+                        # Fallback: execute a SELECT to get the relation
+                        view_df = self.connection.execute("SELECT * FROM forecast.vw_price_predictions LIMIT 0").fetchdf()
+
+                    self._facts['vw_price_predictions'] = view_df
+                    print(f"✓ Registered view in _facts: vw_price_predictions")
+                except Exception as e:
+                    print(f"⚠ Could not register view in _facts: {e}")
+                    # Still continue - view exists in database even if not in _facts
 
         except Exception as e:
-            # View registration is optional (tables might not exist yet)
-            pass
+            # Log the error but don't fail - views are optional (tables might not exist yet)
+            print(f"⚠ Could not create view vw_price_predictions: {e}")
+            print(f"   This is normal if company or forecast tables don't exist yet")
 
     def ensure_built(self):
         """Override to register views after building."""

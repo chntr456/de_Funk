@@ -535,6 +535,19 @@ class BaseModel:
             raise KeyError(f"Fact '{fact_id}' not found in {self.model_name}")
         return self._facts[fact_id]
 
+    def has_table(self, table_name: str) -> bool:
+        """
+        Check if a table exists in this model.
+
+        Args:
+            table_name: Table identifier
+
+        Returns:
+            True if table exists (in dimensions or facts), False otherwise
+        """
+        self.ensure_built()
+        return table_name in self._dims or table_name in self._facts
+
     def list_tables(self) -> Dict[str, List[str]]:
         """
         List all available tables.
