@@ -41,8 +41,12 @@ $exhibits${
   title: "Stock Price Predictions"
   description: "Interactive time series with predictions and confidence intervals"
 
-  x_axis: {dimension: date, label: "Date"}
-  y_axis: {label: "Price ($)"}
+  x_axis:
+    dimension: date
+    label: "Date"
+
+  y_axis:
+    label: "Price ($)"
 
   measure_selector:
     available_measures: [actual, predicted, upper_bound, lower_bound]
@@ -72,11 +76,13 @@ $exhibits${
   source: forecast.vw_price_predictions
   title: "Price Forecast - ARIMA Model"
 
-  x_axis: {dimension: date, label: "Date"}
-  y_axis: {
+  x_axis:
+    dimension: date
+    label: "Date"
+
+  y_axis:
     measures: [actual, predicted]
     label: "Price ($)"
-  }
 
   color_by: ticker
 

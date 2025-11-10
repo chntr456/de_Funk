@@ -230,9 +230,9 @@ graph:
 
     - from: fact_forecast_metrics
       to: core.dim_calendar
-      on: [metric_date = trade_date]
+      on: [metric_date = trade_date, metric_date = date]
       type: left
-      description: "Join metrics to calendar on metric date"
+      description: "Join metrics to calendar on metric date (supports both trade_date and date filters)"
 
     # Cross-model edge: forecast inherits from company for ticker dimension
     - from: fact_forecasts
