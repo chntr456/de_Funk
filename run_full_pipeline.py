@@ -27,6 +27,7 @@ PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from orchestration.common.spark_session import get_spark_session
+from utils.env_loader import inject_credentials_into_config
 
 
 def build_calendar_dimension(spark, repo_root: Path, storage_cfg: dict):
@@ -94,6 +95,9 @@ def ingest_company_data(spark, repo_root: Path, storage_cfg: dict, top_n: int = 
     polygon_cfg_path = repo_root / "configs" / "polygon_endpoints.json"
     with open(polygon_cfg_path) as f:
         polygon_cfg = json.load(f)
+
+    # Inject API keys from environment variables
+    polygon_cfg = inject_credentials_into_config(polygon_cfg, 'polygon')
 
     # Create ingestor
     ingestor = CompanyPolygonIngestor(
