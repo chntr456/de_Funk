@@ -1,4 +1,54 @@
-# de_Funk Architecture - Call Organization
+# de_Funk Architecture
+
+---
+
+## Overview
+
+**de_Funk** is a general-purpose analytics platform built on a powerful graph-based modeling engine. It enables analysts and data teams to build sophisticated data pipelines and interactive analytics applications without writing complex ETL code.
+
+### Key Characteristics
+
+**Graph-Based Engine**
+- Models defined declaratively as graphs with nodes (tables), edges (relationships), and paths (materialized joins)
+- Automatic relationship validation and referential integrity checking
+- Multi-hop join materialization through path definitions
+- Backend-agnostic design (Spark and DuckDB support)
+
+**Declarative Configuration**
+- All model structure defined in YAML, not code
+- Nodes transform raw data with select/derive operations
+- Edges define relationships between tables
+- Paths materialize complex multi-table joins
+- Measures define reusable calculations
+
+**Interactive Notebooks**
+- Markdown-based notebooks with embedded filters and exhibits
+- Dynamic filtering with 6 filter types (select, date_range, number_range, slider, text_search, boolean)
+- 12 exhibit types for visualization (line charts, bar charts, metrics, tables, forecasts, etc.)
+- Interactive measure and dimension selectors
+- Collapsible sections for organization
+
+**Medallion Architecture**
+- **Bronze Layer**: Raw data ingestion from various sources
+- **Silver Layer**: Graph-based dimensional models (facts and dimensions)
+- **Gold Layer**: Aggregated metrics and business-ready datasets
+
+**Model-Agnostic Design**
+- Generic BaseModel implements all graph logic
+- Domain models inherit behavior through YAML configuration
+- UniversalSession provides unified access to all models
+- Extensible through custom node loading and post-build hooks
+
+### Use Cases
+
+de_Funk is designed for:
+- **Financial Analytics**: Stock prices, market data, economic indicators, forecasts
+- **Business Intelligence**: Sales analysis, customer segmentation, product performance
+- **Operational Analytics**: Supply chain, logistics, inventory management
+- **Research & Data Science**: Exploratory analysis, hypothesis testing, model validation
+- **Data Engineering**: Pipeline orchestration, data quality, schema evolution
+
+The platform's graph-based engine makes it particularly well-suited for domains with complex relationships between entities, such as financial markets, social networks, supply chains, and organizational hierarchies.
 
 ---
 
@@ -214,7 +264,9 @@ Note: FilterEngine is NOT owned by any component - it's a standalone utility
 
 ---
 
-## Call Flow Example: Querying Stock Prices
+## Call Flow Example: Querying Data with Filters
+
+This example demonstrates querying data from a graph-based model with filtering, using the Company model (stock prices) as an illustrative use case.
 
 ```
 1. User Code:
@@ -227,10 +279,10 @@ Note: FilterEngine is NOT owned by any component - it's a standalone utility
    │ session = UniversalSession(ctx.connection, ctx.storage,    │
    │                            ctx.repo)                        │
    │                                                             │
-   │ # Query with filters                                       │
+   │ # Query fact table from any model                          │
    │ prices = session.get_fact_df('company', 'fact_prices')     │
    │                                                             │
-   │ # Apply filters using FilterEngine (user can call directly)│
+   │ # Apply filters using FilterEngine (backend-agnostic)      │
    │ filters = {'ticker': ['AAPL', 'MSFT'],                     │
    │            'trade_date': {'min': '2024-01-01'}}            │
    │ filtered = FilterEngine.apply_from_session(prices,         │
@@ -566,16 +618,28 @@ When a model is first accessed, BaseModel executes a 3-phase build process:
 - **Pattern**: All models inherit from BaseModel
 - **Key Innovation**: Graph structure defined in YAML, not code
 
-### **Specific Models** (Domain Logic)
-- **CompanyModel**: Stock market data (Polygon.io)
-- **MacroModel**: Economic indicators (BLS)
-- **ForecastModel**: ML predictions (trained on Company)
-- **CityFinanceModel**: Municipal data (Chicago Data Portal)
-- **Responsibilities**:
-  - Implement domain-specific hooks
-  - Override build steps if needed
-  - Provide custom methods
-  - Define YAML configuration
+### **Domain Models** (Example Implementations)
+
+de_Funk is domain-agnostic and can model any data with relationships. Example models included:
+
+- **CompanyModel**: Financial market data (stocks, prices, exchanges)
+- **MacroModel**: Economic indicators and time series
+- **ForecastModel**: ML predictions and forecasting
+- **CityFinanceModel**: Municipal finance and geographic data
+- **CoreModel**: Shared dimensions (calendar, dates)
+
+**All models inherit from BaseModel and share:**
+- Graph-based structure (nodes, edges, paths)
+- Declarative YAML configuration
+- Automatic validation and materialization
+- Backend-agnostic operations
+- Extensibility through hooks
+
+**Responsibilities**:
+  - Define YAML configuration (graph structure, measures)
+  - Implement domain-specific hooks (optional)
+  - Override build steps if needed (optional)
+  - Provide custom methods for domain logic (optional)
 
 ### **StorageRouter** (Path Resolution)
 - **Purpose**: Resolve logical names to physical paths
