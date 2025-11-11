@@ -757,3 +757,797 @@ where_clause = FilterEngine.build_filter_sql(filters)
 ---
 
 This architecture provides a clean separation of concerns, enables code reuse, and supports both Spark and DuckDB backends transparently. FilterEngine is positioned as a true utility that any component can leverage, rather than being owned by a specific layer.
+
+---
+
+## Markdown Notebook Syntax
+
+de_Funk supports **markdown-based notebooks** with embedded YAML front matter, dynamic filters, and interactive visualizations. This provides a declarative, version-control-friendly way to build analytics notebooks.
+
+### Document Structure
+
+```markdown
+---
+# YAML Front Matter
+id: my_notebook
+title: "My Analytics Notebook"
+models: [company, macro]
+---
+
+# Notebook Content
+
+Regular markdown content here...
+
+$filters${
+  # Filter definitions
+}
+
+More markdown...
+
+$exhibits${
+  # Visualization definitions
+}
+```
+
+---
+
+## `$filters$` Syntax
+
+The `$filters${}` block defines **dynamic filters** that render in the sidebar and allow users to interactively filter data. Filters can pull options dynamically from the database and support fuzzy matching, range selections, and more.
+
+### Filter Block Structure
+
+```markdown
+$filters${
+  # Filter 1
+  ---
+  # Filter 2
+  ---
+  # Filter 3
+}
+```
+
+Each filter is defined in YAML and separated by `---`.
+
+### Basic Filter Example
+
+```yaml
+id: ticker
+label: Stock Tickers
+multi: true
+default: ["AAPL", "MSFT"]
+```
+
+This creates a multi-select dropdown for the `ticker` column with default selections.
+
+### Filter Types
+
+#### 1. **Select Filter** (Single or Multi-Select)
+
+```yaml
+id: ticker
+type: select
+label: Select Stocks
+multi: true  # Allow multiple selections
+required: false
+placeholder: Choose tickers...
+help_text: Select one or more stock tickers
+```
+
+**With Dynamic Options from Database:**
+
+```yaml
+id: ticker
+label: Stock Tickers
+source: {model: company, table: dim_company, column: ticker}
+multi: true
+```
+
+**Short form:**
+
+```yaml
+id: ticker
+label: Stock Tickers
+source: company.dim_company.ticker
+multi: true
+```
+
+**With Static Options:**
+
+```yaml
+id: market_cap_bucket
+label: Market Cap
+type: select
+options: ["Small Cap", "Mid Cap", "Large Cap", "Mega Cap"]
+multi: false
+```
+
+#### 2. **Date Range Filter**
+
+```yaml
+id: trade_date
+type: date_range
+label: Date Range
+operator: between
+default: {start: "2024-01-01", end: "2024-12-31"}
+help_text: Select date range for analysis
+```
+
+**With Relative Dates:**
+
+```yaml
+id: trade_date
+type: date_range
+label: Date Range
+default: {start: "-30d", end: "today"}
+```
+
+#### 3. **Number Range Filter**
+
+```yaml
+id: volume
+type: number_range
+label: Volume Range
+operator: between
+min_value: 0
+max_value: 100000000
+step: 1000000
+default: {min: 1000000, max: 50000000}
+```
+
+#### 4. **Slider Filter**
+
+```yaml
+id: confidence_threshold
+type: slider
+label: Confidence Threshold
+min_value: 0.0
+max_value: 1.0
+step: 0.1
+default: 0.8
+```
+
+#### 5. **Text Search Filter**
+
+```yaml
+id: company_name
+type: text_search
+label: Search Company
+operator: contains
+placeholder: Type to search...
+fuzzy_enabled: true
+fuzzy_threshold: 0.7
+```
+
+**Fuzzy Matching:**
+
+```yaml
+id: ticker_search
+type: text_search
+label: Find Ticker
+operator: fuzzy
+fuzzy_enabled: true
+fuzzy_threshold: 0.6  # 0-1 similarity threshold
+help_text: Fuzzy match ticker symbols
+```
+
+#### 6. **Boolean Filter**
+
+```yaml
+id: is_active
+type: boolean
+label: Active Only
+default: true
+```
+
+### Filter Operators
+
+Filters support various comparison operators:
+
+```yaml
+id: close_price
+label: Close Price
+operator: gte  # Greater than or equal
+min_value: 0
+default: 100
+```
+
+**Available Operators:**
+- `equals` - Exact match
+- `not_equals` - Not equal
+- `in` - In list (default for multi-select)
+- `not_in` - Not in list
+- `gt` - Greater than
+- `gte` - Greater than or equal
+- `lt` - Less than
+- `lte` - Less than or equal
+- `between` - Between two values (for ranges)
+- `contains` - String contains
+- `starts_with` - String starts with
+- `ends_with` - String ends with
+- `fuzzy` - Fuzzy text matching
+
+### Advanced Filter Features
+
+#### Applying Filters to Different Columns
+
+```yaml
+id: stock_filter
+label: Stock Selection
+source: company.dim_company.ticker
+apply_to: stock_ticker  # Apply to different column name
+multi: true
+```
+
+#### Required Filters
+
+```yaml
+id: trade_date
+type: date_range
+label: Date Range
+required: true
+default: {start: "2024-01-01", end: "2024-12-31"}
+```
+
+#### Filter Source Configuration
+
+**Full specification:**
+
+```yaml
+id: ticker
+label: Stock Tickers
+source:
+  model: company
+  table: dim_company
+  column: ticker
+  distinct: true  # Get unique values
+  sort: true      # Sort alphabetically
+  limit: 100      # Limit to top 100
+```
+
+### Complete Filter Examples
+
+**Example 1: Stock Analysis Filters**
+
+```markdown
+$filters${
+id: ticker
+label: Stock Tickers
+source: company.dim_company.ticker
+multi: true
+default: ["AAPL", "MSFT", "GOOGL"]
+---
+id: trade_date
+type: date_range
+label: Analysis Period
+operator: between
+default: {start: "-90d", end: "today"}
+---
+id: min_volume
+type: number_range
+label: Minimum Volume
+operator: gte
+default: 1000000
+help_text: Filter by trading volume
+}
+```
+
+**Example 2: Economic Indicators**
+
+```markdown
+$filters${
+id: series_id
+label: Economic Series
+source: macro.dim_economic_series.series_id
+multi: true
+---
+id: date_range
+type: date_range
+label: Time Period
+default: {start: "2020-01-01", end: "today"}
+---
+id: search_series
+type: text_search
+label: Search Series
+operator: fuzzy
+fuzzy_enabled: true
+placeholder: Search for indicators...
+}
+```
+
+---
+
+## `$exhibits$` Syntax
+
+The `$exhibits${}` block defines **interactive visualizations** that are rendered inline in the notebook. Exhibits can be charts, tables, metric cards, or custom components.
+
+### Exhibit Block Structure
+
+```markdown
+$exhibits${
+type: line_chart
+title: "Stock Prices Over Time"
+# ... configuration
+}
+```
+
+### Exhibit Types
+
+#### 1. **Metric Cards**
+
+Display key metrics as cards with optional comparisons.
+
+```yaml
+type: metric_cards
+title: "Key Metrics"
+source: company.fact_prices
+metrics:
+  - measure: close
+    label: "Average Close"
+    aggregation: avg
+  - measure: volume
+    label: "Total Volume"
+    aggregation: sum
+  - measure: volume_weighted
+    label: "VWAP"
+    aggregation: avg
+```
+
+**With Comparisons:**
+
+```yaml
+type: metric_cards
+source: company.fact_prices
+metrics:
+  - measure: close
+    label: "Close Price"
+    aggregation: avg
+    comparison:
+      period: previous  # or: year_ago, custom
+      label: "vs. Previous Period"
+```
+
+#### 2. **Line Chart**
+
+Time series visualization.
+
+```yaml
+type: line_chart
+title: "Stock Price Trends"
+source: company.fact_prices
+x: trade_date
+x_label: "Date"
+y: close
+y_label: "Close Price ($)"
+color: ticker
+legend: true
+interactive: true
+```
+
+**With Multiple Y-Axes:**
+
+```yaml
+type: line_chart
+title: "Price vs Volume"
+source: company.fact_prices
+x: trade_date
+y: close
+y_label: "Price"
+y2: volume
+y2_label: "Volume"
+color: ticker
+```
+
+**Streamlined Syntax (shorthand):**
+
+```yaml
+type: line_chart
+title: "Prices"
+source: company.fact_prices
+x: trade_date
+y: close
+color: ticker
+```
+
+#### 3. **Bar Chart**
+
+Categorical comparisons.
+
+```yaml
+type: bar_chart
+title: "Average Price by Stock"
+source: company.fact_prices
+x: ticker
+y: close
+aggregation: avg
+sort: {by: y, order: desc}
+```
+
+**Grouped Bar Chart:**
+
+```yaml
+type: bar_chart
+title: "Quarterly Revenue"
+source: company.fact_prices
+x: year_quarter
+y: volume
+color: ticker
+```
+
+#### 4. **Scatter Chart**
+
+Correlation analysis.
+
+```yaml
+type: scatter_chart
+title: "Price vs Volume Correlation"
+source: company.fact_prices
+x: volume
+y: close
+color: ticker
+size: volume_weighted
+interactive: true
+```
+
+#### 5. **Heatmap**
+
+Matrix visualization for correlations or pivot data.
+
+```yaml
+type: heatmap
+title: "Price Correlation Matrix"
+source: company.fact_prices
+x: ticker
+y: trade_date
+value: close
+aggregation: avg
+```
+
+#### 6. **Data Table**
+
+Interactive data table with sorting, pagination, and download.
+
+```yaml
+type: data_table
+title: "Stock Prices"
+source: company.fact_prices
+columns:
+  - ticker
+  - trade_date
+  - open
+  - high
+  - low
+  - close
+  - volume
+pagination: true
+page_size: 50
+sortable: true
+searchable: true
+download: true
+sort: {by: trade_date, order: desc}
+```
+
+#### 7. **Pivot Table**
+
+Cross-tabulation analysis.
+
+```yaml
+type: pivot_table
+title: "Average Prices by Stock and Quarter"
+source: company.fact_prices
+rows: [ticker]
+columns: [year_quarter]
+values: [close]
+aggregation: avg
+```
+
+#### 8. **Dual Axis Chart**
+
+Two measures with different scales.
+
+```yaml
+type: dual_axis_chart
+title: "Price and Volume Trends"
+source: company.fact_prices
+x: trade_date
+y: close
+y_label: "Price ($)"
+y2: volume
+y2_label: "Volume"
+color: ticker
+```
+
+#### 9. **Weighted Aggregate Chart**
+
+Multi-stock indices with custom weighting.
+
+```yaml
+type: weighted_aggregate_chart
+title: "Market Cap Weighted Index"
+source: company.fact_prices
+x: trade_date
+y: close
+weighting: market_cap
+aggregate_by: trade_date
+group_by: [trade_date]
+value_measures: [close]
+```
+
+**Weighting Methods:**
+- `equal` - Equal weighting
+- `market_cap` - Market cap weighted
+- `volume` - Volume weighted
+- `price` - Price weighted
+- `volatility` - Inverse volatility weighted
+
+#### 10. **Forecast Chart**
+
+ML predictions with confidence intervals.
+
+```yaml
+type: forecast_chart
+title: "Price Forecasts"
+source: forecast.forecast_price
+x: prediction_date
+y: predicted_close
+lower_bound: lower_bound
+upper_bound: upper_bound
+color: ticker
+```
+
+### Interactive Features
+
+#### Dynamic Measure Selection
+
+Allow users to choose which measures to display.
+
+```yaml
+type: line_chart
+title: "Stock Metrics"
+source: company.fact_prices
+x: trade_date
+measure_selector:
+  available_measures: [close, open, high, low, volume_weighted]
+  default_measures: [close]
+  label: "Select Metrics"
+  allow_multiple: true
+  selector_type: checkbox
+  help_text: "Choose metrics to display"
+color: ticker
+```
+
+**Selector Types:**
+- `checkbox` - Multiple selection checkboxes
+- `dropdown` - Dropdown menu
+- `radio` - Single selection radio buttons
+
+#### Dynamic Dimension Selection
+
+Allow users to choose grouping dimension.
+
+```yaml
+type: bar_chart
+title: "Average Metrics"
+source: company.fact_prices
+y: close
+aggregation: avg
+dimension_selector:
+  available_dimensions: [ticker, exchange_code, year_quarter]
+  default_dimension: ticker
+  label: "Group By"
+  selector_type: radio
+  applies_to: x  # or: color, size
+```
+
+### Collapsible Exhibits
+
+Wrap exhibits in collapsible sections.
+
+```yaml
+type: line_chart
+title: "Detailed Price Analysis"
+source: company.fact_prices
+x: trade_date
+y: close
+color: ticker
+collapsible: true
+collapsible_title: "Price Details"
+collapsible_expanded: false
+nest_in_expander: true
+```
+
+### Exhibit Filters
+
+Apply exhibit-specific filters (in addition to notebook-level filters).
+
+```yaml
+type: line_chart
+title: "Top Tech Stocks"
+source: company.fact_prices
+x: trade_date
+y: close
+color: ticker
+filters:
+  ticker: ["AAPL", "MSFT", "GOOGL", "AMZN"]
+  volume: {min: 1000000}
+```
+
+### Custom Components
+
+Render custom Streamlit components.
+
+```yaml
+type: custom_component
+title: "Custom Analysis"
+component: my_custom_component
+params:
+  model: company
+  table: fact_prices
+  custom_param: value
+options:
+  height: 600
+  scrolling: true
+```
+
+### Complete Exhibit Examples
+
+**Example 1: Stock Dashboard**
+
+```markdown
+$exhibits${
+type: metric_cards
+title: "Market Summary"
+source: company.fact_prices
+metrics:
+  - measure: close
+    label: "Avg Close"
+    aggregation: avg
+  - measure: volume
+    label: "Total Volume"
+    aggregation: sum
+  - measure: ticker
+    label: "# Stocks"
+    aggregation: count
+}
+
+$exhibits${
+type: line_chart
+title: "Stock Price Trends"
+source: company.fact_prices
+x: trade_date
+y: close
+color: ticker
+legend: true
+interactive: true
+measure_selector:
+  available_measures: [close, open, high, low]
+  default_measures: [close]
+  allow_multiple: true
+}
+
+$exhibits${
+type: data_table
+title: "Recent Prices"
+source: company.fact_prices
+columns: [trade_date, ticker, open, high, low, close, volume]
+pagination: true
+page_size: 20
+sortable: true
+download: true
+sort: {by: trade_date, order: desc}
+}
+```
+
+**Example 2: Economic Dashboard**
+
+```markdown
+$exhibits${
+type: line_chart
+title: "Unemployment Rate"
+source: macro.fact_unemployment
+x: date
+y: value
+color: series_id
+collapsible: true
+collapsible_title: "Unemployment Trends"
+}
+
+$exhibits${
+type: bar_chart
+title: "CPI Changes"
+source: macro.fact_cpi
+x: year
+y: value
+aggregation: avg
+color: series_id
+sort: {by: year, order: asc}
+}
+```
+
+---
+
+## Markdown Notebook Best Practices
+
+### 1. **Organization**
+
+```markdown
+---
+id: stock_analysis
+title: "Stock Market Analysis"
+models: [company, macro, core]
+---
+
+# Executive Summary
+
+High-level findings...
+
+$filters${
+  # User controls here
+}
+
+# Market Overview
+
+$exhibits${
+  # Summary metrics
+}
+
+<details>
+<summary>Deep Dive Analysis</summary>
+
+Additional analysis...
+
+$exhibits${
+  # Detailed charts
+}
+
+</details>
+```
+
+### 2. **Filter Design**
+
+- **Start with most important filters** (e.g., date range, primary dimension)
+- **Use sensible defaults** that work for most users
+- **Add help text** for complex filters
+- **Enable fuzzy search** for large option lists
+- **Set `required: true`** for critical filters
+
+### 3. **Exhibit Design**
+
+- **Start with summary metrics** (metric cards)
+- **Follow with primary visualization** (line chart, bar chart)
+- **Provide detailed views** in collapsible sections
+- **Enable interactivity** for exploration (measure selectors, dimension selectors)
+- **Include data tables** for export and detailed review
+- **Use consistent color schemes** across exhibits
+
+### 4. **Performance**
+
+- **Limit date ranges** in defaults (e.g., `-90d` to `today`)
+- **Add `limit` to filter sources** with many options
+- **Use pagination** for large tables
+- **Apply exhibit-level filters** to reduce data size
+- **Leverage caching** via model build system
+
+---
+
+## Parsing Implementation
+
+The markdown parser (`app/notebook/parsers/markdown_parser.py`) uses regex patterns to extract and parse:
+
+1. **Front Matter**: `^---\s*\n(.*?)\n---\s*\n`
+2. **Filters**: `\$filters?\$\{\s*\n(.*?)\n\}`
+3. **Exhibits**: `\$exhibits?\$\{\s*\n(.*?)\n\}`
+4. **Collapsible Sections**: `<details>\s*<summary>(.*?)</summary>\s*(.*?)</details>`
+
+Each block is parsed into typed dataclass instances:
+- **Filters** → `FilterConfig` objects in `FilterCollection`
+- **Exhibits** → `Exhibit` objects with `ExhibitType` enum
+- **Content** → Mixed list of markdown blocks, exhibits, and collapsible sections
+
+The parser supports:
+- **Streamlined syntax**: Shorthand properties (e.g., `x` instead of `x_axis`)
+- **Auto-detection**: Infers types from operators and IDs
+- **Error handling**: Continues parsing on errors, adds error blocks
+- **Nesting**: Exhibits can be nested in `<details>` tags
+
+---
