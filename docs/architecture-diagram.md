@@ -1274,11 +1274,13 @@ value_measures: [close]
 ```
 
 **Weighting Methods:**
-- `equal` - Equal weighting
+- `equal` - Equal weighting (simple average)
 - `market_cap` - Market cap weighted
 - `volume` - Volume weighted
 - `price` - Price weighted
-- `volatility` - Inverse volatility weighted
+- `custom` - Custom expression-based weighting
+- `volume_deviation` - Volume deviation weighted (unusual activity)
+- `volatility` - Inverse volatility weighted (risk-adjusted)
 
 #### 10. **Forecast Chart**
 
@@ -1293,6 +1295,26 @@ y: predicted_close
 lower_bound: lower_bound
 upper_bound: upper_bound
 color: ticker
+```
+
+#### 11. **Forecast Metrics Table**
+
+Display forecast accuracy metrics and model performance.
+
+```yaml
+type: forecast_metrics_table
+title: "Model Performance"
+source: forecast.forecast_metrics
+columns:
+  - model_name
+  - ticker
+  - mae
+  - rmse
+  - mape
+  - r2_score
+sortable: true
+sort: {by: mape, order: asc}
+pagination: true
 ```
 
 ### Interactive Features
