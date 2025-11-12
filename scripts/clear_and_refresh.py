@@ -145,6 +145,7 @@ def reingest_bronze(ctx, date_from: str, date_to: str, max_tickers: int = None):
 def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
     """Rebuild silver layer models."""
     from models.implemented.company.model import CompanyModel
+    from models.api.session import UniversalSession
 
     print("=" * 80)
     print("REBUILDING SILVER LAYER")
@@ -160,6 +161,9 @@ def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
         import yaml
         model_cfg = yaml.safe_load(cfg_path.read_text())
 
+        # Create session for cross-model references
+        session = UniversalSession(ctx.spark, ctx.storage, ctx.repo)
+
         # Build model
         model = CompanyModel(
             ctx.spark,
@@ -171,6 +175,9 @@ def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
                 "UNIVERSE_SIZE": len(tickers)
             }
         )
+
+        # Set session for cross-model references (e.g., core.dim_calendar)
+        model.set_session(session)
 
         dims, facts = model.build()
 
