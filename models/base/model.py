@@ -205,6 +205,18 @@ class BaseModel:
                 for out_name, expr in node_config['derive'].items():
                     df = self._apply_derive(df, out_name, expr, node_id)
 
+            # Enforce unique_key constraint (deduplication)
+            if 'unique_key' in node_config and node_config['unique_key']:
+                unique_cols = node_config['unique_key']
+                print(f"⚙️  Applying unique_key constraint on {node_id}: deduplicating by {unique_cols}")
+                if self.backend == 'spark':
+                    df = df.dropDuplicates(unique_cols)
+                else:
+                    # DuckDB: Convert to pandas, drop duplicates, convert back
+                    pdf = df.df()
+                    pdf = pdf.drop_duplicates(subset=unique_cols, keep='last')
+                    df = self.connection.conn.from_df(pdf)
+
             nodes[node_id] = df
 
         return nodes

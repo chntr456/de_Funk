@@ -5,6 +5,7 @@ from typing import Dict, Any, List, Optional, Tuple, Set
 from pyspark.sql import DataFrame
 
 from models.api.dal import StorageRouter, BronzeTable
+from core.session.filters import FilterEngine
 
 try:
     import yaml  # type: ignore
@@ -183,7 +184,7 @@ class UniversalSession:
             table_name: Name of the base table
             required_columns: Optional list of columns needed. If specified and some
                             columns don't exist in base table, auto-joins are performed
-            filters: Optional filters to apply (not yet implemented)
+            filters: Optional filters to apply (pushed down before joins/aggregation)
             group_by: Optional list of columns to group by (dimensions at new grain)
             aggregations: Optional dict mapping measure columns to aggregation functions
                         (avg, sum, max, min, count, first). If not provided, uses measure
@@ -222,7 +223,11 @@ class UniversalSession:
 
         # If no specific columns requested, return full table (backward compatible)
         if not required_columns:
-            return model.get_table(table_name)
+            df = model.get_table(table_name)
+            # Apply filters if specified
+            if filters:
+                df = FilterEngine.apply_from_session(df, filters, self)
+            return df
 
         # Check which columns exist in base table
         try:
@@ -239,6 +244,11 @@ class UniversalSession:
         # No missing columns - direct table access
         if not missing:
             df = model.get_table(table_name)
+
+            # Apply filters BEFORE selecting/aggregating (pushdown optimization)
+            if filters:
+                df = FilterEngine.apply_from_session(df, filters, self)
+
             # Select only requested columns
             df = self._select_columns(df, required_columns)
 
@@ -256,7 +266,19 @@ class UniversalSession:
         if materialized_table:
             print(f"✓ Using materialized view: {materialized_table}")
             df = model.get_table(materialized_table)
-            return self._select_columns(df, required_columns)
+
+            # Apply filters BEFORE selecting/aggregating (pushdown optimization)
+            if filters:
+                df = FilterEngine.apply_from_session(df, filters, self)
+
+            # Select only requested columns
+            df = self._select_columns(df, required_columns)
+
+            # Apply aggregation if group_by specified
+            if group_by:
+                df = self._aggregate_data(model_name, df, required_columns, group_by, aggregations)
+
+            return df
 
         # Strategy 2: Build joins from graph
         try:
@@ -267,6 +289,10 @@ class UniversalSession:
             print(f"❌ Auto-join failed: {e}")
             print(f"   Falling back to base table {table_name}")
             df = model.get_table(table_name)
+
+            # Apply filters even in fallback path
+            if filters:
+                df = FilterEngine.apply_from_session(df, filters, self)
 
         # Apply aggregation if group_by specified
         if group_by:
@@ -604,10 +630,10 @@ class UniversalSession:
             model_name: Model name
             join_plan: Join plan from _plan_auto_joins
             required_columns: Columns to return
-            filters: Optional filters (not yet implemented)
+            filters: Optional filters to apply after joins
 
         Returns:
-            DataFrame with required columns
+            DataFrame with required columns (filtered if filters specified)
         """
         model = self.load_model(model_name)
         table_sequence = join_plan['table_sequence']
@@ -616,6 +642,10 @@ class UniversalSession:
         if self.backend == 'spark':
             # Spark: Use DataFrame API
             df = model.get_table(table_sequence[0])
+
+            # Apply filters to base table BEFORE joins (pushdown)
+            if filters:
+                df = FilterEngine.apply_from_session(df, filters, self)
 
             # Join each subsequent table
             for i, next_table in enumerate(table_sequence[1:]):
@@ -676,6 +706,38 @@ class UniversalSession:
                     left_col, right_col = join_keys[i - 1]
                     sql += f" LEFT JOIN {right_temp} ON {left_temp}.{left_col} = {right_temp}.{right_col}"
 
+                # Add WHERE clause for filter pushdown
+                if filters:
+                    where_clauses = []
+                    for col, filter_val in filters.items():
+                        if isinstance(filter_val, dict):
+                            # Range filter: {'start': ..., 'end': ...} or {'min': ..., 'max': ...}
+                            if 'start' in filter_val and 'end' in filter_val:
+                                where_clauses.append(f"{base_temp}.{col} BETWEEN '{filter_val['start']}' AND '{filter_val['end']}'")
+                            elif 'min' in filter_val and 'max' in filter_val:
+                                where_clauses.append(f"{base_temp}.{col} BETWEEN {filter_val['min']} AND {filter_val['max']}")
+                            elif 'min' in filter_val:
+                                where_clauses.append(f"{base_temp}.{col} >= {filter_val['min']}")
+                            elif 'max' in filter_val:
+                                where_clauses.append(f"{base_temp}.{col} <= {filter_val['max']}")
+                        elif isinstance(filter_val, list):
+                            # IN filter
+                            if all(isinstance(v, str) for v in filter_val):
+                                vals = "', '".join(filter_val)
+                                where_clauses.append(f"{base_temp}.{col} IN ('{vals}')")
+                            else:
+                                vals = ", ".join(str(v) for v in filter_val)
+                                where_clauses.append(f"{base_temp}.{col} IN ({vals})")
+                        else:
+                            # Equality filter
+                            if isinstance(filter_val, str):
+                                where_clauses.append(f"{base_temp}.{col} = '{filter_val}'")
+                            else:
+                                where_clauses.append(f"{base_temp}.{col} = {filter_val}")
+
+                    if where_clauses:
+                        sql += " WHERE " + " AND ".join(where_clauses)
+
                 print(f"DEBUG: Auto-join SQL: {sql}")
 
                 # Execute the join query
@@ -709,7 +771,13 @@ class UniversalSession:
                         pass
 
                 # Fall back to base table
-                return model.get_table(table_sequence[0])
+                df = model.get_table(table_sequence[0])
+
+                # Apply filters even in fallback path
+                if filters:
+                    df = FilterEngine.apply_from_session(df, filters, self)
+
+                return df
 
     def _aggregate_data(
         self,
