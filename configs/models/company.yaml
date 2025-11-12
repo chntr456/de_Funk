@@ -213,7 +213,7 @@ measures:
 graph:
   nodes:
     - id: dim_company
-      from: bronze.ref_ticker
+      from: bronze.ref_all_tickers
       select:
         ticker: ticker
         company_name: name
