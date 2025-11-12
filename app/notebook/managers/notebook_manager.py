@@ -436,8 +436,15 @@ class NotebookManager:
 
         model_name, table_name = self._parse_source(exhibit.source)
 
-        # Get raw data from UniversalSession
-        df = self.session.get_table(model_name, table_name)
+        # Extract required columns from exhibit config (for auto-join support)
+        required_columns = self._extract_required_columns(exhibit)
+
+        # Get raw data from UniversalSession (with auto-join if needed)
+        df = self.session.get_table(
+            model_name,
+            table_name,
+            required_columns=required_columns if required_columns else None
+        )
 
         # Build and apply filters
         filters = self._build_filters(exhibit)
@@ -463,6 +470,67 @@ class NotebookManager:
             if exhibit.id == exhibit_id:
                 return exhibit
         return None
+
+    def _extract_required_columns(self, exhibit: Exhibit) -> Optional[List[str]]:
+        """
+        Extract all columns required by an exhibit.
+
+        This enables auto-join functionality - the system can automatically
+        join tables to get columns that don't exist in the base table.
+
+        Args:
+            exhibit: Exhibit configuration
+
+        Returns:
+            List of column names needed, or None if can't determine
+        """
+        required_cols = set()
+
+        # Add x-axis column
+        if hasattr(exhibit, 'x') and exhibit.x:
+            required_cols.add(exhibit.x)
+        elif hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension'):
+            required_cols.add(exhibit.x_axis.dimension)
+
+        # Add y-axis columns
+        if hasattr(exhibit, 'y') and exhibit.y:
+            if isinstance(exhibit.y, list):
+                required_cols.update(exhibit.y)
+            else:
+                required_cols.add(exhibit.y)
+        elif hasattr(exhibit, 'y_axis') and exhibit.y_axis:
+            if hasattr(exhibit.y_axis, 'measures') and exhibit.y_axis.measures:
+                required_cols.update(exhibit.y_axis.measures)
+            elif hasattr(exhibit.y_axis, 'measure') and exhibit.y_axis.measure:
+                required_cols.add(exhibit.y_axis.measure)
+
+        # Add dimension selector dimensions
+        if hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
+            dim_selector = exhibit.dimension_selector
+            if hasattr(dim_selector, 'available_dimensions'):
+                required_cols.update(dim_selector.available_dimensions)
+
+        # Add measure selector measures
+        if hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
+            measure_selector = exhibit.measure_selector
+            if hasattr(measure_selector, 'available_measures'):
+                required_cols.update(measure_selector.available_measures)
+
+        # Add color_by column
+        if hasattr(exhibit, 'color_by') and exhibit.color_by:
+            required_cols.add(exhibit.color_by)
+
+        # Add metric columns (for metric_cards)
+        if hasattr(exhibit, 'metrics') and exhibit.metrics:
+            for metric in exhibit.metrics:
+                if hasattr(metric, 'measure') and metric.measure:
+                    required_cols.add(metric.measure)
+
+        # Add aggregate_by column (for aggregations)
+        if hasattr(exhibit, 'aggregate_by') and exhibit.aggregate_by:
+            required_cols.add(exhibit.aggregate_by)
+
+        return list(required_cols) if required_cols else None
 
     def _models_are_related(self, model_a: str, model_b: str) -> bool:
         """
