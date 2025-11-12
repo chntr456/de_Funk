@@ -1,0 +1,294 @@
+#!/usr/bin/env python3
+"""
+Clear storage and refresh all data from scratch.
+
+This script will:
+1. Delete all bronze and silver storage
+2. Re-ingest data from Polygon API (with updated MIC codes)
+3. Rebuild silver layer models
+
+WARNING: This will delete all existing data!
+
+Usage:
+    python scripts/clear_and_refresh.py
+
+    # Skip confirmation prompt
+    python scripts/clear_and_refresh.py --yes
+
+    # Only clear bronze (keep silver)
+    python scripts/clear_and_refresh.py --bronze-only
+
+    # Only clear silver (keep bronze)
+    python scripts/clear_and_refresh.py --silver-only
+"""
+
+import sys
+import argparse
+import shutil
+from pathlib import Path
+from datetime import datetime, timedelta
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+
+def confirm_action(prompt: str) -> bool:
+    """Ask user for confirmation."""
+    response = input(f"{prompt} (yes/no): ").strip().lower()
+    return response in ['yes', 'y']
+
+
+def clear_storage(bronze: bool = True, silver: bool = True, skip_confirm: bool = False):
+    """Clear bronze and/or silver storage."""
+    from core.context import RepoContext
+
+    print("=" * 80)
+    print("CLEAR STORAGE AND REFRESH DATA")
+    print("=" * 80)
+    print()
+
+    # Initialize context to get storage paths
+    print("Initializing context...")
+    ctx = RepoContext.from_repo_root()
+
+    storage_root = ctx.repo / "storage"
+    bronze_path = storage_root / "bronze" / "company"
+    silver_path = storage_root / "silver" / "company"
+
+    # Show what will be deleted
+    items_to_delete = []
+    if bronze and bronze_path.exists():
+        items_to_delete.append(f"  - Bronze: {bronze_path}")
+    if silver and silver_path.exists():
+        items_to_delete.append(f"  - Silver: {silver_path}")
+
+    if not items_to_delete:
+        print("No data to clear.")
+        return ctx
+
+    print("The following directories will be DELETED:")
+    for item in items_to_delete:
+        print(item)
+    print()
+
+    # Confirm
+    if not skip_confirm:
+        if not confirm_action("Are you sure you want to delete this data?"):
+            print("Aborted.")
+            sys.exit(0)
+
+    # Delete
+    print("\nDeleting storage...")
+    print("-" * 80)
+
+    if bronze and bronze_path.exists():
+        print(f"  → Deleting bronze: {bronze_path}")
+        shutil.rmtree(bronze_path)
+        print("  ✓ Bronze deleted")
+
+    if silver and silver_path.exists():
+        print(f"  → Deleting silver: {silver_path}")
+        shutil.rmtree(silver_path)
+        print("  ✓ Silver deleted")
+
+    print()
+    return ctx
+
+
+def reingest_bronze(ctx, date_from: str, date_to: str, max_tickers: int = None):
+    """Re-ingest bronze data from Polygon API."""
+    from orchestration.orchestrator import Orchestrator
+
+    print("=" * 80)
+    print("RE-INGESTING BRONZE DATA")
+    print("=" * 80)
+    print(f"Date range: {date_from} to {date_to}")
+    if max_tickers:
+        print(f"Max tickers: {max_tickers}")
+    print("=" * 80)
+    print()
+
+    try:
+        from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
+
+        # Initialize ingestor
+        ingestor = CompanyPolygonIngestor(
+            polygon_cfg=ctx.polygon_cfg,
+            storage_cfg=ctx.storage,
+            spark=ctx.spark
+        )
+
+        # Run ingestion
+        print("Step 1: Ingesting data from Polygon API...")
+        print("-" * 80)
+        tickers = ingestor.run_all(
+            date_from=date_from,
+            date_to=date_to,
+            snapshot_dt=None,
+            max_tickers=max_tickers,
+            include_news=True
+        )
+
+        print()
+        print(f"✓ Ingested data for {len(tickers)} tickers")
+        print()
+
+        return tickers
+
+    except Exception as e:
+        print(f"✗ Ingestion failed: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
+    """Rebuild silver layer models."""
+    from models.implemented.company.model import CompanyModel
+
+    print("=" * 80)
+    print("REBUILDING SILVER LAYER")
+    print("=" * 80)
+    print()
+
+    try:
+        # Load model config
+        print("Step 2: Building silver layer models...")
+        print("-" * 80)
+
+        cfg_path = ctx.repo / "configs" / "models" / "company.yaml"
+        import yaml
+        model_cfg = yaml.safe_load(cfg_path.read_text())
+
+        # Build model
+        model = CompanyModel(
+            ctx.spark,
+            model_cfg=model_cfg,
+            storage_cfg=ctx.storage,
+            params={
+                "DATE_FROM": date_from,
+                "DATE_TO": date_to,
+                "UNIVERSE_SIZE": len(tickers)
+            }
+        )
+
+        dims, facts = model.build()
+
+        print()
+        print("✓ Silver layer built successfully")
+        print()
+        print("Dimensions:")
+        for name, df in dims.items():
+            count = df.count()
+            print(f"  - {name}: {count:,} rows")
+
+        print()
+        print("Facts:")
+        for name, df in facts.items():
+            count = df.count()
+            print(f"  - {name}: {count:,} rows")
+
+        print()
+
+    except Exception as e:
+        print(f"✗ Silver build failed: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Clear storage and refresh all data from scratch",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    parser.add_argument(
+        '--yes', '-y',
+        action='store_true',
+        help='Skip confirmation prompt'
+    )
+
+    parser.add_argument(
+        '--bronze-only',
+        action='store_true',
+        help='Only clear and refresh bronze layer'
+    )
+
+    parser.add_argument(
+        '--silver-only',
+        action='store_true',
+        help='Only clear and refresh silver layer (requires bronze data)'
+    )
+
+    parser.add_argument(
+        '--days',
+        type=int,
+        default=30,
+        help='Number of days of data to ingest (default: 30)'
+    )
+
+    parser.add_argument(
+        '--max-tickers',
+        type=int,
+        default=None,
+        help='Maximum number of tickers to process (default: all)'
+    )
+
+    args = parser.parse_args()
+
+    # Determine what to clear
+    clear_bronze = not args.silver_only
+    clear_silver = not args.bronze_only
+
+    # Clear storage
+    ctx = clear_storage(
+        bronze=clear_bronze,
+        silver=clear_silver,
+        skip_confirm=args.yes
+    )
+
+    # Calculate date range
+    date_to = datetime.now().date()
+    date_from = date_to - timedelta(days=args.days)
+    date_from_str = date_from.isoformat()
+    date_to_str = date_to.isoformat()
+
+    # Re-ingest bronze (if cleared or bronze-only)
+    tickers = []
+    if clear_bronze:
+        tickers = reingest_bronze(ctx, date_from_str, date_to_str, args.max_tickers)
+
+    # Rebuild silver (if cleared or silver-only)
+    if clear_silver:
+        # If we didn't ingest bronze, we need to figure out tickers
+        if not tickers:
+            print("Determining ticker list from existing bronze data...")
+            from datapipelines.ingestors.bronze_sink import BronzeSink
+            sink = BronzeSink(ctx.storage)
+            # Get latest snapshot date
+            snapshot_dt = datetime.now().date().isoformat()
+            try:
+                df_tickers = ctx.spark.read.parquet(
+                    str(sink._path("ref_all_tickers", {"snapshot_dt": snapshot_dt}))
+                )
+                tickers = [r["ticker"] for r in df_tickers.collect()]
+                print(f"Found {len(tickers)} tickers in bronze data")
+            except Exception as e:
+                print(f"Warning: Could not read tickers from bronze: {e}")
+                print("Using empty ticker list for silver build")
+
+        rebuild_silver(ctx, date_from_str, date_to_str, tickers)
+
+    print("=" * 80)
+    print("✓ REFRESH COMPLETE")
+    print("=" * 80)
+    print()
+    print("Next steps:")
+    print("  1. Run debug_exchange_data.py to verify exchange codes match")
+    print("  2. Test dimensional selector exchange tab in the notebook app")
+    print()
+
+
+if __name__ == "__main__":
+    main()
