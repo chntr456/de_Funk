@@ -71,10 +71,32 @@ class BaseModel:
         # Detect backend type
         self._backend = self._detect_backend()
 
+        # Unified measure executor (lazy-loaded)
+        self._measure_executor = None
+
     @property
     def backend(self) -> str:
         """Get backend type (spark or duckdb)."""
         return self._backend
+
+    @property
+    def measures(self):
+        """
+        Get unified measure executor.
+
+        Provides access to the new measure framework for calculating
+        all types of measures (simple, computed, weighted, etc.).
+
+        Returns:
+            MeasureExecutor instance
+
+        Example:
+            result = model.measures.execute_measure('avg_close_price', entity_column='ticker')
+        """
+        if self._measure_executor is None:
+            from models.base.measures.executor import MeasureExecutor
+            self._measure_executor = MeasureExecutor(self, backend=self.backend)
+        return self._measure_executor
 
     def _detect_backend(self) -> str:
         """Detect backend type from connection."""
@@ -713,6 +735,53 @@ class BaseModel:
     # ============================================================
     # MEASURE CALCULATIONS (generic operations on facts)
     # ============================================================
+
+    def calculate_measure(
+        self,
+        measure_name: str,
+        entity_column: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        limit: Optional[int] = None,
+        **kwargs
+    ):
+        """
+        Calculate any measure defined in model config (NEW UNIFIED METHOD).
+
+        This is the new unified measure execution method that works with:
+        - All measure types (simple, computed, weighted, etc.)
+        - All backends (DuckDB, Spark)
+        - All domain-specific patterns (weighting, windowing, etc.)
+
+        Replaces calculate_measure_by_entity() with a more flexible interface.
+
+        Args:
+            measure_name: Name of measure from config (e.g., 'avg_close_price', 'volume_weighted_index')
+            entity_column: Optional entity column to group by (e.g., 'ticker')
+            filters: Optional filters to apply
+            limit: Optional limit for top-N results
+            **kwargs: Additional measure-specific parameters
+
+        Returns:
+            QueryResult with data and metadata
+
+        Example:
+            # Simple measure
+            result = model.calculate_measure('avg_close_price', entity_column='ticker', limit=10)
+
+            # Weighted measure
+            result = model.calculate_measure('volume_weighted_index')
+
+            # Access data
+            df = result.data  # Pandas DataFrame or Spark DataFrame
+            print(f"Query took {result.query_time_ms}ms")
+        """
+        return self.measures.execute_measure(
+            measure_name=measure_name,
+            entity_column=entity_column,
+            filters=filters,
+            limit=limit,
+            **kwargs
+        )
 
     def calculate_measure_by_entity(
         self,

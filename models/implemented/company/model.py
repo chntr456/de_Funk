@@ -38,26 +38,31 @@ class CompanyModel(BaseModel):
     # COMPANY-SPECIFIC MEASURE CALCULATIONS
     # ============================================================
 
-    def calculate_measure_by_ticker(self, measure_name: str, limit: Optional[int] = None) -> DataFrame:
+    def calculate_measure_by_ticker(self, measure_name: str, limit: Optional[int] = None):
         """
-        Calculate a measure aggregated by ticker.
+        Calculate a measure aggregated by ticker (NEW: uses unified framework).
 
-        This is a convenience wrapper around the generic BaseModel.calculate_measure_by_entity()
-        method, specifically for the 'ticker' entity column.
+        This is a convenience wrapper around BaseModel.calculate_measure()
+        specifically for the 'ticker' entity column.
+
+        Now supports ALL measure types (simple, computed, weighted) with both backends!
 
         Args:
-            measure_name: Name of measure from config (e.g., 'market_cap', 'avg_close_price')
+            measure_name: Name of measure from config (e.g., 'market_cap', 'volume_weighted_index')
             limit: Optional limit for top-N results
 
         Returns:
-            DataFrame with columns: ticker, <measure_name>
+            QueryResult with data and metadata
 
         Example:
-            # Get top 10 companies by market cap
-            df = company_model.calculate_measure_by_ticker('market_cap', limit=10)
-            # Returns: DataFrame with [ticker, market_cap]
+            # Simple measure
+            result = company_model.calculate_measure_by_ticker('market_cap', limit=10)
+            df = result.data  # Access DataFrame
+
+            # Weighted measure (no ticker grouping needed)
+            result = company_model.calculate_measure_by_ticker('volume_weighted_index')
         """
-        return self.calculate_measure_by_entity(
+        return self.calculate_measure(
             measure_name=measure_name,
             entity_column='ticker',
             limit=limit
@@ -65,7 +70,7 @@ class CompanyModel(BaseModel):
 
     def get_top_tickers_by_measure(self, measure_name: str, limit: int = 10) -> list:
         """
-        Get list of top ticker symbols by a measure.
+        Get list of top ticker symbols by a measure (NEW: uses unified framework).
 
         Convenience method that returns just the ticker list.
 
@@ -81,8 +86,13 @@ class CompanyModel(BaseModel):
             tickers = company_model.get_top_tickers_by_measure('market_cap', limit=10)
             # Returns: ['AAPL', 'MSFT', 'GOOGL', ...]
         """
-        df = self.calculate_measure_by_ticker(measure_name, limit=limit)
-        return [row['ticker'] for row in df.collect()]
+        result = self.calculate_measure_by_ticker(measure_name, limit=limit)
+
+        # Handle both Pandas and Spark DataFrames
+        if self.backend == 'duckdb':
+            return result.data['ticker'].tolist()
+        else:  # spark
+            return [row['ticker'] for row in result.data.collect()]
 
     # ============================================================
     # COMPANY-SPECIFIC CONVENIENCE METHODS

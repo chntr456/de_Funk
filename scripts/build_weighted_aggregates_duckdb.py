@@ -18,7 +18,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.context import RepoContext
-from models.builders.weighted_aggregate_builder import WeightedAggregateBuilder, load_model_config
+from models.builders import WeightedAggregateBuilder
+from models.implemented.company.weighted_aggregate_builder import load_model_config
 
 
 def main():
