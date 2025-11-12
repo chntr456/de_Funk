@@ -607,7 +607,9 @@ class UniversalSession:
                     df_temp = model.get_table(table_name)
                     temp_name = f"_autojoin_{table_name}"
                     # Register as temp table in DuckDB
-                    self.connection.conn.register(temp_name, df_temp.df())
+                    temp_df = df_temp.df()  # Convert to pandas
+                    print(f"DEBUG: Registering {temp_name}: shape={temp_df.shape}, columns={list(temp_df.columns)}")
+                    self.connection.conn.register(temp_name, temp_df)
                     temp_tables[table_name] = temp_name
 
                 # Build SQL with proper qualified column names to avoid ambiguity
@@ -647,6 +649,9 @@ class UniversalSession:
 
                 # Execute the join query
                 result = self.connection.conn.execute(sql)
+                result_df = result.fetchdf()
+                print(f"DEBUG: Query result: shape={result_df.shape}, columns={list(result_df.columns)}")
+                print(f"DEBUG: First few rows:\n{result_df.head()}")
 
                 # Unregister temp tables
                 for temp_name in temp_tables.values():
@@ -656,7 +661,9 @@ class UniversalSession:
                         pass
 
                 # Convert to DuckDB relation
-                return self.connection.conn.from_df(result.fetchdf())
+                final_relation = self.connection.conn.from_df(result_df)
+                print(f"DEBUG: Final relation columns: {final_relation.columns}")
+                return final_relation
 
             except Exception as e:
                 print(f"ERROR: Auto-join SQL failed: {e}")
