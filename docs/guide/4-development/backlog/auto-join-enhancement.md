@@ -100,6 +100,65 @@ $exhibits${
 └─────────────────────────────────────────────────────────┘
 ```
 
+## Architecture Decision: UniversalSession vs NotebookSession
+
+**Decision: Implement in UniversalSession** ✅
+
+### Why UniversalSession is the Right Choice
+
+**UniversalSession** (`models/api/session.py`) is the central authority for all data access:
+
+| Feature | UniversalSession | NotebookSession |
+|---------|-----------------|-----------------|
+| **Graph Access** | Direct (`self.model_graph`) | None (uses storage service) |
+| **Schema Access** | Direct (`self.registry`) | Indirect via storage service |
+| **Connection** | `self.connection` (agnostic) | Via storage service |
+| **Backend Detection** | `self.backend` property | N/A |
+| **Scope** | All query types | Notebooks only |
+| **Used By** | Notebooks, AdHoc, Direct queries | UI only |
+| **Cross-Model** | Built-in | Would need to add |
+
+### Benefits of UniversalSession Implementation
+
+1. **Single Source of Truth** - All auto-join logic in one place
+2. **Broad Availability** - Works for:
+   - `NotebookSession.get_exhibit_data()` (notebooks)
+   - `AdHocSession` (one-off queries)
+   - Direct model usage (`session.get_table_with_auto_joins()`)
+3. **Already Has Infrastructure**:
+   - `self.model_graph` - NetworkX graph with all edges
+   - `self.registry` - ModelRegistry with schemas
+   - `self.backend` - Connection type detection
+   - `self.connection` - Backend-agnostic connection
+4. **Natural Extension** - Existing `get_table()` → new `get_table_with_auto_joins()`
+5. **Cross-Model Joins** - Already handles model dependencies
+
+### Example: How All Sessions Benefit
+
+```python
+# UniversalSession (one implementation)
+class UniversalSession:
+    def get_table_with_auto_joins(...):
+        # Smart auto-join logic here
+
+# NotebookSession (notebooks)
+class NotebookSession:
+    def get_exhibit_data(self, exhibit_id):
+        return self.universal_session.get_table_with_auto_joins(...)
+
+# AdHocSession (one-off queries)
+class AdHocSession:
+    def query(self, model, table, columns):
+        return self.universal_session.get_table_with_auto_joins(...)
+
+# Direct usage (scripts, tests)
+session = UniversalSession(...)
+df = session.get_table_with_auto_joins(
+    'company', 'fact_prices',
+    required_columns=['ticker', 'exchange_name']
+)
+```
+
 ## Implementation Approach
 
 ### Phase 1: Column-to-Table Mapping
@@ -196,22 +255,99 @@ class AutoJoinQueryBuilder:
         pass
 ```
 
-### Phase 4: Integration with NotebookSession
+### Phase 4: Integration with UniversalSession (PREFERRED)
 
-Modify `NotebookSession.get_exhibit_data()`:
+**Why UniversalSession?**
+- Already has `model_graph` (NetworkX graph with edges/paths)
+- Already has `model_registry` (all schemas)
+- Connection agnostic (works with DuckDB, Spark, etc.)
+- Central authority for cross-model queries
+- Used by NotebookSession, AdHocSession, and direct queries
+
+Add to `UniversalSession` (models/api/session.py):
 
 ```python
-def get_exhibit_data(self, exhibit_id: str) -> Any:
+class UniversalSession:
     # ... existing code ...
 
-    # NEW: Instead of simple get_table(), use smart resolver
-    resolver = SmartSourceResolver(self.model_registry)
+    def get_table_with_auto_joins(
+        self,
+        model_name: str,
+        table_name: str,
+        required_columns: List[str],
+        filters: Optional[Dict[str, Any]] = None
+    ) -> DataFrame:
+        """
+        Get table with automatic joins to access missing columns.
+
+        Uses model_graph to find join paths and automatically joins
+        needed tables at query time.
+
+        Args:
+            model_name: Source model
+            table_name: Source table
+            required_columns: Columns needed in result
+            filters: Optional filters to apply
+
+        Returns:
+            DataFrame with all required columns (auto-joined if needed)
+        """
+        # 1. Get base table schema
+        model = self.load_model(model_name)
+        schema = model.get_table_schema(table_name)
+        base_columns = set(schema.keys())
+
+        # 2. Check which columns are missing
+        missing = [col for col in required_columns if col not in base_columns]
+
+        if not missing:
+            # No auto-join needed - use existing get_table()
+            return self.get_table(model_name, table_name)
+
+        # 3. Find join paths using self.model_graph
+        join_plan = self._plan_auto_joins(model_name, table_name, missing)
+
+        # 4. Execute joins (backend agnostic via self.backend)
+        return self._execute_join_plan(model_name, table_name, join_plan, filters)
+
+    def _plan_auto_joins(
+        self,
+        model_name: str,
+        table_name: str,
+        missing_columns: List[str]
+    ) -> Dict[str, Any]:
+        """Plan join sequence to get missing columns."""
+        # Use self.model_graph to find shortest paths
+        # Return join plan: {table_sequence, join_keys, columns_from_each}
+        pass
+
+    def _execute_join_plan(
+        self,
+        model_name: str,
+        table_name: str,
+        join_plan: Dict[str, Any],
+        filters: Dict[str, Any]
+    ) -> DataFrame:
+        """Execute join plan (backend agnostic)."""
+        # Use self.backend to choose SQL vs DataFrame API
+        # Use self.connection for execution
+        pass
+```
+
+Then NotebookSession uses it:
+
+```python
+# app/notebook/api/notebook_session.py
+
+def get_exhibit_data(self, exhibit_id: str) -> Any:
+    # ... parse source, filters, etc ...
 
     # Extract required columns from exhibit
     required_columns = self._extract_required_columns(exhibit)
 
-    # Resolve source with auto-joins
-    df = resolver.get_table_with_auto_joins(
+    # Use UniversalSession's auto-join capability
+    # (self.storage_service wraps UniversalSession in new architecture)
+    df = self.universal_session.get_table_with_auto_joins(
         model_name=model_name,
         table_name=table_name,
         required_columns=required_columns,
@@ -220,6 +356,14 @@ def get_exhibit_data(self, exhibit_id: str) -> Any:
 
     return df
 ```
+
+**Benefits:**
+- ✅ Works for NotebookSession (notebooks)
+- ✅ Works for AdHocSession (one-off queries)
+- ✅ Works for direct model usage
+- ✅ Connection agnostic (DuckDB, Spark, etc.)
+- ✅ Leverages existing graph infrastructure
+- ✅ Central location for all auto-join logic
 
 ## Benefits
 
