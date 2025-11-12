@@ -617,6 +617,43 @@ class BaseModel:
             'facts': list(self._facts.keys())
         }
 
+    def get_table_schema(self, table_name: str) -> Dict[str, str]:
+        """
+        Get schema (column definitions) for a table.
+
+        Args:
+            table_name: Name of the table
+
+        Returns:
+            Dictionary mapping column_name -> data_type
+
+        Raises:
+            KeyError: If table not found
+        """
+        schema_config = self.model_cfg.get('schema', {})
+
+        # Check dimensions
+        if table_name in schema_config.get('dimensions', {}):
+            return schema_config['dimensions'][table_name].get('columns', {})
+
+        # Check facts
+        if table_name in schema_config.get('facts', {}):
+            return schema_config['facts'][table_name].get('columns', {})
+
+        # If not found in schema, try to get columns from actual DataFrame
+        try:
+            self.ensure_built()
+            if table_name in self._dims:
+                df = self._dims[table_name]
+                return {col: 'unknown' for col in df.columns}
+            elif table_name in self._facts:
+                df = self._facts[table_name]
+                return {col: 'unknown' for col in df.columns}
+        except Exception:
+            pass
+
+        raise KeyError(f"Table '{table_name}' not found in model schema")
+
     # ============================================================
     # GENERIC METADATA
     # ============================================================
