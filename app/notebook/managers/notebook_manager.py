@@ -439,22 +439,23 @@ class NotebookManager:
         # Extract required columns from exhibit config (for auto-join support)
         required_columns = self._extract_required_columns(exhibit)
 
+        # Build filters BEFORE get_table for filter pushdown optimization
+        filters = self._build_filters(exhibit)
+
         # Determine if we need aggregation based on dimension selector
         group_by, aggregations = self._determine_aggregation(exhibit)
 
-        # Get data from UniversalSession (with auto-join and aggregation if needed)
+        # Get data from UniversalSession with filters, auto-join, and aggregation
+        # Passing filters here allows the session to push them down into the SQL query
+        # BEFORE the expensive join and aggregation operations
         df = self.session.get_table(
             model_name,
             table_name,
             required_columns=required_columns if required_columns else None,
+            filters=filters,  # FILTER PUSHDOWN: Apply filters BEFORE join/aggregation
             group_by=group_by,
             aggregations=aggregations
         )
-
-        # Build and apply filters
-        filters = self._build_filters(exhibit)
-        if filters:
-            df = FilterEngine.apply_from_session(df, filters, self.session)
 
         return df
 
