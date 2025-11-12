@@ -631,11 +631,17 @@ class UniversalSession:
 
                 sql = f"SELECT {', '.join(select_cols)} FROM {base_temp}"
 
-                # Add each join
-                for i, next_table in enumerate(table_sequence[1:]):
-                    left_col, right_col = join_keys[i]
-                    next_temp = temp_tables[next_table]
-                    sql += f" LEFT JOIN {next_temp} ON {base_temp}.{left_col} = {next_temp}.{right_col}"
+                # Add each join - use PREVIOUS table, not base table
+                # For chain: fact_prices -> dim_company -> dim_exchange
+                # Join 1: fact_prices.ticker = dim_company.ticker
+                # Join 2: dim_company.exchange_code = dim_exchange.exchange_code (NOT fact_prices!)
+                for i in range(1, len(table_sequence)):
+                    left_table = table_sequence[i - 1]
+                    right_table = table_sequence[i]
+                    left_temp = temp_tables[left_table]
+                    right_temp = temp_tables[right_table]
+                    left_col, right_col = join_keys[i - 1]
+                    sql += f" LEFT JOIN {right_temp} ON {left_temp}.{left_col} = {right_temp}.{right_col}"
 
                 print(f"DEBUG: Auto-join SQL: {sql}")
 
