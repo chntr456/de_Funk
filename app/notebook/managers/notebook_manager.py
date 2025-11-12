@@ -439,11 +439,16 @@ class NotebookManager:
         # Extract required columns from exhibit config (for auto-join support)
         required_columns = self._extract_required_columns(exhibit)
 
-        # Get raw data from UniversalSession (with auto-join if needed)
+        # Determine if we need aggregation based on dimension selector
+        group_by, aggregations = self._determine_aggregation(exhibit)
+
+        # Get data from UniversalSession (with auto-join and aggregation if needed)
         df = self.session.get_table(
             model_name,
             table_name,
-            required_columns=required_columns if required_columns else None
+            required_columns=required_columns if required_columns else None,
+            group_by=group_by,
+            aggregations=aggregations
         )
 
         # Build and apply filters
@@ -531,6 +536,79 @@ class NotebookManager:
             required_cols.add(exhibit.aggregate_by)
 
         return list(required_cols) if required_cols else None
+
+    def _determine_aggregation(self, exhibit: Exhibit) -> tuple[Optional[List[str]], Optional[Dict[str, str]]]:
+        """
+        Determine if data needs aggregation based on dimension selector.
+
+        When dimension selector changes the grain (e.g., from ticker to exchange_name),
+        the data needs to be aggregated to the new grain.
+
+        Args:
+            exhibit: Exhibit configuration
+
+        Returns:
+            Tuple of (group_by, aggregations):
+                - group_by: List of columns to group by (None if no aggregation)
+                - aggregations: Dict of measure -> agg function (None to use defaults)
+
+        Example:
+            Base grain: ticker-level (10M rows)
+            Selected dimension: exchange_name
+            Returns: (['trade_date', 'exchange_name'], None)
+            Result: Exchange-level aggregated data (1,825 rows)
+        """
+        # Check if exhibit has dimension selector
+        if not (hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector):
+            return (None, None)
+
+        # Get the selected dimension from session state
+        try:
+            from app.ui.components.exhibits.dimension_selector import get_selected_dimension
+            selected_dimension = get_selected_dimension(exhibit.id)
+
+            if not selected_dimension:
+                # No dimension selected yet, use default
+                if hasattr(exhibit.dimension_selector, 'default_dimension'):
+                    selected_dimension = exhibit.dimension_selector.default_dimension
+                else:
+                    return (None, None)
+        except Exception as e:
+            print(f"Warning: Could not get selected dimension: {e}")
+            return (None, None)
+
+        # Determine base grain from source table
+        # For fact tables, typically ticker is the base grain
+        # For dimension changes (ticker → exchange_name), we need aggregation
+        base_grain_columns = ['ticker', 'company_id']  # Common base grain identifiers
+
+        # If selected dimension is the base grain, no aggregation needed
+        if selected_dimension in base_grain_columns:
+            return (None, None)
+
+        # Dimension changed to higher level - need aggregation
+        # Group by: x-axis (time/category) + selected dimension
+        group_by_cols = []
+
+        # Add x-axis column
+        if hasattr(exhibit, 'x') and exhibit.x:
+            group_by_cols.append(exhibit.x)
+        elif hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension'):
+            group_by_cols.append(exhibit.x_axis.dimension)
+
+        # Add selected dimension
+        if selected_dimension:
+            group_by_cols.append(selected_dimension)
+
+        if not group_by_cols:
+            # No grouping columns identified
+            return (None, None)
+
+        print(f"📊 Dimension selector: aggregating from base grain to {selected_dimension}")
+
+        # Let UniversalSession infer aggregations from measure metadata
+        # (avg for prices, sum for volumes, etc.)
+        return (group_by_cols, None)
 
     def _models_are_related(self, model_a: str, model_b: str) -> bool:
         """
