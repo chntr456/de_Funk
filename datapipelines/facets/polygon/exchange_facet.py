@@ -13,8 +13,10 @@ class ExchangesFacet(PolygonFacet):
         yield {"ep_name": "exchanges", "params": {}}
 
     def postprocess(self, df):
-        code = coalesce_existing(df, ["code","id"]).cast("string").alias("code")
-        name = coalesce_existing(df, ["name","description"]).cast("string").alias("name")
+        # Use MIC (Market Identifier Code) as the primary exchange code
+        # MIC codes like XNAS, XNYS, ARCX match what ref_ticker returns
+        code = coalesce_existing(df, ["mic", "code", "id"]).cast("string").alias("code")
+        name = coalesce_existing(df, ["name", "description"]).cast("string").alias("name")
         return (
             df.select(code, name)
               .dropna(subset=["code"])
