@@ -41,13 +41,13 @@ Select which dimension to use for coloring the lines. Try switching between diff
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: company.prices_with_company
   x: trade_date
   y: close
   title: Stock Price Trends - Dynamic Grouping
   description: Use the dimension selector to change how data is grouped
   dimension_selector: {
-    available_dimensions: [ticker, exchange],
+    available_dimensions: [ticker, exchange_name],
     default_dimension: ticker,
     label: "Group By",
     selector_type: radio,
@@ -66,13 +66,13 @@ Compare volumes across different groupings. The dimension selector lets you quic
 
 $exhibits${
   type: bar_chart
-  source: company.fact_prices
+  source: company.prices_with_company
   x: ticker
   y: volume
   title: Volume Comparison
   description: Switch dimensions to see volume from different perspectives
   dimension_selector: {
-    available_dimensions: [ticker, exchange],
+    available_dimensions: [ticker, exchange_name],
     default_dimension: ticker,
     label: "Color By",
     selector_type: selectbox,
@@ -113,7 +113,7 @@ This exhibit combines all features:
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: company.prices_with_company
   x: trade_date
   y: close
   title: Advanced Multi-Selector Chart
@@ -126,7 +126,7 @@ $exhibits${
     help_text: "Choose which price metrics to display"
   }
   dimension_selector: {
-    available_dimensions: [ticker, exchange],
+    available_dimensions: [ticker, exchange_name],
     default_dimension: ticker,
     label: "Group Lines By",
     selector_type: radio,
@@ -147,7 +147,7 @@ Add a `dimension_selector` to any chart exhibit:
 
 ```markdown
 dimension_selector: {
-  available_dimensions: [ticker, exchange, sector],
+  available_dimensions: [ticker, exchange_name, company_name],
   default_dimension: ticker,
   label: "Group By",
   selector_type: radio,
@@ -185,7 +185,8 @@ collapsible_expanded: false
 - Quickly explore data from different perspectives
 - No need to create multiple exhibits for different groupings
 - Users control how they want to view the data
-- Common use cases: switching between exchange, sector, region, category
+- Common use cases: switching between ticker, exchange_name, company_name, or other dimension columns
+- Note: Available dimensions must exist in your source table (use prices_with_company for exchange data)
 
 **Collapsible Exhibits:**
 - Keep notebooks clean and organized
@@ -195,7 +196,15 @@ collapsible_expanded: false
 
 ## Example Use Cases
 
-1. **Financial Analysis**: Switch between viewing by ticker, exchange, or sector
+1. **Financial Analysis**: Switch between viewing by ticker, exchange_name, or company_name (requires prices_with_company table)
 2. **Regional Sales**: Toggle between country, region, or city views
 3. **Product Analytics**: Switch between product, category, or brand groupings
 4. **Customer Segmentation**: View by age group, region, or purchase frequency
+
+## Important Notes
+
+**Data Source Requirements:**
+- The `fact_prices` table only contains: ticker, trade_date, and pricing metrics
+- For exchange information, use `prices_with_company` (materialized view with company and exchange data)
+- Available dimensions in `prices_with_company`: ticker, company_name, exchange_name
+- Always ensure dimension columns exist in your source table before adding to `available_dimensions`
