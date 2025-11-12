@@ -57,10 +57,10 @@ def reingest_exchanges(snapshot_dt: str = None):
     print("Step 2: Setting up ingestor...")
     print("-" * 80)
     try:
-        from datapipelines.providers.polygon.polygon_ingestor import PolygonIngestor
+        from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
         from datapipelines.ingestors.bronze_sink import BronzeSink
 
-        ingestor = PolygonIngestor(
+        ingestor = CompanyPolygonIngestor(
             polygon_cfg=ctx.polygon_cfg,
             storage_cfg=ctx.storage,
             spark=ctx.spark
