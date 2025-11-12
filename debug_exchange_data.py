@@ -1,6 +1,24 @@
 #!/usr/bin/env python3
 """
 Debug script to investigate why exchange_name is NULL in auto-join results.
+
+ROOT CAUSE IDENTIFIED:
+- dim_company.exchange_code contains MIC codes (XNAS, XNYS, ARCX) from Polygon API
+- dim_exchange.exchange_code contained numeric IDs (1, 10, 11)
+- Zero matching records between the two tables
+
+FIX APPLIED:
+- Updated ExchangesFacet to use 'mic' field from Polygon API
+- This will populate dim_exchange.exchange_code with MIC codes
+
+NEXT STEPS TO COMPLETE FIX:
+1. Re-ingest bronze exchanges data to get MIC codes from Polygon API
+2. Run this script again to verify exchange codes now match
+3. Test dimensional selector exchange tab
+
+To re-ingest exchanges:
+  # Run the exchange ingestion pipeline
+  # This will fetch fresh data from Polygon API with MIC codes
 """
 
 import sys
