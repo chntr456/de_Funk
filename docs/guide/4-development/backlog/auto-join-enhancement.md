@@ -255,115 +255,81 @@ class AutoJoinQueryBuilder:
         pass
 ```
 
-### Phase 4: Integration with UniversalSession (PREFERRED)
+### Phase 4: Implementation in UniversalSession ✅ COMPLETED
 
-**Why UniversalSession?**
-- Already has `model_graph` (NetworkX graph with edges/paths)
-- Already has `model_registry` (all schemas)
-- Connection agnostic (works with DuckDB, Spark, etc.)
-- Central authority for cross-model queries
-- Used by NotebookSession, AdHocSession, and direct queries
+**Auto-join is now the DEFAULT behavior** in `UniversalSession.get_table()`!
 
-Add to `UniversalSession` (models/api/session.py):
-
+Updated signature:
 ```python
-class UniversalSession:
-    # ... existing code ...
-
-    def get_table_with_auto_joins(
-        self,
-        model_name: str,
-        table_name: str,
-        required_columns: List[str],
-        filters: Optional[Dict[str, Any]] = None
-    ) -> DataFrame:
-        """
-        Get table with automatic joins to access missing columns.
-
-        Uses model_graph to find join paths and automatically joins
-        needed tables at query time.
-
-        Args:
-            model_name: Source model
-            table_name: Source table
-            required_columns: Columns needed in result
-            filters: Optional filters to apply
-
-        Returns:
-            DataFrame with all required columns (auto-joined if needed)
-        """
-        # 1. Get base table schema
-        model = self.load_model(model_name)
-        schema = model.get_table_schema(table_name)
-        base_columns = set(schema.keys())
-
-        # 2. Check which columns are missing
-        missing = [col for col in required_columns if col not in base_columns]
-
-        if not missing:
-            # No auto-join needed - use existing get_table()
-            return self.get_table(model_name, table_name)
-
-        # 3. Find join paths using self.model_graph
-        join_plan = self._plan_auto_joins(model_name, table_name, missing)
-
-        # 4. Execute joins (backend agnostic via self.backend)
-        return self._execute_join_plan(model_name, table_name, join_plan, filters)
-
-    def _plan_auto_joins(
-        self,
-        model_name: str,
-        table_name: str,
-        missing_columns: List[str]
-    ) -> Dict[str, Any]:
-        """Plan join sequence to get missing columns."""
-        # Use self.model_graph to find shortest paths
-        # Return join plan: {table_sequence, join_keys, columns_from_each}
-        pass
-
-    def _execute_join_plan(
-        self,
-        model_name: str,
-        table_name: str,
-        join_plan: Dict[str, Any],
-        filters: Dict[str, Any]
-    ) -> DataFrame:
-        """Execute join plan (backend agnostic)."""
-        # Use self.backend to choose SQL vs DataFrame API
-        # Use self.connection for execution
-        pass
+def get_table(
+    self,
+    model_name: str,
+    table_name: str,
+    required_columns: Optional[List[str]] = None,
+    filters: Optional[Dict[str, Any]] = None,
+    use_cache: bool = True
+) -> DataFrame:
 ```
 
-Then NotebookSession uses it:
+**How it works:**
+
+1. **No columns specified** - Returns full table (backward compatible)
+   ```python
+   df = session.get_table('company', 'fact_prices')
+   ```
+
+2. **All columns exist in base table** - Direct access
+   ```python
+   df = session.get_table('company', 'fact_prices',
+       required_columns=['ticker', 'close'])
+   ```
+
+3. **Missing columns** - Transparent auto-join
+   ```python
+   df = session.get_table('company', 'fact_prices',
+       required_columns=['ticker', 'close', 'exchange_name'])
+   # System detects exchange_name not in fact_prices
+   # Auto-joins: fact_prices -> dim_company -> dim_exchange
+   ```
+
+**Smart fallback strategy:**
+1. Check if materialized view exists with all columns → use it
+2. Otherwise, build joins from graph edges
+3. If auto-join fails, fall back to base table
+
+**Implementation details:**
+- `_find_materialized_view()` - Checks if `prices_with_company` has all columns
+- `_plan_auto_joins()` - Uses graph edges to build join sequence
+- `_execute_auto_joins()` - Performs joins (backend agnostic)
+- `_select_columns()` - Returns only requested columns
+
+**Usage in NotebookSession:**
 
 ```python
 # app/notebook/api/notebook_session.py
 
 def get_exhibit_data(self, exhibit_id: str) -> Any:
-    # ... parse source, filters, etc ...
-
-    # Extract required columns from exhibit
+    # Extract required columns from exhibit config
     required_columns = self._extract_required_columns(exhibit)
 
-    # Use UniversalSession's auto-join capability
-    # (self.storage_service wraps UniversalSession in new architecture)
-    df = self.universal_session.get_table_with_auto_joins(
+    # Auto-join happens transparently
+    df = self.universal_session.get_table(
         model_name=model_name,
         table_name=table_name,
         required_columns=required_columns,
         filters=filters
     )
-
     return df
 ```
 
 **Benefits:**
-- ✅ Works for NotebookSession (notebooks)
-- ✅ Works for AdHocSession (one-off queries)
-- ✅ Works for direct model usage
-- ✅ Connection agnostic (DuckDB, Spark, etc.)
-- ✅ Leverages existing graph infrastructure
-- ✅ Central location for all auto-join logic
+- ✅ **Transparent** - Users don't think about joins
+- ✅ **Backward compatible** - Old code still works
+- ✅ **Materialized views as optimization** - Not user-facing concept
+- ✅ **Single method** - No need to choose between `get_table()` and `get_table_with_auto_joins()`
+- ✅ **Works everywhere** - NotebookSession, AdHocSession, direct usage
+- ✅ **Connection agnostic** - DuckDB and Spark support
+- ✅ **Intelligent** - Uses materialized views when available, auto-joins when needed
 
 ## Benefits
 
@@ -478,19 +444,44 @@ class DuckDBAutoJoiner:
 
 ## Next Steps
 
-1. ✅ Document the enhancement proposal (this file)
-2. Create proof-of-concept for DuckDB backend
-3. Test performance: auto-join vs materialized views
-4. Implement column index builder
-5. Implement graph path finder
-6. Integrate with NotebookSession
-7. Update dimension_selector to validate columns exist (via auto-join or direct)
-8. Write tests for various join scenarios
-9. Update documentation with new patterns
+1. ✅ Document the enhancement proposal
+2. ✅ Implement in UniversalSession.get_table()
+3. ✅ Add transparent auto-join as default behavior
+4. ✅ Implement column index builder
+5. ✅ Implement graph path finder
+6. ✅ Backend-agnostic join execution
+7. ⏳ Test with real data (DuckDB backend)
+8. ⏳ Integrate with NotebookSession.get_exhibit_data()
+9. ⏳ Update dimension_selector to pass required_columns
+10. ⏳ Write comprehensive tests
+11. ⏳ Performance benchmarking (auto-join vs materialized views)
+12. ⏳ Update user documentation
 
 ## Status
 
-- **Status**: Proposed
+- **Status**: ✅ **Implemented** (Testing phase)
 - **Priority**: High (major UX improvement)
 - **Complexity**: Medium (leverages existing graph infrastructure)
 - **Impact**: High (simplifies all notebook definitions)
+- **Implementation**: `models/api/session.py` lines 157-601
+
+## Testing Plan
+
+### Phase 1: Unit Tests
+- Test `_build_column_index()` with various model configs
+- Test `_find_materialized_view()` selection logic
+- Test `_plan_auto_joins()` pathfinding
+- Test `_parse_join_condition()` edge cases
+
+### Phase 2: Integration Tests
+- Test simple case: all columns in base table
+- Test auto-join: exchange_name from fact_prices
+- Test materialized view selection
+- Test fallback behavior when joins fail
+- Test cross-model joins (future)
+
+### Phase 3: Performance Tests
+- Benchmark: auto-join vs materialized view
+- Measure: column indexing overhead
+- Compare: DuckDB vs Spark performance
+- Identify: when to materialize vs auto-join

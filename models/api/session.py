@@ -1,7 +1,7 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional, Tuple, Set
 from pyspark.sql import DataFrame
 
 from models.api.dal import StorageRouter, BronzeTable
@@ -154,17 +154,45 @@ class UniversalSession:
 
         return model
 
-    def get_table(self, model_name: str, table_name: str, use_cache: bool = True) -> DataFrame:
+    def get_table(
+        self,
+        model_name: str,
+        table_name: str,
+        required_columns: Optional[List[str]] = None,
+        filters: Optional[Dict[str, Any]] = None,
+        use_cache: bool = True
+    ) -> DataFrame:
         """
-        Get a table from any model.
+        Get a table from any model with transparent auto-join support.
+
+        If required_columns are specified and some don't exist in the base table,
+        the system automatically uses the model graph to find join paths and
+        retrieve the missing columns.
+
+        This makes materialized views a performance optimization rather than
+        a user-facing concept - users just specify what columns they need.
 
         Args:
             model_name: Name of the model
-            table_name: Name of the table
-            use_cache: Whether to use cached data (ignored, kept for backwards compatibility)
+            table_name: Name of the base table
+            required_columns: Optional list of columns needed. If specified and some
+                            columns don't exist in base table, auto-joins are performed
+            filters: Optional filters to apply (not yet implemented)
+            use_cache: Whether to use cached data (kept for backwards compatibility)
 
         Returns:
-            DataFrame
+            DataFrame with requested columns (auto-joined if needed)
+
+        Examples:
+            # Simple usage - get full table
+            df = session.get_table('company', 'fact_prices')
+
+            # Auto-join usage - exchange_name not in fact_prices, auto-joins via graph
+            df = session.get_table(
+                'company', 'fact_prices',
+                required_columns=['ticker', 'close', 'exchange_name']
+            )
+            # System transparently joins: fact_prices -> dim_company -> dim_exchange
 
         Note:
             The use_cache parameter is kept for backwards compatibility with old
@@ -172,7 +200,48 @@ class UniversalSession:
             automatically via the _models cache in UniversalSession.
         """
         model = self.load_model(model_name)
-        return model.get_table(table_name)
+
+        # If no specific columns requested, return full table (backward compatible)
+        if not required_columns:
+            return model.get_table(table_name)
+
+        # Check which columns exist in base table
+        try:
+            schema = model.get_table_schema(table_name)
+            base_columns = set(schema.keys())
+        except Exception as e:
+            # If can't get schema, fall back to simple table access
+            print(f"Warning: Could not get schema for {model_name}.{table_name}: {e}")
+            return model.get_table(table_name)
+
+        # Find missing columns
+        missing = [col for col in required_columns if col not in base_columns]
+
+        # No missing columns - direct table access
+        if not missing:
+            df = model.get_table(table_name)
+            # Return only requested columns
+            return self._select_columns(df, required_columns)
+
+        # Missing columns - try auto-join strategies
+        print(f"🔗 Auto-join: {missing} not in {table_name}, searching for join path...")
+
+        # Strategy 1: Check if a materialized view has all columns
+        materialized_table = self._find_materialized_view(model_name, required_columns)
+        if materialized_table:
+            print(f"✓ Using materialized view: {materialized_table}")
+            df = model.get_table(materialized_table)
+            return self._select_columns(df, required_columns)
+
+        # Strategy 2: Build joins from graph
+        try:
+            join_plan = self._plan_auto_joins(model_name, table_name, missing)
+            print(f"✓ Join plan: {' -> '.join(join_plan['table_sequence'])}")
+            return self._execute_auto_joins(model_name, join_plan, required_columns, filters)
+        except Exception as e:
+            print(f"❌ Auto-join failed: {e}")
+            print(f"   Falling back to base table {table_name}")
+            return model.get_table(table_name)
 
     def get_filter_column_mappings(self, model_name: str, table_name: str) -> Dict[str, str]:
         """
@@ -297,3 +366,236 @@ class UniversalSession:
             BaseModel instance
         """
         return self.load_model(model_name)
+
+    # ============================================================
+    # AUTO-JOIN SUPPORT (Transparent Graph Traversal)
+    # ============================================================
+
+    def _select_columns(self, df: DataFrame, columns: List[str]) -> DataFrame:
+        """
+        Select specific columns from DataFrame (backend agnostic).
+
+        Args:
+            df: DataFrame (Spark or DuckDB)
+            columns: List of column names to select
+
+        Returns:
+            DataFrame with only specified columns
+        """
+        if self.backend == 'spark':
+            return df.select(*columns)
+        else:
+            # DuckDB - use project() method
+            return df.project(','.join(columns))
+
+    def _find_materialized_view(
+        self,
+        model_name: str,
+        required_columns: List[str]
+    ) -> Optional[str]:
+        """
+        Find a materialized view that contains all required columns.
+
+        This allows the system to use pre-computed joins when available,
+        making materialized views a performance optimization.
+
+        Args:
+            model_name: Model to search in
+            required_columns: Columns needed
+
+        Returns:
+            Table name of materialized view, or None if not found
+        """
+        try:
+            model = self.load_model(model_name)
+            tables = model.list_tables()
+
+            # Search in facts (where materialized paths are stored)
+            for table_name in tables.get('facts', []):
+                try:
+                    schema = model.get_table_schema(table_name)
+                    table_columns = set(schema.keys())
+
+                    # Check if this table has all required columns
+                    if all(col in table_columns for col in required_columns):
+                        return table_name
+                except Exception:
+                    continue
+
+            return None
+        except Exception as e:
+            print(f"Warning: Error finding materialized view: {e}")
+            return None
+
+    def _plan_auto_joins(
+        self,
+        model_name: str,
+        base_table: str,
+        missing_columns: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Plan join sequence to get missing columns using model graph.
+
+        Args:
+            model_name: Model name
+            base_table: Starting table
+            missing_columns: Columns to find
+
+        Returns:
+            Join plan dict with:
+                - table_sequence: List of tables to join
+                - join_keys: List of (left_col, right_col) pairs for each join
+                - target_columns: Which columns come from which table
+
+        Raises:
+            ValueError: If no join path found
+        """
+        model_config = self.registry.get_model_config(model_name)
+        graph_config = model_config.get('graph', {})
+
+        if not graph_config or 'edges' not in graph_config:
+            raise ValueError(f"No graph edges defined for model {model_name}")
+
+        # Build column-to-table index
+        column_index = self._build_column_index(model_name)
+
+        # Find which tables have the missing columns
+        target_tables = {}
+        for col in missing_columns:
+            if col in column_index:
+                target_tables[col] = column_index[col][0]  # Use first table that has it
+            else:
+                raise ValueError(f"Column '{col}' not found in any table in model {model_name}")
+
+        # Find join path from base_table to target tables
+        table_sequence = [base_table]
+        join_keys = []
+        seen_tables = {base_table}
+
+        # Simple greedy algorithm: find edges from current tables to target tables
+        edges = graph_config.get('edges', [])
+        current_tables = {base_table}
+
+        # Keep adding tables until we have all target tables
+        while not all(tbl in seen_tables for tbl in target_tables.values()):
+            added_table = False
+
+            for edge in edges:
+                edge_from = edge.get('from', '')
+                edge_to = edge.get('to', '')
+
+                # Skip cross-model edges for now
+                if '.' in edge_to:
+                    continue
+
+                # Check if this edge connects a current table to a new table
+                if edge_from in current_tables and edge_to not in seen_tables:
+                    # Add this table to sequence
+                    table_sequence.append(edge_to)
+                    seen_tables.add(edge_to)
+                    current_tables.add(edge_to)
+
+                    # Extract join keys
+                    on_conditions = edge.get('on', edge.get(True, []))
+                    if on_conditions:
+                        # Parse "col1=col2" format
+                        join_pair = self._parse_join_condition(on_conditions[0])
+                        join_keys.append(join_pair)
+
+                    added_table = True
+                    break
+
+            if not added_table:
+                raise ValueError(
+                    f"Cannot find join path from {base_table} to {missing_columns}. "
+                    f"Reached: {seen_tables}, Need: {set(target_tables.values())}"
+                )
+
+        return {
+            'table_sequence': table_sequence,
+            'join_keys': join_keys,
+            'target_columns': target_tables
+        }
+
+    def _build_column_index(self, model_name: str) -> Dict[str, List[str]]:
+        """
+        Build reverse index: column_name -> [table_names].
+
+        Args:
+            model_name: Model to index
+
+        Returns:
+            Dict mapping column names to list of tables that have that column
+        """
+        index = {}
+        model = self.load_model(model_name)
+        tables = model.list_tables()
+
+        # Index all tables (dims and facts)
+        for table_name in tables.get('dimensions', []) + tables.get('facts', []):
+            try:
+                schema = model.get_table_schema(table_name)
+                for column_name in schema.keys():
+                    if column_name not in index:
+                        index[column_name] = []
+                    index[column_name].append(table_name)
+            except Exception:
+                continue
+
+        return index
+
+    def _parse_join_condition(self, condition: str) -> Tuple[str, str]:
+        """
+        Parse join condition like "ticker=ticker" or "exchange_code=exchange_code".
+
+        Args:
+            condition: Join condition string
+
+        Returns:
+            Tuple of (left_column, right_column)
+        """
+        parts = condition.split('=')
+        if len(parts) == 2:
+            return (parts[0].strip(), parts[1].strip())
+        raise ValueError(f"Invalid join condition: {condition}")
+
+    def _execute_auto_joins(
+        self,
+        model_name: str,
+        join_plan: Dict[str, Any],
+        required_columns: List[str],
+        filters: Optional[Dict[str, Any]] = None
+    ) -> DataFrame:
+        """
+        Execute the join plan to get required columns.
+
+        Args:
+            model_name: Model name
+            join_plan: Join plan from _plan_auto_joins
+            required_columns: Columns to return
+            filters: Optional filters (not yet implemented)
+
+        Returns:
+            DataFrame with required columns
+        """
+        model = self.load_model(model_name)
+        table_sequence = join_plan['table_sequence']
+        join_keys = join_plan['join_keys']
+
+        # Start with base table
+        df = model.get_table(table_sequence[0])
+
+        # Join each subsequent table
+        for i, next_table in enumerate(table_sequence[1:]):
+            right_df = model.get_table(next_table)
+            left_col, right_col = join_keys[i]
+
+            # Perform join (backend agnostic)
+            if self.backend == 'spark':
+                df = df.join(right_df, df[left_col] == right_df[right_col], 'left')
+            else:
+                # DuckDB - use join() method
+                df = df.join(right_df, left_col, how='left')
+
+        # Select only required columns
+        return self._select_columns(df, required_columns)
