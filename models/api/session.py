@@ -582,20 +582,87 @@ class UniversalSession:
         table_sequence = join_plan['table_sequence']
         join_keys = join_plan['join_keys']
 
-        # Start with base table
-        df = model.get_table(table_sequence[0])
+        if self.backend == 'spark':
+            # Spark: Use DataFrame API
+            df = model.get_table(table_sequence[0])
 
-        # Join each subsequent table
-        for i, next_table in enumerate(table_sequence[1:]):
-            right_df = model.get_table(next_table)
-            left_col, right_col = join_keys[i]
-
-            # Perform join (backend agnostic)
-            if self.backend == 'spark':
+            # Join each subsequent table
+            for i, next_table in enumerate(table_sequence[1:]):
+                right_df = model.get_table(next_table)
+                left_col, right_col = join_keys[i]
                 df = df.join(right_df, df[left_col] == right_df[right_col], 'left')
-            else:
-                # DuckDB - use join() method
-                df = df.join(right_df, left_col, how='left')
 
-        # Select only required columns
-        return self._select_columns(df, required_columns)
+            # Select only required columns
+            return self._select_columns(df, required_columns)
+
+        else:
+            # DuckDB: Use SQL for joins (more efficient)
+            # Build SQL query with LEFT JOINS
+            base_table = table_sequence[0]
+
+            # Create temporary views from the tables
+            temp_tables = {}
+            try:
+                for table_name in table_sequence:
+                    df_temp = model.get_table(table_name)
+                    temp_name = f"_autojoin_{table_name}"
+                    # Register as temp table in DuckDB
+                    self.connection.conn.register(temp_name, df_temp.df())
+                    temp_tables[table_name] = temp_name
+
+                # Build SQL with proper qualified column names to avoid ambiguity
+                base_temp = temp_tables[base_table]
+                select_cols = []
+                for col in required_columns:
+                    # Try to find which table has this column
+                    found = False
+                    for table_name in table_sequence:
+                        try:
+                            df = model.get_table(table_name)
+                            if col in df.columns:
+                                select_cols.append(f"{temp_tables[table_name]}.{col}")
+                                found = True
+                                break
+                        except:
+                            continue
+                    if not found:
+                        # If not found, just use unqualified column name
+                        select_cols.append(col)
+
+                sql = f"SELECT {', '.join(select_cols)} FROM {base_temp}"
+
+                # Add each join
+                for i, next_table in enumerate(table_sequence[1:]):
+                    left_col, right_col = join_keys[i]
+                    next_temp = temp_tables[next_table]
+                    sql += f" LEFT JOIN {next_temp} ON {base_temp}.{left_col} = {next_temp}.{right_col}"
+
+                print(f"DEBUG: Auto-join SQL: {sql}")
+
+                # Execute the join query
+                result = self.connection.conn.execute(sql)
+
+                # Unregister temp tables
+                for temp_name in temp_tables.values():
+                    try:
+                        self.connection.conn.unregister(temp_name)
+                    except:
+                        pass
+
+                # Convert to DuckDB relation
+                return self.connection.conn.from_df(result.fetchdf())
+
+            except Exception as e:
+                print(f"ERROR: Auto-join SQL failed: {e}")
+                import traceback
+                traceback.print_exc()
+
+                # Clean up temp tables
+                for temp_name in temp_tables.values():
+                    try:
+                        self.connection.conn.unregister(temp_name)
+                    except:
+                        pass
+
+                # Fall back to base table
+                return model.get_table(table_sequence[0])
