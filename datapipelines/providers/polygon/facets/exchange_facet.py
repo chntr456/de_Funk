@@ -15,10 +15,24 @@ class ExchangesFacet(PolygonFacet):
     def postprocess(self, df):
         # Use MIC (Market Identifier Code) as the primary exchange code
         # MIC codes like XNAS, XNYS, ARCX match what ref_ticker returns
-        code = coalesce_existing(df, ["mic", "code", "id"]).cast("string").alias("code")
-        name = coalesce_existing(df, ["name", "description"]).cast("string").alias("name")
+
+        # Cast to string first to avoid type inference issues with coalesce
+        # Polygon API returns 'mic' as string, 'id' as int
+        if 'mic' in df.columns:
+            df = df.withColumn('mic', F.col('mic').cast('string'))
+        if 'id' in df.columns:
+            df = df.withColumn('id', F.col('id').cast('string'))
+        if 'code' in df.columns:
+            df = df.withColumn('code', F.col('code').cast('string'))
+
+        code = coalesce_existing(df, ["mic", "code", "id"]).alias("exchange_code")
+        name = coalesce_existing(df, ["name", "description"]).alias("exchange_name")
+
         return (
-            df.select(code, name)
-              .dropna(subset=["code"])
-              .dropDuplicates(["code"])
+            df.select(
+                code.cast("string").alias("code"),
+                name.cast("string").alias("name")
+            )
+            .dropna(subset=["code"])
+            .dropDuplicates(["code"])
         )
