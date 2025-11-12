@@ -160,17 +160,23 @@ class UniversalSession:
         table_name: str,
         required_columns: Optional[List[str]] = None,
         filters: Optional[Dict[str, Any]] = None,
+        group_by: Optional[List[str]] = None,
+        aggregations: Optional[Dict[str, str]] = None,
         use_cache: bool = True
     ) -> DataFrame:
         """
-        Get a table from any model with transparent auto-join support.
+        Get a table from any model with transparent auto-join and aggregation support.
 
         If required_columns are specified and some don't exist in the base table,
         the system automatically uses the model graph to find join paths and
         retrieve the missing columns.
 
+        If group_by is specified, the data is aggregated to the new grain using
+        measure metadata from the model configuration.
+
         This makes materialized views a performance optimization rather than
-        a user-facing concept - users just specify what columns they need.
+        a user-facing concept - users just specify what columns they need and
+        at what grain.
 
         Args:
             model_name: Name of the model
@@ -178,10 +184,14 @@ class UniversalSession:
             required_columns: Optional list of columns needed. If specified and some
                             columns don't exist in base table, auto-joins are performed
             filters: Optional filters to apply (not yet implemented)
+            group_by: Optional list of columns to group by (dimensions at new grain)
+            aggregations: Optional dict mapping measure columns to aggregation functions
+                        (avg, sum, max, min, count, first). If not provided, uses measure
+                        metadata from model config.
             use_cache: Whether to use cached data (kept for backwards compatibility)
 
         Returns:
-            DataFrame with requested columns (auto-joined if needed)
+            DataFrame with requested columns (auto-joined and aggregated if needed)
 
         Examples:
             # Simple usage - get full table
@@ -193,6 +203,15 @@ class UniversalSession:
                 required_columns=['ticker', 'close', 'exchange_name']
             )
             # System transparently joins: fact_prices -> dim_company -> dim_exchange
+
+            # Aggregation usage - change grain from ticker to exchange
+            df = session.get_table(
+                'company', 'fact_prices',
+                required_columns=['trade_date', 'exchange_name', 'close', 'volume'],
+                group_by=['trade_date', 'exchange_name'],
+                aggregations={'close': 'avg', 'volume': 'sum'}
+            )
+            # System auto-joins exchange_name, then aggregates to exchange-level
 
         Note:
             The use_cache parameter is kept for backwards compatibility with old
@@ -220,8 +239,14 @@ class UniversalSession:
         # No missing columns - direct table access
         if not missing:
             df = model.get_table(table_name)
-            # Return only requested columns
-            return self._select_columns(df, required_columns)
+            # Select only requested columns
+            df = self._select_columns(df, required_columns)
+
+            # Apply aggregation if group_by specified
+            if group_by:
+                df = self._aggregate_data(model_name, df, required_columns, group_by, aggregations)
+
+            return df
 
         # Missing columns - try auto-join strategies
         print(f"🔗 Auto-join: {missing} not in {table_name}, searching for join path...")
@@ -237,11 +262,17 @@ class UniversalSession:
         try:
             join_plan = self._plan_auto_joins(model_name, table_name, missing)
             print(f"✓ Join plan: {' -> '.join(join_plan['table_sequence'])}")
-            return self._execute_auto_joins(model_name, join_plan, required_columns, filters)
+            df = self._execute_auto_joins(model_name, join_plan, required_columns, filters)
         except Exception as e:
             print(f"❌ Auto-join failed: {e}")
             print(f"   Falling back to base table {table_name}")
-            return model.get_table(table_name)
+            df = model.get_table(table_name)
+
+        # Apply aggregation if group_by specified
+        if group_by:
+            df = self._aggregate_data(model_name, df, required_columns, group_by, aggregations)
+
+        return df
 
     def get_filter_column_mappings(self, model_name: str, table_name: str) -> Dict[str, str]:
         """
@@ -679,3 +710,230 @@ class UniversalSession:
 
                 # Fall back to base table
                 return model.get_table(table_sequence[0])
+
+    def _aggregate_data(
+        self,
+        model_name: str,
+        df: DataFrame,
+        required_columns: List[str],
+        group_by: List[str],
+        aggregations: Optional[Dict[str, str]] = None
+    ) -> DataFrame:
+        """
+        Aggregate data to a new grain using group_by and measure aggregations.
+
+        Args:
+            model_name: Name of the model (for measure metadata lookup)
+            df: DataFrame to aggregate
+            required_columns: All columns that should be in result
+            group_by: Columns to group by (dimensions at new grain)
+            aggregations: Optional dict mapping measure columns to agg functions.
+                        If not provided, infers from measure metadata.
+
+        Returns:
+            Aggregated DataFrame
+
+        Example:
+            Input df: ticker-level daily prices (10M rows)
+            group_by: ['trade_date', 'exchange_name']
+            aggregations: {'close': 'avg', 'volume': 'sum'}
+            Output: exchange-level daily prices (5 exchanges * 365 days = 1,825 rows)
+        """
+        print(f"🔢 Aggregating to grain: {group_by}")
+
+        # Determine which columns are measures (need aggregation)
+        measure_cols = [col for col in required_columns if col not in group_by]
+
+        if not measure_cols:
+            # No measures, just distinct dimensions
+            if self.backend == 'spark':
+                return df.select(*group_by).distinct()
+            else:  # duckdb
+                # DuckDB relations don't have .select(), need to use SQL
+                distinct_query = f"SELECT DISTINCT {', '.join(group_by)} FROM df"
+                return self.connection.conn.execute(distinct_query).df()
+
+        # Get or infer aggregations for each measure
+        if not aggregations:
+            aggregations = self._infer_aggregations(model_name, measure_cols)
+
+        print(f"   Measures: {aggregations}")
+
+        # Apply aggregations based on backend
+        if self.backend == 'spark':
+            return self._aggregate_spark(df, group_by, aggregations)
+        else:  # duckdb
+            return self._aggregate_duckdb(df, group_by, aggregations)
+
+    def _infer_aggregations(self, model_name: str, measure_cols: List[str]) -> Dict[str, str]:
+        """
+        Infer aggregation functions for measures from model metadata.
+
+        Checks model config for measure definitions and uses specified aggregations.
+        Falls back to sensible defaults: avg for prices, sum for volumes/counts.
+
+        Args:
+            model_name: Model to look up metadata
+            measure_cols: Measure columns to infer aggregations for
+
+        Returns:
+            Dict mapping measure column to aggregation function
+        """
+        aggregations = {}
+
+        try:
+            model_config = self.registry.get_model_config(model_name)
+            measures = model_config.get('measures', {})
+
+            for col in measure_cols:
+                # Check if measure is defined in config
+                if col in measures:
+                    measure_def = measures[col]
+                    # Use configured aggregation if available
+                    agg_func = measure_def.get('aggregation', 'avg')
+                    aggregations[col] = agg_func
+                else:
+                    # Fallback defaults based on column name
+                    aggregations[col] = self._default_aggregation(col)
+
+        except Exception as e:
+            print(f"   Warning: Could not load measure metadata: {e}")
+            # Use defaults for all
+            for col in measure_cols:
+                aggregations[col] = self._default_aggregation(col)
+
+        return aggregations
+
+    def _default_aggregation(self, column_name: str) -> str:
+        """
+        Determine default aggregation based on column name.
+
+        Args:
+            column_name: Name of the measure column
+
+        Returns:
+            Aggregation function: avg, sum, max, min, or first
+        """
+        col_lower = column_name.lower()
+
+        # Sum aggregations
+        if any(term in col_lower for term in ['volume', 'count', 'total', 'quantity', 'qty']):
+            return 'sum'
+
+        # Max aggregations
+        if any(term in col_lower for term in ['high', 'max', 'peak']):
+            return 'max'
+
+        # Min aggregations
+        if any(term in col_lower for term in ['low', 'min']):
+            return 'min'
+
+        # Default to average for prices and other numeric measures
+        return 'avg'
+
+    def _aggregate_spark(
+        self,
+        df: DataFrame,
+        group_by: List[str],
+        aggregations: Dict[str, str]
+    ) -> DataFrame:
+        """
+        Aggregate Spark DataFrame using groupBy and agg.
+
+        Args:
+            df: Spark DataFrame
+            group_by: Columns to group by
+            aggregations: Dict of column -> agg function
+
+        Returns:
+            Aggregated Spark DataFrame
+        """
+        from pyspark.sql import functions as F
+
+        # Build aggregation expressions
+        agg_exprs = []
+        for col, agg_func in aggregations.items():
+            if agg_func == 'avg':
+                agg_exprs.append(F.avg(col).alias(col))
+            elif agg_func == 'sum':
+                agg_exprs.append(F.sum(col).alias(col))
+            elif agg_func == 'max':
+                agg_exprs.append(F.max(col).alias(col))
+            elif agg_func == 'min':
+                agg_exprs.append(F.min(col).alias(col))
+            elif agg_func == 'count':
+                agg_exprs.append(F.count(col).alias(col))
+            elif agg_func == 'first':
+                agg_exprs.append(F.first(col).alias(col))
+            else:
+                # Default to avg if unknown function
+                print(f"   Warning: Unknown aggregation '{agg_func}' for {col}, using avg")
+                agg_exprs.append(F.avg(col).alias(col))
+
+        # Group and aggregate
+        result = df.groupBy(*group_by).agg(*agg_exprs)
+
+        # Reorder columns to match group_by + measures order
+        measure_order = list(aggregations.keys())
+        result = result.select(*group_by, *measure_order)
+
+        return result
+
+    def _aggregate_duckdb(
+        self,
+        df,
+        group_by: List[str],
+        aggregations: Dict[str, str]
+    ) -> DataFrame:
+        """
+        Aggregate DuckDB relation using SQL GROUP BY.
+
+        Args:
+            df: DuckDB relation or pandas DataFrame
+            group_by: Columns to group by
+            aggregations: Dict of column -> agg function
+
+        Returns:
+            Aggregated DuckDB relation
+        """
+        # Build aggregation SQL
+        select_parts = []
+
+        # Add group by columns
+        for col in group_by:
+            select_parts.append(col)
+
+        # Add aggregated measures
+        for col, agg_func in aggregations.items():
+            if agg_func == 'avg':
+                select_parts.append(f"AVG({col}) as {col}")
+            elif agg_func == 'sum':
+                select_parts.append(f"SUM({col}) as {col}")
+            elif agg_func == 'max':
+                select_parts.append(f"MAX({col}) as {col}")
+            elif agg_func == 'min':
+                select_parts.append(f"MIN({col}) as {col}")
+            elif agg_func == 'count':
+                select_parts.append(f"COUNT({col}) as {col}")
+            elif agg_func == 'first':
+                select_parts.append(f"FIRST({col}) as {col}")
+            else:
+                # Default to AVG
+                print(f"   Warning: Unknown aggregation '{agg_func}' for {col}, using AVG")
+                select_parts.append(f"AVG({col}) as {col}")
+
+        # Build complete SQL
+        select_clause = ", ".join(select_parts)
+        group_clause = ", ".join(group_by)
+        sql = f"SELECT {select_clause} FROM df GROUP BY {group_clause}"
+
+        print(f"   Aggregation SQL: {sql}")
+
+        # Execute query
+        try:
+            result = self.connection.conn.execute(sql)
+            return result.df()
+        except Exception as e:
+            print(f"   Error in DuckDB aggregation: {e}")
+            # Return original data if aggregation fails
+            return df
