@@ -302,8 +302,8 @@ class TestDuckDBConnectionDelta:
             mode='append'
         )
 
-        # Vacuum with very short retention (0 hours for testing)
-        duckdb_connection.vacuum_delta_table(str(delta_path), retention_hours=0)
+        # Vacuum with very short retention (0 hours for testing, disable enforcement)
+        duckdb_connection.vacuum_delta_table(str(delta_path), retention_hours=0, enforce_retention=False)
 
         # Current version should still be readable
         result_df = duckdb_connection.read_table(str(delta_path), format='delta').df()

@@ -11,7 +11,7 @@ Provides reusable patterns for calculating risk metrics such as:
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 
 class RiskMetricStrategy(ABC):
