@@ -23,8 +23,7 @@ $exhibits${
   type: data_table
   id: company_price_measures
   title: Average Price and Volume by Ticker (Top 20)
-  model: company
-  table: fact_prices
+  source: company.fact_prices
   columns: [ticker, close, volume]
   aggregations:
     close: avg
@@ -49,8 +48,7 @@ $exhibits${
   type: data_table
   id: market_cap_proxy
   title: Market Cap Proxy (Close × Volume) - Top 15
-  model: company
-  table: fact_prices
+  source: company.fact_prices
   columns: [ticker, close, volume]
   derived_columns:
     market_cap_proxy: close * volume
@@ -74,8 +72,7 @@ $exhibits${
   type: data_table
   id: price_volatility
   title: Price Volatility (Std Dev) by Ticker - Top 20
-  model: company
-  table: fact_prices
+  source: company.fact_prices
   columns: [ticker, close]
   aggregations:
     close: stddev
@@ -101,8 +98,7 @@ $exhibits${
   type: data_table
   id: monthly_avg_prices
   title: Monthly Average Closing Prices (Last 12 Months)
-  model: company
-  table: fact_prices
+  source: company.fact_prices
   columns: [trade_date, ticker, close]
   filters:
     ticker: {operator: in, values: [AAPL, MSFT, GOOGL, AMZN, NVDA]}
@@ -132,8 +128,7 @@ $exhibits${
   type: data_table
   id: prices_by_day_of_week
   title: Average Price by Day of Week (All Tickers)
-  model: company
-  table: fact_prices
+  source: company.fact_prices
   columns: [day_of_week, close, volume]
   aggregations:
     close: avg
@@ -160,8 +155,7 @@ $exhibits${
   type: data_table
   id: companies_by_exchange
   title: Company Count by Exchange
-  model: company
-  table: dim_company
+  source: company.dim_company
   columns: [exchange_code]
   aggregations:
     company_count: count
@@ -185,8 +179,7 @@ $exhibits${
   type: data_table
   id: forecast_accuracy
   title: Forecast Model Performance (MAE, MAPE, R²)
-  model: forecast
-  table: fact_forecast_metrics
+  source: forecast.fact_forecast_metrics
   columns: [model_name, mae, mape, r2_score, num_predictions]
   aggregations:
     mae: avg
@@ -216,8 +209,7 @@ $exhibits${
   type: data_table
   id: daily_price_range
   title: Average Daily Price Range (High - Low) - Top 20
-  model: company
-  table: fact_prices
+  source: company.fact_prices
   columns: [ticker, high, low]
   derived_columns:
     daily_range: high - low
