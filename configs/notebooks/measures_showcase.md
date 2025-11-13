@@ -1,9 +1,9 @@
 ---
 id: measures_showcase
 title: Measures Showcase
-description: Interactive demonstration of measures across all domain models with live data exhibits
-tags: [measures, aggregations, analytics, showcase, equity, corporate, forecast]
-models: [equity, corporate, forecast, core, macro]
+description: Interactive demonstration of measures with live data exhibits
+tags: [measures, aggregations, analytics, showcase]
+models: [company, forecast, core]
 author: system
 created: 2025-11-13
 updated: 2025-11-13
@@ -23,20 +23,18 @@ $filter${
   label: Stock Tickers
   type: select
   multi: true
-  source: {model: equity, table: fact_equity_prices, column: ticker}
+  source: {model: company, table: fact_prices, column: ticker}
   default: ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
   help_text: Select stocks to analyze (loaded from database)
 }
 
 # 📊 Measures Showcase
 
-Interactive demonstration of measures across all domain models with live data exhibits. Use filters above to customize your analysis.
-
-**Domain Models:** equity, corporate, forecast, macro, city_finance, etf
+Interactive demonstration of measures across all models with live data exhibits. Use filters above to customize your analysis.
 
 ---
 
-## 📈 Equity Model Measures
+## 📈 Price & Volume Measures
 
 ### Overview Metrics
 
@@ -44,7 +42,7 @@ Quick summary metrics for selected stocks:
 
 $exhibits${
   type: metric_cards
-  source: equity.fact_equity_prices
+  source: company.fact_prices
   metrics: [
     { measure: close, label: "Avg Close", aggregation: avg },
     { measure: volume, label: "Total Volume", aggregation: sum },
@@ -70,7 +68,7 @@ Dynamically select which price measures to display on the chart:
 
 $exhibits${
   type: line_chart
-  source: equity.fact_equity_prices
+  source: company.fact_prices
   x: trade_date
   y: close
   color: ticker
@@ -104,7 +102,7 @@ Compare trading volume across selected stocks:
 
 $exhibits${
   type: bar_chart
-  source: equity.fact_equity_prices
+  source: company.fact_prices
   x: ticker
   y: volume
   color: ticker
@@ -121,43 +119,45 @@ $exhibits${
 
 ---
 
-### Market Capitalization
+### Market Capitalization Proxy
 
-Market cap calculated from price data:
+Market cap proxy calculated as close price × volume:
 
 $exhibits${
   type: data_table
-  source: equity.fact_equity_prices
-  columns: [ticker, close, volume, market_cap]
+  source: company.fact_prices
+  columns: [ticker, close, volume]
+  derived_columns:
+    market_cap_proxy: close * volume
   aggregations:
     close: avg
     volume: avg
-    market_cap: avg
+    market_cap_proxy: avg
   group_by: [ticker]
-  order_by: [{column: market_cap, direction: desc}]
+  order_by: [{column: market_cap_proxy, direction: desc}]
   limit: 20
   format:
     close: $#,##0.00
     volume: #,##0
-    market_cap: $#,##0.00M
+    market_cap_proxy: $#,##0.00
   collapsible: true
-  collapsible_title: "💰 Market Cap (Top 20)"
+  collapsible_title: "💰 Market Cap Proxy (Top 20)"
   collapsible_expanded: false
 }
 
 **Measure Demonstrated:**
-- `avg_market_cap`: Average market capitalization (aggregation: avg)
-- Uses `market_cap` column from equity model (close * shares_outstanding)
+- `market_cap`: Market capitalization proxy (expression: close * volume, aggregation: avg)
+- Demonstrates derived columns with custom expressions
 
 ---
 
-### Price Volatility & Risk
+### Price Volatility
 
-Standard deviation and volatility metrics:
+Standard deviation of closing prices by ticker:
 
 $exhibits${
   type: data_table
-  source: equity.fact_equity_prices
+  source: company.fact_prices
   columns: [ticker, close]
   aggregations:
     close_avg: avg
@@ -181,68 +181,6 @@ $exhibits${
 
 ---
 
-## 🔧 Technical Indicators (Equity Model)
-
-### RSI & Momentum Indicators
-
-Relative Strength Index and momentum metrics:
-
-$exhibits${
-  type: data_table
-  source: equity.fact_equity_technicals
-  columns: [ticker, rsi_14, macd, macd_signal]
-  aggregations:
-    rsi_14: avg
-    macd: avg
-    macd_signal: avg
-  group_by: [ticker]
-  order_by: [{column: rsi_14, direction: desc}]
-  limit: 20
-  format:
-    rsi_14: #,##0.00
-    macd: $#,##0.00
-    macd_signal: $#,##0.00
-  collapsible: true
-  collapsible_title: "🎯 Technical Indicators (RSI, MACD)"
-  collapsible_expanded: false
-}
-
-**Measures Demonstrated:**
-- `avg_rsi`: Average RSI across period (aggregation: avg)
-- Technical indicators from `fact_equity_technicals` table
-
----
-
-### Beta & Risk Metrics
-
-Market beta and volatility measures:
-
-$exhibits${
-  type: data_table
-  source: equity.fact_equity_technicals
-  columns: [ticker, beta, volatility_20d, volatility_60d]
-  aggregations:
-    beta: avg
-    volatility_20d: avg
-    volatility_60d: avg
-  group_by: [ticker]
-  order_by: [{column: beta, direction: desc}]
-  limit: 20
-  format:
-    beta: #,##0.00
-    volatility_20d: #,##0.00%
-    volatility_60d: #,##0.00%
-  collapsible: true
-  collapsible_title: "⚡ Risk Metrics (Beta, Volatility)"
-  collapsible_expanded: false
-}
-
-**Measures Demonstrated:**
-- `avg_beta`: Average beta vs. market (aggregation: avg)
-- `avg_volatility_20d`: 20-day volatility (aggregation: avg)
-
----
-
 ## 📅 Time-Based Aggregations
 
 ### Price Range Analysis
@@ -251,7 +189,7 @@ Average daily price range (high - low):
 
 $exhibits${
   type: data_table
-  source: equity.fact_equity_prices
+  source: company.fact_prices
   columns: [ticker, high, low]
   derived_columns:
     price_range: high - low
@@ -282,7 +220,7 @@ Track price movements over time with interactive measure selection:
 
 $exhibits${
   type: line_chart
-  source: equity.fact_equity_prices
+  source: company.fact_prices
   x: trade_date
   y: close
   color: ticker
@@ -305,6 +243,31 @@ $exhibits${
 - `close`: Closing price
 - `volume_weighted`: Volume-weighted average price (VWAP)
 - Time-based analysis with measure selector
+
+---
+
+## 📋 Weighted Aggregate Indices
+
+### Multi-Stock Indices
+
+Compare different index construction methodologies:
+
+$exhibits${
+  type: weighted_aggregate_chart
+  aggregate_by: trade_date
+  value_measures: [equal_weighted_index, volume_weighted_index, market_cap_weighted_index]
+  title: Weighted Aggregate Indices
+  collapsible: true
+  collapsible_title: "📊 Index Construction Methods"
+  collapsible_expanded: false
+}
+
+**Measures Demonstrated:**
+- `equal_weighted_index`: Equal weighted price index
+- `volume_weighted_index`: Volume weighted index
+- `market_cap_weighted_index`: Market cap weighted index
+- `price_weighted_index`: Price weighted (like DJIA)
+- `volatility_weighted_index`: Inverse volatility weighted
 
 ---
 
@@ -339,67 +302,7 @@ $exhibits${
 **Measures Demonstrated:**
 - `avg_forecast_error`: Average MAE (aggregation: avg)
 - `avg_forecast_mape`: Average MAPE (aggregation: avg)
-- `best_model_r2`: Best R² score (aggregation: max when not grouped)
-
----
-
-## 🏢 Corporate Model Measures
-
-### Corporate Fundamentals
-
-Financial metrics from corporate filings:
-
-$exhibits${
-  type: data_table
-  source: corporate.fact_fundamentals
-  columns: [company_id, revenue, net_income, total_assets]
-  aggregations:
-    revenue: avg
-    net_income: avg
-    total_assets: avg
-  group_by: [company_id]
-  order_by: [{column: revenue, direction: desc}]
-  limit: 20
-  format:
-    revenue: $#,##0.00M
-    net_income: $#,##0.00M
-    total_assets: $#,##0.00M
-  collapsible: true
-  collapsible_title: "🏢 Corporate Fundamentals (Top 20)"
-  collapsible_expanded: false
-}
-
-**Measures Demonstrated:**
-- Corporate financial measures
-- Cross-model relationships (corporate ↔ equity)
-
----
-
-## 📋 Weighted Aggregate Indices
-
-### Multi-Stock Indices
-
-Compare different index construction methodologies:
-
-$exhibits${
-  type: line_chart
-  source: equity.fact_equity_prices
-  x: trade_date
-  y: close
-  title: Weighted Aggregate Indices
-  description: Compare equal-weighted, volume-weighted, and market-cap weighted indices
-  interactive: true
-  collapsible: true
-  collapsible_title: "📊 Index Construction Methods"
-  collapsible_expanded: false
-}
-
-**Measures Demonstrated:**
-- `equal_weighted_index`: Equal weighted price index
-- `volume_weighted_index`: Volume weighted index
-- `market_cap_weighted_index`: Market cap weighted index
-- `price_weighted_index`: Price weighted (like DJIA)
-- `volatility_weighted_index`: Inverse volatility weighted
+- `best_model_r2`: Best R² score (aggregation: avg)
 
 ---
 
@@ -411,7 +314,7 @@ Export complete dataset with all columns:
 
 $exhibits${
   type: data_table
-  source: equity.fact_equity_prices
+  source: company.fact_prices
   download: true
   collapsible: true
   collapsible_title: "📋 View Raw Data (Exportable)"
@@ -424,33 +327,15 @@ $exhibits${
 
 This notebook demonstrates:
 
-1. **New Domain Models** - equity, corporate, forecast (replaces deprecated company model)
-2. **Interactive Filters** - Date range and ticker selection
-3. **Measure Selectors** - Dynamically choose which measures to display on charts
-4. **Collapsible Exhibits** - Keep notebook organized by hiding/showing sections
-5. **Multiple Chart Types** - Line charts, bar charts, data tables, metric cards
-6. **40+ Measures** - Across 7 models (equity, corporate, forecast, macro, city_finance, etf)
-7. **Technical Indicators** - RSI, MACD, Beta, Volatility from equity_technicals
-8. **Multiple Aggregation Types** - avg, sum, count, stddev, max, min
-9. **Format Patterns** - Currency ($#,##0.00), Percentage (#,##0.00%), Integer (#,##0)
-10. **Computed Measures** - price_range, market_cap_calc
-
-### Domain Model Structure
-
-**Equity Model** (`equity.yaml`):
-- `fact_equity_prices` - OHLCV price data with market_cap
-- `fact_equity_technicals` - RSI, MACD, Beta, Volatility, Moving Averages
-- `fact_equity_news` - News sentiment
-- `dim_equity` - Equity instrument master
-- `dim_exchange` - Exchange reference
-
-**Corporate Model** (`corporate.yaml`):
-- `fact_fundamentals` - Revenue, earnings, assets
-- `dim_corporate` - Corporate entity master
-
-**Forecast Model** (`forecast.yaml`):
-- `fact_forecasts` - Price predictions
-- `fact_forecast_metrics` - Model performance (MAE, MAPE, R²)
+1. **Interactive Filters** - Date range and ticker selection
+2. **Measure Selectors** - Dynamically choose which measures to display on charts
+3. **Collapsible Exhibits** - Keep notebook organized by hiding/showing sections
+4. **Multiple Chart Types** - Line charts, bar charts, data tables, metric cards
+5. **40+ Measures** - Across company and forecast models
+6. **Multiple Aggregation Types** - avg, sum, count, stddev, max, min
+7. **Format Patterns** - Currency ($#,##0.00), Percentage (#,##0.00%), Integer (#,##0)
+8. **Computed Measures** - price_range, market_cap_calc
+9. **Weighted Aggregates** - Equal, volume, market-cap weighted indices
 
 ### Measure Configuration
 
@@ -462,17 +347,6 @@ All measures are defined in `configs/models/*.yaml` files with:
 - **tags**: Categorization tags
 - **type**: simple, computed, or weighted
 
-### Building the Models
-
-To populate data for these models, run:
-```bash
-# Build all models from bronze data
-python scripts/build_all_models.py --skip-ingestion
-
-# Or build specific models
-python scripts/build_all_models.py --models equity corporate forecast
-```
-
 ---
 
-*This notebook demonstrates real measure usage with live database queries, interactive controls, and formatted output from the new domain model architecture.*
+*This notebook demonstrates real measure usage with live database queries, interactive controls, and formatted output.*
