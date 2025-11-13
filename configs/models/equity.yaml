@@ -156,10 +156,8 @@ graph:
     - id: dim_exchange
       from: bronze.exchanges
       select:
-        exchange_code: operating_mic
+        exchange_code: code
         exchange_name: name
-        country: country
-        timezone: timezone
       tags: [dim, ref, exchange]
       unique_key: [exchange_code]
 
@@ -453,10 +451,8 @@ bronze_sources:
     transforms:
       - type: select
         columns:
-          exchange_code: operating_mic
+          exchange_code: code
           exchange_name: name
-          country: country
-          timezone: timezone
 
   fact_equity_prices:
     # Loaded from prices_daily bronze data
