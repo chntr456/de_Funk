@@ -172,9 +172,6 @@ graph:
         close: close
         volume: volume
         volume_weighted: volume_weighted
-      derive:
-        transactions: "NULL"
-        market_cap: "close * volume"
       tags: [fact, prices, ohlcv]
 
     - id: fact_equity_news
@@ -186,8 +183,6 @@ graph:
         title: title
         source: source
         sentiment: sentiment
-      derive:
-        url: "NULL"
       tags: [fact, news]
 
   # Edges define relationships between tables
