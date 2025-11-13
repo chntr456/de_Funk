@@ -224,33 +224,33 @@ graph:
   edges:
     - from: fact_forecasts
       to: core.dim_calendar
-      on: [prediction_date = date]
+      "on": ["prediction_date=date"]
       type: left
       description: "Join forecasts to calendar on prediction date"
 
     - from: fact_forecast_metrics
       to: core.dim_calendar
-      on: [metric_date = date]
+      "on": ["metric_date=date"]
       type: left
       description: "Join metrics to calendar on metric date"
 
     # Cross-model edge: forecast inherits from company for ticker dimension
     - from: fact_forecasts
       to: company.fact_prices
-      on: [ticker = ticker]
+      "on": ["ticker=ticker"]
       type: left
       description: "Join forecasts to company prices on ticker (shared dimension)"
 
     - from: fact_forecasts
       to: company.dim_company
-      on: [ticker = ticker]
+      "on": ["ticker=ticker"]
       type: left
       description: "Join forecasts to company dimension on ticker"
 
     # Edge for vw_price_predictions view (unified actuals + predictions)
     - from: vw_price_predictions
       to: core.dim_calendar
-      on: [date = date]
+      "on": ["date=date"]
       type: left
       description: "Join price predictions view to calendar (unified date column)"
 
