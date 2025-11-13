@@ -48,7 +48,7 @@
       "method": "GET",
       "path_template": "/v2/reference/news",
       "required_params": ["published_utc.gte", "published_utc.lte"],
-      "default_query": { "order": "asc", "limit": 10000 },
+      "default_query": { "order": "asc", "limit": 1000 },
       "response_key": "results",
       "default_path_params": {}
     }
