@@ -1,10 +1,21 @@
 """
 CompanyModel - Domain model for company financial data.
 
+⚠️  DEPRECATED: This model has been split into EquityModel and CorporateModel
+    for better separation of concerns.
+
+    - For price/volume/trading data: Use EquityModel
+    - For corporate fundamentals/SEC filings: Use CorporateModel
+
+    See docs/EQUITY_CORPORATE_MIGRATION_GUIDE.md for migration instructions.
+
+    This model remains for backward compatibility but will be removed in a future release.
+
 Inherits all graph building logic from BaseModel.
 Only adds company-specific convenience methods.
 """
 
+import warnings
 from typing import Optional
 from pyspark.sql import DataFrame
 from models.base.model import BaseModel
@@ -13,6 +24,29 @@ from models.base.model import BaseModel
 class CompanyModel(BaseModel):
     """
     Company domain model.
+
+    ⚠️  DEPRECATED: This model is deprecated and will be removed in a future release.
+
+    **Migration Path:**
+    ```python
+    # OLD
+    from models.implemented.company.model import CompanyModel
+    company = CompanyModel(...)
+
+    # NEW
+    from models.implemented.equity.model import EquityModel
+    equity = EquityModel(...)  # Same API!
+    ```
+
+    **Reason for Deprecation:**
+    The "company" model conflated two distinct concepts:
+    - Equity: Tradable securities (ticker, prices, volume)
+    - Corporate: Legal entities (company, fundamentals, SEC filings)
+
+    These have been split into EquityModel and CorporateModel for better
+    separation of concerns.
+
+    See docs/EQUITY_CORPORATE_MIGRATION_GUIDE.md for full migration guide.
 
     Inherits all functionality from BaseModel:
     - Generic graph building from YAML config
@@ -26,6 +60,20 @@ class CompanyModel(BaseModel):
 
     This class adds company-specific convenience methods.
     """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Initialize CompanyModel with deprecation warning.
+        """
+        # Emit deprecation warning
+        warnings.warn(
+            "CompanyModel is deprecated and will be removed in a future release. "
+            "Use EquityModel for price/trading data or CorporateModel for fundamentals. "
+            "See docs/EQUITY_CORPORATE_MIGRATION_GUIDE.md for migration instructions.",
+            DeprecationWarning,
+            stacklevel=2
+        )
+        super().__init__(*args, **kwargs)
 
     # All core functionality is inherited from BaseModel!
     # The YAML config defines:

@@ -1,6 +1,16 @@
+# ⚠️  DEPRECATED: This model has been replaced by equity + corporate models
+#
+# Migration:
+#   - For price/trading data: Use configs/models/equity.yaml (EquityModel)
+#   - For corporate fundamentals: Use configs/models/corporate.yaml (CorporateModel)
+#
+# See docs/EQUITY_CORPORATE_MIGRATION_GUIDE.md for full migration instructions.
+#
+# This config remains for backward compatibility but will be removed in a future release.
+
 version: 1
 model: company
-tags: [equities, polygon, us]
+tags: [equities, polygon, us, deprecated]
 
 # Dependencies on other models
 depends_on:

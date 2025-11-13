@@ -1,0 +1,227 @@
+version: 1
+model: corporate
+tags: [corporate, fundamentals, sec, filings]
+
+# Dependencies on other models
+depends_on:
+  - core  # Calendar dimension
+
+# Storage configuration (model owns its storage)
+storage:
+  root: storage/silver/corporate
+  format: parquet
+
+# Schema definitions - source of truth for available tables
+schema:
+  dimensions:
+    dim_corporate:
+      path: dims/dim_corporate
+      description: "Corporate entity master (legal business entities)"
+      columns:
+        company_id: string                # PK - Internal ID (e.g., COMPANY_AAPL)
+        cik_number: string                # SEC Central Index Key (10 digits, padded) - for future
+        company_name: string              # DBA name
+        legal_name: string                # Legal entity name
+        ticker_primary: string            # Primary ticker symbol (FK → equity.dim_equity.ticker)
+        # Incorporation (future)
+        incorporation_state: string       # e.g., "DE" for Delaware
+        incorporation_country: string     # e.g., "US"
+        # Classification
+        sector: string                    # GICS sector (e.g., "Technology")
+        industry: string                  # GICS industry (e.g., "Software")
+        sic_code: string                  # Standard Industrial Classification
+        sic_description: string
+        # Location
+        headquarters_city: string
+        headquarters_state: string
+        headquarters_country: string
+        # Contact
+        website: string
+        # Metadata
+        is_active: boolean
+        last_updated: timestamp
+      primary_key: [company_id]
+      tags: [dim, entity, corporate, company]
+
+  facts:
+    # Placeholder for future SEC filings data
+    fact_sec_filings:
+      path: facts/fact_sec_filings
+      description: "SEC filing metadata (10-K, 10-Q, 8-K) - Future enhancement"
+      columns:
+        company_id: string                # FK → dim_corporate.company_id
+        cik_number: string
+        accession_number: string          # PK - Unique filing ID
+        filing_date: date                 # Date filed with SEC
+        report_date: date                 # Period end date
+        filing_type: string               # 10-K, 10-Q, 8-K, etc.
+        primary_doc_url: string           # URL to filing document
+        filing_url: string                # EDGAR filing page URL
+      partitions: [filing_date]
+      primary_key: [accession_number]
+      tags: [fact, sec, filings, future]
+
+    # Placeholder for future financial statements
+    fact_financials:
+      path: facts/fact_financials
+      description: "Financial statement line items - Future enhancement"
+      columns:
+        company_id: string                # FK → dim_corporate.company_id
+        report_date: date                 # Period end date
+        report_period: string             # Q1, Q2, Q3, Q4, FY
+        fiscal_year: int
+        fiscal_quarter: int
+        statement_type: string            # income, balance_sheet, cash_flow
+        # Income Statement
+        revenue: double
+        gross_profit: double
+        operating_income: double
+        net_income: double
+        eps_diluted: double               # Earnings per share
+        shares_diluted: long
+        # Balance Sheet
+        total_assets: double
+        total_liabilities: double
+        total_equity: double
+        cash_and_equivalents: double
+        long_term_debt: double
+        # Cash Flow
+        operating_cash_flow: double
+        free_cash_flow: double
+      partitions: [report_date]
+      tags: [fact, financials, future]
+
+    # Placeholder for future financial ratios
+    fact_financial_ratios:
+      path: facts/fact_financial_ratios
+      description: "Calculated financial ratios - Future enhancement"
+      columns:
+        company_id: string
+        report_date: date
+        # Valuation ratios (requires equity price data)
+        pe_ratio: double                  # Price to Earnings
+        pb_ratio: double                  # Price to Book
+        ps_ratio: double                  # Price to Sales
+        # Profitability ratios
+        gross_margin: double              # Gross profit / revenue
+        operating_margin: double          # Operating income / revenue
+        net_margin: double                # Net income / revenue
+        roe: double                       # Return on Equity
+        roa: double                       # Return on Assets
+        # Leverage ratios
+        debt_to_equity: double
+        debt_to_assets: double
+        # Growth rates (YoY)
+        revenue_growth_yoy: double
+        net_income_growth_yoy: double
+        eps_growth_yoy: double
+      partitions: [report_date]
+      tags: [fact, ratios, future]
+
+# Edges define relationships
+edges:
+  - from: fact_sec_filings.company_id
+    to: dim_corporate.company_id
+    type: many_to_one
+
+  - from: fact_financials.company_id
+    to: dim_corporate.company_id
+    type: many_to_one
+
+  - from: fact_financial_ratios.company_id
+    to: dim_corporate.company_id
+    type: many_to_one
+
+  # CROSS-MODEL EDGE: Corporate to Equity (primary ticker)
+  - from: dim_corporate.ticker_primary
+    to: equity.dim_equity.ticker
+    type: many_to_one
+    description: "Each company has a primary ticker"
+
+# Measures (mostly placeholders for future use)
+measures:
+  # Company count
+  company_count:
+    description: "Number of companies"
+    type: simple
+    source: dim_corporate.company_id
+    aggregation: count
+    data_type: long
+    format: "#,##0"
+    tags: [count, corporate]
+
+  # Future fundamental measures (when data is available)
+  avg_revenue:
+    description: "Average revenue - Future"
+    type: simple
+    source: fact_financials.revenue
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00M"
+    tags: [financials, future]
+
+  avg_net_income:
+    description: "Average net income - Future"
+    type: simple
+    source: fact_financials.net_income
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00M"
+    tags: [financials, future]
+
+  avg_pe_ratio:
+    description: "Average P/E ratio - Future"
+    type: simple
+    source: fact_financial_ratios.pe_ratio
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00"
+    tags: [ratios, valuation, future]
+
+  avg_roe:
+    description: "Average return on equity - Future"
+    type: simple
+    source: fact_financial_ratios.roe
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00%"
+    tags: [ratios, profitability, future]
+
+  avg_debt_to_equity:
+    description: "Average debt to equity ratio - Future"
+    type: simple
+    source: fact_financial_ratios.debt_to_equity
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00"
+    tags: [ratios, leverage, future]
+
+# Bronze sources mapping
+bronze_sources:
+  dim_corporate:
+    # Initially built from equity ticker data (denormalized)
+    # In future, will be enriched with SEC EDGAR data
+    source: ref_ticker
+    transforms:
+      - type: select
+        columns:
+          ticker: ticker
+          company_name: name
+      - type: add_columns
+        columns:
+          company_id: "CONCAT('COMPANY_', ticker)"
+          legal_name: "name"
+          ticker_primary: "ticker"
+          is_active: true
+          sector: "'Technology'"  # Placeholder - would come from SEC
+          headquarters_country: "'US'"
+
+  # Future: SEC filings will come from SEC EDGAR API
+  # fact_sec_filings:
+  #   source: sec/filings
+  #   ...
+
+  # Future: Financials will come from SEC EDGAR or financial data provider
+  # fact_financials:
+  #   source: sec/company_facts
+  #   ...
