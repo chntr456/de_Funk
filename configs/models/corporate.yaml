@@ -4,7 +4,8 @@ tags: [corporate, fundamentals, sec, filings]
 
 # Dependencies on other models
 depends_on:
-  - core  # Calendar dimension
+  - core   # Calendar dimension
+  - equity # Corporate entities link to equity instruments
 
 # Storage configuration (model owns its storage)
 storage:

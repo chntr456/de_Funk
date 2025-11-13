@@ -5,7 +5,6 @@ tags: [equities, trading, market_data, polygon]
 # Dependencies on other models
 depends_on:
   - core        # Calendar dimension
-  - corporate   # Company entity dimension (cross-model relationship)
 
 # Storage configuration (model owns its storage)
 storage:
