@@ -122,38 +122,55 @@ class CompanyPolygonIngestor(PolygonIngestor):
             self.sink.write_if_missing("exchanges", {"snapshot_dt": snap}, df_ex)
 
         # ---------------------------
-        # 3) Per-ticker reference snapshot
+        # 3) Per-ticker reference snapshot (using concurrent fetching for efficiency)
         # ---------------------------
         if not self.sink.exists("ref_ticker", {"snapshot_dt": snap}) and tickers_list:
             r_f = RefTickerFacet(self.spark, tickers=tickers_list)
-            r_batches = self._fetch_calls(r_f.calls())
+            # Use concurrent fetching to batch ticker detail requests (10x+ faster)
+            r_batches = self._fetch_calls_concurrent(r_f.calls(), max_workers=10)
             df_r = r_f.normalize(r_batches)
             self.sink.write_if_missing("ref_ticker", {"snapshot_dt": snap}, df_r)
 
         # ---------------------------
-        # 4) Prices: grouped by trade_date
+        # 4) Prices: grouped by trade_date (batch concurrent fetching by date)
         # ---------------------------
         p_f = PricesDailyGroupedFacet(self.spark, date_from=date_from, date_to=date_to)
+        # Collect calls that need fetching
+        price_calls = []
+        price_dates = []
         for call in p_f.calls():
             trade_day = call["params"]["date"]
-            if self.sink.exists("prices_daily", {"trade_date": trade_day}):
-                continue
-            batches = self._fetch_calls([call])
-            df_p = p_f.normalize(batches)
-            self.sink.write_if_missing("prices_daily", {"trade_date": trade_day}, df_p)
+            if not self.sink.exists("prices_daily", {"trade_date": trade_day}):
+                price_calls.append(call)
+                price_dates.append(trade_day)
+
+        # Fetch all needed dates concurrently
+        if price_calls:
+            batches = self._fetch_calls_concurrent(price_calls, max_workers=10)
+            for i, trade_day in enumerate(price_dates):
+                df_p = p_f.normalize([batches[i]])
+                self.sink.write_if_missing("prices_daily", {"trade_date": trade_day}, df_p)
 
         # ---------------------------
-        # 5) News: by publish_date
+        # 5) News: by publish_date (batch concurrent fetching by date)
         # ---------------------------
         if include_news:
             n_f = NewsByDateFacet(self.spark, date_from=date_from, date_to=date_to)
+            # Collect calls that need fetching
+            news_calls = []
+            news_dates = []
             for call in n_f.calls():
                 pub_day = call["params"]["publish_date"]
-                if self.sink.exists("news", {"publish_date": pub_day}):
-                    continue
-                batches = self._fetch_calls([call])
-                df_n = n_f.normalize(batches)
-                self.sink.write_if_missing("news", {"publish_date": pub_day}, df_n)
+                if not self.sink.exists("news", {"publish_date": pub_day}):
+                    news_calls.append(call)
+                    news_dates.append(pub_day)
+
+            # Fetch all needed dates concurrently
+            if news_calls:
+                batches = self._fetch_calls_concurrent(news_calls, max_workers=10)
+                for i, pub_day in enumerate(news_dates):
+                    df_n = n_f.normalize([batches[i]])
+                    self.sink.write_if_missing("news", {"publish_date": pub_day}, df_n)
 
 
 
