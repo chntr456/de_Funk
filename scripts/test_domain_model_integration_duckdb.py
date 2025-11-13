@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Comprehensive integration test for domain model architecture.
+Domain Model Integration Test - DUCKDB BACKEND (REPORTING)
 
-Tests the complete stack:
-1. Session initialization
+Tests the complete domain model architecture with DUCKDB for REPORTING operations:
+1. Session initialization (DuckDB)
 2. Model loading (BaseModel + domain-specific classes)
-3. Graph building (bronze → silver ETL)
+3. Graph building (reading from silver storage)
 4. Measure registry bootstrap
 5. Domain feature loading
 6. Measure execution (simple, computed, weighted)
@@ -13,13 +13,14 @@ Tests the complete stack:
 8. UI-ready data output
 
 Usage:
-    python scripts/test_domain_model_integration.py
+    python scripts/test_domain_model_integration_duckdb.py
 
 Expected behavior:
-- All models should load successfully
+- All models should load successfully with DuckDB backend
 - Measure registry should have all types registered
 - Domain features should be available per model
 - Measures should execute and return data
+- Cross-model references should work
 - Clear output for debugging each step
 """
 
@@ -69,7 +70,7 @@ class DomainModelIntegrationTest:
             True if all tests pass, False otherwise
         """
         print("\n" + "="*80)
-        print("DOMAIN MODEL INTEGRATION TEST")
+        print("DOMAIN MODEL INTEGRATION TEST - DUCKDB BACKEND (REPORTING)")
         print("="*80)
 
         try:
