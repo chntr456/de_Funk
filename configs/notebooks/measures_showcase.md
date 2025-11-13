@@ -1,3 +1,14 @@
+---
+id: measures_showcase
+title: Measures Showcase
+description: Interactive demonstration of measures across all models with live data exhibits
+tags: [measures, aggregations, analytics, showcase]
+models: [company, equity, corporate, forecast, core]
+author: system
+created: 2025-11-13
+updated: 2025-11-13
+---
+
 # 📊 Measures Showcase
 
 Interactive demonstration of measures across all models with live data exhibits.

@@ -1,3 +1,14 @@
+---
+id: measures_catalog
+title: Measures Catalog
+description: A comprehensive catalog of all available measures across the de_Funk data models
+tags: [measures, documentation, reference, catalog]
+models: [company, equity, corporate, forecast, macro, city_finance, etf]
+author: system
+created: 2025-11-13
+updated: 2025-11-13
+---
+
 # 📊 Measures Catalog
 
 A comprehensive catalog of all available measures across the de_Funk data models.
