@@ -31,8 +31,7 @@ class NewsByDateFacet(PolygonFacet):
                 "params": {
                     "query": {
                         "published_utc.gte": f"{d}T00:00:00Z",
-                        "published_utc.lte": f"{d}T23:59:59Z",
-                        "limit": 1000, "order": "asc"
+                        "published_utc.lte": f"{d}T23:59:59Z"
                     },
                     "publish_date": d
                 }

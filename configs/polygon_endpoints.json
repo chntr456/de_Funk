@@ -12,7 +12,7 @@
       "method": "GET",
       "path_template": "/v3/reference/tickers",
       "required_params": [],
-      "default_query": { "market": "stocks", "active": "true", "limit": 1000 },
+      "default_query": { "market": "stocks", "active": "true", "limit": 10000 },
       "response_key": "results",
       "default_path_params": {}
     },
@@ -30,7 +30,7 @@
       "method": "GET",
       "path_template": "/v3/reference/exchanges",
       "required_params": [],
-      "default_query": { "asset_class": "stocks", "limit": 1000 },
+      "default_query": { "asset_class": "stocks", "limit": 10000 },
       "response_key": "results",
       "default_path_params": {}
     },
@@ -48,7 +48,7 @@
       "method": "GET",
       "path_template": "/v2/reference/news",
       "required_params": ["published_utc.gte", "published_utc.lte"],
-      "default_query": { "order": "asc", "limit": 1000 },
+      "default_query": { "order": "asc", "limit": 10000 },
       "response_key": "results",
       "default_path_params": {}
     }
