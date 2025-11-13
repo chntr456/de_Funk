@@ -56,8 +56,6 @@ schema:
         close: double                     # Unadjusted close price
         volume: long                      # Trading volume
         volume_weighted: double           # VWAP - Volume Weighted Average Price
-        transactions: long                # Number of trades (if available)
-        market_cap: double                # Calculated: close * shares_outstanding
       partitions: [trade_date]
       tags: [fact, prices, timeseries, ohlcv]
 
@@ -102,7 +100,6 @@ schema:
         title: string
         source: string
         sentiment: double                 # Sentiment score (-1 to 1)
-        url: string
       partitions: [publish_date]
       tags: [fact, news, sentiment]
 
@@ -293,13 +290,14 @@ measures:
     tags: [price, vwap]
 
   avg_market_cap:
-    description: "Average market capitalization"
-    type: simple
-    source: fact_equity_prices.market_cap
+    description: "Average market capitalization (close * volume proxy)"
+    type: computed
+    source: fact_equity_prices.close
+    expression: "close * volume"
     aggregation: avg
     data_type: double
     format: "$#,##0.00M"
-    tags: [market, valuation]
+    tags: [market, valuation, computed]
 
   # ============================================================
   # WEIGHTED AGGREGATE MEASURES (CROSS-TICKER INDICES)
