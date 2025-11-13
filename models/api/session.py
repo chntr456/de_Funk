@@ -1,10 +1,37 @@
 from __future__ import annotations
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple, Set
-from pyspark.sql import DataFrame
+from typing import Dict, Any, List, Optional, Tuple, Set, TYPE_CHECKING
 
-from models.api.dal import StorageRouter, BronzeTable
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame as SparkDataFrame
+else:
+    SparkDataFrame = Any
+
+# Import StorageRouter separately to avoid pyspark dependency
+# StorageRouter is just a dataclass for paths, doesn't require Spark
+try:
+    from models.api.dal import StorageRouter, BronzeTable
+except ImportError:
+    # If pyspark not available, only import StorageRouter (doesn't need Spark)
+    from dataclasses import dataclass
+    from typing import Dict, Any as DictAny
+
+    @dataclass(frozen=True)
+    class StorageRouter:
+        storage_cfg: Dict[DictAny, DictAny]
+
+        def bronze_path(self, logical_table: str) -> str:
+            root = self.storage_cfg["roots"]["bronze"].rstrip("/")
+            rel = self.storage_cfg["tables"][logical_table]["rel"]
+            return f"{root}/{rel}"
+
+        def silver_path(self, logical_rel: str) -> str:
+            root = self.storage_cfg["roots"]["silver"].rstrip("/")
+            return f"{root}/{logical_rel}"
+
+    BronzeTable = None  # Not needed for DuckDB
+
 from core.session.filters import FilterEngine
 
 try:
@@ -132,7 +159,15 @@ class UniversalSession:
 
         # Get config and class from registry
         model_config = self.registry.get_model_config(model_name)
-        model_class = self.registry.get_model_class(model_name)
+
+        # Try to get model class, fall back to BaseModel if not registered
+        try:
+            model_class = self.registry.get_model_class(model_name)
+        except ValueError:
+            # No custom class registered, use BaseModel
+            from models.base.model import BaseModel
+            model_class = BaseModel
+            print(f"⚠ No custom class for {model_name}, using BaseModel")
 
         # Instantiate model
         model = model_class(
@@ -164,7 +199,7 @@ class UniversalSession:
         group_by: Optional[List[str]] = None,
         aggregations: Optional[Dict[str, str]] = None,
         use_cache: bool = True
-    ) -> DataFrame:
+    ) -> Any:
         """
         Get a table from any model with transparent auto-join and aggregation support.
 
@@ -381,12 +416,12 @@ class UniversalSession:
         print(f"DEBUG: Final mappings: {mappings}\n")
         return mappings
 
-    def get_dimension_df(self, model_name: str, dim_id: str) -> DataFrame:
+    def get_dimension_df(self, model_name: str, dim_id: str) -> Any:
         """Get a dimension table from a model"""
         model = self.load_model(model_name)
         return model.get_dimension_df(dim_id)
 
-    def get_fact_df(self, model_name: str, fact_id: str) -> DataFrame:
+    def get_fact_df(self, model_name: str, fact_id: str) -> Any:
         """Get a fact table from a model"""
         model = self.load_model(model_name)
         return model.get_fact_df(fact_id)
@@ -428,7 +463,7 @@ class UniversalSession:
     # AUTO-JOIN SUPPORT (Transparent Graph Traversal)
     # ============================================================
 
-    def _select_columns(self, df: DataFrame, columns: List[str]) -> DataFrame:
+    def _select_columns(self, df: Any, columns: List[str]) -> Any:
         """
         Select specific columns from DataFrame (backend agnostic).
 
@@ -622,7 +657,7 @@ class UniversalSession:
         join_plan: Dict[str, Any],
         required_columns: List[str],
         filters: Optional[Dict[str, Any]] = None
-    ) -> DataFrame:
+    ) -> Any:
         """
         Execute the join plan to get required columns.
 
@@ -782,11 +817,11 @@ class UniversalSession:
     def _aggregate_data(
         self,
         model_name: str,
-        df: DataFrame,
+        df: Any,
         required_columns: List[str],
         group_by: List[str],
         aggregations: Optional[Dict[str, str]] = None
-    ) -> DataFrame:
+    ) -> Any:
         """
         Aggregate data to a new grain using group_by and measure aggregations.
 
@@ -901,10 +936,10 @@ class UniversalSession:
 
     def _aggregate_spark(
         self,
-        df: DataFrame,
+        df: Any,
         group_by: List[str],
         aggregations: Dict[str, str]
-    ) -> DataFrame:
+    ) -> Any:
         """
         Aggregate Spark DataFrame using groupBy and agg.
 
@@ -916,7 +951,10 @@ class UniversalSession:
         Returns:
             Aggregated Spark DataFrame
         """
-        from pyspark.sql import functions as F
+        try:
+            from pyspark.sql import functions as F
+        except ImportError:
+            raise RuntimeError("PySpark is required for Spark backend but not installed")
 
         # Build aggregation expressions
         agg_exprs = []
@@ -949,10 +987,10 @@ class UniversalSession:
 
     def _aggregate_duckdb(
         self,
-        df,
+        df: Any,
         group_by: List[str],
         aggregations: Dict[str, str]
-    ) -> DataFrame:
+    ) -> Any:
         """
         Aggregate DuckDB relation using SQL GROUP BY.
 

@@ -6,8 +6,18 @@ with both Spark and DuckDB backends, eliminating code duplication across
 the codebase.
 """
 
-from typing import Dict, Any, Union
-from pyspark.sql import DataFrame as SparkDataFrame, functions as F
+from typing import Dict, Any, Union, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame as SparkDataFrame
+    from pyspark.sql import functions as F
+else:
+    # Make imports optional for DuckDB-only environments
+    try:
+        from pyspark.sql import DataFrame as SparkDataFrame, functions as F
+    except ImportError:
+        SparkDataFrame = None
+        F = None
 
 
 class FilterEngine:
@@ -82,6 +92,8 @@ class FilterEngine:
             }
         """
         if backend == 'spark':
+            if F is None:
+                raise RuntimeError("PySpark is required for Spark backend but not installed")
             return FilterEngine._apply_spark_filters(df, filters)
         elif backend == 'duckdb':
             return FilterEngine._apply_duckdb_filters(df, filters)

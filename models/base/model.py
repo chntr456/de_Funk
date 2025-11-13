@@ -13,6 +13,7 @@ The YAML config is the source of truth for the model structure.
 
 from abc import ABC
 from typing import Dict, Any, Optional, List, Tuple, Union
+from dataclasses import dataclass
 
 # Try to import PySpark (may not be available when using DuckDB)
 try:
@@ -22,6 +23,26 @@ except ImportError:
     PYSPARK_AVAILABLE = False
     SparkDataFrame = None
     F = None
+
+# Import StorageRouter (with fallback if pyspark not available)
+try:
+    from models.api.dal import StorageRouter, BronzeTable
+except ImportError:
+    # Fallback for DuckDB-only environments
+    @dataclass(frozen=True)
+    class StorageRouter:
+        storage_cfg: Dict[str, Any]
+
+        def bronze_path(self, logical_table: str) -> str:
+            root = self.storage_cfg["roots"]["bronze"].rstrip("/")
+            rel = self.storage_cfg["tables"][logical_table]["rel"]
+            return f"{root}/{rel}"
+
+        def silver_path(self, logical_rel: str) -> str:
+            root = self.storage_cfg["roots"]["silver"].rstrip("/")
+            return f"{root}/{logical_rel}"
+
+    BronzeTable = None  # Not needed for DuckDB
 
 # Type alias for DataFrame (can be Spark or DuckDB)
 DataFrame = Any
@@ -65,7 +86,6 @@ class BaseModel:
         self._is_built = False
 
         # Storage router for path resolution
-        from models.api.dal import StorageRouter
         self.storage_router = StorageRouter(self.storage_cfg)
 
         # Detect backend type
@@ -253,10 +273,10 @@ class BaseModel:
         Returns:
             DataFrame with merged schema
         """
-        from models.api.dal import BronzeTable
-
         # Use connection type to determine how to load
         if hasattr(self.connection, 'read'):  # Spark
+            if BronzeTable is None:
+                raise RuntimeError("PySpark required for Spark backend but not installed")
             bronze = BronzeTable(self.connection, self.storage_router, table_name)
             return bronze.read(merge_schema=True)
         else:

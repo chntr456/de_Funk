@@ -125,13 +125,13 @@ class DomainModelIntegrationTest:
 
             print("  ✓ Imports successful")
 
-            # Initialize context
-            ctx = RepoContext.from_repo_root()
-            print("  ✓ RepoContext initialized")
+            # Initialize context with DuckDB
+            ctx = RepoContext.from_repo_root(connection_type="duckdb")
+            print("  ✓ RepoContext initialized (DuckDB)")
 
             # Initialize session
             self.session = UniversalSession(
-                connection=ctx.spark,
+                connection=ctx.connection,
                 storage_cfg=ctx.storage,
                 repo_root=Path.cwd()
             )
@@ -146,6 +146,7 @@ class DomainModelIntegrationTest:
         except Exception as e:
             logger.error(f"Session initialization failed: {e}")
             print(f"  ✗ Error: {e}")
+            traceback.print_exc()
             self.results['session'] = False
 
     def test_model_loading(self):
@@ -161,21 +162,26 @@ class DomainModelIntegrationTest:
             try:
                 print(f"\n  Testing {model_name} model:")
 
-                # Get model class
-                model_class = self.session.registry.get_model_class(model_name)
-                print(f"    ✓ Model class: {model_class.__name__}")
+                # Try to get model class (may not be registered for models using BaseModel)
+                try:
+                    model_class = self.session.registry.get_model_class(model_name)
+                    print(f"    ✓ Model class: {model_class.__name__}")
+                except ValueError:
+                    print(f"    ⚠ No custom model class registered (will use BaseModel)")
+                    model_class = None
 
                 # Load model
-                model = self.session.get_model(model_name)
+                model = self.session.get_model_instance(model_name)
                 self.models[model_name] = model
                 print(f"    ✓ Model loaded successfully")
 
                 # Check if it's domain-specific or BaseModel
-                from models.base.model import BaseModel
-                if model_class != BaseModel:
-                    print(f"    ✓ Using domain-specific class: {model_class.__name__}")
-                else:
-                    print(f"    ⚠ Using generic BaseModel")
+                if model_class:
+                    from models.base.model import BaseModel
+                    if model_class != BaseModel:
+                        print(f"    ✓ Using domain-specific class: {model_class.__name__}")
+                    else:
+                        print(f"    ⚠ Using generic BaseModel")
 
                 # Check measure executor
                 if hasattr(model, 'measures'):
@@ -186,6 +192,7 @@ class DomainModelIntegrationTest:
             except Exception as e:
                 logger.error(f"Failed to load {model_name}: {e}")
                 print(f"    ✗ Error: {e}")
+                traceback.print_exc()
                 self.results['models_loaded'][model_name] = False
 
     def test_measure_registry(self):
