@@ -166,6 +166,20 @@ class CompanyExplorerApp:
         else:
             st.info("No news rows in the selected range/filters.")
 
+    def _tab_measures_catalog(self):
+        """Display the measures catalog notebook."""
+        st.subheader("📊 Measures Catalog")
+
+        # Read and display the markdown notebook
+        notebook_path = REPO_ROOT / "app" / "ui" / "notebooks" / "measures_catalog.md"
+        if notebook_path.exists():
+            with open(notebook_path, 'r') as f:
+                content = f.read()
+            st.markdown(content)
+        else:
+            st.error(f"Measures catalog not found at: {notebook_path}")
+            st.info("Run the data pipeline to generate the measures catalog.")
+
     # ------------------------------------------------ main ------------------------------------------------
 
     def run(self):
@@ -174,13 +188,15 @@ class CompanyExplorerApp:
         with st.sidebar:
             st.markdown("### Filters")
             date_from, date_to = self._date_inputs()
-            st.caption("The UI reads what’s already in bronze/silver. Use your ingestion script to refresh data.")
+            st.caption("The UI reads what's already in bronze/silver. Use your ingestion script to refresh data.")
 
-        tab1, tab2 = st.tabs(["Prices", "News"])
+        tab1, tab2, tab3 = st.tabs(["Prices", "News", "📊 Measures Catalog"])
         with tab1:
             self._tab_prices(date_from, date_to)
         with tab2:
             self._tab_news(date_from, date_to)
+        with tab3:
+            self._tab_measures_catalog()
 
 
 # ------------------------------------------- entrypoint -------------------------------------------
