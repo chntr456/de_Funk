@@ -87,6 +87,7 @@ class AllModelBuilder:
         self.config_dir = Path(config_dir)
         self.registry = ModelRegistry(str(self.config_dir))
         self.ctx = None  # Lazy init
+        self.session = None  # Lazy init UniversalSession for cross-model refs
 
         # Overall results
         self.results = {
@@ -101,11 +102,21 @@ class AllModelBuilder:
         logger.info("Initialized all models builder")
 
     def _init_context(self):
-        """Lazy initialize RepoContext."""
+        """Lazy initialize RepoContext and UniversalSession."""
         if self.ctx is None:
             logger.info("Initializing RepoContext...")
             self.ctx = RepoContext.from_repo_root()
             logger.info("  ✓ Context initialized")
+
+            # Initialize UniversalSession for cross-model references
+            from models.api.session import UniversalSession
+            self.session = UniversalSession(
+                connection=self.ctx.spark,
+                storage_cfg=self.ctx.storage,
+                repo_root=Path.cwd(),
+                models=None  # Don't pre-load, load on demand
+            )
+            logger.info("  ✓ Universal session initialized")
 
     def discover_models(self, include_models: Optional[List[str]] = None) -> List[str]:
         """
@@ -540,6 +551,11 @@ class AllModelBuilder:
                     "MAX_TICKERS": max_tickers or 0
                 }
             )
+
+            # Inject session for cross-model references
+            if hasattr(model, 'set_session'):
+                model.set_session(self.session)
+                logger.info(f"  ✓ Session injected for cross-model references")
 
             # Build Silver layer
             logger.info(f"  Building {model_name} graph...")
