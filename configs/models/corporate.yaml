@@ -128,9 +128,8 @@ graph:
         ticker: ticker
         company_name: name
       derive:
-        company_id: "CONCAT('COMPANY_', ticker)"
+        company_id: "sha1(ticker)"
         ticker_primary: "ticker"
-        is_active: "true"
       tags: [dim, entity, corporate]
       unique_key: [company_id]
 

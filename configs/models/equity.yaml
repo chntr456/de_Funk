@@ -149,10 +149,7 @@ graph:
         company_name: name
         exchange_code: exchange_code
       derive:
-        company_id: "CONCAT('COMPANY_', ticker)"
-        is_active: "true"
-        security_type: "'common_stock'"
-        currency: "'USD'"
+        company_id: "sha1(ticker)"
       tags: [dim, entity, equity]
       unique_key: [ticker]
 
