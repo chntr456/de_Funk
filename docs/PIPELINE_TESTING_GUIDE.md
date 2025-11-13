@@ -4,11 +4,12 @@ Comprehensive guide for testing the complete data pipeline from ingestion to UI.
 
 ## Overview
 
-Three test scripts validate the entire pipeline:
+Four test scripts validate the entire pipeline:
 
-1. **`test_pipeline_e2e.py`** - End-to-end pipeline testing (Bronze → Silver → Gold → UI)
-2. **`test_ui_integration.py`** - UI component and query pattern testing
-3. **Model-specific tests** - Unit tests for models, measures, and transformations
+1. **`test_pipeline_e2e.py`** - End-to-end pipeline testing (Bronze → Silver → Gold → UI) for a single model
+2. **`test_ui_integration.py`** - UI component and query pattern testing for a single model
+3. **`test_all_models.py`** - Test all models in the framework (complete system validation)
+4. **Model-specific tests** - Unit tests for models, measures, and transformations
 
 ## Quick Start
 
@@ -36,6 +37,28 @@ python scripts/test_ui_integration.py --model equity --components filters charts
 
 # Run with performance benchmarks
 python scripts/test_ui_integration.py --model equity --benchmark
+```
+
+### Test All Models
+
+```bash
+# Test all models in the framework
+python scripts/test_all_models.py
+
+# With sample data generation
+python scripts/test_all_models.py --generate-sample
+
+# Quick test (all models, minimal data)
+python scripts/test_all_models.py --quick --generate-sample
+
+# Test specific models only
+python scripts/test_all_models.py --models equity corporate
+
+# Parallel execution (faster)
+python scripts/test_all_models.py --parallel
+
+# Save results to file
+python scripts/test_all_models.py --output test_results/all_models_test.json
 ```
 
 ## Pipeline Architecture
@@ -424,6 +447,147 @@ python scripts/test_ui_integration.py --model equity --tickers AAPL GOOGL MSFT
 python scripts/test_ui_integration.py --model equity --benchmark
 ```
 
+## test_all_models.py
+
+### Purpose
+
+Test all models in the framework with a single command. Ideal for:
+- Pre-deployment validation
+- Regression testing
+- CI/CD integration
+- Complete system health check
+
+### How It Works
+
+1. **Discovers** all models in `configs/models/`
+2. **Tests each model** through complete pipeline (Bronze → Silver → Gold → UI)
+3. **Runs in parallel** (optional) for faster execution
+4. **Aggregates results** across all models
+5. **Reports** pass/fail status per model
+
+### Usage Examples
+
+#### Basic Usage
+
+```bash
+# Test all models (sequential)
+python scripts/test_all_models.py
+
+# Test all models (parallel - faster)
+python scripts/test_all_models.py --parallel
+
+# Test with sample data generation
+python scripts/test_all_models.py --generate-sample --quick
+```
+
+#### Selective Testing
+
+```bash
+# Test specific models only
+python scripts/test_all_models.py --models equity corporate
+
+# Test equity and fund models in parallel
+python scripts/test_all_models.py --models equity fund --parallel
+```
+
+#### With Output
+
+```bash
+# Save results to JSON file
+python scripts/test_all_models.py --output test_results/all_models.json
+
+# For historical tracking
+python scripts/test_all_models.py --output "test_results/all_models_$(date +%Y%m%d).json"
+```
+
+### Example Output
+
+```
+======================================================================
+TESTING ALL MODELS
+======================================================================
+Models: 3
+Quick mode: False
+Generate sample: True
+Parallel: True
+
+Discovered 3 model(s): equity, corporate, fund
+
+Running tests in parallel with 4 workers...
+✓ equity - PASSED
+✓ corporate - PASSED
+✓ fund - PASSED
+
+======================================================================
+ALL MODELS TEST SUMMARY
+======================================================================
+
+Total duration: 45.23s
+
+Models tested: 3
+Passed: 3
+Failed: 0
+
+Per-model results:
+  ✓ PASS - equity
+  ✓ PASS - corporate
+  ✓ PASS - fund
+
+======================================================================
+✓ ALL MODELS PASSED
+======================================================================
+
+Results saved to: test_results/all_models_test.json
+```
+
+### Parallel vs Sequential
+
+**Parallel Mode** (--parallel):
+- Faster execution (tests run concurrently)
+- Better for CI/CD (reduced total time)
+- Default 4 workers (adjust with --max-workers)
+- Ideal when models are independent
+
+**Sequential Mode** (default):
+- Easier to read logs
+- Better for debugging
+- Lower resource usage
+- Ideal for local development
+
+### Results JSON Format
+
+```json
+{
+  "start_time": "2025-11-13T10:30:00",
+  "end_time": "2025-11-13T10:30:45",
+  "models_tested": 3,
+  "models_passed": 3,
+  "models_failed": 0,
+  "model_results": {
+    "equity": {
+      "success": true,
+      "timestamp": "2025-11-13T10:30:15"
+    },
+    "corporate": {
+      "success": true,
+      "timestamp": "2025-11-13T10:30:30"
+    },
+    "fund": {
+      "success": true,
+      "timestamp": "2025-11-13T10:30:45"
+    }
+  }
+}
+```
+
+### Integration with Other Scripts
+
+`test_all_models.py` internally uses:
+- `test_pipeline_e2e.py` - For complete pipeline validation
+- `test_ui_integration.py` - For UI component testing
+
+All tests are backend-agnostic and work with both Parquet and Delta Lake formats.
+
 ## Integration with CI/CD
 
 ### Pre-commit Checks
@@ -465,13 +629,20 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Run pipeline tests
+      - name: Run pipeline tests (single model)
         run: |
           python scripts/test_pipeline_e2e.py --model equity --generate-sample --quick
 
-      - name: Run UI tests
+      - name: Run all models test
         run: |
-          python scripts/test_ui_integration.py --model equity
+          python scripts/test_all_models.py --generate-sample --quick --parallel
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-results
+          path: test_results/
 ```
 
 ### Scheduled Testing
