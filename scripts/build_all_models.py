@@ -188,9 +188,9 @@ class AllModelBuilder:
             date_from = date_from_obj.isoformat()
             date_to = date_to_obj.isoformat()
         elif not date_from or not date_to:
-            # Default: last 30 days
+            # Default: last 365 days (1 year)
             date_to_obj = date.today()
-            date_from_obj = date_to_obj - timedelta(days=30)
+            date_from_obj = date_to_obj - timedelta(days=365)
             date_from = date_from_obj.isoformat()
             date_to = date_to_obj.isoformat()
 

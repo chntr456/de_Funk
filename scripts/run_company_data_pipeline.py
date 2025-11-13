@@ -305,12 +305,12 @@ Examples:
         date_from = args.date_from
         date_to = args.date_to
     else:
-        # Default: last 7 days
+        # Default: last 90 days
         date_to = datetime.now().date()
-        date_from = date_to - timedelta(days=7)
+        date_from = date_to - timedelta(days=90)
         date_from = date_from.isoformat()
         date_to = date_to.isoformat()
-        print(f"No date range specified, using last 7 days: {date_from} to {date_to}")
+        print(f"No date range specified, using last 90 days: {date_from} to {date_to}")
         print()
 
     # Run pipeline
