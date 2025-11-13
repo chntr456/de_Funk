@@ -199,7 +199,8 @@ models:
 # Dependencies on other models
 depends_on:
   - core     # Uses shared dim_calendar for time-based queries
-  - company  # Forecast model reads from company model for training data
+  - equity   # Forecast model reads from equity model for training data
+  - corporate # Corporate fundamentals for enhanced predictions
 
 # Graph structure for forecast model
 # Joins to dim_calendar for standard date filtering
@@ -234,18 +235,18 @@ graph:
       type: left
       description: "Join metrics to calendar on metric date"
 
-    # Cross-model edge: forecast inherits from company for ticker dimension
+    # Cross-model edge: forecast inherits from equity for ticker dimension
     - from: fact_forecasts
-      to: company.fact_prices
+      to: equity.fact_equity_prices
       "on": ["ticker=ticker"]
       type: left
-      description: "Join forecasts to company prices on ticker (shared dimension)"
+      description: "Join forecasts to equity prices on ticker (shared dimension)"
 
     - from: fact_forecasts
-      to: company.dim_company
+      to: equity.dim_equity
       "on": ["ticker=ticker"]
       type: left
-      description: "Join forecasts to company dimension on ticker"
+      description: "Join forecasts to equity dimension on ticker"
 
     # Edge for vw_price_predictions view (unified actuals + predictions)
     - from: vw_price_predictions

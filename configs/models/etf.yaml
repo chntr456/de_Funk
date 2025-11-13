@@ -4,8 +4,9 @@ tags: [etf, portfolio, us]
 
 # Dependencies on other models
 depends_on:
-  - core     # For dim_calendar
-  - company  # For underlying holdings
+  - core      # For dim_calendar
+  - equity    # For underlying holdings (ticker prices)
+  - corporate # For company fundamentals
 
 # Storage configuration
 storage:
@@ -110,7 +111,7 @@ measures:
   holdings_weighted_return:
     type: weighted
     description: "ETF return calculated from underlying holdings"
-    source: company.fact_prices.close  # Cross-model reference!
+    source: equity.fact_equity_prices.close  # Cross-model reference!
     weighting_method: etf_holdings
     weight_column: dim_etf_holdings.weight_percent
     group_by: [trade_date, etf_ticker]
@@ -121,7 +122,7 @@ measures:
   holdings_weighted_volume:
     type: weighted
     description: "Weighted trading volume of underlying holdings"
-    source: company.fact_prices.volume
+    source: equity.fact_equity_prices.volume
     weighting_method: etf_holdings
     weight_column: dim_etf_holdings.weight_percent
     group_by: [trade_date, etf_ticker]
@@ -196,12 +197,12 @@ graph:
       type: many_to_one
       description: "Holdings belong to an ETF"
 
-    # Cross-model: ETF holdings to company stocks
+    # Cross-model: ETF holdings to equity stocks
     - from: dim_etf_holdings
-      to: company.dim_company
+      to: equity.dim_equity
       "on": ["holding_ticker=ticker"]
       type: many_to_one
-      description: "Holdings are company stocks"
+      description: "Holdings are equity stocks"
 
   paths:
     - id: etf_prices_with_info
@@ -214,7 +215,7 @@ graph:
       description: "ETF prices with calendar attributes"
       tags: [time, analytics]
 
-    - id: etf_holdings_with_company
-      hops: "dim_etf_holdings -> company.dim_company"
-      description: "ETF holdings with company information"
+    - id: etf_holdings_with_equity
+      hops: "dim_etf_holdings -> equity.dim_equity"
+      description: "ETF holdings with equity information"
       tags: [holdings, analytics]
