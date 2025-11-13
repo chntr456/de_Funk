@@ -1,6 +1,6 @@
 # Delta Lake Usage Guide
 
-This guide shows how to use Delta Lake storage with DuckDB in the de_Funk framework.
+This guide shows how to use Delta Lake storage with both DuckDB and Spark backends in the de_Funk framework.
 
 ## Overview
 
@@ -11,7 +11,11 @@ Delta Lake provides:
 - **Merge/upsert operations** - Efficient updates to large tables
 - **Audit history** - Track all changes to tables
 
+**Backend Support**: Delta Lake is supported in both DuckDB (single-node) and Spark (distributed) backends with a unified API.
+
 ## Installation
+
+### DuckDB Backend
 
 ```bash
 # Install DuckDB (if not already installed)
@@ -19,6 +23,15 @@ pip install duckdb
 
 # Install Delta Lake library
 pip install deltalake
+```
+
+### Spark Backend
+
+```bash
+# Install PySpark with Delta Lake support
+pip install pyspark delta-spark
+
+# Or add to your Spark session configuration
 ```
 
 ## Configuration
@@ -419,8 +432,103 @@ if file_count > 100:
     conn.optimize_delta_table(path)
 ```
 
+## Spark Backend Usage
+
+### Spark Session Configuration
+
+For Spark to support Delta Lake, configure your session:
+
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("de_Funk_Delta") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .getOrCreate()
+
+from core.connection import SparkConnection
+conn = SparkConnection(spark)
+```
+
+### Spark Delta Operations
+
+```python
+from core.connection import SparkConnection
+
+# Read Delta table with time travel
+df = conn.read_table('/path/to/delta', format='delta', version=5)
+
+# Write Delta table
+spark_df = spark.createDataFrame(data)
+conn.write_delta_table(spark_df, '/path/to/delta', mode='overwrite', partition_by=['ticker'])
+
+# Merge (upsert)
+conn.merge_delta_table(
+    source_df,
+    '/path/to/delta',
+    merge_condition="target.ticker = source.ticker AND target.trade_date = source.trade_date"
+)
+
+# Optimize with z-ordering
+conn.optimize_delta_table('/path/to/delta', zorder_by=['ticker', 'trade_date'])
+
+# Get history
+history = conn.get_delta_table_history('/path/to/delta')
+```
+
+## Backend Comparison
+
+### DuckDB vs Spark Delta Support
+
+| Feature | DuckDB | Spark | Notes |
+|---------|--------|-------|-------|
+| **Read Delta** | ✅ `delta_scan()` | ✅ `.format("delta")` | Both support time travel |
+| **Write Delta** | ✅ via delta-rs | ✅ Native | Spark has native support |
+| **Merge/Upsert** | ✅ via delta-rs | ✅ Native SQL | Spark more feature-rich |
+| **Time Travel** | ✅ version/timestamp | ✅ version/timestamp | Same API |
+| **Optimize** | ✅ Compact + Z-order | ✅ Compact + Z-order | Same features |
+| **Vacuum** | ✅ Retention hours | ✅ Retention hours | Same API |
+| **History** | ✅ Full history | ✅ Full history | Same format |
+| **Partitioning** | ✅ Read/Write | ✅ Read/Write | Both support |
+| **Scale** | Single-node | Distributed | Choose based on data size |
+| **Startup Time** | Very fast (< 1s) | Slower (~10-30s) | DuckDB better for interactive |
+| **Data Size** | Up to ~100GB | Any size | Spark for larger datasets |
+
+### When to Use Each Backend
+
+**Use DuckDB for:**
+- Interactive analysis and notebooks
+- Single-node workloads (< 100GB data)
+- Fast iteration and prototyping
+- Local development
+- Streamlit/Dash apps
+
+**Use Spark for:**
+- Large-scale ETL (> 100GB data)
+- Distributed processing
+- Production data pipelines
+- Multi-node clusters
+- Integration with Hive/Databricks
+
+### API Consistency
+
+Both backends use the same API patterns:
+
+```python
+# Same API for both backends!
+conn.read_table(path, format='delta', version=5)
+conn.write_delta_table(df, path, mode='overwrite')
+conn.optimize_delta_table(path, zorder_by=['col1', 'col2'])
+conn.get_delta_table_history(path)
+```
+
+The only difference is the DataFrame type (Pandas for DuckDB, Spark DataFrame for Spark).
+
 ## References
 
 - [Delta Lake Protocol](https://github.com/delta-io/delta/blob/master/PROTOCOL.md)
 - [DuckDB Delta Extension](https://duckdb.org/docs/extensions/delta.html)
 - [delta-rs Python Package](https://delta-io.github.io/delta-rs/)
+- [Spark Delta Lake](https://docs.delta.io/latest/delta-batch.html)
+- [delta-spark Package](https://github.com/delta-io/delta)

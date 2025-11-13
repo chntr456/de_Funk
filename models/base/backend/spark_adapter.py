@@ -1,25 +1,31 @@
 """
-Spark backend adapter implementation.
+Spark backend adapter implementation with Delta Lake support.
 
 Apache Spark is a distributed data processing engine for big data workloads.
 Uses catalog-based table management and lazy evaluation.
+Supports Delta Lake for ACID transactions and time travel.
 """
 
 from typing import Dict, Optional
 import time
+import logging
+from pathlib import Path
 
 from .adapter import BackendAdapter, QueryResult
+
+logger = logging.getLogger(__name__)
 
 
 class SparkAdapter(BackendAdapter):
     """
-    Apache Spark backend adapter.
+    Apache Spark backend adapter with Delta Lake support.
 
     Spark-specific features:
     - Distributed processing
     - Lazy evaluation
     - Catalog-based tables
     - Hive metastore integration
+    - Delta Lake ACID transactions and time travel
     """
 
     def get_dialect(self) -> str:
@@ -64,20 +70,21 @@ class SparkAdapter(BackendAdapter):
         """
         Get Spark table reference.
 
-        Spark uses catalog tables in the format: database.table
+        Spark can use either:
+        1. Catalog tables (database.table format)
+        2. File paths (for direct file access with Delta/Parquet)
+
+        Auto-detects Delta tables when using file paths.
 
         Args:
             table_name: Logical table name from model schema
 
         Returns:
-            Spark catalog table reference (e.g., "silver.fact_prices")
+            Spark table reference (catalog reference or delta.`path`)
 
         Raises:
             ValueError: If table not found in model schema
         """
-        # Get database from storage config (default: 'silver')
-        database = self.model.model_cfg.get('storage', {}).get('database', 'silver')
-
         # Verify table exists in schema
         schema = self.model.model_cfg.get('schema', {})
         dimensions = schema.get('dimensions', {})
@@ -89,14 +96,75 @@ class SparkAdapter(BackendAdapter):
                 f"Available tables: {list(dimensions.keys()) + list(facts.keys())}"
             )
 
-        # Return catalog reference
-        return f"{database}.{table_name}"
+        # Check if we're using catalog or file-based storage
+        storage_config = self.model.model_cfg.get('storage', {})
+
+        # If using catalog (Hive metastore)
+        if 'database' in storage_config:
+            database = storage_config['database']
+            return f"{database}.{table_name}"
+
+        # Otherwise, use file-based access
+        # Resolve table path
+        table_path = self._resolve_table_path(table_name)
+
+        # Check if Delta table
+        if self._is_delta_table(table_path):
+            logger.debug(f"Using Delta format for table '{table_name}' at {table_path}")
+            return f"delta.`{table_path}`"
+        else:
+            # Parquet table
+            return f"parquet.`{table_path}`"
+
+    def _resolve_table_path(self, table_name: str) -> Path:
+        """
+        Resolve logical table name to physical path.
+
+        Args:
+            table_name: Logical table name
+
+        Returns:
+            Path to table data
+        """
+        schema = self.model.model_cfg.get('schema', {})
+
+        # Check dimensions
+        if table_name in schema.get('dimensions', {}):
+            relative_path = schema['dimensions'][table_name]['path']
+        # Check facts
+        elif table_name in schema.get('facts', {}):
+            relative_path = schema['facts'][table_name]['path']
+        else:
+            raise ValueError(f"Table '{table_name}' not found in schema")
+
+        # Build full path
+        storage_root = Path(self.model.model_cfg['storage']['root'])
+        full_path = storage_root / relative_path
+
+        return full_path
+
+    def _is_delta_table(self, path: Path) -> bool:
+        """
+        Check if a path points to a Delta Lake table.
+
+        Args:
+            path: Path to check
+
+        Returns:
+            True if path is a Delta table, False otherwise
+        """
+        if not path.exists():
+            return False
+
+        # Delta tables have a _delta_log directory
+        delta_log = path / "_delta_log"
+        return delta_log.exists() and delta_log.is_dir()
 
     def supports_feature(self, feature: str) -> bool:
         """
         Check Spark feature support.
 
-        Spark SQL supports most standard SQL features.
+        Spark SQL supports most standard SQL features plus Delta Lake.
         """
         supported = {
             'window_functions': True,
@@ -107,6 +175,8 @@ class SparkAdapter(BackendAdapter):
             'pivot': True,         # Spark has PIVOT
             'explode': True,       # Spark-specific array explosion
             'percentile': True,    # PERCENTILE_APPROX
+            'delta_lake': True,    # Spark supports Delta Lake natively
+            'time_travel': True,   # Via Delta Lake
         }
         return supported.get(feature, False)
 
