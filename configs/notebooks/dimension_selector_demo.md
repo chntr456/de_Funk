@@ -28,31 +28,31 @@ $filter${
 
 # Dimension Selector and Collapsible Exhibits
 
-This notebook demonstrates two powerful new features:
+This notebook demonstrates two powerful features:
 
-1. **Dimension Selector** - Dynamically switch between different dimensions (like exchange, sector, ticker) for grouping and coloring
+1. **Measure Selector** - Dynamically select which measures to display on charts
 2. **Collapsible Exhibits** - Hide/show exhibits in expandable sections to keep notebooks clean
 
-## Dimension Selector Examples
+## Measure Selector Examples
 
-### Example 1: Line Chart with Dynamic Dimension Selection
+### Example 1: Line Chart with Dynamic Measure Selection
 
-Select which dimension to use for coloring the lines. Try switching between different groupings!
+Select which price measures to display on the chart. Try switching between different metrics!
 
 $exhibits${
   type: line_chart
-  source: company.prices_with_company
+  source: company.fact_prices
   x: trade_date
   y: close
-  title: Stock Price Trends - Dynamic Grouping
-  description: Use the dimension selector to change how data is grouped
-  dimension_selector: {
-    available_dimensions: [ticker, exchange_name],
-    default_dimension: ticker,
-    label: "Group By",
-    selector_type: radio,
-    applies_to: color,
-    help_text: "Choose how to group the data"
+  color: ticker
+  title: Stock Price Trends - Dynamic Measure Selection
+  description: Use the measure selector to choose which price metrics to display
+  measure_selector: {
+    available_measures: [open, close, high, low, volume_weighted],
+    default_measures: [close],
+    label: "Select Measures",
+    selector_type: checkbox,
+    help_text: "Choose which price measures to display"
   }
   interactive: true
   collapsible: true
@@ -60,28 +60,28 @@ $exhibits${
   collapsible_expanded: true
 }
 
-### Example 2: Bar Chart with Dimension Selector
+### Example 2: Bar Chart with Measure Selector
 
-Compare volumes across different groupings. The dimension selector lets you quickly switch perspectives!
+Compare different metrics across stocks. The measure selector lets you quickly switch perspectives!
 
 $exhibits${
   type: bar_chart
-  source: company.prices_with_company
+  source: company.fact_prices
   x: ticker
   y: volume
-  title: Volume Comparison
-  description: Switch dimensions to see volume from different perspectives
-  dimension_selector: {
-    available_dimensions: [ticker, exchange_name],
-    default_dimension: ticker,
-    label: "Color By",
+  color: ticker
+  title: Metric Comparison
+  description: Switch measures to see different metrics from various perspectives
+  measure_selector: {
+    available_measures: [volume, close, high, low, open],
+    default_measures: [volume],
+    label: "Select Metric",
     selector_type: selectbox,
-    applies_to: color,
-    help_text: "Choose coloring dimension"
+    help_text: "Choose which metric to compare"
   }
   interactive: true
   collapsible: true
-  collapsible_title: "📊 Volume Analysis"
+  collapsible_title: "📊 Metric Comparison"
   collapsible_expanded: false
 }
 
@@ -104,34 +104,27 @@ $exhibits${
   collapsible_expanded: false
 }
 
-### Example 4: Combined Features - Measure + Dimension Selectors + Collapsible
+### Example 4: Multiple Measure Selector with Collapsible
 
 This exhibit combines all features:
 - Measure selector for choosing which metrics to display
-- Dimension selector for choosing how to group data
 - Collapsible section to keep things tidy
+- Interactive charting
 
 $exhibits${
   type: line_chart
-  source: company.prices_with_company
+  source: company.fact_prices
   x: trade_date
   y: close
+  color: ticker
   title: Advanced Multi-Selector Chart
-  description: Use both measure and dimension selectors together
+  description: Use measure selector to view multiple metrics simultaneously
   measure_selector: {
-    available_measures: [open, close, high, low],
-    default_measures: [close],
+    available_measures: [open, close, high, low, volume_weighted],
+    default_measures: [close, high, low],
     label: "Select Price Measures",
     selector_type: checkbox,
-    help_text: "Choose which price metrics to display"
-  }
-  dimension_selector: {
-    available_dimensions: [ticker, exchange_name],
-    default_dimension: ticker,
-    label: "Group Lines By",
-    selector_type: radio,
-    applies_to: color,
-    help_text: "Choose grouping dimension"
+    help_text: "Choose which price metrics to display (multiple allowed)"
   }
   interactive: true
   collapsible: true
@@ -141,27 +134,25 @@ $exhibits${
 
 ## How to Use
 
-### Dimension Selector
+### Measure Selector
 
-Add a `dimension_selector` to any chart exhibit:
+Add a `measure_selector` to any chart exhibit:
 
 ```markdown
-dimension_selector: {
-  available_dimensions: [ticker, exchange_name, company_name],
-  default_dimension: ticker,
-  label: "Group By",
-  selector_type: radio,
-  applies_to: color,
-  help_text: "Choose dimension for grouping"
+measure_selector: {
+  available_measures: [open, close, high, low],
+  default_measures: [close],
+  label: "Select Measures",
+  selector_type: checkbox,
+  help_text: "Choose which measures to display"
 }
 ```
 
 **Properties:**
-- `available_dimensions`: List of dimension columns users can choose from
-- `default_dimension`: Which dimension to use initially
+- `available_measures`: List of measure columns users can choose from
+- `default_measures`: Which measures to display initially
 - `label`: Label shown above the selector
-- `selector_type`: `radio` (horizontal buttons) or `selectbox` (dropdown)
-- `applies_to`: Currently supports `color` (for coloring lines/bars)
+- `selector_type`: `checkbox` (multi-select) or `selectbox` (single select)
 - `help_text`: Help text shown to users
 
 ### Collapsible Exhibits
@@ -181,12 +172,10 @@ collapsible_expanded: false
 
 ## Benefits
 
-**Dimension Selector:**
-- Quickly explore data from different perspectives
-- No need to create multiple exhibits for different groupings
-- Users control how they want to view the data
-- Common use cases: switching between ticker, exchange_name, company_name, or other dimension columns
-- Note: Available dimensions must exist in your source table (use prices_with_company for exchange data)
+**Measure Selector:**
+- Quickly explore different metrics without creating multiple exhibits
+- Users control which data they want to view
+- Common use cases: switching between price measures (open, close, high, low), volume metrics, or calculated fields
 
 **Collapsible Exhibits:**
 - Keep notebooks clean and organized
@@ -196,15 +185,35 @@ collapsible_expanded: false
 
 ## Example Use Cases
 
-1. **Financial Analysis**: Switch between viewing by ticker, exchange_name, or company_name (requires prices_with_company table)
-2. **Regional Sales**: Toggle between country, region, or city views
-3. **Product Analytics**: Switch between product, category, or brand groupings
-4. **Customer Segmentation**: View by age group, region, or purchase frequency
+1. **Financial Analysis**: Switch between viewing open, close, high, low prices
+2. **Volume Analysis**: Toggle between total volume, average volume, and volume-weighted prices
+3. **Multi-Metric Comparison**: Display multiple measures simultaneously on the same chart
+4. **Progressive Disclosure**: Start with summary metrics, expand to detailed tables
+
+## Data Tables with Measure Flexibility
+
+### Example 5: Data Table with All Metrics
+
+View detailed data in table format:
+
+$exhibits${
+  type: data_table
+  source: company.fact_prices
+  download: true
+  collapsible: true
+  collapsible_title: "📋 View Full Data Table (Exportable)"
+  collapsible_expanded: false
+}
 
 ## Important Notes
 
-**Data Source Requirements:**
-- The `fact_prices` table only contains: ticker, trade_date, and pricing metrics
-- For exchange information, use `prices_with_company` (materialized view with company and exchange data)
-- Available dimensions in `prices_with_company`: ticker, company_name, exchange_name
-- Always ensure dimension columns exist in your source table before adding to `available_dimensions`
+**Available Measures:**
+- Measures must exist as columns in your source table
+- For `fact_prices`: ticker, trade_date, open, high, low, close, volume_weighted, volume
+- Ensure measure columns are valid before adding to `available_measures`
+- Aggregations are automatically applied based on exhibit type
+
+**Performance:**
+- Measure selectors are client-side UI controls (fast)
+- Data filtering happens server-side (optimized)
+- Collapsible sections improve page load performance by deferring rendering
