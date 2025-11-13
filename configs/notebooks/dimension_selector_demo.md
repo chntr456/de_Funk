@@ -41,11 +41,11 @@ Select which dimension to use for coloring the lines. Try switching between diff
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: company.prices_with_company
   x: trade_date
   y: close
   title: Stock Price Trends - Dynamic Grouping
-  description: Use the dimension selector to change how data is grouped (auto-join for exchange_name)
+  description: Use the dimension selector to change how data is grouped
   dimension_selector: {
     available_dimensions: [ticker, exchange_name],
     default_dimension: ticker,
@@ -66,11 +66,11 @@ Compare volumes across different groupings. The dimension selector lets you quic
 
 $exhibits${
   type: bar_chart
-  source: company.fact_prices
+  source: company.prices_with_company
   x: ticker
   y: volume
   title: Volume Comparison
-  description: Switch dimensions to see volume from different perspectives (auto-join for exchange_name)
+  description: Switch dimensions to see volume from different perspectives
   dimension_selector: {
     available_dimensions: [ticker, exchange_name],
     default_dimension: ticker,
@@ -113,11 +113,11 @@ This exhibit combines all features:
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: company.prices_with_company
   x: trade_date
   y: close
   title: Advanced Multi-Selector Chart
-  description: Use both measure and dimension selectors together (auto-join for exchange_name)
+  description: Use both measure and dimension selectors together
   measure_selector: {
     available_measures: [open, close, high, low],
     default_measures: [close],
