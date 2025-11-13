@@ -344,7 +344,18 @@ class BaseModel:
             try:
                 other_model = self.session.get_model_instance(model_name)
                 other_model.ensure_built()
-                return other_model.get_dimension_df(table_name)
+
+                # Try dimensions first, then facts
+                if table_name in other_model._dims:
+                    return other_model.get_dimension_df(table_name)
+                elif table_name in other_model._facts:
+                    return other_model.get_fact_df(table_name)
+                else:
+                    raise KeyError(
+                        f"Table '{table_name}' not found in {model_name}. "
+                        f"Available dimensions: {list(other_model._dims.keys())}, "
+                        f"Available facts: {list(other_model._facts.keys())}"
+                    )
             except Exception as e:
                 raise ValueError(
                     f"Cross-model reference '{node_id}' failed: {e}"

@@ -130,7 +130,11 @@ class DomainModelIntegrationTest:
             print("  ✓ RepoContext initialized")
 
             # Initialize session
-            self.session = UniversalSession(ctx.spark, ctx.storage)
+            self.session = UniversalSession(
+                connection=ctx.spark,
+                storage_cfg=ctx.storage,
+                repo_root=Path.cwd()
+            )
             print("  ✓ UniversalSession created")
 
             # Check available models
