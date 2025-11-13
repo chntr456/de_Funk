@@ -15,8 +15,15 @@ Run:
 """
 
 from __future__ import annotations
-import pytest
+import sys
 from pathlib import Path
+
+# Add repository root to Python path
+REPO_ROOT = Path(__file__).parent.parent.resolve()
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+import pytest
 from datetime import date, timedelta
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
@@ -53,18 +60,19 @@ def ctx():
 @pytest.fixture(scope="module")
 def session(ctx):
     """Create UniversalSession."""
+    # Note: 'company' model is deprecated but kept for backward compatibility
     return UniversalSession(
         connection=ctx.spark,
         storage_cfg=ctx.storage,
-        repo_root=Path.cwd(),
-        models=['core', 'company', 'equity', 'forecast']
+        repo_root=REPO_ROOT,
+        models=['core', 'company', 'equity', 'corporate', 'forecast']
     )
 
 
 @pytest.fixture(scope="module")
 def registry():
     """Get ModelRegistry."""
-    return ModelRegistry("configs/models")
+    return ModelRegistry(str(REPO_ROOT / "configs" / "models"))
 
 
 @pytest.fixture
@@ -508,13 +516,14 @@ if __name__ == "__main__":
 
     # Initialize
     ctx = RepoContext.from_repo_root()
+    # Note: 'company' model is deprecated but kept for backward compatibility
     session = UniversalSession(
         connection=ctx.spark,
         storage_cfg=ctx.storage,
-        repo_root=Path.cwd(),
-        models=['core', 'company']
+        repo_root=REPO_ROOT,
+        models=['core', 'company', 'equity', 'corporate', 'forecast']
     )
-    registry = ModelRegistry("configs/models")
+    registry = ModelRegistry(str(REPO_ROOT / "configs" / "models"))
 
     sample_tickers = [
         "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA",
