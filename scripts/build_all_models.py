@@ -531,9 +531,9 @@ class AllModelBuilder:
 
             # Instantiate model
             model = model_class(
-                backend=self.ctx.spark,
-                model_cfg=model_cfg,
+                connection=self.ctx.spark,
                 storage_cfg=self.ctx.storage,
+                model_cfg=model_cfg,
                 params={
                     "DATE_FROM": date_from,
                     "DATE_TO": date_to,
