@@ -4,6 +4,14 @@ Unit tests for measure framework.
 Tests measure registry, executor, and base classes.
 """
 
+import sys
+from pathlib import Path
+
+# Add repository root to Python path
+REPO_ROOT = Path(__file__).parent.parent.parent.resolve()
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 import pytest
 from models.base.measures.base_measure import BaseMeasure, MeasureType
 from models.base.measures.registry import MeasureRegistry

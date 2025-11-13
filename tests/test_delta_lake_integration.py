@@ -9,11 +9,18 @@ Tests core Delta Lake functionality:
 - Backend adapter integration
 """
 
+import sys
+from pathlib import Path
+
+# Add repository root to Python path
+REPO_ROOT = Path(__file__).parent.parent.resolve()
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 import pytest
 import pandas as pd
 import tempfile
 import shutil
-from pathlib import Path
 from datetime import datetime, timedelta
 
 try:
