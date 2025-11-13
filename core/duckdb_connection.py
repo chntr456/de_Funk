@@ -1,13 +1,20 @@
 """
-DuckDB connection implementation.
+DuckDB connection implementation with Delta Lake support.
 
-DuckDB is excellent for analytics workloads and can read Parquet files directly.
+DuckDB is excellent for analytics workloads and can read Parquet and Delta Lake files directly.
 Much faster startup than Spark for single-node operations.
+
+Delta Lake Support:
+- ACID transactions
+- Time travel queries
+- Schema evolution
+- Merge/upsert operations
 """
 
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import pandas as pd
 from pathlib import Path
+import logging
 
 try:
     import duckdb
@@ -15,28 +22,39 @@ try:
 except ImportError:
     DUCKDB_AVAILABLE = False
 
+try:
+    from deltalake import DeltaTable, write_deltalake
+    DELTA_AVAILABLE = True
+except ImportError:
+    DELTA_AVAILABLE = False
+
 from .connection import DataConnection
+
+logger = logging.getLogger(__name__)
 
 
 class DuckDBConnection(DataConnection):
     """
-    DuckDB connection for analytics queries.
+    DuckDB connection for analytics queries with Delta Lake support.
 
     Benefits:
     - Fast startup (no Spark overhead)
-    - Native Parquet support
+    - Native Parquet and Delta Lake support
     - Great for interactive/notebook workloads
     - SQL-based queries
+    - ACID transactions with Delta
+    - Time travel queries
     - Can still use Spark for heavy ETL
     """
 
-    def __init__(self, db_path: str = ":memory:", read_only: bool = False):
+    def __init__(self, db_path: str = ":memory:", read_only: bool = False, enable_delta: bool = True):
         """
-        Initialize DuckDB connection.
+        Initialize DuckDB connection with optional Delta Lake support.
 
         Args:
             db_path: Path to DuckDB database file (":memory:" for in-memory)
             read_only: Whether to open in read-only mode
+            enable_delta: Whether to enable Delta Lake extension (default: True)
         """
         if not DUCKDB_AVAILABLE:
             raise ImportError(
@@ -45,35 +63,295 @@ class DuckDBConnection(DataConnection):
 
         self.conn = duckdb.connect(db_path, read_only=read_only)
         self._cached_tables = {}
+        self.delta_enabled = False
 
-    def read_table(self, path: str, format: str = "parquet") -> Any:
+        # Enable Delta Lake extension if requested
+        if enable_delta:
+            self._enable_delta_extension()
+
+    def _enable_delta_extension(self):
         """
-        Read a table from storage.
+        Enable DuckDB Delta extension.
 
-        DuckDB can query Parquet files directly without loading into memory!
+        Installs and loads the Delta extension for reading/writing Delta Lake tables.
+        """
+        try:
+            # Install delta extension (only needed once per database)
+            self.conn.execute("INSTALL delta")
+            # Load delta extension (needed per session)
+            self.conn.execute("LOAD delta")
+            self.delta_enabled = True
+            logger.info("Delta Lake extension enabled successfully")
+        except Exception as e:
+            logger.warning(f"Could not enable Delta extension: {e}. Delta operations will not be available.")
+            self.delta_enabled = False
+
+    def _is_delta_table(self, path: str) -> bool:
+        """
+        Check if a path points to a Delta Lake table.
+
+        Delta tables have a _delta_log directory containing transaction logs.
+
+        Args:
+            path: Path to check
+
+        Returns:
+            True if path is a Delta table, False otherwise
+        """
+        path_obj = Path(path)
+        if not path_obj.exists():
+            return False
+
+        # Check for _delta_log directory (signature of Delta table)
+        delta_log = path_obj / "_delta_log"
+        return delta_log.exists() and delta_log.is_dir()
+
+    def read_table(self, path: str, format: str = "parquet", version: Optional[int] = None, timestamp: Optional[str] = None) -> Any:
+        """
+        Read a table from storage (Parquet or Delta Lake).
+
+        DuckDB can query files directly without loading into memory!
 
         Args:
             path: Path to the table (file or directory)
-            format: Format of the data (currently only parquet supported)
+            format: Format of the data ('parquet' or 'delta')
+            version: For Delta tables, specific version to read (time travel)
+            timestamp: For Delta tables, timestamp to read (time travel)
 
         Returns:
             DuckDB relation (lazy query result)
-        """
-        if format != "parquet":
-            raise ValueError(f"DuckDB connection only supports parquet format, got {format}")
 
-        # DuckDB can query Parquet files directly
-        # This is lazy - no data loaded until needed
+        Example:
+            # Read current version
+            df = conn.read_table('/path/to/delta', format='delta')
+
+            # Read specific version (time travel)
+            df = conn.read_table('/path/to/delta', format='delta', version=5)
+
+            # Read at timestamp
+            df = conn.read_table('/path/to/delta', format='delta', timestamp='2024-01-15 10:00:00')
+        """
         path_obj = Path(path)
 
-        if path_obj.is_dir():
-            # Read all parquet files in directory
-            pattern = f"{path}/**/*.parquet"
-            # Use from_parquet to get a relation object
-            return self.conn.from_parquet(pattern, union_by_name=True)
+        # Auto-detect Delta tables
+        if format == "parquet" and self._is_delta_table(path):
+            logger.info(f"Auto-detected Delta table at {path}, switching to delta format")
+            format = "delta"
+
+        if format == "delta":
+            if not self.delta_enabled:
+                raise ValueError(
+                    "Delta format requested but Delta extension is not enabled. "
+                    "Install delta-rs: pip install deltalake"
+                )
+            return self._read_delta_table(path, version=version, timestamp=timestamp)
+
+        elif format == "parquet":
+            # DuckDB can query Parquet files directly
+            # This is lazy - no data loaded until needed
+            if path_obj.is_dir():
+                # Read all parquet files in directory
+                pattern = f"{path}/**/*.parquet"
+                # Use from_parquet to get a relation object
+                return self.conn.from_parquet(pattern, union_by_name=True)
+            else:
+                # Read single file
+                return self.conn.from_parquet(path)
+
         else:
-            # Read single file
-            return self.conn.from_parquet(path)
+            raise ValueError(f"Unsupported format: {format}. Use 'parquet' or 'delta'")
+
+    def _read_delta_table(self, path: str, version: Optional[int] = None, timestamp: Optional[str] = None) -> Any:
+        """
+        Read a Delta Lake table using DuckDB's delta_scan function.
+
+        Args:
+            path: Path to Delta table
+            version: Specific version to read (time travel)
+            timestamp: Timestamp to read (time travel)
+
+        Returns:
+            DuckDB relation
+        """
+        # Build time travel parameters
+        time_travel = ""
+        if version is not None:
+            time_travel = f", version => {version}"
+        elif timestamp is not None:
+            time_travel = f", timestamp => '{timestamp}'"
+
+        # Use DuckDB's delta_scan function
+        query = f"SELECT * FROM delta_scan('{path}'{time_travel})"
+        return self.conn.execute(query)
+
+    def write_delta_table(
+        self,
+        df: pd.DataFrame,
+        path: str,
+        mode: str = "overwrite",
+        partition_by: Optional[List[str]] = None,
+        **kwargs
+    ):
+        """
+        Write DataFrame to Delta Lake table.
+
+        Args:
+            df: Pandas DataFrame to write
+            path: Path to Delta table
+            mode: Write mode ('overwrite', 'append', 'merge')
+            partition_by: Columns to partition by
+            **kwargs: Additional arguments passed to write_deltalake
+
+        Example:
+            # Overwrite table
+            conn.write_delta_table(df, '/path/to/delta', mode='overwrite')
+
+            # Append to table
+            conn.write_delta_table(df, '/path/to/delta', mode='append')
+
+            # Partition by column
+            conn.write_delta_table(df, '/path/to/delta', partition_by=['year', 'month'])
+        """
+        if not DELTA_AVAILABLE:
+            raise ImportError(
+                "Delta operations require deltalake package. "
+                "Install it with: pip install deltalake"
+            )
+
+        if mode == "overwrite":
+            write_deltalake(
+                path,
+                df,
+                mode="overwrite",
+                partition_by=partition_by,
+                **kwargs
+            )
+        elif mode == "append":
+            write_deltalake(
+                path,
+                df,
+                mode="append",
+                partition_by=partition_by,
+                **kwargs
+            )
+        elif mode == "merge":
+            # For merge, we need merge keys
+            merge_keys = kwargs.pop('merge_keys', None)
+            if not merge_keys:
+                raise ValueError("merge mode requires 'merge_keys' parameter")
+            self._merge_delta_table(df, path, merge_keys)
+        else:
+            raise ValueError(f"Unsupported mode: {mode}. Use 'overwrite', 'append', or 'merge'")
+
+        logger.info(f"Wrote {len(df)} rows to Delta table at {path} (mode={mode})")
+
+    def _merge_delta_table(self, df: pd.DataFrame, path: str, merge_keys: List[str]):
+        """
+        Merge (upsert) DataFrame into Delta table.
+
+        Args:
+            df: DataFrame with new/updated data
+            path: Path to Delta table
+            merge_keys: Columns to match on (e.g., ['ticker', 'trade_date'])
+        """
+        if not DELTA_AVAILABLE:
+            raise ImportError("Merge requires deltalake package")
+
+        dt = DeltaTable(path)
+
+        # Build predicate for merge
+        predicates = " AND ".join([f"target.{key} = source.{key}" for key in merge_keys])
+
+        # Perform merge
+        (
+            dt.merge(
+                source=df,
+                predicate=predicates,
+                source_alias="source",
+                target_alias="target",
+            )
+            .when_matched_update_all()
+            .when_not_matched_insert_all()
+            .execute()
+        )
+
+        logger.info(f"Merged {len(df)} rows into Delta table at {path}")
+
+    def get_delta_table_history(self, path: str) -> pd.DataFrame:
+        """
+        Get the version history of a Delta table.
+
+        Args:
+            path: Path to Delta table
+
+        Returns:
+            DataFrame with version history (version, timestamp, operation, etc.)
+
+        Example:
+            history = conn.get_delta_table_history('/path/to/delta')
+            print(history[['version', 'timestamp', 'operation']])
+        """
+        if not DELTA_AVAILABLE:
+            raise ImportError("Delta history requires deltalake package")
+
+        dt = DeltaTable(path)
+        history = dt.history()
+
+        # Convert to DataFrame
+        return pd.DataFrame(history)
+
+    def optimize_delta_table(self, path: str, zorder_by: Optional[List[str]] = None):
+        """
+        Optimize Delta table (compact small files, optionally z-order).
+
+        Args:
+            path: Path to Delta table
+            zorder_by: Columns to z-order by (for better data skipping)
+
+        Example:
+            # Basic compaction
+            conn.optimize_delta_table('/path/to/delta')
+
+            # With z-ordering
+            conn.optimize_delta_table('/path/to/delta', zorder_by=['ticker', 'trade_date'])
+        """
+        if not DELTA_AVAILABLE:
+            raise ImportError("Delta optimize requires deltalake package")
+
+        dt = DeltaTable(path)
+
+        # Compact small files
+        dt.optimize.compact()
+        logger.info(f"Compacted Delta table at {path}")
+
+        # Z-order if requested
+        if zorder_by:
+            dt.optimize.z_order(zorder_by)
+            logger.info(f"Z-ordered Delta table at {path} by {zorder_by}")
+
+    def vacuum_delta_table(self, path: str, retention_hours: int = 168):
+        """
+        Vacuum Delta table (remove old files no longer needed).
+
+        Args:
+            path: Path to Delta table
+            retention_hours: Retention period in hours (default: 168 = 7 days)
+
+        Warning: Vacuuming removes old files and disables time travel to those versions!
+
+        Example:
+            # Vacuum files older than 7 days
+            conn.vacuum_delta_table('/path/to/delta')
+
+            # Custom retention
+            conn.vacuum_delta_table('/path/to/delta', retention_hours=24)
+        """
+        if not DELTA_AVAILABLE:
+            raise ImportError("Delta vacuum requires deltalake package")
+
+        dt = DeltaTable(path)
+        dt.vacuum(retention_hours=retention_hours)
+        logger.info(f"Vacuumed Delta table at {path} (retention={retention_hours}h)")
 
     def read_parquet(self, path: str) -> Any:
         """

@@ -1,26 +1,30 @@
 """
-DuckDB backend adapter implementation.
+DuckDB backend adapter implementation with Delta Lake support.
 
 DuckDB is a columnar in-process SQL database optimized for analytics.
-It can read directly from Parquet files without loading into memory.
+It can read directly from Parquet and Delta Lake files without loading into memory.
 """
 
 from pathlib import Path
 from typing import Dict, Optional
 import time
+import logging
 
 from .adapter import BackendAdapter, QueryResult
+
+logger = logging.getLogger(__name__)
 
 
 class DuckDBAdapter(BackendAdapter):
     """
-    DuckDB backend adapter.
+    DuckDB backend adapter with Delta Lake support.
 
     DuckDB-specific features:
-    - Reads directly from Parquet files
+    - Reads directly from Parquet and Delta Lake files
     - QUALIFY clause for window function filtering
     - Columnar storage optimizations
     - Fast aggregations
+    - Delta Lake time travel and ACID transactions
     """
 
     def get_dialect(self) -> str:
@@ -57,13 +61,16 @@ class DuckDBAdapter(BackendAdapter):
         """
         Get DuckDB table reference.
 
-        DuckDB reads directly from Parquet files using read_parquet().
+        DuckDB reads directly from Parquet or Delta Lake files.
+        Automatically detects format based on directory structure.
 
         Args:
             table_name: Logical table name from model schema
 
         Returns:
-            DuckDB-specific table reference (e.g., "read_parquet('/path/*.parquet')")
+            DuckDB-specific table reference:
+            - Delta: "delta_scan('/path')"
+            - Parquet: "read_parquet('/path/*.parquet')"
 
         Raises:
             ValueError: If table not found in model schema
@@ -71,12 +78,35 @@ class DuckDBAdapter(BackendAdapter):
         # Resolve table path from model schema
         table_path = self._resolve_table_path(table_name)
 
+        # Check if this is a Delta table (has _delta_log directory)
+        if self._is_delta_table(table_path):
+            logger.debug(f"Using delta_scan for table '{table_name}' at {table_path}")
+            return f"delta_scan('{table_path}')"
+
+        # Otherwise, read as Parquet
         if table_path.is_dir():
             # Read all parquet files in directory
             return f"read_parquet('{table_path}/*.parquet')"
         else:
             # Single file
             return f"read_parquet('{table_path}')"
+
+    def _is_delta_table(self, path: Path) -> bool:
+        """
+        Check if a path points to a Delta Lake table.
+
+        Args:
+            path: Path to check
+
+        Returns:
+            True if path is a Delta table, False otherwise
+        """
+        if not path.exists():
+            return False
+
+        # Delta tables have a _delta_log directory
+        delta_log = path / "_delta_log"
+        return delta_log.exists() and delta_log.is_dir()
 
     def supports_feature(self, feature: str) -> bool:
         """
@@ -96,6 +126,8 @@ class DuckDBAdapter(BackendAdapter):
             'json': True,     # DuckDB has JSON functions
             'pivot': True,    # DuckDB has PIVOT
             'asof_join': True,  # DuckDB has ASOF joins
+            'delta_lake': True,  # DuckDB supports Delta Lake via extension
+            'time_travel': True,  # Via Delta Lake
         }
         return supported.get(feature, False)
 
