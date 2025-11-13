@@ -19,7 +19,8 @@ Interactive demonstration of measures across all models with live data exhibits.
 
 ### Price & Volume Measures
 
-$exhibit${
+$exhibits${
+  type: data_table
   id: company_price_measures
   title: Average Price and Volume by Ticker (Top 20)
   model: company
@@ -44,7 +45,8 @@ $exhibit${
 
 ### Market Capitalization Proxy
 
-$exhibit${
+$exhibits${
+  type: data_table
   id: market_cap_proxy
   title: Market Cap Proxy (Close × Volume) - Top 15
   model: company
@@ -68,7 +70,8 @@ $exhibit${
 
 ### Volatility Measures
 
-$exhibit${
+$exhibits${
+  type: data_table
   id: price_volatility
   title: Price Volatility (Std Dev) by Ticker - Top 20
   model: company
@@ -94,7 +97,8 @@ $exhibit${
 
 ### Monthly Average Prices
 
-$exhibit${
+$exhibits${
+  type: data_table
   id: monthly_avg_prices
   title: Monthly Average Closing Prices (Last 12 Months)
   model: company
@@ -124,7 +128,8 @@ $exhibit${
 
 ### Prices with Calendar Dimensions
 
-$exhibit${
+$exhibits${
+  type: data_table
   id: prices_by_day_of_week
   title: Average Price by Day of Week (All Tickers)
   model: company
@@ -151,7 +156,8 @@ $exhibit${
 
 ## 📊 Company Count by Exchange
 
-$exhibit${
+$exhibits${
+  type: data_table
   id: companies_by_exchange
   title: Company Count by Exchange
   model: company
@@ -175,7 +181,8 @@ $exhibit${
 
 ### Forecast Accuracy Metrics
 
-$exhibit${
+$exhibits${
+  type: data_table
   id: forecast_accuracy
   title: Forecast Model Performance (MAE, MAPE, R²)
   model: forecast
@@ -205,7 +212,8 @@ $exhibit${
 
 ## 📈 Price Range Analysis
 
-$exhibit${
+$exhibits${
+  type: data_table
   id: daily_price_range
   title: Average Daily Price Range (High - Low) - Top 20
   model: company
