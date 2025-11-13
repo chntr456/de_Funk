@@ -8,6 +8,10 @@ Adds ETF-specific convenience methods.
 from typing import Optional
 from models.base.model import BaseModel
 
+# Bootstrap ETF-specific domain features when this model is loaded
+# This ensures ETF weighting strategies are available
+import models.domains.etf.weighting
+
 
 class ETFModel(BaseModel):
     """
