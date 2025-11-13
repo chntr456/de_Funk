@@ -1,9 +1,9 @@
 ---
 id: dimension_selector_demo
 title: Measure Selector and Collapsible Exhibits Demo
-description: Demonstrating dynamic measure selection and collapsible exhibits
-tags: [demo, measure-selector, collapsible]
-models: [company]
+description: Demonstrating dynamic measure selection and collapsible exhibits with equity model
+tags: [demo, measure-selector, collapsible, equity]
+models: [equity]
 author: analyst@company.com
 created: 2025-01-01
 updated: 2025-11-13
@@ -23,16 +23,18 @@ $filter${
   label: Stock Tickers
   type: select
   multi: true
-  source: {model: company, table: fact_prices, column: ticker}
+  source: {model: equity, table: fact_equity_prices, column: ticker}
   help_text: Select stocks to analyze
 }
 
 # Measure Selector and Collapsible Exhibits
 
-This notebook demonstrates two powerful features:
+This notebook demonstrates two powerful features using the **equity model**:
 
 1. **Measure Selector** - Dynamically select which measures to display on charts
 2. **Collapsible Exhibits** - Hide/show exhibits in expandable sections to keep notebooks clean
+
+**Note:** This uses the `equity` model from the new domain architecture.
 
 ---
 
@@ -44,7 +46,7 @@ Select which price measures to display on the chart. Try switching between diffe
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   x: trade_date
   y: close
   color: ticker
@@ -63,12 +65,13 @@ $exhibits${
   collapsible_expanded: true
 }
 
-**Available Measures from fact_prices:**
+**Available Measures from equity.fact_equity_prices:**
 - `open`: Opening price
 - `close`: Closing price
 - `high`: Highest intraday price
 - `low`: Lowest intraday price
 - `volume_weighted`: Volume-weighted average price (VWAP)
+- `market_cap`: Market capitalization
 - `volume`: Trading volume
 
 ---
@@ -79,14 +82,14 @@ Compare different metrics across stocks. The measure selector lets you quickly s
 
 $exhibits${
   type: bar_chart
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   x: ticker
   y: volume
   color: ticker
   title: Metric Comparison
   description: Switch measures to see different metrics from various perspectives
   measure_selector: {
-    available_measures: [volume, close, high, low, open],
+    available_measures: [volume, close, high, low, open, market_cap],
     default_measures: [volume],
     label: "Select Metric",
     selector_type: selectbox,
@@ -112,7 +115,7 @@ Keep your notebook organized by hiding detailed exhibits until needed.
 
 $exhibits${
   type: metric_cards
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   metrics: [
     { measure: close, label: "Avg Close", aggregation: avg },
     { measure: volume, label: "Total Volume", aggregation: sum },
@@ -134,7 +137,7 @@ This exhibit combines all features:
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   x: trade_date
   y: close
   color: ticker
@@ -229,7 +232,7 @@ View detailed data in table format:
 
 $exhibits${
   type: data_table
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   download: true
   collapsible: true
   collapsible_title: "📋 View Full Data Table (Exportable)"
@@ -240,11 +243,10 @@ $exhibits${
 
 ## Important Notes
 
-**Available Measures:**
-- Measures must exist as columns in your source table
-- For `fact_prices`: ticker, trade_date, open, high, low, close, volume_weighted, volume
-- Ensure measure columns are valid before adding to `available_measures`
-- Aggregations are automatically applied based on exhibit type
+**Equity Model Tables:**
+- `fact_equity_prices`: ticker, trade_date, open, high, low, close, volume_weighted, volume, market_cap, transactions
+- `dim_equity`: Equity instrument master
+- `dim_exchange`: Exchange reference
 
 **Performance:**
 - Measure selectors are client-side UI controls (fast)
@@ -253,4 +255,19 @@ $exhibits${
 
 ---
 
-*This notebook demonstrates interactive measure selectors and collapsible exhibits for a modern analytical experience.*
+## Migration from Company Model
+
+This notebook has been updated from the deprecated `company` model to the new `equity` model:
+
+**Old (Deprecated):**
+- `company.fact_prices` → **NEW:** `equity.fact_equity_prices`
+- `company.dim_company` → **NEW:** `equity.dim_equity` + `corporate.dim_corporate`
+
+**New Features in Equity Model:**
+- Market cap column included in prices (calculated field)
+- Better separation: equity (trading) vs. corporate (fundamentals)
+- Cross-model relationships to corporate model
+
+---
+
+*This notebook demonstrates the new equity model with interactive measure selectors and collapsible exhibits for a modern analytical experience.*

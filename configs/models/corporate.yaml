@@ -118,25 +118,35 @@ schema:
       partitions: [report_date]
       tags: [fact, ratios, future]
 
-# Edges define relationships
-edges:
-  - from: fact_sec_filings.company_id
-    to: dim_corporate.company_id
-    type: many_to_one
+# Graph structure - defines how to load data from bronze
+graph:
+  nodes:
+    - id: dim_corporate
+      from: bronze.ref_ticker
+      select:
+        ticker: ticker
+        company_name: name
+      derive:
+        company_id: "CONCAT('COMPANY_', ticker)"
+        ticker_primary: "ticker"
+        is_active: "true"
+      tags: [dim, entity, corporate]
+      unique_key: [company_id]
 
-  - from: fact_financials.company_id
-    to: dim_corporate.company_id
-    type: many_to_one
+  # Edges define relationships
+  edges:
+    # Future edges for when we have SEC/financial data
+    # - from: fact_sec_filings
+    #   to: dim_corporate
+    #   "on": ["company_id=company_id"]
+    #   type: many_to_one
 
-  - from: fact_financial_ratios.company_id
-    to: dim_corporate.company_id
-    type: many_to_one
-
-  # CROSS-MODEL EDGE: Corporate to Equity (primary ticker)
-  - from: dim_corporate.ticker_primary
-    to: equity.dim_equity.ticker
-    type: many_to_one
-    description: "Each company has a primary ticker"
+    # CROSS-MODEL EDGE: Corporate to Equity (primary ticker)
+    - from: dim_corporate
+      to: equity.dim_equity
+      "on": ["ticker_primary=ticker"]
+      type: many_to_one
+      description: "Each company has a primary ticker"
 
 # Measures (mostly placeholders for future use)
 measures:

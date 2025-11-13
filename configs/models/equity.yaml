@@ -140,73 +140,117 @@ schema:
       partitions: [publish_date]
       tags: [news, analytics, materialized]
 
-# Edges define relationships between tables
-edges:
-  # Equity prices to equity dimension
-  - from: fact_equity_prices.ticker
-    to: dim_equity.ticker
-    type: many_to_one
-    description: "Each price record belongs to an equity"
+# Graph structure - defines how to load data from bronze
+graph:
+  nodes:
+    - id: dim_equity
+      from: bronze.ref_ticker
+      select:
+        ticker: ticker
+        company_name: name
+        exchange_code: exchange_code
+      derive:
+        company_id: "CONCAT('COMPANY_', ticker)"
+        is_active: "true"
+        security_type: "'common_stock'"
+        currency: "'USD'"
+      tags: [dim, entity, equity]
+      unique_key: [ticker]
 
-  # Equity technicals to equity dimension
-  - from: fact_equity_technicals.ticker
-    to: dim_equity.ticker
-    type: many_to_one
+    - id: dim_exchange
+      from: bronze.exchanges
+      select:
+        exchange_code: operating_mic
+        exchange_name: name
+        country: country
+        timezone: timezone
+      tags: [dim, ref, exchange]
+      unique_key: [exchange_code]
 
-  # Equity news to equity dimension
-  - from: fact_equity_news.ticker
-    to: dim_equity.ticker
-    type: many_to_one
+    - id: fact_equity_prices
+      from: bronze.prices_daily
+      select:
+        ticker: ticker
+        trade_date: trade_date
+        open: open
+        high: high
+        low: low
+        close: close
+        volume: volume
+        volume_weighted: volume_weighted
+      derive:
+        transactions: "NULL"
+        market_cap: "close * volume"
+      tags: [fact, prices, ohlcv]
 
-  # Equity to exchange
-  - from: dim_equity.exchange_code
-    to: dim_exchange.exchange_code
-    type: many_to_one
-    description: "Each equity is listed on an exchange"
+    - id: fact_equity_news
+      from: bronze.news
+      select:
+        ticker: ticker
+        publish_date: publish_date
+        article_id: article_id
+        title: title
+        source: source
+        sentiment: sentiment
+      derive:
+        url: "NULL"
+      tags: [fact, news]
 
-  # CROSS-MODEL EDGE: Equity to Corporate
-  - from: dim_equity.company_id
-    to: corporate.dim_corporate.company_id
-    type: many_to_one
-    description: "Each equity (ticker) belongs to a corporate entity (company)"
+  # Edges define relationships between tables
+  edges:
+    # Cross-model edge: equity data uses core calendar for time-based filtering
+    - from: fact_equity_prices
+      to: core.dim_calendar
+      "on": ["trade_date=date"]
+      type: left
+      description: "Join prices to calendar for date-based filtering and attributes"
 
-# Paths define materialized views (joins)
-paths:
-  equity_prices_with_company:
-    description: "Canonical analytics path: prices with equity and exchange info"
-    base: fact_equity_prices
-    joins:
-      - table: dim_equity
-        on: fact_equity_prices.ticker = dim_equity.ticker
-      - table: dim_exchange
-        on: dim_equity.exchange_code = dim_exchange.exchange_code
-    select:
-      - fact_equity_prices.ticker
-      - fact_equity_prices.trade_date
-      - dim_equity.company_name
-      - dim_exchange.exchange_name
-      - fact_equity_prices.open
-      - fact_equity_prices.high
-      - fact_equity_prices.low
-      - fact_equity_prices.close
-      - fact_equity_prices.volume
-      - fact_equity_prices.volume_weighted
-      - fact_equity_prices.market_cap
+    - from: fact_equity_news
+      to: core.dim_calendar
+      "on": ["publish_date=date"]
+      type: left
+      description: "Join news to calendar for date-based filtering"
 
-  equity_news_with_company:
-    description: "News with equity info"
-    base: fact_equity_news
-    joins:
-      - table: dim_equity
-        on: fact_equity_news.ticker = dim_equity.ticker
-    select:
-      - fact_equity_news.ticker
-      - fact_equity_news.publish_date
-      - dim_equity.company_name
-      - fact_equity_news.article_id
-      - fact_equity_news.title
-      - fact_equity_news.source
-      - fact_equity_news.sentiment
+    # Intra-model edges
+    - from: fact_equity_prices
+      to: dim_equity
+      "on": ["ticker=ticker"]
+      type: many_to_one
+      description: "Each price record belongs to an equity"
+
+    - from: fact_equity_news
+      to: dim_equity
+      "on": ["ticker=ticker"]
+      type: many_to_one
+      description: "Each news article is about an equity"
+
+    - from: dim_equity
+      to: dim_exchange
+      "on": ["exchange_code=exchange_code"]
+      type: many_to_one
+      description: "Each equity is listed on an exchange"
+
+  # Paths define materialized views (joins)
+  paths:
+    - id: equity_prices_with_company
+      hops: "fact_equity_prices -> dim_equity -> dim_exchange"
+      description: "Prices with full equity and exchange context"
+      tags: [canonical, analytics]
+
+    - id: equity_prices_with_calendar
+      hops: "fact_equity_prices -> core.dim_calendar"
+      description: "Prices with calendar attributes for time-based analysis"
+      tags: [time, analytics]
+
+    - id: equity_news_with_company
+      hops: "fact_equity_news -> dim_equity"
+      description: "News with equity context"
+      tags: [news, analytics]
+
+    - id: equity_news_with_calendar
+      hops: "fact_equity_news -> core.dim_calendar"
+      description: "News with calendar attributes for time-based analysis"
+      tags: [time, analytics]
 
 # Measures - pre-defined aggregations
 measures:

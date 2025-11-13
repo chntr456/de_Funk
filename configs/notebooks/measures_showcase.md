@@ -1,9 +1,9 @@
 ---
 id: measures_showcase
 title: Measures Showcase
-description: Interactive demonstration of measures with live data exhibits
-tags: [measures, aggregations, analytics, showcase]
-models: [company, forecast, core]
+description: Interactive demonstration of measures across domain models with live data exhibits
+tags: [measures, aggregations, analytics, showcase, equity, forecast]
+models: [equity, corporate, forecast, core]
 author: system
 created: 2025-11-13
 updated: 2025-11-13
@@ -23,18 +23,20 @@ $filter${
   label: Stock Tickers
   type: select
   multi: true
-  source: {model: company, table: fact_prices, column: ticker}
+  source: {model: equity, table: fact_equity_prices, column: ticker}
   default: ["AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"]
   help_text: Select stocks to analyze (loaded from database)
 }
 
 # 📊 Measures Showcase
 
-Interactive demonstration of measures across all models with live data exhibits. Use filters above to customize your analysis.
+Interactive demonstration of measures across domain models with live data exhibits. Use filters above to customize your analysis.
+
+**Domain Models:** equity, corporate, forecast
 
 ---
 
-## 📈 Price & Volume Measures
+## 📈 Equity Model - Price & Volume Measures
 
 ### Overview Metrics
 
@@ -42,7 +44,7 @@ Quick summary metrics for selected stocks:
 
 $exhibits${
   type: metric_cards
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   metrics: [
     { measure: close, label: "Avg Close", aggregation: avg },
     { measure: volume, label: "Total Volume", aggregation: sum },
@@ -68,7 +70,7 @@ Dynamically select which price measures to display on the chart:
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   x: trade_date
   y: close
   color: ticker
@@ -102,7 +104,7 @@ Compare trading volume across selected stocks:
 
 $exhibits${
   type: bar_chart
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   x: ticker
   y: volume
   color: ticker
@@ -119,35 +121,33 @@ $exhibits${
 
 ---
 
-### Market Capitalization Proxy
+### Market Capitalization
 
-Market cap proxy calculated as close price × volume:
+Market cap from equity prices:
 
 $exhibits${
   type: data_table
-  source: company.fact_prices
-  columns: [ticker, close, volume]
-  derived_columns:
-    market_cap_proxy: close * volume
+  source: equity.fact_equity_prices
+  columns: [ticker, close, volume, market_cap]
   aggregations:
     close: avg
     volume: avg
-    market_cap_proxy: avg
+    market_cap: avg
   group_by: [ticker]
-  order_by: [{column: market_cap_proxy, direction: desc}]
+  order_by: [{column: market_cap, direction: desc}]
   limit: 20
   format:
     close: $#,##0.00
     volume: #,##0
-    market_cap_proxy: $#,##0.00
+    market_cap: $#,##0.00
   collapsible: true
-  collapsible_title: "💰 Market Cap Proxy (Top 20)"
+  collapsible_title: "💰 Market Cap (Top 20)"
   collapsible_expanded: false
 }
 
 **Measure Demonstrated:**
-- `market_cap`: Market capitalization proxy (expression: close * volume, aggregation: avg)
-- Demonstrates derived columns with custom expressions
+- `avg_market_cap`: Average market capitalization (aggregation: avg)
+- Uses `market_cap` column from equity model (close * volume proxy)
 
 ---
 
@@ -157,7 +157,7 @@ Standard deviation of closing prices by ticker:
 
 $exhibits${
   type: data_table
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   columns: [ticker, close]
   aggregations:
     close_avg: avg
@@ -189,7 +189,7 @@ Average daily price range (high - low):
 
 $exhibits${
   type: data_table
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   columns: [ticker, high, low]
   derived_columns:
     price_range: high - low
@@ -220,7 +220,7 @@ Track price movements over time with interactive measure selection:
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   x: trade_date
   y: close
   color: ticker
@@ -314,7 +314,7 @@ Export complete dataset with all columns:
 
 $exhibits${
   type: data_table
-  source: company.fact_prices
+  source: equity.fact_equity_prices
   download: true
   collapsible: true
   collapsible_title: "📋 View Raw Data (Exportable)"
@@ -327,15 +327,30 @@ $exhibits${
 
 This notebook demonstrates:
 
-1. **Interactive Filters** - Date range and ticker selection
-2. **Measure Selectors** - Dynamically choose which measures to display on charts
-3. **Collapsible Exhibits** - Keep notebook organized by hiding/showing sections
-4. **Multiple Chart Types** - Line charts, bar charts, data tables, metric cards
-5. **40+ Measures** - Across company and forecast models
-6. **Multiple Aggregation Types** - avg, sum, count, stddev, max, min
-7. **Format Patterns** - Currency ($#,##0.00), Percentage (#,##0.00%), Integer (#,##0)
-8. **Computed Measures** - price_range, market_cap_calc
-9. **Weighted Aggregates** - Equal, volume, market-cap weighted indices
+1. **New Domain Models** - equity, corporate, forecast (replaces deprecated company model)
+2. **Interactive Filters** - Date range and ticker selection
+3. **Measure Selectors** - Dynamically choose which measures to display on charts
+4. **Collapsible Exhibits** - Keep notebook organized by hiding/showing sections
+5. **Multiple Chart Types** - Line charts, bar charts, data tables, metric cards
+6. **40+ Measures** - Across equity and forecast models
+7. **Multiple Aggregation Types** - avg, sum, count, stddev, max, min
+8. **Format Patterns** - Currency ($#,##0.00), Percentage (#,##0.00%), Integer (#,##0)
+9. **Computed Measures** - price_range, market_cap
+10. **Weighted Aggregates** - Equal, volume, market-cap weighted indices
+
+### Domain Model Structure
+
+**Equity Model** (`equity.yaml`):
+- `fact_equity_prices` - OHLCV price data with market_cap
+- `dim_equity` - Equity instrument master
+- `dim_exchange` - Exchange reference
+
+**Corporate Model** (`corporate.yaml`):
+- `dim_corporate` - Corporate entity master
+
+**Forecast Model** (`forecast.yaml`):
+- `fact_forecasts` - Price predictions
+- `fact_forecast_metrics` - Model performance (MAE, MAPE, R²)
 
 ### Measure Configuration
 
@@ -349,4 +364,4 @@ All measures are defined in `configs/models/*.yaml` files with:
 
 ---
 
-*This notebook demonstrates real measure usage with live database queries, interactive controls, and formatted output.*
+*This notebook demonstrates real measure usage with live database queries, interactive controls, and formatted output from the new domain model architecture.*
