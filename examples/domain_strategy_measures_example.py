@@ -108,9 +108,10 @@ def get_weighted_indices(
             # Extract the DataFrame
             df = result.data
             if df is not None and not df.empty:
-                # Rename the measure column to the label
+                # Find the measure column (first non-trade_date column)
                 measure_col = [col for col in df.columns if col != 'trade_date'][0]
-                df = df.rename(columns={measure_col: label})
+                # Keep only trade_date and measure column to avoid merge conflicts
+                df = df[['trade_date', measure_col]].rename(columns={measure_col: label})
                 results[label] = df
 
         except Exception as e:
