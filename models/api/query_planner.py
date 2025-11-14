@@ -386,8 +386,9 @@ class GraphQueryPlanner:
 
             select_clause = ", ".join(select_cols)
         else:
-            # Select all columns from all tables (may have duplicates, DuckDB will handle)
-            select_clause = f"{table_aliases[base_table]}.*"
+            # Select all columns from all tables (DuckDB will handle duplicates)
+            # Generate t0.*, t1.*, t2.*, etc. for all tables in join
+            select_clause = ", ".join(f"{alias}.*" for alias in table_aliases.values())
 
         # Build final SQL
         sql = f"""

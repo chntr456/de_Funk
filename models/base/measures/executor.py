@@ -324,28 +324,46 @@ class MeasureExecutor:
         # Use query planner to find which tables have the missing columns
         query_planner = self.model.query_planner
 
-        # Find tables that contain the missing columns
-        enrich_with = set()
+        # Find tables that contain the missing columns and build full join paths
+        # Use dict to preserve order and track distance from base table
+        all_join_tables_dict = {}
+
         for column in missing_columns:
             # Search for tables with this column
             tables_with_column = query_planner.find_tables_with_column(column)
             if tables_with_column:
-                # Use the first table found
-                # TODO: Could be smarter about choosing the best table
-                enrich_with.add(tables_with_column[0])
+                target_table = tables_with_column[0]
+
+                # Get the full join path from base_table to target_table
+                join_path = query_planner.get_join_path(base_table, target_table)
+
+                if join_path and len(join_path) > 1:
+                    # Add all intermediate tables (excluding base table) in order
+                    for i, table in enumerate(join_path[1:], start=1):
+                        if table not in all_join_tables_dict:
+                            # Store table with its distance from base as value
+                            all_join_tables_dict[table] = i
+                else:
+                    # No path found - column exists but not reachable via joins
+                    # Let it fail naturally with a better error message
+                    pass
             else:
                 # Column not found in any table - will fail during execution
                 # Let it fail naturally with a better error message
                 pass
 
-        if not enrich_with:
+        if not all_join_tables_dict:
             # No enrichment possible
             return
 
-        # Get enriched table using query planner
+        # Sort tables by distance from base (closest first) to ensure correct join order
+        # This ensures dim_equity comes before dim_exchange in the join chain
+        sorted_tables = sorted(all_join_tables_dict.keys(), key=lambda t: all_join_tables_dict[t])
+
+        # Get enriched table using query planner with tables in correct order
         enriched_df = self.model.get_table_enriched(
             base_table,
-            enrich_with=list(enrich_with),
+            enrich_with=sorted_tables,
             columns=None  # Get all columns
         )
 
