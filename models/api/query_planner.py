@@ -355,23 +355,26 @@ class GraphQueryPlanner:
 
         # Build SELECT clause
         if columns:
-            # Select specific columns (need to add table aliases)
+            # Select specific columns with correct table aliases
             select_cols = []
             for col in columns:
-                # Try to find which table has this column
-                found = False
+                # Find which table has this column by checking schema
+                table_with_column = None
                 for table in all_tables:
-                    # Check if column might be in this table
-                    # For now, just use first table alias for ambiguity
-                    if not found:
-                        select_cols.append(f"{table_aliases[all_tables[0]]}.{col}")
-                        found = True
+                    if self._table_has_column(table, col):
+                        table_with_column = table
                         break
-                if not found:
-                    select_cols.append(col)  # Let SQL handle error if column doesn't exist
+
+                if table_with_column:
+                    # Use table alias for column
+                    select_cols.append(f"{table_aliases[table_with_column]}.{col}")
+                else:
+                    # Column not found in any table, let SQL handle the error
+                    select_cols.append(col)
+
             select_clause = ", ".join(select_cols)
         else:
-            # Select all columns from base table + specific columns from joined tables
+            # Select all columns from all tables (may have duplicates, DuckDB will handle)
             select_clause = f"{table_aliases[base_table]}.*"
 
         # Build final SQL
@@ -641,6 +644,31 @@ FROM {base_table_ref} AS {table_aliases[base_table]}
                 tables_with_column.append(table_name)
 
         return tables_with_column
+
+    def _table_has_column(self, table_name: str, column_name: str) -> bool:
+        """
+        Check if a table has a specific column.
+
+        Args:
+            table_name: Table to check
+            column_name: Column to look for
+
+        Returns:
+            True if table has the column, False otherwise
+        """
+        schema = self.model.model_cfg.get('schema', {})
+
+        # Check dimensions
+        if table_name in schema.get('dimensions', {}):
+            columns = schema['dimensions'][table_name].get('columns', {})
+            return column_name in columns
+
+        # Check facts
+        if table_name in schema.get('facts', {}):
+            columns = schema['facts'][table_name].get('columns', {})
+            return column_name in columns
+
+        return False
 
     def __repr__(self) -> str:
         """String representation of query planner."""
