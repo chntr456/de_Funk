@@ -1108,7 +1108,7 @@ class BaseModel:
 
                 # ParquetLoader expects relative path from output_root
                 rel_path = f"dims/{name}"
-                loader.write_dim(rel_path, df)
+                loader.write_dim(rel_path, df, row_count=row_count)
 
                 stats['dimensions'][name] = row_count
                 stats['total_rows'] += row_count
@@ -1119,7 +1119,9 @@ class BaseModel:
             print(f"\nWriting Facts:")
             for name, df in self._facts.items():
                 print(f"  Writing {name}...")
+                # Count rows BEFORE optimizations (more memory-efficient)
                 row_count = df.count()
+                print(f"    Rows: {row_count:,}")
 
                 # Determine sort columns for optimal query performance
                 sort_by = partition_by.get(name, []) if partition_by else []
@@ -1136,12 +1138,12 @@ class BaseModel:
                             break
 
                 rel_path = f"facts/{name}"
-                loader.write_fact(rel_path, df, sort_by=sort_by)
+                # Pass pre-computed row_count to avoid re-counting after sort/coalesce
+                loader.write_fact(rel_path, df, sort_by=sort_by, row_count=row_count)
 
                 stats['facts'][name] = row_count
                 stats['total_rows'] += row_count
                 stats['total_tables'] += 1
-                print(f"    ✓ {row_count:,} rows")
 
         else:
             # Standard Spark writer (fallback)

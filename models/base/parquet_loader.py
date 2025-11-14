@@ -56,7 +56,8 @@ class ParquetLoader:
         rel_path: str,
         df: Any,
         sort_by: Optional[List[str]] = None,
-        num_files: int = 1
+        num_files: int = 1,
+        row_count: Optional[int] = None
     ):
         """
         Write DataFrame to Parquet with DuckDB optimizations.
@@ -66,9 +67,15 @@ class ParquetLoader:
             df: Spark DataFrame
             sort_by: Columns to sort by for query performance (enables zone maps)
             num_files: Number of files to write (default: 1 for <1GB data)
+            row_count: Pre-computed row count (avoids counting after transformations)
         """
         out = self.root / rel_path
         out.parent.mkdir(parents=True, exist_ok=True)
+
+        # Cache row count if not provided (do this BEFORE expensive operations)
+        if row_count is None:
+            print(f"  Counting rows...")
+            row_count = df.count()
 
         # Sort by query columns for zone maps and predicate pushdown
         if sort_by:
@@ -88,11 +95,11 @@ class ParquetLoader:
          .parquet(str(out)))
 
         # Write manifest
-        self._manifest(rel_path, out, df.count())
+        self._manifest(rel_path, out, row_count)
 
         print(f"  ✓ Written to: {out}")
 
-    def write_dim(self, rel_path: str, df: Any):
+    def write_dim(self, rel_path: str, df: Any, row_count: Optional[int] = None):
         """
         Write dimension table.
 
@@ -101,10 +108,11 @@ class ParquetLoader:
         Args:
             rel_path: Relative path from model root (e.g., "dims/dim_equity")
             df: Spark DataFrame
+            row_count: Optional pre-computed row count
         """
-        self._write(rel_path, df, num_files=1)
+        self._write(rel_path, df, num_files=1, row_count=row_count)
 
-    def write_fact(self, rel_path: str, df: Any, sort_by: List[str]):
+    def write_fact(self, rel_path: str, df: Any, sort_by: List[str], row_count: Optional[int] = None):
         """
         Write fact table sorted by query columns.
 
@@ -114,11 +122,16 @@ class ParquetLoader:
             rel_path: Relative path from model root (e.g., "facts/fact_equity_prices")
             df: Spark DataFrame
             sort_by: Columns to sort by (e.g., ["trade_date", "ticker"])
+            row_count: Optional pre-computed row count (recommended for large datasets)
         """
+        # Count rows if not provided (do this BEFORE transformations)
+        if row_count is None:
+            print(f"  Counting rows...")
+            row_count = df.count()
+
         # Determine optimal file count based on size
         # For typical datasets (<10M rows), use single file
         # For very large datasets (>10M rows), use 2-5 files
-        row_count = df.count()
         if row_count < 10_000_000:
             num_files = 1
         elif row_count < 50_000_000:
@@ -126,4 +139,4 @@ class ParquetLoader:
         else:
             num_files = 5
 
-        self._write(rel_path, df, sort_by=sort_by, num_files=num_files)
+        self._write(rel_path, df, sort_by=sort_by, num_files=num_files, row_count=row_count)

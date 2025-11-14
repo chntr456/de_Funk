@@ -18,6 +18,10 @@ def get_spark(app_name: str = "App", config: Optional[Dict[str, str]] = None):
                 .config("spark.sql.session.timeZone", "UTC")
                 .config("spark.sql.caseSensitive", "true")
                 .config("spark.sql.shuffle.partitions", "200")
+                # Memory settings for large datasets with window functions
+                .config("spark.driver.memory", "4g")
+                .config("spark.executor.memory", "4g")
+                .config("spark.driver.maxResultSize", "2g")
                 # better traceback if a worker crashes
                 .config("spark.python.worker.faulthandler.enabled", "true")
                 .config("spark.sql.execution.pyspark.udf.faulthandler.enabled", "true"))
