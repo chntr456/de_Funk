@@ -237,7 +237,19 @@ class GraphQueryPlanner:
                 # Get edge metadata
                 edge_data = self.graph.edges[left_table, right_table]
                 join_on = edge_data['join_on']
-                join_type = edge_data.get('join_type', 'left')
+                join_type_raw = edge_data.get('join_type', 'left').lower()
+
+                # Map join types to standard SQL join types
+                join_type_map = {
+                    'many_to_one': 'left',
+                    'one_to_many': 'left',
+                    'left': 'left',
+                    'right': 'right',
+                    'inner': 'inner',
+                    'full': 'outer',
+                    'outer': 'outer'
+                }
+                join_type = join_type_map.get(join_type_raw, 'left')
 
                 # Load right table
                 right_df = self.model.get_table(right_table)
