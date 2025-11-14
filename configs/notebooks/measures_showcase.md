@@ -6,7 +6,7 @@ tags: [measures, aggregations, analytics, showcase, equity, forecast]
 models: [equity, corporate, forecast, core]
 author: system
 created: 2025-11-13
-updated: 2025-11-13
+updated: 2025-11-14
 ---
 
 $filter${
@@ -40,8 +40,6 @@ Interactive demonstration of measures across domain models with live data exhibi
 
 ### Overview Metrics
 
-Quick summary metrics for selected stocks:
-
 $exhibits${
   type: metric_cards
   source: equity.fact_equity_prices
@@ -56,17 +54,9 @@ $exhibits${
   collapsible_expanded: true
 }
 
-**Measures Demonstrated:**
-- `avg_close_price`: Average closing price (aggregation: avg)
-- `total_volume`: Total trading volume (aggregation: sum)
-- `max_high`: Highest price in period (aggregation: max)
-- `min_low`: Lowest price in period (aggregation: min)
-
 ---
 
-### Price Trends with Measure Selector
-
-Dynamically select which price measures to display on the chart:
+### Price Trends by Ticker
 
 $exhibits${
   type: line_chart
@@ -75,13 +65,11 @@ $exhibits${
   y: close
   color: ticker
   title: Stock Price Trends
-  description: Use the measure selector to choose which price metrics to display
   measure_selector: {
     available_measures: [open, close, high, low, volume_weighted],
     default_measures: [close],
     label: "Select Price Measures",
-    selector_type: checkbox,
-    help_text: "Choose which price metrics to display on chart"
+    selector_type: checkbox
   }
   interactive: true
   collapsible: true
@@ -89,18 +77,9 @@ $exhibits${
   collapsible_expanded: true
 }
 
-**Measures Demonstrated:**
-- `open`: Opening price
-- `close`: Closing price
-- `high`: Highest intraday price
-- `low`: Lowest intraday price
-- `volume_weighted`: Volume-weighted average price (VWAP)
-
 ---
 
 ### Volume Analysis
-
-Compare trading volume across selected stocks:
 
 $exhibits${
   type: bar_chart
@@ -109,21 +88,15 @@ $exhibits${
   y: volume
   color: ticker
   title: Total Volume by Ticker
-  description: Total trading volume for each stock in the selected date range
   interactive: true
   collapsible: true
   collapsible_title: "📊 Volume Analysis"
   collapsible_expanded: false
 }
 
-**Measure Demonstrated:**
-- `total_volume`: Total trading volume (aggregation: sum)
-
 ---
 
 ### Market Capitalization
-
-Market cap from equity prices:
 
 $exhibits${
   type: data_table
@@ -145,15 +118,9 @@ $exhibits${
   collapsible_expanded: false
 }
 
-**Measure Demonstrated:**
-- `avg_market_cap`: Average market capitalization (aggregation: avg)
-- Uses `market_cap` column from equity model (close * volume proxy)
-
 ---
 
 ### Price Volatility
-
-Standard deviation of closing prices by ticker:
 
 $exhibits${
   type: data_table
@@ -175,17 +142,11 @@ $exhibits${
   collapsible_expanded: false
 }
 
-**Measure Demonstrated:**
-- `price_volatility`: Price standard deviation (aggregation: stddev)
-- Shows both average and standard deviation for context
-
 ---
 
 ## 📅 Time-Based Aggregations
 
 ### Price Range Analysis
-
-Average daily price range (high - low):
 
 $exhibits${
   type: data_table
@@ -209,14 +170,9 @@ $exhibits${
   collapsible_expanded: false
 }
 
-**Measure Demonstrated:**
-- `price_range`: Daily range (computed: high - low, aggregation: avg)
-
 ---
 
-### Price Over Time
-
-Track price movements over time with interactive measure selection:
+### Price Time Series by Ticker
 
 $exhibits${
   type: line_chart
@@ -225,13 +181,11 @@ $exhibits${
   y: close
   color: ticker
   title: Price Trends Over Time
-  description: Track how prices change over your selected date range
   measure_selector: {
     available_measures: [open, high, low, close, volume_weighted],
     default_measures: [close, volume_weighted],
     label: "Select Measures",
-    selector_type: checkbox,
-    help_text: "Choose which price measures to track"
+    selector_type: checkbox
   }
   interactive: true
   collapsible: true
@@ -239,43 +193,124 @@ $exhibits${
   collapsible_expanded: false
 }
 
-**Measures Demonstrated:**
-- `close`: Closing price
-- `volume_weighted`: Volume-weighted average price (VWAP)
-- Time-based analysis with measure selector
-
 ---
 
-## 📋 Weighted Aggregate Indices
+## 📊 Weighted Aggregate Indices
 
-### Multi-Stock Indices
+### Market-Wide Index Construction
 
-Compare different index construction methodologies:
+Compare different index construction methodologies aggregated across all selected tickers:
 
 $exhibits${
-  type: weighted_aggregate_chart
-  aggregate_by: trade_date
-  value_measures: [equal_weighted_index, volume_weighted_index, market_cap_weighted_index]
-  title: Weighted Aggregate Indices
+  type: line_chart
+  source: equity.fact_equity_prices
+  x: trade_date
+  y: close
+  title: Equal Weighted Index
+  description: Simple average of all selected stock prices
+  aggregations:
+    close: avg
+  group_by: [trade_date]
+  interactive: true
   collapsible: true
-  collapsible_title: "📊 Index Construction Methods"
+  collapsible_title: "📊 Equal Weighted Index (All Tickers)"
+  collapsible_expanded: true
+}
+
+$exhibits${
+  type: line_chart
+  source: equity.fact_equity_prices
+  x: trade_date
+  y: close
+  title: Volume Weighted Average Price (VWAP)
+  description: Price weighted by trading volume across all selected tickers
+  aggregations:
+    close: weighted_avg
+    weight_column: volume
+  group_by: [trade_date]
+  interactive: true
+  collapsible: true
+  collapsible_title: "💹 Volume Weighted Index (All Tickers)"
+  collapsible_expanded: true
+}
+
+$exhibits${
+  type: data_table
+  source: equity.fact_equity_prices
+  columns: [trade_date, close, volume]
+  aggregations:
+    equal_weighted: avg
+    volume_weighted: weighted_avg
+    total_volume: sum
+  weight_column: volume
+  group_by: [trade_date]
+  order_by: [{column: trade_date, direction: desc}]
+  limit: 30
+  format:
+    equal_weighted: $#,##0.00
+    volume_weighted: $#,##0.00
+    total_volume: #,##0
+  collapsible: true
+  collapsible_title: "📋 Index Values Over Time"
   collapsible_expanded: false
 }
 
-**Measures Demonstrated:**
-- `equal_weighted_index`: Equal weighted price index
-- `volume_weighted_index`: Volume weighted index
-- `market_cap_weighted_index`: Market cap weighted index
-- `price_weighted_index`: Price weighted (like DJIA)
-- `volatility_weighted_index`: Inverse volatility weighted
+---
+
+### Market Cap Weighted Index
+
+$exhibits${
+  type: line_chart
+  source: equity.fact_equity_prices
+  x: trade_date
+  y: close
+  title: Market Cap Weighted Index
+  description: Price weighted by market capitalization (close * volume proxy)
+  derived_columns:
+    market_cap: close * volume
+  aggregations:
+    close: weighted_avg
+    weight_column: market_cap
+  group_by: [trade_date]
+  interactive: true
+  collapsible: true
+  collapsible_title: "💰 Market Cap Weighted Index"
+  collapsible_expanded: false
+}
+
+---
+
+### Index Comparison
+
+$exhibits${
+  type: data_table
+  source: equity.fact_equity_prices
+  columns: [trade_date, close, volume]
+  derived_columns:
+    market_cap: close * volume
+  aggregations:
+    equal_weighted: avg
+    volume_weighted: {aggregation: weighted_avg, weight_column: volume}
+    market_cap_weighted: {aggregation: weighted_avg, weight_column: market_cap}
+    num_stocks: count
+  group_by: [trade_date]
+  order_by: [{column: trade_date, direction: desc}]
+  limit: 30
+  format:
+    equal_weighted: $#,##0.00
+    volume_weighted: $#,##0.00
+    market_cap_weighted: $#,##0.00
+    num_stocks: #,##0
+  collapsible: true
+  collapsible_title: "📊 All Index Methods Comparison"
+  collapsible_expanded: false
+}
 
 ---
 
 ## 🔮 Forecast Model Measures
 
 ### Forecast Accuracy Metrics
-
-Performance metrics for forecast models:
 
 $exhibits${
   type: data_table
@@ -299,18 +334,11 @@ $exhibits${
   collapsible_expanded: false
 }
 
-**Measures Demonstrated:**
-- `avg_forecast_error`: Average MAE (aggregation: avg)
-- `avg_forecast_mape`: Average MAPE (aggregation: avg)
-- `best_model_r2`: Best R² score (aggregation: avg)
-
 ---
 
 ## 📋 Raw Data Export
 
 ### Full Data Table
-
-Export complete dataset with all columns:
 
 $exhibits${
   type: data_table
@@ -332,11 +360,10 @@ This notebook demonstrates:
 3. **Measure Selectors** - Dynamically choose which measures to display on charts
 4. **Collapsible Exhibits** - Keep notebook organized by hiding/showing sections
 5. **Multiple Chart Types** - Line charts, bar charts, data tables, metric cards
-6. **40+ Measures** - Across equity and forecast models
-7. **Multiple Aggregation Types** - avg, sum, count, stddev, max, min
-8. **Format Patterns** - Currency ($#,##0.00), Percentage (#,##0.00%), Integer (#,##0)
-9. **Computed Measures** - price_range, market_cap
-10. **Weighted Aggregates** - Equal, volume, market-cap weighted indices
+6. **Multiple Aggregation Types** - avg, sum, count, stddev, max, min, weighted_avg
+7. **Format Patterns** - Currency ($#,##0.00), Percentage (#,##0.00%), Integer (#,##0)
+8. **Computed Measures** - price_range, market_cap
+9. **Weighted Aggregates** - Equal, volume, market-cap weighted indices across all tickers
 
 ### Domain Model Structure
 
