@@ -44,6 +44,7 @@ class BaseMeasure(ABC):
             - source: Source table and column (e.g., 'fact_prices.close')
             - data_type: Data type of result
             - tags: Classification tags
+            - auto_enrich: Enable automatic table enrichment (joins) when needed
         """
         self.name = config['name']
         self.description = config.get('description', '')
@@ -51,6 +52,7 @@ class BaseMeasure(ABC):
         self.data_type = config.get('data_type', 'double')
         self.format = config.get('format')
         self.tags = config.get('tags', [])
+        self.auto_enrich = config.get('auto_enrich', False)
 
     @abstractmethod
     def to_sql(self, adapter) -> str:

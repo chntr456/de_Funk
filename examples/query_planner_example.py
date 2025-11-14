@@ -5,8 +5,17 @@ Demonstrates how to use the query planner to get enriched tables
 without requiring materialized views.
 """
 
+import sys
 from pathlib import Path
+from typing import List, Optional
+
+# Add project root to path if running as standalone script
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 from core.context import RepoContext
+from models.api.session import UniversalSession
 
 
 def example_basic_enrichment():
@@ -16,9 +25,8 @@ def example_basic_enrichment():
     print("=" * 80)
     print()
 
-    # Initialize session with Spark (required for dynamic joins)
-    ctx = RepoContext.from_repo_root(connection_type="spark")
-    from models.api.session import UniversalSession
+    # Initialize session (works with both Spark and DuckDB)
+    ctx = RepoContext.from_repo_root(connection_type="duckdb")
 
     session = UniversalSession(
         connection=ctx.connection,
@@ -38,9 +46,9 @@ def example_basic_enrichment():
         columns=['ticker', 'trade_date', 'close', 'company_name']
     )
 
-    print(f"Result: {df.count()} rows")
-    print("Columns:", df.columns)
-    df.show(5)
+    print(f"Result: {len(df)} rows")
+    print("Columns:", list(df.columns))
+    print(df.head(5))
     print()
 
 
@@ -52,8 +60,7 @@ def example_multi_hop_join():
     print()
 
     # Initialize session
-    ctx = RepoContext.from_repo_root(connection_type="spark")
-    from models.api.session import UniversalSession
+    ctx = RepoContext.from_repo_root(connection_type="duckdb")
 
     session = UniversalSession(
         connection=ctx.connection,
@@ -79,9 +86,9 @@ def example_multi_hop_join():
         ]
     )
 
-    print(f"Result: {df.count()} rows")
-    print("Columns:", df.columns)
-    df.show(5)
+    print(f"Result: {len(df)} rows")
+    print("Columns:", list(df.columns))
+    print(df.head(5))
     print()
 
 
@@ -93,8 +100,7 @@ def example_query_planner_inspection():
     print()
 
     # Initialize session
-    ctx = RepoContext.from_repo_root(connection_type="spark")
-    from models.api.session import UniversalSession
+    ctx = RepoContext.from_repo_root(connection_type="duckdb")
 
     session = UniversalSession(
         connection=ctx.connection,

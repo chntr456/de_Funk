@@ -466,6 +466,49 @@ measures:
     format: "$#,##0.00"
     tags: [price, volatility, computed]
 
+  # ============================================================
+  # AUTO-ENRICHMENT MEASURES
+  # ============================================================
+  # These measures demonstrate automatic table joining via graph edges.
+  # Columns not in the base table are automatically joined using GraphQueryPlanner.
+
+  avg_close_by_exchange:
+    description: "Average closing price by exchange (auto-enriched)"
+    type: simple
+    source: fact_equity_prices.close
+    aggregation: avg
+    auto_enrich: true  # Enables automatic join to get exchange_name
+    data_type: double
+    format: "$#,##0.00"
+    tags: [price, exchange, auto_enrich]
+    # Note: When grouped by exchange_name, system automatically joins:
+    #   fact_equity_prices -> dim_equity -> dim_exchange
+
+  avg_volume_by_company:
+    description: "Average trading volume by company (auto-enriched)"
+    type: simple
+    source: fact_equity_prices.volume
+    aggregation: avg
+    auto_enrich: true  # Enables automatic join to get company_name
+    data_type: long
+    format: "#,##0"
+    tags: [volume, company, auto_enrich]
+    # Note: When grouped by company_name, system automatically joins:
+    #   fact_equity_prices -> dim_equity
+
+  market_cap_by_exchange:
+    description: "Market cap by exchange (auto-enriched computed measure)"
+    type: computed
+    source: fact_equity_prices.close
+    expression: "close * volume"
+    aggregation: sum
+    auto_enrich: true  # Enables automatic join for exchange_name
+    data_type: double
+    format: "$#,##0.00M"
+    tags: [market, valuation, exchange, auto_enrich]
+    # Note: When grouped by exchange_name, system automatically joins:
+    #   fact_equity_prices -> dim_equity -> dim_exchange
+
 # Bronze sources mapping (where to load data from)
 bronze_sources:
   dim_equity:

@@ -209,6 +209,11 @@ class GraphQueryPlanner:
         Raises:
             ValueError: If no join path exists in graph
         """
+        # For DuckDB, use SQL-based approach (more efficient)
+        if self.backend == 'duckdb':
+            return self._build_duckdb_join_sql(base_table, join_tables, columns)
+
+        # For Spark, use DataFrame API approach
         # Load base table
         df = self.model.get_table(base_table)
 
@@ -247,6 +252,168 @@ class GraphQueryPlanner:
             df = self._select_columns(df, columns)
 
         return df
+
+    def _build_duckdb_join_sql(
+        self,
+        base_table: str,
+        join_tables: List[str],
+        columns: Optional[List[str]] = None
+    ) -> Any:
+        """
+        Build SQL join query for DuckDB.
+
+        Constructs a SQL query with JOINs based on graph edges, then
+        executes it via DuckDB connection.
+
+        Args:
+            base_table: Starting table
+            join_tables: Tables to join
+            columns: Columns to select (if None, selects all from base table + joined cols)
+
+        Returns:
+            Pandas DataFrame with joined data
+
+        Raises:
+            ValueError: If no join path exists
+        """
+        # Get table paths from model
+        base_table_ref = self._get_duckdb_table_reference(base_table)
+
+        # Build list of all tables in join order
+        all_tables = [base_table] + join_tables
+
+        # Build join clauses
+        join_clauses = []
+        table_aliases = {base_table: 't0'}
+        alias_counter = 1
+
+        current_table = base_table
+        for join_table in join_tables:
+            # Find path
+            try:
+                path = nx.shortest_path(self.graph, current_table, join_table)
+            except nx.NetworkXNoPath:
+                raise ValueError(
+                    f"No join path from {current_table} to {join_table} in {self.model_name} model"
+                )
+
+            # Process each edge in path
+            for i in range(len(path) - 1):
+                left = path[i]
+                right = path[i + 1]
+
+                # Assign alias to right table if not already assigned
+                if right not in table_aliases:
+                    table_aliases[right] = f't{alias_counter}'
+                    alias_counter += 1
+
+                # Get edge metadata
+                edge_data = self.graph.edges[left, right]
+                join_on = edge_data['join_on']
+                join_type_raw = edge_data.get('join_type', 'left').lower()
+
+                # Map join types to SQL join types
+                join_type_map = {
+                    'many_to_one': 'LEFT',
+                    'one_to_many': 'LEFT',
+                    'left': 'LEFT',
+                    'right': 'RIGHT',
+                    'inner': 'INNER',
+                    'full': 'FULL OUTER',
+                    'outer': 'FULL OUTER'
+                }
+                join_type = join_type_map.get(join_type_raw, 'LEFT')
+
+                # Get table reference
+                right_table_ref = self._get_duckdb_table_reference(right)
+
+                # Build ON clause
+                on_conditions = []
+                for condition in join_on:
+                    if '=' in condition:
+                        left_col, right_col = condition.split('=', 1)
+                        left_col = left_col.strip()
+                        right_col = right_col.strip()
+                        on_conditions.append(
+                            f"{table_aliases[left]}.{left_col} = {table_aliases[right]}.{right_col}"
+                        )
+                    else:
+                        # Same column name on both sides
+                        col = condition.strip()
+                        on_conditions.append(
+                            f"{table_aliases[left]}.{col} = {table_aliases[right]}.{col}"
+                        )
+
+                on_clause = " AND ".join(on_conditions)
+
+                # Add join clause
+                join_clauses.append(
+                    f"{join_type} JOIN {right_table_ref} AS {table_aliases[right]} ON {on_clause}"
+                )
+
+            current_table = join_table
+
+        # Build SELECT clause
+        if columns:
+            # Select specific columns (need to add table aliases)
+            select_cols = []
+            for col in columns:
+                # Try to find which table has this column
+                found = False
+                for table in all_tables:
+                    # Check if column might be in this table
+                    # For now, just use first table alias for ambiguity
+                    if not found:
+                        select_cols.append(f"{table_aliases[all_tables[0]]}.{col}")
+                        found = True
+                        break
+                if not found:
+                    select_cols.append(col)  # Let SQL handle error if column doesn't exist
+            select_clause = ", ".join(select_cols)
+        else:
+            # Select all columns from base table + specific columns from joined tables
+            select_clause = f"{table_aliases[base_table]}.*"
+
+        # Build final SQL
+        sql = f"""
+SELECT {select_clause}
+FROM {base_table_ref} AS {table_aliases[base_table]}
+{chr(10).join(join_clauses)}
+        """.strip()
+
+        # Execute via DuckDB connection
+        result = self.model.connection.execute(sql).fetchdf()
+
+        return result
+
+    def _get_duckdb_table_reference(self, table_name: str) -> str:
+        """
+        Get DuckDB table reference (parquet path).
+
+        Args:
+            table_name: Table name
+
+        Returns:
+            DuckDB-compatible table reference (e.g., read_parquet('path/*.parquet'))
+        """
+        # Get table path from storage
+        storage_cfg = self.model.storage_cfg
+        roots = storage_cfg.get('roots', {})
+        tables = storage_cfg.get('tables', {})
+
+        if table_name not in tables:
+            raise ValueError(f"Table {table_name} not found in storage config")
+
+        table_cfg = tables[table_name]
+        root_key = table_cfg['root']
+        rel_path = table_cfg['rel']
+
+        # Build full path
+        root_path = roots[root_key]
+        full_path = f"{root_path}/{rel_path}"
+
+        # Return DuckDB read_parquet syntax
+        return f"read_parquet('{full_path}/*.parquet')"
 
     def _join_dataframes(
         self,
@@ -338,34 +505,39 @@ class GraphQueryPlanner:
         join_type: str
     ) -> Any:
         """
-        Execute join using DuckDB.
+        Execute join using DuckDB pandas DataFrames.
 
-        Note: This is a placeholder for future DuckDB join implementation.
-        Currently, DuckDB integration is handled via SQL, not DataFrame API.
+        Note: This method is now deprecated in favor of _build_duckdb_join_sql
+        which builds SQL queries directly. Kept for backwards compatibility.
 
         Args:
-            left_df: Left DataFrame
-            right_df: Right DataFrame
+            left_df: Left pandas DataFrame
+            right_df: Right pandas DataFrame
             join_pairs: List of (left_col, right_col) tuples
             join_type: Join type
 
         Returns:
-            Joined DataFrame
-
-        Raises:
-            NotImplementedError: DuckDB dynamic joins not yet implemented
+            Joined pandas DataFrame
         """
-        raise NotImplementedError(
-            "DuckDB dynamic joins not yet implemented. "
-            "Use Spark backend or create materialized views for now."
-        )
+        # Build join keys
+        left_on = [pair[0] for pair in join_pairs]
+        right_on = [pair[1] for pair in join_pairs]
+
+        # Map join type
+        how = join_type.lower()
+        if how == 'many_to_one':
+            how = 'left'
+
+        # Use pandas merge
+        import pandas as pd
+        return pd.merge(left_df, right_df, left_on=left_on, right_on=right_on, how=how)
 
     def _select_columns(self, df: Any, columns: List[str]) -> Any:
         """
         Select specific columns from DataFrame (backend agnostic).
 
         Args:
-            df: DataFrame (Spark or DuckDB)
+            df: DataFrame (Spark or pandas)
             columns: List of column names to select
 
         Returns:
@@ -376,8 +548,11 @@ class GraphQueryPlanner:
             available_cols = [c for c in columns if c in df.columns]
             return df.select(*available_cols)
         else:
-            # DuckDB - return as-is for now
-            # TODO: Implement DuckDB column selection
+            # DuckDB returns pandas DataFrame
+            # Filter columns that exist
+            available_cols = [c for c in columns if c in df.columns]
+            if available_cols:
+                return df[available_cols]
             return df
 
     def get_join_path(self, from_table: str, to_table: str) -> Optional[List[str]]:
@@ -428,6 +603,44 @@ class GraphQueryPlanner:
             'can_be_joined_from': list(self.graph.predecessors(table_name)),
             'graph_depth': len(nx.ancestors(self.graph, table_name))
         }
+
+    def find_tables_with_column(self, column_name: str) -> List[str]:
+        """
+        Find all tables that contain a specific column.
+
+        Searches the model's schema to find tables that have the specified column.
+        Used for auto-enrichment to find which tables to join.
+
+        Args:
+            column_name: Column to search for
+
+        Returns:
+            List of table names that contain the column
+
+        Example:
+            planner.find_tables_with_column('exchange_name')
+            → ['dim_exchange']
+
+            planner.find_tables_with_column('ticker')
+            → ['dim_equity', 'fact_equity_prices', 'fact_equity_news']
+        """
+        tables_with_column = []
+
+        schema = self.model.model_cfg.get('schema', {})
+
+        # Search dimensions
+        for table_name, table_schema in schema.get('dimensions', {}).items():
+            columns = table_schema.get('columns', {})
+            if column_name in columns:
+                tables_with_column.append(table_name)
+
+        # Search facts
+        for table_name, table_schema in schema.get('facts', {}).items():
+            columns = table_schema.get('columns', {})
+            if column_name in columns:
+                tables_with_column.append(table_name)
+
+        return tables_with_column
 
     def __repr__(self) -> str:
         """String representation of query planner."""

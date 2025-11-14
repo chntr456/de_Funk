@@ -209,3 +209,26 @@ class SparkAdapter(BackendAdapter):
             table_name: Table name to uncache
         """
         self.connection.sql(f"UNCACHE TABLE {table_name}")
+
+    def set_enriched_table(self, table_name: str, enriched_df):
+        """
+        Set enriched DataFrame for a table (used for auto-enrichment).
+
+        Creates a temporary view from the enriched DataFrame so that
+        subsequent queries against table_name will use the enriched data.
+
+        Args:
+            table_name: Logical table name
+            enriched_df: Spark DataFrame with enriched data
+
+        Example:
+            # Get enriched table with joins
+            enriched_df = model.get_table_enriched(
+                'fact_equity_prices',
+                enrich_with=['dim_equity', 'dim_exchange']
+            )
+            # Make adapter use enriched table for all subsequent queries
+            adapter.set_enriched_table('fact_equity_prices', enriched_df)
+        """
+        # Create or replace temporary view
+        enriched_df.createOrReplaceTempView(table_name)
