@@ -14,6 +14,9 @@ The YAML config is the source of truth for the model structure.
 from abc import ABC
 from typing import Dict, Any, Optional, List, Tuple, Union
 from dataclasses import dataclass
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Try to import PySpark (may not be available when using DuckDB)
 try:
@@ -282,7 +285,16 @@ class BaseModel:
             # Apply derive (computed columns)
             if 'derive' in node_config and node_config['derive']:
                 for out_name, expr in node_config['derive'].items():
-                    df = self._apply_derive(df, out_name, expr, node_id)
+                    try:
+                        df = self._apply_derive(df, out_name, expr, node_id)
+                    except Exception as e:
+                        # Log warning and skip this derived column
+                        # Common reasons: unsupported expressions, nested window functions
+                        logger.warning(
+                            f"Skipping derived column '{out_name}' in node '{node_id}': {e}"
+                        )
+                        # Continue with other columns
+                        continue
 
             # Enforce unique_key constraint (deduplication)
             if 'unique_key' in node_config and node_config['unique_key']:
