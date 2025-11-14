@@ -481,12 +481,19 @@ class WeightingStrategy:
 ### How to Use in Python
 
 ```python
-from models.loader import ModelLoader
+from core.context import RepoContext
+from models.api.session import UniversalSession
 
-# Load equity model
-loader = ModelLoader()
-models = loader.load_all_models(backend_type='duckdb')
-equity_model = models['equity']
+# Initialize session with DuckDB backend
+ctx = RepoContext.from_repo_root(connection_type="duckdb")
+session = UniversalSession(
+    connection=ctx.connection,
+    storage_cfg=ctx.storage,
+    repo_root=ctx.repo
+)
+
+# Load equity model (domain strategies auto-loaded)
+equity_model = session.get_model_instance('equity')
 
 # Calculate weighted index measure
 result = equity_model.calculate_measure(
@@ -532,9 +539,46 @@ This showcase demonstrates the power of domain strategy measures. To extend this
 5. **Backtesting**: Test strategies against historical data
 
 **For more information**, see:
-- `examples/domain_strategy_measures_example.py` - Python usage examples
+- `examples/domain_strategy_measures_example.py` - Python usage examples with session setup
 - `models/implemented/equity/domains/` - Strategy implementations
 - `configs/models/equity.yaml` - Measure definitions
+
+### Quick Start Guide
+
+```python
+# 1. Initialize session (from any script)
+from core.context import RepoContext
+from models.api.session import UniversalSession
+
+ctx = RepoContext.from_repo_root(connection_type="duckdb")
+session = UniversalSession(
+    connection=ctx.connection,
+    storage_cfg=ctx.storage,
+    repo_root=ctx.repo
+)
+
+# 2. Load equity model
+equity_model = session.get_model_instance('equity')
+
+# 3. Access domain measures directly
+# All weighted indices
+indices = equity_model.calculate_measure('equal_weighted_index')
+vwap = equity_model.calculate_measure('volume_weighted_index')
+
+# Price measures by ticker
+prices = equity_model.calculate_measure_by_ticker(
+    'avg_close_price',
+    tickers=['AAPL', 'MSFT', 'GOOGL']
+)
+
+# Technical indicators
+rsi_data = equity_model.calculate_measure('avg_rsi')
+volatility = equity_model.calculate_measure('avg_volatility_20d')
+
+# 4. Work with results
+df = indices.data  # Get DataFrame
+print(df.head())   # Display data
+```
 
 ---
 

@@ -13,22 +13,45 @@ Created: 2025-11-14
 """
 
 import pandas as pd
+import sys
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 
-# Import the model loader
-from models.loader import ModelLoader
+# Add project root to path if running as standalone script
+project_root = Path(__file__).parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
+# Import session and context
+from core.context import RepoContext
+from models.api.session import UniversalSession
 
 
 def setup_equity_model():
-    """Initialize the equity model with backend."""
-    loader = ModelLoader()
-    models = loader.load_all_models(backend_type='duckdb')
+    """
+    Initialize the equity model with DuckDB backend.
 
-    if 'equity' not in models:
-        raise ValueError("Equity model not found!")
+    This creates a UniversalSession and loads the equity model with all
+    domain strategies (weighting, risk, technical indicators).
 
-    return models['equity']
+    Returns:
+        Equity model instance with domain strategies loaded
+    """
+    # Initialize repo context with DuckDB
+    ctx = RepoContext.from_repo_root(connection_type="duckdb")
+
+    # Create universal session
+    session = UniversalSession(
+        connection=ctx.connection,
+        storage_cfg=ctx.storage,
+        repo_root=ctx.repo
+    )
+
+    # Load equity model (domain strategies auto-loaded on import)
+    equity_model = session.get_model_instance('equity')
+
+    return equity_model
 
 
 def get_weighted_indices(
