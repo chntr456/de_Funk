@@ -362,7 +362,7 @@ class BaseModel:
                         f"Failed to apply derive expression '{expr}' in node '{node_id}': {e}"
                     )
         else:
-            # DuckDB - use SQL expressions
+            # DuckDB - use SQL execution for complex expressions
             if expr.startswith('sha1(') and expr.endswith(')'):
                 col = expr[5:-1]  # Extract column name
                 sql_expr = f"SHA1({col})"
@@ -370,10 +370,24 @@ class BaseModel:
                 # Direct column reference or SQL expression
                 sql_expr = expr
 
-            # DuckDB: add column using project with *
-            # Get all existing columns plus the new one
+            # For complex expressions (especially window functions), use SQL execution
+            # Register DataFrame as temp table, execute SQL, return result
+            temp_table = f"_temp_{node_id}_{col_name}"
+
+            # Register current DataFrame
+            self.connection.conn.register(temp_table, df)
+
+            # Build SQL with all existing columns plus the new derived column
             existing_cols = ', '.join([f'"{c}"' for c in df.columns])
-            return df.project(f'{existing_cols}, {sql_expr} AS {col_name}')
+            sql = f"SELECT {existing_cols}, {sql_expr} AS {col_name} FROM {temp_table}"
+
+            # Execute and return result
+            result_df = self.connection.conn.execute(sql).fetchdf()
+
+            # Unregister temp table to avoid memory leaks
+            self.connection.conn.unregister(temp_table)
+
+            return result_df
 
     def _resolve_node(self, node_id: str, nodes: Dict[str, DataFrame]) -> DataFrame:
         """
