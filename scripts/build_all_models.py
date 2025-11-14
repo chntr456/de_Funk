@@ -570,6 +570,11 @@ class AllModelBuilder:
                 except Exception as e:
                     logger.warning(f"    - {table_name}: Unable to get row count ({e})")
 
+            # Write tables to Silver storage (persist parquet files)
+            logger.info(f"  Writing {model_name} tables to Silver storage...")
+            stats = model.write_tables(use_optimized_writer=True)
+            logger.info(f"  ✓ Tables written to Silver layer")
+
             return True
 
         except Exception as e:

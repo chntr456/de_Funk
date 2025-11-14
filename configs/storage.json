@@ -8,6 +8,8 @@
     "silver": "storage/silver",
     "core_silver": "storage/silver/core",
     "company_silver": "storage/silver/company",
+    "equity_silver": "storage/silver/equity",
+    "corporate_silver": "storage/silver/corporate",
     "forecast_silver": "storage/silver/forecast",
     "macro_silver": "storage/silver/macro",
     "city_finance_silver": "storage/silver/city_finance"
@@ -38,6 +40,13 @@
     "fact_news":       { "root": "silver", "rel": "company/facts/fact_news" },
 
     "prices_with_company": { "root": "silver", "rel": "company/facts/prices_with_company" },
-    "news_with_company":   { "root": "silver", "rel": "company/facts/news_with_company" }
+    "news_with_company":   { "root": "silver", "rel": "company/facts/news_with_company" },
+
+    "dim_equity":                  { "root": "equity_silver", "rel": "dims/dim_equity" },
+    "fact_equity_prices":          { "root": "equity_silver", "rel": "facts/fact_equity_prices", "partitions": ["trade_date"] },
+    "fact_equity_technicals":      { "root": "equity_silver", "rel": "facts/fact_equity_technicals", "partitions": ["trade_date"] },
+    "fact_equity_news":            { "root": "equity_silver", "rel": "facts/fact_equity_news", "partitions": ["publish_date"] },
+    "equity_prices_with_company":  { "root": "equity_silver", "rel": "facts/equity_prices_with_company", "partitions": ["trade_date"] },
+    "equity_news_with_company":    { "root": "equity_silver", "rel": "facts/equity_news_with_company", "partitions": ["publish_date"] }
   }
 }
