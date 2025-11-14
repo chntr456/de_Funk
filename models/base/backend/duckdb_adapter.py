@@ -204,8 +204,8 @@ class DuckDBAdapter(BackendAdapter):
             # Make adapter use enriched table for all subsequent queries
             adapter.set_enriched_table('fact_equity_prices', enriched_df)
         """
-        # Register DataFrame as a view in DuckDB
-        self.connection.register(f"{table_name}_enriched", enriched_df)
+        # Register DataFrame as a view in DuckDB (use underlying conn)
+        self.connection.conn.register(f"{table_name}_enriched", enriched_df)
 
         # Create a view that references the enriched data
         self.connection.execute(f"""

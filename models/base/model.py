@@ -300,8 +300,8 @@ class BaseModel:
         Returns:
             DataFrame with merged schema
         """
-        # Use connection type to determine how to load
-        if hasattr(self.connection, 'read'):  # Spark
+        # Use backend type to determine how to load
+        if self.backend == 'spark':
             if BronzeTable is None:
                 raise RuntimeError("PySpark required for Spark backend but not installed")
             bronze = BronzeTable(self.connection, self.storage_router, table_name)

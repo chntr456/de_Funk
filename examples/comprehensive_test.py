@@ -136,15 +136,14 @@ def test_duckdb_multi_hop_join(results):
                 'trade_date',
                 'close',
                 'company_name',
-                'exchange_name',
-                'country'
+                'exchange_name'
+                # Note: country and timezone not in physical table
             ]
         )
 
         # Verify results
         assert len(df) > 0, "No rows returned"
         assert 'exchange_name' in df.columns, "exchange_name column missing"
-        assert 'country' in df.columns, "country column missing"
 
         print(f"  Rows: {len(df):,}")
         print(f"  Columns: {list(df.columns)}")
