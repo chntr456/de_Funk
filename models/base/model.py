@@ -291,8 +291,14 @@ class BaseModel:
                 if self.backend == 'spark':
                     df = df.dropDuplicates(unique_cols)
                 else:
-                    # DuckDB: Convert to pandas, drop duplicates, convert back
-                    pdf = df.df()
+                    # DuckDB: Convert to pandas if needed, drop duplicates, convert back
+                    import pandas as pd
+                    if isinstance(df, pd.DataFrame):
+                        # Already a pandas DataFrame (from _apply_derive)
+                        pdf = df
+                    else:
+                        # DuckDB relation - convert to pandas
+                        pdf = df.df()
                     pdf = pdf.drop_duplicates(subset=unique_cols, keep='last')
                     df = self.connection.conn.from_df(pdf)
 
