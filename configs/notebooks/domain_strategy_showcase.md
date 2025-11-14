@@ -538,6 +538,13 @@ This showcase demonstrates the power of domain strategy measures. To extend this
 4. **Portfolio Optimization**: Use risk metrics for portfolio construction
 5. **Backtesting**: Test strategies against historical data
 
+**First Time Setup:**
+
+If you don't have equity data yet, build the model with sample data:
+```bash
+python scripts/build_all_models.py --models equity --max-tickers 20
+```
+
 **For more information**, see:
 - `examples/domain_strategy_measures_example.py` - Python usage examples with session setup
 - `models/implemented/equity/domains/` - Strategy implementations

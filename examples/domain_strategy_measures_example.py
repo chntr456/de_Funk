@@ -365,8 +365,8 @@ if __name__ == "__main__":
 
     if indices_df.empty:
         print("\n   ⚠ No data available")
-        print("   Note: Run the pipeline to build equity silver layer first:")
-        print("   python scripts/build_silver_layer.py")
+        print("   Note: Build the equity model with data first:")
+        print("   python scripts/build_all_models.py --models equity --max-tickers 20")
     else:
         print("\nWeighted Indices DataFrame:")
         print(indices_df.head(10))
@@ -388,8 +388,8 @@ if __name__ == "__main__":
 
     if price_df.empty:
         print("\n   ⚠ No data available")
-        print("   Note: Run the pipeline to build equity silver layer first:")
-        print("   python scripts/build_silver_layer.py")
+        print("   Note: Build the equity model with data first:")
+        print("   python scripts/build_all_models.py --models equity --max-tickers 20")
     else:
         print("\nPrice Measures DataFrame:")
         print(price_df)
@@ -411,8 +411,8 @@ if __name__ == "__main__":
 
     if not tech_indicators:
         print("\n   ⚠ No data available")
-        print("   Note: Run the pipeline to build equity silver layer first:")
-        print("   python scripts/build_silver_layer.py")
+        print("   Note: Build the equity model with data first:")
+        print("   python scripts/build_all_models.py --models equity --max-tickers 20")
     else:
         for indicator_name, df in tech_indicators.items():
             print(f"\n{indicator_name}:")
@@ -432,8 +432,8 @@ if __name__ == "__main__":
 
     if 'error' in comparison and comparison['error']:
         print(f"\n   ⚠ {comparison['error']}")
-        print("   Note: Run the pipeline to build equity silver layer first:")
-        print("   python scripts/build_silver_layer.py")
+        print("   Note: Build the equity model with data first:")
+        print("   python scripts/build_all_models.py --models equity --max-tickers 20")
     else:
         print("\nSummary Statistics:")
         for strategy, stats in comparison.get('summary', {}).items():
