@@ -63,7 +63,7 @@ class WeightedMeasure(BaseMeasure):
             SQL query string
         """
         # Import here to avoid circular dependency
-        from models.domains.equities.weighting import get_weighting_strategy
+        from models.implemented.equity.domains.weighting import get_weighting_strategy
 
         # Get weighting strategy
         strategy = get_weighting_strategy(self.weighting_method)

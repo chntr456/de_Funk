@@ -13,7 +13,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
-from models.domains.equities.weighting import (
+from models.implemented.equity.domains.weighting import (
     WeightingStrategy,
     EqualWeightStrategy,
     VolumeWeightStrategy,
@@ -23,7 +23,7 @@ from models.domains.equities.weighting import (
     VolatilityWeightStrategy,
     get_weighting_strategy
 )
-from models.domains.etf.weighting import HoldingsWeightStrategy
+from models.implemented.etf.domains.weighting import HoldingsWeightStrategy
 
 
 class TestEqualWeightStrategy:

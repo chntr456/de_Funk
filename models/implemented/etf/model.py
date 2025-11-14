@@ -10,7 +10,7 @@ from models.base.model import BaseModel
 
 # Bootstrap ETF-specific domain features when this model is loaded
 # This ensures ETF weighting strategies are available
-import models.domains.etf.weighting
+from models.implemented.etf.domains import weighting
 
 
 class ETFModel(BaseModel):

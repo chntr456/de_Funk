@@ -5,7 +5,7 @@ Provides holdings-based weighting for calculating ETF metrics from underlying ho
 """
 
 from typing import List, Optional
-from models.domains.equities.weighting import WeightingStrategy, WeightingMethod, register_weighting_strategy
+from models.implemented.equity.domains.weighting import WeightingStrategy, WeightingMethod, register_weighting_strategy
 
 
 class HoldingsWeightStrategy(WeightingStrategy):

@@ -20,9 +20,7 @@ from models.base.model import BaseModel
 
 # Bootstrap equity-specific domain features when this model is loaded
 # This ensures measure types and domain strategies are available for equity calculations
-import models.domains.equities.weighting
-import models.domains.equities.technical
-import models.domains.equities.risk
+from models.implemented.equity.domains import weighting, technical, risk
 
 
 class EquityModel(BaseModel):

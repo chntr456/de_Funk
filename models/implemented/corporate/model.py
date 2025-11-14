@@ -20,7 +20,7 @@ from models.base.model import BaseModel
 
 # Bootstrap corporate-specific domain features when this model is loaded
 # This ensures fundamentals calculations are available for corporate measures
-import models.domains.corporate.fundamentals
+from models.implemented.corporate.domains import fundamentals
 
 
 class CorporateModel(BaseModel):

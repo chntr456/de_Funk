@@ -229,15 +229,15 @@ class DomainModelIntegrationTest:
 
         domain_features = {
             'equity': [
-                'models.domains.equities.weighting',
-                'models.domains.equities.technical',
-                'models.domains.equities.risk'
+                'models.implemented.equity.domains.weighting',
+                'models.implemented.equity.domains.technical',
+                'models.implemented.equity.domains.risk'
             ],
             'corporate': [
-                'models.domains.corporate.fundamentals'
+                'models.implemented.corporate.domains.fundamentals'
             ],
             'etf': [
-                'models.domains.etf.weighting'
+                'models.implemented.etf.domains.weighting'
             ]
         }
 
