@@ -193,20 +193,30 @@ class DomainModelIntegrationTest:
         """Test 3: Measure registry bootstrap."""
         try:
             from models.base.measures.registry import MeasureRegistry
+            from models.base.measures.base_measure import MeasureType
 
             print("  Checking registered measure types:")
 
-            # Check that all measure types are registered
-            expected_types = ['simple', 'computed', 'weighted']
-            for measure_type in expected_types:
-                if measure_type in MeasureRegistry._measure_types:
-                    measure_class = MeasureRegistry._measure_types[measure_type]
-                    print(f"    ✓ {measure_type}: {measure_class.__name__}")
-                else:
-                    raise ValueError(f"Measure type '{measure_type}' not registered")
+            # Get registered types
+            registered = MeasureRegistry.get_registered_types()
 
-            self.results['measure_registry'] = True
-            print("  ✓ All measure types registered")
+            # Expected types
+            expected = [MeasureType.SIMPLE, MeasureType.COMPUTED, MeasureType.WEIGHTED]
+
+            for measure_type in expected:
+                if measure_type in registered:
+                    measure_class = MeasureRegistry.get_measure_class(measure_type)
+                    print(f"    ✓ {measure_type.value}: {measure_class.__name__}")
+                else:
+                    print(f"    ✗ {measure_type.value}: NOT REGISTERED")
+
+            # Check if all expected types are registered
+            self.results['measure_registry'] = all(mt in registered for mt in expected)
+
+            if self.results['measure_registry']:
+                print("  ✓ All measure types registered")
+            else:
+                raise ValueError("Not all measure types registered")
 
         except Exception as e:
             logger.error(f"Measure registry test failed: {e}")
