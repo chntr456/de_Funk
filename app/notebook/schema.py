@@ -33,6 +33,7 @@ class AggregationType(Enum):
     """Aggregation functions."""
     SUM = "sum"
     AVG = "avg"
+    WEIGHTED_AVG = "weighted_avg"
     MIN = "min"
     MAX = "max"
     COUNT = "count"

@@ -7,6 +7,7 @@ the codebase.
 """
 
 from typing import Dict, Any, Union, TYPE_CHECKING
+import pandas as pd
 
 if TYPE_CHECKING:
     from pyspark.sql import DataFrame as SparkDataFrame
@@ -160,17 +161,21 @@ class FilterEngine:
     @staticmethod
     def _apply_duckdb_filters(df: Any, filters: Dict[str, Any]) -> Any:
         """
-        Apply filters to DuckDB relation.
+        Apply filters to DuckDB relation or pandas DataFrame.
 
-        DuckDB uses SQL-style filtering, so we build a WHERE clause.
+        Handles both DuckDB relations (SQL-style) and pandas DataFrames
+        (already converted from DuckDB).
 
         Args:
-            df: DuckDB relation
+            df: DuckDB relation or pandas DataFrame
             filters: Filter specifications
 
         Returns:
-            Filtered DuckDB relation
+            Filtered DuckDB relation or pandas DataFrame
         """
+        # Check if df is a pandas DataFrame or DuckDB relation
+        is_pandas = isinstance(df, pd.DataFrame)
+
         conditions = []
 
         for col_name, value in filters.items():
@@ -179,8 +184,12 @@ class FilterEngine:
                 # Date ranges use start/end, numeric ranges use min/max
                 if 'start' in value and 'end' in value:
                     # Date range format
-                    conditions.append(f"{col_name} >= '{value['start']}'")
-                    conditions.append(f"{col_name} <= '{value['end']}'")
+                    if is_pandas:
+                        conditions.append(f"{col_name} >= '{value['start']}'")
+                        conditions.append(f"{col_name} <= '{value['end']}'")
+                    else:
+                        conditions.append(f"{col_name} >= '{value['start']}'")
+                        conditions.append(f"{col_name} <= '{value['end']}'")
                 elif 'min' in value:
                     conditions.append(f"{col_name} >= '{value['min']}'")
                 if 'max' in value:
@@ -197,18 +206,58 @@ class FilterEngine:
             elif isinstance(value, list):
                 # IN filter
                 if value:  # Only apply if list is not empty
-                    # Format list values for SQL IN clause
-                    formatted_values = "', '".join(str(v) for v in value)
-                    conditions.append(f"{col_name} IN ('{formatted_values}')")
+                    if is_pandas:
+                        # pandas: use .isin() method
+                        # For query(), we need to use Python list syntax
+                        if len(value) == 1:
+                            # Single value: use equality
+                            conditions.append(f"{col_name} == '{value[0]}'")
+                        else:
+                            # Multiple values: use in with list
+                            # Note: query() requires the list to be in the local namespace
+                            # So we'll apply this filter separately after building the WHERE clause
+                            pass  # Will handle separately below
+                    else:
+                        # DuckDB: use SQL IN clause
+                        formatted_values = "', '".join(str(v) for v in value)
+                        conditions.append(f"{col_name} IN ('{formatted_values}')")
 
             elif value is not None:
                 # Exact match (ignore None values)
                 conditions.append(f"{col_name} = '{value}'")
 
         # Apply all conditions
-        if conditions:
-            where_clause = " AND ".join(conditions)
-            df = df.filter(where_clause)
+        if is_pandas:
+            # pandas DataFrame: apply filters manually
+            for col_name, value in filters.items():
+                if isinstance(value, dict):
+                    # Range filters
+                    if 'start' in value:
+                        df = df[df[col_name] >= value['start']]
+                    if 'end' in value:
+                        df = df[df[col_name] <= value['end']]
+                    if 'min' in value:
+                        df = df[df[col_name] >= value['min']]
+                    if 'max' in value:
+                        df = df[df[col_name] <= value['max']]
+                    if 'gt' in value:
+                        df = df[df[col_name] > value['gt']]
+                    if 'lt' in value:
+                        df = df[df[col_name] < value['lt']]
+                    if 'gte' in value:
+                        df = df[df[col_name] >= value['gte']]
+                    if 'lte' in value:
+                        df = df[df[col_name] <= value['lte']]
+                elif isinstance(value, list):
+                    if value:
+                        df = df[df[col_name].isin(value)]
+                elif value is not None:
+                    df = df[df[col_name] == value]
+        else:
+            # DuckDB relation: use SQL WHERE clause
+            if conditions:
+                where_clause = " AND ".join(conditions)
+                df = df.filter(where_clause)
 
         return df
 
