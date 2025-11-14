@@ -182,6 +182,48 @@ graph:
         sentiment: sentiment
       tags: [fact, news]
 
+    - id: fact_equity_technicals
+      from: fact_equity_prices
+      select:
+        ticker: ticker
+        trade_date: trade_date
+        close: close
+        high: high
+        low: low
+        volume: volume
+      derive:
+        # Daily Returns
+        daily_return: "(close - LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date)) / NULLIF(LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date), 0) * 100"
+
+        # Moving Averages
+        sma_20: "AVG(close) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)"
+        sma_50: "AVG(close) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 49 PRECEDING AND CURRENT ROW)"
+
+        # Volatility (20-day rolling standard deviation of returns)
+        volatility_20d: "STDDEV(daily_return) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)"
+
+        # RSI (14-period) - Simplified version using price changes
+        price_change: "close - LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date)"
+        gain: "CASE WHEN price_change > 0 THEN price_change ELSE 0 END"
+        loss: "CASE WHEN price_change < 0 THEN ABS(price_change) ELSE 0 END"
+        avg_gain_14: "AVG(gain) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW)"
+        avg_loss_14: "AVG(loss) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW)"
+        rs_14: "avg_gain_14 / NULLIF(avg_loss_14, 0)"
+        rsi_14: "100 - (100 / (1 + rs_14))"
+
+        # Beta (simplified - using 50-day correlation with market proxy)
+        # Note: This is a simplified beta calculation; proper beta requires market index data
+        beta: "COVAR_POP(daily_return, AVG(daily_return) OVER (PARTITION BY trade_date)) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 49 PRECEDING AND CURRENT ROW) / NULLIF(VAR_POP(AVG(daily_return) OVER (PARTITION BY trade_date)) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 49 PRECEDING AND CURRENT ROW), 0)"
+
+        # Volume indicators
+        volume_sma_20: "AVG(volume) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)"
+        volume_ratio: "volume / NULLIF(volume_sma_20, 0)"
+
+        # Price range
+        high_low_range: "high - low"
+        range_pct: "(high - low) / NULLIF(close, 0) * 100"
+      tags: [fact, technical, derived]
+
   # Edges define relationships between tables
   edges:
     # Cross-model edge: equity data uses core calendar for time-based filtering
