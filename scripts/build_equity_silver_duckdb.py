@@ -1,18 +1,32 @@
 #!/usr/bin/env python3
 """
-Build Equity Silver Layer from Bronze data using DuckDB.
+Build Equity Silver Layer from Bronze data using DuckDB (FALLBACK ONLY).
 
-This script:
-1. Loads equity model configuration
-2. Reads from Bronze (ref_ticker, prices_daily, exchanges)
-3. Transforms and builds Silver tables using DuckDB
-4. Writes parquet files to storage/silver/equity/
+⚠️  WARNING: This is a FALLBACK script for environments without PySpark.
+⚠️  It bypasses the equity model's proper build() method and duplicates transformation logic.
+⚠️  For production use, prefer: scripts/build_equity_silver.py (Spark-based)
+
+Why this exists:
+- The proper way to build silver tables is via model.build() using Spark
+- This script provides a DuckDB-only alternative for local dev/testing
+- Uses direct SQL transformations instead of the model's graph-based transformations
+
+Limitations:
+- Does NOT use equity model's graph nodes, select/derive transformations
+- SQL logic here must be manually kept in sync with configs/models/equity.yaml
+- Missing any computed columns or business logic from model.build()
 
 Usage:
     python scripts/build_equity_silver_duckdb.py
 
 Prerequisites:
     - Bronze data must exist
+
+When to use:
+    ✓ Local development without Spark installed
+    ✓ Quick testing of GraphQueryPlanner features
+    ✗ Production data pipelines (use build_equity_silver.py)
+    ✗ When you need computed columns from model graph
 """
 
 import sys
@@ -32,8 +46,13 @@ logger = logging.getLogger(__name__)
 
 def main():
     print("=" * 70)
-    print("Building Equity Silver Layer (DuckDB)")
+    print("Building Equity Silver Layer (DuckDB FALLBACK)")
     print("=" * 70)
+    print()
+    print("⚠️  WARNING: This bypasses the model's build() method")
+    print("⚠️  For production, use: scripts/build_equity_silver.py (Spark)")
+    print("⚠️  This script is only for local dev when Spark unavailable")
+    print()
 
     try:
         # Initialize DuckDB context
@@ -134,7 +153,7 @@ def main():
         print(f"   ✓ Written: {fact_equity_prices_path}")
 
         print("\n" + "=" * 70)
-        print("✓ Equity Silver layer built successfully!")
+        print("✓ Equity Silver layer built successfully (DuckDB fallback)")
         print("=" * 70)
         print("\nSilver files location:")
         print(f"  {silver_root}/dims/")
@@ -142,6 +161,8 @@ def main():
         print("\nNext steps:")
         print("  1. Run tests: python examples/comprehensive_test.py")
         print("  2. Run examples: python examples/query_planner_example.py")
+        print("\nNote: For production, rebuild with Spark-based builder:")
+        print("  python scripts/build_equity_silver.py")
 
         conn.close()
         return 0
