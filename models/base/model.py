@@ -258,12 +258,22 @@ class BaseModel:
                 nodes[node_id] = custom_df
                 continue
 
-            # Default: load from Bronze
-            layer, table = node_config['from'].split('.', 1)
-            assert layer == 'bronze', f"Node {node_id} must load from bronze, got {layer}"
-
-            # Load Bronze table
-            df = self._load_bronze_table(table)
+            # Check if loading from bronze or from another node
+            from_spec = node_config['from']
+            if '.' in from_spec:
+                # Loading from bronze: bronze.table_name
+                layer, table = from_spec.split('.', 1)
+                assert layer == 'bronze', f"Node {node_id} must load from bronze, got {layer}"
+                df = self._load_bronze_table(table)
+            else:
+                # Loading from another node (must already be built)
+                parent_node = from_spec
+                if parent_node not in nodes:
+                    raise ValueError(
+                        f"Node {node_id} depends on {parent_node}, but {parent_node} hasn't been built yet. "
+                        f"Ensure nodes are defined in dependency order in graph.nodes"
+                    )
+                df = nodes[parent_node]
 
             # Apply select (column selection/aliasing)
             if 'select' in node_config and node_config['select']:

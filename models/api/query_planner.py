@@ -479,9 +479,20 @@ FROM {base_table_ref} AS {table_aliases[base_table]}
             → [("ticker", "ticker"), ("date", "trade_date")]
         """
         pairs = []
+
+        # Validate that join_on is a list
+        if not isinstance(join_on, list):
+            raise ValueError(f"join_on must be a list, got {type(join_on)}: {join_on}")
+
         for condition in join_on:
+            if not isinstance(condition, str):
+                raise ValueError(f"join condition must be a string, got {type(condition)}: {condition}")
+
             if '=' in condition:
-                left_col, right_col = condition.split('=', 1)
+                parts = condition.split('=', 1)
+                if len(parts) != 2:
+                    raise ValueError(f"Invalid join condition format: {condition}")
+                left_col, right_col = parts
                 pairs.append((left_col.strip(), right_col.strip()))
             else:
                 # If no '=', assume same column name on both sides
