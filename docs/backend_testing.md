@@ -114,18 +114,18 @@ This allows:
 
 ## Test Results
 
-### Current Environment (No PySpark)
+### With PySpark Installed
 
 ```
 ===============================================================================
 OVERALL RESULTS
 ===============================================================================
 ✓ DuckDB Backend:  PASS (8/8 tests)
-⊘ Spark Backend:   SKIPPED (PySpark not installed)
+✓ Spark Backend:   PASS (8/8 tests)
 ===============================================================================
 ```
 
-### DuckDB Test Details
+### DuckDB Test Details (Reporting)
 ```
 Session Initialization:        ✓ PASS
 Model Loading (core        ): ✓ PASS
@@ -140,43 +140,67 @@ Cross-Model References:        ✓ PASS
 **Key validations:**
 - ✓ Models load without PySpark dependency
 - ✓ Backend correctly detected as 'duckdb'
-- ✓ Domain-specific classes instantiate (EquityModel, CorporateModel)
+- ✓ Domain-specific classes instantiate (EquityModel, CorporateModel, CoreModel)
 - ✓ Measure registry has all types (simple, computed, weighted)
 - ✓ Domain features loaded (weighting, technical, risk, fundamentals)
+- ✓ Cross-model references work (equity → core.dim_calendar)
+
+### Spark Test Details (ETL)
+```
+Session Initialization:        ✓ PASS
+Model Loading (core      ): ✓ PASS
+Model Loading (equity    ): ✓ PASS
+Model Loading (corporate ): ✓ PASS
+Measure Registry:              ✓ PASS
+Domain Features (equity    ): ✓ PASS
+Domain Features (corporate ): ✓ PASS
+Cross-Model References:        ✓ PASS
+```
+
+**Key validations:**
+- ✓ Models load with Spark connection
+- ✓ Backend correctly detected as 'spark'
+- ✓ Model backends are all Spark (not DuckDB)
+- ✓ Domain-specific classes instantiate with Spark
+- ✓ Measure registry has all types (simple, computed, weighted)
+- ✓ Domain features loaded (weighting, technical, risk, fundamentals)
+- ✓ Graph building works (can build equity model)
 - ✓ Cross-model references work (equity → core.dim_calendar)
 
 ## Migration Status
 
 ### ✓ Completed
 - [x] Conditional PySpark imports throughout stack
-- [x] DuckDB backend fully operational
+- [x] DuckDB backend fully operational (8/8 tests passing)
+- [x] Spark backend fully operational (8/8 tests passing)
 - [x] Backend-agnostic UniversalSession
 - [x] Separate test suites for each backend
 - [x] Test orchestrator script
-- [x] Domain model architecture validated (DuckDB)
+- [x] Domain model architecture validated (both backends)
+- [x] Measure registry bootstrap working (both backends)
+- [x] Cross-model references working (both backends)
 
-### ⊘ Pending (Requires PySpark Environment)
-- [ ] Validate Spark backend with actual PySpark installation
-- [ ] Run build_all_models.py successfully
-- [ ] Test end-to-end: ETL (Spark) → Storage → Reporting (DuckDB)
+### Next Steps
 
-## Next Steps
+1. **Run full ETL pipeline:**
+   ```bash
+   python scripts/build_all_models.py --skip-ingestion
+   ```
+   - Build equity and corporate models with Spark
+   - Verify no derive expression errors
+   - Confirm all fact tables created successfully
 
-1. **In Spark-enabled environment:**
-   - Install PySpark
-   - Run `python scripts/test_domain_model_integration_spark.py`
-   - Verify all 8 tests pass with Spark backend
-
-2. **Run full ETL pipeline:**
-   - Run `python scripts/build_all_models.py --skip-ingestion`
-   - Verify equity and corporate models build successfully
-   - Confirm no derive expression errors
-
-3. **End-to-end validation:**
-   - Build models with Spark (ETL)
-   - Query models with DuckDB (Reporting)
+2. **End-to-end validation:**
+   - Build models with Spark (ETL) → writes to silver storage
+   - Query models with DuckDB (Reporting) → reads from silver storage
    - Execute measures in UI
-   - Verify cross-model references work with data
+   - Verify cross-model references work with actual data
+
+3. **UI Validation:**
+   - Test equity model in UI
+   - Test corporate model in UI
+   - Verify computed measures display correctly
+   - Verify weighted measures use domain strategies
 
 ## Troubleshooting
 
