@@ -393,27 +393,33 @@ FROM {base_table_ref} AS {table_aliases[base_table]}
         """
         Get DuckDB table reference (parquet path).
 
+        Uses the model's schema to resolve table paths, ensuring tables
+        are looked up within the correct model's storage.
+
         Args:
             table_name: Table name
 
         Returns:
             DuckDB-compatible table reference (e.g., read_parquet('path/*.parquet'))
         """
-        # Get table path from storage
-        storage_cfg = self.model.storage_cfg
-        roots = storage_cfg.get('roots', {})
-        tables = storage_cfg.get('tables', {})
+        # Get schema from model config (same approach as DuckDBAdapter)
+        schema = self.model.model_cfg.get('schema', {})
 
-        if table_name not in tables:
-            raise ValueError(f"Table {table_name} not found in storage config")
+        # Check dimensions
+        if table_name in schema.get('dimensions', {}):
+            relative_path = schema['dimensions'][table_name]['path']
+        # Check facts
+        elif table_name in schema.get('facts', {}):
+            relative_path = schema['facts'][table_name]['path']
+        else:
+            raise ValueError(
+                f"Table '{table_name}' not found in model '{self.model_name}' schema. "
+                f"Available tables: {list(schema.get('dimensions', {}).keys()) + list(schema.get('facts', {}).keys())}"
+            )
 
-        table_cfg = tables[table_name]
-        root_key = table_cfg['root']
-        rel_path = table_cfg['rel']
-
-        # Build full path
-        root_path = roots[root_key]
-        full_path = f"{root_path}/{rel_path}"
+        # Build full path using model's storage root
+        storage_root = self.model.model_cfg['storage']['root']
+        full_path = f"{storage_root}/{relative_path}"
 
         # Return DuckDB read_parquet syntax
         return f"read_parquet('{full_path}/*.parquet')"
