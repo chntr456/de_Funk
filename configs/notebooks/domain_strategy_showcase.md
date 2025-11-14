@@ -194,7 +194,7 @@ Technical indicators help identify trends, momentum, and potential trading signa
 
 **Trend Indicators**: SMA (20-day, 50-day), price momentum
 **Momentum Indicators**: RSI (14-period), volume ratio
-**Risk Metrics**: Volatility (20-day), beta, price range
+**Risk Metrics**: Volatility (20-day), price range
 
 ### 🎯 Key Technical Metrics
 
@@ -207,8 +207,7 @@ $exhibits${
     { measure: sma_20, label: "Avg SMA (20)", aggregation: avg, format: "$#,##0.00" },
     { measure: sma_50, label: "Avg SMA (50)", aggregation: avg, format: "$#,##0.00" },
     { measure: rsi_14, label: "Avg RSI (14)", aggregation: avg, format: "#,##0.00" },
-    { measure: volatility_20d, label: "Avg Volatility (20d)", aggregation: avg, format: "#,##0.00%" },
-    { measure: beta, label: "Avg Beta", aggregation: avg, format: "#,##0.00" }
+    { measure: volatility_20d, label: "Avg Volatility (20d)", aggregation: avg, format: "#,##0.00%" }
   ]
   collapsible: true
   collapsible_title: "🎯 Technical Indicator Summary"
@@ -292,28 +291,6 @@ $exhibits${
   interactive: true
   collapsible: true
   collapsible_title: "📈 20-Day Rolling Volatility"
-  collapsible_expanded: true
-}
-
----
-
-### 📊 Beta vs. Market
-
-Beta measures systematic risk relative to the market (beta = 1.0 means moves with market):
-
-$exhibits${
-  type: bar_chart
-  source: equity.fact_equity_technicals
-  x: ticker
-  y: beta
-  title: Beta by Ticker
-  description: Systematic risk vs. market - beta > 1 means more volatile than market
-  aggregations:
-    beta: avg
-  group_by: [ticker]
-  interactive: true
-  collapsible: true
-  collapsible_title: "📊 Beta Comparison"
   collapsible_expanded: true
 }
 

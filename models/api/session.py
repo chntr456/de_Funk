@@ -481,11 +481,21 @@ class UniversalSession:
         else:
             # DuckDB - check if already pandas DataFrame or DuckDB relation
             if isinstance(df, pd.DataFrame):
-                # Already pandas - use column selection
-                return df[columns]
+                # Already pandas - filter to only columns that exist
+                available_columns = [col for col in columns if col in df.columns]
+                if not available_columns:
+                    # If no columns available, return empty dataframe with requested columns
+                    return pd.DataFrame(columns=columns)
+                return df[available_columns]
             else:
                 # DuckDB relation - use project() method
-                return df.project(','.join(columns))
+                # Filter to columns that exist in the relation
+                relation_columns = df.columns
+                available_columns = [col for col in columns if col in relation_columns]
+                if not available_columns:
+                    # Return empty result if no columns match
+                    return df.limit(0)
+                return df.project(','.join(available_columns))
 
     def _find_materialized_view(
         self,
