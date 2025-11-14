@@ -94,6 +94,9 @@ class BaseModel:
         # Unified measure executor (lazy-loaded)
         self._measure_executor = None
 
+        # Query planner for dynamic joins (lazy-loaded)
+        self._query_planner = None
+
     @property
     def backend(self) -> str:
         """Get backend type (spark or duckdb)."""
@@ -117,6 +120,30 @@ class BaseModel:
             from models.base.measures.executor import MeasureExecutor
             self._measure_executor = MeasureExecutor(self, backend=self.backend)
         return self._measure_executor
+
+    @property
+    def query_planner(self):
+        """
+        Get query planner for dynamic table joins.
+
+        Uses the model's graph edges to plan and execute joins at runtime,
+        making materialized views an optional performance optimization.
+
+        Returns:
+            GraphQueryPlanner instance
+
+        Example:
+            # Get enriched table with dynamic joins
+            df = model.query_planner.get_table_enriched(
+                'fact_equity_prices',
+                enrich_with=['dim_equity', 'dim_exchange'],
+                columns=['ticker', 'close', 'company_name', 'exchange_name']
+            )
+        """
+        if self._query_planner is None:
+            from models.api.query_planner import GraphQueryPlanner
+            self._query_planner = GraphQueryPlanner(self)
+        return self._query_planner
 
     def _detect_backend(self) -> str:
         """Detect backend type from connection."""
@@ -641,6 +668,44 @@ class BaseModel:
                 f"Table '{table_name}' not found in {self.model_name} model. "
                 f"Available tables: {available}"
             )
+
+    def get_table_enriched(
+        self,
+        table_name: str,
+        enrich_with: Optional[List[str]] = None,
+        columns: Optional[List[str]] = None
+    ) -> DataFrame:
+        """
+        Get table with optional enrichment via dynamic joins.
+
+        Uses graph edges to join related tables at runtime. Falls back to
+        materialized views when available for performance.
+
+        Args:
+            table_name: Base table name (e.g., 'fact_equity_prices')
+            enrich_with: List of tables to join (e.g., ['dim_equity', 'dim_exchange'])
+            columns: Columns to select (default: all columns)
+
+        Returns:
+            DataFrame with enrichment applied
+
+        Raises:
+            ValueError: If no join path exists
+
+        Example:
+            # Get prices with company info (dynamic join)
+            df = equity_model.get_table_enriched(
+                'fact_equity_prices',
+                enrich_with=['dim_equity', 'dim_exchange'],
+                columns=['ticker', 'trade_date', 'close', 'company_name', 'exchange_name']
+            )
+
+            # System:
+            # 1. Checks for materialized view (equity_prices_with_company)
+            # 2. If not found, builds join from graph edges
+            # 3. Returns enriched DataFrame
+        """
+        return self.query_planner.get_table_enriched(table_name, enrich_with, columns)
 
     def get_dimension_df(self, dim_id: str) -> DataFrame:
         """Get a dimension table by ID"""
