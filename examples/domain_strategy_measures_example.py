@@ -72,17 +72,19 @@ def get_weighted_indices(
     Returns:
         DataFrame with all weighted indices by trade_date
     """
-    # Define date filters
-    filters = {}
-    if start_date or end_date:
-        filters['trade_date'] = {}
-        if start_date:
-            filters['trade_date']['start'] = start_date
-        if end_date:
-            filters['trade_date']['end'] = end_date
+    # Build filters - need to pass as separate kwargs, not nested dict
+    filter_kwargs = {}
+
+    if start_date and end_date:
+        # Pass as trade_date parameter with dict value
+        filter_kwargs['trade_date'] = {'start': start_date, 'end': end_date}
+    elif start_date:
+        filter_kwargs['trade_date'] = {'start': start_date}
+    elif end_date:
+        filter_kwargs['trade_date'] = {'end': end_date}
 
     if tickers:
-        filters['ticker'] = tickers
+        filter_kwargs['ticker'] = tickers
 
     # Get each weighted index measure
     weighted_measures = {
@@ -100,12 +102,12 @@ def get_weighted_indices(
         try:
             result = equity_model.calculate_measure(
                 measure_name=measure_name,
-                filters=filters
+                **filter_kwargs  # Unpack filters as kwargs
             )
 
             # Extract the DataFrame
             df = result.data
-            if not df.empty:
+            if df is not None and not df.empty:
                 # Rename the measure column to the label
                 measure_col = [col for col in df.columns if col != 'trade_date'][0]
                 df = df.rename(columns={measure_col: label})
@@ -137,7 +139,7 @@ def get_technical_indicators(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     group_by_ticker: bool = True
-) -> pd.DataFrame:
+) -> Dict[str, pd.DataFrame]:
     """
     Get technical indicator measures.
 
@@ -149,18 +151,20 @@ def get_technical_indicators(
         group_by_ticker: If True, group by ticker; if False, aggregate across all tickers
 
     Returns:
-        DataFrame with technical indicators
+        Dictionary of DataFrames with technical indicators
     """
-    filters = {}
-    if start_date or end_date:
-        filters['trade_date'] = {}
-        if start_date:
-            filters['trade_date']['start'] = start_date
-        if end_date:
-            filters['trade_date']['end'] = end_date
+    # Build filters as kwargs
+    filter_kwargs = {}
+
+    if start_date and end_date:
+        filter_kwargs['trade_date'] = {'start': start_date, 'end': end_date}
+    elif start_date:
+        filter_kwargs['trade_date'] = {'start': start_date}
+    elif end_date:
+        filter_kwargs['trade_date'] = {'end': end_date}
 
     if tickers:
-        filters['ticker'] = tickers
+        filter_kwargs['ticker'] = tickers
 
     # Technical indicator measures
     technical_measures = {
@@ -175,17 +179,17 @@ def get_technical_indicators(
             if group_by_ticker:
                 result = equity_model.calculate_measure_by_ticker(
                     measure_name=measure_name,
-                    tickers=tickers,
-                    **filters
+                    tickers=tickers if tickers else None,
+                    **filter_kwargs
                 )
             else:
                 result = equity_model.calculate_measure(
                     measure_name=measure_name,
-                    filters=filters
+                    **filter_kwargs
                 )
 
             df = result.data
-            if not df.empty:
+            if df is not None and not df.empty:
                 results[label] = df
 
         except Exception as e:
@@ -214,20 +218,22 @@ def get_price_measures_by_ticker(
     Returns:
         DataFrame with price measures by ticker
     """
-    filters = {}
-    if start_date or end_date:
-        filters['trade_date'] = {}
-        if start_date:
-            filters['trade_date']['start'] = start_date
-        if end_date:
-            filters['trade_date']['end'] = end_date
+    # Build filters as kwargs
+    filter_kwargs = {}
 
-    # Price measures to calculate
+    if start_date and end_date:
+        filter_kwargs['trade_date'] = {'start': start_date, 'end': end_date}
+    elif start_date:
+        filter_kwargs['trade_date'] = {'start': start_date}
+    elif end_date:
+        filter_kwargs['trade_date'] = {'end': end_date}
+
+    # Price measures to calculate (using correct measure names from equity.yaml)
     price_measures = {
         'avg_close': 'avg_close_price',
         'total_volume': 'total_volume',
-        'max_high': 'max_high_price',
-        'min_low': 'min_low_price',
+        'max_high': 'max_high',  # Corrected: was 'max_high_price'
+        'min_low': 'min_low',    # Corrected: was 'min_low_price'
         'price_range': 'price_range'
     }
 
@@ -238,11 +244,11 @@ def get_price_measures_by_ticker(
                 measure_name=measure_name,
                 tickers=tickers,
                 limit=limit,
-                **filters
+                **filter_kwargs
             )
 
             df = result.data
-            if not df.empty:
+            if df is not None and not df.empty:
                 # Rename measure column
                 measure_col = [col for col in df.columns if col != 'ticker'][0]
                 df = df.rename(columns={measure_col: label})
@@ -281,7 +287,7 @@ def compare_weighting_strategies(
         end_date: End date
 
     Returns:
-        Dictionary with comparison results
+        Dictionary with comparison results or error info
     """
     # Get weighted indices
     indices_df = get_weighted_indices(
@@ -291,8 +297,14 @@ def compare_weighting_strategies(
         end_date=end_date
     )
 
-    if indices_df.empty:
-        return {"error": "No data available"}
+    if indices_df is None or indices_df.empty:
+        return {
+            "error": "No data available",
+            "summary": {},
+            "data": pd.DataFrame(),
+            "date_range": None,
+            "num_periods": 0
+        }
 
     # Calculate summary statistics for each index
     summary = {}
@@ -303,7 +315,7 @@ def compare_weighting_strategies(
                 'std': indices_df[col].std(),
                 'min': indices_df[col].min(),
                 'max': indices_df[col].max(),
-                'latest': indices_df[col].iloc[-1] if not indices_df.empty else None
+                'latest': indices_df[col].iloc[-1] if len(indices_df) > 0 else None
             }
 
     return {
@@ -351,10 +363,15 @@ if __name__ == "__main__":
         end_date=end_date
     )
 
-    print("\nWeighted Indices DataFrame:")
-    print(indices_df.head(10))
-    print(f"\nShape: {indices_df.shape}")
-    print(f"Columns: {list(indices_df.columns)}")
+    if indices_df.empty:
+        print("\n   ⚠ No data available")
+        print("   Note: Run the pipeline to build equity silver layer first:")
+        print("   python scripts/build_silver_layer.py")
+    else:
+        print("\nWeighted Indices DataFrame:")
+        print(indices_df.head(10))
+        print(f"\nShape: {indices_df.shape}")
+        print(f"Columns: {list(indices_df.columns)}")
 
     # Example 2: Get price measures by ticker
     print("\n" + "=" * 80)
@@ -369,10 +386,15 @@ if __name__ == "__main__":
         limit=10
     )
 
-    print("\nPrice Measures DataFrame:")
-    print(price_df)
-    print(f"\nShape: {price_df.shape}")
-    print(f"Columns: {list(price_df.columns)}")
+    if price_df.empty:
+        print("\n   ⚠ No data available")
+        print("   Note: Run the pipeline to build equity silver layer first:")
+        print("   python scripts/build_silver_layer.py")
+    else:
+        print("\nPrice Measures DataFrame:")
+        print(price_df)
+        print(f"\nShape: {price_df.shape}")
+        print(f"Columns: {list(price_df.columns)}")
 
     # Example 3: Get technical indicators
     print("\n" + "=" * 80)
@@ -387,9 +409,14 @@ if __name__ == "__main__":
         group_by_ticker=True
     )
 
-    for indicator_name, df in tech_indicators.items():
-        print(f"\n{indicator_name}:")
-        print(df.head(10))
+    if not tech_indicators:
+        print("\n   ⚠ No data available")
+        print("   Note: Run the pipeline to build equity silver layer first:")
+        print("   python scripts/build_silver_layer.py")
+    else:
+        for indicator_name, df in tech_indicators.items():
+            print(f"\n{indicator_name}:")
+            print(df.head(10))
 
     # Example 4: Compare weighting strategies
     print("\n" + "=" * 80)
@@ -403,11 +430,16 @@ if __name__ == "__main__":
         end_date=end_date
     )
 
-    print("\nSummary Statistics:")
-    for strategy, stats in comparison['summary'].items():
-        print(f"\n{strategy}:")
-        for stat_name, value in stats.items():
-            print(f"  {stat_name}: {value:,.2f}" if isinstance(value, (int, float)) else f"  {stat_name}: {value}")
+    if 'error' in comparison and comparison['error']:
+        print(f"\n   ⚠ {comparison['error']}")
+        print("   Note: Run the pipeline to build equity silver layer first:")
+        print("   python scripts/build_silver_layer.py")
+    else:
+        print("\nSummary Statistics:")
+        for strategy, stats in comparison.get('summary', {}).items():
+            print(f"\n{strategy}:")
+            for stat_name, value in stats.items():
+                print(f"  {stat_name}: {value:,.2f}" if isinstance(value, (int, float)) else f"  {stat_name}: {value}")
 
     print("\n" + "=" * 80)
     print("Examples completed successfully!")
