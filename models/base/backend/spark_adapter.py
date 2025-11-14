@@ -28,6 +28,11 @@ class SparkAdapter(BackendAdapter):
     - Delta Lake ACID transactions and time travel
     """
 
+    def __init__(self, connection, model):
+        """Initialize Spark adapter with enriched table tracking."""
+        super().__init__(connection, model)
+        self._enriched_tables = set()  # Track tables with enriched temp views
+
     def get_dialect(self) -> str:
         """Get SQL dialect name."""
         return 'spark'
@@ -71,8 +76,9 @@ class SparkAdapter(BackendAdapter):
         Get Spark table reference.
 
         Spark can use either:
-        1. Catalog tables (database.table format)
-        2. File paths (for direct file access with Delta/Parquet)
+        1. Enriched temp views (created by set_enriched_table)
+        2. Catalog tables (database.table format)
+        3. File paths (for direct file access with Delta/Parquet)
 
         Auto-detects Delta tables when using file paths.
 
@@ -80,11 +86,16 @@ class SparkAdapter(BackendAdapter):
             table_name: Logical table name from model schema
 
         Returns:
-            Spark table reference (catalog reference or delta.`path`)
+            Spark table reference (view name, catalog reference, or delta.`path`)
 
         Raises:
             ValueError: If table not found in model schema
         """
+        # Check if table has been enriched - if so, use the temp view
+        if table_name in self._enriched_tables:
+            logger.debug(f"Using enriched temp view for table '{table_name}'")
+            return table_name  # Return view name, not path
+
         # Verify table exists in schema
         schema = self.model.model_cfg.get('schema', {})
         dimensions = schema.get('dimensions', {})
@@ -232,3 +243,7 @@ class SparkAdapter(BackendAdapter):
         """
         # Create or replace temporary view
         enriched_df.createOrReplaceTempView(table_name)
+
+        # Mark this table as enriched so get_table_reference uses the view
+        self._enriched_tables.add(table_name)
+        logger.debug(f"Table '{table_name}' marked as enriched, will use temp view in queries")
