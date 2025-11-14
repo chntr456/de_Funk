@@ -44,7 +44,7 @@ def main():
 
         # Create session
         session = UniversalSession(
-            connection=ctx.spark,
+            connection=ctx.connection,  # Use SparkConnection wrapper, not raw SparkSession
             storage_cfg=ctx.storage,
             repo_root=Path.cwd()
         )
@@ -104,7 +104,7 @@ def main():
         print("  2. Run examples: python examples/domain_strategy_measures_example.py")
         print("  3. View in UI: streamlit run app/ui/notebook_app_duckdb.py")
 
-        ctx.spark.stop()
+        ctx.connection.spark.stop()
         return 0
 
     except FileNotFoundError as e:
