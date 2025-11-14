@@ -520,6 +520,8 @@ FROM {base_table_ref} AS {table_aliases[base_table]}
         """
         # Build join condition
         join_condition = None
+        duplicate_cols = []
+
         for left_col, right_col in join_pairs:
             condition = left_df[left_col] == right_df[right_col]
             if join_condition is None:
@@ -527,8 +529,21 @@ FROM {base_table_ref} AS {table_aliases[base_table]}
             else:
                 join_condition = join_condition & condition
 
+            # Track duplicate columns (where left and right have same name)
+            if left_col == right_col:
+                duplicate_cols.append(right_col)
+
         # Execute join
-        return left_df.join(right_df, join_condition, join_type)
+        result_df = left_df.join(right_df, join_condition, join_type)
+
+        # Drop duplicate columns from right side to avoid ambiguity
+        # After join, Spark keeps both columns causing "AMBIGUOUS_REFERENCE" errors
+        for col in duplicate_cols:
+            if col in result_df.columns:
+                # Drop the duplicate (Spark keeps both, we want only the left one)
+                result_df = result_df.drop(right_df[col])
+
+        return result_df
 
     def _duckdb_join(
         self,

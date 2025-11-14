@@ -49,8 +49,8 @@ class SparkAdapter(BackendAdapter):
         """
         start = time.time()
 
-        # Execute SQL query
-        spark_df = self.connection.sql(sql)
+        # Execute SQL query (SparkConnection.spark is the SparkSession)
+        spark_df = self.connection.spark.sql(sql)
 
         # For row count, we need to trigger execution
         # This can be expensive - consider making it optional
@@ -199,7 +199,7 @@ class SparkAdapter(BackendAdapter):
         Args:
             table_name: Table name to cache
         """
-        self.connection.sql(f"CACHE TABLE {table_name}")
+        self.connection.spark.sql(f"CACHE TABLE {table_name}")
 
     def uncache_table(self, table_name: str):
         """
@@ -208,7 +208,7 @@ class SparkAdapter(BackendAdapter):
         Args:
             table_name: Table name to uncache
         """
-        self.connection.sql(f"UNCACHE TABLE {table_name}")
+        self.connection.spark.sql(f"UNCACHE TABLE {table_name}")
 
     def set_enriched_table(self, table_name: str, enriched_df):
         """
