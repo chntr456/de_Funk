@@ -353,7 +353,7 @@ def get_filter_options_from_db(
     _storage_service
 ) -> List[Any]:
     """
-    Get filter options from database.
+    Get filter options from database using optimized DISTINCT query.
 
     Args:
         source: FilterSource configuration
@@ -364,28 +364,55 @@ def get_filter_options_from_db(
         List of distinct values for the filter
     """
     try:
-        # Query the table
-        df = _storage_service.get_table(source.model, source.table, use_cache=True)
+        # Use SQL to get distinct values (much faster than loading entire table)
+        # This is critical for large fact tables (e.g., 10M+ rows)
 
-        # Get distinct values
-        if source.column in df.columns:
-            pdf = _connection.to_pandas(df)
-            values = pdf[source.column].dropna().unique().tolist()
+        # Get model and table path
+        model = _storage_service.model_registry.get_model(source.model)
+        table_path = model.get_table_path(source.table)
 
-            # Sort if requested
-            if source.sort:
-                values = sorted(values)
-
-            # Limit if requested
-            if source.limit:
-                values = values[:source.limit]
-
-            return values
+        # For DuckDB, construct table reference
+        # table_path is like: Path('storage/silver/equity/facts/fact_equity_prices')
+        if table_path.is_dir():
+            table_ref = f"read_parquet('{table_path}/*.parquet')"
         else:
-            return []
+            table_ref = f"read_parquet('{table_path}')"
+
+        # Build SQL query for distinct values
+        order_clause = f"ORDER BY {source.column}" if source.sort else ""
+        limit_clause = f"LIMIT {source.limit}" if source.limit else ""
+
+        sql = f"""
+            SELECT DISTINCT {source.column}
+            FROM {table_ref}
+            WHERE {source.column} IS NOT NULL
+            {order_clause}
+            {limit_clause}
+        """
+
+        # Execute query
+        result_df = _connection.conn.execute(sql).fetchdf()
+        values = result_df[source.column].tolist()
+
+        return values
 
     except Exception as e:
         st.error(f"Error loading filter options: {str(e)}")
+        # Fallback to old method if SQL fails
+        try:
+            df = _storage_service.get_table(source.model, source.table, use_cache=True)
+            if source.column in df.columns:
+                pdf = _connection.to_pandas(df)
+                values = pdf[source.column].dropna().unique().tolist()
+
+                if source.sort:
+                    values = sorted(values)
+                if source.limit:
+                    values = values[:source.limit]
+
+                return values
+        except:
+            pass
         return []
 
 
