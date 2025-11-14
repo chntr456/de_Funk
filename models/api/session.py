@@ -474,11 +474,18 @@ class UniversalSession:
         Returns:
             DataFrame with only specified columns
         """
+        import pandas as pd
+
         if self.backend == 'spark':
             return df.select(*columns)
         else:
-            # DuckDB - use project() method
-            return df.project(','.join(columns))
+            # DuckDB - check if already pandas DataFrame or DuckDB relation
+            if isinstance(df, pd.DataFrame):
+                # Already pandas - use column selection
+                return df[columns]
+            else:
+                # DuckDB relation - use project() method
+                return df.project(','.join(columns))
 
     def _find_materialized_view(
         self,

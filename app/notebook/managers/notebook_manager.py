@@ -508,7 +508,11 @@ class NotebookManager:
             if hasattr(exhibit.y_axis, 'measures') and exhibit.y_axis.measures:
                 required_cols.update(exhibit.y_axis.measures)
             elif hasattr(exhibit.y_axis, 'measure') and exhibit.y_axis.measure:
-                required_cols.add(exhibit.y_axis.measure)
+                # Handle both single measure and list of measures
+                if isinstance(exhibit.y_axis.measure, list):
+                    required_cols.update(exhibit.y_axis.measure)
+                else:
+                    required_cols.add(exhibit.y_axis.measure)
 
         # Add dimension selector dimensions
         if hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
