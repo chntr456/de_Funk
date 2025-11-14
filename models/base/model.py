@@ -329,12 +329,12 @@ class BaseModel:
         Supports:
         - Column references: "ticker" -> F.col("ticker")
         - SHA1 hash: "sha1(ticker)" -> F.sha1(F.col("ticker"))
-        - More expressions can be added as needed
+        - SQL expressions: Window functions, aggregations, etc. via F.expr()
 
         Args:
             df: Input DataFrame
             col_name: Output column name
-            expr: Derive expression
+            expr: Derive expression (can be any valid SQL expression)
             node_id: Node ID (for error messages)
 
         Returns:
@@ -344,7 +344,7 @@ class BaseModel:
             if not PYSPARK_AVAILABLE:
                 raise ImportError("PySpark not available but Spark backend detected")
 
-            # SHA1 hash
+            # SHA1 hash (special case for common pattern)
             if expr.startswith('sha1(') and expr.endswith(')'):
                 col = expr[5:-1]  # Extract column name
                 return df.withColumn(col_name, F.sha1(F.col(col)))
@@ -353,12 +353,14 @@ class BaseModel:
             elif expr in df.columns:
                 return df.withColumn(col_name, F.col(expr))
 
-            # Unknown expression
+            # Arbitrary SQL expression (window functions, aggregations, etc.)
             else:
-                raise ValueError(
-                    f"Unsupported derive expression '{expr}' in node '{node_id}'. "
-                    f"Supported: column references, sha1(column)"
-                )
+                try:
+                    return df.withColumn(col_name, F.expr(expr))
+                except Exception as e:
+                    raise ValueError(
+                        f"Failed to apply derive expression '{expr}' in node '{node_id}': {e}"
+                    )
         else:
             # DuckDB - use SQL expressions
             if expr.startswith('sha1(') and expr.endswith(')'):
