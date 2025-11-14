@@ -190,7 +190,11 @@ $exhibits${
 
 ## 📈 Part 2: Technical Indicators
 
-Technical indicators help identify trends, momentum, and potential trading signals.
+Technical indicators help identify trends, momentum, and potential trading signals. Our equity model includes:
+
+**Trend Indicators**: SMA (20-day, 50-day), price momentum
+**Momentum Indicators**: RSI (14-period), volume ratio
+**Risk Metrics**: Volatility (20-day), beta, price range
 
 ### 🎯 Key Technical Metrics
 
@@ -200,12 +204,54 @@ $exhibits${
   type: metric_cards
   source: equity.fact_equity_technicals
   metrics: [
+    { measure: sma_20, label: "Avg SMA (20)", aggregation: avg, format: "$#,##0.00" },
+    { measure: sma_50, label: "Avg SMA (50)", aggregation: avg, format: "$#,##0.00" },
     { measure: rsi_14, label: "Avg RSI (14)", aggregation: avg, format: "#,##0.00" },
     { measure: volatility_20d, label: "Avg Volatility (20d)", aggregation: avg, format: "#,##0.00%" },
     { measure: beta, label: "Avg Beta", aggregation: avg, format: "#,##0.00" }
   ]
   collapsible: true
   collapsible_title: "🎯 Technical Indicator Summary"
+  collapsible_expanded: true
+}
+
+---
+
+### 📈 Moving Averages (SMA 20 & 50)
+
+Simple Moving Averages smooth price action and identify trends. The 20-day SMA reacts faster to price changes, while the 50-day SMA shows longer-term trends.
+
+$exhibits${
+  type: line_chart
+  source: equity.fact_equity_technicals
+  x: trade_date
+  y: [close, sma_20, sma_50]
+  color: ticker
+  title: Price with 20-day and 50-day Simple Moving Averages
+  description: Price action with short-term (20-day) and longer-term (50-day) moving averages. SMA crossovers often signal trend changes.
+  interactive: true
+  collapsible: true
+  collapsible_title: "📈 Simple Moving Averages (SMA)"
+  collapsible_expanded: true
+}
+
+---
+
+### 📊 Volume Analysis
+
+Trading volume indicators show market activity and conviction behind price moves:
+
+$exhibits${
+  type: line_chart
+  source: equity.fact_equity_technicals
+  x: trade_date
+  y: volume_ratio
+  color: ticker
+  title: Volume Ratio (Current / 20-day Average)
+  description: Volume relative to 20-day average - values above 1.0 indicate above-average activity
+  interactive: true
+  collapsible: true
+  collapsible_title: "📊 Volume Ratio Analysis"
   collapsible_expanded: true
 }
 
@@ -269,6 +315,26 @@ $exhibits${
   collapsible: true
   collapsible_title: "📊 Beta Comparison"
   collapsible_expanded: true
+}
+
+---
+
+### 📊 Price Range Analysis
+
+Daily price range shows intraday volatility and can signal trend strength:
+
+$exhibits${
+  type: line_chart
+  source: equity.fact_equity_technicals
+  x: trade_date
+  y: range_pct
+  color: ticker
+  title: Daily Price Range % by Ticker
+  description: Intraday range as percentage of close price - measures daily volatility
+  interactive: true
+  collapsible: true
+  collapsible_title: "📊 Daily Price Range %"
+  collapsible_expanded: false
 }
 
 ---
