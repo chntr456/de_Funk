@@ -304,7 +304,8 @@ class BaseModel:
         if self.backend == 'spark':
             if BronzeTable is None:
                 raise RuntimeError("PySpark required for Spark backend but not installed")
-            bronze = BronzeTable(self.connection, self.storage_router, table_name)
+            # BronzeTable expects SparkSession, not SparkConnection
+            bronze = BronzeTable(self.connection.spark, self.storage_router, table_name)
             return bronze.read(merge_schema=True)
         else:
             # DuckDB or other connection types
