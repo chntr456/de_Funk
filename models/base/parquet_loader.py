@@ -34,10 +34,10 @@ class ParquetLoader:
         Initialize loader.
 
         Args:
-            root: Storage root directory
+            root: Storage root directory (full path to model's silver directory)
         """
         self.root = Path(root)
-        (self.root / "silver" / "_meta" / "manifests").mkdir(parents=True, exist_ok=True)
+        (self.root / "_meta" / "manifests").mkdir(parents=True, exist_ok=True)
 
     def _manifest(self, name: str, out_path: Path, rows: int):
         """Write manifest file with metadata."""
@@ -48,7 +48,7 @@ class ParquetLoader:
             "rows": rows,
             "written_at": ts
         }
-        manifest_file = self.root / "silver" / "_meta" / "manifests" / f"{ts}__{name.replace('/', '_')}.json"
+        manifest_file = self.root / "_meta" / "manifests" / f"{ts}__{name.replace('/', '_')}.json"
         manifest_file.write_text(json.dumps(mf, indent=2))
 
     def _write(
@@ -62,12 +62,12 @@ class ParquetLoader:
         Write DataFrame to Parquet with DuckDB optimizations.
 
         Args:
-            rel_path: Relative path (e.g., "company/facts/fact_prices")
+            rel_path: Relative path (e.g., "dims/dim_equity" or "facts/fact_equity_prices")
             df: Spark DataFrame
             sort_by: Columns to sort by for query performance (enables zone maps)
             num_files: Number of files to write (default: 1 for <1GB data)
         """
-        out = self.root / "silver" / rel_path
+        out = self.root / rel_path
         out.parent.mkdir(parents=True, exist_ok=True)
 
         # Sort by query columns for zone maps and predicate pushdown
@@ -92,32 +92,29 @@ class ParquetLoader:
 
         print(f"  ✓ Written to: {out}")
 
-    def write_dim(self, name: str, df: Any):
+    def write_dim(self, rel_path: str, df: Any):
         """
         Write dimension table.
 
         Dimensions are always single files (typically <1 MB).
 
         Args:
-            name: Dimension name (e.g., "dim_company")
+            rel_path: Relative path from model root (e.g., "dims/dim_equity")
             df: Spark DataFrame
         """
-        rel = f"company/dims/{name}"
-        self._write(rel, df, num_files=1)
+        self._write(rel_path, df, num_files=1)
 
-    def write_fact(self, name: str, df: Any, sort_by: List[str]):
+    def write_fact(self, rel_path: str, df: Any, sort_by: List[str]):
         """
         Write fact table sorted by query columns.
 
         Facts are consolidated and sorted for optimal query performance.
 
         Args:
-            name: Fact table name (e.g., "fact_prices")
+            rel_path: Relative path from model root (e.g., "facts/fact_equity_prices")
             df: Spark DataFrame
             sort_by: Columns to sort by (e.g., ["trade_date", "ticker"])
         """
-        rel = f"company/facts/{name}"
-
         # Determine optimal file count based on size
         # For typical datasets (<10M rows), use single file
         # For very large datasets (>10M rows), use 2-5 files
@@ -129,4 +126,4 @@ class ParquetLoader:
         else:
             num_files = 5
 
-        self._write(rel, df, sort_by=sort_by, num_files=num_files)
+        self._write(rel_path, df, sort_by=sort_by, num_files=num_files)

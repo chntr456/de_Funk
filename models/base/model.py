@@ -988,7 +988,7 @@ class BaseModel:
         # Use optimized ParquetLoader if requested and format is parquet
         if use_optimized_writer and format == "parquet":
             from models.base.parquet_loader import ParquetLoader
-            loader = ParquetLoader(root=output_root.rsplit('/', 1)[0])  # Get parent of model dir
+            loader = ParquetLoader(root=output_root)  # Use output_root directly
 
             # Write dimensions
             print(f"\nWriting Dimensions:")
@@ -996,8 +996,8 @@ class BaseModel:
                 print(f"  Writing {name}...")
                 row_count = df.count()
 
-                # ParquetLoader expects relative path
-                rel_path = f"{self.model_name}/dims/{name}"
+                # ParquetLoader expects relative path from output_root
+                rel_path = f"dims/{name}"
                 loader.write_dim(rel_path, df)
 
                 stats['dimensions'][name] = row_count
@@ -1025,7 +1025,7 @@ class BaseModel:
                                 sort_by.append('symbol')
                             break
 
-                rel_path = f"{self.model_name}/facts/{name}"
+                rel_path = f"facts/{name}"
                 loader.write_fact(rel_path, df, sort_by=sort_by)
 
                 stats['facts'][name] = row_count
