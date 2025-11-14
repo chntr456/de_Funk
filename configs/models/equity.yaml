@@ -259,26 +259,29 @@ graph:
       description: "Each equity is listed on an exchange"
 
   # Paths define materialized views (joins)
-  paths:
-    - id: equity_prices_with_company
-      hops: "fact_equity_prices -> dim_equity -> dim_exchange"
-      description: "Prices with full equity and exchange context"
-      tags: [canonical, analytics]
-
-    - id: equity_prices_with_calendar
-      hops: "fact_equity_prices -> core.dim_calendar"
-      description: "Prices with calendar attributes for time-based analysis"
-      tags: [time, analytics]
-
-    - id: equity_news_with_company
-      hops: "fact_equity_news -> dim_equity"
-      description: "News with equity context"
-      tags: [news, analytics]
-
-    - id: equity_news_with_calendar
-      hops: "fact_equity_news -> core.dim_calendar"
-      description: "News with calendar attributes for time-based analysis"
-      tags: [time, analytics]
+  # DISABLED FOR PROTOTYPING: These create 4 additional denormalized tables (36M extra rows)
+  # Re-enable for production BI if you need pre-joined views for dashboards
+  # For development, use graph edges for dynamic joins instead
+  # paths:
+  #   - id: equity_prices_with_company
+  #     hops: "fact_equity_prices -> dim_equity -> dim_exchange"
+  #     description: "Prices with full equity and exchange context"
+  #     tags: [canonical, analytics]
+  #
+  #   - id: equity_prices_with_calendar
+  #     hops: "fact_equity_prices -> core.dim_calendar"
+  #     description: "Prices with calendar attributes for time-based analysis"
+  #     tags: [time, analytics]
+  #
+  #   - id: equity_news_with_company
+  #     hops: "fact_equity_news -> dim_equity"
+  #     description: "News with equity context"
+  #     tags: [news, analytics]
+  #
+  #   - id: equity_news_with_calendar
+  #     hops: "fact_equity_news -> core.dim_calendar"
+  #     description: "News with calendar attributes for time-based analysis"
+  #     tags: [time, analytics]
 
 # Measures - pre-defined aggregations
 measures:
