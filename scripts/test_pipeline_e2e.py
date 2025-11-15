@@ -34,9 +34,8 @@ from datetime import datetime, timedelta
 import time
 import json
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 try:
     import pandas as pd
@@ -83,7 +82,7 @@ class PipelineE2ETester:
 
         # Load model
         self.registry = ModelRegistry(str(self.config_dir))
-        self.model_cfg = self.registry.get_model(model_name).model_cfg
+        self.model_cfg = self.registry.get_model_config(model_name)
 
         # Initialize connection
         self.conn = None

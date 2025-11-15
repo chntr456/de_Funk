@@ -25,15 +25,13 @@ Usage:
 """
 
 import argparse
-import sys
 from pathlib import Path
 from typing import List, Optional, Dict
 import logging
 from datetime import datetime
+from utils.repo import setup_repo_imports
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+repo_root = setup_repo_imports()
 
 try:
     from core.duckdb_connection import DuckDBConnection
@@ -74,8 +72,8 @@ class ModelRebuilder:
 
         # Load model
         self.registry = ModelRegistry(str(self.config_dir))
-        self.model = self.registry.get_model(model_name)
-        self.model_cfg = self.model.model_cfg
+        # Get raw config dict (not ModelConfig object)
+        self.model_cfg = self.registry.get_model_config(model_name)
 
         # Initialize connection if available
         self.conn = None
