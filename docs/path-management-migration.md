@@ -201,6 +201,43 @@ from core.context import RepoContext
 
 ---
 
+## Special Case: Entry-Point Scripts
+
+For scripts run directly by external tools (e.g., `streamlit run app.py`, `uvicorn app:main`), you need a **bootstrap** before importing `utils.repo`:
+
+```python
+import sys
+from pathlib import Path
+
+# Bootstrap: Add repo to path before importing utils.repo
+_current_file = Path(__file__).resolve()
+_repo_root = None
+for _parent in [_current_file.parent] + list(_current_file.parents):
+    if (_parent / "configs").exists() and (_parent / "core").exists():
+        _repo_root = _parent
+        break
+if _repo_root and str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
+# Now safe to import
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
+```
+
+**Why needed?** External tools run scripts in a clean Python environment where the repo isn't in `sys.path` yet. The bootstrap finds and adds the repo before importing `utils.repo`.
+
+**Examples of entry-point scripts:**
+- Streamlit apps: `streamlit run app/ui/notebook_app_duckdb.py`
+- FastAPI/Uvicorn: `uvicorn app.main:app`
+- Gradio apps: `gradio app/ui/gradio_app.py`
+
+**Not needed for:**
+- Scripts run via `python scripts/my_script.py` (normal scripts)
+- Modules imported by other code
+- Library code
+
+---
+
 ## API Reference
 
 ### `setup_repo_imports()` - Recommended for Scripts
