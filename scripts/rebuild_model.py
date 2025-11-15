@@ -198,35 +198,39 @@ class ModelRebuilder:
 
         logger.info(f"    Rebuilding {table_name}...")
 
-        # Determine bronze data source for this table
-        # Look up in storage.json table mappings
-        table_config = self.storage_config.get('tables', {}).get(table_name, {})
+        # Map Silver table name to Bronze source table using heuristics
+        bronze_source_candidates = self._get_bronze_source_candidates(table_name)
 
-        if not table_config:
-            # Table not in storage.json - may need to derive from source tables
-            logger.warning(f"    Table {table_name} not found in storage.json, attempting to derive...")
-            # For derived tables like equity_prices_with_company, we'd need transformation logic
-            return {
-                'success': False,
-                'error': f'Table {table_name} not defined in storage.json and transformation logic not implemented'
-            }
+        bronze_table_path = None
+        bronze_source_name = None
 
-        # Check if this table has bronze data
-        if table_config.get('root') != 'bronze':
-            logger.warning(f"    Table {table_name} is not a bronze table (root={table_config.get('root')})")
-            return {
-                'success': False,
-                'error': f'Table {table_name} is not sourced from bronze layer'
-            }
+        for candidate in bronze_source_candidates:
+            # Look up candidate in storage.json
+            table_config = self.storage_config.get('tables', {}).get(candidate, {})
 
-        # Construct bronze table path
-        bronze_table_path = repo_root / self.bronze_root / table_config.get('rel', table_name)
+            if table_config and table_config.get('root') == 'bronze':
+                # Found a bronze source
+                bronze_rel_path = table_config.get('rel', candidate)
+                candidate_path = repo_root / self.bronze_root / bronze_rel_path
 
-        if not bronze_table_path.exists():
-            return {
-                'success': False,
-                'error': f'Bronze data does not exist: {bronze_table_path}'
-            }
+                if candidate_path.exists():
+                    bronze_table_path = candidate_path
+                    bronze_source_name = candidate
+                    logger.info(f"    Mapped {table_name} → Bronze source: {bronze_source_name}")
+                    break
+
+        if not bronze_table_path:
+            # Check if this is a derived table (needs transformation from other Silver tables)
+            if any(keyword in table_name for keyword in ['_with_', 'aggregated', 'enriched']):
+                return {
+                    'success': False,
+                    'error': f'Table {table_name} is a derived view - requires transformation logic (not yet implemented)'
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': f'No Bronze source found for {table_name}. Tried: {", ".join(bronze_source_candidates)}'
+                }
 
         # Read Bronze data
         try:
@@ -277,9 +281,65 @@ class ModelRebuilder:
                 'error': str(e)
             }
 
+    def _get_bronze_source_candidates(self, table_name: str) -> List[str]:
+        """
+        Generate candidate Bronze source table names for a Silver table.
+
+        Args:
+            table_name: Silver table name (e.g., 'dim_equity', 'fact_equity_prices')
+
+        Returns:
+            List of candidate Bronze table names to try
+
+        Examples:
+            'dim_equity' → ['ref_equity', 'equity', 'ref_ticker']
+            'fact_equity_prices' → ['prices_daily', 'equity_prices', 'prices']
+            'dim_exchange' → ['exchanges', 'ref_exchange', 'exchange']
+        """
+        candidates = []
+
+        # Common transformation patterns
+        base_name = table_name
+
+        # Remove prefixes
+        for prefix in ['fact_', 'dim_', 'ref_']:
+            if base_name.startswith(prefix):
+                base_name = base_name[len(prefix):]
+                break
+
+        # Specific known mappings
+        known_mappings = {
+            'equity': ['ref_ticker', 'ref_equity', 'equity'],
+            'exchange': ['exchanges', 'ref_exchange'],
+            'equity_prices': ['prices_daily'],
+            'equity_news': ['news'],
+            'equity_technicals': ['prices_daily'],  # Derived from prices
+        }
+
+        if base_name in known_mappings:
+            candidates.extend(known_mappings[base_name])
+
+        # Generic patterns
+        candidates.extend([
+            f'ref_{base_name}',  # ref_equity
+            f'{base_name}s',  # exchanges
+            f'{base_name}_daily',  # prices_daily
+            base_name,  # equity
+        ])
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_candidates = []
+        for candidate in candidates:
+            if candidate not in seen:
+                seen.add(candidate)
+                unique_candidates.append(candidate)
+
+        return unique_candidates
+
     def _find_bronze_data(self, table_name: str) -> Optional[Path]:
         """
-        Find Bronze data for a table.
+        Find Bronze data for a table (legacy method - kept for compatibility).
 
         Args:
             table_name: Table name
