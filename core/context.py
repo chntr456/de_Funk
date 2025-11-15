@@ -58,16 +58,20 @@ class RepoContext:
             connection = ConnectionFactory.create("spark", spark_session=spark)
 
         # Build backward-compatible polygon_cfg dict
+        # BaseRegistry expects specific structure: base_urls dict, rate_limit_per_sec number
         polygon_api = config.apis.get("polygon")
         if polygon_api:
+            # Convert base_url string to base_urls dict format
+            base_urls = {"core": polygon_api.base_url}
+
+            # Convert rate_limit calls/period to calls per second
+            rate_limit_per_sec = polygon_api.rate_limit_calls / polygon_api.rate_limit_period
+
             polygon_cfg = {
-                "base_url": polygon_api.base_url,
+                "base_urls": base_urls,
                 "endpoints": polygon_api.endpoints,
                 "api_keys": polygon_api.api_keys,
-                "rate_limit": {
-                    "calls": polygon_api.rate_limit_calls,
-                    "period": polygon_api.rate_limit_period,
-                },
+                "rate_limit_per_sec": rate_limit_per_sec,
                 "headers": polygon_api.headers,
             }
         else:
