@@ -27,7 +27,7 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
 **de_Funk** is a modern financial analytics platform that provides:
 
 - **Multi-source data ingestion**: Automated pipelines for financial, economic, and municipal data
-- **Dimensional data modeling**: YAML-driven graph-based models following medallion architecture
+- **Dimensional data modeling**: YAML-driven graph-based models using a two-layer architecture (Bronze/Silver)
 - **Interactive analytics**: Markdown-based notebooks with dynamic filtering and visualization
 - **Time series forecasting**: Multiple ML models (ARIMA, Prophet, Random Forest)
 - **High-performance analytics**: DuckDB backend for 10-100x faster queries vs Spark
@@ -137,7 +137,9 @@ de_Funk/
 
 ## Architecture & Design Patterns
 
-### Medallion Architecture (Bronze → Silver → Gold)
+### Two-Layer Architecture (Bronze → Silver)
+
+**Note**: de_Funk uses a simplified two-layer architecture (Bronze and Silver) rather than the full three-layer medallion pattern. Analytics are performed directly on the Silver layer using DuckDB, which serves the role of a "Gold" layer without creating a separate persisted layer.
 
 #### Bronze Layer (Raw Data)
 - **Purpose**: Store raw, unprocessed data from APIs
@@ -147,17 +149,18 @@ de_Funk/
 - **Schema**: Facet-normalized schemas
 
 #### Silver Layer (Dimensional Models)
-- **Purpose**: Clean, transformed dimensional models
+- **Purpose**: Clean, transformed dimensional models ready for analytics
 - **Format**: Star/snowflake schemas with facts and dimensions
 - **Path**: `storage/silver/{model}/{table}/`
 - **Configuration**: YAML-driven graph transformations
 - **Models**: 8 domain models with cross-model relationships
 
-#### Gold Layer (Analytics)
+#### Analytics Layer (Not Persisted)
 - **Purpose**: Business-ready analytics and insights
-- **Interface**: Notebooks and dashboards
+- **Interface**: Notebooks and dashboards query Silver directly
 - **Query Engine**: DuckDB (10-100x faster than Spark)
 - **Features**: Dynamic filtering and visualization
+- **Note**: No separate "Gold" layer - queries run directly against Silver tables
 
 ### Model Architecture Pattern
 
