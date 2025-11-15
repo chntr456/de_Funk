@@ -93,7 +93,8 @@ de_Funk/
 ├── scripts/                 # Operational scripts (27 scripts)
 ├── storage/
 │   ├── bronze/              # Raw ingested data (Parquet)
-│   └── silver/              # Dimensional models (Parquet)
+│   ├── silver/              # Dimensional models (Parquet)
+│   └── duckdb/              # DuckDB catalog (analytics.db)
 ├── docs/
 │   └── guide/               # Comprehensive documentation
 ├── examples/                # Runnable code examples
@@ -155,12 +156,13 @@ de_Funk/
 - **Configuration**: YAML-driven graph transformations
 - **Models**: 8 domain models with cross-model relationships
 
-#### Analytics Layer (Not Persisted)
+#### Analytics Layer (DuckDB Catalog)
 - **Purpose**: Business-ready analytics and insights
 - **Interface**: Notebooks and dashboards query Silver directly
 - **Query Engine**: DuckDB (10-100x faster than Spark)
+- **Database File**: `storage/duckdb/analytics.db` (persistent catalog/metadata)
 - **Features**: Dynamic filtering and visualization
-- **Note**: No separate "Gold" layer - queries run directly against Silver tables
+- **Note**: No separate "Gold" layer - queries run directly against Silver Parquet files. The DuckDB file stores catalog metadata, views, and query workspace but does NOT duplicate the data.
 
 ### Model Architecture Pattern
 
@@ -463,10 +465,11 @@ Located in `/scripts/`:
 
 ### Storage Conventions
 
-- **Parquet format**: All persistent storage
+- **Parquet format**: All persistent data storage (Bronze/Silver)
 - **Partitioned data**: Efficient querying and updates
-- **Bronze**: `storage/bronze/{provider}/{table}/`
-- **Silver**: `storage/silver/{model}/{table}/`
+- **Bronze**: `storage/bronze/{provider}/{table}/` - Raw ingested data
+- **Silver**: `storage/silver/{model}/{table}/` - Dimensional models
+- **DuckDB**: `storage/duckdb/analytics.db` - Query catalog and metadata (does NOT duplicate data)
 - **Versioning**: Track schema versions in YAML
 
 ### API Conventions
@@ -814,7 +817,7 @@ If queries are slow:
 - `/orchestration/` → Pipeline orchestration
 - `/tests/` → Unit and integration tests
 - `/scripts/` → Operational scripts
-- `/storage/` → Data storage (Bronze/Silver)
+- `/storage/` → Data storage (Bronze/Silver Parquet files, DuckDB catalog)
 - `/docs/` → Documentation
 - `/examples/` → Code examples
 - `/utils/` → Utility functions
