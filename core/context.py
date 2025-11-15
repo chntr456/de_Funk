@@ -75,18 +75,22 @@ class RepoContext:
 
         # Build backward-compatible storage dict
         # Models expect the original storage.json structure with "roots" nested dict
-        storage_dict = {
-            "roots": {
+        # Load raw storage.json to get all roots (including model-specific silver roots)
+        storage_json_path = config.repo_root / "configs" / "storage.json"
+        if storage_json_path.exists():
+            import json
+            with open(storage_json_path) as f:
+                storage_json = json.load(f)
+            roots = storage_json.get("roots", {})
+        else:
+            # Fallback: minimal roots if storage.json not found
+            roots = {
                 "bronze": str(config.storage.bronze_root),
                 "silver": str(config.storage.silver_root),
-                "core_silver": str(config.storage.core_silver),
-                "company_silver": str(config.storage.company_silver),
-                "equity_silver": str(config.storage.equity_silver),
-                "corporate_silver": str(config.storage.corporate_silver),
-                "forecast_silver": str(config.storage.forecast_silver),
-                "macro_silver": str(config.storage.macro_silver),
-                "city_finance_silver": str(config.storage.city_finance_silver),
-            },
+            }
+
+        storage_dict = {
+            "roots": roots,
             "tables": config.storage.tables,
             "connection": {
                 "type": config.connection.type,
