@@ -115,7 +115,7 @@ class DomainModelIntegrationTest:
 
             # Initialize session with SPARK
             self.session = UniversalSession(
-                connection=ctx.spark,
+                connection=ctx.connection,
                 storage_cfg=ctx.storage,
                 repo_root=repo_root
             )

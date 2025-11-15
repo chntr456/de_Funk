@@ -181,7 +181,9 @@ def run_forecast_pipeline(
 
     # Initialize Spark
     from orchestration.common.spark_session import get_spark
-    spark = get_spark("LargeCapForecastPipeline")
+    from core.connection import ConnectionFactory
+    spark_session = get_spark("LargeCapForecastPipeline")
+    spark = ConnectionFactory.create("spark", spark_session=spark_session)
 
     # Load configurations
     print("Loading configurations...")

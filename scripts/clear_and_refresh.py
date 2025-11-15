@@ -163,11 +163,11 @@ def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
         model_cfg = yaml.safe_load(cfg_path.read_text())
 
         # Create session for cross-model references
-        session = UniversalSession(ctx.spark, ctx.storage, ctx.repo)
+        session = UniversalSession(ctx.connection, ctx.storage, ctx.repo)
 
         # Build model
         model = CompanyModel(
-            ctx.spark,
+            ctx.connection,
             model_cfg=model_cfg,
             storage_cfg=ctx.storage,
             params={

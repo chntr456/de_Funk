@@ -62,7 +62,7 @@ def session(ctx):
     """Create UniversalSession."""
     # Note: 'company' model is deprecated but kept for backward compatibility
     return UniversalSession(
-        connection=ctx.spark,
+        connection=ctx.connection,
         storage_cfg=ctx.storage,
         repo_root=REPO_ROOT,
         models=['core', 'company', 'equity', 'corporate', 'forecast']
@@ -518,7 +518,7 @@ if __name__ == "__main__":
     ctx = RepoContext.from_repo_root()
     # Note: 'company' model is deprecated but kept for backward compatibility
     session = UniversalSession(
-        connection=ctx.spark,
+        connection=ctx.connection,
         storage_cfg=ctx.storage,
         repo_root=REPO_ROOT,
         models=['core', 'company', 'equity', 'corporate', 'forecast']
