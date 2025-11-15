@@ -12,41 +12,42 @@ This is NOT a testing script - it works with REAL data and REAL APIs.
 
 Usage:
     # Build all models with default settings
-    python scripts/build_all_models.py
+    python -m scripts.build_all_models
 
     # Build specific models
-    python scripts/build_all_models.py --models equity corporate
+    python -m scripts.build_all_models --models equity corporate
 
     # With date range for market data
-    python scripts/build_all_models.py --date-from 2024-01-01 --date-to 2024-12-31
+    python -m scripts.build_all_models --date-from 2024-01-01 --date-to 2024-12-31
 
     # With ticker limit (for testing/development)
-    python scripts/build_all_models.py --max-tickers 20
+    python -m scripts.build_all_models --max-tickers 20
 
     # Skip ingestion (just rebuild Silver from existing Bronze)
-    python scripts/build_all_models.py --skip-ingestion
+    python -m scripts.build_all_models --skip-ingestion
 
     # Parallel model building
-    python scripts/build_all_models.py --parallel
+    python -m scripts.build_all_models --parallel
 
     # Dry run (show what would be done)
-    python scripts/build_all_models.py --dry-run
+    python -m scripts.build_all_models --dry-run
 
 Examples:
     # Full production build (all domains, all data)
-    python scripts/build_all_models.py --date-from 2024-01-01
+    python -m scripts.build_all_models --date-from 2024-01-01
 
     # Development build (limited data, specific models)
-    python scripts/build_all_models.py --models equity --max-tickers 10 --date-from 2025-01-01
+    python -m scripts.build_all_models --models equity --max-tickers 10 --date-from 2025-01-01
 
     # Quick rebuild from existing Bronze
-    python scripts/build_all_models.py --skip-ingestion
+    python -m scripts.build_all_models --skip-ingestion
 """
 
 from __future__ import annotations
-import argparse
+
 import sys
 from pathlib import Path
+import argparse
 from typing import List, Dict, Optional, Set
 import logging
 from datetime import datetime, date, timedelta

@@ -13,7 +13,7 @@ Tests the complete domain model architecture with DUCKDB for REPORTING operation
 8. UI-ready data output
 
 Usage:
-    python scripts/test_domain_model_integration_duckdb.py
+    python -m scripts.test_domain_model_integration_duckdb
 
 Expected behavior:
 - All models should load successfully with DuckDB backend
@@ -25,8 +25,9 @@ Expected behavior:
 """
 
 import sys
-import logging
 from pathlib import Path
+
+import logging
 from typing import Dict, Any
 import traceback
 

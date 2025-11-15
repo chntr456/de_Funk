@@ -18,15 +18,16 @@ This test validates:
 - Spark backend operations
 
 Usage:
-    python scripts/test_domain_model_integration_spark.py
+    python -m scripts.test_domain_model_integration_spark
 
 Expected outcome:
     All tests should pass, confirming domain model architecture works with Spark
 """
 
 import sys
-import traceback
 from pathlib import Path
+
+import traceback
 from typing import Dict, Optional
 import logging
 

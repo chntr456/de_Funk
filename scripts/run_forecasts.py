@@ -9,14 +9,15 @@ stock prices and volumes. It:
 4. Stores forecast results and accuracy metrics in the Silver layer
 
 Usage:
-    python scripts/run_forecasts.py [--tickers AAPL,GOOGL] [--refresh-days 7] [--models arima_30d,prophet_30d]
+    python -m scripts.run_forecasts [--tickers AAPL,GOOGL] [--refresh-days 7] [--models arima_30d,prophet_30d]
 """
+
+import sys
+from pathlib import Path
 
 from __future__ import annotations
 import argparse
-import sys
 from datetime import datetime
-from pathlib import Path
 import yaml
 import json
 

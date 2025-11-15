@@ -6,13 +6,14 @@ This script builds weighted aggregate measure views in DuckDB from existing silv
 These views provide pre-calculated weighted indices across multiple stocks.
 
 Usage:
-    python scripts/build_weighted_aggregates_duckdb.py
-    python scripts/build_weighted_aggregates_duckdb.py --materialize  # Create tables instead of views
+    python -m scripts.build_weighted_aggregates_duckdb
+    python -m scripts.build_weighted_aggregates_duckdb --materialize  # Create tables instead of views
 """
 
-import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
+
+import argparse
 
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()

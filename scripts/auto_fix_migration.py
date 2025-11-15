@@ -9,14 +9,15 @@ This script automatically fixes common migration issues:
 4. Standardize imports
 
 Usage:
-    python scripts/auto_fix_migration.py  # Dry run (shows what would change)
-    python scripts/auto_fix_migration.py --apply  # Actually apply fixes
-    python scripts/auto_fix_migration.py --file path/to/file.py  # Fix single file
+    python -m scripts.auto_fix_migration  # Dry run (shows what would change)
+    python -m scripts.auto_fix_migration --apply  # Actually apply fixes
+    python -m scripts.auto_fix_migration --file path/to/file.py  # Fix single file
 """
 
 import sys
-import re
 from pathlib import Path
+
+import re
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 

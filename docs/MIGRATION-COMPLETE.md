@@ -91,11 +91,37 @@ repo_root = Path.cwd()
 ```
 
 ### After (Robust)
+
+**For Scripts:**
 ```python
+# scripts/my_script.py
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-# That's it! Works from anywhere, never breaks.
+# Run with: python -m scripts.my_script
+# Works from anywhere, never breaks!
+```
+
+**For Entry Points (Streamlit/FastAPI):**
+```python
+# app/ui/my_app.py
+import sys
+from pathlib import Path
+
+# Bootstrap for external tools
+_current_file = Path(__file__).resolve()
+_repo_root = None
+for _parent in [_current_file.parent] + list(_current_file.parents):
+    if (_parent / "configs").exists() and (_parent / "core").exists():
+        _repo_root = _parent
+        break
+if _repo_root and str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
+
+# Run with: streamlit run app/ui/my_app.py
 ```
 
 ---
@@ -207,9 +233,10 @@ def __init__(self, repo_root: Optional[Path] = None):
 
 1. **`docs/configuration.md`** - Configuration system guide
 2. **`docs/path-management-migration.md`** - Migration guide
-3. **`docs/refactoring-example.md`** - Real-world examples
-4. **`docs/ARCH-REF-002-summary.md`** - Architecture summary
-5. **`docs/MIGRATION-COMPLETE.md`** - This document
+3. **`docs/IMPORT-PATTERNS.md`** - **NEW!** Standardized import patterns by file type
+4. **`docs/refactoring-example.md`** - Real-world examples
+5. **`docs/ARCH-REF-002-summary.md`** - Architecture summary
+6. **`docs/MIGRATION-COMPLETE.md`** - This document
 
 ---
 
@@ -364,6 +391,39 @@ python scripts/validate_migration.py | grep "my_script.py"
 - See `docs/configuration.md` for configuration guide
 - See `utils/repo.py` for API documentation
 - Run validation for specific issues
+
+---
+
+## Final Patterns (Updated 2025-11-15)
+
+After user feedback, we standardized on **different patterns for different file types**:
+
+### Pattern 1: Scripts and Examples
+```bash
+# Run with python -m pattern (no bootstrap needed)
+python -m scripts.rebuild_model --model equity
+python -m examples.measure_framework.01_basic_usage
+```
+
+**Why:** The `python -m` pattern automatically adds the current directory to `sys.path`, eliminating the need for bootstrap code.
+
+### Pattern 2: Entry Points (Streamlit, FastAPI, etc.)
+```bash
+# Run with external tools (bootstrap needed)
+streamlit run app/ui/notebook_app_duckdb.py
+uvicorn app.api.main:app
+```
+
+**Why:** External tools run scripts in a clean environment where the repo isn't in `sys.path`, so bootstrap is required.
+
+### Pattern 3: Library Code
+- Use lazy import of `get_repo_root()` in constructors/functions
+- Never call `setup_repo_imports()` at module level
+- Accept `repo_root` as optional parameter
+
+**Why:** Library code is imported, not executed. Module-level side effects are anti-pattern.
+
+**See `docs/IMPORT-PATTERNS.md` for complete guide.**
 
 ---
 

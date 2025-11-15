@@ -9,16 +9,17 @@ This script validates that all Python files in the repository:
 4. Follow best practices
 
 Usage:
-    python scripts/validate_migration.py
-    python scripts/validate_migration.py --fix  # Auto-fix issues
-    python scripts/validate_migration.py --report  # Generate detailed report
+    python -m scripts.validate_migration
+    python -m scripts.validate_migration --fix  # Auto-fix issues
+    python -m scripts.validate_migration --report  # Generate detailed report
 """
 
 import sys
+from pathlib import Path
+
 import ast
 import importlib.util
 import subprocess
-from pathlib import Path
 from typing import List, Dict, Set, Tuple, Optional
 from dataclasses import dataclass, field
 import re
@@ -109,6 +110,10 @@ class MigrationValidator:
         try:
             content = file_path.read_text()
             lines = content.split('\n')
+
+            # Skip pattern checks for test_utils_repo.py - it tests these patterns
+            if file_path.name == 'test_utils_repo.py':
+                return issues
 
             for line_num, line in enumerate(lines, 1):
                 # Check for old path patterns
@@ -291,7 +296,7 @@ class MigrationValidator:
             print()
             print("Next steps:")
             print("1. Review issues above")
-            print("2. Run: python scripts/validate_migration.py --fix  (to auto-fix)")
+            print("2. Run: python -m scripts.validate_migration --fix  (to auto-fix)")
             print("3. Or manually fix issues following suggestions")
 
         return summary['failed'] == 0

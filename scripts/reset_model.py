@@ -9,22 +9,22 @@ reinitializes with empty schema-compliant tables.
 
 Usage:
     # Reset single model (with confirmation)
-    python scripts/reset_model.py --model equity
+    python -m scripts.reset_model --model equity
 
     # Reset with backup first
-    python scripts/reset_model.py --model equity --backup
+    python -m scripts.reset_model --model equity --backup
 
     # Reset and reinitialize empty tables
-    python scripts/reset_model.py --model equity --reinit
+    python -m scripts.reset_model --model equity --reinit
 
     # Reset specific tables only
-    python scripts/reset_model.py --model equity --tables fact_equity_prices dim_equity
+    python -m scripts.reset_model --model equity --tables fact_equity_prices dim_equity
 
     # Dry run (show what would be deleted)
-    python scripts/reset_model.py --model equity --dry-run
+    python -m scripts.reset_model --model equity --dry-run
 
     # Force reset without confirmation
-    python scripts/reset_model.py --model equity --force
+    python -m scripts.reset_model --model equity --force
 """
 
 import argparse
@@ -36,9 +36,9 @@ import shutil
 from datetime import datetime
 import yaml
 
-# Add project root to path
-project_root = get_repo_root()
-sys.path.insert(0, str(project_root))
+
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from models.registry import ModelRegistry
 

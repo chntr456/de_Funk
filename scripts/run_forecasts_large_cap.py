@@ -15,23 +15,24 @@ Market Cap Calculation:
 
 Usage:
     # Run for companies > $100M market cap (default)
-    python scripts/run_forecasts_large_cap.py
+    python -m scripts.run_forecasts_large_cap
 
     # Run for companies > $500M market cap
-    python scripts/run_forecasts_large_cap.py --min-market-cap 500000000
+    python -m scripts.run_forecasts_large_cap --min-market-cap 500000000
 
     # Run for companies > $1B market cap, specific models only
-    python scripts/run_forecasts_large_cap.py --min-market-cap 1000000000 --models arima_30d,prophet_30d
+    python -m scripts.run_forecasts_large_cap --min-market-cap 1000000000 --models arima_30d,prophet_30d
 
     # Dry run - show which companies would be processed
-    python scripts/run_forecasts_large_cap.py --dry-run
+    python -m scripts.run_forecasts_large_cap --dry-run
 """
+
+import sys
+from pathlib import Path
 
 from __future__ import annotations
 import argparse
-import sys
 from datetime import datetime
-from pathlib import Path
 import yaml
 import json
 
@@ -361,16 +362,16 @@ def main():
         epilog="""
 Examples:
   # Run for companies > $100M (default)
-  python scripts/run_forecasts_large_cap.py
+  python -m scripts.run_forecasts_large_cap
 
   # Run for companies > $500M
-  python scripts/run_forecasts_large_cap.py --min-market-cap 500000000
+  python -m scripts.run_forecasts_large_cap --min-market-cap 500000000
 
   # Run for companies > $1B with specific models
-  python scripts/run_forecasts_large_cap.py --min-market-cap 1000000000 --models arima_30d,prophet_30d
+  python -m scripts.run_forecasts_large_cap --min-market-cap 1000000000 --models arima_30d,prophet_30d
 
   # Dry run to see which companies would be processed
-  python scripts/run_forecasts_large_cap.py --dry-run
+  python -m scripts.run_forecasts_large_cap --dry-run
 
   # Common market cap thresholds:
   #   $100M   = 100000000  (Small Cap)
@@ -433,7 +434,6 @@ Examples:
         sys.exit(1)
     except Exception as e:
         print(f"\n✗ Pipeline failed with error: {str(e)}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)
 

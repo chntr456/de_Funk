@@ -8,6 +8,9 @@ Checks:
 3. How many ended up in dim_company (after deduplication)
 """
 
+import sys
+from pathlib import Path
+
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 

@@ -10,24 +10,25 @@ This script tests the complete data pipeline:
 
 Usage:
     # Full pipeline test
-    python scripts/test_pipeline_e2e.py --model equity
+    python -m scripts.test_pipeline_e2e --model equity
 
     # Test specific stages
-    python scripts/test_pipeline_e2e.py --model equity --stages bronze silver
+    python -m scripts.test_pipeline_e2e --model equity --stages bronze silver
 
     # Generate sample data and run pipeline
-    python scripts/test_pipeline_e2e.py --model equity --generate-sample
+    python -m scripts.test_pipeline_e2e --model equity --generate-sample
 
     # Quick test with minimal data
-    python scripts/test_pipeline_e2e.py --model equity --quick
+    python -m scripts.test_pipeline_e2e --model equity --quick
 
     # Verbose output
-    python scripts/test_pipeline_e2e.py --model equity --verbose
+    python -m scripts.test_pipeline_e2e --model equity --verbose
 """
 
-import argparse
 import sys
 from pathlib import Path
+
+import argparse
 from typing import List, Dict, Optional, Any
 import logging
 from datetime import datetime, timedelta

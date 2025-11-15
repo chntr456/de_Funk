@@ -5,24 +5,25 @@ This script runs the complete data ingestion pipeline from Polygon API to Silver
 It can be configured via command-line arguments for flexible execution.
 
 Usage:
-    python scripts/run_company_data_pipeline.py [options]
+    python -m scripts.run_company_data_pipeline [options]
 
 Examples:
     # Ingest last 30 days for all active tickers
-    python scripts/run_company_data_pipeline.py --days 30
+    python -m scripts.run_company_data_pipeline --days 30
 
     # Ingest specific date range for 100 tickers
-    python scripts/run_company_data_pipeline.py --from 2024-01-01 --to 2024-12-31 --max-tickers 100
+    python -m scripts.run_company_data_pipeline --from 2024-01-01 --to 2024-12-31 --max-tickers 100
 
     # Full historical ingest (all tickers, all available data)
-    python scripts/run_company_data_pipeline.py --from 2020-01-01 --to 2024-12-31
+    python -m scripts.run_company_data_pipeline --from 2020-01-01 --to 2024-12-31
 """
+
+import sys
+from pathlib import Path
 
 from __future__ import annotations
 import argparse
-import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
@@ -225,16 +226,16 @@ def main():
         epilog="""
 Examples:
   # Ingest last 30 days for all tickers
-  python scripts/run_company_data_pipeline.py --days 30
+  python -m scripts.run_company_data_pipeline --days 30
 
   # Ingest specific date range
-  python scripts/run_company_data_pipeline.py --from 2024-01-01 --to 2024-12-31
+  python -m scripts.run_company_data_pipeline --from 2024-01-01 --to 2024-12-31
 
   # Ingest with ticker limit (for testing)
-  python scripts/run_company_data_pipeline.py --days 7 --max-tickers 10
+  python -m scripts.run_company_data_pipeline --days 7 --max-tickers 10
 
   # Ingest without news (faster)
-  python scripts/run_company_data_pipeline.py --days 30 --no-news
+  python -m scripts.run_company_data_pipeline --days 30 --no-news
         """
     )
 
@@ -324,7 +325,6 @@ Examples:
         )
     except Exception as e:
         print(f"\n✗ Pipeline failed with error: {str(e)}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)
 

@@ -13,12 +13,13 @@ Tests:
 5. With and without filters
 
 Usage:
-    python scripts/test_dimension_selector_performance.py
+    python -m scripts.test_dimension_selector_performance
 """
 
 import sys
-import time
 from pathlib import Path
+
+import time
 from typing import Dict, Any
 
 from utils.repo import setup_repo_imports

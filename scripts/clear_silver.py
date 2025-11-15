@@ -7,19 +7,22 @@ Bronze data is preserved.
 
 Usage:
     # Clear all Silver data
-    python scripts/clear_silver.py
+    python -m scripts.clear_silver
 
     # Clear specific model
-    python scripts/clear_silver.py --model equity
+    python -m scripts.clear_silver --model equity
 
     # Dry run (show what would be deleted)
-    python scripts/clear_silver.py --dry-run
+    python -m scripts.clear_silver --dry-run
 """
 
 import argparse
 import shutil
 from pathlib import Path
 import sys
+
+
+from utils.repo import get_repo_root
 
 
 def clear_silver(model: str = None, dry_run: bool = False):
@@ -123,13 +126,13 @@ def main():
         epilog="""
 Examples:
   # Clear all Silver data
-  python scripts/clear_silver.py
+  python -m scripts.clear_silver
 
   # Clear only equity model
-  python scripts/clear_silver.py --model equity
+  python -m scripts.clear_silver --model equity
 
   # See what would be deleted without deleting
-  python scripts/clear_silver.py --dry-run
+  python -m scripts.clear_silver --dry-run
         """
     )
     parser.add_argument(

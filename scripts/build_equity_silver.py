@@ -9,12 +9,15 @@ This script:
 4. Writes parquet files to storage/silver/equity/
 
 Usage:
-    python scripts/build_equity_silver.py
+    python -m scripts.build_equity_silver
 
 Prerequisites:
     - Bronze data must exist (run ingestion first if needed)
     - Spark must be available for writes
 """
+
+import sys
+from pathlib import Path
 
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()

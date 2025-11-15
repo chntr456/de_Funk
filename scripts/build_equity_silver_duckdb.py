@@ -17,7 +17,7 @@ Limitations:
 - Missing any computed columns or business logic from model.build()
 
 Usage:
-    python scripts/build_equity_silver_duckdb.py
+    python -m scripts.build_equity_silver_duckdb
 
 Prerequisites:
     - Bronze data must exist
@@ -28,6 +28,9 @@ When to use:
     ✗ Production data pipelines (use build_equity_silver.py)
     ✗ When you need computed columns from model graph
 """
+
+import sys
+from pathlib import Path
 
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()

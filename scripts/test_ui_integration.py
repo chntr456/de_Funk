@@ -7,21 +7,22 @@ used by the Streamlit application.
 
 Usage:
     # Test all UI components
-    python scripts/test_ui_integration.py --model equity
+    python -m scripts.test_ui_integration --model equity
 
     # Test specific components
-    python scripts/test_ui_integration.py --model equity --components filters charts
+    python -m scripts.test_ui_integration --model equity --components filters charts
 
     # Performance benchmarking
-    python scripts/test_ui_integration.py --model equity --benchmark
+    python -m scripts.test_ui_integration --model equity --benchmark
 
     # Test with specific tickers
-    python scripts/test_ui_integration.py --model equity --tickers AAPL GOOGL MSFT
+    python -m scripts.test_ui_integration --model equity --tickers AAPL GOOGL MSFT
 """
 
-import argparse
 import sys
 from pathlib import Path
+
+import argparse
 from typing import List, Dict, Optional
 import logging
 import time

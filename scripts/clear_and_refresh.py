@@ -10,22 +10,23 @@ This script will:
 WARNING: This will delete all existing data!
 
 Usage:
-    python scripts/clear_and_refresh.py
+    python -m scripts.clear_and_refresh
 
     # Skip confirmation prompt
-    python scripts/clear_and_refresh.py --yes
+    python -m scripts.clear_and_refresh --yes
 
     # Only clear bronze (keep silver)
-    python scripts/clear_and_refresh.py --bronze-only
+    python -m scripts.clear_and_refresh --bronze-only
 
     # Only clear silver (keep bronze)
-    python scripts/clear_and_refresh.py --silver-only
+    python -m scripts.clear_and_refresh --silver-only
 """
 
 import sys
+from pathlib import Path
+
 import argparse
 import shutil
-from pathlib import Path
 from datetime import datetime, timedelta
 
 from utils.repo import setup_repo_imports
@@ -199,7 +200,6 @@ def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
 
     except Exception as e:
         print(f"✗ Silver build failed: {e}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)
 

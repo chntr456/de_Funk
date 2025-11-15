@@ -5,12 +5,15 @@ Build Silver Layer Script.
 Uses BaseModel.write_tables() to materialize the Silver layer from Bronze data.
 
 Usage:
-    python scripts/build_silver_layer.py [--model MODEL_NAME]
+    python -m scripts.build_silver_layer [--model MODEL_NAME]
 
 Examples:
-    python scripts/build_silver_layer.py --model company
-    python scripts/build_silver_layer.py --model macro
+    python -m scripts.build_silver_layer --model company
+    python -m scripts.build_silver_layer --model macro
 """
+
+import sys
+from pathlib import Path
 
 import argparse
 import json

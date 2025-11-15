@@ -6,27 +6,28 @@ This script runs the complete end-to-end pipeline:
 2. Forecasting: Generate time series forecasts for all tickers
 
 Usage:
-    python scripts/run_full_pipeline.py [options]
+    python -m scripts.run_full_pipeline [options]
 
 Examples:
     # Run full pipeline for last 30 days, all tickers
-    python scripts/run_full_pipeline.py --days 30
+    python -m scripts.run_full_pipeline --days 30
 
     # Run for specific date range with ticker limit (testing)
-    python scripts/run_full_pipeline.py --from 2024-01-01 --to 2024-12-31 --max-tickers 20
+    python -m scripts.run_full_pipeline --from 2024-01-01 --to 2024-12-31 --max-tickers 20
 
     # Run only forecasts (skip data refresh)
-    python scripts/run_full_pipeline.py --skip-data-refresh
+    python -m scripts.run_full_pipeline --skip-data-refresh
 
     # Run with specific models
-    python scripts/run_full_pipeline.py --days 90 --models arima_30d,prophet_30d
+    python -m scripts.run_full_pipeline --days 90 --models arima_30d,prophet_30d
 """
+
+import sys
+from pathlib import Path
 
 from __future__ import annotations
 import argparse
-import sys
 from datetime import datetime, timedelta
-from pathlib import Path
 
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
@@ -206,7 +207,6 @@ def run_full_pipeline(
         except Exception as e:
             error_msg = f"Forecasting failed: {str(e)}"
             print(f"✗ {error_msg}")
-            import traceback
             traceback.print_exc()
             results['forecasting'] = {
                 'status': 'failed',
@@ -288,22 +288,22 @@ def main():
         epilog="""
 Examples:
   # Run full pipeline for last 30 days
-  python scripts/run_full_pipeline.py --days 30
+  python -m scripts.run_full_pipeline --days 30
 
   # Run with specific date range
-  python scripts/run_full_pipeline.py --from 2024-01-01 --to 2024-12-31
+  python -m scripts.run_full_pipeline --from 2024-01-01 --to 2024-12-31
 
   # Run with ticker limit (for testing)
-  python scripts/run_full_pipeline.py --days 90 --max-tickers 20
+  python -m scripts.run_full_pipeline --days 90 --max-tickers 20
 
   # Skip data refresh, just run forecasts
-  python scripts/run_full_pipeline.py --skip-data-refresh
+  python -m scripts.run_full_pipeline --skip-data-refresh
 
   # Run with specific models
-  python scripts/run_full_pipeline.py --days 90 --models arima_30d,prophet_30d
+  python -m scripts.run_full_pipeline --days 90 --models arima_30d,prophet_30d
 
   # Full production run (all tickers, all models, 90 days)
-  python scripts/run_full_pipeline.py --days 90
+  python -m scripts.run_full_pipeline --days 90
         """
     )
 

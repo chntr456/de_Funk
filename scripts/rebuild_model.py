@@ -9,28 +9,30 @@ This script performs a complete model rebuild:
 
 Usage:
     # Rebuild entire model from Bronze
-    python scripts/rebuild_model.py --model equity
+    python -m scripts.rebuild_model --model equity
 
     # Rebuild specific tables
-    python scripts/rebuild_model.py --model equity --tables fact_equity_prices
+    python -m scripts.rebuild_model --model equity --tables fact_equity_prices
 
     # Rebuild with backup and validation
-    python scripts/rebuild_model.py --model equity --backup --validate
+    python -m scripts.rebuild_model --model equity --backup --validate
 
     # Dry run (show what would be done)
-    python scripts/rebuild_model.py --model equity --dry-run
+    python -m scripts.rebuild_model --model equity --dry-run
 
     # Use custom Bronze path
-    python scripts/rebuild_model.py --model equity --bronze-path storage/bronze/polygon
+    python -m scripts.rebuild_model --model equity --bronze-path storage/bronze/polygon
 """
 
 import argparse
+import sys
 from pathlib import Path
 from typing import List, Optional, Dict
 import logging
 from datetime import datetime
-from utils.repo import setup_repo_imports
 
+
+from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 try:
