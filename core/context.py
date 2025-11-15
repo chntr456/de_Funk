@@ -57,49 +57,13 @@ class RepoContext:
             from core.connection import ConnectionFactory
             connection = ConnectionFactory.create("spark", spark_session=spark)
 
-        # Build backward-compatible polygon_cfg dict
-        # BaseRegistry expects specific structure: base_urls dict, rate_limit_per_sec number
-        polygon_api = config.apis.get("polygon")
-        if polygon_api:
-            # Convert base_url string to base_urls dict format
-            base_urls = {"core": polygon_api.base_url}
+        # Pass through polygon config as-is (raw JSON from polygon_endpoints.json)
+        # No transformation needed - consumers already understand the structure
+        polygon_cfg = config.apis.get("polygon", {})
 
-            # Convert rate_limit calls/period to calls per second
-            rate_limit_per_sec = polygon_api.rate_limit_calls / polygon_api.rate_limit_period
-
-            polygon_cfg = {
-                "base_urls": base_urls,
-                "endpoints": polygon_api.endpoints,
-                "api_keys": polygon_api.api_keys,
-                "rate_limit_per_sec": rate_limit_per_sec,
-                "headers": polygon_api.headers,
-            }
-        else:
-            polygon_cfg = {}
-
-        # Build backward-compatible storage dict
-        # Models expect the original storage.json structure with "roots" nested dict
-        # Load raw storage.json to get all roots (including model-specific silver roots)
-        storage_json_path = config.repo_root / "configs" / "storage.json"
-        if storage_json_path.exists():
-            import json
-            with open(storage_json_path) as f:
-                storage_json = json.load(f)
-            roots = storage_json.get("roots", {})
-        else:
-            # Fallback: minimal roots if storage.json not found
-            roots = {
-                "bronze": str(config.storage.bronze_root),
-                "silver": str(config.storage.silver_root),
-            }
-
-        storage_dict = {
-            "roots": roots,
-            "tables": config.storage.tables,
-            "connection": {
-                "type": config.connection.type,
-            }
-        }
+        # Pass through storage config as-is (raw JSON from storage.json)
+        # ConfigLoader already loaded it - no transformation needed
+        storage_dict = config.storage
 
         return cls(
             repo=config.repo_root,

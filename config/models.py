@@ -143,8 +143,8 @@ class AppConfig:
     """
     repo_root: Path
     connection: ConnectionConfig
-    storage: StorageConfig
-    apis: Dict[str, APIConfig] = field(default_factory=dict)
+    storage: Dict[str, Any]  # Raw storage config (JSON dict from storage.json)
+    apis: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # Raw API configs (JSON dicts)
     log_level: str = "INFO"
     env_loaded: bool = False
 

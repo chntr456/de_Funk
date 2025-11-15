@@ -262,16 +262,16 @@ class ConfigLoader:
         """
         return StorageConfig.from_dict(storage_json, self._repo_root)
 
-    def _build_api_config(self, provider: str, endpoint_json: Dict[str, Any]) -> APIConfig:
+    def _inject_api_keys(self, provider: str, endpoint_json: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Build API configuration with credentials injection.
+        Inject API keys into raw endpoint config.
 
         Args:
             provider: Provider name (e.g., 'polygon', 'bls')
             endpoint_json: Loaded endpoint JSON data
 
         Returns:
-            APIConfig instance
+            Config dict with API keys injected
         """
         # Get API keys from environment
         api_keys = self._get_api_keys(provider)
@@ -282,7 +282,13 @@ class ConfigLoader:
                 f"Set {provider.upper()}_API_KEYS in .env file or environment."
             )
 
-        return APIConfig.from_dict(provider, endpoint_json, api_keys)
+        # Inject API keys into credentials section
+        config = endpoint_json.copy()
+        if "credentials" not in config:
+            config["credentials"] = {}
+        config["credentials"]["api_keys"] = api_keys
+
+        return config
 
     def load(
         self,
@@ -315,10 +321,10 @@ class ConfigLoader:
         # Build connection config
         connection = self._build_connection_config(connection_type, storage_json)
 
-        # Build storage config
-        storage = self._build_storage_config(storage_json)
+        # Keep storage as raw JSON dict (no transformation needed)
+        storage = storage_json
 
-        # Load API configs
+        # Load API configs (raw JSON with API keys injected)
         apis = {}
         api_providers = ["polygon_endpoints", "bls_endpoints", "chicago_endpoints"]
 
@@ -326,7 +332,8 @@ class ConfigLoader:
             provider_name = provider_file.replace("_endpoints", "")
             try:
                 endpoint_json = self._load_json_config(f"{provider_file}.json")
-                apis[provider_name] = self._build_api_config(provider_name, endpoint_json)
+                # Just inject API keys, don't transform structure
+                apis[provider_name] = self._inject_api_keys(provider_name, endpoint_json)
             except ValueError as e:
                 warnings.warn(f"Could not load {provider_name} API config: {e}")
 
