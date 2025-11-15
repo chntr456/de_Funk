@@ -105,13 +105,30 @@ class APIConfig:
     @classmethod
     def from_dict(cls, name: str, data: Dict[str, Any], api_keys: Optional[List[str]] = None) -> "APIConfig":
         """Create from endpoint JSON dictionary."""
+        # Handle both base_url (string) and base_urls (dict) formats
+        base_url = data.get("base_url", "")
+        if not base_url and "base_urls" in data:
+            # If base_urls dict exists, use the 'core' entry
+            base_url = data["base_urls"].get("core", "")
+
+        # Handle both rate_limit dict and rate_limit_per_sec number formats
+        if "rate_limit_per_sec" in data:
+            # Convert from calls per second to calls/period
+            rate_limit_per_sec = data["rate_limit_per_sec"]
+            rate_limit_calls = int(rate_limit_per_sec * 60)  # Scale to calls per minute
+            rate_limit_period = 60
+        else:
+            # Use nested rate_limit object
+            rate_limit_calls = data.get("rate_limit", {}).get("calls", 5)
+            rate_limit_period = data.get("rate_limit", {}).get("period", 60)
+
         return cls(
             name=name,
-            base_url=data.get("base_url", ""),
+            base_url=base_url,
             endpoints=data.get("endpoints", {}),
             api_keys=api_keys or [],
-            rate_limit_calls=data.get("rate_limit", {}).get("calls", 5),
-            rate_limit_period=data.get("rate_limit", {}).get("period", 60),
+            rate_limit_calls=rate_limit_calls,
+            rate_limit_period=rate_limit_period,
             headers=data.get("headers", {}),
             timeout=data.get("timeout", 30),
         )
