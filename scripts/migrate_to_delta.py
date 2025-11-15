@@ -67,8 +67,7 @@ class ParquetToDeltaMigrator:
 
         # Load model config
         self.registry = ModelRegistry(str(self.config_dir))
-        self.model = self.registry.get_model(model_name)
-        self.model_cfg = self.model.model_cfg
+        self.model_cfg = self.registry.get_model_config(model_name)
 
         logger.info(f"Initialized migrator for model: {model_name}")
 
