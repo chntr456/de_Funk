@@ -77,12 +77,19 @@ class ModelRebuilder:
         # Get raw config dict (not ModelConfig object)
         self.model_cfg = self.registry.get_model_config(model_name)
 
+        # Load storage configuration to get bronze root and table mappings
+        from config.loader import ConfigLoader
+        config_loader = ConfigLoader(repo_root=repo_root)
+        self.storage_config = config_loader._load_json_config("storage.json")
+        self.bronze_root = Path(self.storage_config.get('roots', {}).get('bronze', 'storage/bronze'))
+
         # Initialize connection if available
         self.conn = None
         if DUCKDB_AVAILABLE:
             self.conn = DuckDBConnection()
 
         logger.info(f"Initialized rebuilder for model: {model_name}")
+        logger.info(f"Bronze root: {repo_root / self.bronze_root}")
 
     def rebuild_model(
         self,
@@ -191,31 +198,34 @@ class ModelRebuilder:
 
         logger.info(f"    Rebuilding {table_name}...")
 
-        # Check if we have a Bronze path
-        if not self.bronze_path:
-            # Try to infer from model config
-            bronze_hint = self.model_cfg.get('bronze', {}).get('path')
-            if bronze_hint:
-                self.bronze_path = Path(bronze_hint)
-            else:
-                return {
-                    'success': False,
-                    'error': 'Bronze path not specified and cannot be inferred from model config'
-                }
+        # Determine bronze data source for this table
+        # Look up in storage.json table mappings
+        table_config = self.storage_config.get('tables', {}).get(table_name, {})
 
-        if not self.bronze_path.exists():
+        if not table_config:
+            # Table not in storage.json - may need to derive from source tables
+            logger.warning(f"    Table {table_name} not found in storage.json, attempting to derive...")
+            # For derived tables like equity_prices_with_company, we'd need transformation logic
             return {
                 'success': False,
-                'error': f'Bronze path does not exist: {self.bronze_path}'
+                'error': f'Table {table_name} not defined in storage.json and transformation logic not implemented'
             }
 
-        # Check if Bronze data exists for this table
-        bronze_table_path = self._find_bronze_data(table_name)
-
-        if not bronze_table_path:
+        # Check if this table has bronze data
+        if table_config.get('root') != 'bronze':
+            logger.warning(f"    Table {table_name} is not a bronze table (root={table_config.get('root')})")
             return {
                 'success': False,
-                'error': f'No Bronze data found for table {table_name}'
+                'error': f'Table {table_name} is not sourced from bronze layer'
+            }
+
+        # Construct bronze table path
+        bronze_table_path = repo_root / self.bronze_root / table_config.get('rel', table_name)
+
+        if not bronze_table_path.exists():
+            return {
+                'success': False,
+                'error': f'Bronze data does not exist: {bronze_table_path}'
             }
 
         # Read Bronze data
