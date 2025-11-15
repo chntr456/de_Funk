@@ -111,7 +111,7 @@ class AllModelBuilder:
             # Initialize UniversalSession for cross-model references
             from models.api.session import UniversalSession
             self.session = UniversalSession(
-                connection=self.ctx.spark,
+                connection=self.ctx.connection,  # Use SparkConnection wrapper, not raw spark
                 storage_cfg=self.ctx.storage,
                 repo_root=repo_root,
                 models=None  # Don't pre-load, load on demand
