@@ -542,7 +542,7 @@ class AllModelBuilder:
 
             # Instantiate model
             model = model_class(
-                connection=self.ctx.spark,
+                connection=self.ctx.connection,  # Use SparkConnection wrapper
                 storage_cfg=self.ctx.storage,
                 model_cfg=model_cfg,
                 params={
