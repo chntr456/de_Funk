@@ -1,8 +1,11 @@
 """
 Environment Variable Loader for de_Funk
 
-This module handles loading API keys and other sensitive configuration
-from environment variables and .env files.
+DEPRECATED: This module is deprecated in favor of the unified config system.
+Please use config.ConfigLoader for new code.
+
+This module is kept for backward compatibility but will be removed in a future version.
+Functions are still available but now recommend using the centralized config system.
 """
 
 import os
@@ -194,5 +197,15 @@ def inject_credentials_into_config(config: dict, provider: str) -> dict:
     return config
 
 
-# Auto-load .env on module import
-load_dotenv()
+# REMOVED: Auto-load on import (caused side effects)
+# The new config.ConfigLoader handles .env loading explicitly.
+# For backward compatibility, auto-load is now opt-in via environment variable.
+if os.getenv("LEGACY_ENV_AUTOLOAD", "").lower() == "true":
+    load_dotenv()
+    warnings.warn(
+        "LEGACY_ENV_AUTOLOAD is deprecated. "
+        "Please migrate to config.ConfigLoader for explicit configuration management. "
+        "See docs/configuration.md for migration guide.",
+        DeprecationWarning,
+        stacklevel=2
+    )

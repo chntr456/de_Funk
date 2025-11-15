@@ -1,0 +1,338 @@
+"""
+Centralized configuration loader.
+
+This module provides the main ConfigLoader class that handles all configuration loading
+with proper precedence, validation, and error handling.
+"""
+
+import json
+import os
+import warnings
+from pathlib import Path
+from typing import Optional, Dict, Any, List
+
+from .models import (
+    AppConfig,
+    ConnectionConfig,
+    StorageConfig,
+    APIConfig,
+    SparkConfig,
+    DuckDBConfig,
+)
+from .constants import (
+    DEFAULT_CONNECTION_TYPE,
+    DEFAULT_LOG_LEVEL,
+    DEFAULT_SPARK_DRIVER_MEMORY,
+    DEFAULT_SPARK_EXECUTOR_MEMORY,
+    DEFAULT_SPARK_SHUFFLE_PARTITIONS,
+    DEFAULT_SPARK_TIMEZONE,
+    DEFAULT_SPARK_LEGACY_TIME_PARSER,
+    DEFAULT_DUCKDB_PATH,
+    DEFAULT_DUCKDB_MEMORY_LIMIT,
+    DEFAULT_DUCKDB_THREADS,
+    REPO_MARKERS,
+)
+
+
+class ConfigLoader:
+    """
+    Centralized configuration loader.
+
+    Handles loading configuration from multiple sources with clear precedence:
+    1. Explicit parameters (highest priority)
+    2. Environment variables
+    3. Configuration files
+    4. Default values (lowest priority)
+
+    Usage:
+        loader = ConfigLoader()
+        config = loader.load()  # Auto-discover repo root
+
+        # Or with explicit repo root
+        loader = ConfigLoader(repo_root="/path/to/repo")
+        config = loader.load(connection_type="spark")
+    """
+
+    def __init__(self, repo_root: Optional[Path] = None):
+        """
+        Initialize ConfigLoader.
+
+        Args:
+            repo_root: Optional explicit repo root. If not provided, will auto-discover.
+        """
+        self._repo_root = Path(repo_root) if repo_root else self._discover_repo_root()
+        self._env_loaded = False
+
+    @staticmethod
+    def _discover_repo_root(start_path: Optional[Path] = None) -> Path:
+        """
+        Discover repository root by walking up from start_path.
+
+        Looks for directories containing repo markers (configs/, core/, .git/).
+
+        Args:
+            start_path: Starting path for search. Defaults to current working directory.
+
+        Returns:
+            Path to repository root.
+
+        Raises:
+            ValueError: If repo root cannot be found.
+        """
+        current = Path(start_path) if start_path else Path.cwd()
+
+        # Walk up directory tree
+        for parent in [current] + list(current.parents):
+            # Check if this directory contains all markers
+            if all((parent / marker).exists() for marker in REPO_MARKERS):
+                return parent
+
+        raise ValueError(
+            f"Could not find repository root from {current}. "
+            f"Looking for directories containing: {', '.join(REPO_MARKERS)}"
+        )
+
+    def load_env(self, env_file: Optional[Path] = None) -> None:
+        """
+        Load environment variables from .env file.
+
+        Args:
+            env_file: Optional explicit path to .env file. If not provided,
+                     looks for .env in repo root.
+        """
+        if self._env_loaded:
+            return
+
+        # Find .env file
+        if env_file is None:
+            env_file = self._repo_root / ".env"
+
+        if not env_file.exists():
+            warnings.warn(f"No .env file found at {env_file}. Using environment variables only.")
+            self._env_loaded = True
+            return
+
+        # Parse and load .env file
+        try:
+            with open(env_file, "r") as f:
+                for line in f:
+                    line = line.strip()
+
+                    # Skip empty lines and comments
+                    if not line or line.startswith("#"):
+                        continue
+
+                    # Parse KEY=VALUE
+                    if "=" in line:
+                        key, value = line.split("=", 1)
+                        key = key.strip()
+                        value = value.strip()
+
+                        # Remove quotes if present
+                        if value.startswith('"') and value.endswith('"'):
+                            value = value[1:-1]
+                        elif value.startswith("'") and value.endswith("'"):
+                            value = value[1:-1]
+
+                        # Only set if not already in environment
+                        if key not in os.environ:
+                            os.environ[key] = value
+
+            self._env_loaded = True
+
+        except Exception as e:
+            warnings.warn(f"Failed to load .env file: {e}")
+            self._env_loaded = True
+
+    def _get_api_keys(self, provider: str) -> List[str]:
+        """
+        Get API keys for a provider from environment.
+
+        Args:
+            provider: Provider name (e.g., 'polygon', 'bls', 'chicago')
+
+        Returns:
+            List of API keys (empty if not found)
+        """
+        env_var = f"{provider.upper()}_API_KEYS"
+        keys_str = os.getenv(env_var, "").strip()
+
+        if not keys_str:
+            return []
+
+        # Split by comma and clean
+        keys = [k.strip() for k in keys_str.split(",") if k.strip()]
+        return keys
+
+    def _load_json_config(self, filename: str) -> Dict[str, Any]:
+        """
+        Load JSON configuration file.
+
+        Args:
+            filename: Name of JSON file in configs/ directory
+
+        Returns:
+            Parsed JSON dictionary
+
+        Raises:
+            ValueError: If file not found or invalid JSON
+        """
+        config_path = self._repo_root / "configs" / filename
+
+        if not config_path.exists():
+            raise ValueError(f"Configuration file not found: {config_path}")
+
+        try:
+            with open(config_path, "r") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in {config_path}: {e}")
+
+    def _build_connection_config(
+        self,
+        connection_type: Optional[str] = None,
+        storage_json: Optional[Dict[str, Any]] = None,
+    ) -> ConnectionConfig:
+        """
+        Build connection configuration with proper precedence.
+
+        Precedence: explicit param > env var > storage.json > default
+
+        Args:
+            connection_type: Explicit connection type
+            storage_json: Loaded storage.json data
+
+        Returns:
+            ConnectionConfig instance
+        """
+        # Determine connection type with precedence
+        conn_type = (
+            connection_type
+            or os.getenv("CONNECTION_TYPE")
+            or (storage_json or {}).get("connection", {}).get("type")
+            or DEFAULT_CONNECTION_TYPE
+        )
+
+        # Build type-specific config
+        if conn_type == "spark":
+            spark_config = SparkConfig(
+                driver_memory=os.getenv("SPARK_DRIVER_MEMORY", DEFAULT_SPARK_DRIVER_MEMORY),
+                executor_memory=os.getenv("SPARK_EXECUTOR_MEMORY", DEFAULT_SPARK_EXECUTOR_MEMORY),
+                shuffle_partitions=int(os.getenv("SPARK_SHUFFLE_PARTITIONS", DEFAULT_SPARK_SHUFFLE_PARTITIONS)),
+                timezone=os.getenv("SPARK_TIMEZONE", DEFAULT_SPARK_TIMEZONE),
+                legacy_time_parser=os.getenv("SPARK_LEGACY_TIME_PARSER", str(DEFAULT_SPARK_LEGACY_TIME_PARSER)).lower() == "true",
+            )
+            return ConnectionConfig(type="spark", spark=spark_config)
+
+        elif conn_type == "duckdb":
+            db_path = Path(os.getenv("DUCKDB_PATH", DEFAULT_DUCKDB_PATH))
+            if not db_path.is_absolute():
+                db_path = self._repo_root / db_path
+
+            duckdb_config = DuckDBConfig(
+                database_path=db_path,
+                memory_limit=os.getenv("DUCKDB_MEMORY_LIMIT", DEFAULT_DUCKDB_MEMORY_LIMIT),
+                threads=int(os.getenv("DUCKDB_THREADS", DEFAULT_DUCKDB_THREADS)),
+            )
+            return ConnectionConfig(type="duckdb", duckdb=duckdb_config)
+
+        else:
+            raise ValueError(f"Unknown connection type: {conn_type}")
+
+    def _build_storage_config(self, storage_json: Dict[str, Any]) -> StorageConfig:
+        """
+        Build storage configuration from storage.json.
+
+        Args:
+            storage_json: Loaded storage.json data
+
+        Returns:
+            StorageConfig instance
+        """
+        return StorageConfig.from_dict(storage_json, self._repo_root)
+
+    def _build_api_config(self, provider: str, endpoint_json: Dict[str, Any]) -> APIConfig:
+        """
+        Build API configuration with credentials injection.
+
+        Args:
+            provider: Provider name (e.g., 'polygon', 'bls')
+            endpoint_json: Loaded endpoint JSON data
+
+        Returns:
+            APIConfig instance
+        """
+        # Get API keys from environment
+        api_keys = self._get_api_keys(provider)
+
+        if not api_keys:
+            warnings.warn(
+                f"No API keys found for {provider}. "
+                f"Set {provider.upper()}_API_KEYS in .env file or environment."
+            )
+
+        return APIConfig.from_dict(provider, endpoint_json, api_keys)
+
+    def load(
+        self,
+        connection_type: Optional[str] = None,
+        load_env: bool = True,
+    ) -> AppConfig:
+        """
+        Load complete application configuration.
+
+        Args:
+            connection_type: Optional explicit connection type ('spark' or 'duckdb')
+            load_env: Whether to load .env file. Default True.
+
+        Returns:
+            Complete AppConfig instance
+
+        Raises:
+            ValueError: If configuration is invalid or required files missing
+        """
+        # Load environment if requested
+        if load_env:
+            self.load_env()
+
+        # Load JSON configs
+        try:
+            storage_json = self._load_json_config("storage.json")
+        except ValueError as e:
+            raise ValueError(f"Failed to load storage configuration: {e}")
+
+        # Build connection config
+        connection = self._build_connection_config(connection_type, storage_json)
+
+        # Build storage config
+        storage = self._build_storage_config(storage_json)
+
+        # Load API configs
+        apis = {}
+        api_providers = ["polygon_endpoints", "bls_endpoints", "chicago_endpoints"]
+
+        for provider_file in api_providers:
+            provider_name = provider_file.replace("_endpoints", "")
+            try:
+                endpoint_json = self._load_json_config(f"{provider_file}.json")
+                apis[provider_name] = self._build_api_config(provider_name, endpoint_json)
+            except ValueError as e:
+                warnings.warn(f"Could not load {provider_name} API config: {e}")
+
+        # Get log level
+        log_level = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
+
+        # Build final config
+        return AppConfig(
+            repo_root=self._repo_root,
+            connection=connection,
+            storage=storage,
+            apis=apis,
+            log_level=log_level,
+            env_loaded=self._env_loaded,
+        )
+
+    @property
+    def repo_root(self) -> Path:
+        """Get repository root path."""
+        return self._repo_root
