@@ -78,7 +78,20 @@ class LineChartRenderer(BaseExhibitRenderer):
 
             # Update axis labels
             x_label = self.exhibit.x_axis.label or x_col.replace('_', ' ').title()
-            y_label = self.exhibit.y_axis.label if hasattr(self.exhibit, 'y_axis') and self.exhibit.y_axis and self.exhibit.y_axis.label else "Value"
+
+            # Get y-axis label, ensuring it's always a string
+            if hasattr(self.exhibit, 'y_axis') and self.exhibit.y_axis and hasattr(self.exhibit.y_axis, 'label') and self.exhibit.y_axis.label:
+                y_label = self.exhibit.y_axis.label
+                # If label is a list (shouldn't happen but handle gracefully), join it
+                if isinstance(y_label, list):
+                    y_label = ", ".join(str(l) for l in y_label)
+            else:
+                # Default label for multiple measures
+                if len(self.selected_measures) > 1:
+                    y_label = "Value"
+                else:
+                    y_label = self.selected_measures[0].replace('_', ' ').title()
+
             fig.update_xaxes(title_text=x_label)
             fig.update_yaxes(title_text=y_label)
 
