@@ -13,7 +13,7 @@ def demo_auto_join():
     """Demonstrate transparent auto-join functionality."""
 
     # Setup
-    repo_root = Path(__file__).parent.parent
+    repo_root = get_repo_root()
     storage_cfg = {
         'bronze_root': repo_root / 'storage/bronze',
         'silver_root': repo_root / 'storage/silver'

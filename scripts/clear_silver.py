@@ -30,7 +30,7 @@ def clear_silver(model: str = None, dry_run: bool = False):
         model: Specific model to clear (e.g., 'equity', 'corporate'). If None, clears all.
         dry_run: If True, only show what would be deleted without actually deleting
     """
-    repo_root = Path(__file__).parent.parent
+    repo_root = get_repo_root()
     silver_root = repo_root / "storage" / "silver"
 
     if not silver_root.exists():

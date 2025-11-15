@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 # Add repository root to Python path
-REPO_ROOT = Path(__file__).parent.parent.resolve()
+REPO_ROOT = get_repo_root().resolve()
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

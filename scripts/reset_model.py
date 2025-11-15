@@ -37,7 +37,7 @@ from datetime import datetime
 import yaml
 
 # Add project root to path
-project_root = Path(__file__).parent.parent
+project_root = get_repo_root()
 sys.path.insert(0, str(project_root))
 
 from models.registry import ModelRegistry

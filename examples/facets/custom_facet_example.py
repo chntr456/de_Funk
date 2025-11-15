@@ -21,7 +21,8 @@ from pyspark.sql.types import StringType, DoubleType, LongType, DateType
 # Import base facet class
 import sys
 from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from datapipelines.facets.base_facet import Facet
 

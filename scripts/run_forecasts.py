@@ -104,7 +104,7 @@ def run_forecast_pipeline(
 
     # Load configurations
     print("Loading configurations...")
-    config_root = Path(__file__).parent.parent / "configs"
+    config_root = get_repo_root() / "configs"
 
     storage_cfg = load_config(config_root / "storage.json")
     forecast_cfg = load_config(config_root / "models" / "forecast.yaml")
@@ -142,7 +142,7 @@ def run_forecast_pipeline(
     print("-" * 80)
 
     # Create universal session for cross-model access
-    repo_root = Path(__file__).parent.parent
+    repo_root = get_repo_root()
     session = UniversalSession(
         connection=spark,
         storage_cfg=storage_cfg,

@@ -20,7 +20,8 @@ from pathlib import Path
 from typing import Optional
 
 # Add de_Funk root to path
-sys.path.append(str(Path(__file__).parent.parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from pyspark.sql import DataFrame
 from models.base.model import BaseModel

@@ -55,7 +55,7 @@ def create_session():
     }
 
     # Repository root
-    repo_root = Path(__file__).parent.parent.parent
+    repo_root = get_repo_root()
 
     # Create UniversalSession
     session = UniversalSession(
