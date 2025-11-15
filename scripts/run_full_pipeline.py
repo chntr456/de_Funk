@@ -22,10 +22,10 @@ Examples:
     python -m scripts.run_full_pipeline --days 90 --models arima_30d,prophet_30d
 """
 
+from __future__ import annotations
+
 import sys
 from pathlib import Path
-
-from __future__ import annotations
 import argparse
 from datetime import datetime, timedelta
 
