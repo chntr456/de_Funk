@@ -324,18 +324,19 @@ class ConfigLoader:
         # Keep storage as raw JSON dict (no transformation needed)
         storage = storage_json
 
-        # Load API configs (raw JSON with API keys injected)
+        # Auto-discover API configs (any *_endpoints.json file)
         apis = {}
-        api_providers = ["polygon_endpoints", "bls_endpoints", "chicago_endpoints"]
+        configs_dir = self._repo_root / "configs"
 
-        for provider_file in api_providers:
-            provider_name = provider_file.replace("_endpoints", "")
-            try:
-                endpoint_json = self._load_json_config(f"{provider_file}.json")
-                # Just inject API keys, don't transform structure
-                apis[provider_name] = self._inject_api_keys(provider_name, endpoint_json)
-            except ValueError as e:
-                warnings.warn(f"Could not load {provider_name} API config: {e}")
+        if configs_dir.exists():
+            for endpoint_file in configs_dir.glob("*_endpoints.json"):
+                provider_name = endpoint_file.stem.replace("_endpoints", "")
+                try:
+                    endpoint_json = self._load_json_config(endpoint_file.name)
+                    # Just inject API keys, don't transform structure
+                    apis[provider_name] = self._inject_api_keys(provider_name, endpoint_json)
+                except ValueError as e:
+                    warnings.warn(f"Could not load {provider_name} API config: {e}")
 
         # Get log level
         log_level = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()

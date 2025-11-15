@@ -13,11 +13,27 @@ class RepoContext:
     """
     repo: Path
     spark: Any  # Kept for backward compatibility
-    polygon_cfg: Dict[str, Any]
     storage: Dict[str, Any]
     connection: Optional[Any] = None  # DataConnection (DuckDB or Spark)
     connection_type: str = "spark"  # Default to spark for backward compatibility
     _config: Optional[AppConfig] = None  # Internal: full typed config
+
+    @property
+    def polygon_cfg(self) -> Dict[str, Any]:
+        """Get Polygon API configuration (backward compatibility property)."""
+        return self._config.apis.get("polygon", {}) if self._config else {}
+
+    def get_api_config(self, provider: str) -> Dict[str, Any]:
+        """
+        Get API configuration for any provider.
+
+        Args:
+            provider: Provider name (e.g., 'polygon', 'bls', 'fred')
+
+        Returns:
+            API configuration dict (empty if not found)
+        """
+        return self._config.apis.get(provider, {}) if self._config else {}
 
     @classmethod
     def from_repo_root(cls, connection_type: Optional[str] = None) -> "RepoContext":
@@ -57,10 +73,6 @@ class RepoContext:
             from core.connection import ConnectionFactory
             connection = ConnectionFactory.create("spark", spark_session=spark)
 
-        # Pass through polygon config as-is (raw JSON from polygon_endpoints.json)
-        # No transformation needed - consumers already understand the structure
-        polygon_cfg = config.apis.get("polygon", {})
-
         # Pass through storage config as-is (raw JSON from storage.json)
         # ConfigLoader already loaded it - no transformation needed
         storage_dict = config.storage
@@ -68,7 +80,6 @@ class RepoContext:
         return cls(
             repo=config.repo_root,
             spark=spark,
-            polygon_cfg=polygon_cfg,
             storage=storage_dict,
             connection=connection,
             connection_type=config.connection.type,
