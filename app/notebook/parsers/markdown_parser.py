@@ -63,7 +63,10 @@ class MarkdownNotebookParser:
         Args:
             repo_root: Repository root path for resolving relative paths
         """
-        self.repo_root = repo_root or Path.cwd()
+        if repo_root is None:
+            from utils.repo import get_repo_root
+            repo_root = get_repo_root()
+        self.repo_root = repo_root
 
     def parse_file(self, notebook_path: str) -> NotebookConfig:
         """

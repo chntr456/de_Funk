@@ -53,9 +53,8 @@ from datetime import datetime, date, timedelta
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from models.registry import ModelRegistry
 from core.context import RepoContext
@@ -113,7 +112,7 @@ class AllModelBuilder:
             self.session = UniversalSession(
                 connection=self.ctx.spark,
                 storage_cfg=self.ctx.storage,
-                repo_root=Path.cwd(),
+                repo_root=repo_root,
                 models=None  # Don't pre-load, load on demand
             )
             logger.info("  ✓ Universal session initialized")

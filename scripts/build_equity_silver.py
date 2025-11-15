@@ -16,9 +16,8 @@ Prerequisites:
     - Spark must be available for writes
 """
 
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from core.context import RepoContext
 from models.api.session import UniversalSession
@@ -46,7 +45,7 @@ def main():
         session = UniversalSession(
             connection=ctx.connection,  # Use SparkConnection wrapper, not raw SparkSession
             storage_cfg=ctx.storage,
-            repo_root=Path.cwd()
+            repo_root=repo_root
         )
         print("   ✓ Session created")
 

@@ -5,11 +5,8 @@ Basic Usage Examples - Unified Measure Framework
 Demonstrates basic measure calculations with the new framework.
 """
 
-import sys
-from pathlib import Path
-
-# Add parent to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from core.context import RepoContext
 

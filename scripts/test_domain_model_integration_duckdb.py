@@ -30,9 +30,8 @@ from pathlib import Path
 from typing import Dict, Any
 import traceback
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 # Configure logging
 logging.basicConfig(
@@ -134,7 +133,7 @@ class DomainModelIntegrationTest:
             self.session = UniversalSession(
                 connection=ctx.connection,
                 storage_cfg=ctx.storage,
-                repo_root=Path.cwd()
+                repo_root=repo_root
             )
             print("  ✓ UniversalSession created")
 

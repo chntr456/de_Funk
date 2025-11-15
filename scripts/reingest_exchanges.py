@@ -18,8 +18,8 @@ import argparse
 from pathlib import Path
 from datetime import date
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from core.context import RepoContext
 from datapipelines.providers.polygon.facets.exchange_facet import ExchangesFacet

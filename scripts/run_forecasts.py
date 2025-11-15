@@ -20,8 +20,8 @@ from pathlib import Path
 import yaml
 import json
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from models.implemented.forecast import ForecastModel
 from models.api.session import UniversalSession

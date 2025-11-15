@@ -28,8 +28,8 @@ import shutil
 from pathlib import Path
 from datetime import datetime, timedelta
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 
 def confirm_action(prompt: str) -> bool:

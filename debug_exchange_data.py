@@ -21,8 +21,8 @@ To re-ingest exchanges:
   # This will fetch fresh data from Polygon API with MIC codes
 """
 
-import sys
-sys.path.insert(0, '/home/user/de_Funk')
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from core.duckdb_connection import DuckDBConnection
 

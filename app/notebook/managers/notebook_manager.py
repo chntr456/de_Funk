@@ -56,7 +56,10 @@ class NotebookManager:
             notebooks_root: Root directory for notebooks (defaults to repo_root/configs/notebooks)
         """
         self.session = universal_session
-        self.repo_root = repo_root or Path.cwd()
+        if repo_root is None:
+            from utils.repo import get_repo_root
+            repo_root = get_repo_root()
+        self.repo_root = repo_root
 
         # Initialize markdown parser (only format supported)
         self.markdown_parser = MarkdownNotebookParser(self.repo_root)

@@ -24,8 +24,8 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from core.context import RepoContext
 from utils.pipeline_tracker import PipelineRunTracker

@@ -19,9 +19,8 @@ import streamlit as st
 from pathlib import Path
 from typing import Dict, Any
 
-# Add parent directory to path for imports
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from core.context import RepoContext
 from models.registry import ModelRegistry
