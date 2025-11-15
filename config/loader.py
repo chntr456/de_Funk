@@ -30,8 +30,16 @@ from .constants import (
     DEFAULT_DUCKDB_PATH,
     DEFAULT_DUCKDB_MEMORY_LIMIT,
     DEFAULT_DUCKDB_THREADS,
-    REPO_MARKERS,
 )
+
+# Import centralized repo root discovery
+try:
+    from utils.repo import get_repo_root
+    _HAS_UTILS_REPO = True
+except ImportError:
+    # Fallback if utils.repo doesn't exist yet (during migration)
+    _HAS_UTILS_REPO = False
+    from .constants import REPO_MARKERS
 
 
 class ConfigLoader:
@@ -68,7 +76,7 @@ class ConfigLoader:
         """
         Discover repository root by walking up from start_path.
 
-        Looks for directories containing repo markers (configs/, core/, .git/).
+        Now delegates to the centralized utils.repo.get_repo_root() function.
 
         Args:
             start_path: Starting path for search. Defaults to current working directory.
@@ -79,11 +87,14 @@ class ConfigLoader:
         Raises:
             ValueError: If repo root cannot be found.
         """
+        # Use centralized repo root discovery
+        if _HAS_UTILS_REPO:
+            return get_repo_root(start_path)
+
+        # Fallback to original implementation (for backward compatibility)
         current = Path(start_path) if start_path else Path.cwd()
 
-        # Walk up directory tree
         for parent in [current] + list(current.parents):
-            # Check if this directory contains all markers
             if all((parent / marker).exists() for marker in REPO_MARKERS):
                 return parent
 
