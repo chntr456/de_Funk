@@ -6,7 +6,9 @@
 
 ## Overview
 
-de_Funk uses a **directed acyclic graph (DAG)** to define dimensional models. This graph-based approach enables declarative modeling where you define **what** you want (schema structure) in YAML, and the framework figures out **how** to build it.
+de_Funk is a graphical overlay to a unified relational model enabling low-code interactions with data warehouses. It uses a **directed acyclic graph (DAG)** to define dimensional models declaratively.
+
+This graph-based approach enables you to define **what** you want (schema structure) in YAML, and the framework figures out **how** to build it - regardless of domain or data source.
 
 ### Core Concept
 

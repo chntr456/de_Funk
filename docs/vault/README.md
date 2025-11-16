@@ -9,7 +9,11 @@ Version: 1.0
 
 ## Overview
 
-This documentation vault provides in-depth technical reference for every component in the de_Funk system. Each section includes method-level documentation, architecture explanations, and usage examples.
+This documentation vault provides in-depth technical reference for every component in the de_Funk system.
+
+**de_Funk** is a graphical overlay to a unified relational model enabling low-code interactions with data warehouses. It uses YAML-driven graph-based modeling to define dimensional schemas declaratively, abstracting away backend complexity.
+
+Each section includes method-level documentation, architecture explanations, and usage examples.
 
 ## Documentation Structure
 
