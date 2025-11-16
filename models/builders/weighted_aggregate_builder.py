@@ -124,36 +124,72 @@ class WeightedAggregateBuilder:
         source = measure.get('source', 'fact_prices.close')
         group_by = measure.get('group_by', ['trade_date'])
 
-        # Parse source (e.g., "fact_prices.close" -> table="fact_prices", column="close")
+        # Parse source (e.g., "fact_equity_prices.close" -> table="fact_equity_prices", column="close")
         if '.' in source:
             source_table, value_column = source.rsplit('.', 1)
         else:
             raise ValueError(f"Source must be in format 'table.column', got: {source}")
+
+        # Build table reference - use actual table path for Parquet files
+        # DuckDB can query Parquet files directly
+        table_ref = self._get_table_reference(source_table)
 
         # Build group by clause
         group_cols = ', '.join(group_by)
 
         # Generate SQL based on weighting method
         if method == 'equal':
-            return self._sql_equal_weighted(source_table, value_column, group_cols)
+            return self._sql_equal_weighted(table_ref, value_column, group_cols)
 
         elif method == 'volume':
-            return self._sql_volume_weighted(source_table, value_column, group_cols)
+            return self._sql_volume_weighted(table_ref, value_column, group_cols)
 
         elif method == 'market_cap':
-            return self._sql_market_cap_weighted(source_table, value_column, group_cols)
+            return self._sql_market_cap_weighted(table_ref, value_column, group_cols)
 
         elif method == 'price':
-            return self._sql_price_weighted(source_table, value_column, group_cols)
+            return self._sql_price_weighted(table_ref, value_column, group_cols)
 
         elif method == 'volume_deviation':
-            return self._sql_volume_deviation_weighted(source_table, value_column, group_cols)
+            return self._sql_volume_deviation_weighted(table_ref, value_column, group_cols)
 
         elif method == 'volatility':
-            return self._sql_volatility_weighted(source_table, value_column, group_cols)
+            return self._sql_volatility_weighted(table_ref, value_column, group_cols)
 
         else:
             raise ValueError(f"Unknown weighting method: {method}")
+
+    def _get_table_reference(self, table_name: str) -> str:
+        """
+        Get DuckDB table reference for a table name.
+
+        Checks if table is already registered in DuckDB, otherwise constructs
+        a read_parquet() reference to the Silver layer files.
+
+        Args:
+            table_name: Table name (e.g., 'fact_equity_prices')
+
+        Returns:
+            SQL table reference (e.g., 'fact_equity_prices' or 'read_parquet(...)')
+        """
+        # Try to use table if it's already registered
+        try:
+            result = self.connection.execute(f"SELECT 1 FROM {table_name} LIMIT 1")
+            # Table exists, use it directly
+            return table_name
+        except:
+            # Table not registered, use Parquet file path
+            # Construct path based on table naming convention
+            if table_name.startswith('fact_'):
+                subdir = 'facts'
+            elif table_name.startswith('dim_'):
+                subdir = 'dimensions'
+            else:
+                subdir = 'tables'
+
+            # Use glob pattern to read all partitions
+            parquet_path = f"{self.storage_path}/{subdir}/{table_name}/**/*.parquet"
+            return f"read_parquet('{parquet_path}', union_by_name=true)"
 
     def _sql_equal_weighted(self, table: str, value_col: str, group_cols: str) -> str:
         """Generate SQL for equal weighting (simple average). Normalization applied at query time."""
@@ -223,25 +259,25 @@ class WeightedAggregateBuilder:
         return f"""
         WITH avg_volumes AS (
             SELECT
-                {group_cols},
+                ticker,
                 AVG(volume) as avg_volume
             FROM {table}
             WHERE volume IS NOT NULL
-            GROUP BY {group_cols}
+            GROUP BY ticker
         )
         SELECT
             f.{group_cols},
             SUM(f.{value_col} * ABS(f.volume - av.avg_volume) * f.close) /
                 NULLIF(SUM(ABS(f.volume - av.avg_volume) * f.close), 0) as weighted_value,
             COUNT(*) as stock_count,
-            av.avg_volume
+            AVG(av.avg_volume) as avg_volume
         FROM {table} f
-        JOIN avg_volumes av USING ({group_cols})
+        JOIN avg_volumes av ON f.ticker = av.ticker
         WHERE f.{value_col} IS NOT NULL
           AND f.volume IS NOT NULL
           AND f.close IS NOT NULL
           AND f.close > 0
-        GROUP BY f.{group_cols}, av.avg_volume
+        GROUP BY f.{group_cols}
         ORDER BY f.{group_cols}
         """
 
