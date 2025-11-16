@@ -551,7 +551,8 @@ class NotebookManager:
 
         Checks for aggregation configuration in this order:
         1. Explicit group_by and aggregations fields in exhibit YAML
-        2. Dynamic dimension selector (for UI-driven aggregation)
+        2. Smart defaults: If aggregations specified but group_by is not, auto-detect from x-axis and color_by
+        3. Dynamic dimension selector (for UI-driven aggregation)
 
         Args:
             exhibit: Exhibit configuration
@@ -561,19 +562,43 @@ class NotebookManager:
                 - group_by: List of columns to group by (None if no aggregation)
                 - aggregations: Dict of measure -> agg function (None to use defaults)
 
-        Example:
-            Base grain: ticker-level (10M rows)
-            Selected dimension: exchange_name
-            Returns: (['trade_date', 'exchange_name'], None)
-            Result: Exchange-level aggregated data (1,825 rows)
+        Examples:
+            # Aggregate across all tickers (one line)
+            aggregations: {close: avg}
+            group_by: [trade_date]
+
+            # Split by ticker (one line per ticker)
+            aggregations: {close: avg}
+            group_by: [trade_date, ticker]
+            color_by: ticker
         """
-        # First, check for explicit aggregation configuration in exhibit YAML
+        aggregations = getattr(exhibit, 'aggregations', None)
+
+        # First, check for explicit group_by configuration
         if hasattr(exhibit, 'group_by') and exhibit.group_by:
             group_by_cols = exhibit.group_by if isinstance(exhibit.group_by, list) else [exhibit.group_by]
-            aggregations = getattr(exhibit, 'aggregations', None)
-
             print(f"📊 Using explicit aggregation config: group_by={group_by_cols}, aggregations={aggregations}")
             return (group_by_cols, aggregations)
+
+        # Second, check if aggregations defined without group_by (smart defaults)
+        if aggregations:
+            group_by_cols = []
+
+            # Always include x-axis in group_by for time-series aggregation
+            if hasattr(exhibit, 'x') and exhibit.x:
+                group_by_cols.append(exhibit.x)
+            elif hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension'):
+                group_by_cols.append(exhibit.x_axis.dimension)
+
+            # If color_by is specified, include it in group_by to split the visualization
+            # This allows one line/bar per dimension value (e.g., one line per ticker)
+            if hasattr(exhibit, 'color_by') and exhibit.color_by:
+                if exhibit.color_by not in group_by_cols:
+                    group_by_cols.append(exhibit.color_by)
+
+            if group_by_cols:
+                print(f"📊 Using smart default aggregation: group_by={group_by_cols}, aggregations={aggregations}")
+                return (group_by_cols, aggregations)
 
         # Fall back to dimension selector logic
         # Check if exhibit has dimension selector
