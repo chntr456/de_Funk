@@ -34,27 +34,31 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
 
 ## Project Overview
 
-**de_Funk** is a modern financial analytics platform that provides:
+**de_Funk** is a graphical overlay to a unified relational model enabling low-code interactions with data warehouses. It provides:
 
-- **Multi-source data ingestion**: Automated pipelines for financial, economic, and municipal data
-- **Dimensional data modeling**: YAML-driven graph-based models using a two-layer architecture (Bronze/Silver)
+- **YAML-driven graph-based modeling**: Declarative dimensional models using nodes, edges, and paths
+- **Two-layer architecture**: Bronze (raw data) → Silver (dimensional models)
+- **Backend abstraction**: Unified interface supporting both Spark and DuckDB
+- **Multi-source data ingestion**: Pluggable pipeline architecture for any data provider
+- **Cross-model analysis**: Unified query interface with automatic dependency resolution
 - **Interactive analytics**: Markdown-based notebooks with dynamic filtering and visualization
-- **Time series forecasting**: Multiple ML models (ARIMA, Prophet, Random Forest)
-- **High-performance analytics**: DuckDB backend for 10-100x faster queries vs Spark
-- **Cross-model analysis**: Unified query interface across multiple domain models
+- **Low-code development**: Define models, measures, and transformations in YAML, not code
 
-### Data Sources
+### Current Implementation (Example Domain)
+
+The current implementation demonstrates the framework with financial and economic data:
+
+**Data Sources:**
 - **Polygon.io**: Stock prices, company data, news, technical indicators
 - **Bureau of Labor Statistics (BLS)**: Economic indicators (unemployment, CPI, GDP)
 - **Chicago Data Portal**: Municipal finance data (Socrata API)
 
-### Core Capabilities
-- Real-time and historical stock data analysis
-- Economic indicator tracking and correlation
-- Municipal finance analysis
-- ETF holdings and performance tracking
-- Multi-model time series forecasting
-- Interactive notebook-based analytics
+**Example Models:**
+- Core (calendar dimension), Corporate (companies), Equity (securities)
+- Macro (economic indicators), City Finance (municipal data)
+- ETF (fund holdings), Forecast (predictions)
+
+**Note:** The framework is domain-agnostic. You can model any domain (healthcare, retail, logistics, etc.) using the same YAML-driven approach.
 
 ---
 
