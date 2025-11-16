@@ -194,13 +194,14 @@ class AllModelBuilder:
 
         # Determine date range for market data
         if days:
-            date_to_obj = date.today()
+            # Exclude today (Polygon basic plan doesn't allow same-day data)
+            date_to_obj = date.today() - timedelta(days=1)
             date_from_obj = date_to_obj - timedelta(days=days)
             date_from = date_from_obj.isoformat()
             date_to = date_to_obj.isoformat()
         elif not date_from or not date_to:
-            # Default: last 365 days (1 year)
-            date_to_obj = date.today()
+            # Default: last 365 days (1 year), excluding today
+            date_to_obj = date.today() - timedelta(days=1)
             date_from_obj = date_to_obj - timedelta(days=365)
             date_from = date_from_obj.isoformat()
             date_to = date_to_obj.isoformat()
