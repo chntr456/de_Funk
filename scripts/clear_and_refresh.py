@@ -10,26 +10,27 @@ This script will:
 WARNING: This will delete all existing data!
 
 Usage:
-    python scripts/clear_and_refresh.py
+    python -m scripts.clear_and_refresh
 
     # Skip confirmation prompt
-    python scripts/clear_and_refresh.py --yes
+    python -m scripts.clear_and_refresh --yes
 
     # Only clear bronze (keep silver)
-    python scripts/clear_and_refresh.py --bronze-only
+    python -m scripts.clear_and_refresh --bronze-only
 
     # Only clear silver (keep bronze)
-    python scripts/clear_and_refresh.py --silver-only
+    python -m scripts.clear_and_refresh --silver-only
 """
 
 import sys
+from pathlib import Path
+
 import argparse
 import shutil
-from pathlib import Path
 from datetime import datetime, timedelta
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 
 def confirm_action(prompt: str) -> bool:
@@ -162,11 +163,11 @@ def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
         model_cfg = yaml.safe_load(cfg_path.read_text())
 
         # Create session for cross-model references
-        session = UniversalSession(ctx.spark, ctx.storage, ctx.repo)
+        session = UniversalSession(ctx.connection, ctx.storage, ctx.repo)
 
         # Build model
         model = CompanyModel(
-            ctx.spark,
+            ctx.connection,
             model_cfg=model_cfg,
             storage_cfg=ctx.storage,
             params={
@@ -199,7 +200,6 @@ def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
 
     except Exception as e:
         print(f"✗ Silver build failed: {e}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)
 

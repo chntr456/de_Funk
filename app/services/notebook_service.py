@@ -51,7 +51,10 @@ class NotebookService:
             validate_on_load: Whether to validate notebooks on load (default: True)
         """
         self.storage_service = storage_service
-        self.repo_root = repo_root or Path.cwd()
+        if repo_root is None:
+            from utils.repo import get_repo_root
+            repo_root = get_repo_root()
+        self.repo_root = repo_root
         self.parser = NotebookParser(repo_root)
         self.validate_on_load = validate_on_load
 

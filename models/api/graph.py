@@ -48,9 +48,9 @@ class ModelGraph:
         # Get all model configs
         for model_name in model_registry.list_models():
             try:
-                model = model_registry.get_model(model_name)
-                if hasattr(model, 'model_cfg'):
-                    self._model_configs[model_name] = model.model_cfg
+                # Get raw config dict (not ModelConfig object)
+                model_config = model_registry.get_model_config(model_name)
+                self._model_configs[model_name] = model_config
             except Exception:
                 continue
 

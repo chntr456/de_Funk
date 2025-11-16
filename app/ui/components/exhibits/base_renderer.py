@@ -145,7 +145,11 @@ class BaseExhibitRenderer(ABC):
             if hasattr(self.exhibit.y_axis, 'measures') and self.exhibit.y_axis.measures:
                 measures = self.exhibit.y_axis.measures
             elif hasattr(self.exhibit.y_axis, 'measure') and self.exhibit.y_axis.measure:
-                measures = [self.exhibit.y_axis.measure]
+                # Handle both single measure and list of measures
+                if isinstance(self.exhibit.y_axis.measure, list):
+                    measures = self.exhibit.y_axis.measure
+                else:
+                    measures = [self.exhibit.y_axis.measure]
 
         # Filter to only those present in the dataframe
         return [m for m in measures if m in self.pdf.columns]

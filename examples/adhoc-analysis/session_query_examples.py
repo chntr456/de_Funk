@@ -15,12 +15,11 @@ Author: de_Funk Team
 Date: 2024-11-08
 """
 
-import sys
 from pathlib import Path
 from datetime import datetime, timedelta
+from utils.repo import setup_repo_imports
 
-# Add de_Funk root to path
-sys.path.append(str(Path(__file__).parent.parent.parent))
+repo_root = setup_repo_imports()
 
 from pyspark.sql import SparkSession, functions as F
 from models.api.session import UniversalSession
@@ -56,7 +55,7 @@ def create_session():
     }
 
     # Repository root
-    repo_root = Path(__file__).parent.parent.parent
+    repo_root = get_repo_root()
 
     # Create UniversalSession
     session = UniversalSession(
@@ -636,7 +635,7 @@ UNIVERSALSESSION QUERY PATTERNS - KEY TAKEAWAYS:
    session = UniversalSession(
        connection=spark,
        storage_cfg=storage_cfg,
-       repo_root=Path.cwd(),
+       repo_root=repo_root,
        models=['company', 'macro']  # Pre-load models
    )
    ```

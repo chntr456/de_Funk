@@ -11,7 +11,8 @@ Checks:
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from core.context import RepoContext
 

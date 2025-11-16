@@ -16,12 +16,23 @@ Usage:
 """
 
 import streamlit as st
+import sys
 from pathlib import Path
 from typing import Dict, Any
 
-# Add parent directory to path for imports
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Bootstrap: Add repo to path before importing utils.repo
+# This handles the case when streamlit is run from any directory
+_current_file = Path(__file__).resolve()
+_repo_root = None
+for _parent in [_current_file.parent] + list(_current_file.parents):
+    if (_parent / "configs").exists() and (_parent / "core").exists():
+        _repo_root = _parent
+        break
+if _repo_root and str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from core.context import RepoContext
 from models.registry import ModelRegistry

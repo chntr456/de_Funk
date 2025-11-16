@@ -63,7 +63,10 @@ class MarkdownNotebookParser:
         Args:
             repo_root: Repository root path for resolving relative paths
         """
-        self.repo_root = repo_root or Path.cwd()
+        if repo_root is None:
+            from utils.repo import get_repo_root
+            repo_root = get_repo_root()
+        self.repo_root = repo_root
 
     def parse_file(self, notebook_path: str) -> NotebookConfig:
         """
@@ -399,10 +402,12 @@ class MarkdownNotebookParser:
 
         y_axis = None
         if 'y' in data:
-            # Shorthand syntax: y: measure_name
+            # Shorthand syntax: y: measure_name (or list of measures)
+            # For label, only use data['y'] if it's a string (not a list)
+            default_label = data['y'] if isinstance(data['y'], str) else None
             y_axis = AxisConfig(
                 measure=data['y'],
-                label=data.get('y_label', data['y'])
+                label=data.get('y_label', default_label)
             )
         elif 'y_axis' in data and isinstance(data['y_axis'], dict):
             # Full syntax: y_axis: {measures: [...], label: ...}
@@ -417,9 +422,11 @@ class MarkdownNotebookParser:
         y_axis_left = None
         if 'y2' in data:
             y_axis_left = y_axis
+            # For label, only use data['y2'] if it's a string (not a list)
+            default_y2_label = data['y2'] if isinstance(data['y2'], str) else None
             y_axis = AxisConfig(
                 measure=data['y2'],
-                label=data.get('y2_label', data['y2'])
+                label=data.get('y2_label', default_y2_label)
             )
 
         # Parse metrics for metric_cards

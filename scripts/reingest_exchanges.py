@@ -7,19 +7,20 @@ ExchangesFacet which now extracts MIC codes (XNAS, XNYS, ARCX) instead
 of numeric IDs. This fixes the auto-join issue where exchange_name was NULL.
 
 Usage:
-    python scripts/reingest_exchanges.py
+    python -m scripts.reingest_exchanges
 
     # Or with custom snapshot date
-    python scripts/reingest_exchanges.py --snapshot 2025-11-12
+    python -m scripts.reingest_exchanges --snapshot 2025-11-12
 """
 
 import sys
-import argparse
 from pathlib import Path
+
+import argparse
 from datetime import date
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from core.context import RepoContext
 from datapipelines.providers.polygon.facets.exchange_facet import ExchangesFacet
@@ -154,7 +155,6 @@ def main():
         reingest_exchanges(snapshot_dt=args.snapshot)
     except Exception as e:
         print(f"\n✗ Re-ingestion failed: {str(e)}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)
 

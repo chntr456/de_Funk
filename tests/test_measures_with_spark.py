@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 # Add repository root to Python path
-REPO_ROOT = Path(__file__).parent.parent.resolve()
+REPO_ROOT = get_repo_root().resolve()
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -62,7 +62,7 @@ def session(ctx):
     """Create UniversalSession."""
     # Note: 'company' model is deprecated but kept for backward compatibility
     return UniversalSession(
-        connection=ctx.spark,
+        connection=ctx.connection,
         storage_cfg=ctx.storage,
         repo_root=REPO_ROOT,
         models=['core', 'company', 'equity', 'corporate', 'forecast']
@@ -518,7 +518,7 @@ if __name__ == "__main__":
     ctx = RepoContext.from_repo_root()
     # Note: 'company' model is deprecated but kept for backward compatibility
     session = UniversalSession(
-        connection=ctx.spark,
+        connection=ctx.connection,
         storage_cfg=ctx.storage,
         repo_root=REPO_ROOT,
         models=['core', 'company', 'equity', 'corporate', 'forecast']

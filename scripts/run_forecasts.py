@@ -9,19 +9,20 @@ stock prices and volumes. It:
 4. Stores forecast results and accuracy metrics in the Silver layer
 
 Usage:
-    python scripts/run_forecasts.py [--tickers AAPL,GOOGL] [--refresh-days 7] [--models arima_30d,prophet_30d]
+    python -m scripts.run_forecasts [--tickers AAPL,GOOGL] [--refresh-days 7] [--models arima_30d,prophet_30d]
 """
+
+import sys
+from pathlib import Path
 
 from __future__ import annotations
 import argparse
-import sys
 from datetime import datetime
-from pathlib import Path
 import yaml
 import json
 
-# Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from models.implemented.forecast import ForecastModel
 from models.api.session import UniversalSession
@@ -100,11 +101,13 @@ def run_forecast_pipeline(
 
     # Initialize Spark
     from orchestration.common.spark_session import get_spark
-    spark = get_spark("ForecastPipeline")
+    from core.connection import ConnectionFactory
+    spark_session = get_spark("ForecastPipeline")
+    spark = ConnectionFactory.create("spark", spark_session=spark_session)
 
     # Load configurations
     print("Loading configurations...")
-    config_root = Path(__file__).parent.parent / "configs"
+    config_root = get_repo_root() / "configs"
 
     storage_cfg = load_config(config_root / "storage.json")
     forecast_cfg = load_config(config_root / "models" / "forecast.yaml")
@@ -142,7 +145,7 @@ def run_forecast_pipeline(
     print("-" * 80)
 
     # Create universal session for cross-model access
-    repo_root = Path(__file__).parent.parent
+    repo_root = get_repo_root()
     session = UniversalSession(
         connection=spark,
         storage_cfg=storage_cfg,

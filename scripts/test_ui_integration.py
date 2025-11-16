@@ -7,29 +7,29 @@ used by the Streamlit application.
 
 Usage:
     # Test all UI components
-    python scripts/test_ui_integration.py --model equity
+    python -m scripts.test_ui_integration --model equity
 
     # Test specific components
-    python scripts/test_ui_integration.py --model equity --components filters charts
+    python -m scripts.test_ui_integration --model equity --components filters charts
 
     # Performance benchmarking
-    python scripts/test_ui_integration.py --model equity --benchmark
+    python -m scripts.test_ui_integration --model equity --benchmark
 
     # Test with specific tickers
-    python scripts/test_ui_integration.py --model equity --tickers AAPL GOOGL MSFT
+    python -m scripts.test_ui_integration --model equity --tickers AAPL GOOGL MSFT
 """
 
-import argparse
 import sys
 from pathlib import Path
+
+import argparse
 from typing import List, Dict, Optional
 import logging
 import time
 from datetime import datetime, timedelta
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 try:
     import pandas as pd
@@ -69,7 +69,7 @@ class UIIntegrationTester:
 
         # Load model
         self.registry = ModelRegistry(str(self.config_dir))
-        self.model_cfg = self.registry.get_model(model_name).model_cfg
+        self.model_cfg = self.registry.get_model_config(model_name)
 
         # Initialize connection
         self.conn = None

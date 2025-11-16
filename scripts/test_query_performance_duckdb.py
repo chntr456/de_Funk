@@ -60,7 +60,7 @@ def main():
     print()
 
     # Find storage directory
-    repo_root = Path(__file__).parent.parent
+    repo_root = get_repo_root()
     storage_path = repo_root / "storage" / "silver" / "company"
 
     if not storage_path.exists():

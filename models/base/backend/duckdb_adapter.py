@@ -27,6 +27,11 @@ class DuckDBAdapter(BackendAdapter):
     - Delta Lake time travel and ACID transactions
     """
 
+    def __init__(self, connection, model):
+        """Initialize DuckDB adapter with enriched table tracking."""
+        super().__init__(connection, model)
+        self._enriched_tables = set()  # Track tables with enriched views
+
     def get_dialect(self) -> str:
         """Get SQL dialect name."""
         return 'duckdb'
@@ -63,18 +68,25 @@ class DuckDBAdapter(BackendAdapter):
 
         DuckDB reads directly from Parquet or Delta Lake files.
         Automatically detects format based on directory structure.
+        If table has been enriched via set_enriched_table(), uses the view instead.
 
         Args:
             table_name: Logical table name from model schema
 
         Returns:
             DuckDB-specific table reference:
+            - Enriched: table_name (view created by set_enriched_table)
             - Delta: "delta_scan('/path')"
             - Parquet: "read_parquet('/path/*.parquet')"
 
         Raises:
             ValueError: If table not found in model schema
         """
+        # Check if table has been enriched - if so, use the view
+        if table_name in self._enriched_tables:
+            logger.debug(f"Using enriched view for table '{table_name}'")
+            return table_name
+
         # Resolve table path from model schema
         table_path = self._resolve_table_path(table_name)
 
@@ -183,3 +195,36 @@ class DuckDBAdapter(BackendAdapter):
             CREATE OR REPLACE VIEW {table_name} AS
             SELECT * FROM {table_ref}
         """)
+
+    def set_enriched_table(self, table_name: str, enriched_df):
+        """
+        Set enriched DataFrame for a table (used for auto-enrichment).
+
+        Creates a temporary view from the enriched DataFrame so that
+        subsequent queries against table_name will use the enriched data.
+
+        Args:
+            table_name: Logical table name
+            enriched_df: Pandas DataFrame with enriched data
+
+        Example:
+            # Get enriched table with joins
+            enriched_df = model.get_table_enriched(
+                'fact_equity_prices',
+                enrich_with=['dim_equity', 'dim_exchange']
+            )
+            # Make adapter use enriched table for all subsequent queries
+            adapter.set_enriched_table('fact_equity_prices', enriched_df)
+        """
+        # Register DataFrame as a view in DuckDB (use underlying conn)
+        self.connection.conn.register(f"{table_name}_enriched", enriched_df)
+
+        # Create a view that references the enriched data
+        self.connection.execute(f"""
+            CREATE OR REPLACE VIEW {table_name} AS
+            SELECT * FROM {table_name}_enriched
+        """)
+
+        # Mark this table as enriched so get_table_reference uses the view
+        self._enriched_tables.add(table_name)
+        logger.debug(f"Table '{table_name}' marked as enriched, will use view in queries")

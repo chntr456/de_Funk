@@ -7,17 +7,17 @@ minimal downtime and data verification.
 
 Usage:
     # Migrate a single table
-    python scripts/migrate_to_delta.py --model equity --table fact_equity_prices
+    python -m scripts.migrate_to_delta --model equity --table fact_equity_prices
 
     # Migrate with partitioning
-    python scripts/migrate_to_delta.py --model equity --table fact_equity_prices \\
+    python -m scripts.migrate_to_delta --model equity --table fact_equity_prices \\
         --partition-by ticker --verify
 
     # Migrate all tables in a model
-    python scripts/migrate_to_delta.py --model equity --all-tables
+    python -m scripts.migrate_to_delta --model equity --all-tables
 
     # Dry run (no changes)
-    python scripts/migrate_to_delta.py --model equity --table fact_equity_prices --dry-run
+    python -m scripts.migrate_to_delta --model equity --table fact_equity_prices --dry-run
 """
 
 import argparse
@@ -28,9 +28,9 @@ import logging
 import pandas as pd
 from datetime import datetime
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 try:
     import duckdb
@@ -67,8 +67,7 @@ class ParquetToDeltaMigrator:
 
         # Load model config
         self.registry = ModelRegistry(str(self.config_dir))
-        self.model = self.registry.get_model(model_name)
-        self.model_cfg = self.model.model_cfg
+        self.model_cfg = self.registry.get_model_config(model_name)
 
         logger.info(f"Initialized migrator for model: {model_name}")
 

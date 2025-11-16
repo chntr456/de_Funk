@@ -9,19 +9,19 @@ This script performs a complete model rebuild:
 
 Usage:
     # Rebuild entire model from Bronze
-    python scripts/rebuild_model.py --model equity
+    python -m scripts.rebuild_model --model equity
 
     # Rebuild specific tables
-    python scripts/rebuild_model.py --model equity --tables fact_equity_prices
+    python -m scripts.rebuild_model --model equity --tables fact_equity_prices
 
     # Rebuild with backup and validation
-    python scripts/rebuild_model.py --model equity --backup --validate
+    python -m scripts.rebuild_model --model equity --backup --validate
 
     # Dry run (show what would be done)
-    python scripts/rebuild_model.py --model equity --dry-run
+    python -m scripts.rebuild_model --model equity --dry-run
 
     # Use custom Bronze path
-    python scripts/rebuild_model.py --model equity --bronze-path storage/bronze/polygon
+    python -m scripts.rebuild_model --model equity --bronze-path storage/bronze/polygon
 """
 
 import argparse
@@ -31,9 +31,9 @@ from typing import List, Optional, Dict
 import logging
 from datetime import datetime
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 try:
     from core.duckdb_connection import DuckDBConnection
@@ -74,8 +74,14 @@ class ModelRebuilder:
 
         # Load model
         self.registry = ModelRegistry(str(self.config_dir))
-        self.model = self.registry.get_model(model_name)
-        self.model_cfg = self.model.model_cfg
+        # Get raw config dict (not ModelConfig object)
+        self.model_cfg = self.registry.get_model_config(model_name)
+
+        # Load storage configuration to get bronze root and table mappings
+        from config.loader import ConfigLoader
+        config_loader = ConfigLoader(repo_root=repo_root)
+        self.storage_config = config_loader._load_json_config("storage.json")
+        self.bronze_root = Path(self.storage_config.get('roots', {}).get('bronze', 'storage/bronze'))
 
         # Initialize connection if available
         self.conn = None
@@ -83,6 +89,7 @@ class ModelRebuilder:
             self.conn = DuckDBConnection()
 
         logger.info(f"Initialized rebuilder for model: {model_name}")
+        logger.info(f"Bronze root: {repo_root / self.bronze_root}")
 
     def rebuild_model(
         self,
@@ -191,32 +198,39 @@ class ModelRebuilder:
 
         logger.info(f"    Rebuilding {table_name}...")
 
-        # Check if we have a Bronze path
-        if not self.bronze_path:
-            # Try to infer from model config
-            bronze_hint = self.model_cfg.get('bronze', {}).get('path')
-            if bronze_hint:
-                self.bronze_path = Path(bronze_hint)
+        # Map Silver table name to Bronze source table using heuristics
+        bronze_source_candidates = self._get_bronze_source_candidates(table_name)
+
+        bronze_table_path = None
+        bronze_source_name = None
+
+        for candidate in bronze_source_candidates:
+            # Look up candidate in storage.json
+            table_config = self.storage_config.get('tables', {}).get(candidate, {})
+
+            if table_config and table_config.get('root') == 'bronze':
+                # Found a bronze source
+                bronze_rel_path = table_config.get('rel', candidate)
+                candidate_path = repo_root / self.bronze_root / bronze_rel_path
+
+                if candidate_path.exists():
+                    bronze_table_path = candidate_path
+                    bronze_source_name = candidate
+                    logger.info(f"    Mapped {table_name} → Bronze source: {bronze_source_name}")
+                    break
+
+        if not bronze_table_path:
+            # Check if this is a derived table (needs transformation from other Silver tables)
+            if any(keyword in table_name for keyword in ['_with_', 'aggregated', 'enriched']):
+                return {
+                    'success': False,
+                    'error': f'Table {table_name} is a derived view - requires transformation logic (not yet implemented)'
+                }
             else:
                 return {
                     'success': False,
-                    'error': 'Bronze path not specified and cannot be inferred from model config'
+                    'error': f'No Bronze source found for {table_name}. Tried: {", ".join(bronze_source_candidates)}'
                 }
-
-        if not self.bronze_path.exists():
-            return {
-                'success': False,
-                'error': f'Bronze path does not exist: {self.bronze_path}'
-            }
-
-        # Check if Bronze data exists for this table
-        bronze_table_path = self._find_bronze_data(table_name)
-
-        if not bronze_table_path:
-            return {
-                'success': False,
-                'error': f'No Bronze data found for table {table_name}'
-            }
 
         # Read Bronze data
         try:
@@ -267,9 +281,65 @@ class ModelRebuilder:
                 'error': str(e)
             }
 
+    def _get_bronze_source_candidates(self, table_name: str) -> List[str]:
+        """
+        Generate candidate Bronze source table names for a Silver table.
+
+        Args:
+            table_name: Silver table name (e.g., 'dim_equity', 'fact_equity_prices')
+
+        Returns:
+            List of candidate Bronze table names to try
+
+        Examples:
+            'dim_equity' → ['ref_equity', 'equity', 'ref_ticker']
+            'fact_equity_prices' → ['prices_daily', 'equity_prices', 'prices']
+            'dim_exchange' → ['exchanges', 'ref_exchange', 'exchange']
+        """
+        candidates = []
+
+        # Common transformation patterns
+        base_name = table_name
+
+        # Remove prefixes
+        for prefix in ['fact_', 'dim_', 'ref_']:
+            if base_name.startswith(prefix):
+                base_name = base_name[len(prefix):]
+                break
+
+        # Specific known mappings
+        known_mappings = {
+            'equity': ['ref_ticker', 'ref_equity', 'equity'],
+            'exchange': ['exchanges', 'ref_exchange'],
+            'equity_prices': ['prices_daily'],
+            'equity_news': ['news'],
+            'equity_technicals': ['prices_daily'],  # Derived from prices
+        }
+
+        if base_name in known_mappings:
+            candidates.extend(known_mappings[base_name])
+
+        # Generic patterns
+        candidates.extend([
+            f'ref_{base_name}',  # ref_equity
+            f'{base_name}s',  # exchanges
+            f'{base_name}_daily',  # prices_daily
+            base_name,  # equity
+        ])
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_candidates = []
+        for candidate in candidates:
+            if candidate not in seen:
+                seen.add(candidate)
+                unique_candidates.append(candidate)
+
+        return unique_candidates
+
     def _find_bronze_data(self, table_name: str) -> Optional[Path]:
         """
-        Find Bronze data for a table.
+        Find Bronze data for a table (legacy method - kept for compatibility).
 
         Args:
             table_name: Table name

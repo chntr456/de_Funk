@@ -18,21 +18,21 @@ This test validates:
 - Spark backend operations
 
 Usage:
-    python scripts/test_domain_model_integration_spark.py
+    python -m scripts.test_domain_model_integration_spark
 
 Expected outcome:
     All tests should pass, confirming domain model architecture works with Spark
 """
 
 import sys
-import traceback
 from pathlib import Path
+
+import traceback
 from typing import Dict, Optional
 import logging
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 # Setup logging
 logging.basicConfig(
@@ -115,9 +115,9 @@ class DomainModelIntegrationTest:
 
             # Initialize session with SPARK
             self.session = UniversalSession(
-                connection=ctx.spark,
+                connection=ctx.connection,
                 storage_cfg=ctx.storage,
-                repo_root=Path.cwd()
+                repo_root=repo_root
             )
             print("  ✓ UniversalSession created")
 

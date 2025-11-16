@@ -504,11 +504,17 @@ class DuckDBConnection(DataConnection):
         Convert DuckDB relation to pandas DataFrame.
 
         Args:
-            df: DuckDB relation
+            df: DuckDB relation or pandas DataFrame
 
         Returns:
             Pandas DataFrame
         """
+        import pandas as pd
+
+        # Check if already pandas DataFrame
+        if isinstance(df, pd.DataFrame):
+            return df
+
         # DuckDB relation has direct pandas conversion
         return df.df()
 

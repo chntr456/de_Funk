@@ -14,6 +14,9 @@ The YAML config is the source of truth for the model structure.
 from abc import ABC
 from typing import Dict, Any, Optional, List, Tuple, Union
 from dataclasses import dataclass
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Try to import PySpark (may not be available when using DuckDB)
 try:
@@ -94,6 +97,9 @@ class BaseModel:
         # Unified measure executor (lazy-loaded)
         self._measure_executor = None
 
+        # Query planner for dynamic joins (lazy-loaded)
+        self._query_planner = None
+
     @property
     def backend(self) -> str:
         """Get backend type (spark or duckdb)."""
@@ -117,6 +123,30 @@ class BaseModel:
             from models.base.measures.executor import MeasureExecutor
             self._measure_executor = MeasureExecutor(self, backend=self.backend)
         return self._measure_executor
+
+    @property
+    def query_planner(self):
+        """
+        Get query planner for dynamic table joins.
+
+        Uses the model's graph edges to plan and execute joins at runtime,
+        making materialized views an optional performance optimization.
+
+        Returns:
+            GraphQueryPlanner instance
+
+        Example:
+            # Get enriched table with dynamic joins
+            df = model.query_planner.get_table_enriched(
+                'fact_equity_prices',
+                enrich_with=['dim_equity', 'dim_exchange'],
+                columns=['ticker', 'close', 'company_name', 'exchange_name']
+            )
+        """
+        if self._query_planner is None:
+            from models.api.query_planner import GraphQueryPlanner
+            self._query_planner = GraphQueryPlanner(self)
+        return self._query_planner
 
     def _detect_backend(self) -> str:
         """Detect backend type from connection."""
@@ -231,12 +261,22 @@ class BaseModel:
                 nodes[node_id] = custom_df
                 continue
 
-            # Default: load from Bronze
-            layer, table = node_config['from'].split('.', 1)
-            assert layer == 'bronze', f"Node {node_id} must load from bronze, got {layer}"
-
-            # Load Bronze table
-            df = self._load_bronze_table(table)
+            # Check if loading from bronze or from another node
+            from_spec = node_config['from']
+            if '.' in from_spec:
+                # Loading from bronze: bronze.table_name
+                layer, table = from_spec.split('.', 1)
+                assert layer == 'bronze', f"Node {node_id} must load from bronze, got {layer}"
+                df = self._load_bronze_table(table)
+            else:
+                # Loading from another node (must already be built)
+                parent_node = from_spec
+                if parent_node not in nodes:
+                    raise ValueError(
+                        f"Node {node_id} depends on {parent_node}, but {parent_node} hasn't been built yet. "
+                        f"Ensure nodes are defined in dependency order in graph.nodes"
+                    )
+                df = nodes[parent_node]
 
             # Apply select (column selection/aliasing)
             if 'select' in node_config and node_config['select']:
@@ -245,7 +285,16 @@ class BaseModel:
             # Apply derive (computed columns)
             if 'derive' in node_config and node_config['derive']:
                 for out_name, expr in node_config['derive'].items():
-                    df = self._apply_derive(df, out_name, expr, node_id)
+                    try:
+                        df = self._apply_derive(df, out_name, expr, node_id)
+                    except Exception as e:
+                        # Log warning and skip this derived column
+                        # Common reasons: unsupported expressions, nested window functions
+                        logger.warning(
+                            f"Skipping derived column '{out_name}' in node '{node_id}': {e}"
+                        )
+                        # Continue with other columns
+                        continue
 
             # Enforce unique_key constraint (deduplication)
             if 'unique_key' in node_config and node_config['unique_key']:
@@ -254,8 +303,14 @@ class BaseModel:
                 if self.backend == 'spark':
                     df = df.dropDuplicates(unique_cols)
                 else:
-                    # DuckDB: Convert to pandas, drop duplicates, convert back
-                    pdf = df.df()
+                    # DuckDB: Convert to pandas if needed, drop duplicates, convert back
+                    import pandas as pd
+                    if isinstance(df, pd.DataFrame):
+                        # Already a pandas DataFrame (from _apply_derive)
+                        pdf = df
+                    else:
+                        # DuckDB relation - convert to pandas
+                        pdf = df.df()
                     pdf = pdf.drop_duplicates(subset=unique_cols, keep='last')
                     df = self.connection.conn.from_df(pdf)
 
@@ -273,11 +328,12 @@ class BaseModel:
         Returns:
             DataFrame with merged schema
         """
-        # Use connection type to determine how to load
-        if hasattr(self.connection, 'read'):  # Spark
+        # Use backend type to determine how to load
+        if self.backend == 'spark':
             if BronzeTable is None:
                 raise RuntimeError("PySpark required for Spark backend but not installed")
-            bronze = BronzeTable(self.connection, self.storage_router, table_name)
+            # BronzeTable expects SparkSession, not SparkConnection
+            bronze = BronzeTable(self.connection.spark, self.storage_router, table_name)
             return bronze.read(merge_schema=True)
         else:
             # DuckDB or other connection types
@@ -291,12 +347,12 @@ class BaseModel:
         Supports:
         - Column references: "ticker" -> F.col("ticker")
         - SHA1 hash: "sha1(ticker)" -> F.sha1(F.col("ticker"))
-        - More expressions can be added as needed
+        - SQL expressions: Window functions, aggregations, etc. via F.expr()
 
         Args:
             df: Input DataFrame
             col_name: Output column name
-            expr: Derive expression
+            expr: Derive expression (can be any valid SQL expression)
             node_id: Node ID (for error messages)
 
         Returns:
@@ -306,7 +362,7 @@ class BaseModel:
             if not PYSPARK_AVAILABLE:
                 raise ImportError("PySpark not available but Spark backend detected")
 
-            # SHA1 hash
+            # SHA1 hash (special case for common pattern)
             if expr.startswith('sha1(') and expr.endswith(')'):
                 col = expr[5:-1]  # Extract column name
                 return df.withColumn(col_name, F.sha1(F.col(col)))
@@ -315,14 +371,16 @@ class BaseModel:
             elif expr in df.columns:
                 return df.withColumn(col_name, F.col(expr))
 
-            # Unknown expression
+            # Arbitrary SQL expression (window functions, aggregations, etc.)
             else:
-                raise ValueError(
-                    f"Unsupported derive expression '{expr}' in node '{node_id}'. "
-                    f"Supported: column references, sha1(column)"
-                )
+                try:
+                    return df.withColumn(col_name, F.expr(expr))
+                except Exception as e:
+                    raise ValueError(
+                        f"Failed to apply derive expression '{expr}' in node '{node_id}': {e}"
+                    )
         else:
-            # DuckDB - use SQL expressions
+            # DuckDB - use SQL execution for complex expressions
             if expr.startswith('sha1(') and expr.endswith(')'):
                 col = expr[5:-1]  # Extract column name
                 sql_expr = f"SHA1({col})"
@@ -330,10 +388,24 @@ class BaseModel:
                 # Direct column reference or SQL expression
                 sql_expr = expr
 
-            # DuckDB: add column using project with *
-            # Get all existing columns plus the new one
+            # For complex expressions (especially window functions), use SQL execution
+            # Register DataFrame as temp table, execute SQL, return result
+            temp_table = f"_temp_{node_id}_{col_name}"
+
+            # Register current DataFrame
+            self.connection.conn.register(temp_table, df)
+
+            # Build SQL with all existing columns plus the new derived column
             existing_cols = ', '.join([f'"{c}"' for c in df.columns])
-            return df.project(f'{existing_cols}, {sql_expr} AS {col_name}')
+            sql = f"SELECT {existing_cols}, {sql_expr} AS {col_name} FROM {temp_table}"
+
+            # Execute and return result
+            result_df = self.connection.conn.execute(sql).fetchdf()
+
+            # Unregister temp table to avoid memory leaks
+            self.connection.conn.unregister(temp_table)
+
+            return result_df
 
     def _resolve_node(self, node_id: str, nodes: Dict[str, DataFrame]) -> DataFrame:
         """
@@ -641,6 +713,44 @@ class BaseModel:
                 f"Table '{table_name}' not found in {self.model_name} model. "
                 f"Available tables: {available}"
             )
+
+    def get_table_enriched(
+        self,
+        table_name: str,
+        enrich_with: Optional[List[str]] = None,
+        columns: Optional[List[str]] = None
+    ) -> DataFrame:
+        """
+        Get table with optional enrichment via dynamic joins.
+
+        Uses graph edges to join related tables at runtime. Falls back to
+        materialized views when available for performance.
+
+        Args:
+            table_name: Base table name (e.g., 'fact_equity_prices')
+            enrich_with: List of tables to join (e.g., ['dim_equity', 'dim_exchange'])
+            columns: Columns to select (default: all columns)
+
+        Returns:
+            DataFrame with enrichment applied
+
+        Raises:
+            ValueError: If no join path exists
+
+        Example:
+            # Get prices with company info (dynamic join)
+            df = equity_model.get_table_enriched(
+                'fact_equity_prices',
+                enrich_with=['dim_equity', 'dim_exchange'],
+                columns=['ticker', 'trade_date', 'close', 'company_name', 'exchange_name']
+            )
+
+            # System:
+            # 1. Checks for materialized view (equity_prices_with_company)
+            # 2. If not found, builds join from graph edges
+            # 3. Returns enriched DataFrame
+        """
+        return self.query_planner.get_table_enriched(table_name, enrich_with, columns)
 
     def get_dimension_df(self, dim_id: str) -> DataFrame:
         """Get a dimension table by ID"""
@@ -988,7 +1098,7 @@ class BaseModel:
         # Use optimized ParquetLoader if requested and format is parquet
         if use_optimized_writer and format == "parquet":
             from models.base.parquet_loader import ParquetLoader
-            loader = ParquetLoader(root=output_root.rsplit('/', 1)[0])  # Get parent of model dir
+            loader = ParquetLoader(root=output_root)  # Use output_root directly
 
             # Write dimensions
             print(f"\nWriting Dimensions:")
@@ -996,9 +1106,9 @@ class BaseModel:
                 print(f"  Writing {name}...")
                 row_count = df.count()
 
-                # ParquetLoader expects relative path
-                rel_path = f"{self.model_name}/dims/{name}"
-                loader.write_dim(rel_path, df)
+                # ParquetLoader expects relative path from output_root
+                rel_path = f"dims/{name}"
+                loader.write_dim(rel_path, df, row_count=row_count)
 
                 stats['dimensions'][name] = row_count
                 stats['total_rows'] += row_count
@@ -1009,7 +1119,9 @@ class BaseModel:
             print(f"\nWriting Facts:")
             for name, df in self._facts.items():
                 print(f"  Writing {name}...")
+                # Count rows BEFORE optimizations (more memory-efficient)
                 row_count = df.count()
+                print(f"    Rows: {row_count:,}")
 
                 # Determine sort columns for optimal query performance
                 sort_by = partition_by.get(name, []) if partition_by else []
@@ -1025,13 +1137,13 @@ class BaseModel:
                                 sort_by.append('symbol')
                             break
 
-                rel_path = f"{self.model_name}/facts/{name}"
-                loader.write_fact(rel_path, df, sort_by=sort_by)
+                rel_path = f"facts/{name}"
+                # Pass pre-computed row_count to avoid re-counting after sort/coalesce
+                loader.write_fact(rel_path, df, sort_by=sort_by, row_count=row_count)
 
                 stats['facts'][name] = row_count
                 stats['total_rows'] += row_count
                 stats['total_tables'] += 1
-                print(f"    ✓ {row_count:,} rows")
 
         else:
             # Standard Spark writer (fallback)

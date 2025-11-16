@@ -46,14 +46,15 @@ class Orchestrator:
         from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
         from models.implemented.company.model import CompanyModel
 
-        # ✅ do NOT call spark like a function
-        spark = self.ctx.spark
+        # Get connection wrapper for model, but raw spark for ingestor
+        connection = self.ctx.connection
+        spark_session = self.ctx.spark
 
         # 1) Bronze: ingest Polygon → parquet (skip-if-exists at partition level)
         ing = CompanyPolygonIngestor(
             polygon_cfg=self.ctx.polygon_cfg,
             storage_cfg=self.ctx.storage,
-            spark=spark,
+            spark=spark_session,  # Ingestor expects raw SparkSession
         )
         tickers = ing.run_all(
             date_from=date_from,
@@ -66,7 +67,7 @@ class Orchestrator:
         # 2) Silver: build the model graph from bronze sources
         model_cfg = self._load_company_model_cfg()
         model = CompanyModel(
-            spark,
+            connection,  # Use SparkConnection wrapper
             model_cfg=model_cfg,
             storage_cfg=self.ctx.storage,
             params={"DATE_FROM": date_from, "DATE_TO": date_to, "UNIVERSE_SIZE": len(tickers)},

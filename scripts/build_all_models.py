@@ -12,50 +12,50 @@ This is NOT a testing script - it works with REAL data and REAL APIs.
 
 Usage:
     # Build all models with default settings
-    python scripts/build_all_models.py
+    python -m scripts.build_all_models
 
     # Build specific models
-    python scripts/build_all_models.py --models equity corporate
+    python -m scripts.build_all_models --models equity corporate
 
     # With date range for market data
-    python scripts/build_all_models.py --date-from 2024-01-01 --date-to 2024-12-31
+    python -m scripts.build_all_models --date-from 2024-01-01 --date-to 2024-12-31
 
     # With ticker limit (for testing/development)
-    python scripts/build_all_models.py --max-tickers 20
+    python -m scripts.build_all_models --max-tickers 20
 
     # Skip ingestion (just rebuild Silver from existing Bronze)
-    python scripts/build_all_models.py --skip-ingestion
+    python -m scripts.build_all_models --skip-ingestion
 
     # Parallel model building
-    python scripts/build_all_models.py --parallel
+    python -m scripts.build_all_models --parallel
 
     # Dry run (show what would be done)
-    python scripts/build_all_models.py --dry-run
+    python -m scripts.build_all_models --dry-run
 
 Examples:
     # Full production build (all domains, all data)
-    python scripts/build_all_models.py --date-from 2024-01-01
+    python -m scripts.build_all_models --date-from 2024-01-01
 
     # Development build (limited data, specific models)
-    python scripts/build_all_models.py --models equity --max-tickers 10 --date-from 2025-01-01
+    python -m scripts.build_all_models --models equity --max-tickers 10 --date-from 2025-01-01
 
     # Quick rebuild from existing Bronze
-    python scripts/build_all_models.py --skip-ingestion
+    python -m scripts.build_all_models --skip-ingestion
 """
 
 from __future__ import annotations
-import argparse
+
 import sys
 from pathlib import Path
+import argparse
 from typing import List, Dict, Optional, Set
 import logging
 from datetime import datetime, date, timedelta
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 from models.registry import ModelRegistry
 from core.context import RepoContext
@@ -111,9 +111,9 @@ class AllModelBuilder:
             # Initialize UniversalSession for cross-model references
             from models.api.session import UniversalSession
             self.session = UniversalSession(
-                connection=self.ctx.spark,
+                connection=self.ctx.connection,  # Use SparkConnection wrapper, not raw spark
                 storage_cfg=self.ctx.storage,
-                repo_root=Path.cwd(),
+                repo_root=repo_root,
                 models=None  # Don't pre-load, load on demand
             )
             logger.info("  ✓ Universal session initialized")
@@ -194,13 +194,14 @@ class AllModelBuilder:
 
         # Determine date range for market data
         if days:
-            date_to_obj = date.today()
+            # Exclude today (Polygon basic plan doesn't allow same-day data)
+            date_to_obj = date.today() - timedelta(days=1)
             date_from_obj = date_to_obj - timedelta(days=days)
             date_from = date_from_obj.isoformat()
             date_to = date_to_obj.isoformat()
         elif not date_from or not date_to:
-            # Default: last 365 days (1 year)
-            date_to_obj = date.today()
+            # Default: last 365 days (1 year), excluding today
+            date_to_obj = date.today() - timedelta(days=1)
             date_from_obj = date_to_obj - timedelta(days=365)
             date_from = date_from_obj.isoformat()
             date_to = date_to_obj.isoformat()
@@ -542,7 +543,7 @@ class AllModelBuilder:
 
             # Instantiate model
             model = model_class(
-                connection=self.ctx.spark,
+                connection=self.ctx.connection,  # Use SparkConnection wrapper
                 storage_cfg=self.ctx.storage,
                 model_cfg=model_cfg,
                 params={
@@ -569,6 +570,11 @@ class AllModelBuilder:
                     logger.info(f"    - {table_name}: {count:,} rows")
                 except Exception as e:
                     logger.warning(f"    - {table_name}: Unable to get row count ({e})")
+
+            # Write tables to Silver storage (persist parquet files)
+            logger.info(f"  Writing {model_name} tables to Silver storage...")
+            stats = model.write_tables(use_optimized_writer=True)
+            logger.info(f"  ✓ Tables written to Silver layer")
 
             return True
 

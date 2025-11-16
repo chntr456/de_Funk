@@ -28,6 +28,11 @@ class SparkAdapter(BackendAdapter):
     - Delta Lake ACID transactions and time travel
     """
 
+    def __init__(self, connection, model):
+        """Initialize Spark adapter with enriched table tracking."""
+        super().__init__(connection, model)
+        self._enriched_tables = set()  # Track tables with enriched temp views
+
     def get_dialect(self) -> str:
         """Get SQL dialect name."""
         return 'spark'
@@ -49,8 +54,8 @@ class SparkAdapter(BackendAdapter):
         """
         start = time.time()
 
-        # Execute SQL query
-        spark_df = self.connection.sql(sql)
+        # Execute SQL query (SparkConnection.spark is the SparkSession)
+        spark_df = self.connection.spark.sql(sql)
 
         # For row count, we need to trigger execution
         # This can be expensive - consider making it optional
@@ -71,8 +76,9 @@ class SparkAdapter(BackendAdapter):
         Get Spark table reference.
 
         Spark can use either:
-        1. Catalog tables (database.table format)
-        2. File paths (for direct file access with Delta/Parquet)
+        1. Enriched temp views (created by set_enriched_table)
+        2. Catalog tables (database.table format)
+        3. File paths (for direct file access with Delta/Parquet)
 
         Auto-detects Delta tables when using file paths.
 
@@ -80,11 +86,16 @@ class SparkAdapter(BackendAdapter):
             table_name: Logical table name from model schema
 
         Returns:
-            Spark table reference (catalog reference or delta.`path`)
+            Spark table reference (view name, catalog reference, or delta.`path`)
 
         Raises:
             ValueError: If table not found in model schema
         """
+        # Check if table has been enriched - if so, use the temp view
+        if table_name in self._enriched_tables:
+            logger.debug(f"Using enriched temp view for table '{table_name}'")
+            return table_name  # Return view name, not path
+
         # Verify table exists in schema
         schema = self.model.model_cfg.get('schema', {})
         dimensions = schema.get('dimensions', {})
@@ -199,7 +210,7 @@ class SparkAdapter(BackendAdapter):
         Args:
             table_name: Table name to cache
         """
-        self.connection.sql(f"CACHE TABLE {table_name}")
+        self.connection.spark.sql(f"CACHE TABLE {table_name}")
 
     def uncache_table(self, table_name: str):
         """
@@ -208,4 +219,31 @@ class SparkAdapter(BackendAdapter):
         Args:
             table_name: Table name to uncache
         """
-        self.connection.sql(f"UNCACHE TABLE {table_name}")
+        self.connection.spark.sql(f"UNCACHE TABLE {table_name}")
+
+    def set_enriched_table(self, table_name: str, enriched_df):
+        """
+        Set enriched DataFrame for a table (used for auto-enrichment).
+
+        Creates a temporary view from the enriched DataFrame so that
+        subsequent queries against table_name will use the enriched data.
+
+        Args:
+            table_name: Logical table name
+            enriched_df: Spark DataFrame with enriched data
+
+        Example:
+            # Get enriched table with joins
+            enriched_df = model.get_table_enriched(
+                'fact_equity_prices',
+                enrich_with=['dim_equity', 'dim_exchange']
+            )
+            # Make adapter use enriched table for all subsequent queries
+            adapter.set_enriched_table('fact_equity_prices', enriched_df)
+        """
+        # Create or replace temporary view
+        enriched_df.createOrReplaceTempView(table_name)
+
+        # Mark this table as enriched so get_table_reference uses the view
+        self._enriched_tables.add(table_name)
+        logger.debug(f"Table '{table_name}' marked as enriched, will use temp view in queries")

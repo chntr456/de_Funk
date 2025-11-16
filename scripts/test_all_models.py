@@ -7,22 +7,22 @@ validation across Bronze → Silver → Gold → UI layers for each model.
 
 Usage:
     # Test all models
-    python scripts/test_all_models.py
+    python -m scripts.test_all_models
 
     # Test with sample data generation
-    python scripts/test_all_models.py --generate-sample
+    python -m scripts.test_all_models --generate-sample
 
     # Quick test (minimal data)
-    python scripts/test_all_models.py --quick --generate-sample
+    python -m scripts.test_all_models --quick --generate-sample
 
     # Test specific models only
-    python scripts/test_all_models.py --models equity corporate
+    python -m scripts.test_all_models --models equity corporate
 
     # Parallel execution
-    python scripts/test_all_models.py --parallel
+    python -m scripts.test_all_models --parallel
 
     # Save results to file
-    python scripts/test_all_models.py --output test_results.json
+    python -m scripts.test_all_models --output test_results.json
 """
 
 import argparse
@@ -35,9 +35,9 @@ import json
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Add project root to path
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
+
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
 
 try:
     import pandas as pd

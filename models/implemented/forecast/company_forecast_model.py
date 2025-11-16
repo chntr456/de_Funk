@@ -105,10 +105,10 @@ class CompanyForecastModel(TimeSeriesForecastModel):
         print(f"DEBUG: Loading from silver path: {path}")
 
         # Load with connection
-        if hasattr(self.connection, 'read'):
-            # Spark
+        if self.backend == 'spark':
+            # Spark: use connection.spark to access SparkSession
             try:
-                return self.connection.read.parquet(path)
+                return self.connection.spark.read.parquet(path)
             except Exception:
                 # Table doesn't exist yet - return empty DataFrame with schema
                 return self._create_empty_table(table_name)
@@ -170,10 +170,10 @@ class CompanyForecastModel(TimeSeriesForecastModel):
             ]
 
             schema = StructType(fields)
-            return self.connection.createDataFrame([], schema)
+            return self.connection.spark.createDataFrame([], schema)
 
         # Fallback: empty DataFrame
-        return self.connection.createDataFrame([], StructType([]))
+        return self.connection.spark.createDataFrame([], StructType([]))
 
     # ============================================================
     # VIEW REGISTRATION

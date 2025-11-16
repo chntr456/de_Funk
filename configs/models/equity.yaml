@@ -182,6 +182,48 @@ graph:
         sentiment: sentiment
       tags: [fact, news]
 
+    - id: fact_equity_technicals
+      from: fact_equity_prices
+      select:
+        ticker: ticker
+        trade_date: trade_date
+        close: close
+        high: high
+        low: low
+        volume: volume
+      derive:
+        # Daily Returns
+        daily_return: "(close - LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date)) / NULLIF(LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date), 0) * 100"
+
+        # Moving Averages
+        sma_20: "AVG(close) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)"
+        sma_50: "AVG(close) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 49 PRECEDING AND CURRENT ROW)"
+
+        # Volatility (20-day rolling standard deviation of returns)
+        volatility_20d: "STDDEV(daily_return) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)"
+
+        # RSI (14-period) - Simplified version using price changes
+        price_change: "close - LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date)"
+        gain: "CASE WHEN price_change > 0 THEN price_change ELSE 0 END"
+        loss: "CASE WHEN price_change < 0 THEN ABS(price_change) ELSE 0 END"
+        avg_gain_14: "AVG(gain) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW)"
+        avg_loss_14: "AVG(loss) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW)"
+        rs_14: "avg_gain_14 / NULLIF(avg_loss_14, 0)"
+        rsi_14: "100 - (100 / (1 + rs_14))"
+
+        # Beta (simplified - using 50-day correlation with market proxy)
+        # Note: This is a simplified beta calculation; proper beta requires market index data
+        beta: "COVAR_POP(daily_return, AVG(daily_return) OVER (PARTITION BY trade_date)) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 49 PRECEDING AND CURRENT ROW) / NULLIF(VAR_POP(AVG(daily_return) OVER (PARTITION BY trade_date)) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 49 PRECEDING AND CURRENT ROW), 0)"
+
+        # Volume indicators
+        volume_sma_20: "AVG(volume) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)"
+        volume_ratio: "volume / NULLIF(volume_sma_20, 0)"
+
+        # Price range
+        high_low_range: "high - low"
+        range_pct: "(high - low) / NULLIF(close, 0) * 100"
+      tags: [fact, technical, derived]
+
   # Edges define relationships between tables
   edges:
     # Cross-model edge: equity data uses core calendar for time-based filtering
@@ -217,26 +259,29 @@ graph:
       description: "Each equity is listed on an exchange"
 
   # Paths define materialized views (joins)
-  paths:
-    - id: equity_prices_with_company
-      hops: "fact_equity_prices -> dim_equity -> dim_exchange"
-      description: "Prices with full equity and exchange context"
-      tags: [canonical, analytics]
-
-    - id: equity_prices_with_calendar
-      hops: "fact_equity_prices -> core.dim_calendar"
-      description: "Prices with calendar attributes for time-based analysis"
-      tags: [time, analytics]
-
-    - id: equity_news_with_company
-      hops: "fact_equity_news -> dim_equity"
-      description: "News with equity context"
-      tags: [news, analytics]
-
-    - id: equity_news_with_calendar
-      hops: "fact_equity_news -> core.dim_calendar"
-      description: "News with calendar attributes for time-based analysis"
-      tags: [time, analytics]
+  # DISABLED FOR PROTOTYPING: These create 4 additional denormalized tables (36M extra rows)
+  # Re-enable for production BI if you need pre-joined views for dashboards
+  # For development, use graph edges for dynamic joins instead
+  # paths:
+  #   - id: equity_prices_with_company
+  #     hops: "fact_equity_prices -> dim_equity -> dim_exchange"
+  #     description: "Prices with full equity and exchange context"
+  #     tags: [canonical, analytics]
+  #
+  #   - id: equity_prices_with_calendar
+  #     hops: "fact_equity_prices -> core.dim_calendar"
+  #     description: "Prices with calendar attributes for time-based analysis"
+  #     tags: [time, analytics]
+  #
+  #   - id: equity_news_with_company
+  #     hops: "fact_equity_news -> dim_equity"
+  #     description: "News with equity context"
+  #     tags: [news, analytics]
+  #
+  #   - id: equity_news_with_calendar
+  #     hops: "fact_equity_news -> core.dim_calendar"
+  #     description: "News with calendar attributes for time-based analysis"
+  #     tags: [time, analytics]
 
 # Measures - pre-defined aggregations
 measures:
@@ -420,6 +465,49 @@ measures:
     data_type: double
     format: "$#,##0.00"
     tags: [price, volatility, computed]
+
+  # ============================================================
+  # AUTO-ENRICHMENT MEASURES
+  # ============================================================
+  # These measures demonstrate automatic table joining via graph edges.
+  # Columns not in the base table are automatically joined using GraphQueryPlanner.
+
+  avg_close_by_exchange:
+    description: "Average closing price by exchange (auto-enriched)"
+    type: simple
+    source: fact_equity_prices.close
+    aggregation: avg
+    auto_enrich: true  # Enables automatic join to get exchange_name
+    data_type: double
+    format: "$#,##0.00"
+    tags: [price, exchange, auto_enrich]
+    # Note: When grouped by exchange_name, system automatically joins:
+    #   fact_equity_prices -> dim_equity -> dim_exchange
+
+  avg_volume_by_company:
+    description: "Average trading volume by company (auto-enriched)"
+    type: simple
+    source: fact_equity_prices.volume
+    aggregation: avg
+    auto_enrich: true  # Enables automatic join to get company_name
+    data_type: long
+    format: "#,##0"
+    tags: [volume, company, auto_enrich]
+    # Note: When grouped by company_name, system automatically joins:
+    #   fact_equity_prices -> dim_equity
+
+  market_cap_by_exchange:
+    description: "Market cap by exchange (auto-enriched computed measure)"
+    type: computed
+    source: fact_equity_prices.close
+    expression: "close * volume"
+    aggregation: sum
+    auto_enrich: true  # Enables automatic join for exchange_name
+    data_type: double
+    format: "$#,##0.00M"
+    tags: [market, valuation, exchange, auto_enrich]
+    # Note: When grouped by exchange_name, system automatically joins:
+    #   fact_equity_prices -> dim_equity -> dim_exchange
 
 # Bronze sources mapping (where to load data from)
 bronze_sources:

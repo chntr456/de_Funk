@@ -1,28 +1,56 @@
 from __future__ import annotations
-from typing import Dict, Optional
+from typing import Dict, Optional, TYPE_CHECKING
 from pyspark.sql import SparkSession
 
-def get_spark(app_name: str = "App", config: Optional[Dict[str, str]] = None):
+if TYPE_CHECKING:
+    from config.models import SparkConfig
+
+def get_spark(
+    app_name: str = "App",
+    config: Optional[Dict[str, str]] = None,
+    spark_config: Optional["SparkConfig"] = None,
+):
     """
     Get or create a Spark session with standard configurations.
 
+    Now supports SparkConfig objects for centralized configuration management.
+
     Args:
         app_name: Name of the Spark application
-        config: Optional dictionary of additional Spark configuration options
+        config: Optional dictionary of additional Spark configuration options (legacy)
+        spark_config: Optional SparkConfig object with typed configuration
 
     Returns:
         SparkSession instance
     """
-    builder = (SparkSession.builder
-                .appName(app_name)
-                .config("spark.sql.session.timeZone", "UTC")
-                .config("spark.sql.caseSensitive", "true")
-                .config("spark.sql.shuffle.partitions", "200")
-                # better traceback if a worker crashes
-                .config("spark.python.worker.faulthandler.enabled", "true")
-                .config("spark.sql.execution.pyspark.udf.faulthandler.enabled", "true"))
+    # Use SparkConfig if provided, otherwise use defaults
+    if spark_config:
+        base_config = spark_config.to_spark_conf_dict()
+    else:
+        # Legacy default configuration
+        base_config = {
+            "spark.sql.session.timeZone": "UTC",
+            "spark.sql.shuffle.partitions": "200",
+            "spark.driver.memory": "4g",
+            "spark.executor.memory": "4g",
+        }
 
-    # Apply additional config if provided
+    # Build Spark session with config
+    builder = SparkSession.builder.appName(app_name)
+
+    # Apply base configuration
+    for key, value in base_config.items():
+        builder = builder.config(key, value)
+
+    # Standard configs not in SparkConfig
+    builder = (builder
+        .config("spark.sql.caseSensitive", "true")
+        .config("spark.driver.maxResultSize", "2g")
+        .config("spark.python.worker.faulthandler.enabled", "true")
+        .config("spark.sql.execution.pyspark.udf.faulthandler.enabled", "true")
+    )
+
+    # Apply additional legacy config if provided (overrides SparkConfig)
     if config:
         for key, value in config.items():
             builder = builder.config(key, value)
