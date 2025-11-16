@@ -507,6 +507,7 @@ class MarkdownNotebookParser:
             aggregate_by=data.get('aggregate_by'),
             value_measures=data.get('value_measures'),
             group_by=data.get('group_by'),
+            aggregations=data.get('aggregations'),
             # Table fields
             columns=data.get('columns'),
             pagination=data.get('pagination', False),

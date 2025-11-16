@@ -282,7 +282,8 @@ class Exhibit:
     weighting: Optional[WeightingConfig] = None
     aggregate_by: Optional[str] = None  # Dimension to aggregate by (e.g., "trade_date")
     value_measures: Optional[List[str]] = None  # Measures to aggregate (e.g., ["close", "volume"])
-    group_by: Optional[str] = None  # Optional grouping dimension
+    group_by: Optional[Union[str, List[str]]] = None  # Grouping dimension(s) for aggregation
+    aggregations: Optional[Dict[str, str]] = None  # Dict of column -> agg function (e.g., {"close": "avg"})
 
     # Table configurations
     columns: Optional[List[str]] = None  # dimension or measure ids

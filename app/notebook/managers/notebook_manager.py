@@ -547,10 +547,11 @@ class NotebookManager:
 
     def _determine_aggregation(self, exhibit: Exhibit) -> tuple[Optional[List[str]], Optional[Dict[str, str]]]:
         """
-        Determine if data needs aggregation based on dimension selector.
+        Determine if data needs aggregation based on exhibit configuration or dimension selector.
 
-        When dimension selector changes the grain (e.g., from ticker to exchange_name),
-        the data needs to be aggregated to the new grain.
+        Checks for aggregation configuration in this order:
+        1. Explicit group_by and aggregations fields in exhibit YAML
+        2. Dynamic dimension selector (for UI-driven aggregation)
 
         Args:
             exhibit: Exhibit configuration
@@ -566,6 +567,15 @@ class NotebookManager:
             Returns: (['trade_date', 'exchange_name'], None)
             Result: Exchange-level aggregated data (1,825 rows)
         """
+        # First, check for explicit aggregation configuration in exhibit YAML
+        if hasattr(exhibit, 'group_by') and exhibit.group_by:
+            group_by_cols = exhibit.group_by if isinstance(exhibit.group_by, list) else [exhibit.group_by]
+            aggregations = getattr(exhibit, 'aggregations', None)
+
+            print(f"📊 Using explicit aggregation config: group_by={group_by_cols}, aggregations={aggregations}")
+            return (group_by_cols, aggregations)
+
+        # Fall back to dimension selector logic
         # Check if exhibit has dimension selector
         if not (hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector):
             return (None, None)
