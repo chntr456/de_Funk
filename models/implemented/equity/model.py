@@ -15,7 +15,7 @@ Inherits all graph building logic from BaseModel.
 Only adds equity-specific convenience methods.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
 from models.base.model import BaseModel
 
 # Bootstrap equity-specific domain features when this model is loaded
@@ -46,6 +46,64 @@ class EquityModel(BaseModel):
     # - Edges: ticker relationships, cross-model link to corporate
     # - Paths: equity_prices_with_company
     # - Measures: price aggregates, weighted indices, technical indicators
+
+    # ============================================================
+    # BUILD HOOKS
+    # ============================================================
+
+    def after_build(
+        self,
+        dims: Dict[str, Any],
+        facts: Dict[str, Any]
+    ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+        """
+        Post-build hook to create weighted aggregate views.
+
+        These views are used by weighted_aggregate_chart exhibits to display
+        multi-stock indices (equal-weighted, volume-weighted, etc.).
+
+        Args:
+            dims: Built dimensions
+            facts: Built facts
+
+        Returns:
+            Modified (dims, facts)
+        """
+        # Only create views if using DuckDB backend
+        if self.backend == 'duckdb':
+            self._build_weighted_aggregate_views()
+
+        return dims, facts
+
+    def _build_weighted_aggregate_views(self):
+        """Build weighted aggregate measure views for DuckDB."""
+        try:
+            from models.builders import WeightedAggregateBuilder
+            from pathlib import Path
+
+            print("  Building weighted aggregate views...")
+
+            # Get DuckDB connection (unwrap if needed)
+            duck_conn = self.connection.conn if hasattr(self.connection, 'conn') else self.connection
+
+            # Get storage path
+            storage_root = self.model_cfg.get('storage', {}).get('root', 'storage/silver/equity')
+            storage_path = Path(storage_root)
+
+            builder = WeightedAggregateBuilder(
+                connection=duck_conn,
+                model_config=self.model_cfg,
+                storage_path=storage_path
+            )
+
+            # Create views (not materialized tables)
+            builder.build_all_weighted_aggregates(materialize=False)
+            print("  ✓ Weighted aggregate views created")
+
+        except Exception as e:
+            print(f"  ⚠️  Warning: Could not build weighted aggregate views: {e}")
+            # Don't fail the entire build if weighted aggregates fail
+            # These are optional features for advanced visualizations
 
     # ============================================================
     # EQUITY-SPECIFIC MEASURE CALCULATIONS

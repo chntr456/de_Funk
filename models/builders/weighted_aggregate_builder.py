@@ -70,8 +70,11 @@ class WeightedAggregateBuilder:
         if not measure:
             raise ValueError(f"Measure '{measure_id}' not found in model config")
 
-        if measure.get('type') != 'weighted_aggregate':
-            raise ValueError(f"Measure '{measure_id}' is not a weighted_aggregate type")
+        if measure.get('type') not in ('weighted', 'weighted_aggregate'):
+            raise ValueError(
+                f"Measure '{measure_id}' is not a weighted type "
+                f"(got type: {measure.get('type')})"
+            )
 
         # Generate SQL for weighted aggregate
         sql = self._generate_weighted_aggregate_sql(measure_id, measure)
@@ -103,7 +106,7 @@ class WeightedAggregateBuilder:
         return [
             measure_id
             for measure_id, measure in self.measures.items()
-            if measure.get('type') == 'weighted_aggregate'
+            if measure.get('type') in ('weighted', 'weighted_aggregate')  # Support both types
         ]
 
     def _generate_weighted_aggregate_sql(self, measure_id: str, measure: Dict[str, Any]) -> str:
