@@ -1,9 +1,16 @@
 # CLAUDE.md - AI Assistant Guide for de_Funk
 
-**Last Updated**: 2025-11-15
-**Version**: 1.0
+**Last Updated**: 2025-11-16
+**Version**: 1.1
 
 This document provides comprehensive guidance for AI assistants (like Claude) working with the de_Funk codebase. It covers project structure, architecture patterns, development workflows, and key conventions.
+
+**Recent Updates (v1.1)**:
+- Added comprehensive Configuration Management System documentation
+- Documented new `config/` module with ConfigLoader and typed models
+- Added `utils/repo.py` centralized repository discovery
+- Updated script execution patterns to use `python -m` module syntax
+- Documented configuration precedence rules and environment variable usage
 
 ---
 
@@ -56,10 +63,20 @@ de_Funk/
 │   ├── notebook/            # Notebook system (parsers, managers, filters)
 │   ├── services/            # Business logic services
 │   └── ui/                  # Streamlit components & main app
+├── config/                   # Centralized configuration system (NEW)
+│   ├── __init__.py          # ConfigLoader and typed models
+│   ├── loader.py            # Configuration loading with precedence
+│   ├── models.py            # Type-safe config dataclasses
+│   └── constants.py         # Default configuration values
 ├── configs/
 │   ├── models/              # YAML model configurations (8 models)
-│   └── notebooks/           # Markdown notebook definitions
+│   ├── notebooks/           # Markdown notebook definitions
+│   ├── storage.json         # Storage paths and table mappings
+│   ├── polygon_endpoints.json  # Polygon API configuration
+│   ├── bls_endpoints.json   # BLS API configuration
+│   └── chicago_endpoints.json  # Chicago API configuration
 ├── core/
+│   ├── context.py           # RepoContext (now uses ConfigLoader)
 │   └── session/             # Core session & connection management
 ├── datapipelines/
 │   ├── base/                # Base classes for pipeline components
@@ -99,6 +116,8 @@ de_Funk/
 │   └── guide/               # Comprehensive documentation
 ├── examples/                # Runnable code examples
 └── utils/                   # Utility functions
+    ├── repo.py              # Centralized repo discovery (NEW)
+    └── env_loader.py        # Environment variable loading
 ```
 
 ### Key Statistics
@@ -218,14 +237,169 @@ Tier 3 (Advanced):
 
 ### Key Architectural Patterns
 
-1. **BaseModel Inheritance**: All models extend `models/base/model.py::BaseModel`
-2. **Storage Router**: Abstracts Bronze/Silver path resolution
-3. **Backend Agnostic**: Adapters for both Spark and DuckDB
-4. **Measure Framework**: Unified calculation engine (simple, computed, weighted)
-5. **Universal Session**: Cross-model query interface
-6. **Filter Engine**: Backend-agnostic filter application
-7. **Lazy Loading**: Models and tables loaded on demand
-8. **Graph-Based Dependencies**: NetworkX for dependency resolution
+1. **Centralized Configuration**: ConfigLoader for type-safe, validated configuration
+2. **BaseModel Inheritance**: All models extend `models/base/model.py::BaseModel`
+3. **Storage Router**: Abstracts Bronze/Silver path resolution
+4. **Backend Agnostic**: Adapters for both Spark and DuckDB
+5. **Measure Framework**: Unified calculation engine (simple, computed, weighted)
+6. **Universal Session**: Cross-model query interface
+7. **Filter Engine**: Backend-agnostic filter application
+8. **Lazy Loading**: Models and tables loaded on demand
+9. **Graph-Based Dependencies**: NetworkX for dependency resolution
+
+---
+
+## Configuration Management System
+
+### Overview
+
+de_Funk uses a **centralized, type-safe configuration system** introduced in November 2025 that eliminates scattered configuration loading and provides clear precedence rules.
+
+**Key Features:**
+- **Single entry point**: `ConfigLoader` class loads all configuration
+- **Type safety**: Dataclass models for all config (no raw dicts)
+- **Clear precedence**: env vars > explicit params > config files > defaults
+- **Auto-discovery**: Automatically finds and loads API configs
+- **Validation**: Configuration values validated at load time
+- **No hardcoded values**: All config externalized to files/env vars
+
+### Configuration Precedence
+
+Configuration sources in order of priority (highest to lowest):
+
+1. **Explicit parameters** - Passed directly to `loader.load(connection_type="duckdb")`
+2. **Environment variables** - From `.env` file or system env
+3. **Configuration files** - JSON files in `configs/` directory
+4. **Default values** - Defined in `config/constants.py`
+
+### ConfigLoader Usage
+
+```python
+from config import ConfigLoader
+
+# Basic usage - auto-discover repo root
+loader = ConfigLoader()
+config = loader.load()
+
+# Access typed configuration
+print(f"Connection type: {config.connection.type}")
+print(f"Repo root: {config.repo_root}")
+print(f"Models dir: {config.models_dir}")
+
+# Override connection type
+config = loader.load(connection_type="duckdb")
+
+# Access API configs (auto-discovered from configs/*.json)
+polygon_cfg = config.apis.get("polygon", {})
+bls_cfg = config.apis.get("bls", {})
+```
+
+### Typed Configuration Models
+
+All configuration uses dataclasses for type safety:
+
+**`AppConfig`** - Top-level configuration
+- `repo_root: Path` - Repository root directory
+- `connection: ConnectionConfig` - Database connection config
+- `storage: Dict` - Storage configuration (from storage.json)
+- `apis: Dict` - API configurations (auto-discovered)
+- `log_level: str` - Logging level
+
+**`ConnectionConfig`** - Connection settings
+- `type: str` - "spark" or "duckdb"
+- `spark: SparkConfig` - Spark-specific settings (if using Spark)
+- `duckdb: DuckDBConfig` - DuckDB-specific settings (if using DuckDB)
+
+**`SparkConfig`** - Spark configuration
+- `driver_memory: str` - Driver memory (e.g., "4g")
+- `executor_memory: str` - Executor memory (e.g., "4g")
+- `shuffle_partitions: int` - Number of shuffle partitions
+- `timezone: str` - Session timezone
+
+**`DuckDBConfig`** - DuckDB configuration
+- `database_path: Path` - Path to DuckDB file
+- `memory_limit: str` - Memory limit (e.g., "4GB")
+- `threads: int` - Number of threads
+- `read_only: bool` - Read-only mode
+
+### RepoContext Integration
+
+`RepoContext` now uses `ConfigLoader` internally:
+
+```python
+from core.context import RepoContext
+
+# RepoContext uses ConfigLoader behind the scenes
+ctx = RepoContext.from_repo_root(connection_type="duckdb")
+
+# Access typed config (new)
+if ctx.config:
+    print(f"Models directory: {ctx.config.models_dir}")
+    print(f"Connection type: {ctx.config.connection.type}")
+
+# Backward compatible properties still work
+polygon_cfg = ctx.polygon_cfg  # Still works!
+
+# New method for any API provider
+bls_cfg = ctx.get_api_config("bls")
+```
+
+### Environment Variables
+
+Set in `.env` file (copy from `.env.example`):
+
+```bash
+# API Keys (required for data ingestion)
+POLYGON_API_KEYS=your_key_here
+BLS_API_KEYS=your_key_here
+CHICAGO_API_KEYS=your_key_here
+
+# Connection type override (optional)
+CONNECTION_TYPE=duckdb
+
+# Logging level (optional)
+LOG_LEVEL=DEBUG
+
+# Spark configuration (when using Spark)
+SPARK_DRIVER_MEMORY=8g
+SPARK_EXECUTOR_MEMORY=8g
+SPARK_SHUFFLE_PARTITIONS=400
+
+# DuckDB configuration (when using DuckDB)
+DUCKDB_DATABASE_PATH=storage/duckdb/analytics.db
+DUCKDB_MEMORY_LIMIT=8GB
+DUCKDB_THREADS=8
+```
+
+### Repository Discovery
+
+The `utils/repo.py` module provides centralized repo root discovery:
+
+```python
+from utils.repo import get_repo_root, setup_repo_imports
+
+# Option 1: Just get repo root (no sys.path modification)
+repo_root = get_repo_root()
+print(repo_root)  # /home/user/de_Funk
+
+# Option 2: Setup imports (recommended for scripts)
+repo_root = setup_repo_imports()
+# Now you can import from anywhere in the repo!
+from core.context import RepoContext
+from models.api.session import UniversalSession
+
+# Option 3: Context manager (auto-cleanup)
+from utils.repo import repo_imports
+with repo_imports() as repo_root:
+    from core.context import RepoContext
+    # ... use imports ...
+# sys.path cleaned up after exiting context
+```
+
+**Repo Discovery Algorithm:**
+- Walks up directory tree from start point
+- Looks for directories containing: `configs/`, `core/`, `.git/`
+- Returns first parent directory containing all markers
 
 ---
 
@@ -510,15 +684,17 @@ python scripts/build_silver_layer.py
 
 ### Model Operations
 
+**Note**: Scripts now use the `python -m` pattern for better import handling:
+
 ```bash
 # Rebuild specific model
-python scripts/rebuild_model.py --model equity
+python -m scripts.rebuild_model --model equity
 
 # Reset model state
-python scripts/reset_model.py --model equity
+python -m scripts.reset_model --model equity
 
 # Test all models
-python scripts/test_all_models.py
+python -m scripts.test_all_models
 ```
 
 ### Data Operations
@@ -560,7 +736,7 @@ pytest tests/unit/test_measure_framework.py
 bash scripts/run_backend_tests.sh
 
 # Run E2E pipeline test
-python scripts/test_pipeline_e2e.py
+python -m scripts.test_pipeline_e2e
 ```
 
 ### Querying Data
@@ -698,10 +874,14 @@ If queries are slow:
 | File | Purpose |
 |------|---------|
 | `.env` | API keys and environment configuration |
+| `configs/storage.json` | Storage paths and table mappings |
+| `configs/polygon_endpoints.json` | Polygon API endpoint configuration (auto-discovered) |
+| `configs/bls_endpoints.json` | BLS API endpoint configuration (auto-discovered) |
+| `configs/chicago_endpoints.json` | Chicago API endpoint configuration (auto-discovered) |
 | `configs/models/*.yaml` | Model definitions (8 models) |
 | `configs/notebooks/*.md` | Notebook definitions |
-| `storage.json` | Storage paths and table mappings |
-| `polygon_endpoints.json` | Polygon API endpoint configuration |
+
+**Note**: With the new ConfigLoader system, API configs are auto-discovered from `configs/*_endpoints.json` files. No manual registration needed!
 
 ### Critical Documentation Files
 
@@ -711,6 +891,9 @@ If queries are slow:
 | `RUNNING.md` | How to run the application |
 | `TESTING_GUIDE.md` | Comprehensive testing guide |
 | `PIPELINE_GUIDE.md` | Data pipeline documentation |
+| `docs/configuration.md` | **Configuration system documentation (NEW)** |
+| `docs/IMPORT-PATTERNS.md` | **Import pattern standardization (NEW)** |
+| `docs/path-management-migration.md` | **Path management guide (NEW)** |
 | `CALENDAR_DIMENSION_GUIDE.md` | Calendar dimension details |
 | `MODEL_DEPENDENCY_ANALYSIS.md` | Model dependency issues |
 | `MODEL_EDGES_REFERENCE.md` | Cross-model relationships |
@@ -721,6 +904,10 @@ If queries are slow:
 
 | Module | Purpose |
 |--------|---------|
+| `config/loader.py` | **ConfigLoader** - Centralized configuration loading (NEW) |
+| `config/models.py` | Type-safe configuration dataclasses (NEW) |
+| `utils/repo.py` | **Repo discovery** - Find repo root and setup imports (NEW) |
+| `core/context.py` | **RepoContext** - Now uses ConfigLoader internally |
 | `models/base/model.py` | BaseModel class - foundation for all models |
 | `models/api/registry.py` | Model registry - discover and manage models |
 | `core/session/universal_session.py` | Unified query interface |
@@ -746,10 +933,16 @@ If queries are slow:
 
 ## Current State & Known Issues
 
-### Active Migration
+### Recent Migrations (November 2025)
 
-**Deprecating `company` model** → Splitting into `equity` and `corporate`
+**✅ Configuration System Migration - COMPLETE**
+- New centralized `config/` module with ConfigLoader
+- All scripts updated to use `python -m` module syntax
+- Repository discovery centralized in `utils/repo.py`
+- Type-safe configuration with dataclass models
+- Auto-discovery of API configurations
 
+**In Progress: `company` model migration** → Splitting into `equity` and `corporate`
 - Several cross-model edges need updating
 - Documented in `MODEL_DEPENDENCY_ANALYSIS.md`
 - Some notebooks may reference old `company` model
@@ -762,7 +955,7 @@ If queries are slow:
 
 ### Data Sources Status
 
-- **Polygon.io**: Active, fully integrated
+- **Polygon.io**: Active, fully integrated (API limit: 1000/request)
 - **BLS**: Active, economic indicators working
 - **Chicago Data Portal**: Active, municipal finance data
 
@@ -810,17 +1003,18 @@ If queries are slow:
 ### Directory Purpose Quick Lookup
 
 - `/app/` → Streamlit UI and notebook system
-- `/configs/` → YAML model definitions and notebook files
+- `/config/` → **Centralized configuration system (NEW)** - ConfigLoader, typed models
+- `/configs/` → Configuration files (storage.json, API endpoints, model YAMLs)
 - `/core/` → Session management and filters
 - `/datapipelines/` → Data ingestion and Bronze layer
 - `/models/` → Silver layer models and measure framework
 - `/orchestration/` → Pipeline orchestration
 - `/tests/` → Unit and integration tests
-- `/scripts/` → Operational scripts
+- `/scripts/` → Operational scripts (use `python -m scripts.script_name`)
 - `/storage/` → Data storage (Bronze/Silver Parquet files, DuckDB catalog)
 - `/docs/` → Documentation
 - `/examples/` → Code examples
-- `/utils/` → Utility functions
+- `/utils/` → **Utility functions** - repo.py for centralized repo discovery
 
 ### Backend Selection
 
