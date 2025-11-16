@@ -5,12 +5,15 @@
 
 This document provides comprehensive guidance for AI assistants (like Claude) working with the de_Funk codebase. It covers project structure, architecture patterns, development workflows, and key conventions.
 
+**Architecture Diagram**: See `docs/architecture-diagram.drawio` for visual representation of the system architecture.
+
 **Recent Updates (v1.1)**:
 - Added comprehensive Configuration Management System documentation
 - Documented new `config/` module with ConfigLoader and typed models
 - Added `utils/repo.py` centralized repository discovery
 - Updated script execution patterns to use `python -m` module syntax
 - Documented configuration precedence rules and environment variable usage
+- Added architecture diagram (docs/architecture-diagram.drawio)
 
 ---
 
