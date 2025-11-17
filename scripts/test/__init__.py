@@ -1,1 +1,1 @@
-"""Scripts for test"""
+"""Integration tests for end-to-end workflows."""

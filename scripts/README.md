@@ -132,9 +132,60 @@ python -m scripts.forecast.verify_forecast_config
 
 ---
 
-## 🧪 Test Scripts (9 scripts)
+## 🐛 Debug Scripts (8 scripts)
+
+**Purpose:** Debugging and diagnostic utilities
+
+| Script | Description | Usage |
+|--------|-------------|-------|
+| `check_parquet_path.py` | Check and validate Parquet file paths | `python -m scripts.debug.check_parquet_path` |
+| `debug_exchange_data.py` | Debug exchange data issues | `python -m scripts.debug.debug_exchange_data` |
+| `debug_forecast_view.py` | Debug forecast view issues | `python -m scripts.debug.debug_forecast_view` |
+| `debug_session_injection.py` | Debug session injection | `python -m scripts.debug.debug_session_injection` |
+| `debug_weighted_views.py` | Debug weighted aggregate views | `python -m scripts.debug.debug_weighted_views` |
+| `diagnose_view_data.py` | Diagnose view data issues | `python -m scripts.debug.diagnose_view_data` |
+| `drop_view.py` | Drop database views (utility) | `python -m scripts.debug.drop_view` |
+
+### Common Debug Examples
+
+```bash
+# Debug exchange data
+python -m scripts.debug.debug_exchange_data
+
+# Check parquet paths
+python -m scripts.debug.check_parquet_path
+
+# Debug forecast views
+python -m scripts.debug.debug_forecast_view
+
+# Diagnose view data issues
+python -m scripts.debug.diagnose_view_data
+```
+
+---
+
+## 🧪 Test Scripts (29 scripts)
 
 **Purpose:** Testing and validation
+
+**Organized into:**
+- **Integration tests:** Domain model integration, pipeline E2E
+- **Unit tests:** Measure framework, backend adapters, weighting strategies
+- **Performance tests:** Query performance, dimension selector
+- **Standalone tests:** Filter system, UI state, merge logic, forecasts
+- **Fixtures:** Sample data generators for testing
+- **Configuration:** pytest conftest.py, pipeline_tester.py
+
+| Category | Scripts | Description |
+|----------|---------|-------------|
+| **Integration** | 3 scripts | Domain model integration (DuckDB/Spark), E2E pipeline |
+| **Unit Tests** | 4 scripts | Measure framework, backend adapters, weighting, utils |
+| **Performance** | 3 scripts | Query performance, dimension selector, UI state |
+| **Standalone** | 10 scripts | Filter system, UI components, forecast views, merge logic |
+| **Validation** | 3 scripts | Cross-model edges, backend tests, all models |
+| **Utilities** | 2 scripts + fixtures | Pipeline tester, conftest, sample data generator |
+
+### Key Test Scripts
 
 | Script | Description | Usage |
 |--------|-------------|-------|
@@ -143,10 +194,11 @@ python -m scripts.forecast.verify_forecast_config
 | `test_domain_model_integration_spark.py` | Spark backend integration tests | `python -m scripts.test.test_domain_model_integration_spark --help` |
 | `test_pipeline_e2e.py` | End-to-end pipeline test | `python -m scripts.test.test_pipeline_e2e --help` |
 | `test_ui_integration.py` | UI integration test for Streamlit app | `python -m scripts.test.test_ui_integration --help` |
-| `test_dimension_selector_performance.py` | Dimension selector performance test | `python -m scripts.test.test_dimension_selector_performance` |
-| `test_query_performance_duckdb.py` | DuckDB query performance test | `python -m scripts.test.test_query_performance_duckdb` |
+| `test_measure_framework.py` | Unit tests for measure framework | `pytest scripts/test/test_measure_framework.py` |
+| `test_backend_adapters.py` | Unit tests for backend adapters | `pytest scripts/test/test_backend_adapters.py` |
 | `verify_cross_model_edges.py` | Verify cross-model edges and dependencies | `python -m scripts.test.verify_cross_model_edges` |
 | `run_backend_tests.sh` | Backend compatibility tests (Shell script) | `bash scripts/test/run_backend_tests.sh` |
+| `conftest.py` | Pytest configuration and fixtures | N/A (auto-loaded by pytest) |
 
 ### Common Test Examples
 
@@ -157,11 +209,24 @@ python -m scripts.test.test_all_models
 # Run E2E pipeline test
 python -m scripts.test.test_pipeline_e2e
 
+# Run pytest unit tests
+pytest scripts/test/test_measure_framework.py
+pytest scripts/test/test_backend_adapters.py
+pytest scripts/test/  # Run all pytest tests
+
 # Verify cross-model edges
 python -m scripts.test.verify_cross_model_edges
 
 # Run backend compatibility tests
 bash scripts/test/run_backend_tests.sh
+
+# Performance tests
+python -m scripts.test.test_query_performance_duckdb
+python -m scripts.test.test_dimension_selector_performance
+
+# Standalone tests
+python -m scripts.test.test_filter_system_standalone
+python -m scripts.test.test_ui_state_standalone
 ```
 
 ---
@@ -210,9 +275,11 @@ By Category:
 
 ---
 
-## 🗑️ Removed Scripts (Obsolete)
+## 🗑️ Cleaned Up
 
-The following 11 scripts were removed during reorganization as they were obsolete:
+The following items were removed or consolidated during reorganization:
+
+### Removed Obsolete Scripts (11 from scripts/)
 
 **Migration Utilities (one-time use):**
 1. `migrate_to_delta.py` - Delta Lake migration (project uses Parquet)
@@ -230,6 +297,47 @@ The following 11 scripts were removed during reorganization as they were obsolet
 9. `refresh_data.py` - Used old import paths (`src.orchestration`)
 10. `build_equity_silver_duckdb.py` - Marked as "FALLBACK ONLY", bypasses proper model
 11. `examples/Silve_pull.py` - Typo in name, incomplete example
+
+### Removed from Root (7 files)
+
+**Empty Documentation (6 files):**
+- FORECAST_README.md
+- PIPELINE_GUIDE.md
+- QUICKSTART.md
+- REBUILD_STORAGE.md
+- RUNNING.md
+- SHARED_CALENDAR_DIMENSION.md
+
+**Duplicate (1 file):**
+- run_full_pipeline.py (older version, scripts/ingest/ has current)
+
+### Consolidated (tests/ folder → scripts/test/)
+
+**All test files moved to scripts/test/ and tests/ folder removed:**
+- Unit tests (4 files)
+- Integration tests (1 file)
+- Fixtures (sample_data_generator.py)
+- Configuration (conftest.py)
+- Pipeline tester and other test utilities
+
+**Root test scripts moved to scripts/test/:**
+- API_key_tests.py
+- test_env_loader.py
+- test_filter_system_standalone.py
+- test_forecast_view_standalone.py
+- test_merge_logic.py
+- test_ui_state_standalone.py
+- test_unified_filters.py
+- test_weighted_fix.py
+
+**Debug scripts moved to scripts/debug/:**
+- check_parquet_path.py
+- debug_exchange_data.py
+- debug_forecast_view.py
+- debug_session_injection.py
+- debug_weighted_views.py
+- diagnose_view_data.py
+- drop_view.py
 
 ---
 
@@ -334,12 +442,13 @@ Build all models with paginated ingestion from real data sources
 
 ## 📊 Statistics
 
-- **Total Scripts:** 24 (from original 36)
-- **Scripts Removed:** 11 obsolete scripts
-- **Scripts Kept:** 25 active scripts
-- **Total Lines of Code:** ~9,000 lines (after cleanup)
-- **Categories:** 5
-- **Validation Pass Rate:** 95.8%
+- **Total Scripts:** 52 organized scripts
+- **Previously Scattered:** ~45 scripts across root, tests/, and scripts/
+- **Scripts Removed:** 18 obsolete/empty files
+- **Total Lines of Code:** ~15,000 lines (organized)
+- **Categories:** 6 (build, ingest, maintenance, forecast, test, debug)
+- **Test Coverage:** 29 test scripts + fixtures
+- **Debug Tools:** 8 diagnostic scripts
 
 ---
 
