@@ -1,0 +1,453 @@
+{
+  "timestamp": "2025-11-17T17:07:04.393048",
+  "summary": {
+    "total_scripts": 24,
+    "passed": 23,
+    "warnings": 1,
+    "failed": 0,
+    "pass_rate": 95.83333333333334,
+    "duration": 2.782214
+  },
+  "by_category": {
+    "build": {
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "warnings": 0
+    },
+    "ingest": {
+      "total": 3,
+      "passed": 2,
+      "failed": 0,
+      "warnings": 1
+    },
+    "maintenance": {
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "warnings": 0
+    },
+    "forecast": {
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "warnings": 0
+    },
+    "test": {
+      "total": 9,
+      "passed": 9,
+      "failed": 0,
+      "warnings": 0
+    }
+  },
+  "results": [
+    {
+      "category": "build",
+      "script": "build_all_models.py",
+      "passed": true,
+      "line_count": 748,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Build All Models - Complete data ingestion and model building across all domains.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "build",
+      "script": "build_equity_silver.py",
+      "passed": true,
+      "line_count": 129,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Build Equity Silver Layer from existing Bronze data.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "build",
+      "script": "build_silver_layer.py",
+      "passed": true,
+      "line_count": 82,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Build Silver Layer Script.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "build",
+      "script": "build_weighted_aggregates_duckdb.py",
+      "passed": true,
+      "line_count": 181,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Build Weighted Aggregate Views (DuckDB).",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "build",
+      "script": "build_weighted_views.py",
+      "passed": true,
+      "line_count": 112,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Build weighted aggregate views for equity model.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "build",
+      "script": "rebuild_model.py",
+      "passed": true,
+      "line_count": 693,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Rebuild model from Bronze layer data.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "ingest",
+      "script": "Bronze_pull.py",
+      "passed": false,
+      "line_count": 24,
+      "syntax_valid": true,
+      "has_docstring": false,
+      "has_main": false,
+      "has_help": false,
+      "importable": true,
+      "docstring": null,
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "ingest",
+      "script": "reingest_exchanges.py",
+      "passed": true,
+      "line_count": 164,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Re-ingest exchanges data to get MIC codes from Polygon API.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "ingest",
+      "script": "run_full_pipeline.py",
+      "passed": true,
+      "line_count": 396,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": true,
+      "importable": true,
+      "docstring": "Full Pipeline Orchestrator",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "maintenance",
+      "script": "clear_and_refresh.py",
+      "passed": true,
+      "line_count": 302,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": true,
+      "importable": true,
+      "docstring": "Clear storage and refresh all data from scratch.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "maintenance",
+      "script": "clear_silver.py",
+      "passed": true,
+      "line_count": 156,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": true,
+      "importable": true,
+      "docstring": "Clear Silver Layer Utility",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "maintenance",
+      "script": "reset_model.py",
+      "passed": true,
+      "line_count": 431,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": true,
+      "importable": true,
+      "docstring": "Reset model storage to clean state.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "forecast",
+      "script": "run_forecasts.py",
+      "passed": true,
+      "line_count": 305,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Forecast Execution Script",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "forecast",
+      "script": "run_forecasts_large_cap.py",
+      "passed": true,
+      "line_count": 445,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Forecast Execution Script for Large Cap Companies",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "forecast",
+      "script": "verify_forecast_config.py",
+      "passed": true,
+      "line_count": 75,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": true,
+      "importable": true,
+      "docstring": "Quick verification script for forecast model configuration.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "test",
+      "script": "test_all_models.py",
+      "passed": true,
+      "line_count": 479,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": true,
+      "importable": true,
+      "docstring": "Test all models in the framework.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "test",
+      "script": "test_dimension_selector_performance.py",
+      "passed": true,
+      "line_count": 363,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Test dimension selector performance outside of Streamlit.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "test",
+      "script": "test_domain_model_integration_duckdb.py",
+      "passed": true,
+      "line_count": 472,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Domain Model Integration Test - DUCKDB BACKEND (REPORTING)",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "test",
+      "script": "test_domain_model_integration_spark.py",
+      "passed": true,
+      "line_count": 426,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": true,
+      "importable": true,
+      "docstring": "Domain Model Integration Test - SPARK BACKEND",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "test",
+      "script": "test_pipeline_e2e.py",
+      "passed": true,
+      "line_count": 738,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": true,
+      "importable": true,
+      "docstring": "End-to-end pipeline test: Ingestion \u2192 Silver \u2192 Gold \u2192 UI",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "test",
+      "script": "test_query_performance_duckdb.py",
+      "passed": true,
+      "line_count": 342,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Test dimension selector query performance with DuckDB.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "test",
+      "script": "test_ui_integration.py",
+      "passed": true,
+      "line_count": 634,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": true,
+      "importable": true,
+      "docstring": "UI integration test for Streamlit app and query patterns.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "test",
+      "script": "verify_cross_model_edges.py",
+      "passed": true,
+      "line_count": 180,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": true,
+      "has_help": true,
+      "importable": true,
+      "docstring": "Verify cross-model edges across all domain models.",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    },
+    {
+      "category": "test",
+      "script": "run_backend_tests.sh",
+      "passed": true,
+      "line_count": 62,
+      "syntax_valid": true,
+      "has_docstring": true,
+      "has_main": false,
+      "has_help": false,
+      "importable": true,
+      "docstring": "Backend Integration Tests",
+      "errors": {
+        "syntax": null,
+        "import": null,
+        "help": null
+      }
+    }
+  ]
+}
