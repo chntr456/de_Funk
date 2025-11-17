@@ -233,7 +233,9 @@ python -m scripts.test.test_ui_state_standalone
 
 ## 🔍 Script Validation
 
-The `test_scripts.py` utility provides comprehensive validation of all scripts:
+### Syntax Validation (test_scripts.py)
+
+The `test_scripts.py` utility validates script syntax and structure:
 
 ```bash
 # Run validation on all scripts
