@@ -164,13 +164,13 @@ class WeightedAggregateBuilder:
         Get DuckDB table reference for a table name.
 
         Checks if table is already registered in DuckDB, otherwise constructs
-        a read_parquet() reference to the Silver layer files.
+        a delta_scan() or read_parquet() reference to the Silver layer files.
 
         Args:
             table_name: Table name (e.g., 'fact_equity_prices')
 
         Returns:
-            SQL table reference (e.g., 'fact_equity_prices' or 'read_parquet(...)')
+            SQL table reference (e.g., 'fact_equity_prices' or 'delta_scan(...)')
         """
         # Try to use table if it's already registered
         try:
@@ -178,7 +178,7 @@ class WeightedAggregateBuilder:
             # Table exists, use it directly
             return table_name
         except:
-            # Table not registered, use Parquet file path
+            # Table not registered, need to read from files
             # Construct path based on table naming convention
             if table_name.startswith('fact_'):
                 subdir = 'facts'
@@ -187,9 +187,17 @@ class WeightedAggregateBuilder:
             else:
                 subdir = 'tables'
 
-            # Use glob pattern to read all partitions
-            parquet_path = f"{self.storage_path}/{subdir}/{table_name}/**/*.parquet"
-            return f"read_parquet('{parquet_path}', union_by_name=true)"
+            # Check if Delta table exists (has _delta_log directory)
+            from pathlib import Path
+            table_path = Path(self.storage_path) / subdir / table_name
+
+            if (table_path / '_delta_log').exists():
+                # Use delta_scan for Delta tables
+                return f"delta_scan('{table_path}')"
+            else:
+                # Use read_parquet for Parquet files
+                parquet_path = f"{table_path}/**/*.parquet"
+                return f"read_parquet('{parquet_path}', union_by_name=true)"
 
     def _sql_equal_weighted(self, table: str, value_col: str, group_cols: str) -> str:
         """Generate SQL for equal weighting (simple average). Normalization applied at query time."""
