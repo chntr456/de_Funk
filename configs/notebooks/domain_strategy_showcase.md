@@ -82,16 +82,11 @@ $exhibits${
 }
 
 $exhibits${
-  type: line_chart
-  source: equity.fact_equity_prices
-  x: trade_date
-  y: close
+  type: weighted_aggregate_chart
+  aggregate_by: trade_date
+  value_measures: [volume_weighted_index]
   title: Volume Weighted Average Price (VWAP)
   description: Price weighted by trading volume - represents institutional execution price
-  aggregations:
-    close: weighted_avg
-    weight_column: volume
-  group_by: [trade_date]
   interactive: true
   collapsible: true
   collapsible_title: "💹 Volume Weighted Index (VWAP)"
@@ -99,18 +94,11 @@ $exhibits${
 }
 
 $exhibits${
-  type: line_chart
-  source: equity.fact_equity_prices
-  x: trade_date
-  y: close
+  type: weighted_aggregate_chart
+  aggregate_by: trade_date
+  value_measures: [market_cap_weighted_index]
   title: Market Cap Weighted Index
   description: Weighted by market capitalization (close * volume proxy) - S&P 500 methodology
-  derived_columns:
-    market_cap: close * volume
-  aggregations:
-    close: weighted_avg
-    weight_column: market_cap
-  group_by: [trade_date]
   interactive: true
   collapsible: true
   collapsible_title: "💰 Market Cap Weighted Index (S&P 500 Style)"
@@ -118,16 +106,11 @@ $exhibits${
 }
 
 $exhibits${
-  type: line_chart
-  source: equity.fact_equity_prices
-  x: trade_date
-  y: close
+  type: weighted_aggregate_chart
+  aggregate_by: trade_date
+  value_measures: [price_weighted_index]
   title: Price Weighted Index
   description: Weighted by stock price - Dow Jones Industrial Average methodology
-  aggregations:
-    close: weighted_avg
-    weight_column: close
-  group_by: [trade_date]
   interactive: true
   collapsible: true
   collapsible_title: "📉 Price Weighted Index (DJIA Style)"
@@ -135,19 +118,11 @@ $exhibits${
 }
 
 $exhibits${
-  type: line_chart
-  source: equity.fact_equity_prices
-  x: trade_date
-  y: volume
+  type: weighted_aggregate_chart
+  aggregate_by: trade_date
+  value_measures: [volume_deviation_weighted_index]
   title: Volume Deviation Weighted Index
   description: Weighted by deviation from average volume - detects unusual trading activity
-  derived_columns:
-    avg_volume: avg(volume)
-    volume_deviation: abs(volume - avg_volume)
-  aggregations:
-    close: weighted_avg
-    weight_column: volume_deviation
-  group_by: [trade_date]
   interactive: true
   collapsible: true
   collapsible_title: "🔔 Volume Deviation Weighted Index"
@@ -167,19 +142,15 @@ $exhibits${
   derived_columns:
     market_cap: close * volume
   aggregations:
-    equal_weighted: avg
-    volume_weighted: {aggregation: weighted_avg, weight_column: volume}
-    market_cap_weighted: {aggregation: weighted_avg, weight_column: market_cap}
-    price_weighted: {aggregation: weighted_avg, weight_column: close}
+    close: avg
+    volume: sum
     num_stocks: count
   group_by: [trade_date]
   order_by: [{column: trade_date, direction: desc}]
   limit: 50
   format:
-    equal_weighted: $#,##0.00
-    volume_weighted: $#,##0.00
-    market_cap_weighted: $#,##0.00
-    price_weighted: $#,##0.00
+    close: $#,##0.00
+    volume: #,##0
     num_stocks: #,##0
   collapsible: true
   collapsible_title: "📊 All Weighting Strategies Comparison"
@@ -429,40 +400,57 @@ Compare index values across all weighting methodologies:
 $exhibits${
   type: metric_cards
   source: equity.fact_equity_prices
-  derived_columns:
-    market_cap: close * volume
   metrics: [
     {
       measure: close,
-      label: "Equal Weighted",
+      label: "Equal Weighted Index",
       aggregation: avg,
-      format: "$#,##0.00"
-    },
-    {
-      measure: close,
-      label: "Volume Weighted (VWAP)",
-      aggregation: weighted_avg,
-      weight_column: volume,
-      format: "$#,##0.00"
-    },
-    {
-      measure: close,
-      label: "Market Cap Weighted",
-      aggregation: weighted_avg,
-      weight_column: market_cap,
-      format: "$#,##0.00"
-    },
-    {
-      measure: close,
-      label: "Price Weighted",
-      aggregation: weighted_avg,
-      weight_column: close,
       format: "$#,##0.00"
     }
   ]
-  collapsible: true
-  collapsible_title: "📈 Index Construction Summary"
-  collapsible_expanded: true
+  collapsible: false
+}
+
+$exhibits${
+  type: metric_cards
+  source: equity.volume_weighted_index
+  metrics: [
+    {
+      measure: weighted_value,
+      label: "Volume Weighted (VWAP)",
+      aggregation: avg,
+      format: "$#,##0.00"
+    }
+  ]
+  collapsible: false
+}
+
+$exhibits${
+  type: metric_cards
+  source: equity.market_cap_weighted_index
+  metrics: [
+    {
+      measure: weighted_value,
+      label: "Market Cap Weighted",
+      aggregation: avg,
+      format: "$#,##0.00"
+    }
+  ]
+  collapsible: false
+}
+
+$exhibits${
+  type: metric_cards
+  source: equity.price_weighted_index
+  metrics: [
+    {
+      measure: weighted_value,
+      label: "Price Weighted",
+      aggregation: avg,
+      format: "$#,##0.00"
+    }
+  ]
+  collapsible: false
 }
 
 ---
