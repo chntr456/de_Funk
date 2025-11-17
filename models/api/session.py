@@ -136,6 +136,50 @@ class UniversalSession:
         # Unknown connection type
         raise ValueError(f"Unknown connection type: {connection_type}")
 
+    # ============================================================
+    # GRAPH ORCHESTRATION METHODS
+    # ============================================================
+
+    def should_apply_cross_model_filter(
+        self,
+        source_model: str,
+        target_model: str
+    ) -> bool:
+        """
+        Check if a filter from source_model should be applied to target_model.
+
+        Returns True if:
+        - Same model (always apply)
+        - Models are related via graph (cross-model filter is valid)
+
+        Args:
+            source_model: Model that defines the filter
+            target_model: Model being queried
+
+        Returns:
+            True if filter should be applied
+
+        Example:
+            # Apply equity filters to equity model
+            session.should_apply_cross_model_filter('equity', 'equity')  # True
+
+            # Apply equity filters to forecast model (related via graph)
+            session.should_apply_cross_model_filter('equity', 'forecast')  # True
+
+            # Don't apply equity filters to unrelated city_finance
+            session.should_apply_cross_model_filter('equity', 'city_finance')  # False
+        """
+        # Same model - always apply
+        if source_model == target_model:
+            return True
+
+        # Check if models are related via graph
+        if hasattr(self, 'model_graph') and self.model_graph:
+            return self.model_graph.are_related(target_model, source_model)
+
+        # No graph available - be conservative, don't apply cross-model filters
+        return False
+
     def load_model(self, model_name: str):
         """
         Dynamically load a model by name.

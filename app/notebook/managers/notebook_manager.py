@@ -653,26 +653,15 @@ class NotebookManager:
         # (avg for prices, sum for volumes, etc.)
         return (group_by_cols, None)
 
-    def _models_are_related(self, model_a: str, model_b: str) -> bool:
-        """
-        Check if two models have a declared relationship.
-
-        Uses NetworkX-based ModelGraph for efficient relationship checking.
-        Handles both direct and transitive dependencies.
-
-        Args:
-            model_a: First model name (e.g., "forecast")
-            model_b: Second model name (e.g., "company")
-
-        Returns:
-            True if models are related (direct or transitive), False otherwise
-        """
-        # Use the NetworkX-based ModelGraph from session
-        if hasattr(self.session, 'model_graph'):
-            return self.session.model_graph.are_related(model_a, model_b)
-
-        # Fallback: assume not related if graph not available
-        return False
+    # ============================================================
+    # REMOVED: _models_are_related
+    #
+    # This method has been removed and replaced with
+    # session.should_apply_cross_model_filter() which centralizes
+    # cross-model filter validation logic in UniversalSession.
+    #
+    # See GRAPH_REFACTOR_SCAN.md for details.
+    # ============================================================
 
     def _parse_source(self, source: str) -> tuple[str, str]:
         """
@@ -749,12 +738,8 @@ class NotebookManager:
                 if exhibit_model and filter_config.source:
                     filter_model = filter_config.source.model
 
-                    # Same model - always apply
-                    if filter_model == exhibit_model:
-                        pass  # Apply filter
-
-                    # Cross-model - check if relationship exists
-                    elif not self._models_are_related(exhibit_model, filter_model):
+                    # Check if filter should be applied (same model or related models)
+                    if not self.session.should_apply_cross_model_filter(filter_model, exhibit_model):
                         # No relationship declared - skip this filter
                         continue
 
