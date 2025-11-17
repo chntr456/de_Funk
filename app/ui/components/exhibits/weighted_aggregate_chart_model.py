@@ -186,33 +186,47 @@ def render_weighted_aggregate_chart(exhibit, pdf: pd.DataFrame):
 
     st.plotly_chart(fig, use_container_width=True, config=config)
 
-    # Show information about the measures
-    with st.expander("📊 Measure Information"):
-        st.markdown(f"""
-        **Displaying {len(measures)} weighted aggregate measure(s):**
-        """)
+    # Show information about the measures (only use expander if not already collapsible)
+    # Check if exhibit is collapsible to avoid nested expanders
+    use_expander = not getattr(exhibit, 'collapsible', False)
 
-        for measure_id in sorted(measures):
-            measure_data = pdf[pdf['measure_id'] == measure_id]
-            avg_value = measure_data['weighted_value'].mean()
-            min_value = measure_data['weighted_value'].min()
-            max_value = measure_data['weighted_value'].max()
-            data_points = len(measure_data)
-
-            display_name = measure_id.replace('_', ' ').replace(' index', '').title()
-            st.markdown(f"""
-            **{display_name}**
-            - Data points: {data_points}
-            - Range: ${min_value:.2f} - ${max_value:.2f}
-            - Average: ${avg_value:.2f}
-            """)
-
-        st.caption("""
-        💡 **Tip:** Click on legend items to show/hide specific weighting methods.
-
-        These values are pre-calculated in the silver layer for optimal performance.
-        """)
+    if use_expander:
+        with st.expander("📊 Measure Information"):
+            _render_measure_info(exhibit, pdf, measures)
+    else:
+        # Just show the info directly without expander
+        st.markdown("---")
+        st.markdown("**📊 Measure Information**")
+        _render_measure_info(exhibit, pdf, measures)
 
     # Optional: Show sample data
     if st.checkbox("Show sample data", key=f"{exhibit.id}_show_data"):
         st.dataframe(pdf.head(20), use_container_width=True)
+
+
+def _render_measure_info(exhibit, pdf, measures):
+    """Render measure information section."""
+    st.markdown(f"""
+    **Displaying {len(measures)} weighted aggregate measure(s):**
+    """)
+
+    for measure_id in sorted(measures):
+        measure_data = pdf[pdf['measure_id'] == measure_id]
+        avg_value = measure_data['weighted_value'].mean()
+        min_value = measure_data['weighted_value'].min()
+        max_value = measure_data['weighted_value'].max()
+        data_points = len(measure_data)
+
+        display_name = measure_id.replace('_', ' ').replace(' index', '').title()
+        st.markdown(f"""
+        **{display_name}**
+        - Data points: {data_points}
+        - Range: ${min_value:.2f} - ${max_value:.2f}
+        - Average: ${avg_value:.2f}
+        """)
+
+    st.caption("""
+    💡 **Tip:** Click on legend items to show/hide specific weighting methods.
+
+    These values are pre-calculated in the silver layer for optimal performance.
+    """)
