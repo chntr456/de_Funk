@@ -126,7 +126,7 @@ class ModelRebuilder:
 
         try:
             # Step 1: Reset existing Silver tables
-            logger.info("Step 1/3: Resetting Silver layer tables...")
+            logger.info("Step 1/4: Resetting Silver layer tables...")
             resetter = ModelResetter(self.model_name, str(self.config_dir))
 
             if not resetter.reset_model(
@@ -140,7 +140,7 @@ class ModelRebuilder:
                 return False
 
             # Step 2: Rebuild from Bronze
-            logger.info("Step 2/3: Rebuilding from Bronze layer...")
+            logger.info("Step 2/4: Rebuilding from Bronze layer...")
             rebuild_results = {}
 
             for table_name in tables_to_rebuild:
@@ -157,11 +157,18 @@ class ModelRebuilder:
 
             # Step 3: Validate if requested
             if validate:
-                logger.info("Step 3/3: Validating rebuilt data...")
+                logger.info("Step 3/4: Validating rebuilt data...")
                 validation_results = self._validate_rebuild(tables_to_rebuild, rebuild_results)
             else:
-                logger.info("Step 3/3: Skipping validation (not requested)")
+                logger.info("Step 3/4: Skipping validation (not requested)")
                 validation_results = {}
+
+            # Step 4: Build weighted aggregate views (for equity model only)
+            if self.model_name == 'equity':
+                logger.info("Step 4/4: Building weighted aggregate views...")
+                self._build_weighted_views()
+            else:
+                logger.info("Step 4/4: No post-build steps for this model")
 
             # Summary
             self._print_summary(tables_to_rebuild, rebuild_results, validation_results)
@@ -562,6 +569,31 @@ class ModelRebuilder:
         print("\n" + "=" * 70)
 
         return True
+
+    def _build_weighted_views(self):
+        """Build weighted aggregate views for equity model (DuckDB only)."""
+        try:
+            from models.builders import WeightedAggregateBuilder
+
+            # Get storage path
+            storage_root = self.model_cfg.get('storage', {}).get('root', 'storage/silver/equity')
+            storage_path = Path(storage_root)
+
+            # Create builder
+            builder = WeightedAggregateBuilder(
+                connection=self.conn.conn,  # Unwrap DuckDBConnection to get raw DuckDB conn
+                model_config=self.model_cfg,
+                storage_path=storage_path
+            )
+
+            # Build all weighted aggregate views
+            builder.build_all_weighted_aggregates(materialize=False)
+            logger.info("  ✓ Weighted aggregate views created successfully")
+
+        except Exception as e:
+            logger.warning(f"  ⚠️  Could not build weighted aggregate views: {e}")
+            logger.warning("  Weighted indices may not work in exhibits until views are created")
+            # Don't fail the rebuild if this fails - it's an optional feature
 
 
 def main():
