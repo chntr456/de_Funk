@@ -206,13 +206,15 @@ class BaseModel:
 
     def build(self) -> Tuple[Dict[str, DataFrame], Dict[str, DataFrame]]:
         """
-        Generic build process - works for any model with YAML config.
+        Build model tables from Bronze layer.
 
-        Steps:
-        1. Build nodes from schema (read Bronze, apply transformations)
-        2. Validate edges (ensure join paths exist)
-        3. Materialize paths (create joined views)
-        4. Separate into dims and facts
+        All graph operations (joins, relationships, validation) are handled
+        at query time by GraphQueryPlanner and UniversalSession.
+
+        This method simply:
+        1. Loads individual tables from Bronze
+        2. Applies transformations (select, derive)
+        3. Separates into dimensions and facts
 
         Returns:
             Tuple of (dimensions, facts)
@@ -220,19 +222,14 @@ class BaseModel:
         # Call before hook
         self.before_build()
 
-        # Build graph
+        # Build all tables from Bronze
         nodes = self._build_nodes()
-        self._apply_edges(nodes)
-        paths = self._materialize_paths(nodes)
 
         # Separate by naming convention
         dims = {k: v for k, v in nodes.items() if k.startswith("dim_")}
-        facts = {
-            **{k: v for k, v in nodes.items() if k.startswith("fact_")},
-            **paths
-        }
+        facts = {k: v for k, v in nodes.items() if k.startswith("fact_")}
 
-        # Call after hook
+        # Call after hook (allows model-specific customization)
         dims, facts = self.after_build(dims, facts)
 
         return dims, facts
@@ -459,137 +456,22 @@ class BaseModel:
 
         raise ValueError(f"Node '{node_id}' not found in local nodes or cross-model refs")
 
-    def _apply_edges(self, nodes: Dict[str, DataFrame]) -> None:
-        """
-        Validate that edges exist between nodes.
-
-        Does a dry-run join with limit(1) to validate:
-        - Both nodes exist
-        - Join columns exist
-        - Join is valid
-
-        Supports cross-model references (e.g., 'core.dim_calendar').
-
-        Note: Skipped for DuckDB backend (joins not yet implemented)
-
-        Args:
-            nodes: Dictionary of node_id -> DataFrame
-        """
-        # Skip edge validation for DuckDB (joins not yet supported)
-        if self.backend == 'duckdb':
-            return
-
-        graph = self.model_cfg.get('graph', {})
-
-        for edge in graph.get('edges', []):
-            from_id = edge['from']
-            to_id = edge['to']
-
-            # Resolve nodes (supports cross-model references)
-            try:
-                left = self._resolve_node(from_id, nodes)
-                right = self._resolve_node(to_id, nodes)
-            except ValueError as e:
-                raise ValueError(f"Edge resolution failed: {from_id} -> {to_id}. {e}") from e
-
-            # Get join keys
-            pairs = (
-                self._join_pairs_from_strings(edge['on'])
-                if edge.get('on')
-                else self._infer_join_pairs(left, right)
-            )
-
-            # Dry-run validation (limit to keep it cheap)
-            try:
-                _ = left.limit(1).join(
-                    right.limit(1),
-                    on=[left[l] == right[r] for l, r in pairs],
-                    how='left'
-                )
-            except Exception as e:
-                raise ValueError(
-                    f"Edge validation failed: {from_id} -> {to_id}. "
-                    f"Join pairs: {pairs}. Error: {e}"
-                )
-
-    def _materialize_paths(self, nodes: Dict[str, DataFrame]) -> Dict[str, DataFrame]:
-        """
-        Materialize path definitions by joining nodes.
-
-        Paths represent materialized views (e.g., fact_prices joined with dim_company).
-
-        Note: Skipped for DuckDB backend (joins not yet implemented)
-
-        Args:
-            nodes: Dictionary of node_id -> DataFrame
-
-        Returns:
-            Dictionary of path_id -> joined DataFrame
-        """
-        # Skip path materialization for DuckDB (joins not yet supported)
-        if self.backend == 'duckdb':
-            return {}
-
-        graph = self.model_cfg.get('graph', {})
-        paths = {}
-
-        for path_config in graph.get('paths', []):
-            path_id = path_config['id']
-            hops_spec = path_config['hops']
-
-            # Parse hops into chain
-            # Supports: "fact_prices -> dim_company -> dim_exchange"
-            # Or: ["fact_prices", "dim_company", "dim_exchange"]
-            if isinstance(hops_spec, str):
-                chain = [h.strip() for h in hops_spec.split('->')]
-            elif isinstance(hops_spec, list):
-                if len(hops_spec) == 1 and '->' in hops_spec[0]:
-                    chain = [h.strip() for h in hops_spec[0].split('->')]
-                else:
-                    chain = hops_spec
-            else:
-                raise ValueError(f"Invalid hops format for path {path_id}: {hops_spec}")
-
-            # Start with first node (supports cross-model refs)
-            try:
-                df = self._resolve_node(chain[0], nodes)
-            except ValueError as e:
-                raise ValueError(f"Path base '{chain[0]}' not found: {e}") from e
-
-            # Join remaining nodes in sequence
-            for i in range(len(chain) - 1):
-                left_id = chain[i]
-                right_id = chain[i + 1]
-
-                # Resolve right node (supports cross-model refs)
-                try:
-                    right_df = self._resolve_node(right_id, nodes)
-                except ValueError as e:
-                    raise ValueError(f"Path node '{right_id}' not found: {e}") from e
-
-                # Find edge definition for join keys
-                edge = self._find_edge(left_id, right_id)
-                pairs = (
-                    self._join_pairs_from_strings(edge['on'])
-                    if edge and edge.get('on')
-                    else self._infer_join_pairs(df, right_df)
-                )
-
-                # Join with dedupe (avoid duplicate columns)
-                right_prefix = f"{right_id}__"
-                df = self._join_with_dedupe(df, right_df, pairs, right_prefix, how='left')
-
-            paths[path_id] = df
-
-        return paths
-
-    def _find_edge(self, from_id: str, to_id: str) -> Optional[Dict]:
-        """Find edge definition between two nodes"""
-        graph = self.model_cfg.get('graph', {})
-        for edge in graph.get('edges', []):
-            if edge['from'] == from_id and edge['to'] == to_id:
-                return edge
-        return None
+    # ============================================================
+    # REMOVED: Graph deployment methods
+    #
+    # The following methods have been removed as part of the graph
+    # architecture refactor. All graph operations (joins, relationships,
+    # validation) are now handled at query time by:
+    # - GraphQueryPlanner (intra-model joins)
+    # - UniversalSession (cross-model operations)
+    #
+    # Removed methods:
+    # - _apply_edges(): Edge validation (was already skipped for DuckDB)
+    # - _materialize_paths(): Path materialization (was already skipped for DuckDB)
+    # - _find_edge(): Helper for above
+    #
+    # See GRAPH_REFACTOR_SCAN.md for detailed analysis
+    # ============================================================
 
     def _join_pairs_from_strings(self, specs: List[str]) -> List[Tuple[str, str]]:
         """
