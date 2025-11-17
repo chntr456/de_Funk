@@ -275,6 +275,49 @@ By Category:
 - test:        9/9 passed (100%)
 ```
 
+### Runtime Validation (validate_all_scripts.py)
+
+The `validate_all_scripts.py` utility **actually runs** all scripts with minimal test parameters to catch runtime errors:
+
+```bash
+# Validate all scripts (safe - skips destructive operations)
+python -m scripts.validate_all_scripts
+
+# Validate specific category
+python -m scripts.validate_all_scripts --category build
+
+# Include maintenance scripts (WARNING: destructive)
+python -m scripts.validate_all_scripts --include-maintenance
+
+# Verbose output with full command details
+python -m scripts.validate_all_scripts --verbose
+
+# Generate JSON report
+python -m scripts.validate_all_scripts --report validation_report.json
+```
+
+**What it validates:**
+- ✅ Scripts execute without crashing
+- ✅ Import statements work correctly
+- ✅ Command-line arguments are parsed
+- ✅ --help flags work (where applicable)
+- ✅ Scripts complete within timeout limits
+- ✅ Integration between components
+
+**Safety features:**
+- Uses minimal test parameters (--max-tickers 5, --days 7, etc.)
+- Skips destructive maintenance operations by default
+- Uses --dry-run flags where available
+- Skips long-running operations by default
+- 3-second warning before running maintenance scripts
+
+**When to use:**
+- After making changes to core modules
+- Before committing major refactors
+- After updating dependencies
+- To verify scripts still work in new environment
+- Before creating a pull request
+
 ---
 
 ## 🗑️ Cleaned Up
