@@ -218,16 +218,11 @@ $exhibits${
 }
 
 $exhibits${
-  type: line_chart
-  source: equity.fact_equity_prices
-  x: trade_date
-  y: close
+  type: weighted_aggregate_chart
+  aggregate_by: trade_date
+  value_measures: [volume_weighted_index]
   title: Volume Weighted Average Price (VWAP)
   description: Price weighted by trading volume across all selected tickers
-  aggregations:
-    close: weighted_avg
-    weight_column: volume
-  group_by: [trade_date]
   interactive: true
   collapsible: true
   collapsible_title: "💹 Volume Weighted Index (All Tickers)"
@@ -239,19 +234,16 @@ $exhibits${
   source: equity.fact_equity_prices
   columns: [trade_date, close, volume]
   aggregations:
-    equal_weighted: avg
-    volume_weighted: weighted_avg
-    total_volume: sum
-  weight_column: volume
+    close: avg
+    volume: sum
   group_by: [trade_date]
   order_by: [{column: trade_date, direction: desc}]
   limit: 30
   format:
-    equal_weighted: $#,##0.00
-    volume_weighted: $#,##0.00
-    total_volume: #,##0
+    close: $#,##0.00
+    volume: #,##0
   collapsible: true
-  collapsible_title: "📋 Index Values Over Time"
+  collapsible_title: "📋 Aggregated Values Over Time"
   collapsible_expanded: false
 }
 
@@ -260,18 +252,11 @@ $exhibits${
 ### Market Cap Weighted Index
 
 $exhibits${
-  type: line_chart
-  source: equity.fact_equity_prices
-  x: trade_date
-  y: close
+  type: weighted_aggregate_chart
+  aggregate_by: trade_date
+  value_measures: [market_cap_weighted_index]
   title: Market Cap Weighted Index
   description: Price weighted by market capitalization (close * volume proxy)
-  derived_columns:
-    market_cap: close * volume
-  aggregations:
-    close: weighted_avg
-    weight_column: market_cap
-  group_by: [trade_date]
   interactive: true
   collapsible: true
   collapsible_title: "💰 Market Cap Weighted Index"
@@ -283,24 +268,12 @@ $exhibits${
 ### Index Comparison
 
 $exhibits${
-  type: data_table
-  source: equity.fact_equity_prices
-  columns: [trade_date, close, volume]
-  derived_columns:
-    market_cap: close * volume
-  aggregations:
-    equal_weighted: avg
-    volume_weighted: {aggregation: weighted_avg, weight_column: volume}
-    market_cap_weighted: {aggregation: weighted_avg, weight_column: market_cap}
-    num_stocks: count
-  group_by: [trade_date]
-  order_by: [{column: trade_date, direction: desc}]
-  limit: 30
-  format:
-    equal_weighted: $#,##0.00
-    volume_weighted: $#,##0.00
-    market_cap_weighted: $#,##0.00
-    num_stocks: #,##0
+  type: weighted_aggregate_chart
+  aggregate_by: trade_date
+  value_measures: [equal_weighted_index, volume_weighted_index, market_cap_weighted_index, price_weighted_index]
+  title: All Index Methods Comparison
+  description: Compare all weighting methodologies in one chart
+  interactive: true
   collapsible: true
   collapsible_title: "📊 All Index Methods Comparison"
   collapsible_expanded: false
@@ -360,7 +333,7 @@ This notebook demonstrates:
 3. **Measure Selectors** - Dynamically choose which measures to display on charts
 4. **Collapsible Exhibits** - Keep notebook organized by hiding/showing sections
 5. **Multiple Chart Types** - Line charts, bar charts, data tables, metric cards
-6. **Multiple Aggregation Types** - avg, sum, count, stddev, max, min, weighted_avg
+6. **Multiple Aggregation Types** - avg, sum, count, stddev, max, min
 7. **Format Patterns** - Currency ($#,##0.00), Percentage (#,##0.00%), Integer (#,##0)
 8. **Computed Measures** - price_range, market_cap
 9. **Weighted Aggregates** - Equal, volume, market-cap weighted indices across all tickers
