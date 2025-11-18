@@ -4,9 +4,20 @@ Pytest configuration and shared fixtures.
 Provides common test fixtures for backend adapters, models, and test data.
 """
 
+import sys
+from pathlib import Path
+
+# Bootstrap repo imports using centralized repo discovery
+repo_root = Path(__file__).resolve().parent.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
+
+# Now we can use the unified config system
+from utils.repo import setup_repo_imports
+setup_repo_imports()
+
 import pytest
 import tempfile
-from pathlib import Path
 import yaml
 import pandas as pd
 import duckdb
