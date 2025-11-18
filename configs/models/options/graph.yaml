@@ -1,0 +1,39 @@
+# Options graph - extends base securities graph
+
+extends: _base.securities.graph
+
+nodes:
+  dim_option:
+    extends: _base.securities._dim_security_base
+    filters:
+      - "asset_type = 'options'"     # KEY FILTER
+    select:
+      ticker: ticker
+      security_name: name
+      underlying_ticker: underlying_ticker
+      strike_price: strike_price
+      expiry_date: expiry_date
+      option_type: option_type
+      contract_size: contract_size
+
+  fact_option_prices:
+    extends: _base.securities._fact_prices_base
+    filters:
+      - "asset_type = 'options'"     # KEY FILTER
+    select:
+      # OHLCV fields
+      ticker: ticker
+      trade_date: trade_date
+      open: open
+      high: high
+      low: low
+      close: close
+      volume: volume
+
+edges:
+  option_to_underlying:
+    from: dim_option
+    to: stocks.dim_stock
+    on: ["underlying_ticker=ticker"]
+    type: many_to_one
+    description: "Option derives from underlying stock"

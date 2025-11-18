@@ -1,218 +1,130 @@
 """
-CompanyModel - Domain model for company financial data.
+Company Model - Corporate legal entities.
 
-⚠️  DEPRECATED: This model has been split into EquityModel and CorporateModel
-    for better separation of concerns.
+Represents companies as legal entities (not tradable securities).
+Primary key is SEC CIK (Central Index Key).
 
-    - For price/volume/trading data: Use EquityModel
-    - For corporate fundamentals/SEC filings: Use CorporateModel
-
-    See docs/EQUITY_CORPORATE_MIGRATION_GUIDE.md for migration instructions.
-
-    This model remains for backward compatibility but will be removed in a future release.
-
-Inherits all graph building logic from BaseModel.
-Only adds company-specific convenience methods.
+Version: 2.0 - Redesigned model architecture
 """
 
-import warnings
-from typing import Optional
-from pyspark.sql import DataFrame
 from models.base.model import BaseModel
+from typing import Optional, Dict, Any, List
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CompanyModel(BaseModel):
     """
-    Company domain model.
+    Corporate entity model.
 
-    ⚠️  DEPRECATED: This model is deprecated and will be removed in a future release.
+    Represents legal business entities with CIK as primary key.
+    Companies can have multiple tickers (e.g., Alphabet: GOOGL, GOOG).
 
-    **Migration Path:**
-    ```python
-    # OLD
-    from models.implemented.company.model import CompanyModel
-    company = CompanyModel(...)
-
-    # NEW
-    from models.implemented.equity.model import EquityModel
-    equity = EquityModel(...)  # Same API!
-    ```
-
-    **Reason for Deprecation:**
-    The "company" model conflated two distinct concepts:
-    - Equity: Tradable securities (ticker, prices, volume)
-    - Corporate: Legal entities (company, fundamentals, SEC filings)
-
-    These have been split into EquityModel and CorporateModel for better
-    separation of concerns.
-
-    See docs/EQUITY_CORPORATE_MIGRATION_GUIDE.md for full migration guide.
-
-    Inherits all functionality from BaseModel:
-    - Generic graph building from YAML config
-    - Node loading from Bronze
-    - Edge validation
-    - Path materialization
-    - Table access methods
-    - Measure calculations
-
-    The YAML config (configs/models/company.yaml) drives everything.
-
-    This class adds company-specific convenience methods.
+    This model focuses on corporate entities, fundamentals, and SEC filings.
+    For tradable securities and prices, use StocksModel.
     """
 
-    def __init__(self, *args, **kwargs):
+    def get_company_by_cik(self, cik: str) -> Any:
         """
-        Initialize CompanyModel with deprecation warning.
-        """
-        # Emit deprecation warning
-        warnings.warn(
-            "CompanyModel is deprecated and will be removed in a future release. "
-            "Use EquityModel for price/trading data or CorporateModel for fundamentals. "
-            "See docs/EQUITY_CORPORATE_MIGRATION_GUIDE.md for migration instructions.",
-            DeprecationWarning,
-            stacklevel=2
-        )
-        super().__init__(*args, **kwargs)
-
-    # All core functionality is inherited from BaseModel!
-    # The YAML config defines:
-    # - Nodes: dim_company, dim_exchange, fact_prices, fact_news
-    # - Edges: relationships between tables
-    # - Paths: prices_with_company, news_with_company
-    # - Measures: market_cap, avg_close_price, total_volume, etc.
-
-    # ============================================================
-    # COMPANY-SPECIFIC MEASURE CALCULATIONS
-    # ============================================================
-
-    def calculate_measure_by_ticker(self, measure_name: str, limit: Optional[int] = None):
-        """
-        Calculate a measure aggregated by ticker (NEW: uses unified framework).
-
-        This is a convenience wrapper around BaseModel.calculate_measure()
-        specifically for the 'ticker' entity column.
-
-        Now supports ALL measure types (simple, computed, weighted) with both backends!
+        Get company information by SEC CIK number.
 
         Args:
-            measure_name: Name of measure from config (e.g., 'market_cap', 'volume_weighted_index')
-            limit: Optional limit for top-N results
+            cik: SEC Central Index Key (10 digits, zero-padded)
 
         Returns:
-            QueryResult with data and metadata
-
-        Example:
-            # Simple measure
-            result = company_model.calculate_measure_by_ticker('market_cap', limit=10)
-            df = result.data  # Access DataFrame
-
-            # Weighted measure (no ticker grouping needed)
-            result = company_model.calculate_measure_by_ticker('volume_weighted_index')
+            DataFrame with company information
         """
-        return self.calculate_measure(
-            measure_name=measure_name,
-            entity_column='ticker',
-            limit=limit
-        )
+        dim_company = self.get_table('dim_company')
 
-    def get_top_tickers_by_measure(self, measure_name: str, limit: int = 10) -> list:
+        if self._backend == 'spark':
+            return dim_company.filter(dim_company.cik == cik)
+        else:  # duckdb/pandas
+            return dim_company[dim_company['cik'] == cik]
+
+    def get_company_by_ticker(self, ticker: str) -> Any:
         """
-        Get list of top ticker symbols by a measure (NEW: uses unified framework).
-
-        Convenience method that returns just the ticker list.
+        Get company information by primary ticker symbol.
 
         Args:
-            measure_name: Name of measure from config
-            limit: Number of top tickers to return
+            ticker: Trading symbol (e.g., 'AAPL')
 
         Returns:
-            List of ticker symbols, ordered by measure value descending
-
-        Example:
-            # Get top 10 companies by market cap
-            tickers = company_model.get_top_tickers_by_measure('market_cap', limit=10)
-            # Returns: ['AAPL', 'MSFT', 'GOOGL', ...]
+            DataFrame with company information
         """
-        result = self.calculate_measure_by_ticker(measure_name, limit=limit)
+        dim_company = self.get_table('dim_company')
 
-        # Handle both Pandas and Spark DataFrames
-        if self.backend == 'duckdb':
-            return result.data['ticker'].tolist()
-        else:  # spark
-            return [row['ticker'] for row in result.data.collect()]
+        if self._backend == 'spark':
+            return dim_company.filter(dim_company.ticker_primary == ticker)
+        else:  # duckdb/pandas
+            return dim_company[dim_company['ticker_primary'] == ticker]
 
-    # ============================================================
-    # COMPANY-SPECIFIC CONVENIENCE METHODS
-    # ============================================================
-
-    def get_prices(self, ticker: Optional[str] = None) -> DataFrame:
+    def get_companies_by_sector(self, sector: str) -> Any:
         """
-        Convenience method for getting price data.
+        Get all companies in a given sector.
 
         Args:
-            ticker: Optional ticker filter
+            sector: GICS sector name
 
         Returns:
-            DataFrame with price data
+            DataFrame with companies in sector
         """
-        df = self.get_fact_df('fact_prices')
-        if ticker:
-            df = df.filter(df.ticker == ticker)
-        return df
+        dim_company = self.get_table('dim_company')
 
-    def get_news(self, ticker: Optional[str] = None) -> DataFrame:
+        if self._backend == 'spark':
+            return dim_company.filter(dim_company.sector == sector)
+        else:  # duckdb/pandas
+            return dim_company[dim_company['sector'] == sector]
+
+    def get_active_companies(self) -> Any:
         """
-        Convenience method for getting news data.
-
-        Args:
-            ticker: Optional ticker filter
+        Get all active companies.
 
         Returns:
-            DataFrame with news data
+            DataFrame with active companies
         """
-        df = self.get_table('news_with_company')
-        if ticker:
-            df = df.filter(df.ticker == ticker)
-        return df
+        dim_company = self.get_table('dim_company')
 
-    def get_company_info(self, ticker: Optional[str] = None) -> DataFrame:
+        if self._backend == 'spark':
+            return dim_company.filter(dim_company.is_active == True)
+        else:  # duckdb/pandas
+            return dim_company[dim_company['is_active'] == True]
+
+    def list_sectors(self) -> List[str]:
         """
-        Convenience method for getting company dimension data.
-
-        Args:
-            ticker: Optional ticker filter
+        Get list of all sectors.
 
         Returns:
-            DataFrame with company info
+            List of sector names
         """
-        df = self.get_dimension_df('dim_company')
-        if ticker:
-            df = df.filter(df.ticker == ticker)
-        return df
+        dim_company = self.get_table('dim_company')
 
-    def get_exchanges(self) -> DataFrame:
+        if self._backend == 'spark':
+            sectors = dim_company.select('sector').distinct().collect()
+            return [row.sector for row in sectors if row.sector]
+        else:  # duckdb/pandas
+            return dim_company['sector'].dropna().unique().tolist()
+
+    def get_company_count_by_sector(self) -> Dict[str, int]:
         """
-        Convenience method for getting exchange dimension data.
+        Get count of companies by sector.
 
         Returns:
-            DataFrame with exchange info
+            Dictionary mapping sector to count
         """
-        return self.get_dimension_df('dim_exchange')
+        dim_company = self.get_table('dim_company')
 
-    def get_prices_with_context(self, ticker: Optional[str] = None) -> DataFrame:
-        """
-        Get prices with full company and exchange context.
+        if self._backend == 'spark':
+            result = dim_company.groupBy('sector').count().collect()
+            return {row.sector: row['count'] for row in result if row.sector}
+        else:  # duckdb/pandas
+            return dim_company['sector'].value_counts().to_dict()
 
-        This is a materialized path from the graph.
-
-        Args:
-            ticker: Optional ticker filter
-
-        Returns:
-            DataFrame with prices, company, and exchange info
-        """
-        df = self.get_table('prices_with_company')
-        if ticker:
-            df = df.filter(df.ticker == ticker)
-        return df
+    # Future methods when we add financial data:
+    # def get_financials(self, cik: str, start_date=None, end_date=None):
+    #     """Get financial statements for a company"""
+    #     pass
+    #
+    # def get_filings(self, cik: str, filing_type=None):
+    #     """Get SEC filings for a company"""
+    #     pass

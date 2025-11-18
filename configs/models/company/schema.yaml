@@ -1,0 +1,281 @@
+# Company schema - corporate legal entities
+
+dimensions:
+  dim_company:
+    description: "Corporate entity master (legal business entities)"
+    columns:
+      company_id:
+        type: string
+        description: "PK - Internal ID (e.g., COMPANY_0000320193)"
+        required: true
+
+      cik:
+        type: string
+        description: "SEC Central Index Key (10 digits, zero-padded)"
+        pattern: "^[0-9]{10}$"
+        required: true
+
+      company_name:
+        type: string
+        description: "DBA name (Doing Business As)"
+        required: true
+
+      legal_name:
+        type: string
+        description: "Legal entity name"
+
+      ticker_primary:
+        type: string
+        description: "Primary trading symbol (most liquid)"
+
+      # Incorporation
+      incorporation_state:
+        type: string
+        description: "State of incorporation (e.g., 'DE' for Delaware)"
+
+      incorporation_country:
+        type: string
+        description: "Country of incorporation (e.g., 'US')"
+        default: "US"
+
+      incorporation_date:
+        type: date
+        description: "Date of incorporation"
+
+      # Classification
+      sector:
+        type: string
+        description: "GICS Sector (Level 1)"
+
+      industry_group:
+        type: string
+        description: "GICS Industry Group (Level 2)"
+
+      industry:
+        type: string
+        description: "GICS Industry (Level 3)"
+
+      sub_industry:
+        type: string
+        description: "GICS Sub-Industry (Level 4)"
+
+      sic_code:
+        type: string
+        description: "Standard Industrial Classification code"
+
+      naics_code:
+        type: string
+        description: "North American Industry Classification System code"
+
+      # Location
+      headquarters_city:
+        type: string
+        description: "HQ city"
+
+      headquarters_state:
+        type: string
+        description: "HQ state/province"
+
+      headquarters_country:
+        type: string
+        description: "HQ country"
+
+      headquarters_address:
+        type: string
+        description: "Full HQ address"
+
+      # Contact
+      website:
+        type: string
+        description: "Company website URL"
+
+      phone:
+        type: string
+        description: "Main phone number"
+
+      email:
+        type: string
+        description: "Main contact email"
+
+      # Status
+      is_active:
+        type: boolean
+        description: "Currently active/operating"
+        default: true
+
+      fiscal_year_end:
+        type: string
+        description: "Fiscal year end (MM-DD format)"
+
+      employee_count:
+        type: long
+        description: "Number of employees"
+
+      # Metadata
+      description:
+        type: string
+        description: "Business description"
+
+      last_updated:
+        type: timestamp
+        description: "Last metadata update"
+
+    primary_key: [cik]
+    tags: [dim, entity, corporate, company]
+
+facts:
+  fact_company_financials:
+    description: "Financial statements from SEC filings"
+    columns:
+      cik:
+        type: string
+        description: "FK to dim_company"
+        required: true
+
+      report_date:
+        type: date
+        description: "Period end date"
+        required: true
+
+      filing_date:
+        type: date
+        description: "Date filed with SEC"
+
+      fiscal_year:
+        type: int
+        description: "Fiscal year"
+
+      fiscal_quarter:
+        type: int
+        description: "Fiscal quarter (1-4, 0 for annual)"
+
+      # Income Statement
+      revenue:
+        type: double
+        description: "Total revenue"
+
+      cost_of_revenue:
+        type: double
+        description: "Cost of goods/services sold"
+
+      gross_profit:
+        type: double
+        description: "Revenue - COGS"
+
+      operating_expenses:
+        type: double
+        description: "Operating expenses"
+
+      operating_income:
+        type: double
+        description: "Operating profit/loss"
+
+      net_income:
+        type: double
+        description: "Net income/loss"
+
+      eps_basic:
+        type: double
+        description: "Earnings per share (basic)"
+
+      eps_diluted:
+        type: double
+        description: "Earnings per share (diluted)"
+
+      shares_basic:
+        type: long
+        description: "Weighted average shares (basic)"
+
+      shares_diluted:
+        type: long
+        description: "Weighted average shares (diluted)"
+
+      # Balance Sheet
+      total_assets:
+        type: double
+        description: "Total assets"
+
+      current_assets:
+        type: double
+        description: "Current assets"
+
+      total_liabilities:
+        type: double
+        description: "Total liabilities"
+
+      current_liabilities:
+        type: double
+        description: "Current liabilities"
+
+      total_equity:
+        type: double
+        description: "Stockholders' equity"
+
+      cash:
+        type: double
+        description: "Cash and cash equivalents"
+
+      debt_long_term:
+        type: double
+        description: "Long-term debt"
+
+      # Cash Flow
+      operating_cash_flow:
+        type: double
+        description: "Cash from operations"
+
+      investing_cash_flow:
+        type: double
+        description: "Cash from investing"
+
+      financing_cash_flow:
+        type: double
+        description: "Cash from financing"
+
+      free_cash_flow:
+        type: double
+        description: "Operating CF - CapEx"
+
+      capex:
+        type: double
+        description: "Capital expenditures"
+
+    primary_key: [cik, report_date, fiscal_quarter]
+    partitions: [report_date]
+    tags: [fact, financials, fundamentals, sec]
+
+  fact_company_filings:
+    description: "SEC filing metadata (10-K, 10-Q, 8-K)"
+    columns:
+      cik:
+        type: string
+        required: true
+
+      accession_number:
+        type: string
+        description: "Unique filing identifier"
+        required: true
+
+      filing_date:
+        type: date
+        required: true
+
+      report_date:
+        type: date
+        description: "Period end date"
+
+      filing_type:
+        type: string
+        description: "10-K, 10-Q, 8-K, etc."
+
+      primary_doc_url:
+        type: string
+        description: "URL to primary document"
+
+      filing_url:
+        type: string
+        description: "EDGAR filing page URL"
+
+    primary_key: [accession_number]
+    partitions: [filing_date]
+    tags: [fact, sec, filings]

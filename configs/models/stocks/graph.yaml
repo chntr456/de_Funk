@@ -1,0 +1,127 @@
+# Stocks graph definition - extends base securities graph
+
+extends: _base.securities.graph
+
+nodes:
+  dim_stock:
+    extends: _base.securities._dim_security_base
+    # Override filters to select only stocks
+    filters:
+      - "asset_type = 'stocks'"       # KEY FILTER - only stocks!
+      - "is_active = true"
+    select:
+      # Base fields
+      ticker: ticker
+      security_name: name
+      asset_type: asset_type
+      asset_class: asset_class
+      exchange_code: primary_exchange
+      currency: currency
+      is_active: active
+      listing_date: listing_date
+      delisting_date: delisted_utc
+      # Stocks-specific fields
+      cik: cik
+      stock_type: type
+      shares_outstanding: weighted_shares_outstanding
+      sector: sector
+      industry: industry
+    derive:
+      company_id: "CONCAT('COMPANY_', cik)"
+      market_cap: "close * COALESCE(shares_outstanding, 0)"
+    unique_key: [ticker]
+    tags: [dim, stock]
+
+  fact_stock_prices:
+    extends: _base.securities._fact_prices_base
+    # Override filters to select only stock prices
+    filters:
+      - "asset_type = 'stocks'"       # KEY FILTER - only stock prices!
+      - "trade_date IS NOT NULL"
+      - "ticker IS NOT NULL"
+    select:
+      # Inherits all OHLCV fields from base
+      ticker: ticker
+      trade_date: trade_date
+      open: open
+      high: high
+      low: low
+      close: close
+      volume: volume
+      volume_weighted: volume_weighted
+      transactions: transactions
+    tags: [fact, prices, stocks]
+
+  fact_stock_technicals:
+    from: fact_stock_prices
+    select:
+      ticker: ticker
+      trade_date: trade_date
+      close: close
+      high: high
+      low: low
+      volume: volume
+    derive:
+      # Returns
+      daily_return: "(close - LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date)) / NULLIF(LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date), 0) * 100"
+
+      # Simple Moving Averages
+      sma_20: "AVG(close) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)"
+      sma_50: "AVG(close) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 49 PRECEDING AND CURRENT ROW)"
+      sma_200: "AVG(close) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 199 PRECEDING AND CURRENT ROW)"
+
+      # RSI calculation (14-period)
+      price_change: "close - LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date)"
+      gain: "CASE WHEN price_change > 0 THEN price_change ELSE 0 END"
+      loss: "CASE WHEN price_change < 0 THEN ABS(price_change) ELSE 0 END"
+      avg_gain_14: "AVG(gain) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW)"
+      avg_loss_14: "AVG(loss) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 13 PRECEDING AND CURRENT ROW)"
+      rs_14: "avg_gain_14 / NULLIF(avg_loss_14, 0)"
+      rsi_14: "100 - (100 / (1 + COALESCE(rs_14, 0)))"
+
+      # Volatility (20-day and 60-day)
+      volatility_20d: "STDDEV(daily_return) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW) * SQRT(252)"
+      volatility_60d: "STDDEV(daily_return) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) * SQRT(252)"
+
+      # Bollinger Bands (20-day, 2 std dev)
+      bollinger_middle: "sma_20"
+      bollinger_upper: "sma_20 + (2 * STDDEV(close) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW))"
+      bollinger_lower: "sma_20 - (2 * STDDEV(close) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW))"
+
+      # Volume indicators
+      volume_sma_20: "AVG(volume) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)"
+      volume_ratio: "volume / NULLIF(volume_sma_20, 0)"
+
+    tags: [fact, technical]
+
+edges:
+  # Inherits from base: _prices_to_security, _prices_to_calendar
+
+  # Stocks-specific edges
+  stock_to_company:
+    from: dim_stock
+    to: company.dim_company
+    on: ["company_id=company_id"]
+    type: many_to_one
+    description: "Stock belongs to a company (corporate entity)"
+
+  prices_to_stock:
+    from: fact_stock_prices
+    to: dim_stock
+    on: ["ticker=ticker"]
+    type: many_to_one
+    description: "Prices belong to a stock"
+
+  technicals_to_stock:
+    from: fact_stock_technicals
+    to: dim_stock
+    on: ["ticker=ticker"]
+    type: many_to_one
+    description: "Technical indicators belong to a stock"
+
+  technicals_to_calendar:
+    from: fact_stock_technicals
+    to: core.dim_calendar
+    on: ["trade_date=date"]
+    type: left
+    description: "Link technicals to calendar for date filtering"

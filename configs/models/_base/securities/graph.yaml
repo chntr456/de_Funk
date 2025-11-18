@@ -1,0 +1,54 @@
+# Base graph patterns for securities
+# Models can extend and override these patterns
+
+nodes:
+  _dim_security_base:
+    from: bronze.securities_reference
+    filters:
+      # Override in child: - "asset_type = 'stocks'"
+      - "is_active = true"
+    select:
+      ticker: ticker
+      security_name: name
+      asset_type: asset_type
+      asset_class: asset_class
+      exchange_code: exchange_code
+      currency: currency
+      is_active: active
+      listing_date: listing_date
+    derive:
+      security_id: "sha1(ticker)"
+    tags: [dim, entity]
+
+  _fact_prices_base:
+    from: bronze.securities_prices_daily
+    filters:
+      # Override in child: - "asset_type = 'stocks'"
+      - "trade_date IS NOT NULL"
+      - "ticker IS NOT NULL"
+    select:
+      ticker: ticker
+      trade_date: trade_date
+      open: open
+      high: high
+      low: low
+      close: close
+      volume: volume
+      volume_weighted: volume_weighted
+      transactions: transactions
+    tags: [fact, prices]
+
+edges:
+  _prices_to_security:
+    from: _fact_prices
+    to: _dim_security
+    on: ["ticker=ticker"]
+    type: many_to_one
+    description: "Prices belong to a security"
+
+  _prices_to_calendar:
+    from: _fact_prices
+    to: core.dim_calendar
+    on: ["trade_date=date"]
+    type: left
+    description: "Join prices to calendar for date filtering"

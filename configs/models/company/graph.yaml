@@ -1,0 +1,40 @@
+# Company graph definition
+
+nodes:
+  dim_company:
+    from: bronze.securities_reference
+    filters:
+      - "asset_type = 'stocks'"  # Only stock tickers have company data
+      - "cik IS NOT NULL"        # Must have CIK to be a valid company
+    select:
+      cik: cik
+      company_name: name
+      legal_name: name  # Will be updated when we get proper SEC data
+      ticker_primary: ticker
+      sic_code: sic_code
+      sic_description: sic_description
+      exchange_code: primary_exchange
+    derive:
+      company_id: "CONCAT('COMPANY_', cik)"
+      is_active: "CAST(active AS BOOLEAN)"
+      incorporation_country: "'US'"  # Default, update from SEC data later
+    tags: [dim, entity, corporate]
+    unique_key: [cik]
+
+  # Placeholder for future fact tables (will be populated from SEC EDGAR API)
+  # fact_company_financials:
+  #   from: bronze.company_financials
+  #   select: {...}
+
+  # fact_company_filings:
+  #   from: bronze.sec_filings
+  #   select: {...}
+
+edges:
+  # Future edge: company to calendar for fiscal periods
+  # company_financials_to_calendar:
+  #   from: fact_company_financials
+  #   to: core.dim_calendar
+  #   on: ["report_date=date"]
+  #   type: left
+  #   description: "Link financials to calendar"

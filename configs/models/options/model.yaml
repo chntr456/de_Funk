@@ -1,0 +1,36 @@
+# Options Model - Options contracts
+# Inherits from securities base class
+
+model: options
+version: 2.0
+description: "Options contracts with strike, expiry, and Greeks"
+tags: [options, derivatives, securities]
+
+# Model inheritance and dependencies
+inherits_from: _base.securities      # Inherits schema, graph, measures
+depends_on: [core, stocks]           # Options derive value from underlying stocks
+
+# Component composition
+components:
+  schema: options/schema.yaml
+  graph: options/graph.yaml
+  measures:
+    yaml: options/measures.yaml
+    python: options/measures.py    # Greeks calculations, implied vol, etc.
+
+# Storage configuration
+storage:
+  root: storage/silver/options
+  format: parquet
+
+# Build configuration
+build:
+  partitions: [trade_date]
+  sort_by: [ticker, expiry_date, strike_price]
+  optimize: true
+
+# Metadata
+metadata:
+  owner: data_engineering
+  domain: derivatives
+  sla_hours: 4

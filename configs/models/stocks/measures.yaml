@@ -1,0 +1,168 @@
+# Stocks measures - extends base securities measures
+
+extends: _base.securities.measures
+
+# Inherit all base measures:
+# - avg_close_price, total_volume, max_high, min_low, avg_vwap
+# - price_range, intraday_return
+
+# Add stocks-specific simple measures
+simple_measures:
+  avg_market_cap:
+    description: "Average market capitalization"
+    type: simple
+    source: dim_stock.market_cap
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00M"
+    tags: [valuation, market_cap]
+
+  total_market_cap:
+    description: "Total market cap across stocks"
+    type: simple
+    source: dim_stock.market_cap
+    aggregation: sum
+    data_type: double
+    format: "$#,##0.00B"
+    tags: [valuation, aggregate]
+
+  stock_count:
+    description: "Number of stocks"
+    type: simple
+    source: dim_stock.ticker
+    aggregation: count
+    data_type: long
+    format: "#,##0"
+    tags: [count]
+
+  avg_shares_outstanding:
+    description: "Average shares outstanding"
+    type: simple
+    source: dim_stock.shares_outstanding
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00M"
+    tags: [shares]
+
+  # Technical indicator measures
+  avg_rsi:
+    description: "Average RSI across period"
+    type: simple
+    source: fact_stock_technicals.rsi_14
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00"
+    tags: [technical, momentum]
+
+  avg_volatility_20d:
+    description: "Average 20-day annualized volatility"
+    type: simple
+    source: fact_stock_technicals.volatility_20d
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00%"
+    tags: [technical, risk, volatility]
+
+  avg_volatility_60d:
+    description: "Average 60-day annualized volatility"
+    type: simple
+    source: fact_stock_technicals.volatility_60d
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00%"
+    tags: [technical, risk, volatility]
+
+  avg_volume_ratio:
+    description: "Average volume ratio (current/20-day avg)"
+    type: simple
+    source: fact_stock_technicals.volume_ratio
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00"
+    tags: [volume, activity]
+
+computed_measures:
+  avg_dollar_volume:
+    description: "Average daily dollar volume"
+    type: computed
+    expression: "close * volume"
+    source_table: fact_stock_prices
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00M"
+    tags: [liquidity, volume]
+
+  market_cap_calculated:
+    description: "Market capitalization (close * shares)"
+    type: computed
+    expression: "close * shares_outstanding"
+    source_table: fact_stock_prices
+    join_tables: [dim_stock]
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00M"
+    tags: [valuation, computed]
+
+  daily_return_avg:
+    description: "Average daily return"
+    type: computed
+    expression: "(close - LAG(close) OVER w) / LAG(close) OVER w * 100"
+    source_table: fact_stock_prices
+    window: "PARTITION BY ticker ORDER BY trade_date"
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00%"
+    tags: [returns, performance]
+
+# Complex measures delegated to Python
+python_measures:
+  # These reference functions in models/implemented/stocks/measures.py
+
+  sharpe_ratio:
+    description: "Risk-adjusted return (Sharpe ratio)"
+    function: "stocks.measures.calculate_sharpe_ratio"
+    params:
+      risk_free_rate: 0.045  # 4.5% annual
+      window_days: 252       # 1 year rolling
+    tags: [risk, performance]
+
+  correlation_matrix:
+    description: "Correlation matrix of stock returns"
+    function: "stocks.measures.calculate_correlation_matrix"
+    params:
+      window_days: 60
+      min_periods: 30
+    tags: [correlation, risk]
+
+  momentum_score:
+    description: "Multi-factor momentum score"
+    function: "stocks.measures.calculate_momentum_score"
+    params:
+      weights:
+        rsi: 0.3
+        macd: 0.3
+        price_trend: 0.4
+    tags: [momentum, composite]
+
+  sector_rotation_signal:
+    description: "Sector rotation trading signal"
+    function: "stocks.measures.calculate_sector_rotation"
+    params:
+      lookback_days: 20
+      threshold: 0.1
+    tags: [sector, signal]
+
+  rolling_beta:
+    description: "Rolling beta vs. market index"
+    function: "stocks.measures.calculate_rolling_beta"
+    params:
+      market_ticker: "SPY"
+      window_days: 252
+    tags: [risk, beta]
+
+  drawdown:
+    description: "Maximum drawdown from peak"
+    function: "stocks.measures.calculate_drawdown"
+    params:
+      window_days: 252
+    tags: [risk, drawdown]

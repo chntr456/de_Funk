@@ -1,0 +1,37 @@
+# Company Model - Corporate Legal Entities
+# Represents legal business entities (not tradable securities)
+
+model: company
+version: 2.0
+description: "Corporate legal entities with SEC registration and fundamentals"
+tags: [company, corporate, legal_entity, fundamentals]
+
+# Dependencies
+depends_on: [core]  # Only depends on calendar
+
+# Component composition
+components:
+  schema: company/schema.yaml
+  graph: company/graph.yaml
+  measures: company/measures.yaml
+
+# Storage configuration
+storage:
+  root: storage/silver/company
+  format: parquet
+
+# Build configuration
+build:
+  partitions: []  # Dimension-only model, no date partitions
+  sort_by: [cik]
+  optimize: true
+
+# Metadata
+metadata:
+  owner: data_engineering
+  domain: corporate
+  sla_hours: 24
+  data_quality_checks:
+    - no_null_cik
+    - valid_cik_format
+    - unique_cik
