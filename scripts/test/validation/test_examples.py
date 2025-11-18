@@ -10,8 +10,10 @@ import sys
 from pathlib import Path
 from typing import Dict, Any
 
-from utils.repo import setup_repo_imports
-setup_repo_imports()
+# Setup repo path before importing project modules
+repo_root = Path(__file__).resolve().parent.parent.parent.parent
+if str(repo_root) not in sys.path:
+    sys.path.insert(0, str(repo_root))
 
 from scripts.examples.parameter_interface import (
     MeasureCalculator,
