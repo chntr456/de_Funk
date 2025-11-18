@@ -100,6 +100,9 @@ class BaseModel:
         # Query planner for dynamic joins (lazy-loaded)
         self._query_planner = None
 
+        # Python measures module (lazy-loaded)
+        self._python_measures = None
+
     @property
     def backend(self) -> str:
         """Get backend type (spark or duckdb)."""
@@ -147,6 +150,62 @@ class BaseModel:
             from models.api.query_planner import GraphQueryPlanner
             self._query_planner = GraphQueryPlanner(self)
         return self._query_planner
+
+    @property
+    def python_measures(self):
+        """
+        Get Python measures module for complex calculations.
+
+        Loads Python measure modules dynamically based on model configuration.
+        Python measures handle complex logic that can't be expressed in YAML
+        (e.g., rolling windows, correlations, ML models).
+
+        Returns:
+            Measures class instance or None if no Python measures defined
+
+        Example:
+            # In stocks model
+            sharpe = model.python_measures.calculate_sharpe_ratio(
+                ticker='AAPL',
+                risk_free_rate=0.045,
+                window_days=252
+            )
+        """
+        if self._python_measures is None:
+            self._python_measures = self._load_python_measures()
+        return self._python_measures
+
+    def _load_python_measures(self):
+        """
+        Load Python measures module for this model.
+
+        Uses ModelConfigLoader to discover and load Python measure classes
+        based on the model configuration's measures._python_module setting.
+
+        Returns:
+            Measures class instance or None
+        """
+        try:
+            from config.model_loader import ModelConfigLoader
+            from pathlib import Path
+
+            # Get models directory from storage config
+            models_dir = self.storage_cfg.get('models_dir', 'configs/models')
+
+            # Load Python measures if available
+            loader = ModelConfigLoader(Path(models_dir))
+            measures_instance = loader.load_python_measures(self.model_name, model_instance=self)
+
+            if measures_instance:
+                logger.info(f"Loaded Python measures for model '{self.model_name}'")
+                return measures_instance
+            else:
+                logger.debug(f"No Python measures found for model '{self.model_name}'")
+                return None
+
+        except Exception as e:
+            logger.warning(f"Failed to load Python measures for '{self.model_name}': {e}")
+            return None
 
     def _detect_backend(self) -> str:
         """Detect backend type from connection."""
@@ -768,36 +827,40 @@ class BaseModel:
         **kwargs
     ):
         """
-        Calculate any measure defined in model config (NEW UNIFIED METHOD).
+        Calculate any measure defined in model config (UNIFIED METHOD).
 
-        This is the new unified measure execution method that works with:
-        - All measure types (simple, computed, weighted, etc.)
+        This is the unified measure execution method that works with:
+        - All measure types (simple, computed, weighted, Python)
         - All backends (DuckDB, Spark)
         - All domain-specific patterns (weighting, windowing, etc.)
 
         Replaces calculate_measure_by_entity() with a more flexible interface.
 
         Args:
-            measure_name: Name of measure from config (e.g., 'avg_close_price', 'volume_weighted_index')
+            measure_name: Name of measure from config (e.g., 'avg_close_price', 'sharpe_ratio')
             entity_column: Optional entity column to group by (e.g., 'ticker')
             filters: Optional filters to apply
             limit: Optional limit for top-N results
             **kwargs: Additional measure-specific parameters
 
         Returns:
-            QueryResult with data and metadata
+            QueryResult with data and metadata, or DataFrame for Python measures
 
         Example:
-            # Simple measure
+            # Simple measure (YAML)
             result = model.calculate_measure('avg_close_price', entity_column='ticker', limit=10)
 
-            # Weighted measure
-            result = model.calculate_measure('volume_weighted_index')
+            # Python measure
+            result = model.calculate_measure('sharpe_ratio', ticker='AAPL', window_days=252)
 
             # Access data
-            df = result.data  # Pandas DataFrame or Spark DataFrame
-            print(f"Query took {result.query_time_ms}ms")
+            df = result.data if hasattr(result, 'data') else result
         """
+        # Check if this is a Python measure
+        if self._is_python_measure(measure_name):
+            return self._execute_python_measure(measure_name, filters=filters, **kwargs)
+
+        # Otherwise, use standard measure executor
         return self.measures.execute_measure(
             measure_name=measure_name,
             entity_column=entity_column,
@@ -805,6 +868,74 @@ class BaseModel:
             limit=limit,
             **kwargs
         )
+
+    def _is_python_measure(self, measure_name: str) -> bool:
+        """
+        Check if a measure is defined as a Python measure.
+
+        Args:
+            measure_name: Name of the measure
+
+        Returns:
+            True if it's a Python measure, False otherwise
+        """
+        measures_config = self.model_cfg.get('measures', {})
+        python_measures = measures_config.get('python_measures', {})
+        return measure_name in python_measures
+
+    def _execute_python_measure(self, measure_name: str, **kwargs):
+        """
+        Execute a Python measure function.
+
+        Args:
+            measure_name: Name of the Python measure
+            **kwargs: Parameters to pass to the measure function
+
+        Returns:
+            Result from the Python measure function (typically a DataFrame)
+
+        Raises:
+            ValueError: If measure not found or Python measures not available
+        """
+        # Get measures config
+        measures_config = self.model_cfg.get('measures', {})
+        python_measures = measures_config.get('python_measures', {})
+
+        if measure_name not in python_measures:
+            raise ValueError(f"Python measure '{measure_name}' not found in model '{self.model_name}'")
+
+        # Get Python measures instance
+        if self.python_measures is None:
+            raise RuntimeError(
+                f"No Python measures module loaded for model '{self.model_name}'. "
+                f"Check that measures.py exists in models/implemented/{self.model_name}/"
+            )
+
+        # Get measure configuration
+        measure_cfg = python_measures[measure_name]
+        function_name = measure_cfg['function'].split('.')[-1]
+
+        # Get the function from Python measures instance
+        if not hasattr(self.python_measures, function_name):
+            raise AttributeError(
+                f"Function '{function_name}' not found in {self.model_name}.measures module"
+            )
+
+        func = getattr(self.python_measures, function_name)
+
+        # Merge params from YAML config and kwargs
+        params = measure_cfg.get('params', {}).copy()
+        params.update(kwargs)
+
+        logger.info(f"Executing Python measure '{measure_name}' with params: {params}")
+
+        # Execute the function
+        try:
+            result = func(**params)
+            return result
+        except Exception as e:
+            logger.error(f"Error executing Python measure '{measure_name}': {e}")
+            raise
 
     def calculate_measure_by_entity(
         self,

@@ -237,11 +237,37 @@ class ModelRegistry:
         if not self.models_dir.exists():
             raise ValueError(f"Models directory not found: {self.models_dir}")
 
+        # Try to use ModelConfigLoader for modular YAML support
+        try:
+            from config.model_loader import ModelConfigLoader
+            use_modular_loader = True
+        except ImportError:
+            use_modular_loader = False
+
+        # First, try to load modular models (subdirectories with model.yaml)
+        if use_modular_loader:
+            loader = ModelConfigLoader(self.models_dir)
+            for model_dir in self.models_dir.iterdir():
+                if model_dir.is_dir() and not model_dir.name.startswith('_'):
+                    model_yaml = model_dir / 'model.yaml'
+                    if model_yaml.exists():
+                        try:
+                            # Use ModelConfigLoader to get merged config
+                            config_dict = loader.load_model_config(model_dir.name)
+                            model = ModelConfig(config_dict)
+                            self.models[model.name] = model
+                        except Exception as e:
+                            print(f"Warning: Failed to load modular model from {model_dir}: {e}")
+
+        # Also load legacy single-file YAMLs (backward compatibility)
         for yaml_file in self.models_dir.glob("*.yaml"):
             try:
                 config_dict = yaml.safe_load(yaml_file.read_text())
-                model = ModelConfig(config_dict)
-                self.models[model.name] = model
+                model_name = config_dict.get('model')
+                # Only load if not already loaded from modular structure
+                if model_name and model_name not in self.models:
+                    model = ModelConfig(config_dict)
+                    self.models[model.name] = model
             except Exception as e:
                 print(f"Warning: Failed to load model from {yaml_file}: {e}")
 
@@ -306,6 +332,8 @@ class ModelRegistry:
         """
         # Try to register known models
         # Imports are delayed and failures are silently ignored
+
+        # New models (v2.0 architecture)
         try:
             from models.implemented.company.model import CompanyModel
             self.register_model_class('company', CompanyModel)
@@ -313,7 +341,31 @@ class ModelRegistry:
             pass  # Will use auto-registration on first access
 
         try:
-            # Import from package, which uses the backward compatibility alias
+            from models.implemented.stocks.model import StocksModel
+            self.register_model_class('stocks', StocksModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
+        try:
+            from models.implemented.options.model import OptionsModel
+            self.register_model_class('options', OptionsModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
+        try:
+            from models.implemented.etfs.model import ETFsModel
+            self.register_model_class('etfs', ETFsModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
+        try:
+            from models.implemented.futures.model import FuturesModel
+            self.register_model_class('futures', FuturesModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
+        # Legacy models (will be deprecated)
+        try:
             from models.implemented.forecast import ForecastModel
             self.register_model_class('forecast', ForecastModel)
         except Exception:
@@ -367,13 +419,13 @@ class ModelRegistry:
         """
         import importlib
 
+        # Convert model name to class name (e.g., 'stocks' -> 'StocksModel')
+        class_name = ''.join(word.capitalize() for word in model_name.split('_')) + 'Model'
+
         try:
             # Try package import first (preferred - allows package to control exports)
             package_path = f"models.implemented.{model_name}"
             module = importlib.import_module(package_path)
-
-            # Look for ForecastModel, CompanyModel, etc.
-            class_name = f"{model_name.capitalize()}Model"
 
             if hasattr(module, class_name):
                 model_class = getattr(module, class_name)
@@ -385,7 +437,6 @@ class ModelRegistry:
 
         try:
             # Fall back to old convention: models.implemented.{model_name}.model
-            class_name = f"{model_name.capitalize()}Model"
             module_path = f"models.implemented.{model_name}.model"
             module = importlib.import_module(module_path)
             model_class = getattr(module, class_name)
@@ -399,6 +450,8 @@ class ModelRegistry:
         """
         Get raw model configuration dictionary (for model instantiation).
 
+        Supports both modular and single-file YAML configurations.
+
         Args:
             model_name: Name of the model
 
@@ -407,9 +460,19 @@ class ModelRegistry:
         """
         model_config = self.get_model(model_name)
 
-        # Return raw dict with all config
+        # Try modular structure first
+        model_dir = self.models_dir / model_name
+        if model_dir.exists() and (model_dir / 'model.yaml').exists():
+            try:
+                from config.model_loader import ModelConfigLoader
+                loader = ModelConfigLoader(self.models_dir)
+                return loader.load_model_config(model_name)
+            except Exception:
+                pass  # Fall back to single file
+
+        # Fall back to single-file YAML (legacy)
         config_path = self.models_dir / f"{model_name}.yaml"
         if config_path.exists():
             return yaml.safe_load(config_path.read_text())
         else:
-            raise ValueError(f"Model config file not found: {config_path}")
+            raise ValueError(f"Model config file not found: {config_path} or {model_dir}")
