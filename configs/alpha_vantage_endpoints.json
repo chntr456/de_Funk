@@ -1,0 +1,127 @@
+{
+  "credentials": {
+    "api_keys": [],
+    "comment": "Set ALPHA_VANTAGE_API_KEYS environment variable with your API key(s)"
+  },
+  "base_urls": {
+    "core": "https://www.alphavantage.co/query"
+  },
+  "headers": {},
+  "rate_limit_per_sec": 0.08333,
+  "_rate_limit_comment": "Free tier: 5 calls/minute (0.08333/sec). Premium tiers have higher limits.",
+  "endpoints": {
+    "company_overview": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "OVERVIEW"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "comment": "Company fundamentals including sector, industry, market cap, PE ratio, etc. Note: No direct CIK field, but includes exchange and other identifiers."
+    },
+    "time_series_daily": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "TIME_SERIES_DAILY",
+        "outputsize": "full",
+        "datatype": "json"
+      },
+      "response_key": "Time Series (Daily)",
+      "default_path_params": {},
+      "comment": "Daily OHLCV data. outputsize: 'compact' (100 days) or 'full' (20+ years)"
+    },
+    "time_series_daily_adjusted": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "TIME_SERIES_DAILY_ADJUSTED",
+        "outputsize": "full",
+        "datatype": "json"
+      },
+      "response_key": "Time Series (Daily)",
+      "default_path_params": {},
+      "comment": "Daily OHLCV with dividend/split adjustments. Recommended for historical analysis."
+    },
+    "global_quote": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "GLOBAL_QUOTE"
+      },
+      "response_key": "Global Quote",
+      "default_path_params": {},
+      "comment": "Real-time quote with latest price, volume, change"
+    },
+    "symbol_search": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_query": ["keywords"],
+      "default_query": {
+        "function": "SYMBOL_SEARCH"
+      },
+      "response_key": "bestMatches",
+      "default_path_params": {},
+      "comment": "Search for ticker symbols by company name or ticker"
+    },
+    "listing_status": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": [],
+      "default_query": {
+        "function": "LISTING_STATUS",
+        "state": "active"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "comment": "Get list of active or delisted stocks. Returns CSV format. Useful for bulk ticker discovery."
+    },
+    "technical_sma": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol", "interval", "time_period", "series_type"],
+      "default_query": {
+        "function": "SMA"
+      },
+      "response_key": "Technical Analysis: SMA",
+      "default_path_params": {},
+      "comment": "Simple Moving Average. interval: 1min, 5min, 15min, 30min, 60min, daily, weekly, monthly"
+    },
+    "technical_rsi": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol", "interval", "time_period", "series_type"],
+      "default_query": {
+        "function": "RSI"
+      },
+      "response_key": "Technical Analysis: RSI",
+      "default_path_params": {},
+      "comment": "Relative Strength Index"
+    },
+    "technical_macd": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol", "interval", "series_type"],
+      "default_query": {
+        "function": "MACD"
+      },
+      "response_key": "Technical Analysis: MACD",
+      "default_path_params": {},
+      "comment": "Moving Average Convergence Divergence"
+    }
+  }
+}
