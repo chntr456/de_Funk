@@ -7,7 +7,15 @@
     "bronze": "storage/bronze",
     "silver": "storage/silver",
     "core_silver": "storage/silver/core",
+
+    "_comment_v2": "v2.0 model roots (modular architecture)",
     "company_silver": "storage/silver/company",
+    "stocks_silver": "storage/silver/stocks",
+    "options_silver": "storage/silver/options",
+    "etfs_silver": "storage/silver/etfs",
+    "futures_silver": "storage/silver/futures",
+
+    "_comment_v1": "v1.x legacy model roots (will be deprecated)",
     "equity_silver": "storage/silver/equity",
     "corporate_silver": "storage/silver/corporate",
     "forecast_silver": "storage/silver/forecast",
@@ -17,10 +25,13 @@
   "tables": {
     "calendar_seed":   { "root": "bronze", "rel": "calendar_seed", "partitions": [] },
 
-    "ref_all_tickers": { "root": "bronze", "rel": "ref_all_tickers", "partitions": ["snapshot_dt"] },
+    "securities_reference": { "root": "bronze", "rel": "securities_reference", "partitions": ["snapshot_dt", "asset_type"], "comment": "v2.0 unified reference data with CIK" },
+    "securities_prices_daily": { "root": "bronze", "rel": "securities_prices_daily", "partitions": ["trade_date", "asset_type"], "comment": "v2.0 unified daily OHLCV for all asset types" },
+
+    "ref_all_tickers": { "root": "bronze", "rel": "ref_all_tickers", "partitions": ["snapshot_dt"], "comment": "v1.x legacy - use securities_reference" },
     "exchanges":       { "root": "bronze", "rel": "exchanges",       "partitions": ["snapshot_dt"] },
-    "ref_ticker":      { "root": "bronze", "rel": "ref_ticker",      "partitions": ["snapshot_dt"] },
-    "prices_daily":    { "root": "bronze", "rel": "prices_daily",    "partitions": ["trade_date"] },
+    "ref_ticker":      { "root": "bronze", "rel": "ref_ticker",      "partitions": ["snapshot_dt"], "comment": "v1.x legacy - use securities_reference" },
+    "prices_daily":    { "root": "bronze", "rel": "prices_daily",    "partitions": ["trade_date"], "comment": "v1.x legacy - use securities_prices_daily" },
     "news":            { "root": "bronze", "rel": "news",            "partitions": ["publish_date"] },
     "fundamentals":    { "root": "bronze", "rel": "fundamentals",    "partitions": ["fiscal_year","fiscal_period"] },
 

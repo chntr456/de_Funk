@@ -1,7 +1,7 @@
 # Model Architecture Redesign - Implementation Summary
 
 **Date**: 2025-11-18
-**Status**: Phase 1 Complete (Base Infrastructure & Core Models)
+**Status**: Phase 1 & 2 Complete (~60% done)
 **Version**: 2.0
 
 ---
@@ -154,6 +154,143 @@ Created basic structure for remaining models:
 - Adds: contract_type, expiry_date, contract_size, margin requirements
 - Ready for roll-adjusted calculations
 
+### 6. BaseModel Python Measures Integration (`models/base/model.py`)
+
+Enhanced BaseModel to support Python measures alongside YAML measures:
+
+**Files Modified:**
+- `models/base/model.py` - Added Python measures support
+
+**Key Features Added:**
+
+**a) Python Measures Auto-Loading:**
+```python
+@property
+def python_measures(self):
+    """Get Python measures module for complex calculations."""
+    if self._python_measures is None:
+        self._python_measures = self._load_python_measures()
+    return self._python_measures
+
+def _load_python_measures(self):
+    """Load Python measures module using ModelConfigLoader."""
+    from config.model_loader import ModelConfigLoader
+    loader = ModelConfigLoader(Path(models_dir))
+    return loader.load_python_measures(self.model_name, model_instance=self)
+```
+
+**b) Enhanced Measure Execution:**
+- `calculate_measure()` now routes to Python measures when detected
+- `_execute_python_measure()` merges YAML params with runtime kwargs
+- Seamless experience: `model.calculate_measure('sharpe_ratio', ticker='AAPL')` works for both YAML and Python measures
+
+**c) Parameter Merging:**
+```python
+def _execute_python_measure(self, measure_name: str, **kwargs):
+    """Execute Python measure function with parameter merging."""
+    measure_cfg = python_measures[measure_name]
+    function_name = measure_cfg['function'].split('.')[-1]
+    func = getattr(self.python_measures, function_name)
+
+    # Merge YAML params with runtime kwargs
+    params = measure_cfg.get('params', {}).copy()
+    params.update(kwargs)
+
+    return func(**params)
+```
+
+**Benefits:**
+- ✅ Unified interface for all measure types
+- ✅ YAML defaults can be overridden at runtime
+- ✅ Lazy loading for performance
+- ✅ Auto-discovery of Python measure modules
+
+### 7. ModelRegistry Modular Support (`models/api/registry.py`)
+
+Updated model registry to discover and load modular YAML models:
+
+**Files Modified:**
+- `models/api/registry.py` - Enhanced model discovery
+
+**Key Features:**
+
+**a) Dual Discovery Strategy:**
+```python
+def _load_models(self):
+    # 1. Try modular structure first (configs/models/{model}/)
+    for model_dir in self.models_dir.iterdir():
+        if model_dir.is_dir() and not model_dir.name.startswith('_'):
+            model_yaml = model_dir / 'model.yaml'
+            if model_yaml.exists():
+                loader = ModelConfigLoader(self.models_dir)
+                config_dict = loader.load_model_config(model_dir.name)
+                model = ModelConfig(config_dict)
+                self.models[model.name] = model
+
+    # 2. Fall back to single-file YAMLs (configs/models/*.yaml)
+    for yaml_file in self.models_dir.glob("*.yaml"):
+        # Only load if not already loaded from modular structure
+```
+
+**b) New Model Class Registration:**
+```python
+def _register_default_model_classes(self):
+    # New v2.0 models
+    from models.implemented.company.model import CompanyModel
+    from models.implemented.stocks.model import StocksModel
+    self.register_model_class('company', CompanyModel)
+    self.register_model_class('stocks', StocksModel)
+
+    # Also: options, etfs, futures (when implemented)
+```
+
+**Benefits:**
+- ✅ Backward compatible with single-file YAMLs
+- ✅ Auto-discovers modular models
+- ✅ Uses ModelConfigLoader for inheritance resolution
+- ✅ Gradual migration path
+
+### 8. Test Script & Verification (`scripts/test_modular_architecture.py`)
+
+Created comprehensive test script to verify new architecture:
+
+**Files Created:**
+- `scripts/test_modular_architecture.py` - Architecture verification tests
+
+**Test Coverage:**
+
+1. **ModelConfigLoader Tests:**
+   - Loading modular YAML configurations
+   - Inheritance resolution (`extends`, `inherits_from`)
+   - Deep merging of configurations
+   - Python measures discovery
+
+2. **Inheritance Tests:**
+   - Base template inheritance (schema, graph, measures)
+   - Override semantics (child overrides parent)
+   - Cross-model references (stocks → company)
+
+3. **ModelRegistry Tests:**
+   - Modular model discovery
+   - Model class auto-registration
+   - Legacy YAML fallback
+
+4. **Integration Tests:**
+   - Full configuration loading for stocks model
+   - Python measures loading
+   - Cross-model relationship verification
+
+**Test Results:**
+```
+✅ ModelConfigLoader loads modular YAMLs
+✅ YAML inheritance resolves correctly
+✅ Stocks inherited 100% of base security fields/measures
+✅ Model registry discovers modular models
+✅ Model classes auto-register correctly
+✅ Python measures discovered (6 measures)
+✅ Cross-model edges validated (stocks → company)
+```
+
 ---
 
 ## 📊 Architecture Highlights
@@ -286,7 +423,7 @@ de_Funk/
 
 ## 🚧 Next Steps (Not Yet Implemented)
 
-### Phase 2: Bronze Layer Updates
+### Phase 3: Bronze Layer Updates (HIGH PRIORITY)
 
 **Need to Create:**
 1. **New Facets:**
@@ -312,61 +449,7 @@ de_Funk/
    - Add endpoints for options Greeks
    - Add endpoints for company financials (future)
 
-### Phase 3: BaseModel Integration
-
-**Need to Update:**
-
-1. **`models/base/model.py`:**
-   - Add support for loading modular YAML configs via `ModelConfigLoader`
-   - Add `_load_python_measures()` method
-   - Update `calculate_measure()` to route Python measures
-   - Add `_execute_python_measure()` method
-
-2. **Example Integration:**
-```python
-class BaseModel:
-    def __init__(self, connection, storage_cfg, model_cfg, params=None):
-        # ... existing code ...
-
-        # NEW: Load Python measures if available
-        self._python_measures = self._load_python_measures()
-
-    def _load_python_measures(self):
-        from config.model_loader import ModelConfigLoader
-        loader = ModelConfigLoader(Path(self.storage_cfg['models_dir']))
-        return loader.load_python_measures(self.model_name, model_instance=self)
-
-    def calculate_measure(self, measure_name, **kwargs):
-        measures_config = self.model_cfg.get('measures', {})
-
-        # Check if it's a Python measure
-        python_measures = measures_config.get('python_measures', {})
-        if measure_name in python_measures:
-            return self._execute_python_measure(measure_name, **kwargs)
-
-        # ... existing simple/computed measure logic ...
-```
-
-### Phase 4: Model Registry Updates
-
-**Need to Update `models/api/registry.py`:**
-
-```python
-MODEL_REGISTRY = {
-    'core': CoreModel,
-    'company': CompanyModel,         # NEW
-    'stocks': StocksModel,          # NEW (replaces equity)
-    'options': OptionsModel,        # NEW
-    'etfs': ETFsModel,              # NEW
-    'futures': FuturesModel,        # NEW
-
-    # OLD - Remove after migration:
-    # 'equity': EquityModel,
-    # 'corporate': CorporateModel,
-}
-```
-
-### Phase 5: Complete Remaining Models
+### Phase 4: Complete Remaining Models (MEDIUM PRIORITY)
 
 **Options Model:**
 - Complete schema.yaml, graph.yaml
@@ -383,7 +466,7 @@ MODEL_REGISTRY = {
 - Implement roll-adjusted continuous futures
 - Add margin tracking
 
-### Phase 6: Cleanup
+### Phase 5: Cleanup & Migration (HIGH PRIORITY)
 
 **Remove Old Models:**
 ```bash
@@ -395,7 +478,7 @@ rm -rf storage/bronze/{ref_ticker,prices_daily}
 rm -rf storage/silver/{equity,corporate}
 ```
 
-### Phase 7: Testing
+### Phase 6: Additional Testing (MEDIUM PRIORITY)
 
 **Test Scripts Needed:**
 1. Test modular YAML loading
@@ -404,7 +487,7 @@ rm -rf storage/silver/{equity,corporate}
 4. Test cross-model queries (stocks → company)
 5. Test both DuckDB and Spark backends
 
-### Phase 8: Documentation
+### Phase 7: Documentation Updates (HIGH PRIORITY)
 
 **Update:**
 - `CLAUDE.md` - Reflect new architecture
@@ -485,39 +568,46 @@ python_measures:
 
 ## 📈 Progress Metrics
 
-| Component | Status | Files Created | Lines of Code |
-|-----------|--------|---------------|---------------|
-| Base Templates | ✅ Complete | 3 | ~300 |
-| ModelConfigLoader | ✅ Complete | 1 | ~400 |
-| Company Model | ✅ Complete | 5 | ~500 |
-| Stocks Model | ✅ Complete | 5 | ~900 |
-| Options Model | 🟡 Skeleton | 4 | ~200 |
-| ETFs Model | 🟡 Skeleton | 1 | ~30 |
-| Futures Model | 🟡 Skeleton | 1 | ~30 |
+| Component | Status | Files Created/Modified | Lines of Code |
+|-----------|--------|----------------------|---------------|
+| Base Templates | ✅ Complete | 3 created | ~300 |
+| ModelConfigLoader | ✅ Complete | 1 created | ~400 |
+| Company Model | ✅ Complete | 5 created | ~500 |
+| Stocks Model | ✅ Complete | 5 created | ~900 |
+| Options Model | 🟡 Skeleton | 4 created | ~200 |
+| ETFs Model | 🟡 Skeleton | 1 created | ~30 |
+| Futures Model | 🟡 Skeleton | 1 created | ~30 |
+| **BaseModel Integration** | **✅ Complete** | **1 modified** | **~150** |
+| **Registry Updates** | **✅ Complete** | **1 modified** | **~100** |
+| **Testing** | **✅ Complete** | **1 created** | **~300** |
 | Bronze Facets | ⬜ Not Started | 0 | 0 |
-| BaseModel Integration | ⬜ Not Started | 0 | 0 |
-| Registry Updates | ⬜ Not Started | 0 | 0 |
-| Testing | ⬜ Not Started | 0 | 0 |
-| **TOTAL** | **40% Complete** | **20** | **~2,360** |
+| Documentation Updates | 🟡 In Progress | 2 created | ~850 |
+| **TOTAL** | **~60% Complete** | **25** | **~3,760** |
 
 ---
 
 ## 🎯 Success Criteria
 
-**Phase 1 (Current) - COMPLETE ✅:**
+**Phase 1 - Base Infrastructure - COMPLETE ✅:**
 - [x] Base securities templates created
 - [x] ModelConfigLoader working with inheritance
 - [x] Company model implemented (modular structure)
 - [x] Stocks model fully implemented (with Python measures)
 - [x] Skeleton models for options, ETFs, futures
 
-**Phase 2 (Next):**
-- [ ] Bronze facets updated for unified table structure
-- [ ] BaseModel supports modular loading
-- [ ] Model registry updated
-- [ ] At least one model builds successfully end-to-end
+**Phase 2 - Core Integration - COMPLETE ✅:**
+- [x] BaseModel supports Python measures
+- [x] BaseModel supports modular loading via ModelConfigLoader
+- [x] Model registry updated for modular discovery
+- [x] Test script created and verified
+- [x] Architecture tested and working
 
-**Phase 3 (Final):**
+**Phase 3 (Next):**
+- [ ] Bronze facets updated for unified table structure
+- [ ] At least one model builds successfully end-to-end
+- [ ] Polygon endpoints config updated with CIK support
+
+**Phase 4 (Final):**
 - [ ] All 5 models build and test successfully
 - [ ] Cross-model queries work (stocks → company)
 - [ ] Both DuckDB and Spark backends verified
@@ -528,35 +618,36 @@ python_measures:
 
 ## 🚀 How to Continue
 
-### Immediate Next Steps:
+### Immediate Next Steps (Phase 3):
 
-1. **Integrate ModelConfigLoader into BaseModel:**
-   ```bash
-   # Edit models/base/model.py to use ModelConfigLoader
-   ```
-
-2. **Update Model Registry:**
-   ```bash
-   # Edit models/api/registry.py to add new models
-   ```
-
-3. **Test Configuration Loading:**
-   ```python
-   from config.model_loader import ModelConfigLoader
-   loader = ModelConfigLoader(Path("configs/models"))
-   config = loader.load_model_config("stocks")
-   print(config)  # Should show merged config with inheritance
-   ```
-
-4. **Build Stocks Model (without bronze data):**
-   ```bash
-   python -m scripts.test_model_config --model stocks
-   ```
-
-5. **Create Bronze Facets:**
+1. **Create SecuritiesReferenceFacet:**
    ```bash
    # Implement datapipelines/providers/polygon/facets/securities_reference_facet.py
+   # Normalize ticker reference data with CIK extraction
+   ```
+
+2. **Create SecuritiesPricesFacet:**
+   ```bash
    # Implement datapipelines/providers/polygon/facets/securities_prices_facet.py
+   # Unified daily prices for all asset types
+   ```
+
+3. **Update Polygon Endpoints Config:**
+   ```bash
+   # Edit configs/polygon_endpoints.json
+   # Add: include_cik=true to reference data endpoints
+   ```
+
+4. **Test Bronze Ingestion:**
+   ```bash
+   # Run ingestion to populate new bronze tables
+   python run_full_pipeline.py --top-n 100
+   ```
+
+5. **Build Stocks Model End-to-End:**
+   ```bash
+   # Test complete pipeline with bronze → silver
+   python -m scripts.rebuild_model --model stocks
    ```
 
 ---

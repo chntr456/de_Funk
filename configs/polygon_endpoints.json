@@ -25,6 +25,16 @@
       "response_key": "results",
       "default_path_params": {}
     },
+    "ref_ticker_detailed": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v3/reference/tickers/{ticker}",
+      "required_params": ["ticker"],
+      "default_query": {},
+      "response_key": "results",
+      "default_path_params": {},
+      "comment": "Detailed ticker info including CIK for company linkage"
+    },
     "exchanges": {
       "base": "core",
       "method": "GET",
@@ -42,6 +52,16 @@
       "default_query": { "adjusted": "true" },
       "response_key": "results",
       "default_path_params": {}
+    },
+    "prices_daily_agg": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/v2/aggs/ticker/{ticker}/range/{mult}/{timespan}/{from}/{to}",
+      "required_params": ["ticker", "from", "to"],
+      "default_query": { "adjusted": "true", "sort": "asc", "limit": 50000 },
+      "response_key": "results",
+      "default_path_params": { "mult": 1, "timespan": "day" },
+      "comment": "Daily aggregates for individual tickers (unified for all asset types)"
     },
     "news_by_date": {
       "base": "core",
