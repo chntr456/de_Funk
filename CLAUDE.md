@@ -1,19 +1,27 @@
 # CLAUDE.md - AI Assistant Guide for de_Funk
 
-**Last Updated**: 2025-11-16
-**Version**: 1.1
+**Last Updated**: 2025-11-18
+**Version**: 2.0
 
 This document provides comprehensive guidance for AI assistants (like Claude) working with the de_Funk codebase. It covers project structure, architecture patterns, development workflows, and key conventions.
 
 **Architecture Diagram**: See `docs/architecture-diagram.drawio` for visual representation of the system architecture.
 
-**Recent Updates (v1.1)**:
-- Added comprehensive Configuration Management System documentation
-- Documented new `config/` module with ConfigLoader and typed models
-- Added `utils/repo.py` centralized repository discovery
-- Updated script execution patterns to use `python -m` module syntax
-- Documented configuration precedence rules and environment variable usage
-- Added architecture diagram (docs/architecture-diagram.drawio)
+**Recent Updates (v2.0)**:
+- **Modular YAML Architecture**: Models now split into schema.yaml, graph.yaml, measures.yaml
+- **Model Inheritance**: Base securities templates with `extends` and `inherits_from` keywords
+- **Python Measures**: Hybrid measure system (YAML for simple, Python for complex)
+- **Unified Bronze Layer**: Single tables with asset_type filtering (securities_reference, securities_prices_daily)
+- **New Models**: company, stocks, options, etfs, futures (replaces equity, corporate)
+- **ModelConfigLoader**: Centralized YAML loading with inheritance resolution
+- **CIK Integration**: Company linkage via SEC identifiers
+- Enhanced BaseModel with Python measures auto-loading
+
+**Previous Updates (v1.1)**:
+- Configuration Management System with ConfigLoader
+- Centralized repository discovery (utils/repo.py)
+- Script execution with `python -m` module syntax
+- Configuration precedence rules
 
 ---
 
@@ -53,12 +61,19 @@ The current implementation demonstrates the framework with financial and economi
 - **Bureau of Labor Statistics (BLS)**: Economic indicators (unemployment, CPI, GDP)
 - **Chicago Data Portal**: Municipal finance data (Socrata API)
 
-**Example Models:**
-- Core (calendar dimension), Corporate (companies), Equity (securities)
-- Macro (economic indicators), City Finance (municipal data)
-- ETF (fund holdings), Forecast (predictions)
+**v2.0 Models (Modular Architecture):**
+- **Core** (calendar dimension) - Foundation for all date-based analysis
+- **Company** (corporate entities) - CIK-based, SEC identifiers, fundamentals
+- **Stocks** (stock securities) - Inherits from base securities, prices + technicals
+- **Options** (options contracts) - Inherits from base securities, Greeks + Black-Scholes
+- **ETFs** (exchange-traded funds) - Holdings and NAV tracking
+- **Futures** (futures contracts) - Roll-adjusted, margin tracking
 
-**Note:** The framework is domain-agnostic. You can model any domain (healthcare, retail, logistics, etc.) using the same YAML-driven approach.
+**v1.x Legacy Models (Being Deprecated):**
+- Macro (economic indicators), City Finance (municipal data), Forecast (predictions)
+- Equity → migrated to Stocks, Corporate → migrated to Company
+
+**Note:** The framework is domain-agnostic. The modular YAML architecture with inheritance makes it easy to model any domain (healthcare, retail, logistics, etc.).
 
 ---
 
@@ -70,16 +85,25 @@ de_Funk/
 │   ├── notebook/            # Notebook system (parsers, managers, filters)
 │   ├── services/            # Business logic services
 │   └── ui/                  # Streamlit components & main app
-├── config/                   # Centralized configuration system (NEW)
+├── config/                   # Centralized configuration system
 │   ├── __init__.py          # ConfigLoader and typed models
 │   ├── loader.py            # Configuration loading with precedence
+│   ├── model_loader.py      # ModelConfigLoader with YAML inheritance (v2.0)
 │   ├── models.py            # Type-safe config dataclasses
 │   └── constants.py         # Default configuration values
 ├── configs/
-│   ├── models/              # YAML model configurations (8 models)
+│   ├── models/              # YAML model configurations
+│   │   ├── _base/           # Base templates for inheritance (v2.0)
+│   │   │   └── securities/  # Base securities schema/graph/measures
+│   │   ├── company/         # Company model (modular: model/schema/graph/measures)
+│   │   ├── stocks/          # Stocks model (modular + Python measures)
+│   │   ├── options/         # Options model (partial implementation)
+│   │   ├── etfs/            # ETFs model (skeleton)
+│   │   ├── futures/         # Futures model (skeleton)
+│   │   └── [legacy models]  # equity.yaml, corporate.yaml (deprecated)
 │   ├── notebooks/           # Markdown notebook definitions
-│   ├── storage.json         # Storage paths and table mappings
-│   ├── polygon_endpoints.json  # Polygon API configuration
+│   ├── storage.json         # Storage paths and table mappings (v2.0 updated)
+│   ├── polygon_endpoints.json  # Polygon API configuration (v2.0 with CIK)
 │   ├── bls_endpoints.json   # BLS API configuration
 │   └── chicago_endpoints.json  # Chicago API configuration
 ├── core/
@@ -95,16 +119,24 @@ de_Funk/
 │       └── bls/             # Economic data (Bureau of Labor Statistics)
 ├── models/
 │   ├── api/                 # Model sessions & registry
-│   ├── base/                # BaseModel class framework
+│   ├── base/                # BaseModel class framework (v2.0: Python measures support)
 │   ├── builders/            # Model building utilities
-│   ├── measures/            # Measure framework (simple, computed, weighted)
-│   └── implemented/         # Domain models (equity, corporate, macro, etc.)
+│   ├── measures/            # Measure framework (simple, computed, weighted, Python)
+│   └── implemented/         # Domain models
 │       ├── core/            # Calendar dimension (foundation)
-│       ├── equity/          # Tradable securities and prices
-│       ├── corporate/       # Company entities and fundamentals
+│       │
+│       ├── _v2.0 Models:_
+│       ├── company/         # Corporate entities (model.py, measures.py)
+│       ├── stocks/          # Stock securities (model.py, measures.py with 6 Python measures)
+│       ├── options/         # Options contracts [PARTIAL - needs model.py]
+│       ├── etfs/            # Exchange-traded funds [SKELETON]
+│       ├── futures/         # Futures contracts [SKELETON]
+│       │
+│       ├── _v1.x Legacy:_
+│       ├── equity/          # [DEPRECATED] → use stocks
+│       ├── corporate/       # [DEPRECATED] → use company
 │       ├── macro/           # Economic indicators
 │       ├── city_finance/    # Municipal finance
-│       ├── etf/             # ETF data
 │       └── forecast/        # Time series predictions
 ├── orchestration/
 │   ├── common/              # Shared orchestration utilities
@@ -117,7 +149,20 @@ de_Funk/
 ├── scripts/                 # Operational scripts (27 scripts)
 ├── storage/
 │   ├── bronze/              # Raw ingested data (Parquet)
+│   │   ├── _v2.0:_
+│   │   ├── securities_reference/  # Unified reference data with CIK (partitioned by snapshot_dt, asset_type)
+│   │   ├── securities_prices_daily/  # Unified OHLCV for all securities (partitioned by trade_date, asset_type)
+│   │   ├── _v1.x (deprecated):_
+│   │   ├── ref_ticker/      # → use securities_reference
+│   │   ├── prices_daily/    # → use securities_prices_daily
+│   │   └── [other providers]  # bls/, chicago/, etc.
 │   ├── silver/              # Dimensional models (Parquet)
+│   │   ├── company/         # Company dimension & facts (v2.0)
+│   │   ├── stocks/          # Stock securities with prices/technicals (v2.0)
+│   │   ├── options/         # Options contracts [planned]
+│   │   ├── etfs/            # ETFs [planned]
+│   │   ├── futures/         # Futures [planned]
+│   │   └── [legacy]/        # equity/, corporate/ (deprecated)
 │   └── duckdb/              # DuckDB catalog (analytics.db)
 ├── docs/
 │   └── guide/               # Comprehensive documentation
@@ -192,67 +237,347 @@ de_Funk/
 
 ### Model Architecture Pattern
 
-All models follow a YAML-driven configuration pattern:
+**v2.0 Modular YAML Pattern** (Recommended):
+
+Models split across multiple files for clarity and inheritance:
+
+```
+configs/models/stocks/
+├── model.yaml          # Metadata & composition
+├── schema.yaml         # Table definitions (extends base)
+├── graph.yaml          # Graph structure (extends base)
+└── measures.yaml       # Measure definitions (YAML + Python)
+```
+
+**model.yaml**:
+```yaml
+model: stocks
+version: 2.0
+description: "Stock securities with technical indicators"
+inherits_from: _base.securities  # Inherit from base templates
+
+components:
+  schema: stocks/schema.yaml
+  graph: stocks/graph.yaml
+  measures:
+    yaml: stocks/measures.yaml
+    python: stocks/measures.py  # Python measures for complex calculations
+
+depends_on: [core, company]
+storage:
+  root: storage/silver/stocks
+  format: parquet
+```
+
+**schema.yaml** (with inheritance):
+```yaml
+extends: _base.securities.schema  # Inherit base schema
+
+dimensions:
+  dim_stock:
+    extends: _base.securities._dim_security  # Extend base dimension
+    columns:
+      # Inherited: ticker, asset_type, exchange_code, etc.
+      company_id: string  # Added field
+      cik: string
+      shares_outstanding: long
+```
+
+**measures.yaml** (hybrid YAML + Python):
+```yaml
+extends: _base.securities.measures  # Inherit base measures
+
+simple_measures:
+  avg_market_cap:  # YAML for simple aggregations
+    type: simple
+    source: dim_stock.market_cap
+    aggregation: avg
+
+python_measures:  # Python for complex calculations
+  sharpe_ratio:
+    function: "stocks.measures.calculate_sharpe_ratio"
+    params:
+      risk_free_rate: 0.045
+```
+
+**v1.x Single YAML Pattern** (Legacy):
 
 ```yaml
 model: equity
 version: 1
-depends_on: [core, corporate]  # Model dependencies
-storage:
-  root: storage/silver/equity
-  format: parquet
+depends_on: [core, corporate]
 schema:
   dimensions:
     dim_equity: {...}
-  facts:
-    fact_equity_prices: {...}
-graph:
-  nodes: {...}
-  edges: {...}
-  paths: {...}
 measures:
   avg_close_price: {...}
 ```
 
 ### Model Dependency Graph
 
-Models are organized in tiers based on dependencies:
+**v2.0 Model Dependencies:**
 
 ```
 Tier 0 (Foundation):
   └── core (calendar dimension)
 
 Tier 1 (Independent):
-  ├── macro (economic indicators)
-  └── corporate (company entities)
+  └── company (corporate entities, CIK-based)
 
-Tier 2 (Dependent):
-  ├── equity (depends on: core, corporate)
-  └── city_finance (depends on: core)
+Tier 2 (Securities - inherit from _base.securities):
+  ├── stocks (depends on: core, company)
+  ├── options (depends on: core, stocks)  [PARTIAL]
+  ├── etfs (depends on: core, stocks)     [SKELETON]
+  └── futures (depends on: core)          [SKELETON]
 
-Tier 3 (Advanced):
-  ├── etf (depends on: equity)
-  └── forecast (depends on: equity)
+_base/ (Templates - not instantiated):
+  └── securities (schema, graph, measures templates)
+```
+
+**v1.x Legacy Dependencies** (being deprecated):
+
+```
+Tier 1: macro, corporate
+Tier 2: equity (→ stocks), city_finance
+Tier 3: etf (→ etfs), forecast
 ```
 
 ### Cross-Model Relationships
 
-- **equity ↔ corporate**: Equity instruments belong to corporate entities
-- **forecast → equity**: Predictions reference equity prices
-- **etf → equity**: ETF holdings reference equities
-- **All → core**: All models link to calendar dimension
+**v2.0 Relationships:**
+- **stocks → company**: Stock dimension links to company via company_id (derived from CIK)
+- **options → stocks**: Options reference underlying stocks via ticker
+- **etfs → stocks**: ETF holdings reference constituent stocks
+- **All → core**: All models link to calendar dimension for time-series analysis
+
+**Key Design:**
+- **Company is standalone** (not a security) - tracks legal entities
+- **Securities inherit from _base.securities** - shared OHLCV schema
+- **CIK as bridge** - SEC identifier connects stocks to companies
 
 ### Key Architectural Patterns
 
-1. **Centralized Configuration**: ConfigLoader for type-safe, validated configuration
-2. **BaseModel Inheritance**: All models extend `models/base/model.py::BaseModel`
-3. **Storage Router**: Abstracts Bronze/Silver path resolution
-4. **Backend Agnostic**: Adapters for both Spark and DuckDB
-5. **Measure Framework**: Unified calculation engine (simple, computed, weighted)
-6. **Universal Session**: Cross-model query interface
-7. **Filter Engine**: Backend-agnostic filter application
-8. **Lazy Loading**: Models and tables loaded on demand
-9. **Graph-Based Dependencies**: NetworkX for dependency resolution
+1. **Modular YAML Architecture** (v2.0): Models split into schema/graph/measures files for clarity
+2. **YAML Inheritance** (v2.0): `extends` and `inherits_from` keywords for reusable templates
+3. **Hybrid Measure System** (v2.0): YAML for simple aggregations, Python for complex calculations
+4. **Python Measures Auto-Loading** (v2.0): BaseModel discovers and loads Python measure modules
+5. **Unified Bronze Tables** (v2.0): Single tables with asset_type filtering (securities_reference, securities_prices_daily)
+6. **Centralized Configuration**: ConfigLoader for type-safe, validated configuration
+7. **BaseModel Inheritance**: All models extend `models/base/model.py::BaseModel`
+8. **Storage Router**: Abstracts Bronze/Silver path resolution
+9. **Backend Agnostic**: Adapters for both Spark and DuckDB
+10. **Measure Framework**: Unified calculation engine (simple, computed, weighted, Python)
+11. **Universal Session**: Cross-model query interface
+12. **Filter Engine**: Backend-agnostic filter application
+13. **Lazy Loading**: Models and tables loaded on demand
+14. **Graph-Based Dependencies**: NetworkX for dependency resolution
+
+---
+
+## v2.0 Model Architecture (November 2025)
+
+### Modular YAML Structure
+
+**Philosophy**: Split large monolithic YAMLs into logical components for maintainability.
+
+**Structure**:
+```
+configs/models/{model}/
+├── model.yaml      # Metadata, dependencies, composition
+├── schema.yaml     # Dimensions, facts, columns
+├── graph.yaml      # Nodes, edges, paths
+└── measures.yaml   # Simple + Python measures
+```
+
+**Loading**: `ModelConfigLoader` (`config/model_loader.py`) handles:
+- Discovering modular YAML files
+- Resolving `extends` and `inherits_from` keywords
+- Deep merging configurations with override semantics
+- Auto-discovering Python measure modules
+
+**Example Usage**:
+```python
+from config.model_loader import ModelConfigLoader
+from pathlib import Path
+
+loader = ModelConfigLoader(Path("configs/models"))
+config = loader.load_model_config("stocks")
+# Returns fully merged config with inherited schemas/measures
+```
+
+### YAML Inheritance System
+
+**Two Keywords**:
+- `inherits_from`: Model-level inheritance (e.g., `stocks` inherits from `_base.securities`)
+- `extends`: Component-level inheritance (e.g., `schema.yaml` extends base schema)
+
+**Inheritance Resolution**:
+1. Load base template (e.g., `_base/securities/schema.yaml`)
+2. Load child config (e.g., `stocks/schema.yaml`)
+3. Deep merge: child overrides parent, preserving structure
+4. Result: Child has all base fields + additions/overrides
+
+**Example**:
+```yaml
+# _base/securities/schema.yaml
+dimensions:
+  _dim_security:
+    columns:
+      ticker: string
+      asset_type: string
+      exchange_code: string
+
+# stocks/schema.yaml
+extends: _base.securities.schema
+dimensions:
+  dim_stock:
+    extends: _base.securities._dim_security
+    columns:
+      # ticker, asset_type, exchange_code inherited automatically
+      company_id: string  # Added field
+      shares_outstanding: long
+```
+
+**Result**: `dim_stock` has ALL base fields + new fields (100% inheritance verified).
+
+### Hybrid Measure System
+
+**Problem**: YAML can't express complex calculations (rolling windows, correlations, ML).
+
+**Solution**: Hybrid approach with clear boundary:
+
+**YAML Measures** - Simple aggregations:
+```yaml
+simple_measures:
+  avg_close_price:
+    type: simple
+    source: fact_prices.close
+    aggregation: avg
+    format: "#,##0.00"
+```
+
+**Python Measures** - Complex calculations:
+```yaml
+python_measures:
+  sharpe_ratio:
+    function: "stocks.measures.calculate_sharpe_ratio"
+    params:
+      risk_free_rate: 0.045
+      window_days: 252
+```
+
+**Python Implementation** (`models/implemented/stocks/measures.py`):
+```python
+class StocksMeasures:
+    def __init__(self, model):
+        self.model = model
+
+    def calculate_sharpe_ratio(self, ticker=None, risk_free_rate=0.045, window_days=252, **kwargs):
+        """Calculate rolling Sharpe ratio."""
+        # Get price data from model
+        df = self.model.get_prices(ticker=ticker)
+
+        # Calculate returns
+        df['returns'] = df['close'].pct_change()
+
+        # Rolling Sharpe
+        df['sharpe'] = (
+            (df['returns'].rolling(window_days).mean() - risk_free_rate / 252) /
+            df['returns'].rolling(window_days).std() * np.sqrt(252)
+        )
+
+        return df[['ticker', 'trade_date', 'sharpe']]
+```
+
+**Usage** (seamless for both types):
+```python
+model = registry.get_model("stocks")
+
+# YAML measure
+avg_price = model.calculate_measure("avg_close_price", ticker="AAPL")
+
+# Python measure (YAML params + runtime override)
+sharpe = model.calculate_measure("sharpe_ratio", ticker="AAPL", window_days=60)
+```
+
+**Benefits**:
+- ✅ Simple aggregations stay declarative (easy to define)
+- ✅ Complex logic uses full Python power (pandas, numpy, scipy)
+- ✅ Unified interface (users don't care which type)
+- ✅ YAML params provide defaults, runtime kwargs override
+
+### Unified Bronze Layer
+
+**v1.x Problem**: Separate bronze tables per model (ref_ticker, prices_daily, etc.)
+
+**v2.0 Solution**: Unified tables with asset_type filtering:
+
+**Bronze Tables**:
+- `securities_reference` - All ticker reference data with CIK
+  - Partitions: `snapshot_dt`, `asset_type` (stocks, options, etfs, futures)
+  - Schema: ticker, name, asset_type, cik, exchange_code, shares_outstanding, market_cap
+
+- `securities_prices_daily` - All daily OHLCV data
+  - Partitions: `trade_date`, `asset_type`
+  - Schema: ticker, trade_date, asset_type, open, high, low, close, volume, volume_weighted
+
+**Silver Filtering**:
+```yaml
+# stocks/graph.yaml
+nodes:
+  fact_stock_prices:
+    from: bronze.securities_prices_daily
+    filters:
+      - "asset_type = 'stocks'"  # KEY FILTER
+```
+
+**Benefits**:
+- ✅ Bronze mirrors API structure (Polygon returns all types from same endpoint)
+- ✅ No data duplication at ingestion
+- ✅ Easy to add new asset types (just filter differently)
+- ✅ Single ingestion pipeline for all securities
+
+### CIK Integration
+
+**CIK** (Central Index Key) - SEC's permanent 10-digit identifier for companies.
+
+**Why CIK**:
+- Tickers change (GOOGL/GOOG, FB→META)
+- CIK is permanent and unique per legal entity
+- Links to SEC filings (10-K, 10-Q, 8-K)
+
+**Architecture**:
+```
+company.dim_company (primary key: cik)
+  ↑
+  | company_id = CONCAT('COMPANY_', cik)
+  |
+stocks.dim_stock (foreign key: company_id)
+```
+
+**Extraction** (`SecuritiesReferenceFacet`):
+```python
+cik_expr = (
+    when(col("cik").isNotNull(),
+         lpad(regexp_extract(col("cik"), r"(\d+)", 1), 10, "0"))
+    .cast("string")
+)
+```
+
+**Usage**:
+```python
+# Get stock with company info
+df = session.query("""
+    SELECT
+        s.ticker,
+        s.close_price,
+        c.company_name,
+        c.sector
+    FROM stocks.dim_stock s
+    JOIN company.dim_company c ON s.company_id = c.company_id
+    WHERE s.ticker = 'AAPL'
+""")
+```
 
 ---
 
