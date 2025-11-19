@@ -59,13 +59,19 @@ class AlphaVantageFacet(Facet):
 
     def normalize(self, raw_batches):
         """
-        Override normalize to pre-clean Alpha Vantage's "None" strings.
+        Override normalize to clean Alpha Vantage data at Python level.
 
-        Alpha Vantage returns the literal string "None" for missing values,
-        which causes Spark 4.0.1's aggressive optimizer to fail during casting.
+        Alpha Vantage data quality issues:
+        - Returns literal string "None" for missing values
+        - Uses "N/A" and "-" for unavailable data
+        - Sometimes has extra whitespace
+        - Empty strings for missing data
 
-        Replace "None"/"N/A"/"-" with empty strings (not None) so Spark can
-        infer schema as StringType. Empty strings are safe to cast to NULL.
+        This method performs bronze layer cleaning:
+        - Replace invalid markers ("None", "N/A", "-") with Python None (becomes NULL)
+        - Strip whitespace from all string values
+        - Convert empty strings to None
+        - Preserve valid data as-is
         """
         # Clean the raw data at Python level
         cleaned_batches = []
@@ -73,13 +79,22 @@ class AlphaVantageFacet(Facet):
             cleaned_batch = []
             for item in batch:
                 if isinstance(item, dict):
-                    # Replace invalid strings with empty string
+                    # Clean each field value
                     cleaned_item = {}
                     for key, value in item.items():
-                        if value == "None" or value == "N/A" or value == "-":
-                            cleaned_item[key] = ""  # Empty string, not None
-                        elif value is None:
-                            cleaned_item[key] = ""  # Convert None to empty string too
+                        # Handle None/null values
+                        if value is None:
+                            cleaned_item[key] = None
+                        # Handle string values
+                        elif isinstance(value, str):
+                            # Strip whitespace
+                            cleaned_value = value.strip()
+                            # Replace invalid markers with None
+                            if cleaned_value in ("None", "N/A", "-", ""):
+                                cleaned_item[key] = None
+                            else:
+                                cleaned_item[key] = cleaned_value
+                        # Keep non-string values as-is
                         else:
                             cleaned_item[key] = value
                     cleaned_batch.append(cleaned_item)

@@ -162,8 +162,10 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         )
 
         # Note: All numeric fields are kept as strings in bronze layer.
-        # Data is pre-cleaned at Python level by AlphaVantageFacet.normalize(),
-        # which replaces "None"/"N/A"/"-" with empty strings.
+        # Data is pre-cleaned at Python level by AlphaVantageFacet.normalize():
+        #   - Invalid markers ("None", "N/A", "-", "") → NULL
+        #   - Whitespace stripped from all values
+        #   - Valid string values preserved
         # Numeric casting will happen in the silver layer transformations.
 
         # --- Asset Type Classification ---
