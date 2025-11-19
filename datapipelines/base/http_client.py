@@ -30,10 +30,23 @@ class HttpClient:
     def _build_request(self, base_key, path, query, method):
         base = self.base_urls[base_key].rstrip("/")
         url = f"{base}{path}"
-        if query:
-            url += "?" + urllib.parse.urlencode(query, doseq=True)
+
+        # Get API key for this request
         key = self.api_key_pool.next_key()
+
+        # Replace ${API_KEY} placeholders in query parameters (for Alpha Vantage)
+        if query:
+            query_with_key = {}
+            for k, v in query.items():
+                if isinstance(v, str) and "${API_KEY}" in v:
+                    query_with_key[k] = v.replace("${API_KEY}", key or "")
+                else:
+                    query_with_key[k] = v
+            url += "?" + urllib.parse.urlencode(query_with_key, doseq=True)
+
+        # Replace ${API_KEY} placeholders in headers (for Polygon)
         hdrs = {k: v.replace("${API_KEY}", key or "") for k, v in self.headers.items()}
+
         return urllib.request.Request(url, headers=hdrs, method=method), url
 
     from urllib.error import HTTPError, URLError
