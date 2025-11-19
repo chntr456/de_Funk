@@ -158,28 +158,19 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         - 52WeekHigh, 52WeekLow
         """
         from pyspark.sql.functions import (
-            col, when, lit, trim, coalesce, upper, current_timestamp,
-            regexp_replace, length
+            col, when, lit, trim, coalesce, upper, current_timestamp
         )
 
-        # Helper function for safe casting - use regexp to avoid comparison casting
+        # Helper function for safe casting
         def safe_cast(column_name, target_type):
-            """Safely cast using regexp_replace to avoid Spark's aggressive casting.
+            """Cast column to target type.
 
-            Spark 4.0.1's optimizer aggressively casts columns even during string
-            comparisons. Using regexp_replace to physically modify string values
-            avoids all comparison operations that trigger unwanted casting.
+            Data is pre-cleaned at Python level by AlphaVantageFacet.normalize(),
+            which replaces "None"/"N/A"/"-"/"" strings with Python None before
+            creating the Spark DataFrame. This avoids Spark 4.0.1's aggressive
+            optimizer casting issues.
             """
-            # Step 1: Replace invalid values with empty string using regex
-            # Matches: 'None', 'N/A', '-', or already empty ''
-            cleaned = regexp_replace(col(column_name), r'^(None|N/A|-|)$', '')
-
-            # Step 2: Keep only non-empty strings, return NULL for empty
-            # Using length() > 0 to avoid equality comparison
-            cleaned = when(length(cleaned) > 0, cleaned)  # NULL by default if length <= 0
-
-            # Step 3: Cast to target type (NULL values are safe to cast)
-            return cleaned.cast(target_type)
+            return col(column_name).cast(target_type)
 
         # --- Asset Type Classification ---
         # Alpha Vantage provides AssetType field

@@ -56,3 +56,34 @@ class AlphaVantageFacet(Facet):
         Returns iterable of dicts with ep_name and params.
         """
         raise NotImplementedError
+
+    def normalize(self, raw_batches):
+        """
+        Override normalize to pre-clean Alpha Vantage's "None" strings.
+
+        Alpha Vantage returns the literal string "None" for missing values,
+        which causes Spark 4.0.1's aggressive optimizer to fail during casting.
+
+        This method cleans the raw Python dictionaries BEFORE creating the
+        Spark DataFrame, avoiding all Spark optimization issues.
+        """
+        # Clean the raw data at Python level
+        cleaned_batches = []
+        for batch in raw_batches:
+            cleaned_batch = []
+            for item in batch:
+                if isinstance(item, dict):
+                    # Replace "None" strings with actual None
+                    cleaned_item = {}
+                    for key, value in item.items():
+                        if value == "None" or value == "N/A" or value == "-" or value == "":
+                            cleaned_item[key] = None
+                        else:
+                            cleaned_item[key] = value
+                    cleaned_batch.append(cleaned_item)
+                else:
+                    cleaned_batch.append(item)
+            cleaned_batches.append(cleaned_batch)
+
+        # Now call parent's normalize with cleaned data
+        return super().normalize(cleaned_batches)
