@@ -308,8 +308,16 @@ class BaseModel:
         graph = self.model_cfg.get('graph', {})
         nodes = {}
 
-        for node_config in graph.get('nodes', []):
-            node_id = node_config['id']
+        # Support both dict and list formats for nodes
+        nodes_config = graph.get('nodes', {})
+        if isinstance(nodes_config, dict):
+            # Dict format (modular YAML): {node_id: {from: ..., select: ...}}
+            node_items = [(node_id, node_config) for node_id, node_config in nodes_config.items()]
+        else:
+            # List format (legacy YAML): [{id: node_id, from: ..., select: ...}]
+            node_items = [(node_config['id'], node_config) for node_config in nodes_config]
+
+        for node_id, node_config in node_items:
 
             # Try custom loading first
             custom_df = self.custom_node_loading(node_id, node_config)

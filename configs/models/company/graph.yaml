@@ -1,7 +1,7 @@
 # Company graph definition
 
 nodes:
-  - id: dim_company
+  dim_company:
     from: bronze.securities_reference
     filters:
       - "asset_type = 'stocks'"  # Only stock tickers have company data
