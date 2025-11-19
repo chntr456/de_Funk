@@ -12,23 +12,19 @@ nodes:
     select:
       # Base fields
       ticker: ticker
-      security_name: name
+      security_name: security_name  # Bronze column name
       asset_type: asset_type
-      asset_class: asset_class
       exchange_code: primary_exchange
       currency: currency
-      is_active: active
-      listing_date: listing_date
-      delisting_date: delisted_utc
+      is_active: is_active  # Bronze column name (already boolean)
       # Stocks-specific fields
       cik: cik
-      stock_type: type
-      shares_outstanding: weighted_shares_outstanding
+      shares_outstanding: shares_outstanding  # Bronze column name
+      market_cap: market_cap  # Bronze column name (already calculated)
       sector: sector
       industry: industry
     derive:
       company_id: "CONCAT('COMPANY_', cik)"
-      market_cap: "close * COALESCE(shares_outstanding, 0)"
     unique_key: [ticker]
     tags: [dim, stock]
 
