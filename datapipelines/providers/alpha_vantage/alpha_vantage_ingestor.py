@@ -68,7 +68,7 @@ class AlphaVantageIngestor(Ingestor):
             self.registry.rate_limit,
             ApiKeyPool(
                 (alpha_vantage_cfg.get("credentials") or {}).get("api_keys") or [],
-                window_seconds=60  # 1-minute window for rate limiting
+                cooldown_seconds=60.0  # 1-minute cooldown for rate limiting
             )
         )
         self.sink = BronzeSink(storage_cfg)
