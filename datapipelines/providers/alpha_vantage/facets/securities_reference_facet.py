@@ -90,8 +90,8 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         ("locale", "string"),
         ("type", "string"),
         ("primary_exchange", "string"),
-        ("shares_outstanding", "string"),  # Keep as string in bronze layer
-        ("market_cap", "string"),  # Keep as string in bronze layer
+        ("shares_outstanding", "long"),  # Converted via pandas
+        ("market_cap", "double"),  # Converted via pandas
         ("sic_code", "string"),  # Will be NULL for Alpha Vantage
         ("sic_description", "string"),
         ("ticker_root", "string"),
@@ -100,18 +100,18 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         ("delisted_utc", "timestamp"),
         ("last_updated_utc", "timestamp"),
         ("is_active", "boolean"),
-        # Additional Alpha Vantage fields (optional)
+        # Additional Alpha Vantage fields
         ("sector", "string"),
         ("industry", "string"),
         ("description", "string"),
-        ("pe_ratio", "string"),  # Keep as string in bronze layer
-        ("peg_ratio", "string"),  # Keep as string in bronze layer
-        ("book_value", "string"),  # Keep as string in bronze layer
-        ("dividend_per_share", "string"),  # Keep as string in bronze layer
-        ("dividend_yield", "string"),  # Keep as string in bronze layer
-        ("eps", "string"),  # Keep as string in bronze layer
-        ("week_52_high", "string"),  # Keep as string in bronze layer
-        ("week_52_low", "string")  # Keep as string in bronze layer
+        ("pe_ratio", "double"),  # Converted via pandas
+        ("peg_ratio", "double"),  # Converted via pandas
+        ("book_value", "double"),  # Converted via pandas
+        ("dividend_per_share", "double"),  # Converted via pandas
+        ("dividend_yield", "double"),  # Converted via pandas
+        ("eps", "double"),  # Converted via pandas
+        ("week_52_high", "double"),  # Converted via pandas
+        ("week_52_low", "double")  # Converted via pandas
     ]
 
     def __init__(self, spark, *, tickers: List[str]):
@@ -141,12 +141,14 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         """
         Transform Alpha Vantage OVERVIEW response to unified securities schema.
 
+        Uses pandas for transformation to avoid Spark 4.0.1 optimizer issues.
+        Pandas handles string-to-numeric conversion gracefully with pd.to_numeric().
+
         Key Transformations:
         1. Map Alpha Vantage field names to unified schema
-        2. Set asset_type based on AssetType field or infer from ticker
-        3. Set CIK to NULL (not available in Alpha Vantage)
-        4. Extract and normalize exchange codes
-        5. Convert market cap and shares outstanding to proper types
+        2. Set asset_type based on AssetType field
+        3. Convert numeric fields using pandas (handles "None" strings gracefully)
+        4. Set CIK to NULL (not available in Alpha Vantage)
 
         Alpha Vantage OVERVIEW Response Fields:
         - Symbol, Name, Description
@@ -157,101 +159,132 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         - DividendPerShare, DividendYield
         - 52WeekHigh, 52WeekLow
         """
-        from pyspark.sql.functions import (
-            col, when, lit, trim, coalesce, upper, current_timestamp
-        )
+        import pandas as pd
+        from datetime import datetime
 
-        # Note: All numeric fields are kept as strings in bronze layer.
-        # Data is pre-cleaned at Python level by AlphaVantageFacet.normalize():
-        #   - Invalid markers ("None", "N/A", "-", "") → NULL
-        #   - Whitespace stripped from all values
-        #   - Valid string values preserved
-        # Numeric casting will happen in the silver layer transformations.
+        # Convert Spark DataFrame to pandas (small data - API responses)
+        pdf = df.toPandas()
 
-        # --- Asset Type Classification ---
-        # Alpha Vantage provides AssetType field
-        # Map to our canonical asset_type
-        asset_type_expr = (
-            when(col("AssetType") == "Common Stock", lit("stocks"))
-            .when(col("AssetType") == "ETF", lit("etfs"))
-            .when(col("AssetType") == "Mutual Fund", lit("etfs"))
-            .when(col("AssetType").contains("Option"), lit("options"))
-            .when(col("AssetType").contains("Future"), lit("futures"))
-            .otherwise(lit("stocks"))  # Default to stocks
-            .cast("string")
-        )
+        # Filter out error responses
+        if 'Error Message' in pdf.columns:
+            pdf = pdf[pdf['Error Message'].isna()]
 
-        # --- Ticker Root Extraction ---
-        # For options: Extract underlying ticker
-        # For stocks: Use Symbol as-is
-        ticker_root_expr = col("Symbol").cast("string")
+        # Remove rows without ticker
+        pdf = pdf[pdf['Symbol'].notna()].copy()
 
-        # --- Build Final DataFrame ---
-        result_df = df.select(
+        if pdf.empty:
+            # Return empty Spark DataFrame with correct schema
+            from pyspark.sql.types import StructType, StructField, StringType, LongType, DoubleType, TimestampType, BooleanType
+            schema = StructType([
+                StructField("ticker", StringType()),
+                StructField("security_name", StringType()),
+                StructField("asset_type", StringType()),
+                StructField("cik", StringType()),
+                StructField("composite_figi", StringType()),
+                StructField("exchange_code", StringType()),
+                StructField("currency", StringType()),
+                StructField("market", StringType()),
+                StructField("locale", StringType()),
+                StructField("type", StringType()),
+                StructField("primary_exchange", StringType()),
+                StructField("shares_outstanding", LongType()),
+                StructField("market_cap", DoubleType()),
+                StructField("sic_code", StringType()),
+                StructField("sic_description", StringType()),
+                StructField("ticker_root", StringType()),
+                StructField("base_currency_symbol", StringType()),
+                StructField("currency_symbol", StringType()),
+                StructField("delisted_utc", TimestampType()),
+                StructField("last_updated_utc", TimestampType()),
+                StructField("is_active", BooleanType()),
+                StructField("sector", StringType()),
+                StructField("industry", StringType()),
+                StructField("description", StringType()),
+                StructField("pe_ratio", DoubleType()),
+                StructField("peg_ratio", DoubleType()),
+                StructField("book_value", DoubleType()),
+                StructField("dividend_per_share", DoubleType()),
+                StructField("dividend_yield", DoubleType()),
+                StructField("eps", DoubleType()),
+                StructField("week_52_high", DoubleType()),
+                StructField("week_52_low", DoubleType())
+            ])
+            return self.spark.createDataFrame([], schema)
+
+        # Map asset types
+        def map_asset_type(asset_type):
+            if pd.isna(asset_type):
+                return "stocks"
+            asset_type = str(asset_type)
+            if asset_type == "Common Stock":
+                return "stocks"
+            elif asset_type in ("ETF", "Mutual Fund"):
+                return "etfs"
+            elif "Option" in asset_type:
+                return "options"
+            elif "Future" in asset_type:
+                return "futures"
+            else:
+                return "stocks"
+
+        # Build result DataFrame
+        result = pd.DataFrame({
             # Core identifiers
-            col("Symbol").cast("string").alias("ticker"),
-            col("Name").cast("string").alias("security_name"),
-            asset_type_expr.alias("asset_type"),
+            'ticker': pdf['Symbol'],
+            'security_name': pdf['Name'],
+            'asset_type': pdf['AssetType'].apply(map_asset_type),
 
-            # CIK and FIGI (not available in Alpha Vantage)
-            lit(None).cast("string").alias("cik"),
-            lit(None).cast("string").alias("composite_figi"),
+            # CIK and FIGI (not available)
+            'cik': None,
+            'composite_figi': None,
 
             # Exchange information
-            col("Exchange").cast("string").alias("exchange_code"),
-            coalesce(col("Currency"), lit("USD")).cast("string").alias("currency"),
-            lit("stocks").cast("string").alias("market"),  # Alpha Vantage is primarily stocks
-            coalesce(col("Country"), lit("US")).cast("string").alias("locale"),
-            col("AssetType").cast("string").alias("type"),
-            col("Exchange").cast("string").alias("primary_exchange"),
+            'exchange_code': pdf['Exchange'],
+            'currency': pdf.get('Currency', 'USD').fillna('USD'),
+            'market': 'stocks',
+            'locale': pdf.get('Country', 'US').fillna('US'),
+            'type': pdf['AssetType'],
+            'primary_exchange': pdf['Exchange'],
 
-            # Market data - keep as strings in bronze layer (casting happens in silver)
-            col("SharesOutstanding").cast("string").alias("shares_outstanding"),
-            col("MarketCapitalization").cast("string").alias("market_cap"),
+            # Market data - use pd.to_numeric for safe conversion
+            'shares_outstanding': pd.to_numeric(pdf.get('SharesOutstanding'), errors='coerce').astype('Int64'),
+            'market_cap': pd.to_numeric(pdf.get('MarketCapitalization'), errors='coerce'),
 
-            # SIC codes (not available in Alpha Vantage)
-            lit(None).cast("string").alias("sic_code"),
-            col("Sector").cast("string").alias("sic_description"),  # Use Sector as proxy
+            # SIC codes (not available)
+            'sic_code': None,
+            'sic_description': pdf.get('Sector'),
 
             # Additional metadata
-            ticker_root_expr.alias("ticker_root"),
-            col("Currency").cast("string").alias("base_currency_symbol"),
-            col("Currency").cast("string").alias("currency_symbol"),
+            'ticker_root': pdf['Symbol'],
+            'base_currency_symbol': pdf.get('Currency'),
+            'currency_symbol': pdf.get('Currency'),
 
             # Timestamps
-            lit(None).cast("timestamp").alias("delisted_utc"),
-            current_timestamp().alias("last_updated_utc"),
-            lit(True).cast("boolean").alias("is_active"),  # Assume active if returned
+            'delisted_utc': None,
+            'last_updated_utc': datetime.now(),
+            'is_active': True,
 
-            # Alpha Vantage specific fields (additional)
-            col("Sector").cast("string").alias("sector"),
-            col("Industry").cast("string").alias("industry"),
-            col("Description").cast("string").alias("description"),
+            # Alpha Vantage specific fields
+            'sector': pdf.get('Sector'),
+            'industry': pdf.get('Industry'),
+            'description': pdf.get('Description'),
 
-            # Alpha Vantage numeric fields - keep as strings in bronze layer
-            col("PERatio").cast("string").alias("pe_ratio"),
-            col("PEGRatio").cast("string").alias("peg_ratio"),
-            col("BookValue").cast("string").alias("book_value"),
-            col("DividendPerShare").cast("string").alias("dividend_per_share"),
-            col("DividendYield").cast("string").alias("dividend_yield"),
-            col("EPS").cast("string").alias("eps"),
-            col("52WeekHigh").cast("string").alias("week_52_high"),
-            col("52WeekLow").cast("string").alias("week_52_low")
-        )
+            # Numeric fields - pd.to_numeric handles "None" gracefully
+            'pe_ratio': pd.to_numeric(pdf.get('PERatio'), errors='coerce'),
+            'peg_ratio': pd.to_numeric(pdf.get('PEGRatio'), errors='coerce'),
+            'book_value': pd.to_numeric(pdf.get('BookValue'), errors='coerce'),
+            'dividend_per_share': pd.to_numeric(pdf.get('DividendPerShare'), errors='coerce'),
+            'dividend_yield': pd.to_numeric(pdf.get('DividendYield'), errors='coerce'),
+            'eps': pd.to_numeric(pdf.get('EPS'), errors='coerce'),
+            'week_52_high': pd.to_numeric(pdf.get('52WeekHigh'), errors='coerce'),
+            'week_52_low': pd.to_numeric(pdf.get('52WeekLow'), errors='coerce')
+        })
 
-        # --- Filters ---
-        # Remove rows without ticker
-        result_df = result_df.filter(col("ticker").isNotNull())
+        # Deduplicate
+        result = result.drop_duplicates(subset=['ticker'])
 
-        # Filter out rows where Alpha Vantage returned error or invalid data
-        # (Alpha Vantage sometimes returns "Error Message" or "Note" fields)
-        if "Error Message" in df.columns:
-            result_df = result_df.filter(col("Error Message").isNull())
-
-        # Deduplicate by ticker
-        result_df = result_df.dropDuplicates(["ticker"])
-
-        return result_df
+        # Convert back to Spark DataFrame
+        return self.spark.createDataFrame(result)
 
     def validate(self, df):
         """
