@@ -57,7 +57,7 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
 The current implementation demonstrates the framework with financial and economic data:
 
 **Data Sources:**
-- **Polygon.io**: Stock prices, company data, news, technical indicators
+- **Alpha Vantage**: Stock prices, company fundamentals, technical indicators (v2.0 - sole securities provider)
 - **Bureau of Labor Statistics (BLS)**: Economic indicators (unemployment, CPI, GDP)
 - **Chicago Data Portal**: Municipal finance data (Socrata API)
 
@@ -103,7 +103,7 @@ de_Funk/
 │   │   └── [legacy models]  # equity.yaml, corporate.yaml (deprecated)
 │   ├── notebooks/           # Markdown notebook definitions
 │   ├── storage.json         # Storage paths and table mappings (v2.0 updated)
-│   ├── polygon_endpoints.json  # Polygon API configuration (v2.0 with CIK)
+│   ├── alpha_vantage_endpoints.json  # Alpha Vantage API configuration (v2.0)
 │   ├── bls_endpoints.json   # BLS API configuration
 │   └── chicago_endpoints.json  # Chicago API configuration
 ├── core/
@@ -114,7 +114,7 @@ de_Funk/
 │   ├── facets/              # Data transformation facets
 │   ├── ingestors/           # Data ingestion orchestration
 │   └── providers/           # Provider-specific implementations
-│       ├── polygon/         # Stock market data (Polygon.io)
+│       ├── alpha_vantage/   # Stock market data (Alpha Vantage - v2.0)
 │       ├── chicago/         # Municipal data (Chicago Data Portal)
 │       └── bls/             # Economic data (Bureau of Labor Statistics)
 ├── models/
@@ -532,7 +532,7 @@ nodes:
 ```
 
 **Benefits**:
-- ✅ Bronze mirrors API structure (Polygon returns all types from same endpoint)
+- ✅ Bronze mirrors API structure (Alpha Vantage returns all types from same endpoint)
 - ✅ No data duplication at ingestion
 - ✅ Easy to add new asset types (just filter differently)
 - ✅ Single ingestion pipeline for all securities
@@ -1207,10 +1207,10 @@ If queries are slow:
 |------|---------|
 | `.env` | API keys and environment configuration |
 | `configs/storage.json` | Storage paths and table mappings |
-| `configs/polygon_endpoints.json` | Polygon API endpoint configuration (auto-discovered) |
+| `configs/alpha_vantage_endpoints.json` | Alpha Vantage API endpoint configuration (v2.0) |
 | `configs/bls_endpoints.json` | BLS API endpoint configuration (auto-discovered) |
 | `configs/chicago_endpoints.json` | Chicago API endpoint configuration (auto-discovered) |
-| `configs/models/*.yaml` | Model definitions (8 models) |
+| `configs/models/*.yaml` | Model definitions (v2.0 modular architecture) |
 | `configs/notebooks/*.md` | Notebook definitions |
 
 **Note**: With the new ConfigLoader system, API configs are auto-discovered from `configs/*_endpoints.json` files. No manual registration needed!
@@ -1274,10 +1274,14 @@ If queries are slow:
 - Type-safe configuration with dataclass models
 - Auto-discovery of API configurations
 
-**In Progress: `company` model migration** → Splitting into `equity` and `corporate`
-- Several cross-model edges need updating
-- Documented in `MODEL_DEPENDENCY_ANALYSIS.md`
-- Some notebooks may reference old `company` model
+**✅ v2.0 Model Architecture - COMPLETE**
+- Modular YAML structure (schema/graph/measures split)
+- YAML inheritance with `extends` and `inherits_from`
+- Hybrid measure system (YAML + Python)
+- Unified bronze layer with asset_type filtering
+- Legacy models removed (equity, corporate)
+- Polygon.io completely removed, Alpha Vantage is sole securities provider
+- New models: company, stocks, options (partial), etfs (skeleton), futures (skeleton)
 
 ### Backend Support
 
@@ -1287,9 +1291,11 @@ If queries are slow:
 
 ### Data Sources Status
 
-- **Polygon.io**: Active, fully integrated (API limit: 1000/request)
+- **Alpha Vantage**: Active, v2.0 sole securities provider (Free: 5 calls/min, Premium: 75 calls/min)
 - **BLS**: Active, economic indicators working
 - **Chicago Data Portal**: Active, municipal finance data
+
+**Note**: Polygon.io has been completely removed in v2.0. Alpha Vantage is now the exclusive provider for securities data (stocks, options, ETFs, futures).
 
 ---
 
