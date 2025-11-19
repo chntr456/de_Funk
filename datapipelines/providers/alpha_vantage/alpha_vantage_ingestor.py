@@ -196,6 +196,33 @@ class AlphaVantageIngestor(Ingestor):
             print(f"Fetching data sequentially (rate limit: {self.registry.rate_limit} calls/sec)")
             raw_batches = self._fetch_calls(calls, response_key=None)
 
+        # Check for API errors before normalizing
+        error_count = 0
+        for batch in raw_batches:
+            for item in batch:
+                if isinstance(item, dict):
+                    # Alpha Vantage returns errors as {"Information": "...error message..."}
+                    # or {"Error Message": "...error message..."}
+                    # or {"Note": "...rate limit message..."}
+                    if "Information" in item and len(item) == 1:
+                        error_count += 1
+                        print(f"⚠ API Info: {item['Information']}")
+                    elif "Error Message" in item:
+                        error_count += 1
+                        print(f"✗ API Error: {item['Error Message']}")
+                    elif "Note" in item:
+                        error_count += 1
+                        print(f"⚠ API Note: {item['Note']}")
+
+        if error_count > 0:
+            print(f"\n⚠ Warning: {error_count} API responses contained errors or info messages")
+            print("Common causes:")
+            print("  - Missing or invalid API key (set ALPHA_VANTAGE_API_KEYS environment variable)")
+            print("  - Rate limit exceeded (free tier: 5 calls/minute, 500 calls/day)")
+            print("  - Invalid ticker symbols")
+            if error_count == len([item for batch in raw_batches for item in batch]):
+                raise ValueError(f"All {error_count} API calls failed. Check API key and configuration.")
+
         # Normalize to DataFrame (postprocess is called internally by normalize)
         df = facet.normalize(raw_batches)
         df = facet.validate(df)
