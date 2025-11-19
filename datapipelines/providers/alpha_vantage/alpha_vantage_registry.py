@@ -10,10 +10,10 @@ Key Differences from Polygon:
 - Rate limits are lower (5 calls/min for free tier)
 """
 
-from datapipelines.base.endpoint_registry import EndpointRegistry, Endpoint
+from datapipelines.base.registry import BaseRegistry, Endpoint
 
 
-class AlphaVantageRegistry(EndpointRegistry):
+class AlphaVantageRegistry(BaseRegistry):
     """
     Registry for Alpha Vantage API endpoints.
 
@@ -48,9 +48,20 @@ class AlphaVantageRegistry(EndpointRegistry):
         Returns:
             Tuple of (endpoint, path, query_params)
         """
-        ep = self.endpoints.get(ep_name)
-        if not ep:
+        ep_config = self.endpoints.get(ep_name)
+        if not ep_config:
             raise ValueError(f"Unknown endpoint: {ep_name}")
+
+        # Create Endpoint object
+        ep = Endpoint(
+            name=ep_name,
+            base=ep_config["base"],
+            method=ep_config["method"],
+            path_template=ep_config.get("path_template", ""),
+            required_params=ep_config.get("required_params", []),
+            default_query=ep_config.get("default_query", {}),
+            response_key=ep_config.get("response_key")
+        )
 
         # Alpha Vantage has no path templates (empty path)
         path = ep.path_template or ""
