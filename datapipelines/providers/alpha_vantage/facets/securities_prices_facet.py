@@ -171,6 +171,46 @@ class SecuritiesPricesFacetAV(AlphaVantageFacet):
 
         return "stocks"
 
+    def get_input_schema(self):
+        """Define explicit schema for Alpha Vantage TIME_SERIES response."""
+        from pyspark.sql.types import StructType, StructField, StringType
+
+        return StructType([
+            # All fields as StringType - will convert in postprocess using pandas
+            StructField("ticker", StringType(), True),
+            StructField("asset_type", StringType(), True),
+            StructField("trade_date", StringType(), True),
+            StructField("1. open", StringType(), True),
+            StructField("2. high", StringType(), True),
+            StructField("3. low", StringType(), True),
+            StructField("4. close", StringType(), True),
+            StructField("5. adjusted close", StringType(), True),
+            StructField("6. volume", StringType(), True),
+            StructField("7. dividend amount", StringType(), True),
+            StructField("8. split coefficient", StringType(), True),
+        ])
+
+    def _get_output_schema(self):
+        """Get the output schema for the transformed DataFrame."""
+        from pyspark.sql.types import StructType, StructField, StringType, DateType, DoubleType, LongType, BooleanType
+
+        return StructType([
+            StructField("trade_date", DateType(), True),
+            StructField("ticker", StringType(), True),
+            StructField("asset_type", StringType(), True),
+            StructField("open", DoubleType(), True),
+            StructField("high", DoubleType(), True),
+            StructField("low", DoubleType(), True),
+            StructField("close", DoubleType(), True),
+            StructField("volume", DoubleType(), True),
+            StructField("volume_weighted", DoubleType(), True),
+            StructField("transactions", LongType(), True),
+            StructField("otc", BooleanType(), True),
+            StructField("adjusted_close", DoubleType(), True),
+            StructField("dividend_amount", DoubleType(), True),
+            StructField("split_coefficient", DoubleType(), True)
+        ])
+
     def normalize(self, raw_batches: List[List[dict]]):
         """
         Normalize Alpha Vantage time series response.
@@ -241,19 +281,31 @@ class SecuritiesPricesFacetAV(AlphaVantageFacet):
         """
         Transform normalized DataFrame to final output schema.
 
+        Uses pandas for transformation to avoid Spark 4.0.1 optimizer issues.
+        Pandas handles string-to-numeric conversion gracefully with pd.to_numeric().
+
         Transformations:
         1. Parse trade_date string to date type
         2. Rename Alpha Vantage fields (1. open -> open, etc.)
-        3. Calculate volume-weighted price (VWAP approximation)
-        4. Filter by date range if specified
-        5. Handle missing fields (transactions, otc)
-        6. Deduplicate by (ticker, trade_date)
+        3. Convert numeric fields using pandas
+        4. Calculate volume-weighted price (VWAP approximation)
+        5. Filter by date range if specified
+        6. Handle missing fields (transactions, otc)
+        7. Deduplicate by (ticker, trade_date)
         """
-        # --- Parse trade_date ---
-        df = df.withColumn("trade_date", to_date(col("trade_date"), "yyyy-MM-dd"))
+        import pandas as pd
+        from datetime import datetime
 
-        # --- Rename columns (remove numeric prefixes) ---
-        # Alpha Vantage uses "1. open", "2. high", etc.
+        # Convert Spark DataFrame to pandas
+        pdf = df.toPandas()
+
+        if pdf.empty:
+            return self.spark.createDataFrame([], schema=self._get_output_schema())
+
+        # Parse trade_date
+        pdf['trade_date'] = pd.to_datetime(pdf['trade_date'], errors='coerce').dt.date
+
+        # Rename columns (remove numeric prefixes)
         rename_map = {
             "1. open": "open",
             "2. high": "high",
@@ -264,54 +316,54 @@ class SecuritiesPricesFacetAV(AlphaVantageFacet):
             "7. dividend amount": "dividend_amount",
             "8. split coefficient": "split_coefficient"
         }
+        pdf = pdf.rename(columns=rename_map)
 
-        for old_name, new_name in rename_map.items():
-            if old_name in df.columns:
-                df = df.withColumnRenamed(old_name, new_name)
+        # Convert numeric fields with explicit float64 casting for Spark DoubleType compatibility
+        numeric_fields = ['open', 'high', 'low', 'close', 'adjusted_close', 'volume',
+                         'dividend_amount', 'split_coefficient']
 
-        # --- Calculate VWAP ---
-        # Alpha Vantage doesn't provide VWAP, so approximate as (H+L+C)/3
-        df = df.withColumn(
-            "volume_weighted",
-            (col("high") + col("low") + col("close")) / 3.0
-        )
+        for field in numeric_fields:
+            if field in pdf.columns:
+                pdf[field] = pd.to_numeric(pdf[field], errors='coerce').astype('float64')
 
-        # --- Add missing fields ---
-        if "transactions" not in df.columns:
-            df = df.withColumn("transactions", lit(None).cast("long"))
+        # Calculate VWAP - now safe since fields are numeric
+        pdf['volume_weighted'] = ((pdf['high'] + pdf['low'] + pdf['close']) / 3.0).astype('float64')
 
-        if "otc" not in df.columns:
-            df = df.withColumn("otc", lit(False))
+        # Add missing fields
+        pdf['transactions'] = None  # Not available in Alpha Vantage
+        pdf['otc'] = False
 
-        # --- Date range filtering ---
+        # Date range filtering
         if self.date_from:
-            df = df.filter(col("trade_date") >= lit(self.date_from))
+            date_from = pd.to_datetime(self.date_from).date()
+            pdf = pdf[pdf['trade_date'] >= date_from]
         if self.date_to:
-            df = df.filter(col("trade_date") <= lit(self.date_to))
+            date_to = pd.to_datetime(self.date_to).date()
+            pdf = pdf[pdf['trade_date'] <= date_to]
 
-        # --- Data Quality Filters ---
-        df = df.filter(
-            (col("ticker").isNotNull()) &
-            (col("close").isNotNull()) &
-            (col("close") > 0) &
-            (col("trade_date").isNotNull())
-        )
+        # Data quality filters
+        pdf = pdf[
+            pdf['ticker'].notna() &
+            pdf['close'].notna() &
+            (pdf['close'] > 0) &
+            pdf['trade_date'].notna()
+        ]
 
-        # --- Select final columns in order ---
+        # Deduplicate
+        pdf = pdf.drop_duplicates(subset=['ticker', 'trade_date'])
+
+        # Select final columns in order
         final_cols = [col_name for col_name, _ in self.OUTPUT_SCHEMA]
-        existing_cols = set(df.columns)
 
-        # Add missing columns as NULL
+        # Ensure all columns exist
         for col_name, col_type in self.OUTPUT_SCHEMA:
-            if col_name not in existing_cols:
-                df = df.withColumn(col_name, lit(None).cast(col_type))
+            if col_name not in pdf.columns:
+                pdf[col_name] = None
 
-        df = df.select(*final_cols)
+        pdf = pdf[final_cols]
 
-        # --- Deduplicate ---
-        df = df.dropDuplicates(["ticker", "trade_date"])
-
-        return df
+        # Convert back to Spark DataFrame with explicit schema
+        return self.spark.createDataFrame(pdf, schema=self._get_output_schema())
 
     def validate(self, df):
         """
