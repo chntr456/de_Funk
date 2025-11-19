@@ -163,11 +163,19 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
 
         # Helper function for safe casting (compatible with all PySpark versions)
         def safe_cast(column_name, target_type):
-            """Safely cast a column, returning NULL for invalid values."""
-            invalid_values = "('', 'None', 'N/A', '-')"
+            """Safely cast a column, returning NULL for invalid values.
+
+            Note: Using OR conditions instead of IN to avoid type casting issues.
+            Spark's IN operator tries to cast values for comparison, which fails
+            when comparing invalid strings against numeric types.
+            """
             return expr(f"""
                 CASE
-                    WHEN {column_name} IN {invalid_values} OR {column_name} IS NULL
+                    WHEN {column_name} IS NULL
+                         OR {column_name} = ''
+                         OR {column_name} = 'None'
+                         OR {column_name} = 'N/A'
+                         OR {column_name} = '-'
                     THEN NULL
                     ELSE CAST({column_name} AS {target_type})
                 END
