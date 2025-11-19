@@ -158,28 +158,27 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         - 52WeekHigh, 52WeekLow
         """
         from pyspark.sql.functions import (
-            col, when, lit, trim, coalesce, upper, current_timestamp
+            col, when, lit, trim, coalesce, upper, current_timestamp,
+            regexp_replace, length
         )
 
-        # Helper function for safe casting - pre-clean THEN cast
+        # Helper function for safe casting - use regexp to avoid comparison casting
         def safe_cast(column_name, target_type):
-            """Safely cast by first replacing invalid values with NULL, then casting.
+            """Safely cast using regexp_replace to avoid Spark's aggressive casting.
 
-            Spark 4.0.1's try_cast still throws errors on "None" strings during lazy
-            evaluation (e.g., during Parquet write). This approach uses eager evaluation
-            with Python Spark functions to clean data before casting.
+            Spark 4.0.1's optimizer aggressively casts columns even during string
+            comparisons. Using regexp_replace to physically modify string values
+            avoids all comparison operations that trigger unwanted casting.
             """
-            # First, replace invalid string values with NULL (using Python functions)
-            cleaned = when(
-                col(column_name).isNull() |
-                (col(column_name) == "") |
-                (col(column_name) == "None") |
-                (col(column_name) == "N/A") |
-                (col(column_name) == "-"),
-                lit(None)
-            ).otherwise(col(column_name))
+            # Step 1: Replace invalid values with empty string using regex
+            # Matches: 'None', 'N/A', '-', or already empty ''
+            cleaned = regexp_replace(col(column_name), r'^(None|N/A|-|)$', '')
 
-            # Then cast the cleaned column to target type
+            # Step 2: Keep only non-empty strings, return NULL for empty
+            # Using length() > 0 to avoid equality comparison
+            cleaned = when(length(cleaned) > 0, cleaned)  # NULL by default if length <= 0
+
+            # Step 3: Cast to target type (NULL values are safe to cast)
             return cleaned.cast(target_type)
 
         # --- Asset Type Classification ---
