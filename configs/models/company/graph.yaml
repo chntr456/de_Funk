@@ -8,15 +8,17 @@ nodes:
       - "cik IS NOT NULL"        # Must have CIK to be a valid company
     select:
       cik: cik
-      company_name: name
-      legal_name: name  # Will be updated when we get proper SEC data
+      company_name: security_name  # Bronze column is security_name, not name
+      legal_name: security_name    # Will be updated when we get proper SEC data
       ticker_primary: ticker
       sic_code: sic_code
       sic_description: sic_description
       exchange_code: primary_exchange
+      is_active: is_active  # Already boolean in bronze
+      sector: sector
+      industry: industry
     derive:
       company_id: "CONCAT('COMPANY_', cik)"
-      is_active: "CAST(active AS BOOLEAN)"
       incorporation_country: "'US'"  # Default, update from SEC data later
     tags: [dim, entity, corporate]
     unique_key: [cik]
