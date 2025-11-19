@@ -198,15 +198,28 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             col("AssetType").cast("string").alias("type"),
             col("Exchange").cast("string").alias("primary_exchange"),
 
-            # Market data - filter out "None" strings before casting
-            when(col("SharesOutstanding").isin("None", "", "N/A", "-"), lit(None))
-            .otherwise(col("SharesOutstanding"))
-            .cast("long")
+            # Market data - filter out "None"/empty strings before casting
+            # Use nullif() to convert invalid strings to NULL before casting
+            when(
+                col("SharesOutstanding").isNotNull() &
+                (col("SharesOutstanding") != "") &
+                (col("SharesOutstanding") != "None") &
+                (col("SharesOutstanding") != "N/A") &
+                (col("SharesOutstanding") != "-"),
+                col("SharesOutstanding").cast("long")
+            )
+            .otherwise(lit(None).cast("long"))
             .alias("shares_outstanding"),
 
-            when(col("MarketCapitalization").isin("None", "", "N/A", "-"), lit(None))
-            .otherwise(col("MarketCapitalization"))
-            .cast("double")
+            when(
+                col("MarketCapitalization").isNotNull() &
+                (col("MarketCapitalization") != "") &
+                (col("MarketCapitalization") != "None") &
+                (col("MarketCapitalization") != "N/A") &
+                (col("MarketCapitalization") != "-"),
+                col("MarketCapitalization").cast("double")
+            )
+            .otherwise(lit(None).cast("double"))
             .alias("market_cap"),
 
             # SIC codes (not available in Alpha Vantage)
@@ -228,45 +241,93 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             col("Industry").cast("string").alias("industry"),
             col("Description").cast("string").alias("description"),
 
-            # Replace "None" strings with NULL before casting to double
-            when(col("PERatio").isin("None", "", "N/A", "-"), lit(None))
-            .otherwise(col("PERatio"))
-            .cast("double")
+            # Replace "None"/empty strings with NULL before casting to double
+            when(
+                col("PERatio").isNotNull() &
+                (col("PERatio") != "") &
+                (col("PERatio") != "None") &
+                (col("PERatio") != "N/A") &
+                (col("PERatio") != "-"),
+                col("PERatio").cast("double")
+            )
+            .otherwise(lit(None).cast("double"))
             .alias("pe_ratio"),
 
-            when(col("PEGRatio").isin("None", "", "N/A", "-"), lit(None))
-            .otherwise(col("PEGRatio"))
-            .cast("double")
+            when(
+                col("PEGRatio").isNotNull() &
+                (col("PEGRatio") != "") &
+                (col("PEGRatio") != "None") &
+                (col("PEGRatio") != "N/A") &
+                (col("PEGRatio") != "-"),
+                col("PEGRatio").cast("double")
+            )
+            .otherwise(lit(None).cast("double"))
             .alias("peg_ratio"),
 
-            when(col("BookValue").isin("None", "", "N/A", "-"), lit(None))
-            .otherwise(col("BookValue"))
-            .cast("double")
+            when(
+                col("BookValue").isNotNull() &
+                (col("BookValue") != "") &
+                (col("BookValue") != "None") &
+                (col("BookValue") != "N/A") &
+                (col("BookValue") != "-"),
+                col("BookValue").cast("double")
+            )
+            .otherwise(lit(None).cast("double"))
             .alias("book_value"),
 
-            when(col("DividendPerShare").isin("None", "", "N/A", "-"), lit(None))
-            .otherwise(col("DividendPerShare"))
-            .cast("double")
+            when(
+                col("DividendPerShare").isNotNull() &
+                (col("DividendPerShare") != "") &
+                (col("DividendPerShare") != "None") &
+                (col("DividendPerShare") != "N/A") &
+                (col("DividendPerShare") != "-"),
+                col("DividendPerShare").cast("double")
+            )
+            .otherwise(lit(None).cast("double"))
             .alias("dividend_per_share"),
 
-            when(col("DividendYield").isin("None", "", "N/A", "-"), lit(None))
-            .otherwise(col("DividendYield"))
-            .cast("double")
+            when(
+                col("DividendYield").isNotNull() &
+                (col("DividendYield") != "") &
+                (col("DividendYield") != "None") &
+                (col("DividendYield") != "N/A") &
+                (col("DividendYield") != "-"),
+                col("DividendYield").cast("double")
+            )
+            .otherwise(lit(None).cast("double"))
             .alias("dividend_yield"),
 
-            when(col("EPS").isin("None", "", "N/A", "-"), lit(None))
-            .otherwise(col("EPS"))
-            .cast("double")
+            when(
+                col("EPS").isNotNull() &
+                (col("EPS") != "") &
+                (col("EPS") != "None") &
+                (col("EPS") != "N/A") &
+                (col("EPS") != "-"),
+                col("EPS").cast("double")
+            )
+            .otherwise(lit(None).cast("double"))
             .alias("eps"),
 
-            when(col("52WeekHigh").isin("None", "", "N/A", "-"), lit(None))
-            .otherwise(col("52WeekHigh"))
-            .cast("double")
+            when(
+                col("52WeekHigh").isNotNull() &
+                (col("52WeekHigh") != "") &
+                (col("52WeekHigh") != "None") &
+                (col("52WeekHigh") != "N/A") &
+                (col("52WeekHigh") != "-"),
+                col("52WeekHigh").cast("double")
+            )
+            .otherwise(lit(None).cast("double"))
             .alias("week_52_high"),
 
-            when(col("52WeekLow").isin("None", "", "N/A", "-"), lit(None))
-            .otherwise(col("52WeekLow"))
-            .cast("double")
+            when(
+                col("52WeekLow").isNotNull() &
+                (col("52WeekLow") != "") &
+                (col("52WeekLow") != "None") &
+                (col("52WeekLow") != "N/A") &
+                (col("52WeekLow") != "-"),
+                col("52WeekLow").cast("double")
+            )
+            .otherwise(lit(None).cast("double"))
             .alias("week_52_low")
         )
 
