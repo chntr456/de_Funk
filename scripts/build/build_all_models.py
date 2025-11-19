@@ -4,7 +4,7 @@ Build All Models - Complete data ingestion and model building across all domains
 
 This script:
 1. Discovers all models in configs/models/
-2. Runs appropriate paginated ingestion for each domain (Polygon, BLS, Chicago APIs)
+2. Runs appropriate paginated ingestion for each domain (Alpha Vantage, BLS, Chicago APIs)
 3. Builds Silver layer from Bronze data
 4. Reports progress and results
 
@@ -15,7 +15,7 @@ Usage:
     python -m scripts.build_all_models
 
     # Build specific models
-    python -m scripts.build_all_models --models equity corporate
+    python -m scripts.build_all_models --models stocks company
 
     # With date range for market data
     python -m scripts.build_all_models --date-from 2024-01-01 --date-to 2024-12-31
@@ -37,7 +37,7 @@ Examples:
     python -m scripts.build_all_models --date-from 2024-01-01
 
     # Development build (limited data, specific models)
-    python -m scripts.build_all_models --models equity --max-tickers 10 --date-from 2025-01-01
+    python -m scripts.build_all_models --models stocks --max-tickers 10 --date-from 2025-01-01
 
     # Quick rebuild from existing Bronze
     python -m scripts.build_all_models --skip-ingestion
@@ -71,10 +71,10 @@ class AllModelBuilder:
     """Build all models with paginated ingestion from real data sources."""
 
     # Model categorization by data source
-    POLYGON_MODELS = {'company', 'equity', 'corporate'}  # Polygon API
+    ALPHA_VANTAGE_MODELS = {'company', 'stocks', 'options', 'etfs', 'futures'}  # Alpha Vantage API (v2.0)
     BLS_MODELS = {'macro'}  # Bureau of Labor Statistics API
     CHICAGO_MODELS = {'city_finance'}  # Chicago Data Portal
-    DERIVED_MODELS = {'forecast', 'etf'}  # Derived from other models (no direct ingestion)
+    DERIVED_MODELS = {'forecast'}  # Derived from other models (no direct ingestion)
     CORE_MODELS = {'core'}  # Reference data (calendar, etc.)
 
     def __init__(self, config_dir: str = "configs/models"):
@@ -145,7 +145,7 @@ class AllModelBuilder:
         def sort_key(model_name):
             if model_name in self.CORE_MODELS:
                 return 0
-            elif model_name in self.POLYGON_MODELS:
+            elif model_name in self.ALPHA_VANTAGE_MODELS:
                 return 1
             elif model_name in self.BLS_MODELS:
                 return 2
@@ -194,7 +194,7 @@ class AllModelBuilder:
 
         # Determine date range for market data
         if days:
-            # Exclude today (Polygon basic plan doesn't allow same-day data)
+            # Exclude today (Alpha Vantage typically doesn't include same-day data)
             date_to_obj = date.today() - timedelta(days=1)
             date_from_obj = date_to_obj - timedelta(days=days)
             date_from = date_from_obj.isoformat()
@@ -376,7 +376,7 @@ class AllModelBuilder:
             model_name: Model to build
             date_from: Start date
             date_to: End date
-            max_tickers: Max tickers (for Polygon models)
+            max_tickers: Max tickers (for Alpha Vantage models)
             skip_ingestion: Skip Bronze ingestion
 
         Returns:
@@ -421,8 +421,8 @@ class AllModelBuilder:
 
     def _get_source_type(self, model_name: str) -> str:
         """Get the data source type for a model."""
-        if model_name in self.POLYGON_MODELS:
-            return "Polygon API"
+        if model_name in self.ALPHA_VANTAGE_MODELS:
+            return "Alpha Vantage API"
         elif model_name in self.BLS_MODELS:
             return "BLS API"
         elif model_name in self.CHICAGO_MODELS:
@@ -451,8 +451,8 @@ class AllModelBuilder:
         self._init_context()
 
         try:
-            if model_name in self.POLYGON_MODELS:
-                return self._run_polygon_ingestion(date_from, date_to, max_tickers)
+            if model_name in self.ALPHA_VANTAGE_MODELS:
+                return self._run_alpha_vantage_ingestion(date_from, date_to, max_tickers)
             elif model_name in self.BLS_MODELS:
                 return self._run_bls_ingestion(date_from, date_to)
             elif model_name in self.CHICAGO_MODELS:
@@ -471,28 +471,40 @@ class AllModelBuilder:
             logger.error(f"Ingestion failed: {e}", exc_info=True)
             return False
 
-    def _run_polygon_ingestion(
+    def _run_alpha_vantage_ingestion(
         self,
         date_from: str,
         date_to: str,
         max_tickers: Optional[int]
     ) -> bool:
-        """Run Polygon API ingestion (Company/Equity/Corporate models)."""
-        from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
+        """Run Alpha Vantage API ingestion (v2.0 securities models)."""
+        from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
 
-        logger.info("  Running Polygon ingestion (paginated)...")
-        ingestor = CompanyPolygonIngestor(
-            polygon_cfg=self.ctx.polygon_cfg,
+        logger.info("  Running Alpha Vantage ingestion...")
+        ingestor = AlphaVantageIngestor(
+            alpha_vantage_cfg=self.ctx.get_api_config('alpha_vantage'),
             storage_cfg=self.ctx.storage,
             spark=self.ctx.spark
         )
 
-        tickers = ingestor.run_all(
+        # Default tickers for development/testing
+        tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
+        if max_tickers:
+            tickers = tickers[:max_tickers]
+
+        # Ingest reference data (company overview)
+        logger.info(f"  Ingesting reference data for {len(tickers)} tickers...")
+        ingestor.ingest_reference_data(tickers=tickers, use_concurrent=False)
+
+        # Ingest prices (daily OHLCV)
+        logger.info(f"  Ingesting prices from {date_from} to {date_to}...")
+        ingestor.ingest_prices(
+            tickers=tickers,
             date_from=date_from,
             date_to=date_to,
-            snapshot_dt=None,
-            max_tickers=max_tickers,
-            include_news=True
+            adjusted=True,
+            outputsize='full',
+            use_concurrent=False
         )
 
         logger.info(f"  ✓ Ingested data for {len(tickers)} tickers")
@@ -674,7 +686,7 @@ def main():
     parser.add_argument(
         '--max-tickers',
         type=int,
-        help='Limit number of tickers for development/testing (Polygon models only)'
+        help='Limit number of tickers for development/testing (Alpha Vantage models only)'
     )
 
     parser.add_argument(
