@@ -2,7 +2,7 @@
 Full Pipeline Orchestrator
 
 This script runs the complete end-to-end pipeline:
-1. Data Ingestion: Polygon API → Bronze → Silver layer
+1. Data Ingestion: Alpha Vantage API → Bronze → Silver layer
 2. Forecasting: Generate time series forecasts for all tickers
 
 Usage:
