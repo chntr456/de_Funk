@@ -117,30 +117,13 @@ def reingest_bronze(ctx, date_from: str, date_to: str, max_tickers: int = None):
             spark=ctx.spark
         )
 
-        # Default tickers for ingestion
-        tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
-        if max_tickers:
-            tickers = tickers[:max_tickers]
-
-        # Run ingestion
-        print("Step 1: Ingesting reference data from Alpha Vantage...")
-        print("-" * 80)
-        ingestor.ingest_reference_data(tickers=tickers, use_concurrent=False)
-
-        print("\nStep 2: Ingesting prices from Alpha Vantage...")
-        print("-" * 80)
-        ingestor.ingest_prices(
-            tickers=tickers,
+        # Run full ingestion using run_all method
+        tickers = ingestor.run_all(
             date_from=date_from,
             date_to=date_to,
-            adjusted=True,
-            outputsize='full',
-            use_concurrent=False
+            max_tickers=max_tickers,
+            use_concurrent=False  # Sequential for free tier
         )
-
-        print()
-        print(f"✓ Ingested data for {len(tickers)} tickers")
-        print()
 
         return tickers
 

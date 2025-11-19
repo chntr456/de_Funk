@@ -289,3 +289,55 @@ class AlphaVantageIngestor(Ingestor):
         # Need to convert to DataFrame and normalize to securities_reference schema
 
         raise NotImplementedError("Bulk listing ingestion not yet implemented. Use ingest_reference_data() with ticker list.")
+
+    def run_all(self, tickers=None, date_from=None, date_to=None,
+                max_tickers=None, use_concurrent=False, **kwargs):
+        """
+        Run complete ingestion: reference data + prices.
+
+        This method implements the abstract method from Ingestor base class.
+        It orchestrates the full ingestion process for Alpha Vantage data.
+
+        Args:
+            tickers: List of ticker symbols (default: top 10 tickers)
+            date_from: Start date for prices (YYYY-MM-DD)
+            date_to: End date for prices (YYYY-MM-DD)
+            max_tickers: Limit number of tickers to ingest
+            use_concurrent: Use concurrent fetching (premium tier only)
+            **kwargs: Additional arguments (ignored for compatibility)
+
+        Returns:
+            List of ingested tickers
+        """
+        # Default tickers if none provided
+        if not tickers:
+            tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
+
+        # Apply ticker limit
+        if max_tickers:
+            tickers = tickers[:max_tickers]
+
+        print(f"Running full ingestion for {len(tickers)} tickers...")
+        print(f"Date range: {date_from} to {date_to}")
+        print(f"Concurrent mode: {use_concurrent}")
+        print()
+
+        # Step 1: Ingest reference data
+        print("Step 1: Ingesting reference data...")
+        print("-" * 80)
+        self.ingest_reference_data(tickers=tickers, use_concurrent=use_concurrent)
+        print()
+
+        # Step 2: Ingest prices
+        print("Step 2: Ingesting prices...")
+        print("-" * 80)
+        self.ingest_prices(
+            tickers=tickers,
+            date_from=date_from,
+            date_to=date_to,
+            use_concurrent=use_concurrent
+        )
+        print()
+
+        print(f"✓ Full ingestion complete for {len(tickers)} tickers")
+        return tickers

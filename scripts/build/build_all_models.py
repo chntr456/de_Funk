@@ -487,24 +487,12 @@ class AllModelBuilder:
             spark=self.ctx.spark
         )
 
-        # Default tickers for development/testing
-        tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
-        if max_tickers:
-            tickers = tickers[:max_tickers]
-
-        # Ingest reference data (company overview)
-        logger.info(f"  Ingesting reference data for {len(tickers)} tickers...")
-        ingestor.ingest_reference_data(tickers=tickers, use_concurrent=False)
-
-        # Ingest prices (daily OHLCV)
-        logger.info(f"  Ingesting prices from {date_from} to {date_to}...")
-        ingestor.ingest_prices(
-            tickers=tickers,
+        # Run full ingestion using run_all method
+        tickers = ingestor.run_all(
             date_from=date_from,
             date_to=date_to,
-            adjusted=True,
-            outputsize='full',
-            use_concurrent=False
+            max_tickers=max_tickers,
+            use_concurrent=False  # Sequential for free tier
         )
 
         logger.info(f"  ✓ Ingested data for {len(tickers)} tickers")
