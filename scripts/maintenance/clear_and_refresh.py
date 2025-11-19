@@ -40,7 +40,7 @@ def confirm_action(prompt: str) -> bool:
 
 
 def clear_storage(bronze: bool = True, silver: bool = True, skip_confirm: bool = False):
-    """Clear bronze and/or silver storage."""
+    """Clear bronze and/or silver storage for v2.0 unified architecture."""
     from core.context import RepoContext
 
     print("=" * 80)
@@ -53,15 +53,29 @@ def clear_storage(bronze: bool = True, silver: bool = True, skip_confirm: bool =
     ctx = RepoContext.from_repo_root()
 
     storage_root = ctx.repo / "storage"
-    bronze_path = storage_root / "bronze" / "company"
-    silver_path = storage_root / "silver" / "company"
+
+    # v2.0 unified bronze tables
+    bronze_paths = [
+        storage_root / "bronze" / "securities_reference",
+        storage_root / "bronze" / "securities_prices_daily"
+    ]
+
+    # v2.0 silver model directories
+    silver_paths = [
+        storage_root / "silver" / "company",
+        storage_root / "silver" / "stocks"
+    ]
 
     # Show what will be deleted
     items_to_delete = []
-    if bronze and bronze_path.exists():
-        items_to_delete.append(f"  - Bronze: {bronze_path}")
-    if silver and silver_path.exists():
-        items_to_delete.append(f"  - Silver: {silver_path}")
+    if bronze:
+        for path in bronze_paths:
+            if path.exists():
+                items_to_delete.append(f"  - Bronze: {path}")
+    if silver:
+        for path in silver_paths:
+            if path.exists():
+                items_to_delete.append(f"  - Silver: {path}")
 
     if not items_to_delete:
         print("No data to clear.")
@@ -82,15 +96,19 @@ def clear_storage(bronze: bool = True, silver: bool = True, skip_confirm: bool =
     print("\nDeleting storage...")
     print("-" * 80)
 
-    if bronze and bronze_path.exists():
-        print(f"  → Deleting bronze: {bronze_path}")
-        shutil.rmtree(bronze_path)
-        print("  ✓ Bronze deleted")
+    if bronze:
+        for path in bronze_paths:
+            if path.exists():
+                print(f"  → Deleting bronze: {path}")
+                shutil.rmtree(path)
+                print(f"  ✓ Deleted: {path.name}")
 
-    if silver and silver_path.exists():
-        print(f"  → Deleting silver: {silver_path}")
-        shutil.rmtree(silver_path)
-        print("  ✓ Silver deleted")
+    if silver:
+        for path in silver_paths:
+            if path.exists():
+                print(f"  → Deleting silver: {path}")
+                shutil.rmtree(path)
+                print(f"  ✓ Deleted: {path.name}")
 
     print()
     return ctx
@@ -135,58 +153,88 @@ def reingest_bronze(ctx, date_from: str, date_to: str, max_tickers: int = None):
 
 
 def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
-    """Rebuild silver layer models."""
+    """Rebuild silver layer models using v2.0 modular architecture."""
+    from config.model_loader import ModelConfigLoader
     from models.implemented.company.model import CompanyModel
+    from models.implemented.stocks.model import StocksModel
     from models.api.session import UniversalSession
 
     print("=" * 80)
-    print("REBUILDING SILVER LAYER")
+    print("REBUILDING SILVER LAYER (v2.0 Models)")
     print("=" * 80)
     print()
 
     try:
-        # Load model config
-        print("Step 2: Building silver layer models...")
-        print("-" * 80)
-
-        cfg_path = ctx.repo / "configs" / "models" / "company.yaml"
-        import yaml
-        model_cfg = yaml.safe_load(cfg_path.read_text())
+        # Initialize model config loader
+        models_dir = ctx.repo / "configs" / "models"
+        loader = ModelConfigLoader(models_dir)
 
         # Create session for cross-model references
         session = UniversalSession(ctx.connection, ctx.storage, ctx.repo)
 
-        # Build model
-        model = CompanyModel(
+        # Build parameters
+        params = {
+            "DATE_FROM": date_from,
+            "DATE_TO": date_to,
+            "UNIVERSE_SIZE": len(tickers)
+        }
+
+        # --- Build Company Model ---
+        print("Building company model...")
+        print("-" * 80)
+        company_cfg = loader.load_model_config("company")
+        company_model = CompanyModel(
             ctx.connection,
-            model_cfg=model_cfg,
+            model_cfg=company_cfg,
             storage_cfg=ctx.storage,
-            params={
-                "DATE_FROM": date_from,
-                "DATE_TO": date_to,
-                "UNIVERSE_SIZE": len(tickers)
-            }
+            params=params
         )
+        company_model.set_session(session)
+        company_dims, company_facts = company_model.build()
 
-        # Set session for cross-model references (e.g., core.dim_calendar)
-        model.set_session(session)
-
-        dims, facts = model.build()
-
-        print()
-        print("✓ Silver layer built successfully")
-        print()
-        print("Dimensions:")
-        for name, df in dims.items():
+        print("✓ Company model built")
+        print("  Dimensions:")
+        for name, df in company_dims.items():
             count = df.count()
-            print(f"  - {name}: {count:,} rows")
-
-        print()
-        print("Facts:")
-        for name, df in facts.items():
+            print(f"    - {name}: {count:,} rows")
+        print("  Facts:")
+        for name, df in company_facts.items():
             count = df.count()
-            print(f"  - {name}: {count:,} rows")
+            print(f"    - {name}: {count:,} rows")
+        print()
 
+        # --- Build Stocks Model ---
+        print("Building stocks model...")
+        print("-" * 80)
+        stocks_cfg = loader.load_model_config("stocks")
+        stocks_model = StocksModel(
+            ctx.connection,
+            model_cfg=stocks_cfg,
+            storage_cfg=ctx.storage,
+            params=params
+        )
+        stocks_model.set_session(session)
+        stocks_dims, stocks_facts = stocks_model.build()
+
+        print("✓ Stocks model built")
+        print("  Dimensions:")
+        for name, df in stocks_dims.items():
+            count = df.count()
+            print(f"    - {name}: {count:,} rows")
+        print("  Facts:")
+        for name, df in stocks_facts.items():
+            count = df.count()
+            print(f"    - {name}: {count:,} rows")
+        print()
+
+        print("=" * 80)
+        print("✓ SILVER LAYER BUILD COMPLETE")
+        print("=" * 80)
+        print()
+        print("Summary:")
+        print(f"  Models built: company, stocks")
+        print(f"  Total dimensions: {len(company_dims) + len(stocks_dims)}")
+        print(f"  Total facts: {len(company_facts) + len(stocks_facts)}")
         print()
 
     except Exception as e:
