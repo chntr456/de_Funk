@@ -57,6 +57,18 @@ class AlphaVantageFacet(Facet):
         """
         raise NotImplementedError
 
+    def get_input_schema(self):
+        """
+        Get the input schema for this facet's API response.
+
+        Override in subclass to provide explicit schema for Spark DataFrame creation.
+        This prevents CANNOT_DETERMINE_TYPE errors when columns have all NULL values.
+
+        Returns:
+            pyspark.sql.types.StructType or None
+        """
+        return None
+
     def normalize(self, raw_batches):
         """
         Override normalize to clean Alpha Vantage data at Python level.
@@ -102,5 +114,19 @@ class AlphaVantageFacet(Facet):
                     cleaned_batch.append(item)
             cleaned_batches.append(cleaned_batch)
 
-        # Now call parent's normalize with cleaned data
-        return super().normalize(cleaned_batches)
+        # Flatten batches into single list
+        rows = [item for batch in cleaned_batches for item in batch]
+
+        # Get schema if provided by subclass
+        schema = self.get_input_schema()
+
+        # Create DataFrame with explicit schema (avoids type inference issues)
+        if schema:
+            df = self.spark.createDataFrame(rows, schema=schema)
+        else:
+            df = self.spark.createDataFrame(rows, samplingRatio=1.0)
+
+        # Apply postprocessing
+        df = self.postprocess(df)
+
+        return df

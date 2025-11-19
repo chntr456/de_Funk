@@ -39,6 +39,65 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
 
     name = "securities_reference"
 
+    def get_input_schema(self):
+        """Define explicit schema for Alpha Vantage OVERVIEW API response."""
+        from pyspark.sql.types import StructType, StructField, StringType
+
+        return StructType([
+            # All fields as StringType - we'll convert in postprocess using pandas
+            StructField("Symbol", StringType(), True),
+            StructField("AssetType", StringType(), True),
+            StructField("Name", StringType(), True),
+            StructField("Description", StringType(), True),
+            StructField("CIK", StringType(), True),
+            StructField("Exchange", StringType(), True),
+            StructField("Currency", StringType(), True),
+            StructField("Country", StringType(), True),
+            StructField("Sector", StringType(), True),
+            StructField("Industry", StringType(), True),
+            StructField("Address", StringType(), True),
+            StructField("FiscalYearEnd", StringType(), True),
+            StructField("LatestQuarter", StringType(), True),
+            StructField("MarketCapitalization", StringType(), True),
+            StructField("EBITDA", StringType(), True),
+            StructField("PERatio", StringType(), True),
+            StructField("PEGRatio", StringType(), True),
+            StructField("BookValue", StringType(), True),
+            StructField("DividendPerShare", StringType(), True),
+            StructField("DividendYield", StringType(), True),
+            StructField("EPS", StringType(), True),
+            StructField("RevenuePerShareTTM", StringType(), True),
+            StructField("ProfitMargin", StringType(), True),
+            StructField("OperatingMarginTTM", StringType(), True),
+            StructField("ReturnOnAssetsTTM", StringType(), True),
+            StructField("ReturnOnEquityTTM", StringType(), True),
+            StructField("RevenueTTM", StringType(), True),
+            StructField("GrossProfitTTM", StringType(), True),
+            StructField("DilutedEPSTTM", StringType(), True),
+            StructField("QuarterlyEarningsGrowthYOY", StringType(), True),
+            StructField("QuarterlyRevenueGrowthYOY", StringType(), True),
+            StructField("AnalystTargetPrice", StringType(), True),
+            StructField("AnalystRatingStrongBuy", StringType(), True),
+            StructField("AnalystRatingBuy", StringType(), True),
+            StructField("AnalystRatingHold", StringType(), True),
+            StructField("AnalystRatingSell", StringType(), True),
+            StructField("AnalystRatingStrongSell", StringType(), True),
+            StructField("TrailingPE", StringType(), True),
+            StructField("ForwardPE", StringType(), True),
+            StructField("PriceToSalesRatioTTM", StringType(), True),
+            StructField("PriceToBookRatio", StringType(), True),
+            StructField("EVToRevenue", StringType(), True),
+            StructField("EVToEBITDA", StringType(), True),
+            StructField("Beta", StringType(), True),
+            StructField("52WeekHigh", StringType(), True),
+            StructField("52WeekLow", StringType(), True),
+            StructField("50DayMovingAverage", StringType(), True),
+            StructField("200DayMovingAverage", StringType(), True),
+            StructField("SharesOutstanding", StringType(), True),
+            StructField("DividendDate", StringType(), True),
+            StructField("ExDividendDate", StringType(), True),
+        ])
+
     # Numeric coercion for Alpha Vantage response
     NUMERIC_COERCE = {
         "MarketCapitalization": "long",
