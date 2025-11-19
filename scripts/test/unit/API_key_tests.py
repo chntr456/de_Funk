@@ -3,10 +3,10 @@ from pathlib import Path
 import json
 
 
-# Load configs
-polygon_cfg = json.loads(Path("configs/polygon_endpoints.json").read_text())
+# Load Alpha Vantage config
+alpha_vantage_cfg = json.loads(Path("configs/alpha_vantage_endpoints.json").read_text())
 
+# Inject credentials
+alpha_vantage_cfg = inject_credentials_into_config(alpha_vantage_cfg, 'alpha_vantage')
 
-polygon_cfg = inject_credentials_into_config(polygon_cfg, 'polygon')
-
-print(polygon_cfg)
+print(alpha_vantage_cfg)

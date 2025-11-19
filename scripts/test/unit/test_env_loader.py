@@ -2,32 +2,33 @@
 Test script to verify environment variable loading and credential injection
 """
 from utils.env_loader import inject_credentials_into_config
+from utils.repo import get_repo_root
 from pathlib import Path
 import json
 
-# Load configs - CORRECT way: read file first, then parse JSON
-root = Path(__file__).parent
-polygon_cfg = json.loads((root / "configs" / "polygon_endpoints.json").read_text())
-storage = json.loads((root / "configs" / "storage.json").read_text())
+# Load Alpha Vantage config from correct location
+repo_root = get_repo_root()
+alpha_vantage_cfg = json.loads((repo_root / "configs" / "alpha_vantage_endpoints.json").read_text())
+storage = json.loads((repo_root / "configs" / "storage.json").read_text())
 
 print("=" * 70)
 print("BEFORE INJECTION:")
 print("=" * 70)
-print(f"API Keys: {polygon_cfg['credentials']['api_keys']}")
-print(f"Base URL: {polygon_cfg['base_urls']['core']}")
+print(f"API Keys: {alpha_vantage_cfg['credentials']['api_keys']}")
+print(f"Base URL: {alpha_vantage_cfg['base_urls']['core']}")
 print()
 
 # Inject credentials from environment
-polygon_cfg = inject_credentials_into_config(polygon_cfg, 'polygon')
+alpha_vantage_cfg = inject_credentials_into_config(alpha_vantage_cfg, 'alpha_vantage')
 
 print("=" * 70)
 print("AFTER INJECTION:")
 print("=" * 70)
-print(f"API Keys: {polygon_cfg['credentials']['api_keys']}")
-print(f"Number of keys: {len(polygon_cfg['credentials']['api_keys'])}")
+print(f"API Keys: {alpha_vantage_cfg['credentials']['api_keys']}")
+print(f"Number of keys: {len(alpha_vantage_cfg['credentials']['api_keys'])}")
 
-if polygon_cfg['credentials']['api_keys']:
-    first_key = polygon_cfg['credentials']['api_keys'][0]
+if alpha_vantage_cfg['credentials']['api_keys']:
+    first_key = alpha_vantage_cfg['credentials']['api_keys'][0]
     print(f"First key (partial): {first_key[:15]}...")
     print(f"✓ Credentials successfully loaded from .env file!")
 else:
@@ -37,4 +38,4 @@ print()
 print("=" * 70)
 print("FULL CONFIG:")
 print("=" * 70)
-print(json.dumps(polygon_cfg, indent=2))
+print(json.dumps(alpha_vantage_cfg, indent=2))
