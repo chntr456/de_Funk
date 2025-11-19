@@ -158,8 +158,20 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         - 52WeekHigh, 52WeekLow
         """
         from pyspark.sql.functions import (
-            col, when, lit, trim, coalesce, upper, current_timestamp, try_cast
+            col, when, lit, trim, coalesce, upper, current_timestamp, expr
         )
+
+        # Helper function for safe casting (compatible with all PySpark versions)
+        def safe_cast(column_name, target_type):
+            """Safely cast a column, returning NULL for invalid values."""
+            invalid_values = "('', 'None', 'N/A', '-')"
+            return expr(f"""
+                CASE
+                    WHEN {column_name} IN {invalid_values} OR {column_name} IS NULL
+                    THEN NULL
+                    ELSE CAST({column_name} AS {target_type})
+                END
+            """)
 
         # --- Asset Type Classification ---
         # Alpha Vantage provides AssetType field
@@ -198,9 +210,9 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             col("AssetType").cast("string").alias("type"),
             col("Exchange").cast("string").alias("primary_exchange"),
 
-            # Market data - use try_cast to handle invalid values gracefully
-            try_cast(col("SharesOutstanding"), "long").alias("shares_outstanding"),
-            try_cast(col("MarketCapitalization"), "double").alias("market_cap"),
+            # Market data - use safe_cast to handle invalid values gracefully
+            safe_cast("SharesOutstanding", "LONG").alias("shares_outstanding"),
+            safe_cast("MarketCapitalization", "DOUBLE").alias("market_cap"),
 
             # SIC codes (not available in Alpha Vantage)
             lit(None).cast("string").alias("sic_code"),
@@ -221,15 +233,15 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             col("Industry").cast("string").alias("industry"),
             col("Description").cast("string").alias("description"),
 
-            # Alpha Vantage numeric fields - use try_cast to handle invalid values gracefully
-            try_cast(col("PERatio"), "double").alias("pe_ratio"),
-            try_cast(col("PEGRatio"), "double").alias("peg_ratio"),
-            try_cast(col("BookValue"), "double").alias("book_value"),
-            try_cast(col("DividendPerShare"), "double").alias("dividend_per_share"),
-            try_cast(col("DividendYield"), "double").alias("dividend_yield"),
-            try_cast(col("EPS"), "double").alias("eps"),
-            try_cast(col("52WeekHigh"), "double").alias("week_52_high"),
-            try_cast(col("52WeekLow"), "double").alias("week_52_low")
+            # Alpha Vantage numeric fields - use safe_cast to handle invalid values gracefully
+            safe_cast("PERatio", "DOUBLE").alias("pe_ratio"),
+            safe_cast("PEGRatio", "DOUBLE").alias("peg_ratio"),
+            safe_cast("BookValue", "DOUBLE").alias("book_value"),
+            safe_cast("DividendPerShare", "DOUBLE").alias("dividend_per_share"),
+            safe_cast("DividendYield", "DOUBLE").alias("dividend_yield"),
+            safe_cast("EPS", "DOUBLE").alias("eps"),
+            safe_cast("`52WeekHigh`", "DOUBLE").alias("week_52_high"),
+            safe_cast("`52WeekLow`", "DOUBLE").alias("week_52_low")
         )
 
         # --- Filters ---
