@@ -196,6 +196,45 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
                 "params": {"symbol": ticker}
             }
 
+    def _get_output_schema(self):
+        """Get the output schema for the transformed DataFrame."""
+        from pyspark.sql.types import StructType, StructField, StringType, LongType, DoubleType, TimestampType, BooleanType
+
+        return StructType([
+            StructField("ticker", StringType(), True),
+            StructField("security_name", StringType(), True),
+            StructField("asset_type", StringType(), True),
+            StructField("cik", StringType(), True),
+            StructField("composite_figi", StringType(), True),
+            StructField("exchange_code", StringType(), True),
+            StructField("currency", StringType(), True),
+            StructField("market", StringType(), True),
+            StructField("locale", StringType(), True),
+            StructField("type", StringType(), True),
+            StructField("primary_exchange", StringType(), True),
+            StructField("shares_outstanding", LongType(), True),
+            StructField("market_cap", DoubleType(), True),
+            StructField("sic_code", StringType(), True),
+            StructField("sic_description", StringType(), True),
+            StructField("ticker_root", StringType(), True),
+            StructField("base_currency_symbol", StringType(), True),
+            StructField("currency_symbol", StringType(), True),
+            StructField("delisted_utc", TimestampType(), True),
+            StructField("last_updated_utc", TimestampType(), True),
+            StructField("is_active", BooleanType(), True),
+            StructField("sector", StringType(), True),
+            StructField("industry", StringType(), True),
+            StructField("description", StringType(), True),
+            StructField("pe_ratio", DoubleType(), True),
+            StructField("peg_ratio", DoubleType(), True),
+            StructField("book_value", DoubleType(), True),
+            StructField("dividend_per_share", DoubleType(), True),
+            StructField("dividend_yield", DoubleType(), True),
+            StructField("eps", DoubleType(), True),
+            StructField("week_52_high", DoubleType(), True),
+            StructField("week_52_low", DoubleType(), True)
+        ])
+
     def postprocess(self, df):
         """
         Transform Alpha Vantage OVERVIEW response to unified securities schema.
@@ -233,42 +272,7 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
 
         if pdf.empty:
             # Return empty Spark DataFrame with correct schema
-            from pyspark.sql.types import StructType, StructField, StringType, LongType, DoubleType, TimestampType, BooleanType
-            schema = StructType([
-                StructField("ticker", StringType()),
-                StructField("security_name", StringType()),
-                StructField("asset_type", StringType()),
-                StructField("cik", StringType()),
-                StructField("composite_figi", StringType()),
-                StructField("exchange_code", StringType()),
-                StructField("currency", StringType()),
-                StructField("market", StringType()),
-                StructField("locale", StringType()),
-                StructField("type", StringType()),
-                StructField("primary_exchange", StringType()),
-                StructField("shares_outstanding", LongType()),
-                StructField("market_cap", DoubleType()),
-                StructField("sic_code", StringType()),
-                StructField("sic_description", StringType()),
-                StructField("ticker_root", StringType()),
-                StructField("base_currency_symbol", StringType()),
-                StructField("currency_symbol", StringType()),
-                StructField("delisted_utc", TimestampType()),
-                StructField("last_updated_utc", TimestampType()),
-                StructField("is_active", BooleanType()),
-                StructField("sector", StringType()),
-                StructField("industry", StringType()),
-                StructField("description", StringType()),
-                StructField("pe_ratio", DoubleType()),
-                StructField("peg_ratio", DoubleType()),
-                StructField("book_value", DoubleType()),
-                StructField("dividend_per_share", DoubleType()),
-                StructField("dividend_yield", DoubleType()),
-                StructField("eps", DoubleType()),
-                StructField("week_52_high", DoubleType()),
-                StructField("week_52_low", DoubleType())
-            ])
-            return self.spark.createDataFrame([], schema)
+            return self.spark.createDataFrame([], schema=self._get_output_schema())
 
         # Map asset types
         def map_asset_type(asset_type):
@@ -342,8 +346,8 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         # Deduplicate
         result = result.drop_duplicates(subset=['ticker'])
 
-        # Convert back to Spark DataFrame
-        return self.spark.createDataFrame(result)
+        # Convert back to Spark DataFrame with explicit schema (avoids CANNOT_DETERMINE_TYPE)
+        return self.spark.createDataFrame(result, schema=self._get_output_schema())
 
     def validate(self, df):
         """
