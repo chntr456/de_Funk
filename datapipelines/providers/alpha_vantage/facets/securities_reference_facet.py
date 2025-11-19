@@ -310,8 +310,9 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             'primary_exchange': pdf['Exchange'],
 
             # Market data - use pd.to_numeric for safe conversion
+            # Cast to proper dtypes: Int64 for LongType, float64 for DoubleType
             'shares_outstanding': pd.to_numeric(pdf.get('SharesOutstanding'), errors='coerce').astype('Int64'),
-            'market_cap': pd.to_numeric(pdf.get('MarketCapitalization'), errors='coerce'),
+            'market_cap': pd.to_numeric(pdf.get('MarketCapitalization'), errors='coerce').astype('float64'),
 
             # SIC codes (not available)
             'sic_code': None,
@@ -332,15 +333,15 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             'industry': pdf.get('Industry'),
             'description': pdf.get('Description'),
 
-            # Numeric fields - pd.to_numeric handles "None" gracefully
-            'pe_ratio': pd.to_numeric(pdf.get('PERatio'), errors='coerce'),
-            'peg_ratio': pd.to_numeric(pdf.get('PEGRatio'), errors='coerce'),
-            'book_value': pd.to_numeric(pdf.get('BookValue'), errors='coerce'),
-            'dividend_per_share': pd.to_numeric(pdf.get('DividendPerShare'), errors='coerce'),
-            'dividend_yield': pd.to_numeric(pdf.get('DividendYield'), errors='coerce'),
-            'eps': pd.to_numeric(pdf.get('EPS'), errors='coerce'),
-            'week_52_high': pd.to_numeric(pdf.get('52WeekHigh'), errors='coerce'),
-            'week_52_low': pd.to_numeric(pdf.get('52WeekLow'), errors='coerce')
+            # Numeric fields - pd.to_numeric handles "None" gracefully, cast to float64 for Spark DoubleType
+            'pe_ratio': pd.to_numeric(pdf.get('PERatio'), errors='coerce').astype('float64'),
+            'peg_ratio': pd.to_numeric(pdf.get('PEGRatio'), errors='coerce').astype('float64'),
+            'book_value': pd.to_numeric(pdf.get('BookValue'), errors='coerce').astype('float64'),
+            'dividend_per_share': pd.to_numeric(pdf.get('DividendPerShare'), errors='coerce').astype('float64'),
+            'dividend_yield': pd.to_numeric(pdf.get('DividendYield'), errors='coerce').astype('float64'),
+            'eps': pd.to_numeric(pdf.get('EPS'), errors='coerce').astype('float64'),
+            'week_52_high': pd.to_numeric(pdf.get('52WeekHigh'), errors='coerce').astype('float64'),
+            'week_52_low': pd.to_numeric(pdf.get('52WeekLow'), errors='coerce').astype('float64')
         })
 
         # Deduplicate
