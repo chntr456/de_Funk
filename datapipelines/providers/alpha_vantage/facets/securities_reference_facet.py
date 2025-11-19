@@ -158,17 +158,29 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         - 52WeekHigh, 52WeekLow
         """
         from pyspark.sql.functions import (
-            col, when, lit, trim, coalesce, upper, current_timestamp, expr
+            col, when, lit, trim, coalesce, upper, current_timestamp
         )
 
-        # Helper function for safe casting using SQL try_cast (available in Spark 3.4+)
+        # Helper function for safe casting - pre-clean THEN cast
         def safe_cast(column_name, target_type):
-            """Safely cast using SQL try_cast function (returns NULL for invalid values).
+            """Safely cast by first replacing invalid values with NULL, then casting.
 
-            This bypasses Python API import issues by using SQL expression directly.
-            Works in Spark 3.4+ / PySpark 4.0+.
+            Spark 4.0.1's try_cast still throws errors on "None" strings during lazy
+            evaluation (e.g., during Parquet write). This approach uses eager evaluation
+            with Python Spark functions to clean data before casting.
             """
-            return expr(f"try_cast({column_name} as {target_type})")
+            # First, replace invalid string values with NULL (using Python functions)
+            cleaned = when(
+                col(column_name).isNull() |
+                (col(column_name) == "") |
+                (col(column_name) == "None") |
+                (col(column_name) == "N/A") |
+                (col(column_name) == "-"),
+                lit(None)
+            ).otherwise(col(column_name))
+
+            # Then cast the cleaned column to target type
+            return cleaned.cast(target_type)
 
         # --- Asset Type Classification ---
         # Alpha Vantage provides AssetType field
