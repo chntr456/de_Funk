@@ -285,8 +285,8 @@ class AlphaVantageIngestor(Ingestor):
         df = facet.normalize(raw_batches)
         df = facet.validate(df)
 
-        # Write to bronze
-        table_path = self.sink.write(df, table_name, partitions=["trade_date", "asset_type"])
+        # Write to bronze with year/month partitioning (avoids partition sprawl)
+        table_path = self.sink.write(df, table_name, partitions=["asset_type", "year", "month"])
         print(f"Written {df.count()} rows to {table_path}")
 
         return table_path

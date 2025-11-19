@@ -26,7 +26,7 @@
     "calendar_seed":   { "root": "bronze", "rel": "calendar_seed", "partitions": [] },
 
     "securities_reference": { "root": "bronze", "rel": "securities_reference", "partitions": ["snapshot_dt", "asset_type"], "comment": "v2.0 unified reference data with CIK" },
-    "securities_prices_daily": { "root": "bronze", "rel": "securities_prices_daily", "partitions": ["trade_date", "asset_type"], "comment": "v2.0 unified daily OHLCV for all asset types" },
+    "securities_prices_daily": { "root": "bronze", "rel": "securities_prices_daily", "partitions": ["asset_type", "year", "month"], "comment": "v2.0 unified daily OHLCV for all asset types (year/month partitioning avoids partition sprawl)" },
 
     "ref_all_tickers": { "root": "bronze", "rel": "ref_all_tickers", "partitions": ["snapshot_dt"], "comment": "v1.x legacy - use securities_reference" },
     "exchanges":       { "root": "bronze", "rel": "exchanges",       "partitions": ["snapshot_dt"] },

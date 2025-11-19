@@ -74,6 +74,8 @@ class SecuritiesPricesFacetAV(AlphaVantageFacet):
         ("trade_date", "date"),
         ("ticker", "string"),
         ("asset_type", "string"),
+        ("year", "int"),  # Partition column - extracted from trade_date
+        ("month", "int"),  # Partition column - extracted from trade_date
         ("open", "double"),
         ("high", "double"),
         ("low", "double"),
@@ -192,12 +194,14 @@ class SecuritiesPricesFacetAV(AlphaVantageFacet):
 
     def _get_output_schema(self):
         """Get the output schema for the transformed DataFrame."""
-        from pyspark.sql.types import StructType, StructField, StringType, DateType, DoubleType, LongType, BooleanType
+        from pyspark.sql.types import StructType, StructField, StringType, DateType, DoubleType, LongType, BooleanType, IntegerType
 
         return StructType([
             StructField("trade_date", DateType(), True),
             StructField("ticker", StringType(), True),
             StructField("asset_type", StringType(), True),
+            StructField("year", IntegerType(), True),       # Partition column
+            StructField("month", IntegerType(), True),      # Partition column
             StructField("open", DoubleType(), True),
             StructField("high", DoubleType(), True),
             StructField("low", DoubleType(), True),
@@ -302,8 +306,11 @@ class SecuritiesPricesFacetAV(AlphaVantageFacet):
         if pdf.empty:
             return self.spark.createDataFrame([], schema=self._get_output_schema())
 
-        # Parse trade_date
-        pdf['trade_date'] = pd.to_datetime(pdf['trade_date'], errors='coerce').dt.date
+        # Parse trade_date and extract partition columns
+        pdf['trade_date'] = pd.to_datetime(pdf['trade_date'], errors='coerce')
+        pdf['year'] = pdf['trade_date'].dt.year.astype('Int32')  # Nullable int for Spark IntegerType
+        pdf['month'] = pdf['trade_date'].dt.month.astype('Int32')
+        pdf['trade_date'] = pdf['trade_date'].dt.date  # Convert to date after extracting year/month
 
         # Rename columns (remove numeric prefixes)
         rename_map = {
