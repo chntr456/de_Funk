@@ -4,23 +4,22 @@ extends: _base.securities.graph
 
 nodes:
   dim_stock:
-    extends: _base.securities._dim_security_base
-    # Override filters to select only stocks
+    from: bronze.securities_reference
     filters:
       - "asset_type = 'stocks'"       # KEY FILTER - only stocks!
       - "is_active = true"
     select:
       # Base fields
       ticker: ticker
-      security_name: security_name  # Bronze column name
+      security_name: security_name
       asset_type: asset_type
       exchange_code: primary_exchange
       currency: currency
-      is_active: is_active  # Bronze column name (already boolean)
+      is_active: is_active
       # Stocks-specific fields
       cik: cik
-      shares_outstanding: shares_outstanding  # Bronze column name
-      market_cap: market_cap  # Bronze column name (already calculated)
+      shares_outstanding: shares_outstanding
+      market_cap: market_cap
       sector: sector
       industry: industry
     derive:
@@ -29,14 +28,12 @@ nodes:
     tags: [dim, stock]
 
   fact_stock_prices:
-    extends: _base.securities._fact_prices_base
-    # Override filters to select only stock prices
+    from: bronze.securities_prices_daily
     filters:
       - "asset_type = 'stocks'"       # KEY FILTER - only stock prices!
       - "trade_date IS NOT NULL"
       - "ticker IS NOT NULL"
     select:
-      # Inherits all OHLCV fields from base
       ticker: ticker
       trade_date: trade_date
       open: open
@@ -45,7 +42,6 @@ nodes:
       close: close
       volume: volume
       volume_weighted: volume_weighted
-      transactions: transactions
     tags: [fact, prices, stocks]
 
   fact_stock_technicals:
