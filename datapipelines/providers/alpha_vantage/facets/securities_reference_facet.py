@@ -158,19 +158,19 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         - 52WeekHigh, 52WeekLow
         """
         from pyspark.sql.functions import (
-            col, when, lit, trim, coalesce, upper, current_timestamp
+            col, when, lit, trim, coalesce, upper, current_timestamp, length
         )
 
         # Helper function for safe casting
         def safe_cast(column_name, target_type):
-            """Cast column to target type.
+            """Cast column to target type, treating empty strings as NULL.
 
             Data is pre-cleaned at Python level by AlphaVantageFacet.normalize(),
-            which replaces "None"/"N/A"/"-"/"" strings with Python None before
-            creating the Spark DataFrame. This avoids Spark 4.0.1's aggressive
-            optimizer casting issues.
+            which replaces "None"/"N/A"/"-" with empty strings. This function
+            uses length() comparison to avoid Spark's aggressive casting optimizer.
             """
-            return col(column_name).cast(target_type)
+            # Use length() > 0 to avoid direct string comparison (triggers casting)
+            return when(length(col(column_name)) > 0, col(column_name)).cast(target_type)
 
         # --- Asset Type Classification ---
         # Alpha Vantage provides AssetType field

@@ -64,8 +64,8 @@ class AlphaVantageFacet(Facet):
         Alpha Vantage returns the literal string "None" for missing values,
         which causes Spark 4.0.1's aggressive optimizer to fail during casting.
 
-        This method cleans the raw Python dictionaries BEFORE creating the
-        Spark DataFrame, avoiding all Spark optimization issues.
+        Replace "None"/"N/A"/"-" with empty strings (not None) so Spark can
+        infer schema as StringType. Empty strings are safe to cast to NULL.
         """
         # Clean the raw data at Python level
         cleaned_batches = []
@@ -73,11 +73,13 @@ class AlphaVantageFacet(Facet):
             cleaned_batch = []
             for item in batch:
                 if isinstance(item, dict):
-                    # Replace "None" strings with actual None
+                    # Replace invalid strings with empty string
                     cleaned_item = {}
                     for key, value in item.items():
-                        if value == "None" or value == "N/A" or value == "-" or value == "":
-                            cleaned_item[key] = None
+                        if value == "None" or value == "N/A" or value == "-":
+                            cleaned_item[key] = ""  # Empty string, not None
+                        elif value is None:
+                            cleaned_item[key] = ""  # Convert None to empty string too
                         else:
                             cleaned_item[key] = value
                     cleaned_batch.append(cleaned_item)
