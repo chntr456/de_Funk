@@ -18,17 +18,12 @@ class RepoContext:
     connection_type: str = "spark"  # Default to spark for backward compatibility
     _config: Optional[AppConfig] = None  # Internal: full typed config
 
-    @property
-    def polygon_cfg(self) -> Dict[str, Any]:
-        """Get Polygon API configuration (backward compatibility property)."""
-        return self._config.apis.get("polygon", {}) if self._config else {}
-
     def get_api_config(self, provider: str) -> Dict[str, Any]:
         """
         Get API configuration for any provider.
 
         Args:
-            provider: Provider name (e.g., 'polygon', 'bls', 'fred')
+            provider: Provider name (e.g., 'alpha_vantage', 'bls', 'chicago')
 
         Returns:
             API configuration dict (empty if not found)

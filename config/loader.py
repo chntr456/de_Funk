@@ -160,7 +160,7 @@ class ConfigLoader:
         Get API keys for a provider from environment.
 
         Args:
-            provider: Provider name (e.g., 'polygon', 'bls', 'chicago')
+            provider: Provider name (e.g., 'alpha_vantage', 'bls', 'chicago')
 
         Returns:
             List of API keys (empty if not found)
@@ -267,7 +267,7 @@ class ConfigLoader:
         Inject API keys into raw endpoint config.
 
         Args:
-            provider: Provider name (e.g., 'polygon', 'bls')
+            provider: Provider name (e.g., 'alpha_vantage', 'bls')
             endpoint_json: Loaded endpoint JSON data
 
         Returns:
