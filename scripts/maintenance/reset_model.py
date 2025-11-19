@@ -9,22 +9,22 @@ reinitializes with empty schema-compliant tables.
 
 Usage:
     # Reset single model (with confirmation)
-    python -m scripts.reset_model --model equity
+    python -m scripts.reset_model --model stocks
 
     # Reset with backup first
-    python -m scripts.reset_model --model equity --backup
+    python -m scripts.reset_model --model stocks --backup
 
     # Reset and reinitialize empty tables
-    python -m scripts.reset_model --model equity --reinit
+    python -m scripts.reset_model --model stocks --reinit
 
     # Reset specific tables only
-    python -m scripts.reset_model --model equity --tables fact_equity_prices dim_equity
+    python -m scripts.reset_model --model stocks --tables fact_stock_prices dim_stock
 
     # Dry run (show what would be deleted)
-    python -m scripts.reset_model --model equity --dry-run
+    python -m scripts.reset_model --model stocks --dry-run
 
     # Force reset without confirmation
-    python -m scripts.reset_model --model equity --force
+    python -m scripts.reset_model --model stocks --force
 """
 
 import argparse
@@ -57,7 +57,7 @@ class ModelResetter:
         Initialize model resetter.
 
         Args:
-            model_name: Name of the model (e.g., 'equity', 'corporate')
+            model_name: Name of the model (e.g., 'stocks', 'company')
             config_dir: Directory containing model configs
         """
         self.model_name = model_name
@@ -362,7 +362,7 @@ def main():
     parser.add_argument(
         '--model',
         required=True,
-        help='Model name (e.g., equity, corporate)'
+        help='Model name (e.g., stocks, company, options)'
     )
 
     parser.add_argument(

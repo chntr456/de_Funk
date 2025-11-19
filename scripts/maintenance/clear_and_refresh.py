@@ -4,7 +4,7 @@ Clear storage and refresh all data from scratch.
 
 This script will:
 1. Delete all bronze and silver storage
-2. Re-ingest data from Polygon API (with updated MIC codes)
+2. Re-ingest data from Alpha Vantage API
 3. Rebuild silver layer models
 
 WARNING: This will delete all existing data!
@@ -97,8 +97,8 @@ def clear_storage(bronze: bool = True, silver: bool = True, skip_confirm: bool =
 
 
 def reingest_bronze(ctx, date_from: str, date_to: str, max_tickers: int = None):
-    """Re-ingest bronze data from Polygon API."""
-    from orchestration.orchestrator import Orchestrator
+    """Re-ingest bronze data from Alpha Vantage API."""
+    from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
 
     print("=" * 80)
     print("RE-INGESTING BRONZE DATA")
@@ -110,24 +110,32 @@ def reingest_bronze(ctx, date_from: str, date_to: str, max_tickers: int = None):
     print()
 
     try:
-        from datapipelines.ingestors.company_ingestor import CompanyPolygonIngestor
-
-        # Initialize ingestor
-        ingestor = CompanyPolygonIngestor(
-            polygon_cfg=ctx.polygon_cfg,
+        # Initialize Alpha Vantage ingestor
+        ingestor = AlphaVantageIngestor(
+            alpha_vantage_cfg=ctx.get_api_config('alpha_vantage'),
             storage_cfg=ctx.storage,
             spark=ctx.spark
         )
 
+        # Default tickers for ingestion
+        tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
+        if max_tickers:
+            tickers = tickers[:max_tickers]
+
         # Run ingestion
-        print("Step 1: Ingesting data from Polygon API...")
+        print("Step 1: Ingesting reference data from Alpha Vantage...")
         print("-" * 80)
-        tickers = ingestor.run_all(
+        ingestor.ingest_reference_data(tickers=tickers, use_concurrent=False)
+
+        print("\nStep 2: Ingesting prices from Alpha Vantage...")
+        print("-" * 80)
+        ingestor.ingest_prices(
+            tickers=tickers,
             date_from=date_from,
             date_to=date_to,
-            snapshot_dt=None,
-            max_tickers=max_tickers,
-            include_news=True
+            adjusted=True,
+            outputsize='full',
+            use_concurrent=False
         )
 
         print()
