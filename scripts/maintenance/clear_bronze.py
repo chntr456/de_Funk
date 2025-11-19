@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Clear all silver layer data.
+Clear all bronze layer data.
 
-This script completely wipes the storage/silver/ directory.
+This script completely wipes the storage/bronze/ directory.
 Use with caution - this is destructive and cannot be undone!
 
 Usage:
-    python -m scripts.maintenance.clear_silver           # Interactive confirmation
-    python -m scripts.maintenance.clear_silver --yes     # Skip confirmation
-    python -m scripts.maintenance.clear_silver --list    # Just list what would be deleted
+    python -m scripts.maintenance.clear_bronze           # Interactive confirmation
+    python -m scripts.maintenance.clear_bronze --yes     # Skip confirmation
+    python -m scripts.maintenance.clear_bronze --list    # Just list what would be deleted
 """
 
 import sys
@@ -20,14 +20,14 @@ from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 
-def list_silver_contents(silver_root: Path):
-    """List all contents in silver directory."""
-    if not silver_root.exists():
+def list_bronze_contents(bronze_root: Path):
+    """List all contents in bronze directory."""
+    if not bronze_root.exists():
         return []
 
     # Get all subdirectories and files
     items = []
-    for item in silver_root.iterdir():
+    for item in bronze_root.iterdir():
         if item.is_dir():
             # Count files recursively
             file_count = sum(1 for _ in item.rglob('*') if _.is_file())
@@ -59,29 +59,29 @@ def confirm_action(prompt: str) -> bool:
     return response in ['yes', 'y']
 
 
-def clear_silver(silver_root: Path, skip_confirm: bool = False, list_only: bool = False):
-    """Clear all silver layer data."""
+def clear_bronze(bronze_root: Path, skip_confirm: bool = False, list_only: bool = False):
+    """Clear all bronze layer data."""
 
     print("=" * 80)
-    print("CLEAR SILVER LAYER")
+    print("CLEAR BRONZE LAYER")
     print("=" * 80)
     print()
 
-    if not silver_root.exists():
-        print(f"Silver directory does not exist: {silver_root}")
+    if not bronze_root.exists():
+        print(f"Bronze directory does not exist: {bronze_root}")
         print("Nothing to clear.")
         return
 
     # List contents
-    items = list_silver_contents(silver_root)
+    items = list_bronze_contents(bronze_root)
 
     if not items:
-        print(f"Silver directory is empty: {silver_root}")
+        print(f"Bronze directory is empty: {bronze_root}")
         print("Nothing to clear.")
         return
 
     # Show what will be deleted
-    print(f"Silver directory: {silver_root}")
+    print(f"Bronze directory: {bronze_root}")
     print()
     print("The following will be DELETED:")
     print("-" * 80)
@@ -108,16 +108,16 @@ def clear_silver(silver_root: Path, skip_confirm: bool = False, list_only: bool 
 
     # Confirm
     if not skip_confirm:
-        print("⚠️  WARNING: This will permanently delete all silver layer models!")
+        print("⚠️  WARNING: This will permanently delete all bronze data!")
         print("⚠️  This action cannot be undone!")
         print()
-        if not confirm_action("Are you sure you want to delete ALL silver data?"):
+        if not confirm_action("Are you sure you want to delete ALL bronze data?"):
             print("Aborted.")
             sys.exit(0)
 
     # Delete everything
     print()
-    print("Deleting silver data...")
+    print("Deleting bronze data...")
     print("-" * 80)
 
     deleted_count = 0
@@ -136,24 +136,24 @@ def clear_silver(silver_root: Path, skip_confirm: bool = False, list_only: bool 
     print("-" * 80)
     print(f"✓ Deleted {deleted_count}/{len(items)} items")
     print()
-    print("Silver layer cleared successfully!")
+    print("Bronze layer cleared successfully!")
     print()
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Clear all silver layer data",
+        description="Clear all bronze layer data",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Interactive confirmation
-  python -m scripts.maintenance.clear_silver
+  python -m scripts.maintenance.clear_bronze
 
   # Skip confirmation (dangerous!)
-  python -m scripts.maintenance.clear_silver --yes
+  python -m scripts.maintenance.clear_bronze --yes
 
   # Just list what would be deleted
-  python -m scripts.maintenance.clear_silver --list
+  python -m scripts.maintenance.clear_bronze --list
         """
     )
 
@@ -171,13 +171,13 @@ Examples:
 
     args = parser.parse_args()
 
-    # Get silver root
+    # Get bronze root
     from core.context import RepoContext
     ctx = RepoContext.from_repo_root()
-    silver_root = ctx.repo / "storage" / "silver"
+    bronze_root = ctx.repo / "storage" / "bronze"
 
-    # Clear silver
-    clear_silver(silver_root, skip_confirm=args.yes, list_only=args.list)
+    # Clear bronze
+    clear_bronze(bronze_root, skip_confirm=args.yes, list_only=args.list)
 
 
 if __name__ == "__main__":
