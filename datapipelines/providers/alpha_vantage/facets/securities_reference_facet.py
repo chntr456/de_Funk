@@ -90,8 +90,8 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         ("locale", "string"),
         ("type", "string"),
         ("primary_exchange", "string"),
-        ("shares_outstanding", "long"),
-        ("market_cap", "double"),
+        ("shares_outstanding", "string"),  # Keep as string in bronze layer
+        ("market_cap", "string"),  # Keep as string in bronze layer
         ("sic_code", "string"),  # Will be NULL for Alpha Vantage
         ("sic_description", "string"),
         ("ticker_root", "string"),
@@ -104,14 +104,14 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         ("sector", "string"),
         ("industry", "string"),
         ("description", "string"),
-        ("pe_ratio", "double"),
-        ("peg_ratio", "double"),
-        ("book_value", "double"),
-        ("dividend_per_share", "double"),
-        ("dividend_yield", "double"),
-        ("eps", "double"),
-        ("week_52_high", "double"),
-        ("week_52_low", "double")
+        ("pe_ratio", "string"),  # Keep as string in bronze layer
+        ("peg_ratio", "string"),  # Keep as string in bronze layer
+        ("book_value", "string"),  # Keep as string in bronze layer
+        ("dividend_per_share", "string"),  # Keep as string in bronze layer
+        ("dividend_yield", "string"),  # Keep as string in bronze layer
+        ("eps", "string"),  # Keep as string in bronze layer
+        ("week_52_high", "string"),  # Keep as string in bronze layer
+        ("week_52_low", "string")  # Keep as string in bronze layer
     ]
 
     def __init__(self, spark, *, tickers: List[str]):
@@ -158,19 +158,13 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         - 52WeekHigh, 52WeekLow
         """
         from pyspark.sql.functions import (
-            col, when, lit, trim, coalesce, upper, current_timestamp, length
+            col, when, lit, trim, coalesce, upper, current_timestamp
         )
 
-        # Helper function for safe casting
-        def safe_cast(column_name, target_type):
-            """Cast column to target type, treating empty strings as NULL.
-
-            Data is pre-cleaned at Python level by AlphaVantageFacet.normalize(),
-            which replaces "None"/"N/A"/"-" with empty strings. This function
-            uses length() comparison to avoid Spark's aggressive casting optimizer.
-            """
-            # Use length() > 0 to avoid direct string comparison (triggers casting)
-            return when(length(col(column_name)) > 0, col(column_name)).cast(target_type)
+        # Note: All numeric fields are kept as strings in bronze layer.
+        # Data is pre-cleaned at Python level by AlphaVantageFacet.normalize(),
+        # which replaces "None"/"N/A"/"-" with empty strings.
+        # Numeric casting will happen in the silver layer transformations.
 
         # --- Asset Type Classification ---
         # Alpha Vantage provides AssetType field
@@ -209,9 +203,9 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             col("AssetType").cast("string").alias("type"),
             col("Exchange").cast("string").alias("primary_exchange"),
 
-            # Market data - use safe_cast to handle invalid values gracefully
-            safe_cast("SharesOutstanding", "LONG").alias("shares_outstanding"),
-            safe_cast("MarketCapitalization", "DOUBLE").alias("market_cap"),
+            # Market data - keep as strings in bronze layer (casting happens in silver)
+            col("SharesOutstanding").cast("string").alias("shares_outstanding"),
+            col("MarketCapitalization").cast("string").alias("market_cap"),
 
             # SIC codes (not available in Alpha Vantage)
             lit(None).cast("string").alias("sic_code"),
@@ -232,15 +226,15 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             col("Industry").cast("string").alias("industry"),
             col("Description").cast("string").alias("description"),
 
-            # Alpha Vantage numeric fields - use safe_cast to handle invalid values gracefully
-            safe_cast("PERatio", "DOUBLE").alias("pe_ratio"),
-            safe_cast("PEGRatio", "DOUBLE").alias("peg_ratio"),
-            safe_cast("BookValue", "DOUBLE").alias("book_value"),
-            safe_cast("DividendPerShare", "DOUBLE").alias("dividend_per_share"),
-            safe_cast("DividendYield", "DOUBLE").alias("dividend_yield"),
-            safe_cast("EPS", "DOUBLE").alias("eps"),
-            safe_cast("`52WeekHigh`", "DOUBLE").alias("week_52_high"),
-            safe_cast("`52WeekLow`", "DOUBLE").alias("week_52_low")
+            # Alpha Vantage numeric fields - keep as strings in bronze layer
+            col("PERatio").cast("string").alias("pe_ratio"),
+            col("PEGRatio").cast("string").alias("peg_ratio"),
+            col("BookValue").cast("string").alias("book_value"),
+            col("DividendPerShare").cast("string").alias("dividend_per_share"),
+            col("DividendYield").cast("string").alias("dividend_yield"),
+            col("EPS").cast("string").alias("eps"),
+            col("52WeekHigh").cast("string").alias("week_52_high"),
+            col("52WeekLow").cast("string").alias("week_52_low")
         )
 
         # --- Filters ---
