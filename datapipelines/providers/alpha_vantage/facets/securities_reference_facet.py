@@ -161,25 +161,14 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             col, when, lit, trim, coalesce, upper, current_timestamp, expr
         )
 
-        # Helper function for safe casting (compatible with all PySpark versions)
+        # Helper function for safe casting using SQL try_cast (available in Spark 3.4+)
         def safe_cast(column_name, target_type):
-            """Safely cast a column, returning NULL for invalid values.
+            """Safely cast using SQL try_cast function (returns NULL for invalid values).
 
-            Note: Using OR conditions instead of IN to avoid type casting issues.
-            Spark's IN operator tries to cast values for comparison, which fails
-            when comparing invalid strings against numeric types.
+            This bypasses Python API import issues by using SQL expression directly.
+            Works in Spark 3.4+ / PySpark 4.0+.
             """
-            return expr(f"""
-                CASE
-                    WHEN {column_name} IS NULL
-                         OR {column_name} = ''
-                         OR {column_name} = 'None'
-                         OR {column_name} = 'N/A'
-                         OR {column_name} = '-'
-                    THEN NULL
-                    ELSE CAST({column_name} AS {target_type})
-                END
-            """)
+            return expr(f"try_cast({column_name} as {target_type})")
 
         # --- Asset Type Classification ---
         # Alpha Vantage provides AssetType field
