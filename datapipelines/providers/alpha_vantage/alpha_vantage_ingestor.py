@@ -196,9 +196,8 @@ class AlphaVantageIngestor(Ingestor):
             print(f"Fetching data sequentially (rate limit: {self.registry.rate_limit} calls/sec)")
             raw_batches = self._fetch_calls(calls, response_key=None)
 
-        # Normalize to DataFrame
+        # Normalize to DataFrame (postprocess is called internally by normalize)
         df = facet.normalize(raw_batches)
-        df = facet.postprocess(df)
         df = facet.validate(df)
 
         # Write to bronze
@@ -255,9 +254,8 @@ class AlphaVantageIngestor(Ingestor):
             print(f"Fetching data sequentially (rate limit: {self.registry.rate_limit} calls/sec)")
             raw_batches = self._fetch_calls(calls, response_key="Time Series (Daily)")
 
-        # Normalize to DataFrame
+        # Normalize to DataFrame (postprocess is called internally by normalize)
         df = facet.normalize(raw_batches)
-        df = facet.postprocess(df)
         df = facet.validate(df)
 
         # Write to bronze
