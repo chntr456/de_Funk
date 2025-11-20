@@ -17,13 +17,14 @@ nodes:
       currency: currency
       is_active: is_active
       # Stocks-specific fields
-      cik: cik
+      cik: cik  # Will be NULL for Alpha Vantage data
       shares_outstanding: shares_outstanding
       market_cap: market_cap
       sector: sector
       industry: industry
     derive:
-      company_id: "CONCAT('COMPANY_', cik)"
+      # Use ticker as fallback when CIK is NULL (Alpha Vantage case) - matches company.company_id logic
+      company_id: "CASE WHEN cik IS NOT NULL THEN CONCAT('COMPANY_', cik) ELSE CONCAT('COMPANY_', ticker) END"
     unique_key: [ticker]
     tags: [dim, stock]
 

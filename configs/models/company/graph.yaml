@@ -5,9 +5,9 @@ nodes:
     from: bronze.securities_reference
     filters:
       - "asset_type = 'stocks'"  # Only stock tickers have company data
-      - "cik IS NOT NULL"        # Must have CIK to be a valid company
+      # Note: CIK filter removed - Alpha Vantage doesn't provide CIK
     select:
-      cik: cik
+      cik: cik  # Will be NULL for Alpha Vantage data
       company_name: security_name  # Bronze column is security_name, not name
       legal_name: security_name    # Will be updated when we get proper SEC data
       ticker_primary: ticker
@@ -18,10 +18,11 @@ nodes:
       sector: sector
       industry: industry
     derive:
-      company_id: "CONCAT('COMPANY_', cik)"
+      # Use ticker as fallback when CIK is NULL (Alpha Vantage case)
+      company_id: "CASE WHEN cik IS NOT NULL THEN CONCAT('COMPANY_', cik) ELSE CONCAT('COMPANY_', ticker) END"
       incorporation_country: "'US'"  # Default, update from SEC data later
     tags: [dim, entity, corporate]
-    unique_key: [cik]
+    unique_key: [ticker_primary]  # Changed from [cik] since CIK can be NULL
 
   # Placeholder for future fact tables (will be populated from SEC EDGAR API)
   # fact_company_financials:
