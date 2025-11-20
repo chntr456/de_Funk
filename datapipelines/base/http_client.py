@@ -51,6 +51,45 @@ class HttpClient:
 
     from urllib.error import HTTPError, URLError
 
+    def request_text(self, base_key, path, query, method="GET"):
+        """
+        Make HTTP request and return raw text response.
+
+        Use this for non-JSON endpoints (e.g., CSV, XML).
+        """
+        backoff_base = 2.0
+        for attempt in range(self.max_retries):
+            self._throttle()
+            req, url = self._build_request(base_key, path, query, method)
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    return resp.read().decode("utf-8")
+            except HTTPError as e:
+                body = None
+                try:
+                    body = e.read().decode("utf-8")
+                except Exception:
+                    pass
+                # 429 → backoff + retry
+                if e.code == 429:
+                    retry_after = e.headers.get("Retry-After")
+                    wait = float(retry_after) if retry_after and retry_after.isdigit() else min(120.0, (
+                                backoff_base ** attempt)) + (0.1 * attempt)
+                    time.sleep(wait)
+                    continue
+                # 5xx → retry
+                if 500 <= e.code < 600:
+                    time.sleep(min(60.0, (backoff_base ** attempt)))
+                    continue
+                # 4xx → raise with details
+                raise RuntimeError(f"HTTP {e.code} for {url} :: query={query} :: body={body}") from e
+            except URLError as e:
+                if attempt < self.max_retries - 1:
+                    time.sleep(min(30.0, (backoff_base ** attempt)))
+                    continue
+                raise RuntimeError(f"URLError after {self.max_retries} attempts for {url}: {e}") from e
+        raise RuntimeError(f"Request failed after {self.max_retries} attempts for {url}")
+
     def request(self, base_key, path, query, method="GET"):
         backoff_base = 2.0
         for attempt in range(self.max_retries):

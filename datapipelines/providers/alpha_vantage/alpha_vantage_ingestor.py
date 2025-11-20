@@ -324,9 +324,9 @@ class AlphaVantageIngestor(Ingestor):
         ep, path, query = self.registry.render("listing_status", state=state)
         query['apikey'] = self.key_pool.next_key() if self.key_pool else None
 
-        # Fetch CSV data
+        # Fetch CSV data (use request_text for CSV endpoints, not JSON)
         with self._http_lock:
-            response_text = self.http.request(ep.base, path, query, ep.method)
+            response_text = self.http.request_text(ep.base, path, query, ep.method)
 
         # Parse CSV response
         csv_reader = csv.DictReader(io.StringIO(response_text))
