@@ -9,13 +9,11 @@ nodes:
       - "is_active = true"
     select:
       ticker: ticker
-      security_name: name
+      security_name: security_name  # Bronze column name (Alpha Vantage)
       asset_type: asset_type
-      asset_class: asset_class
-      exchange_code: exchange_code
+      exchange_code: primary_exchange  # Bronze column name
       currency: currency
-      is_active: active
-      listing_date: listing_date
+      is_active: is_active  # Bronze column name (already boolean)
     derive:
       security_id: "sha1(ticker)"
     tags: [dim, entity]
