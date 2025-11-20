@@ -1,0 +1,10 @@
+# ETFs Model Measures
+# Placeholder measures for ETF analysis
+
+extends: _base.securities.measures
+
+simple_measures: {}
+
+computed_measures: {}
+
+python_measures: {}

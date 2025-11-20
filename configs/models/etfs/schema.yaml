@@ -1,0 +1,23 @@
+# ETFs Model Schema
+# Exchange-Traded Funds with holdings and NAV tracking
+
+extends: _base.securities.schema
+
+dimensions:
+  dim_etf:
+    extends: _base.securities._dim_security
+    description: "ETF dimension with fund-specific attributes"
+    unique_key: [ticker]
+    columns:
+      # Inherited from _base.securities._dim_security:
+      # - ticker, asset_type, exchange_code, currency, etc.
+
+      # ETF-specific fields
+      fund_family: string
+      expense_ratio: double
+      net_assets: double
+      inception_date: date
+      is_leveraged: boolean
+      leverage_factor: double
+
+facts: []

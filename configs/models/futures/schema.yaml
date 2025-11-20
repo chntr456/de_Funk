@@ -1,0 +1,25 @@
+# Futures Model Schema
+# Futures contracts with roll adjustments and margin tracking
+
+extends: _base.securities.schema
+
+dimensions:
+  dim_future:
+    extends: _base.securities._dim_security
+    description: "Futures dimension with contract-specific attributes"
+    unique_key: [ticker, expiration_date]
+    columns:
+      # Inherited from _base.securities._dim_security:
+      # - ticker, asset_type, exchange_code, currency, etc.
+
+      # Futures-specific fields
+      underlying_asset: string
+      contract_size: double
+      contract_unit: string
+      expiration_date: date
+      first_notice_date: date
+      last_trading_date: date
+      tick_size: double
+      tick_value: double
+
+facts: []
