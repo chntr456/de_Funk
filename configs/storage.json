@@ -1,7 +1,7 @@
 {
   "connection": {
     "type": "duckdb",
-    "comment": "Default for UI/analytics (10-100x faster). Ingestion pipelines override to 'spark' (required for facets). Set CONNECTION_TYPE env var to override."
+    "comment": "Default for UI only (10-100x faster). All data pipelines (ingestion + model builds) override to 'spark'. Set CONNECTION_TYPE env var to override."
   },
   "roots": {
     "bronze": "storage/bronze",

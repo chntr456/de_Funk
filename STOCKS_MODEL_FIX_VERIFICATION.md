@@ -164,13 +164,13 @@ fact_stock_prices:
 ```
 
 **Rationale**:
-- DuckDB is 10-100x faster and recommended for UI/analytics/queries
-- Ingestion pipelines explicitly override to use Spark (required for PySpark facets)
-- Clear separation: Spark for writes (bronze ingestion), DuckDB for reads (silver queries)
+- DuckDB is for UI/analytics only (reads existing Parquet files, 10-100x faster)
+- All data pipelines use Spark (bronze ingestion + silver model builds)
+- Clear separation: Spark for all data processing, DuckDB for UI queries only
 
 ### `scripts/maintenance/clear_and_refresh.py`
 
-**Change**: Explicitly use Spark for ingestion pipeline
+**Change**: Explicitly use Spark for entire data pipeline (ingestion + silver builds)
 
 **Update**:
 ```python
@@ -181,9 +181,9 @@ ctx = RepoContext.from_repo_root(connection_type="spark")
 ```
 
 **Rationale**:
-- Alpha Vantage facets require PySpark for DataFrame operations
-- Bronze layer ingestion must use Spark regardless of default connection type
-- Silver layer build uses the same Spark context for consistency
+- Bronze ingestion requires Spark (facets use PySpark DataFrames)
+- Silver model builds require Spark (BaseModel uses PySpark for transformations)
+- DuckDB is UI-only (queries against already-written Parquet files)
 
 ## Expected Behavior After Fix
 
