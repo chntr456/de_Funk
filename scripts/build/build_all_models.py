@@ -71,11 +71,13 @@ class AllModelBuilder:
     """Build all models with paginated ingestion from real data sources."""
 
     # Model categorization by data source
-    ALPHA_VANTAGE_MODELS = {'company', 'stocks', 'options', 'etfs', 'futures'}  # Alpha Vantage API (v2.0)
+    ALPHA_VANTAGE_MODELS = {'company', 'stocks'}  # v2.0 implemented models only
+    ALPHA_VANTAGE_SKELETON = {'options', 'etfs', 'futures'}  # v2.0 planned (not implemented)
     BLS_MODELS = {'macro'}  # Bureau of Labor Statistics API
     CHICAGO_MODELS = {'city_finance'}  # Chicago Data Portal
     DERIVED_MODELS = {'forecast'}  # Derived from other models (no direct ingestion)
     CORE_MODELS = {'core'}  # Reference data (calendar, etc.)
+    LEGACY_MODELS = {'equity', 'corporate', 'etf'}  # v1.x deprecated models
 
     def __init__(self, config_dir: str = "configs/models"):
         """
@@ -88,6 +90,9 @@ class AllModelBuilder:
         self.loader = ModelConfigLoader(self.config_dir)
         self.ctx = None  # Lazy init
         self.session = None  # Lazy init UniversalSession for cross-model refs
+
+        # Track ingestion state (avoid re-ingesting same data source)
+        self.ingestion_completed = set()
 
         # Overall results
         self.results = {
@@ -131,6 +136,11 @@ class AllModelBuilder:
         """
         # Get all available models from loader
         all_models = self.loader.list_models()
+
+        # Remove duplicates and skeleton/legacy models
+        all_models = list(set(all_models))  # Deduplicate
+        all_models = [m for m in all_models if m not in self.ALPHA_VANTAGE_SKELETON]  # Remove skeletons
+        all_models = [m for m in all_models if m not in self.LEGACY_MODELS]  # Remove legacy
 
         if include_models:
             # Filter to specified models
@@ -195,17 +205,20 @@ class AllModelBuilder:
 
         # Determine date range for market data
         if days:
-            # Exclude today (Alpha Vantage typically doesn't include same-day data)
-            date_to_obj = date.today() - timedelta(days=1)
+            # Use days parameter: calculate date_from and date_to
+            date_to_obj = date.today() - timedelta(days=1)  # Exclude today
             date_from_obj = date_to_obj - timedelta(days=days)
             date_from = date_from_obj.isoformat()
             date_to = date_to_obj.isoformat()
-        elif not date_from or not date_to:
-            # Default: last 365 days (1 year), excluding today
-            date_to_obj = date.today() - timedelta(days=1)
-            date_from_obj = date_to_obj - timedelta(days=365)
-            date_from = date_from_obj.isoformat()
-            date_to = date_to_obj.isoformat()
+        else:
+            # Use provided dates or defaults
+            if not date_to:
+                # Default date_to: yesterday
+                date_to = (date.today() - timedelta(days=1)).isoformat()
+            if not date_from:
+                # Default date_from: 1 year before date_to
+                date_to_obj = date.fromisoformat(date_to)
+                date_from = (date_to_obj - timedelta(days=365)).isoformat()
 
         # Discover models
         models_to_build = self.discover_models(models)
@@ -452,12 +465,31 @@ class AllModelBuilder:
         self._init_context()
 
         try:
+            # Check if ingestion for this data source already completed
             if model_name in self.ALPHA_VANTAGE_MODELS:
-                return self._run_alpha_vantage_ingestion(date_from, date_to, max_tickers)
+                if 'alpha_vantage' in self.ingestion_completed:
+                    logger.info(f"  Alpha Vantage ingestion already completed (shared with other models), skipping...")
+                    return True
+                success = self._run_alpha_vantage_ingestion(date_from, date_to, max_tickers)
+                if success:
+                    self.ingestion_completed.add('alpha_vantage')
+                return success
             elif model_name in self.BLS_MODELS:
-                return self._run_bls_ingestion(date_from, date_to)
+                if 'bls' in self.ingestion_completed:
+                    logger.info(f"  BLS ingestion already completed, skipping...")
+                    return True
+                success = self._run_bls_ingestion(date_from, date_to)
+                if success:
+                    self.ingestion_completed.add('bls')
+                return success
             elif model_name in self.CHICAGO_MODELS:
-                return self._run_chicago_ingestion()
+                if 'chicago' in self.ingestion_completed:
+                    logger.info(f"  Chicago ingestion already completed, skipping...")
+                    return True
+                success = self._run_chicago_ingestion()
+                if success:
+                    self.ingestion_completed.add('chicago')
+                return success
             elif model_name in self.DERIVED_MODELS:
                 logger.info(f"  {model_name} is derived, no ingestion needed")
                 return True
