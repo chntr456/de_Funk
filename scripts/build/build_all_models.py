@@ -191,7 +191,8 @@ class AllModelBuilder:
         dry_run: bool = False,
         use_bulk_discovery: bool = True,
         skip_reference_refresh: bool = False,
-        outputsize: str = "full"
+        outputsize: str = "full",
+        use_concurrent: bool = True
     ) -> bool:
         """
         Build all models with ingestion and Silver layer creation.
@@ -209,6 +210,7 @@ class AllModelBuilder:
             use_bulk_discovery: Use bulk endpoints to discover all available tickers (default: True)
             skip_reference_refresh: Skip reference data refresh (saves ~50% time for daily updates)
             outputsize: 'compact' (100 days) or 'full' (20+ years) for price data
+            use_concurrent: Use concurrent API requests (premium tier only, default: True)
 
         Returns:
             True if all builds succeed
@@ -217,6 +219,7 @@ class AllModelBuilder:
         self.use_bulk_discovery = use_bulk_discovery
         self.skip_reference_refresh = skip_reference_refresh
         self.outputsize = outputsize
+        self.use_concurrent = use_concurrent
 
         # Determine date range for market data
         if days:
@@ -545,11 +548,12 @@ class AllModelBuilder:
         # use_bulk_listing: Discovers ALL tickers via LISTING_STATUS (1 call), then gets full data
         # skip_reference_refresh: Skip OVERVIEW calls for daily updates (saves ~50% time)
         # outputsize: 'compact' (100 days) for daily updates, 'full' (20+ years) for initial load
+        # use_concurrent: Concurrent requests (premium: True, free: False)
         tickers = ingestor.run_all(
             date_from=date_from,
             date_to=date_to,
             max_tickers=max_tickers,
-            use_concurrent=True,  # Enable concurrent for premium tier (much faster!)
+            use_concurrent=self.use_concurrent,  # Controlled via --no-concurrent flag
             use_bulk_listing=self.use_bulk_discovery,  # Bulk discovery enabled by default
             skip_reference_refresh=self.skip_reference_refresh,  # Skip fundamentals for daily updates
             outputsize=self.outputsize  # compact for daily updates, full for initial load
@@ -851,6 +855,12 @@ def main():
         help='Price data size: compact (100 days) or full (20+ years). Use compact for daily updates.'
     )
 
+    parser.add_argument(
+        '--no-concurrent',
+        action='store_true',
+        help='Disable concurrent API requests (use for free tier to respect rate limits)'
+    )
+
     args = parser.parse_args()
 
     try:
@@ -870,7 +880,8 @@ def main():
             dry_run=args.dry_run,
             use_bulk_discovery=not args.no_bulk_discovery,  # Enabled by default
             skip_reference_refresh=args.skip_reference_refresh,  # Skip OVERVIEW for daily updates
-            outputsize=args.outputsize  # compact for daily updates, full for initial load
+            outputsize=args.outputsize,  # compact for daily updates, full for initial load
+            use_concurrent=not args.no_concurrent  # Enabled by default (premium tier)
         )
 
         # Save results if requested
