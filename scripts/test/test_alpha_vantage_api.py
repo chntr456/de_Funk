@@ -557,21 +557,31 @@ def main():
     # Load configuration
     config = ConfigLoader().load()
 
-    # Get API keys
+    # Get API keys from configuration
     alpha_vantage_cfg = config.apis.get("alpha_vantage", {})
     if not alpha_vantage_cfg:
         logger.error("❌ ERROR: alpha_vantage_endpoints.json not found in configs/")
         sys.exit(1)
 
-    api_keys_str = alpha_vantage_cfg.get("api_keys", "")
-    if not api_keys_str:
-        logger.error("❌ ERROR: No API keys found in environment variable ALPHA_VANTAGE_API_KEYS")
-        logger.error("Set it in .env file: ALPHA_VANTAGE_API_KEYS=your_key_here")
+    # API keys are nested under credentials.api_keys
+    credentials = alpha_vantage_cfg.get("credentials", {})
+    api_keys = credentials.get("api_keys", [])
+
+    if not api_keys:
+        logger.error("❌ ERROR: No API keys found")
+        logger.error("Expected structure in alpha_vantage_endpoints.json:")
+        logger.error('  "credentials": { "api_keys": ["your_key_here"] }')
+        logger.error("")
+        logger.error("Or set environment variable: ALPHA_VANTAGE_API_KEYS=your_key_here")
+        logger.error("(in .env file)")
         sys.exit(1)
 
-    api_keys = [k.strip() for k in api_keys_str.split(",") if k.strip()]
+    if isinstance(api_keys, str):
+        # If it's a string, split by comma
+        api_keys = [k.strip() for k in api_keys.split(",") if k.strip()]
+
     if not api_keys:
-        logger.error("❌ ERROR: API keys string is empty")
+        logger.error("❌ ERROR: API keys list is empty")
         sys.exit(1)
 
     print(f"{'='*80}")
