@@ -336,6 +336,26 @@ class ModelConfigLoader:
 
         return None
 
+    def list_models(self) -> list[str]:
+        """
+        List all available models in the models directory.
+
+        Returns:
+            List of model names (both modular directories and single YAML files)
+        """
+        models = []
+
+        # Scan models directory
+        for item in self.models_dir.iterdir():
+            if item.is_dir() and not item.name.startswith('_'):
+                # Modular model directory (e.g., stocks/, company/)
+                models.append(item.name)
+            elif item.is_file() and item.suffix == '.yaml' and not item.name.startswith('_'):
+                # Single YAML file (legacy, e.g., equity.yaml)
+                models.append(item.stem)
+
+        return sorted(models)
+
     def clear_cache(self):
         """Clear the configuration cache."""
         self._cache.clear()
