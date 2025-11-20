@@ -379,8 +379,11 @@ class AlphaVantageIngestor(Ingestor):
             lit("USD").cast("string").alias("base_currency_symbol"),
             lit("USD").cast("string").alias("currency_symbol"),
 
-            # Dates
-            col("delistingDate").cast("timestamp").alias("delisted_utc"),
+            # Dates (handle "null" strings from CSV)
+            when(col("delistingDate").isin("null", "None", ""), lit(None))
+            .otherwise(col("delistingDate"))
+            .cast("timestamp")
+            .alias("delisted_utc"),
             current_timestamp().alias("last_updated_utc"),
             (col("status") == "Active").cast("boolean").alias("is_active"),
 
