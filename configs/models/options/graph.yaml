@@ -4,22 +4,33 @@ extends: _base.securities.graph
 
 nodes:
   dim_option:
-    extends: _base.securities._dim_security_base
+    from: bronze.securities_reference
     filters:
       - "asset_type = 'options'"     # KEY FILTER
+      - "is_active = true"
     select:
+      # Base fields
       ticker: ticker
-      security_name: name
+      security_name: security_name
+      asset_type: asset_type
+      exchange_code: primary_exchange
+      currency: currency
+      is_active: is_active
+      # Options-specific fields
       underlying_ticker: underlying_ticker
       strike_price: strike_price
       expiry_date: expiry_date
       option_type: option_type
       contract_size: contract_size
+    unique_key: [ticker]
+    tags: [dim, option]
 
   fact_option_prices:
-    extends: _base.securities._fact_prices_base
+    from: bronze.securities_prices_daily
     filters:
       - "asset_type = 'options'"     # KEY FILTER
+      - "trade_date IS NOT NULL"
+      - "ticker IS NOT NULL"
     select:
       # OHLCV fields
       ticker: ticker
@@ -29,6 +40,8 @@ nodes:
       low: low
       close: close
       volume: volume
+      volume_weighted: volume_weighted
+    tags: [fact, prices, options]
 
 edges:
   option_to_underlying:
