@@ -371,7 +371,7 @@ class AlphaVantageIngestor(Ingestor):
             state: 'active' or 'delisted' (default: active)
 
         Returns:
-            Tuple of (path to written table, list of tickers)
+            Tuple of (path to written table, list of tickers, dict of ticker->exchange)
         """
         import csv
         import io
@@ -468,11 +468,14 @@ class AlphaVantageIngestor(Ingestor):
         # Write to bronze
         table_path = self.sink.write(df_normalized, table_name, partitions=["snapshot_dt", "asset_type"])
 
+        # Return both ticker list AND ticker->exchange mapping for filtering
         tickers = [row['symbol'] for row in rows if row.get('symbol')]  # CSV has 'symbol', not 'ticker'
+        ticker_exchanges = {row['symbol']: row.get('exchange', 'UNKNOWN') for row in rows if row.get('symbol')}
+
         print(f"Written {df_normalized.count()} tickers to {table_path}")
         print(f"Note: For fundamentals (PE, market cap, etc.), call ingest_reference_data() for specific tickers")
 
-        return table_path, tickers
+        return table_path, tickers, ticker_exchanges
 
     def run_all(self, tickers=None, date_from=None, date_to=None,
                 max_tickers=None, use_concurrent=False, use_bulk_listing=False,
@@ -503,19 +506,37 @@ class AlphaVantageIngestor(Ingestor):
             print("=" * 80)
             print("Step 1a: Fetching ALL ticker symbols from LISTING_STATUS (1 API call)...")
             print("-" * 80)
-            _, all_tickers = self.ingest_bulk_listing()
+            _, all_tickers, ticker_exchanges = self.ingest_bulk_listing()
+
+            # Get US exchanges from config for filtering
+            us_exchanges = self.alpha_vantage_cfg.get("us_exchanges", [
+                "NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"
+            ])
+
+            # Filter to US exchanges only (foreign tickers often don't have OVERVIEW data)
+            us_tickers = [t for t in all_tickers if ticker_exchanges.get(t) in us_exchanges]
+            foreign_count = len(all_tickers) - len(us_tickers)
+
+            print(f"\n📊 Ticker Discovery Summary:")
+            print(f"   Total tickers from LISTING_STATUS: {len(all_tickers)}")
+            print(f"   US exchange tickers: {len(us_tickers)}")
+            print(f"   Foreign exchange tickers (filtered out): {foreign_count}")
+            print(f"   US Exchanges: {', '.join(us_exchanges)}")
+            print()
 
             # Filter to requested tickers if provided
             if tickers:
-                tickers = [t for t in tickers if t in all_tickers]
+                tickers = [t for t in tickers if t in us_tickers]
+                print(f"✓ Filtered to requested tickers: {len(tickers)}")
             else:
-                tickers = all_tickers
+                tickers = us_tickers
 
             # Apply limit
             if max_tickers:
                 tickers = tickers[:max_tickers]
+                print(f"✓ Limited to first {max_tickers} tickers")
 
-            print(f"\n✓ Discovered {len(tickers)} tickers for full ingestion")
+            print(f"\n✓ Final ticker count for ingestion: {len(tickers)}")
             print()
 
         # Option 2: Individual ticker mode (default)

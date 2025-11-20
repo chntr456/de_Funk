@@ -9,6 +9,8 @@
   "headers": {},
   "rate_limit_per_sec": 1.0,
   "_rate_limit_comment": "Conservative rate: 60 calls/minute (1.0/sec) - provides headroom below premium tier limit (75/min). Free tier: 5 calls/minute (0.08333/sec).",
+  "us_exchanges": ["NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"],
+  "_us_exchanges_comment": "Filter to US exchanges for company data ingestion. Foreign exchanges may not have OVERVIEW data available.",
   "endpoints": {
     "company_overview": {
       "base": "core",
