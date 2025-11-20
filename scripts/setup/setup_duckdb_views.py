@@ -234,6 +234,29 @@ SELECT * FROM read_parquet('{pattern}');
                 dry_run=dry_run
             )
 
+        # Alias views for inherited base securities measures
+        # Base measures reference generic table names (fact_prices, dim_security)
+        # Create aliases so inherited measures work without modification
+        alias_sql = """
+-- Alias views for base securities compatibility
+CREATE OR REPLACE VIEW stocks.fact_prices AS
+  SELECT * FROM stocks.fact_stock_prices;
+
+CREATE OR REPLACE VIEW stocks.dim_security AS
+  SELECT * FROM stocks.dim_stock;
+"""
+
+        if dry_run:
+            print(f"\n-- stocks aliases")
+            print(alias_sql)
+        else:
+            try:
+                self.conn.execute(alias_sql)
+                logger.info("✓ Created alias views: fact_prices, dim_security")
+                self.created_views.extend(["stocks.fact_prices", "stocks.dim_security"])
+            except Exception as e:
+                logger.warning(f"⚠ Could not create alias views: {e}")
+
     def create_options_views(self, dry_run: bool = False):
         """Create views for options model."""
         logger.info("\n" + "="*80)
@@ -268,6 +291,27 @@ SELECT * FROM read_parquet('{pattern}');
                 parquet_path=silver_path / 'facts' / fact,
                 dry_run=dry_run
             )
+
+        # Alias views for inherited base securities measures
+        alias_sql = """
+-- Alias views for base securities compatibility
+CREATE OR REPLACE VIEW options.fact_prices AS
+  SELECT * FROM options.fact_option_prices;
+
+CREATE OR REPLACE VIEW options.dim_security AS
+  SELECT * FROM options.dim_option;
+"""
+
+        if dry_run:
+            print(f"\n-- options aliases")
+            print(alias_sql)
+        else:
+            try:
+                self.conn.execute(alias_sql)
+                logger.info("✓ Created alias views: fact_prices, dim_security")
+                self.created_views.extend(["options.fact_prices", "options.dim_security"])
+            except Exception as e:
+                logger.warning(f"⚠ Could not create alias views: {e}")
 
     def create_etfs_views(self, dry_run: bool = False):
         """Create views for ETFs model."""
@@ -304,6 +348,27 @@ SELECT * FROM read_parquet('{pattern}');
                 dry_run=dry_run
             )
 
+        # Alias views for inherited base securities measures
+        alias_sql = """
+-- Alias views for base securities compatibility
+CREATE OR REPLACE VIEW etfs.fact_prices AS
+  SELECT * FROM etfs.fact_etf_prices;
+
+CREATE OR REPLACE VIEW etfs.dim_security AS
+  SELECT * FROM etfs.dim_etf;
+"""
+
+        if dry_run:
+            print(f"\n-- etfs aliases")
+            print(alias_sql)
+        else:
+            try:
+                self.conn.execute(alias_sql)
+                logger.info("✓ Created alias views: fact_prices, dim_security")
+                self.created_views.extend(["etfs.fact_prices", "etfs.dim_security"])
+            except Exception as e:
+                logger.warning(f"⚠ Could not create alias views: {e}")
+
     def create_futures_views(self, dry_run: bool = False):
         """Create views for futures model."""
         logger.info("\n" + "="*80)
@@ -338,6 +403,27 @@ SELECT * FROM read_parquet('{pattern}');
                 parquet_path=silver_path / 'facts' / fact,
                 dry_run=dry_run
             )
+
+        # Alias views for inherited base securities measures
+        alias_sql = """
+-- Alias views for base securities compatibility
+CREATE OR REPLACE VIEW futures.fact_prices AS
+  SELECT * FROM futures.fact_future_prices;
+
+CREATE OR REPLACE VIEW futures.dim_security AS
+  SELECT * FROM futures.dim_future;
+"""
+
+        if dry_run:
+            print(f"\n-- futures aliases")
+            print(alias_sql)
+        else:
+            try:
+                self.conn.execute(alias_sql)
+                logger.info("✓ Created alias views: fact_prices, dim_security")
+                self.created_views.extend(["futures.fact_prices", "futures.dim_security"])
+            except Exception as e:
+                logger.warning(f"⚠ Could not create alias views: {e}")
 
     def create_helper_views(self, dry_run: bool = False):
         """Create helper views for common queries."""

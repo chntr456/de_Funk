@@ -1,12 +1,10 @@
 ---
+id: stock_analysis_v2
 title: "Stock Analysis Dashboard (v2.0)"
 description: "Stock analysis with company fundamentals and technical indicators"
 model: stocks
-version: 2.0
-tags:
-  - stocks
-  - company
-  - technical-analysis
+models: [stocks, company, core]
+tags: [stocks, company, technical-analysis, v2.0]
 author: "de_Funk v2.0"
 created: "2025-11-20"
 ---
