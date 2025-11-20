@@ -182,7 +182,8 @@ class AllModelBuilder:
         skip_ingestion: bool = False,
         parallel: bool = False,
         max_workers: int = 3,
-        dry_run: bool = False
+        dry_run: bool = False,
+        use_bulk_discovery: bool = True
     ) -> bool:
         """
         Build all models with ingestion and Silver layer creation.
@@ -197,11 +198,13 @@ class AllModelBuilder:
             parallel: Build models in parallel
             max_workers: Max parallel workers
             dry_run: Show what would be done without executing
+            use_bulk_discovery: Use bulk endpoints to discover all available tickers (default: True)
 
         Returns:
             True if all builds succeed
         """
         self.results['start_time'] = datetime.now()
+        self.use_bulk_discovery = use_bulk_discovery
 
         # Determine date range for market data
         if days:
@@ -527,11 +530,13 @@ class AllModelBuilder:
 
         # Run full ingestion using run_all method
         # Note: Premium tier supports concurrent requests (75 calls/min)
+        # use_bulk_listing: Discovers ALL tickers via LISTING_STATUS (1 call), then gets full data
         tickers = ingestor.run_all(
             date_from=date_from,
             date_to=date_to,
             max_tickers=max_tickers,
-            use_concurrent=True  # Enable concurrent for premium tier (much faster!)
+            use_concurrent=True,  # Enable concurrent for premium tier (much faster!)
+            use_bulk_listing=self.use_bulk_discovery  # Bulk discovery enabled by default
         )
 
         logger.info(f"  ✓ Ingested data for {len(tickers)} tickers")
@@ -811,6 +816,12 @@ def main():
         help='Show what would be done without executing'
     )
 
+    parser.add_argument(
+        '--no-bulk-discovery',
+        action='store_true',
+        help='Disable bulk ticker discovery (uses default tickers instead of discovering all available)'
+    )
+
     args = parser.parse_args()
 
     try:
@@ -827,7 +838,8 @@ def main():
             skip_ingestion=args.skip_ingestion,
             parallel=args.parallel,
             max_workers=args.max_workers,
-            dry_run=args.dry_run
+            dry_run=args.dry_run,
+            use_bulk_discovery=not args.no_bulk_discovery  # Enabled by default
         )
 
         # Save results if requested
