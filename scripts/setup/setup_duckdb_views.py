@@ -1,0 +1,516 @@
+#!/usr/bin/env python3
+"""
+Setup DuckDB Views for v2.0 Models
+
+Creates a persistent DuckDB database with views pointing to Silver layer Parquet files.
+This enables fast analytical queries without duplicating data.
+
+Usage:
+    # Create fresh database with all views
+    python -m scripts.setup.setup_duckdb_views
+
+    # Update existing database (recreate views)
+    python -m scripts.setup.setup_duckdb_views --update
+
+    # Dry run (show SQL without executing)
+    python -m scripts.setup.setup_duckdb_views --dry-run
+
+    # Custom database path
+    python -m scripts.setup.setup_duckdb_views --db-path custom/path/analytics.db
+
+Features:
+- Creates views for ALL v2.0 models (core, company, stocks, options, etfs, futures)
+- Points views to Silver Parquet files (zero data duplication)
+- Handles missing tables gracefully (skips if not built yet)
+- Validates views after creation
+- Shows table statistics
+"""
+
+import argparse
+import sys
+from pathlib import Path
+from typing import Dict, List, Tuple, Optional
+import logging
+
+# Add repo root to path
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
+
+try:
+    import duckdb
+except ImportError:
+    print("❌ ERROR: DuckDB not installed")
+    print("Install it with: pip install duckdb")
+    sys.exit(1)
+
+from config import ConfigLoader
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+
+class DuckDBViewSetup:
+    """Setup DuckDB views for v2.0 models."""
+
+    def __init__(self, db_path: Path, config: ConfigLoader):
+        """
+        Initialize DuckDB view setup.
+
+        Args:
+            db_path: Path to DuckDB database file
+            config: Application configuration
+        """
+        self.db_path = db_path
+        self.config = config
+        self.conn = None
+        self.created_views = []
+        self.skipped_views = []
+
+    def connect(self, read_only: bool = False):
+        """Connect to DuckDB database."""
+        # Create parent directory if needed
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.info(f"Connecting to DuckDB: {self.db_path}")
+        self.conn = duckdb.connect(str(self.db_path), read_only=read_only)
+        logger.info("✓ Connected")
+
+    def close(self):
+        """Close DuckDB connection."""
+        if self.conn:
+            self.conn.close()
+            self.conn = None
+
+    def get_silver_path(self, model: str) -> Path:
+        """Get Silver layer path for model."""
+        return Path(self.config.storage.get(f'{model}_silver', f'storage/silver/{model}'))
+
+    def create_view(self, schema: str, table: str, parquet_path: Path, dry_run: bool = False) -> bool:
+        """
+        Create a DuckDB view pointing to Parquet file(s).
+
+        Args:
+            schema: Schema name (e.g., 'core', 'company', 'stocks')
+            table: Table name (e.g., 'dim_calendar', 'dim_company')
+            parquet_path: Path to Parquet file or directory
+            dry_run: If True, show SQL without executing
+
+        Returns:
+            True if view created, False if skipped
+        """
+        # Check if parquet path exists
+        if not parquet_path.exists():
+            logger.warning(f"⚠ Skipping {schema}.{table} - path not found: {parquet_path}")
+            self.skipped_views.append(f"{schema}.{table}")
+            return False
+
+        # Determine if reading directory or single file
+        if parquet_path.is_dir():
+            # Check if directory has any parquet files
+            parquet_files = list(parquet_path.glob("**/*.parquet"))
+            if not parquet_files:
+                logger.warning(f"⚠ Skipping {schema}.{table} - no parquet files in: {parquet_path}")
+                self.skipped_views.append(f"{schema}.{table}")
+                return False
+            pattern = f"{parquet_path}/**/*.parquet"
+        else:
+            pattern = str(parquet_path)
+
+        # Create schema if needed
+        schema_sql = f"CREATE SCHEMA IF NOT EXISTS {schema};"
+
+        # Create view SQL
+        view_sql = f"""
+CREATE OR REPLACE VIEW {schema}.{table} AS
+SELECT * FROM read_parquet('{pattern}');
+"""
+
+        full_sql = schema_sql + view_sql
+
+        if dry_run:
+            print(f"\n-- {schema}.{table}")
+            print(full_sql)
+            return True
+
+        try:
+            self.conn.execute(schema_sql)
+            self.conn.execute(view_sql)
+            logger.info(f"✓ Created view: {schema}.{table}")
+            self.created_views.append(f"{schema}.{table}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Failed to create {schema}.{table}: {e}")
+            self.skipped_views.append(f"{schema}.{table}")
+            return False
+
+    def create_core_views(self, dry_run: bool = False):
+        """Create views for core model (calendar dimension)."""
+        logger.info("\n" + "="*80)
+        logger.info("CORE MODEL VIEWS")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('core')
+
+        # dim_calendar
+        self.create_view(
+            schema='core',
+            table='dim_calendar',
+            parquet_path=silver_path / 'dims' / 'dim_calendar',
+            dry_run=dry_run
+        )
+
+    def create_company_views(self, dry_run: bool = False):
+        """Create views for company model."""
+        logger.info("\n" + "="*80)
+        logger.info("COMPANY MODEL VIEWS")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('company')
+
+        # Dimensions
+        dimensions = [
+            'dim_company',
+            'dim_exchange'
+        ]
+
+        for dim in dimensions:
+            self.create_view(
+                schema='company',
+                table=dim,
+                parquet_path=silver_path / 'dims' / dim,
+                dry_run=dry_run
+            )
+
+        # Facts
+        facts = [
+            'fact_company_fundamentals',
+            'fact_company_metrics'
+        ]
+
+        for fact in facts:
+            self.create_view(
+                schema='company',
+                table=fact,
+                parquet_path=silver_path / 'facts' / fact,
+                dry_run=dry_run
+            )
+
+    def create_stocks_views(self, dry_run: bool = False):
+        """Create views for stocks model."""
+        logger.info("\n" + "="*80)
+        logger.info("STOCKS MODEL VIEWS")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('stocks')
+
+        # Dimensions
+        dimensions = [
+            'dim_stock'
+        ]
+
+        for dim in dimensions:
+            self.create_view(
+                schema='stocks',
+                table=dim,
+                parquet_path=silver_path / 'dims' / dim,
+                dry_run=dry_run
+            )
+
+        # Facts
+        facts = [
+            'fact_stock_prices',
+            'fact_stock_technicals',
+            'fact_stock_fundamentals'
+        ]
+
+        for fact in facts:
+            self.create_view(
+                schema='stocks',
+                table=fact,
+                parquet_path=silver_path / 'facts' / fact,
+                dry_run=dry_run
+            )
+
+    def create_options_views(self, dry_run: bool = False):
+        """Create views for options model."""
+        logger.info("\n" + "="*80)
+        logger.info("OPTIONS MODEL VIEWS")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('options')
+
+        # Dimensions
+        dimensions = [
+            'dim_option'
+        ]
+
+        for dim in dimensions:
+            self.create_view(
+                schema='options',
+                table=dim,
+                parquet_path=silver_path / 'dims' / dim,
+                dry_run=dry_run
+            )
+
+        # Facts
+        facts = [
+            'fact_option_prices',
+            'fact_option_greeks'
+        ]
+
+        for fact in facts:
+            self.create_view(
+                schema='options',
+                table=fact,
+                parquet_path=silver_path / 'facts' / fact,
+                dry_run=dry_run
+            )
+
+    def create_etfs_views(self, dry_run: bool = False):
+        """Create views for ETFs model."""
+        logger.info("\n" + "="*80)
+        logger.info("ETFS MODEL VIEWS")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('etfs')
+
+        # Dimensions
+        dimensions = [
+            'dim_etf'
+        ]
+
+        for dim in dimensions:
+            self.create_view(
+                schema='etfs',
+                table=dim,
+                parquet_path=silver_path / 'dims' / dim,
+                dry_run=dry_run
+            )
+
+        # Facts
+        facts = [
+            'fact_etf_prices',
+            'fact_etf_holdings'
+        ]
+
+        for fact in facts:
+            self.create_view(
+                schema='etfs',
+                table=fact,
+                parquet_path=silver_path / 'facts' / fact,
+                dry_run=dry_run
+            )
+
+    def create_futures_views(self, dry_run: bool = False):
+        """Create views for futures model."""
+        logger.info("\n" + "="*80)
+        logger.info("FUTURES MODEL VIEWS")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('futures')
+
+        # Dimensions
+        dimensions = [
+            'dim_future'
+        ]
+
+        for dim in dimensions:
+            self.create_view(
+                schema='futures',
+                table=dim,
+                parquet_path=silver_path / 'dims' / dim,
+                dry_run=dry_run
+            )
+
+        # Facts
+        facts = [
+            'fact_future_prices',
+            'fact_future_margins'
+        ]
+
+        for fact in facts:
+            self.create_view(
+                schema='futures',
+                table=fact,
+                parquet_path=silver_path / 'facts' / fact,
+                dry_run=dry_run
+            )
+
+    def create_helper_views(self, dry_run: bool = False):
+        """Create helper views for common queries."""
+        logger.info("\n" + "="*80)
+        logger.info("HELPER VIEWS")
+        logger.info("="*80)
+
+        # Helper: Stock prices with company info
+        helper_sql = """
+CREATE OR REPLACE VIEW analytics.stock_prices_enriched AS
+SELECT
+    p.ticker,
+    p.trade_date,
+    p.open,
+    p.high,
+    p.low,
+    p.close,
+    p.volume,
+    p.volume_weighted,
+    c.company_name,
+    c.sector,
+    c.industry,
+    c.market_cap,
+    c.exchange_code
+FROM stocks.fact_stock_prices p
+LEFT JOIN stocks.dim_stock s ON p.ticker = s.ticker
+LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
+"""
+
+        if dry_run:
+            print(f"\n-- analytics.stock_prices_enriched")
+            print(helper_sql)
+        else:
+            try:
+                self.conn.execute("CREATE SCHEMA IF NOT EXISTS analytics;")
+                self.conn.execute(helper_sql)
+                logger.info("✓ Created helper view: analytics.stock_prices_enriched")
+                self.created_views.append("analytics.stock_prices_enriched")
+            except Exception as e:
+                logger.warning(f"⚠ Could not create stock_prices_enriched view: {e}")
+                self.skipped_views.append("analytics.stock_prices_enriched")
+
+    def validate_views(self):
+        """Validate created views."""
+        logger.info("\n" + "="*80)
+        logger.info("VIEW VALIDATION")
+        logger.info("="*80)
+
+        for view_name in self.created_views:
+            try:
+                # Test query
+                result = self.conn.execute(f"SELECT COUNT(*) as cnt FROM {view_name}").fetchone()
+                count = result[0] if result else 0
+                logger.info(f"✓ {view_name}: {count:,} rows")
+            except Exception as e:
+                logger.error(f"❌ {view_name}: {e}")
+
+    def show_summary(self):
+        """Show setup summary."""
+        logger.info("\n" + "="*80)
+        logger.info("SETUP SUMMARY")
+        logger.info("="*80)
+        logger.info(f"Database path: {self.db_path}")
+        logger.info(f"Created views: {len(self.created_views)}")
+        logger.info(f"Skipped views: {len(self.skipped_views)}")
+
+        if self.created_views:
+            logger.info("\n✓ Created:")
+            for view in sorted(self.created_views):
+                logger.info(f"  - {view}")
+
+        if self.skipped_views:
+            logger.info("\n⚠ Skipped (missing Parquet files):")
+            for view in sorted(self.skipped_views):
+                logger.info(f"  - {view}")
+
+        logger.info("\n✓ DuckDB setup complete!")
+        logger.info(f"\nConnect with:")
+        logger.info(f"  python -c \"import duckdb; conn = duckdb.connect('{self.db_path}')\"")
+        logger.info(f"\nQuery example:")
+        logger.info(f"  SELECT * FROM stocks.fact_stock_prices LIMIT 10;")
+
+    def setup_all(self, dry_run: bool = False):
+        """Create all views."""
+        if not dry_run:
+            self.connect()
+
+        try:
+            # v2.0 models
+            self.create_core_views(dry_run=dry_run)
+            self.create_company_views(dry_run=dry_run)
+            self.create_stocks_views(dry_run=dry_run)
+            self.create_options_views(dry_run=dry_run)
+            self.create_etfs_views(dry_run=dry_run)
+            self.create_futures_views(dry_run=dry_run)
+
+            # Helper views
+            if not dry_run:
+                self.create_helper_views(dry_run=dry_run)
+
+            # Validate
+            if not dry_run:
+                self.validate_views()
+
+            # Summary
+            self.show_summary()
+
+        finally:
+            if not dry_run:
+                self.close()
+
+
+def main():
+    """CLI entry point."""
+    parser = argparse.ArgumentParser(
+        description="Setup DuckDB views for de_Funk v2.0 models",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__
+    )
+
+    parser.add_argument(
+        '--db-path',
+        type=Path,
+        help='Path to DuckDB database (default: from config)'
+    )
+
+    parser.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='Show SQL without executing'
+    )
+
+    parser.add_argument(
+        '--update',
+        action='store_true',
+        help='Update existing database (recreate views)'
+    )
+
+    args = parser.parse_args()
+
+    # Load configuration
+    config = ConfigLoader().load()
+
+    # Get database path
+    if args.db_path:
+        db_path = args.db_path
+    else:
+        # Use from config (DuckDB config or default)
+        from config.constants import DEFAULT_DUCKDB_PATH
+        db_path_str = config.connection.duckdb.database_path if hasattr(config.connection, 'duckdb') else DEFAULT_DUCKDB_PATH
+        db_path = Path(db_path_str)
+
+    logger.info("="*80)
+    logger.info("DUCKDB VIEW SETUP (v2.0)")
+    logger.info("="*80)
+    logger.info(f"Database: {db_path}")
+    logger.info(f"Dry run: {args.dry_run}")
+    logger.info(f"Mode: {'UPDATE' if args.update else 'CREATE'}")
+    logger.info("")
+
+    # Check if database exists
+    if db_path.exists() and not args.update and not args.dry_run:
+        logger.warning(f"⚠ Database already exists: {db_path}")
+        logger.warning("Use --update to recreate views or --db-path to specify a different location")
+        response = input("Continue and recreate views? [y/N]: ")
+        if response.lower() != 'y':
+            logger.info("Aborted")
+            return
+
+    # Setup views
+    setup = DuckDBViewSetup(db_path=db_path, config=config)
+    setup.setup_all(dry_run=args.dry_run)
+
+
+if __name__ == "__main__":
+    main()
