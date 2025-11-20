@@ -185,6 +185,7 @@ class AllModelBuilder:
         date_to: Optional[str] = None,
         days: Optional[int] = None,
         max_tickers: Optional[int] = None,
+        tickers: Optional[List[str]] = None,
         skip_ingestion: bool = False,
         parallel: bool = False,
         max_workers: int = 3,
@@ -203,6 +204,7 @@ class AllModelBuilder:
             date_to: End date for market data (YYYY-MM-DD)
             days: Alternative to date_from/date_to - number of recent days
             max_tickers: Limit number of tickers (for development/testing)
+            tickers: Specific ticker symbols to ingest (overrides bulk discovery and max_tickers)
             skip_ingestion: Skip Bronze ingestion (use existing Bronze data)
             parallel: Build models in parallel
             max_workers: Max parallel workers
@@ -220,6 +222,7 @@ class AllModelBuilder:
         self.skip_reference_refresh = skip_reference_refresh
         self.outputsize = outputsize
         self.use_concurrent = use_concurrent
+        self.tickers = tickers  # Explicit ticker list (overrides discovery)
 
         # Determine date range for market data
         if days:
@@ -545,11 +548,13 @@ class AllModelBuilder:
 
         # Run full ingestion using run_all method
         # Note: Premium tier supports concurrent requests (75 calls/min)
+        # tickers: If provided, uses explicit list (no discovery)
         # use_bulk_listing: Discovers ALL tickers via LISTING_STATUS (1 call), then gets full data
         # skip_reference_refresh: Skip OVERVIEW calls for daily updates (saves ~50% time)
         # outputsize: 'compact' (100 days) for daily updates, 'full' (20+ years) for initial load
         # use_concurrent: Concurrent requests (premium: True, free: False)
-        tickers = ingestor.run_all(
+        ingested_tickers = ingestor.run_all(
+            tickers=self.tickers,  # Explicit ticker list (overrides discovery if provided)
             date_from=date_from,
             date_to=date_to,
             max_tickers=max_tickers,
@@ -559,7 +564,7 @@ class AllModelBuilder:
             outputsize=self.outputsize  # compact for daily updates, full for initial load
         )
 
-        logger.info(f"  ✓ Ingested data for {len(tickers)} tickers")
+        logger.info(f"  ✓ Ingested data for {len(ingested_tickers)} tickers")
         return True
 
     def _run_bls_ingestion(self, date_from: str, date_to: str) -> bool:
@@ -801,6 +806,12 @@ def main():
     )
 
     parser.add_argument(
+        '--tickers',
+        nargs='+',
+        help='Specific ticker symbols to ingest (e.g., --tickers AAPL MSFT ABI). Overrides bulk discovery and max-tickers.'
+    )
+
+    parser.add_argument(
         '--skip-ingestion',
         action='store_true',
         help='Skip Bronze ingestion (use existing Bronze data)'
@@ -874,6 +885,7 @@ def main():
             date_to=args.date_to,
             days=args.days,
             max_tickers=args.max_tickers,
+            tickers=args.tickers,  # Explicit ticker list (overrides discovery)
             skip_ingestion=args.skip_ingestion,
             parallel=args.parallel,
             max_workers=args.max_workers,
