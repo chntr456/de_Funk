@@ -61,6 +61,10 @@ class AlphaVantageIngestor(Ingestor):
             spark: SparkSession
         """
         super().__init__(storage_cfg=storage_cfg)
+
+        # Store config for later access (e.g., US exchange filtering)
+        self.alpha_vantage_cfg = alpha_vantage_cfg
+
         self.registry = AlphaVantageRegistry(alpha_vantage_cfg)
 
         # Create API key pool (store separately for bulk listing)
