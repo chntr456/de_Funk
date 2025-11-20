@@ -407,14 +407,15 @@ class AlphaVantageIngestor(Ingestor):
         # Write to bronze
         table_path = self.sink.write(df_normalized, table_name, partitions=["snapshot_dt", "asset_type"])
 
-        tickers = [row['ticker'] for row in rows if row.get('symbol')]
+        tickers = [row['symbol'] for row in rows if row.get('symbol')]  # CSV has 'symbol', not 'ticker'
         print(f"Written {df_normalized.count()} tickers to {table_path}")
         print(f"Note: For fundamentals (PE, market cap, etc.), call ingest_reference_data() for specific tickers")
 
         return table_path, tickers
 
     def run_all(self, tickers=None, date_from=None, date_to=None,
-                max_tickers=None, use_concurrent=False, use_bulk_listing=False, **kwargs):
+                max_tickers=None, use_concurrent=False, use_bulk_listing=False,
+                skip_reference_refresh=False, outputsize="full", **kwargs):
         """
         Run complete ingestion: reference data + prices.
 
@@ -428,6 +429,8 @@ class AlphaVantageIngestor(Ingestor):
             max_tickers: Limit number of tickers to ingest
             use_concurrent: Use concurrent fetching (premium tier only)
             use_bulk_listing: Use LISTING_STATUS endpoint for bulk ticker discovery (ONE API call!)
+            skip_reference_refresh: Skip OVERVIEW calls (saves ~50% time for daily updates, default: False)
+            outputsize: 'compact' (100 days) or 'full' (20+ years) - use compact for daily updates
             **kwargs: Additional arguments (ignored for compatibility)
 
         Returns:
@@ -465,25 +468,36 @@ class AlphaVantageIngestor(Ingestor):
                 tickers = tickers[:max_tickers]
 
         # Common ingestion flow (runs for BOTH modes)
-        print(f"Running full ingestion for {len(tickers)} tickers...")
+        print(f"Running ingestion for {len(tickers)} tickers...")
         print(f"Date range: {date_from} to {date_to}")
         print(f"Concurrent mode: {use_concurrent}")
+        print(f"Output size: {outputsize}")
+        print(f"Skip reference refresh: {skip_reference_refresh}")
         print()
 
         # Step 1: Ingest reference data (detailed fundamentals per ticker)
         # This runs for BOTH modes - we need CIK + fundamentals for company model
-        print("Step 1{'b' if use_bulk_listing else ''}: Ingesting reference data (OVERVIEW endpoint)...")
-        print("-" * 80)
-        self.ingest_reference_data(tickers=tickers, use_concurrent=use_concurrent)
-        print()
+        # OPTIMIZATION: Skip for daily updates if fundamentals haven't changed
+        if skip_reference_refresh:
+            print("⚡ SKIPPING reference data refresh (using existing data)")
+            print("   This saves ~50% of API calls for daily updates")
+            print("   Note: Run full refresh periodically to update fundamentals")
+            print()
+        else:
+            print("Step 1{'b' if use_bulk_listing else ''}: Ingesting reference data (OVERVIEW endpoint)...")
+            print("-" * 80)
+            self.ingest_reference_data(tickers=tickers, use_concurrent=use_concurrent)
+            print()
 
         # Step 2: Ingest prices (same for both modes)
-        print("Step 2: Ingesting prices...")
+        step_num = '1' if skip_reference_refresh else '2'
+        print(f"Step {step_num}: Ingesting prices...")
         print("-" * 80)
         self.ingest_prices(
             tickers=tickers,
             date_from=date_from,
             date_to=date_to,
+            outputsize=outputsize,  # Pass through outputsize parameter
             use_concurrent=use_concurrent
         )
         print()

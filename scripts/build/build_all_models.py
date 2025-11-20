@@ -32,6 +32,9 @@ Usage:
     # Dry run (show what would be done)
     python -m scripts.build_all_models --dry-run
 
+    # Daily refresh (fast - skip fundamentals, use compact prices)
+    python -m scripts.build_all_models --date-from 2025-11-20 --skip-reference-refresh --outputsize compact
+
 Examples:
     # Full production build (all domains, all data)
     python -m scripts.build_all_models --date-from 2024-01-01
@@ -41,6 +44,9 @@ Examples:
 
     # Quick rebuild from existing Bronze
     python -m scripts.build_all_models --skip-ingestion
+
+    # Daily refresh (optimized - 50% faster)
+    python -m scripts.build_all_models --date-from 2025-11-20 --skip-reference-refresh --outputsize compact
 """
 
 from __future__ import annotations
@@ -183,7 +189,9 @@ class AllModelBuilder:
         parallel: bool = False,
         max_workers: int = 3,
         dry_run: bool = False,
-        use_bulk_discovery: bool = True
+        use_bulk_discovery: bool = True,
+        skip_reference_refresh: bool = False,
+        outputsize: str = "full"
     ) -> bool:
         """
         Build all models with ingestion and Silver layer creation.
@@ -199,12 +207,16 @@ class AllModelBuilder:
             max_workers: Max parallel workers
             dry_run: Show what would be done without executing
             use_bulk_discovery: Use bulk endpoints to discover all available tickers (default: True)
+            skip_reference_refresh: Skip reference data refresh (saves ~50% time for daily updates)
+            outputsize: 'compact' (100 days) or 'full' (20+ years) for price data
 
         Returns:
             True if all builds succeed
         """
         self.results['start_time'] = datetime.now()
         self.use_bulk_discovery = use_bulk_discovery
+        self.skip_reference_refresh = skip_reference_refresh
+        self.outputsize = outputsize
 
         # Determine date range for market data
         if days:
@@ -531,12 +543,16 @@ class AllModelBuilder:
         # Run full ingestion using run_all method
         # Note: Premium tier supports concurrent requests (75 calls/min)
         # use_bulk_listing: Discovers ALL tickers via LISTING_STATUS (1 call), then gets full data
+        # skip_reference_refresh: Skip OVERVIEW calls for daily updates (saves ~50% time)
+        # outputsize: 'compact' (100 days) for daily updates, 'full' (20+ years) for initial load
         tickers = ingestor.run_all(
             date_from=date_from,
             date_to=date_to,
             max_tickers=max_tickers,
             use_concurrent=True,  # Enable concurrent for premium tier (much faster!)
-            use_bulk_listing=self.use_bulk_discovery  # Bulk discovery enabled by default
+            use_bulk_listing=self.use_bulk_discovery,  # Bulk discovery enabled by default
+            skip_reference_refresh=self.skip_reference_refresh,  # Skip fundamentals for daily updates
+            outputsize=self.outputsize  # compact for daily updates, full for initial load
         )
 
         logger.info(f"  ✓ Ingested data for {len(tickers)} tickers")
@@ -822,6 +838,19 @@ def main():
         help='Disable bulk ticker discovery (uses default tickers instead of discovering all available)'
     )
 
+    parser.add_argument(
+        '--skip-reference-refresh',
+        action='store_true',
+        help='Skip reference data refresh (OVERVIEW endpoint) - saves ~50%% time for daily updates'
+    )
+
+    parser.add_argument(
+        '--outputsize',
+        choices=['compact', 'full'],
+        default='full',
+        help='Price data size: compact (100 days) or full (20+ years). Use compact for daily updates.'
+    )
+
     args = parser.parse_args()
 
     try:
@@ -839,7 +868,9 @@ def main():
             parallel=args.parallel,
             max_workers=args.max_workers,
             dry_run=args.dry_run,
-            use_bulk_discovery=not args.no_bulk_discovery  # Enabled by default
+            use_bulk_discovery=not args.no_bulk_discovery,  # Enabled by default
+            skip_reference_refresh=args.skip_reference_refresh,  # Skip OVERVIEW for daily updates
+            outputsize=args.outputsize  # compact for daily updates, full for initial load
         )
 
         # Save results if requested
