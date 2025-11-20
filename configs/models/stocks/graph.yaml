@@ -23,8 +23,7 @@ nodes:
       sector: sector
       industry: industry
     derive:
-      # Use ticker as fallback when CIK is NULL (Alpha Vantage case) - matches company.company_id logic
-      company_id: "CASE WHEN cik IS NOT NULL THEN CONCAT('COMPANY_', cik) ELSE CONCAT('COMPANY_', ticker) END"
+      company_id: "CONCAT('COMPANY_', ticker)"
     unique_key: [ticker]
     tags: [dim, stock]
 

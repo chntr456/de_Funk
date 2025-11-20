@@ -18,8 +18,7 @@ nodes:
       sector: sector
       industry: industry
     derive:
-      # Use ticker as fallback when CIK is NULL (Alpha Vantage case)
-      company_id: "CASE WHEN cik IS NOT NULL THEN CONCAT('COMPANY_', cik) ELSE CONCAT('COMPANY_', ticker) END"
+      company_id: "CONCAT('COMPANY_', ticker)"
       incorporation_country: "'US'"  # Default, update from SEC data later
     tags: [dim, entity, corporate]
     unique_key: [ticker_primary]  # Changed from [cik] since CIK can be NULL
