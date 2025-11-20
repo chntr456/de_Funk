@@ -141,7 +141,7 @@ fact_stock_prices:
     volume_weighted: volume_weighted    ✓ exists
 ```
 
-## Configuration Update
+## Configuration Updates
 
 ### `configs/storage.json`
 
@@ -159,11 +159,31 @@ fact_stock_prices:
 ```json
 "connection": {
   "type": "duckdb",
-  "comment": "Default connection type. Use 'duckdb' (recommended - 10-100x faster) or 'spark' (for large-scale ETL). Override with CONNECTION_TYPE env var."
+  "comment": "Default for UI/analytics (10-100x faster). Ingestion pipelines override to 'spark' (required for facets). Set CONNECTION_TYPE env var to override."
 }
 ```
 
-**Rationale**: Aligns with .env.example and CLAUDE.md recommendations. DuckDB is 10-100x faster and recommended for most operations. Can still override with CONNECTION_TYPE env var for Spark-based ETL if needed.
+**Rationale**:
+- DuckDB is 10-100x faster and recommended for UI/analytics/queries
+- Ingestion pipelines explicitly override to use Spark (required for PySpark facets)
+- Clear separation: Spark for writes (bronze ingestion), DuckDB for reads (silver queries)
+
+### `scripts/maintenance/clear_and_refresh.py`
+
+**Change**: Explicitly use Spark for ingestion pipeline
+
+**Update**:
+```python
+# Initialize context to get storage paths
+# NOTE: Use Spark for ingestion (bronze layer requires PySpark for facets)
+print("Initializing context with Spark (required for bronze ingestion)...")
+ctx = RepoContext.from_repo_root(connection_type="spark")
+```
+
+**Rationale**:
+- Alpha Vantage facets require PySpark for DataFrame operations
+- Bronze layer ingestion must use Spark regardless of default connection type
+- Silver layer build uses the same Spark context for consistency
 
 ## Expected Behavior After Fix
 
@@ -207,7 +227,8 @@ To verify the fix works end-to-end:
 **Files Modified**:
 - `configs/models/company/graph.yaml` (column name fixes)
 - `configs/models/stocks/graph.yaml` (removed extends, added explicit from, fixed column names)
-- `configs/storage.json` (default connection type to duckdb)
+- `configs/storage.json` (default connection type to duckdb, updated comment)
+- `scripts/maintenance/clear_and_refresh.py` (force Spark for ingestion pipeline)
 
 **Reference Files**:
 - `datapipelines/providers/alpha_vantage/facets/securities_reference_facet.py` (bronze schema)

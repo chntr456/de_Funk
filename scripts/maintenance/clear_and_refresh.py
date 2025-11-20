@@ -50,8 +50,9 @@ def clear_storage(bronze: bool = True, silver: bool = True, skip_confirm: bool =
     print()
 
     # Initialize context to get storage paths
-    print("Initializing context...")
-    ctx = RepoContext.from_repo_root()
+    # NOTE: Use Spark for ingestion (bronze layer requires PySpark for facets)
+    print("Initializing context with Spark (required for bronze ingestion)...")
+    ctx = RepoContext.from_repo_root(connection_type="spark")
 
     storage_root = ctx.repo / "storage"
 

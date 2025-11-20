@@ -1,7 +1,7 @@
 {
   "connection": {
     "type": "duckdb",
-    "comment": "Default connection type. Use 'duckdb' (recommended - 10-100x faster) or 'spark' (for large-scale ETL). Override with CONNECTION_TYPE env var."
+    "comment": "Default for UI/analytics (10-100x faster). Ingestion pipelines override to 'spark' (required for facets). Set CONNECTION_TYPE env var to override."
   },
   "roots": {
     "bronze": "storage/bronze",
