@@ -62,14 +62,18 @@ class AlphaVantageIngestor(Ingestor):
         """
         super().__init__(storage_cfg=storage_cfg)
         self.registry = AlphaVantageRegistry(alpha_vantage_cfg)
+
+        # Create API key pool (store separately for bulk listing)
+        self.key_pool = ApiKeyPool(
+            (alpha_vantage_cfg.get("credentials") or {}).get("api_keys") or [],
+            cooldown_seconds=60.0  # 1-minute cooldown for rate limiting
+        )
+
         self.http = HttpClient(
             self.registry.base_urls,
             self.registry.headers,
             self.registry.rate_limit,
-            ApiKeyPool(
-                (alpha_vantage_cfg.get("credentials") or {}).get("api_keys") or [],
-                cooldown_seconds=60.0  # 1-minute cooldown for rate limiting
-            )
+            self.key_pool
         )
         self.sink = BronzeSink(storage_cfg)
         self.spark = spark
@@ -318,7 +322,7 @@ class AlphaVantageIngestor(Ingestor):
 
         # Make single API call for bulk listing
         ep, path, query = self.registry.render("listing_status", state=state)
-        query['apikey'] = self.http.key_pool.next_key() if self.http.key_pool else None
+        query['apikey'] = self.key_pool.next_key() if self.key_pool else None
 
         # Fetch CSV data
         with self._http_lock:
