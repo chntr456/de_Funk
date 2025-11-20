@@ -4,7 +4,7 @@ SecuritiesReferenceFacetAV - Alpha Vantage reference data facet.
 Maps Alpha Vantage OVERVIEW endpoint to unified securities_reference schema.
 
 Key Differences from Polygon:
-- No CIK field (Alpha Vantage doesn't provide SEC identifiers)
+- Includes CIK (SEC Central Index Key) for company identification
 - Different field names (Symbol vs ticker, MarketCapitalization vs market_cap)
 - More fundamental data (PE ratio, dividend yield, etc.)
 - One API call per ticker (no bulk endpoint)
@@ -27,8 +27,8 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
 
     Maps to same schema as Polygon's SecuritiesReferenceFacet for compatibility.
 
-    Note: CIK field will be NULL as Alpha Vantage doesn't provide it.
-    Consider using a separate SEC EDGAR lookup if CIK is critical.
+    Alpha Vantage provides CIK (SEC Central Index Key) which is padded to 10 digits
+    per SEC standard for use as a permanent company identifier.
 
     Usage:
         facet = SecuritiesReferenceFacetAV(
@@ -141,7 +141,7 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         ("ticker", "string"),
         ("security_name", "string"),
         ("asset_type", "string"),
-        ("cik", "string"),  # Will be NULL for Alpha Vantage
+        ("cik", "string"),  # SEC Central Index Key (padded to 10 digits)
         ("composite_figi", "string"),  # Will be NULL for Alpha Vantage
         ("exchange_code", "string"),
         ("currency", "string"),
@@ -246,10 +246,10 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
         1. Map Alpha Vantage field names to unified schema
         2. Set asset_type based on AssetType field
         3. Convert numeric fields using pandas (handles "None" strings gracefully)
-        4. Set CIK to NULL (not available in Alpha Vantage)
+        4. Extract CIK and pad to 10 digits per SEC standard
 
         Alpha Vantage OVERVIEW Response Fields:
-        - Symbol, Name, Description
+        - Symbol, Name, Description, CIK
         - Exchange, Currency, Country, Sector, Industry
         - AssetType (Common Stock, ETF, etc.)
         - MarketCapitalization, SharesOutstanding
@@ -297,8 +297,9 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             'security_name': pdf['Name'],
             'asset_type': pdf['AssetType'].apply(map_asset_type),
 
-            # CIK and FIGI (not available)
-            'cik': None,
+            # CIK from Alpha Vantage (pad to 10 digits per SEC standard)
+            'cik': pdf.get('CIK').apply(lambda x: str(x).zfill(10) if pd.notna(x) and str(x) != 'None' else None),
+            # FIGI not available in Alpha Vantage
             'composite_figi': None,
 
             # Exchange information

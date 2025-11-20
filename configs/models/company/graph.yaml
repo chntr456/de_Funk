@@ -5,23 +5,23 @@ nodes:
     from: bronze.securities_reference
     filters:
       - "asset_type = 'stocks'"  # Only stock tickers have company data
-      # Note: CIK filter removed - Alpha Vantage doesn't provide CIK
+      - "cik IS NOT NULL"        # Must have CIK (Alpha Vantage provides this)
     select:
-      cik: cik  # Will be NULL for Alpha Vantage data
-      company_name: security_name  # Bronze column is security_name, not name
+      cik: cik  # SEC Central Index Key (10-digit, permanent identifier)
+      company_name: security_name
       legal_name: security_name    # Will be updated when we get proper SEC data
       ticker_primary: ticker
       sic_code: sic_code
       sic_description: sic_description
       exchange_code: primary_exchange
-      is_active: is_active  # Already boolean in bronze
+      is_active: is_active
       sector: sector
       industry: industry
     derive:
-      company_id: "CONCAT('COMPANY_', ticker)"
+      company_id: "CONCAT('COMPANY_', cik)"  # Use permanent CIK identifier
       incorporation_country: "'US'"  # Default, update from SEC data later
     tags: [dim, entity, corporate]
-    unique_key: [ticker_primary]  # Changed from [cik] since CIK can be NULL
+    unique_key: [cik]  # CIK is permanent, survives ticker changes
 
   # Placeholder for future fact tables (will be populated from SEC EDGAR API)
   # fact_company_financials:

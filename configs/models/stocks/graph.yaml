@@ -17,13 +17,13 @@ nodes:
       currency: currency
       is_active: is_active
       # Stocks-specific fields
-      cik: cik  # Will be NULL for Alpha Vantage data
+      cik: cik  # SEC Central Index Key (10-digit, permanent identifier)
       shares_outstanding: shares_outstanding
       market_cap: market_cap
       sector: sector
       industry: industry
     derive:
-      company_id: "CONCAT('COMPANY_', ticker)"
+      company_id: "CONCAT('COMPANY_', cik)"  # Use permanent CIK for company linkage
     unique_key: [ticker]
     tags: [dim, stock]
 
