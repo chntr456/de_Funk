@@ -57,7 +57,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from models.registry import ModelRegistry
+from config.model_loader import ModelConfigLoader
 from core.context import RepoContext
 
 logging.basicConfig(
@@ -85,7 +85,7 @@ class AllModelBuilder:
             config_dir: Model config directory
         """
         self.config_dir = Path(config_dir)
-        self.registry = ModelRegistry(str(self.config_dir))
+        self.loader = ModelConfigLoader(self.config_dir)
         self.ctx = None  # Lazy init
         self.session = None  # Lazy init UniversalSession for cross-model refs
 
@@ -99,14 +99,15 @@ class AllModelBuilder:
             'model_results': {}
         }
 
-        logger.info("Initialized all models builder")
+        logger.info("Initialized all models builder (v2.0 - ModelConfigLoader)")
 
     def _init_context(self):
         """Lazy initialize RepoContext and UniversalSession."""
         if self.ctx is None:
-            logger.info("Initializing RepoContext...")
-            self.ctx = RepoContext.from_repo_root()
-            logger.info("  ✓ Context initialized")
+            logger.info("Initializing RepoContext with Spark (required for data pipelines)...")
+            # IMPORTANT: Use Spark for all data processing (facets + model builds)
+            self.ctx = RepoContext.from_repo_root(connection_type="spark")
+            logger.info("  ✓ Context initialized (Spark)")
 
             # Initialize UniversalSession for cross-model references
             from models.api.session import UniversalSession
@@ -128,8 +129,8 @@ class AllModelBuilder:
         Returns:
             List of model names
         """
-        # Get all available models from registry
-        all_models = self.registry.list_models()
+        # Get all available models from loader
+        all_models = self.loader.list_models()
 
         if include_models:
             # Filter to specified models
@@ -529,15 +530,32 @@ class AllModelBuilder:
         self._init_context()
 
         try:
-            # Get model configuration
-            model_cfg = self.registry.get_model_config(model_name)
+            # Get model configuration using ModelConfigLoader
+            model_cfg = self.loader.load_model_config(model_name)
 
-            # Get model class
-            try:
-                model_class = self.registry.get_model_class(model_name)
-            except ValueError:
-                # Fall back to BaseModel if specific class not found
-                logger.warning(f"  Using BaseModel for {model_name}")
+            # Get model class (v2.0 models)
+            model_class = None
+            if model_name == 'company':
+                from models.implemented.company.model import CompanyModel
+                model_class = CompanyModel
+            elif model_name == 'stocks':
+                from models.implemented.stocks.model import StocksModel
+                model_class = StocksModel
+            elif model_name == 'options':
+                from models.implemented.options.model import OptionsModel
+                model_class = OptionsModel
+            elif model_name == 'etfs':
+                from models.implemented.etfs.model import ETFsModel
+                model_class = ETFsModel
+            elif model_name == 'futures':
+                from models.implemented.futures.model import FuturesModel
+                model_class = FuturesModel
+            elif model_name == 'core':
+                from models.implemented.core.model import CoreModel
+                model_class = CoreModel
+            else:
+                # Fall back to BaseModel for other models
+                logger.warning(f"  No specific model class for {model_name}, using BaseModel")
                 from models.base.model import BaseModel
                 model_class = BaseModel
 
@@ -549,7 +567,7 @@ class AllModelBuilder:
                 params={
                     "DATE_FROM": date_from,
                     "DATE_TO": date_to,
-                    "MAX_TICKERS": max_tickers or 0
+                    "UNIVERSE_SIZE": max_tickers or 0
                 }
             )
 
