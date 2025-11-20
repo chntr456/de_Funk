@@ -94,6 +94,9 @@ class AllModelBuilder:
         # Track ingestion state (avoid re-ingesting same data source)
         self.ingestion_completed = set()
 
+        # Ingestion options
+        self.use_bulk_listing = False  # Set by build_all_models()
+
         # Overall results
         self.results = {
             'start_time': None,
@@ -182,7 +185,8 @@ class AllModelBuilder:
         skip_ingestion: bool = False,
         parallel: bool = False,
         max_workers: int = 3,
-        dry_run: bool = False
+        dry_run: bool = False,
+        use_bulk_listing: bool = False
     ) -> bool:
         """
         Build all models with ingestion and Silver layer creation.
@@ -197,11 +201,13 @@ class AllModelBuilder:
             parallel: Build models in parallel
             max_workers: Max parallel workers
             dry_run: Show what would be done without executing
+            use_bulk_listing: Use Alpha Vantage LISTING_STATUS bulk endpoint (1 call, but missing CIK)
 
         Returns:
             True if all builds succeed
         """
         self.results['start_time'] = datetime.now()
+        self.use_bulk_listing = use_bulk_listing  # Store for use in ingestion methods
 
         # Determine date range for market data
         if days:
@@ -526,11 +532,15 @@ class AllModelBuilder:
         )
 
         # Run full ingestion using run_all method
+        # Note: Premium tier supports concurrent requests (75 calls/min)
+        # use_bulk_listing: If True, uses LISTING_STATUS (1 call) but missing CIK/fundamentals
+        #                   If False, uses OVERVIEW per ticker (gets CIK - needed for company model)
         tickers = ingestor.run_all(
             date_from=date_from,
             date_to=date_to,
             max_tickers=max_tickers,
-            use_concurrent=False  # Sequential for free tier
+            use_concurrent=True,  # Enable concurrent for premium tier (much faster!)
+            use_bulk_listing=self.use_bulk_listing
         )
 
         logger.info(f"  ✓ Ingested data for {len(tickers)} tickers")
@@ -810,6 +820,12 @@ def main():
         help='Show what would be done without executing'
     )
 
+    parser.add_argument(
+        '--use-bulk-listing',
+        action='store_true',
+        help='Use Alpha Vantage LISTING_STATUS bulk endpoint (1 API call for all tickers, but missing CIK/fundamentals)'
+    )
+
     args = parser.parse_args()
 
     try:
@@ -826,7 +842,8 @@ def main():
             skip_ingestion=args.skip_ingestion,
             parallel=args.parallel,
             max_workers=args.max_workers,
-            dry_run=args.dry_run
+            dry_run=args.dry_run,
+            use_bulk_listing=args.use_bulk_listing
         )
 
         # Save results if requested
