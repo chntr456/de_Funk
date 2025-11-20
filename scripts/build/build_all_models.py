@@ -494,8 +494,13 @@ class AllModelBuilder:
                 logger.info(f"  {model_name} is derived, no ingestion needed")
                 return True
             elif model_name in self.CORE_MODELS:
-                logger.info(f"  {model_name} uses reference data, no ingestion needed")
-                return True
+                if 'calendar_seed' in self.ingestion_completed:
+                    logger.info(f"  Calendar seed already generated, skipping...")
+                    return True
+                success = self._generate_calendar_seed()
+                if success:
+                    self.ingestion_completed.add('calendar_seed')
+                return success
             else:
                 logger.warning(f"  Unknown model type: {model_name}, skipping ingestion")
                 return True
@@ -544,6 +549,48 @@ class AllModelBuilder:
         # This would use datapipelines.providers.chicago.chicago_ingestor
         logger.info("  Chicago ingestion not yet implemented, skipping...")
         return True
+
+    def _generate_calendar_seed(self) -> bool:
+        """Generate calendar seed data for core model."""
+        from models.implemented.core.builders.calendar_builder import build_calendar_table
+
+        # Initialize context if needed
+        self._init_context()
+
+        try:
+            # Load core model config to get calendar generation settings
+            core_cfg = self.loader.load_model_config('core')
+            calendar_config = core_cfg.get('calendar_config', {})
+
+            # Get calendar generation parameters
+            start_date = calendar_config.get('start_date', '2000-01-01')
+            end_date = calendar_config.get('end_date', '2050-12-31')
+            fiscal_year_start_month = calendar_config.get('fiscal_year_start_month', 1)
+
+            # Determine output path
+            bronze_root = Path(self.ctx.storage.get('bronze_root', 'storage/bronze'))
+            calendar_seed_path = bronze_root / 'calendar_seed'
+
+            logger.info(f"  Generating calendar seed data...")
+            logger.info(f"    Date range: {start_date} to {end_date}")
+            logger.info(f"    Fiscal year starts: Month {fiscal_year_start_month}")
+            logger.info(f"    Output path: {calendar_seed_path}")
+
+            # Build calendar table
+            build_calendar_table(
+                spark=self.ctx.spark,
+                output_path=str(calendar_seed_path),
+                start_date=start_date,
+                end_date=end_date,
+                fiscal_year_start_month=fiscal_year_start_month
+            )
+
+            logger.info(f"  ✓ Calendar seed data generated successfully")
+            return True
+
+        except Exception as e:
+            logger.error(f"  ✗ Calendar seed generation failed: {e}", exc_info=True)
+            return False
 
     def _build_silver_layer(
         self,
