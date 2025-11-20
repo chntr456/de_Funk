@@ -202,21 +202,33 @@ class AlphaVantageIngestor(Ingestor):
 
         # Check for API errors before normalizing
         error_count = 0
-        for batch in raw_batches:
+        error_details = []  # Track detailed error info
+
+        for i, batch in enumerate(raw_batches):
             for item in batch:
                 if isinstance(item, dict):
                     # Alpha Vantage returns errors as {"Information": "...error message..."}
                     # or {"Error Message": "...error message..."}
                     # or {"Note": "...rate limit message..."}
+
+                    # Get ticker for this batch (if available)
+                    ticker = tickers[i] if i < len(tickers) else "UNKNOWN"
+
                     if "Information" in item and len(item) == 1:
                         error_count += 1
-                        print(f"⚠ API Info: {item['Information']}")
+                        error_msg = item['Information']
+                        print(f"⚠ API Info for {ticker}: {error_msg}")
+                        error_details.append({"ticker": ticker, "type": "INFO", "message": error_msg})
                     elif "Error Message" in item:
                         error_count += 1
-                        print(f"✗ API Error: {item['Error Message']}")
+                        error_msg = item['Error Message']
+                        print(f"✗ API Error for {ticker}: {error_msg}")
+                        error_details.append({"ticker": ticker, "type": "ERROR", "message": error_msg})
                     elif "Note" in item:
                         error_count += 1
-                        print(f"⚠ API Note: {item['Note']}")
+                        error_msg = item['Note']
+                        print(f"⚠ API Note for {ticker}: {error_msg}")
+                        error_details.append({"ticker": ticker, "type": "NOTE", "message": error_msg})
 
         if error_count > 0:
             print(f"\n⚠ Warning: {error_count} API responses contained errors or info messages")
@@ -224,6 +236,14 @@ class AlphaVantageIngestor(Ingestor):
             print("  - Missing or invalid API key (set ALPHA_VANTAGE_API_KEYS environment variable)")
             print("  - Rate limit exceeded (free tier: 5 calls/minute, 500 calls/day)")
             print("  - Invalid ticker symbols")
+
+            # Show detailed summary
+            print(f"\nFailed tickers ({len(error_details)}):")
+            for detail in error_details[:10]:  # Show first 10
+                print(f"  {detail['ticker']}: [{detail['type']}] {detail['message'][:80]}")
+            if len(error_details) > 10:
+                print(f"  ... and {len(error_details) - 10} more")
+
             if error_count == len([item for batch in raw_batches for item in batch]):
                 raise ValueError(f"All {error_count} API calls failed. Check API key and configuration.")
 
@@ -284,6 +304,47 @@ class AlphaVantageIngestor(Ingestor):
         else:
             print(f"Fetching data sequentially (rate limit: {self.registry.rate_limit} calls/sec)")
             raw_batches = self._fetch_calls(calls, response_key="Time Series (Daily)")
+
+        # Check for API errors before normalizing
+        error_count = 0
+        error_details = []  # Track detailed error info
+
+        for i, batch in enumerate(raw_batches):
+            # For prices, batch might be None if response key not found (error case)
+            if batch is None or len(batch) == 0:
+                ticker = tickers[i] if i < len(tickers) else "UNKNOWN"
+                error_count += 1
+                print(f"⚠ No price data returned for {ticker}")
+                error_details.append({"ticker": ticker, "type": "NO_DATA", "message": "No price data in response"})
+                continue
+
+            for item in batch:
+                if isinstance(item, dict):
+                    ticker = tickers[i] if i < len(tickers) else "UNKNOWN"
+
+                    if "Information" in item and len(item) == 1:
+                        error_count += 1
+                        error_msg = item['Information']
+                        print(f"⚠ API Info for {ticker}: {error_msg}")
+                        error_details.append({"ticker": ticker, "type": "INFO", "message": error_msg})
+                    elif "Error Message" in item:
+                        error_count += 1
+                        error_msg = item['Error Message']
+                        print(f"✗ API Error for {ticker}: {error_msg}")
+                        error_details.append({"ticker": ticker, "type": "ERROR", "message": error_msg})
+                    elif "Note" in item:
+                        error_count += 1
+                        error_msg = item['Note']
+                        print(f"⚠ API Note for {ticker}: {error_msg}")
+                        error_details.append({"ticker": ticker, "type": "NOTE", "message": error_msg})
+
+        if error_count > 0:
+            print(f"\n⚠ Warning: {error_count} price API responses contained errors or missing data")
+            print(f"\nFailed tickers ({len(error_details)}):")
+            for detail in error_details[:10]:  # Show first 10
+                print(f"  {detail['ticker']}: [{detail['type']}] {detail['message'][:80]}")
+            if len(error_details) > 10:
+                print(f"  ... and {len(error_details) - 10} more")
 
         # Normalize to DataFrame (postprocess is called internally by normalize)
         df = facet.normalize(raw_batches)
