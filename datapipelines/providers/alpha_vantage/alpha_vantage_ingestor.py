@@ -426,10 +426,12 @@ class AlphaVantageIngestor(Ingestor):
         Returns:
             List of ingested tickers
         """
-        # Option 1: Bulk listing (most efficient for getting ALL tickers)
+        # Option 1: Bulk listing (discover ALL tickers efficiently)
         if use_bulk_listing:
-            print("Using BULK LISTING mode (LISTING_STATUS endpoint - ONE API call)")
+            print("Using BULK LISTING mode (LISTING_STATUS endpoint)")
             print("=" * 80)
+            print("Step 1a: Fetching ALL ticker symbols from LISTING_STATUS (1 API call)...")
+            print("-" * 80)
             _, all_tickers = self.ingest_bulk_listing()
 
             # Filter to requested tickers if provided
@@ -442,7 +444,8 @@ class AlphaVantageIngestor(Ingestor):
             if max_tickers:
                 tickers = tickers[:max_tickers]
 
-            print(f"\nFiltered to {len(tickers)} tickers for price ingestion")
+            print(f"\n✓ Discovered {len(tickers)} tickers for full ingestion")
+            print()
 
         # Option 2: Individual ticker mode (default)
         else:
@@ -454,16 +457,18 @@ class AlphaVantageIngestor(Ingestor):
             if max_tickers:
                 tickers = tickers[:max_tickers]
 
-            print(f"Running full ingestion for {len(tickers)} tickers...")
-            print(f"Date range: {date_from} to {date_to}")
-            print(f"Concurrent mode: {use_concurrent}")
-            print()
+        # Common ingestion flow (runs for BOTH modes)
+        print(f"Running full ingestion for {len(tickers)} tickers...")
+        print(f"Date range: {date_from} to {date_to}")
+        print(f"Concurrent mode: {use_concurrent}")
+        print()
 
-            # Step 1: Ingest reference data (detailed fundamentals per ticker)
-            print("Step 1: Ingesting reference data (OVERVIEW endpoint)...")
-            print("-" * 80)
-            self.ingest_reference_data(tickers=tickers, use_concurrent=use_concurrent)
-            print()
+        # Step 1: Ingest reference data (detailed fundamentals per ticker)
+        # This runs for BOTH modes - we need CIK + fundamentals for company model
+        print("Step 1{'b' if use_bulk_listing else ''}: Ingesting reference data (OVERVIEW endpoint)...")
+        print("-" * 80)
+        self.ingest_reference_data(tickers=tickers, use_concurrent=use_concurrent)
+        print()
 
         # Step 2: Ingest prices (same for both modes)
         print("Step 2: Ingesting prices...")

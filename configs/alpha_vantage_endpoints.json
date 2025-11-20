@@ -7,8 +7,8 @@
     "core": "https://www.alphavantage.co/query"
   },
   "headers": {},
-  "rate_limit_per_sec": 0.08333,
-  "_rate_limit_comment": "Free tier: 5 calls/minute (0.08333/sec). Premium tiers have higher limits.",
+  "rate_limit_per_sec": 1.25,
+  "_rate_limit_comment": "Premium tier: 75 calls/minute (1.25/sec). Free tier: 5 calls/minute (0.08333/sec).",
   "endpoints": {
     "company_overview": {
       "base": "core",
