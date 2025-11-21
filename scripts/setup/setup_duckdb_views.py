@@ -3,7 +3,7 @@
 Setup DuckDB Views for v2.0 Models
 
 Creates a persistent DuckDB database with views pointing to Silver layer Parquet files.
-This enables fast analytical queries without duplicating data.
+This is OPTIONAL for performance optimization - base measures work without it via schema aliases.
 
 Usage:
     # Create fresh database with all views
@@ -21,9 +21,17 @@ Usage:
 Features:
 - Creates views for ALL v2.0 models (core, company, stocks, options, etfs, futures)
 - Points views to Silver Parquet files (zero data duplication)
+- Creates alias views (stocks.fact_prices → stocks.fact_stock_prices) for DuckDB caching
+- Backend-agnostic base measures work via schema aliases (ModelConfigLoader)
+- This script provides performance optimization by pre-creating database views
 - Handles missing tables gracefully (skips if not built yet)
 - Validates views after creation
 - Shows table statistics
+
+Note:
+- Alias views here are DuckDB-specific performance optimization
+- Functional aliasing (backend-agnostic) is handled by schema-level aliases
+- Both Spark and DuckDB backends work via schema aliases
 """
 
 import argparse

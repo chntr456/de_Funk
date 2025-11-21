@@ -129,8 +129,100 @@ class ModelConfigLoader:
                     merged['measures'] = {}
                 merged['measures']['_python_module'] = f'{model_name}/measures.py'
 
+        # Auto-generate schema aliases for base measure compatibility (backend-agnostic)
+        merged = self._add_schema_aliases(merged)
+
         self._cache[model_name] = merged
         return merged
+
+    def _add_schema_aliases(self, config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Auto-generate schema aliases for inherited base measures.
+
+        For models inheriting from _base.securities, creates alias entries in schema
+        so base measures (fact_prices.close, dim_security.ticker) work with both
+        Spark and DuckDB backends.
+
+        This is backend-agnostic: both adapters use schema paths to resolve tables.
+
+        Args:
+            config: Model configuration
+
+        Returns:
+            Configuration with schema aliases added
+        """
+        # Only add aliases for securities-based models
+        if not config.get('inherits_from', '').endswith('securities'):
+            return config
+
+        schema = config.get('schema', {})
+        if not schema:
+            return config
+
+        dimensions = schema.get('dimensions', {})
+        facts = schema.get('facts', {})
+
+        # Map generic names to specific names for securities models
+        alias_map = {
+            # Dimension aliases
+            'dim_security': None,  # Will be set based on what exists
+            # Fact aliases
+            'fact_prices': None,
+        }
+
+        # Auto-detect specific table names (skip base templates starting with _)
+        for dim_name in dimensions.keys():
+            if (dim_name.startswith('dim_') and
+                not dim_name.startswith('_') and
+                dim_name not in ['dim_security', 'dim_exchange']):
+                # Found model-specific dimension (dim_stock, dim_option, etc.)
+                alias_map['dim_security'] = dim_name
+                break
+
+        for fact_name in facts.keys():
+            if ('price' in fact_name.lower() and
+                not fact_name.startswith('_') and
+                fact_name != 'fact_prices'):
+                # Found model-specific price fact (fact_stock_prices, etc.)
+                alias_map['fact_prices'] = fact_name
+                break
+
+        # Create alias entries in schema
+        for alias_name, target_name in alias_map.items():
+            if not target_name:
+                continue  # Skip if no target found
+
+            if alias_name.startswith('dim_'):
+                # Dimension alias
+                if target_name in dimensions and alias_name not in dimensions:
+                    # Copy target definition as alias, including path
+                    target_def = dimensions[target_name]
+                    dimensions[alias_name] = {
+                        **target_def,
+                        'description': f"Alias for {target_name} (base measure compatibility)",
+                        'is_alias': True,
+                        'alias_for': target_name,
+                        # Ensure path points to same location (will be auto-generated if missing)
+                        'path': target_def.get('path', f'dims/{target_name}')
+                    }
+                    logger.debug(f"Created schema alias: {alias_name} → {target_name}")
+
+            elif alias_name.startswith('fact_'):
+                # Fact alias
+                if target_name in facts and alias_name not in facts:
+                    # Copy target definition as alias, including path
+                    target_def = facts[target_name]
+                    facts[alias_name] = {
+                        **target_def,
+                        'description': f"Alias for {target_name} (base measure compatibility)",
+                        'is_alias': True,
+                        'alias_for': target_name,
+                        # Ensure path points to same location (will be auto-generated if missing)
+                        'path': target_def.get('path', f'facts/{target_name}')
+                    }
+                    logger.debug(f"Created schema alias: {alias_name} → {target_name}")
+
+        return config
 
     def _load_base_config(self, base_path: str) -> Dict[str, Any]:
         """
