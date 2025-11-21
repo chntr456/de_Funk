@@ -317,15 +317,17 @@ class ModelConfigLoader:
             dir_parts = parts[:-1]
 
             # Try to infer file type from key pattern
-            if key.startswith('_dim'):
+            # IMPORTANT: Check _base suffix FIRST (before _dim/_fact prefixes)
+            # because graph node templates like _dim_security_base need to load from graph.yaml
+            if key.endswith('_base'):
+                file_name = 'graph.yaml'
+                section = 'nodes'
+            elif key.startswith('_dim'):
                 file_name = 'schema.yaml'
                 section = 'dimensions'
             elif key.startswith('_fact'):
                 file_name = 'schema.yaml'
                 section = 'facts'
-            elif key.endswith('_base'):
-                file_name = 'graph.yaml'
-                section = 'nodes'
             else:
                 # Default to schema
                 file_name = 'schema.yaml'
