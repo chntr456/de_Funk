@@ -7,7 +7,7 @@ nodes:
     from: bronze.ref_ticker  # TEMP: Using v1.x table until v2.0 bronze data is ingested
     filters:
       # - "asset_type = 'stocks'"  # DISABLED: v1.x data doesn't have asset_type
-      - "active = true"  # v1.x uses 'active' not 'is_active'
+      # - "active = true"  # DISABLED: column doesn't exist in bronze data
     select:
       # Base fields (only those available in v1.x ref_ticker)
       ticker: ticker
@@ -25,7 +25,7 @@ nodes:
     derive:
       # company_id: "CONCAT('COMPANY_', cik)"  # DISABLED: cik not available
       asset_type: "'stocks'"  # Hardcode since all ref_ticker are stocks
-      is_active: "active"  # Map v1.x column
+      is_active: "true"  # Default to true since we don't have this column
     unique_key: [ticker]
     tags: [dim, stock]
 
