@@ -22,20 +22,29 @@ Latest stock prices with linked company information via CIK.
 $exhibits${
   type: data_table
   source: stocks.fact_stock_prices
-  title: "Stock Overview with Company Data"
-  description: "Latest prices with company fundamentals"
+  title: "Stock Overview - Recent Prices"
+  description: "Latest prices for top stocks (last 30 days)"
+  filters:
+    ticker:
+      operator: in
+      value: [AAPL, MSFT, GOOGL, AMZN, NVDA, TSLA, META, NFLX, ORCL, INTC]
+  limit: 100
 }
 
 ---
 
 ## Price Trends
 
-Historical closing prices for tech stocks.
+Historical closing prices for major tech stocks.
 
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  title: "Daily Closing Prices"
+  title: "Daily Closing Prices - Top Tech Stocks"
+  filters:
+    ticker:
+      operator: in
+      value: [AAPL, MSFT, GOOGL, AMZN, NVDA]
   x_axis:
     dimension: trade_date
     label: "Date"
@@ -54,8 +63,12 @@ Relative Strength Index showing overbought/oversold conditions.
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_technicals
-  title: "RSI (14-day)"
+  title: "RSI (14-day) - Top Tech Stocks"
   description: "Relative Strength Index - values above 70 indicate overbought, below 30 indicate oversold"
+  filters:
+    ticker:
+      operator: in
+      value: [AAPL, MSFT, GOOGL, AMZN, NVDA]
   x_axis:
     dimension: trade_date
     label: "Date"
@@ -76,6 +89,10 @@ $exhibits${
   source: stocks.fact_stock_technicals
   title: "Moving Averages (AAPL)"
   description: "Simple moving averages showing trend direction"
+  filters:
+    ticker:
+      operator: eq
+      value: AAPL
   x_axis:
     dimension: trade_date
     label: "Date"
@@ -97,6 +114,10 @@ $exhibits${
   source: stocks.fact_stock_technicals
   title: "Bollinger Bands (AAPL)"
   description: "Price with 2-standard-deviation volatility bands"
+  filters:
+    ticker:
+      operator: eq
+      value: AAPL
   x_axis:
     dimension: trade_date
     label: "Date"
@@ -111,13 +132,17 @@ $exhibits${
 
 ## Volume Analysis
 
-Trading volume with volume ratio (vs 20-day average).
+Trading volume with volume ratio (vs 20-day average) for top tech stocks.
 
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_technicals
-  title: "Trading Volume Analysis"
+  title: "Trading Volume Analysis - Top Tech Stocks"
   description: "Daily volume and 20-day average comparison"
+  filters:
+    ticker:
+      operator: in
+      value: [AAPL, MSFT, GOOGL, AMZN, NVDA]
   x_axis:
     dimension: trade_date
     label: "Date"
