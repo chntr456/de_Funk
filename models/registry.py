@@ -78,9 +78,16 @@ class ModelConfig:
         """Load schema definitions."""
         # Load dimensions
         for dim_name, dim_config in schema.get('dimensions', {}).items():
+            # Skip base templates (names starting with _)
+            if dim_name.startswith('_'):
+                continue
+
+            # Auto-generate path if not provided (v2.0 compatibility)
+            path = dim_config.get('path', f'dims/{dim_name}')
+
             self._dimensions[dim_name] = TableConfig(
                 name=dim_name,
-                path=dim_config['path'],
+                path=path,
                 description=dim_config.get('description', ''),
                 columns=dim_config.get('columns', {}),
                 primary_key=dim_config.get('primary_key'),
@@ -89,9 +96,16 @@ class ModelConfig:
 
         # Load facts
         for fact_name, fact_config in schema.get('facts', {}).items():
+            # Skip base templates (names starting with _)
+            if fact_name.startswith('_'):
+                continue
+
+            # Auto-generate path if not provided (v2.0 compatibility)
+            path = fact_config.get('path', f'facts/{fact_name}')
+
             self._facts[fact_name] = TableConfig(
                 name=fact_name,
-                path=fact_config['path'],
+                path=path,
                 description=fact_config.get('description', ''),
                 columns=fact_config.get('columns', {}),
                 partitions=fact_config.get('partitions'),
