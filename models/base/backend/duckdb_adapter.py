@@ -52,6 +52,18 @@ class DuckDBAdapter(BackendAdapter):
         # Execute query and fetch as Pandas DataFrame
         result_df = self.connection.execute(sql).fetch_df()
 
+        # Ensure data types are Streamlit-compatible
+        # Convert any problematic object columns to strings
+        for col in result_df.columns:
+            if result_df[col].dtype == 'object':
+                # Check if column contains non-string objects
+                if len(result_df) > 0:
+                    sample = result_df[col].iloc[0]
+                    # If it's not a string/None/number, convert to string
+                    if sample is not None and not isinstance(sample, (str, int, float, bool)):
+                        logger.warning(f"Converting column '{col}' to string (type: {type(sample).__name__})")
+                        result_df[col] = result_df[col].astype(str)
+
         elapsed_ms = (time.time() - start) * 1000
 
         return QueryResult(
