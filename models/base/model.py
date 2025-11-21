@@ -448,7 +448,6 @@ class BaseModel:
         else:
             # DuckDB or other connection types
             path = self.storage_router.bronze_path(table_name)
-            print(f"DEBUG: Loading bronze table '{table_name}' from path: {path}")
             return self.connection.read_parquet(path)
 
     def _apply_derive(self, df: DataFrame, col_name: str, expr: str, node_id: str) -> DataFrame:

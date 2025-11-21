@@ -791,12 +791,6 @@ class NotebookManager:
                 # Get automatic mappings from UniversalSession based on graph edges
                 column_mappings = self.session.get_filter_column_mappings(model_name, table_name)
 
-                # DEBUG
-                print(f"DEBUG: Exhibit source: {exhibit.source}")
-                print(f"DEBUG: Model: {model_name}, Table: {table_name}")
-                print(f"DEBUG: Column mappings: {column_mappings}")
-                print(f"DEBUG: Filters before mapping: {filters}")
-
                 if column_mappings:
                     # Remap filter columns
                     mapped_filters = {}
@@ -809,12 +803,9 @@ class NotebookManager:
                             # Keep original column name
                             mapped_filters[filter_column] = filter_value
                     filters = mapped_filters
-                    print(f"DEBUG: Filters after mapping: {filters}")
-            except Exception as e:
+            except Exception:
                 # If mapping fails, continue with original filters
-                print(f"DEBUG: Mapping failed with error: {e}")
-                import traceback
-                traceback.print_exc()
+                pass
 
         return filters
 
