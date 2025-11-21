@@ -14,6 +14,7 @@ The YAML config is the source of truth for the model structure.
 from abc import ABC
 from typing import Dict, Any, Optional, List, Tuple, Union
 from dataclasses import dataclass
+from pathlib import Path
 import logging
 
 logger = logging.getLogger(__name__)
@@ -35,15 +36,22 @@ except ImportError:
     @dataclass(frozen=True)
     class StorageRouter:
         storage_cfg: Dict[str, Any]
+        repo_root: Optional[Path] = None
 
         def bronze_path(self, logical_table: str) -> str:
             root = self.storage_cfg["roots"]["bronze"].rstrip("/")
             rel = self.storage_cfg["tables"][logical_table]["rel"]
-            return f"{root}/{rel}"
+            path = f"{root}/{rel}"
+            if self.repo_root:
+                return str(self.repo_root / path)
+            return path
 
         def silver_path(self, logical_rel: str) -> str:
             root = self.storage_cfg["roots"]["silver"].rstrip("/")
-            return f"{root}/{logical_rel}"
+            path = f"{root}/{logical_rel}"
+            if self.repo_root:
+                return str(self.repo_root / path)
+            return path
 
     BronzeTable = None  # Not needed for DuckDB
 
@@ -64,7 +72,7 @@ class BaseModel:
       schema:         # Table metadata (optional)
     """
 
-    def __init__(self, connection, storage_cfg: Dict, model_cfg: Dict, params: Dict = None):
+    def __init__(self, connection, storage_cfg: Dict, model_cfg: Dict, params: Dict = None, repo_root: Optional[Path] = None):
         """
         Initialize a model.
 
@@ -73,12 +81,14 @@ class BaseModel:
             storage_cfg: Storage configuration (roots, table mappings)
             model_cfg: Model configuration from YAML
             params: Runtime parameters for customization
+            repo_root: Repository root for absolute path resolution (optional)
         """
         self.connection = connection
         self.storage_cfg = storage_cfg
         self.model_cfg = model_cfg
         self.params = params or {}
         self.model_name = model_cfg.get('model', 'unknown')
+        self.repo_root = repo_root
 
         # Session reference for cross-model access (injected by UniversalSession)
         self.session = None
@@ -88,8 +98,8 @@ class BaseModel:
         self._facts: Optional[Dict[str, DataFrame]] = None
         self._is_built = False
 
-        # Storage router for path resolution
-        self.storage_router = StorageRouter(self.storage_cfg)
+        # Storage router for path resolution (with repo_root for absolute paths)
+        self.storage_router = StorageRouter(self.storage_cfg, repo_root=repo_root)
 
         # Detect backend type
         self._backend = self._detect_backend()

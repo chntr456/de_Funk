@@ -7,15 +7,26 @@ from pyspark.sql import DataFrame, SparkSession
 @dataclass(frozen=True)
 class StorageRouter:
     storage_cfg: Dict[str, Any]
+    repo_root: Optional[Path] = None  # Optional repo root for absolute paths
 
     def bronze_path(self, logical_table: str) -> str:
         root = self.storage_cfg["roots"]["bronze"].rstrip("/")
         rel = self.storage_cfg["tables"][logical_table]["rel"]
-        return f"{root}/{rel}"
+        path = f"{root}/{rel}"
+
+        # Convert to absolute path if repo_root provided
+        if self.repo_root:
+            return str(self.repo_root / path)
+        return path
 
     def silver_path(self, logical_rel: str) -> str:
         root = self.storage_cfg["roots"]["silver"].rstrip("/")
-        return f"{root}/{logical_rel}"
+        path = f"{root}/{logical_rel}"
+
+        # Convert to absolute path if repo_root provided
+        if self.repo_root:
+            return str(self.repo_root / path)
+        return path
 
 class BronzeTable:
     def __init__(self, spark: SparkSession, router: StorageRouter, logical_table: str):

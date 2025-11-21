@@ -218,7 +218,8 @@ class UniversalSession:
             connection=self.connection,
             storage_cfg=self.storage_cfg,
             model_cfg=model_config,
-            params={}
+            params={},
+            repo_root=self.repo_root  # Pass repo_root for absolute paths
         )
 
         # Inject session for cross-model access
