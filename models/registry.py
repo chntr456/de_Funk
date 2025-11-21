@@ -113,20 +113,56 @@ class ModelConfig:
             )
 
     def _load_measures(self, measures: Dict):
-        """Load measure definitions."""
-        for measure_name, measure_config in measures.items():
-            self._measures[measure_name] = MeasureConfig(
-                name=measure_name,
-                description=measure_config.get('description', ''),
-                source=measure_config['source'],
-                data_type=measure_config.get('data_type', 'double'),
-                aggregation=measure_config.get('aggregation'),  # Optional for weighted aggregates
-                type=measure_config.get('type'),  # Type of measure
-                weighting_method=measure_config.get('weighting_method'),  # For weighted aggregates
-                group_by=measure_config.get('group_by'),  # For weighted aggregates
-                format=measure_config.get('format'),
-                tags=measure_config.get('tags', [])
-            )
+        """
+        Load measure definitions.
+
+        Supports both v1.x flat structure and v2.0 nested structure:
+        - v1.x: measures = {measure_name: {source, aggregation, ...}}
+        - v2.0: measures = {simple_measures: {...}, computed_measures: {...}, python_measures: {...}}
+        """
+        # Check if this is v2.0 nested structure
+        if 'simple_measures' in measures or 'computed_measures' in measures or 'python_measures' in measures:
+            # v2.0 nested structure - flatten all measure types
+            all_measures = {}
+
+            # Merge simple, computed, and python measures
+            for measure_type in ['simple_measures', 'computed_measures', 'python_measures']:
+                if measure_type in measures and isinstance(measures[measure_type], dict):
+                    all_measures.update(measures[measure_type])
+
+            # Load flattened measures
+            for measure_name, measure_config in all_measures.items():
+                self._measures[measure_name] = MeasureConfig(
+                    name=measure_name,
+                    description=measure_config.get('description', ''),
+                    source=measure_config.get('source', ''),  # Python measures may not have source
+                    data_type=measure_config.get('data_type', 'double'),
+                    aggregation=measure_config.get('aggregation'),
+                    type=measure_config.get('type'),
+                    weighting_method=measure_config.get('weighting_method'),
+                    group_by=measure_config.get('group_by'),
+                    format=measure_config.get('format'),
+                    tags=measure_config.get('tags', [])
+                )
+        else:
+            # v1.x flat structure - load directly
+            for measure_name, measure_config in measures.items():
+                # Skip internal keys
+                if measure_name.startswith('_'):
+                    continue
+
+                self._measures[measure_name] = MeasureConfig(
+                    name=measure_name,
+                    description=measure_config.get('description', ''),
+                    source=measure_config.get('source', ''),
+                    data_type=measure_config.get('data_type', 'double'),
+                    aggregation=measure_config.get('aggregation'),
+                    type=measure_config.get('type'),
+                    weighting_method=measure_config.get('weighting_method'),
+                    group_by=measure_config.get('group_by'),
+                    format=measure_config.get('format'),
+                    tags=measure_config.get('tags', [])
+                )
 
     @property
     def storage_root(self) -> str:

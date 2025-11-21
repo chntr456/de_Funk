@@ -259,40 +259,6 @@ class BaseModel:
             col_expressions = [f"{expr} AS {out_name}" for out_name, expr in select_config.items()]
             return df.project(','.join(col_expressions))
 
-    def _apply_filters(self, df: DataFrame, filters: List[str], node_id: str) -> DataFrame:
-        """
-        Backend-agnostic filter application.
-
-        Filters are SQL WHERE clause expressions (e.g., "asset_type = 'stocks'").
-
-        Args:
-            df: Input DataFrame (Spark or DuckDB)
-            filters: List of filter expressions (strings)
-            node_id: Node identifier for logging
-
-        Returns:
-            Filtered DataFrame
-        """
-        if not filters:
-            return df
-
-        print(f"⚙️  Applying {len(filters)} filter(s) to {node_id}")
-
-        if self.backend == 'spark':
-            if not PYSPARK_AVAILABLE:
-                raise ImportError("PySpark not available but Spark backend detected")
-            # Apply each filter as SQL expression
-            for filter_expr in filters:
-                df = df.filter(filter_expr)
-                logger.debug(f"  Applied filter: {filter_expr}")
-        else:
-            # DuckDB - use filter() method with SQL expressions
-            for filter_expr in filters:
-                df = df.filter(filter_expr)
-                logger.debug(f"  Applied filter: {filter_expr}")
-
-        return df
-
     # ============================================================
     # GENERIC GRAPH BUILDING (from company_model.py)
     # ============================================================
@@ -375,10 +341,6 @@ class BaseModel:
                         f"Ensure nodes are defined in dependency order in graph.nodes"
                     )
                 df = nodes[parent_node]
-
-            # Apply filters (before select/derive)
-            if 'filters' in node_config and node_config['filters']:
-                df = self._apply_filters(df, node_config['filters'], node_id)
 
             # Apply select (column selection/aliasing)
             if 'select' in node_config and node_config['select']:

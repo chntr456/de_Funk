@@ -153,6 +153,8 @@ class MeasureExecutor:
         """
         Get measure configuration from model.
 
+        Supports both v1.x flat structure and v2.0 nested structure.
+
         Args:
             measure_name: Name of measure
 
@@ -164,27 +166,62 @@ class MeasureExecutor:
         """
         measures = self.model.model_cfg.get('measures', {})
 
-        if measure_name not in measures:
-            available = list(measures.keys())
+        # Check if v2.0 nested structure
+        if 'simple_measures' in measures or 'computed_measures' in measures or 'python_measures' in measures:
+            # v2.0 nested - search across all measure types
+            for measure_type in ['simple_measures', 'computed_measures', 'python_measures']:
+                if measure_type in measures and isinstance(measures[measure_type], dict):
+                    if measure_name in measures[measure_type]:
+                        measure_config = measures[measure_type][measure_name].copy()
+                        measure_config['name'] = measure_name
+                        return measure_config
+
+            # Not found in any measure type
+            all_measures = {}
+            for measure_type in ['simple_measures', 'computed_measures', 'python_measures']:
+                if measure_type in measures and isinstance(measures[measure_type], dict):
+                    all_measures.update(measures[measure_type])
+
+            available = list(all_measures.keys())
             raise ValueError(
                 f"Measure '{measure_name}' not defined in model '{self.model.model_name}'. "
                 f"Available measures: {available}"
             )
+        else:
+            # v1.x flat structure
+            if measure_name not in measures:
+                available = list(measures.keys())
+                raise ValueError(
+                    f"Measure '{measure_name}' not defined in model '{self.model.model_name}'. "
+                    f"Available measures: {available}"
+                )
 
-        # Get config and add name field
-        measure_config = measures[measure_name].copy()
-        measure_config['name'] = measure_name
-
-        return measure_config
+            measure_config = measures[measure_name].copy()
+            measure_config['name'] = measure_name
+            return measure_config
 
     def list_measures(self) -> Dict[str, Dict[str, Any]]:
         """
         List all available measures in model.
 
+        Returns a flattened dictionary for both v1.x and v2.0 structures.
+
         Returns:
             Dictionary of measure name -> measure config
         """
-        return self.model.model_cfg.get('measures', {})
+        measures = self.model.model_cfg.get('measures', {})
+
+        # Check if v2.0 nested structure
+        if 'simple_measures' in measures or 'computed_measures' in measures or 'python_measures' in measures:
+            # v2.0 nested - flatten all measure types
+            all_measures = {}
+            for measure_type in ['simple_measures', 'computed_measures', 'python_measures']:
+                if measure_type in measures and isinstance(measures[measure_type], dict):
+                    all_measures.update(measures[measure_type])
+            return all_measures
+        else:
+            # v1.x flat structure
+            return measures
 
     def get_measure_info(self, measure_name: str) -> Dict[str, Any]:
         """
