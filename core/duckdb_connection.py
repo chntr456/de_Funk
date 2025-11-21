@@ -223,7 +223,8 @@ class DuckDBConnection(DataConnection):
                 # Read all parquet files in directory
                 pattern = f"{path}/**/*.parquet"
                 # Use from_parquet to get a relation object
-                return self.conn.from_parquet(pattern, union_by_name=True)
+                # hive_partitioning=True enables reading partition columns (e.g., asset_type=stocks)
+                return self.conn.from_parquet(pattern, union_by_name=True, hive_partitioning=True)
             else:
                 # Read single file
                 return self.conn.from_parquet(path)
