@@ -488,7 +488,7 @@ class ConnectionFactory:
             raise ValueError(f"Unsupported connection type: {connection_type}")
 
 
-# Convenience function for getting a Spark connection
+# Convenience functions for getting connections
 def get_spark_connection(spark_session) -> SparkConnection:
     """
     Get a Spark connection.
@@ -500,3 +500,35 @@ def get_spark_connection(spark_session) -> SparkConnection:
         SparkConnection instance
     """
     return ConnectionFactory.create("spark", spark_session=spark_session)
+
+
+def get_duckdb_connection(db_path: str = None, auto_init_views: bool = True, **kwargs):
+    """
+    Get a DuckDB connection with sensible defaults.
+
+    Args:
+        db_path: Path to DuckDB database (default: storage/duckdb/analytics.db)
+        auto_init_views: Whether to auto-initialize v2.0 model views (default: True)
+        **kwargs: Additional arguments passed to DuckDBConnection
+
+    Returns:
+        DuckDBConnection instance
+
+    Example:
+        # Production connection with auto-initialized views
+        conn = get_duckdb_connection()
+
+        # In-memory for tests
+        conn = get_duckdb_connection(db_path=":memory:")
+
+        # Custom path
+        conn = get_duckdb_connection(db_path="path/to/custom.db")
+    """
+    if db_path is None:
+        # Default to analytics database
+        from pathlib import Path
+        from utils.repo import get_repo_root
+        repo_root = get_repo_root()
+        db_path = str(repo_root / "storage" / "duckdb" / "analytics.db")
+
+    return ConnectionFactory.create("duckdb", db_path=db_path, auto_init_views=auto_init_views, **kwargs)

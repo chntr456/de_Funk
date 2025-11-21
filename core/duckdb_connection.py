@@ -47,7 +47,7 @@ class DuckDBConnection(DataConnection):
     - Can still use Spark for heavy ETL
     """
 
-    def __init__(self, db_path: str = ":memory:", read_only: bool = False, enable_delta: bool = True):
+    def __init__(self, db_path: str = ":memory:", read_only: bool = False, enable_delta: bool = True, auto_init_views: bool = True):
         """
         Initialize DuckDB connection with optional Delta Lake support.
 
@@ -55,12 +55,14 @@ class DuckDBConnection(DataConnection):
             db_path: Path to DuckDB database file (":memory:" for in-memory)
             read_only: Whether to open in read-only mode
             enable_delta: Whether to enable Delta Lake extension (default: True)
+            auto_init_views: Whether to automatically create v2.0 model views (default: True)
         """
         if not DUCKDB_AVAILABLE:
             raise ImportError(
                 "DuckDB is not installed. Install it with: pip install duckdb"
             )
 
+        self.db_path = db_path
         self.conn = duckdb.connect(db_path, read_only=read_only)
         self._cached_tables = {}
         self.delta_enabled = False
@@ -68,6 +70,10 @@ class DuckDBConnection(DataConnection):
         # Enable Delta Lake extension if requested
         if enable_delta:
             self._enable_delta_extension()
+
+        # Auto-initialize views for v2.0 models (if persistent database and not read-only)
+        if auto_init_views and db_path != ":memory:" and not read_only:
+            self._init_model_views()
 
     def _enable_delta_extension(self):
         """
@@ -85,6 +91,70 @@ class DuckDBConnection(DataConnection):
         except Exception as e:
             logger.warning(f"Could not enable Delta extension: {e}. Delta operations will not be available.")
             self.delta_enabled = False
+
+    def _init_model_views(self):
+        """
+        Auto-initialize v2.0 model views on connection startup.
+
+        This checks if views exist and creates them if missing, ensuring:
+        - Users don't need to manually run setup_duckdb_views.py
+        - Views are available immediately on connection
+        - Only runs for persistent databases (not :memory:)
+        - Gracefully handles missing silver layer data
+        """
+        try:
+            # Check if any v2.0 model schemas exist (quick check to avoid unnecessary work)
+            existing_schemas = self.conn.execute("""
+                SELECT schema_name
+                FROM information_schema.schemata
+                WHERE schema_name IN ('stocks', 'options', 'company', 'core')
+            """).fetchall()
+
+            # If schemas exist with tables, views likely already setup
+            if existing_schemas:
+                for schema_name in [s[0] for s in existing_schemas]:
+                    tables = self.conn.execute(f"""
+                        SELECT COUNT(*)
+                        FROM information_schema.tables
+                        WHERE table_schema = '{schema_name}'
+                    """).fetchone()[0]
+
+                    if tables > 0:
+                        logger.debug(f"Views already exist in schema '{schema_name}', skipping initialization")
+                        return
+
+            # Views don't exist or are incomplete - initialize them
+            logger.info("Initializing v2.0 model views...")
+
+            # Import here to avoid circular dependency
+            from utils.repo import get_repo_root
+            from config import ConfigLoader
+
+            # Get repo root and config
+            repo_root = get_repo_root()
+            loader = ConfigLoader(repo_root=repo_root)
+            config = loader.load()
+
+            # Import and run view setup (but silently - don't spam logs)
+            import sys
+            from io import StringIO
+            from scripts.setup.setup_duckdb_views import DuckDBViewSetup
+
+            # Capture output to avoid spamming console
+            old_stdout = sys.stdout
+            sys.stdout = StringIO()
+
+            try:
+                setup = DuckDBViewSetup(db_path=Path(self.db_path), config=config)
+                setup.setup_all(dry_run=False)
+                logger.info("✓ Model views initialized successfully")
+            finally:
+                sys.stdout = old_stdout
+
+        except Exception as e:
+            # Don't fail connection if view setup fails - just log warning
+            logger.warning(f"Could not auto-initialize model views: {e}")
+            logger.info("Views can be manually created with: python -m scripts.setup.setup_duckdb_views")
 
     def _is_delta_table(self, path: str) -> bool:
         """
