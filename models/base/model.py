@@ -259,6 +259,30 @@ class BaseModel:
             col_expressions = [f"{expr} AS {out_name}" for out_name, expr in select_config.items()]
             return df.project(','.join(col_expressions))
 
+    def _apply_filters(self, df: DataFrame, filters: list) -> DataFrame:
+        """
+        Backend-agnostic filter application.
+
+        Args:
+            df: Input DataFrame (Spark or DuckDB)
+            filters: List of filter expressions (SQL WHERE clause conditions)
+
+        Returns:
+            DataFrame with filters applied
+        """
+        if self.backend == 'spark':
+            if not PYSPARK_AVAILABLE:
+                raise ImportError("PySpark not available but Spark backend detected")
+            # Use PySpark - apply each filter using F.expr()
+            for filter_expr in filters:
+                df = df.filter(F.expr(filter_expr))
+            return df
+        else:
+            # DuckDB - use filter() method with SQL expressions
+            for filter_expr in filters:
+                df = df.filter(filter_expr)
+            return df
+
     # ============================================================
     # GENERIC GRAPH BUILDING (from company_model.py)
     # ============================================================
@@ -341,6 +365,10 @@ class BaseModel:
                         f"Ensure nodes are defined in dependency order in graph.nodes"
                     )
                 df = nodes[parent_node]
+
+            # Apply filters (before select to filter source data)
+            if 'filters' in node_config and node_config['filters']:
+                df = self._apply_filters(df, node_config['filters'])
 
             # Apply select (column selection/aliasing)
             if 'select' in node_config and node_config['select']:
