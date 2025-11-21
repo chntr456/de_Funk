@@ -329,6 +329,168 @@ For stocks model specifically:
 
 ---
 
+### Diagnose Silver Data
+
+**Script**: `scripts/diagnose_silver_data.py`
+
+**Purpose**: Diagnose silver layer tables, DuckDB views, and cross-model relationships. Essential for troubleshooting model build and query issues.
+
+**Usage**:
+```bash
+# Check all models (default: show top 3 rows per table)
+python -m scripts.diagnose_silver_data
+
+# Show more sample rows
+python -m scripts.diagnose_silver_data --top-n 5
+
+# Check specific models only
+python -m scripts.diagnose_silver_data --models stocks company
+```
+
+**What it does**:
+1. **Scans silver directory** - Finds all model directories and Parquet tables
+2. **Reads schemas** - Shows columns for each table
+3. **Shows sample data** - Displays top N rows (configurable)
+4. **Checks row counts** - Total records per table
+5. **Validates DuckDB views** - Checks if views exist and are queryable
+6. **Compares counts** - Verifies Parquet vs DuckDB view row counts match
+7. **Tests cross-model joins** - Validates stocks → company relationship
+8. **Tests aggregations** - Verifies queries work correctly
+9. **Provides recommendations** - Suggests fixes for issues
+
+**Output**:
+```
+================================================================================
+SILVER LAYER DIAGNOSTICS
+================================================================================
+
+✓ Found 3 model(s): ['company', 'core', 'stocks']
+✓ DuckDB database: /home/user/de_Funk/storage/duckdb/analytics.db
+✓ Connected to DuckDB
+
+================================================================================
+MODEL: stocks
+================================================================================
+
+Tables found: ['dim_stock', 'fact_stock_prices', 'fact_stock_technicals']
+
+--------------------------------------------------------------------------------
+TABLE: stocks.dim_stock
+--------------------------------------------------------------------------------
+Files: 1
+Path: /home/user/de_Funk/storage/silver/stocks/dim_stock
+
+Columns (15):
+  - ticker
+  - security_name
+  - asset_type
+  - cik
+  - company_id
+  - exchange_code
+  - shares_outstanding
+  - market_cap
+  - sector
+  - industry
+  ... and 5 more
+
+Rows: 386
+
+Sample data (top 3 rows):
+ticker  security_name     asset_type  cik         company_id        ...
+AAPL    Apple Inc.        stocks      0000320193  COMPANY_0000320193 ...
+MSFT    Microsoft Corp.   stocks      0000789019  COMPANY_0000789019 ...
+GOOGL   Alphabet Inc.     stocks      0001652044  COMPANY_0001652044 ...
+
+✅ Table readable from Parquet
+✅ DuckDB view exists: stocks.dim_stock
+   View rows: 386
+
+--------------------------------------------------------------------------------
+TABLE: stocks.fact_stock_prices
+--------------------------------------------------------------------------------
+Files: 386
+Path: /home/user/de_Funk/storage/silver/stocks/fact_stock_prices
+
+Columns (11):
+  - ticker
+  - trade_date
+  - asset_type
+  - year
+  - month
+  - open
+  - high
+  - low
+  - close
+  - volume
+  - volume_weighted
+
+Rows: 107,860
+
+Sample data (top 3 rows):
+ticker  trade_date  open    high    low     close   volume
+AAPL    2024-01-02  185.00  187.50  184.25  186.75  52341200
+AAPL    2024-01-03  186.50  188.00  185.75  187.25  48623400
+AAPL    2024-01-04  187.00  189.25  186.50  188.75  55891600
+
+✅ Table readable from Parquet
+✅ DuckDB view exists: stocks.fact_stock_prices
+   View rows: 107,860
+
+================================================================================
+SUMMARY
+================================================================================
+Total tables found: 8
+Working tables: 8
+Failed tables: 0
+
+✅ All tables readable!
+
+================================================================================
+CROSS-MODEL RELATIONSHIPS
+================================================================================
+
+[1] Testing stocks → company join (via CIK)...
+✅ Join successful! Sample:
+ticker  cik         company_id          company_name      sector
+AAPL    0000320193  COMPANY_0000320193  Apple Inc.        TECHNOLOGY
+MSFT    0000789019  COMPANY_0000789019  Microsoft Corp.   TECHNOLOGY
+GOOGL   0001652044  COMPANY_0001652044  Alphabet Inc.     TECHNOLOGY
+
+Join coverage:
+  Total stocks: 386
+  With company: 285 (73.8%)
+  Without company: 101 (26.2%)
+
+[2] Testing stocks price aggregation...
+✅ Aggregation successful! Top 5 tickers by data:
+ticker  price_records  earliest_date  latest_date  avg_close_price
+AAPL    250           2024-01-02     2024-12-31   186.45
+MSFT    250           2024-01-02     2024-12-31   412.78
+GOOGL   250           2024-01-02     2024-12-31   168.23
+AMZN    250           2024-01-02     2024-12-31   178.56
+NVDA    250           2024-01-02     2024-12-31   495.32
+
+================================================================================
+RECOMMENDATIONS
+================================================================================
+
+✅ All tables working correctly!
+
+Next steps:
+1. Launch UI: python run_app.py
+2. Create notebooks referencing silver tables
+3. Test measure calculations
+```
+
+**Use Cases**:
+- **After model build** - Verify silver tables created correctly
+- **Debugging query errors** - Check if tables/views exist and are queryable
+- **View validation** - Ensure DuckDB views point to correct Parquet files
+- **Join troubleshooting** - Verify cross-model relationships work
+- **Data quality** - Check sample data and row counts
+
+---
+
 ## Testing Scripts
 
 ### Test Modular Architecture
