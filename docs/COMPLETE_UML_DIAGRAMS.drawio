@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2025-11-21T00:00:00.000Z" agent="de_Funk Complete UML Diagrams" version="22.0.0">
+
+  <!-- TAB 1: BaseModel Complete Class Diagram with ALL Methods -->
+  <diagram id="basemodel-complete" name="1. BaseModel - ALL 40+ Methods">
+    <mxGraphModel dx="2400" dy="1600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2800" pageHeight="2200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title-basemodel" value="BaseModel Complete Class Diagram - ALL Methods &amp; Attributes" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=28;fontStyle=1;fontColor=#7b1fa2;" vertex="1" parent="1">
+          <mxGeometry x="400" y="20" width="1800" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- BaseModel Class (1,313 lines) -->
+        <mxCell id="basemodel-class" value="&lt;b&gt;&lt;&lt;abstract&gt;&gt;&lt;br&gt;BaseModel&lt;/b&gt;&lt;br&gt;&lt;i&gt;models/base/model.py (1,313 lines)&lt;/i&gt;" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=70;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=0;marginBottom=0;fillColor=#f3e5f5;strokeColor=#7b1fa2;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="100" width="900" height="1950" as="geometry" />
+        </mxCell>
+
+        <!-- Attributes -->
+        <mxCell id="basemodel-attrs" value="&lt;b&gt;# CLASS ATTRIBUTES (11 attributes)&lt;/b&gt;&lt;br&gt;&lt;br&gt;+ connection: Any  # Database connection (Spark or DuckDB)&lt;br&gt;+ storage_cfg: Dict[str, Any]  # Storage configuration&lt;br&gt;+ model_cfg: Dict[str, Any]  # Model configuration from YAML&lt;br&gt;+ params: Dict[str, Any]  # Runtime parameters&lt;br&gt;+ model_name: str  # Model name from config&lt;br&gt;+ repo_root: Optional[Path]  # Repository root&lt;br&gt;+ session: Optional[UniversalSession]  # Cross-model access&lt;br&gt;+ storage_router: StorageRouter  # Path resolution&lt;br&gt;&lt;br&gt;&lt;i&gt;# Private/Protected Attributes&lt;/i&gt;&lt;br&gt;- _dims: Optional[Dict[str, DataFrame]]  # Cached dimensions&lt;br&gt;- _facts: Optional[Dict[str, DataFrame]]  # Cached facts&lt;br&gt;- _is_built: bool  # Build state flag&lt;br&gt;- _backend: str  # Backend type (spark | duckdb)&lt;br&gt;- _measure_executor: Optional[MeasureExecutor]  # Measure calc&lt;br&gt;- _query_planner: Optional[GraphQueryPlanner]  # Join planning&lt;br&gt;- _python_measures: Optional[Any]  # Python measures module" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=10;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="70" width="900" height="280" as="geometry" />
+        </mxCell>
+
+        <mxCell id="basemodel-line1" value="" style="line;strokeWidth=2;fillColor=none;align=left;verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;strokeColor=#7b1fa2;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="350" width="900" height="8" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section 1: Initialization & Properties -->
+        <mxCell id="basemodel-init" value="&lt;b&gt;## INITIALIZATION &amp; PROPERTIES (6 methods)&lt;/b&gt;&lt;br&gt;&lt;br&gt;+ __init__(connection, storage_cfg, model_cfg, params=None, repo_root=None)&lt;br&gt;  # Initialize model with configuration&lt;br&gt;&lt;br&gt;+ @property backend() → str&lt;br&gt;  # Get backend type (spark or duckdb)&lt;br&gt;&lt;br&gt;+ @property measures() → MeasureExecutor&lt;br&gt;  # Get unified measure executor (lazy-loaded)&lt;br&gt;&lt;br&gt;+ @property query_planner() → GraphQueryPlanner&lt;br&gt;  # Get query planner for dynamic joins (lazy-loaded)&lt;br&gt;&lt;br&gt;+ @property python_measures() → Optional[Any]&lt;br&gt;  # Get Python measures module (lazy-loaded)&lt;br&gt;&lt;br&gt;- _detect_backend() → str&lt;br&gt;  # Detect backend type from connection" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="358" width="900" height="190" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section 2: Graph Building -->
+        <mxCell id="basemodel-graph" value="&lt;b&gt;## GRAPH BUILDING (5 methods)&lt;/b&gt;&lt;br&gt;&lt;br&gt;+ build() → Tuple[Dict[str, DataFrame], Dict[str, DataFrame]]&lt;br&gt;  # Build model tables from Bronze layer&lt;br&gt;  # Returns: (dimensions, facts)&lt;br&gt;&lt;br&gt;- _build_nodes() → Dict[str, DataFrame]&lt;br&gt;  # Build all nodes from graph.nodes config&lt;br&gt;  # Loads from Bronze, applies select/derive/filters&lt;br&gt;&lt;br&gt;- _load_bronze_table(table_name: str) → DataFrame&lt;br&gt;  # Load Bronze table using StorageRouter&lt;br&gt;&lt;br&gt;- _apply_derive(df, col_name, expr, node_id) → DataFrame&lt;br&gt;  # Apply derive expression (SHA1, SQL expressions)&lt;br&gt;  # Supports: column refs, sha1(), window functions&lt;br&gt;&lt;br&gt;- _resolve_node(node_id, nodes) → DataFrame&lt;br&gt;  # Resolve node DataFrame (supports cross-model refs)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="548" width="900" height="200" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section 3: Backend Abstraction -->
+        <mxCell id="basemodel-backend" value="&lt;b&gt;## BACKEND ABSTRACTION (2 methods)&lt;/b&gt;&lt;br&gt;&lt;br&gt;- _select_columns(df, select_config) → DataFrame&lt;br&gt;  # Backend-agnostic column selection&lt;br&gt;  # Handles both Spark (F.col) and DuckDB (project)&lt;br&gt;&lt;br&gt;- _apply_filters(df, filters) → DataFrame&lt;br&gt;  # Backend-agnostic filter application&lt;br&gt;  # Spark: F.expr(), DuckDB: filter()" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="748" width="900" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section 4: Table Access -->
+        <mxCell id="basemodel-table-access" value="&lt;b&gt;## TABLE ACCESS (9 methods)&lt;/b&gt;&lt;br&gt;&lt;br&gt;+ ensure_built() → None&lt;br&gt;  # Lazy build pattern - only build when needed&lt;br&gt;&lt;br&gt;+ get_table(table_name) → DataFrame&lt;br&gt;  # Get table by name (searches dims and facts)&lt;br&gt;&lt;br&gt;+ get_table_enriched(table_name, enrich_with=None, columns=None) → DataFrame&lt;br&gt;  # Get table with dynamic joins via graph edges&lt;br&gt;&lt;br&gt;+ get_dimension_df(dim_id) → DataFrame&lt;br&gt;  # Get dimension table by ID&lt;br&gt;&lt;br&gt;+ get_fact_df(fact_id) → DataFrame&lt;br&gt;  # Get fact table by ID&lt;br&gt;&lt;br&gt;+ has_table(table_name) → bool&lt;br&gt;  # Check if table exists&lt;br&gt;&lt;br&gt;+ list_tables() → Dict[str, List[str]]&lt;br&gt;  # List all available tables {'dimensions': [...], 'facts': [...]}&lt;br&gt;&lt;br&gt;+ get_table_schema(table_name) → Dict[str, str]&lt;br&gt;  # Get schema (column definitions) for table&lt;br&gt;&lt;br&gt;+ set_session(session) → None&lt;br&gt;  # Inject session reference for cross-model access" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="858" width="900" height="260" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section 5: Join Utilities -->
+        <mxCell id="basemodel-joins" value="&lt;b&gt;## JOIN UTILITIES (3 methods)&lt;/b&gt;&lt;br&gt;&lt;br&gt;- _join_pairs_from_strings(specs) → List[Tuple[str, str]]&lt;br&gt;  # Parse join specs ['ticker=ticker'] → [(left_col, right_col)]&lt;br&gt;&lt;br&gt;- _infer_join_pairs(left, right) → List[Tuple[str, str]]&lt;br&gt;  # Infer join keys based on common columns&lt;br&gt;&lt;br&gt;- _join_with_dedupe(left, right, pairs, right_prefix, how='left') → DataFrame&lt;br&gt;  # Join with deduplication (avoids duplicate columns)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="1118" width="900" height="120" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section 6: Metadata -->
+        <mxCell id="basemodel-metadata" value="&lt;b&gt;## METADATA (2 methods)&lt;/b&gt;&lt;br&gt;&lt;br&gt;+ get_relations() → Dict[str, List[str]]&lt;br&gt;  # Return relationship graph from edges config&lt;br&gt;&lt;br&gt;+ get_metadata() → Dict[str, Any]&lt;br&gt;  # Return model metadata (name, version, nodes, measures, etc.)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="1238" width="900" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section 7: Measure Calculations -->
+        <mxCell id="basemodel-measures" value="&lt;b&gt;## MEASURE CALCULATIONS (4 methods)&lt;/b&gt;&lt;br&gt;&lt;br&gt;+ calculate_measure(measure_name, entity_column=None, filters=None, limit=None, **kwargs) → QueryResult|DataFrame&lt;br&gt;  # UNIFIED METHOD: Calculate any measure (YAML or Python)&lt;br&gt;  # Works with all measure types and backends&lt;br&gt;&lt;br&gt;+ calculate_measure_by_entity(measure_name, entity_column, limit=None) → DataFrame&lt;br&gt;  # Calculate measure aggregated by entity (Spark only)&lt;br&gt;  # Reads from YAML config and calculates from facts&lt;br&gt;&lt;br&gt;- _is_python_measure(measure_name) → bool&lt;br&gt;  # Check if measure is defined as Python measure&lt;br&gt;&lt;br&gt;- _execute_python_measure(measure_name, **kwargs) → DataFrame&lt;br&gt;  # Execute Python measure function" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="1328" width="900" height="160" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section 8: Persistence -->
+        <mxCell id="basemodel-persist" value="&lt;b&gt;## PERSISTENCE (1 method)&lt;/b&gt;&lt;br&gt;&lt;br&gt;+ write_tables(output_root=None, format='parquet', mode='overwrite', &lt;br&gt;               use_optimized_writer=True, partition_by=None) → Dict&lt;br&gt;  # Write all model tables to storage (Silver layer)&lt;br&gt;  # Returns statistics dict&lt;br&gt;  # Uses ParquetLoader for optimized writes" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="1488" width="900" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section 9: Python Measures -->
+        <mxCell id="basemodel-python-measures" value="&lt;b&gt;## PYTHON MEASURES SUPPORT (1 method)&lt;/b&gt;&lt;br&gt;&lt;br&gt;- _load_python_measures() → Optional[Any]&lt;br&gt;  # Load Python measures module for this model&lt;br&gt;  # Uses ModelConfigLoader to discover and load measure classes" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="1588" width="900" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Methods Section 10: Extension Points -->
+        <mxCell id="basemodel-hooks" value="&lt;b&gt;## EXTENSION POINTS / HOOKS (3 methods)&lt;/b&gt;&lt;br&gt;&lt;br&gt;+ before_build() → None&lt;br&gt;  # Hook called before build() - override for pre-processing&lt;br&gt;&lt;br&gt;+ after_build(dims, facts) → Tuple[Dict, Dict]&lt;br&gt;  # Hook called after build() - override for post-processing&lt;br&gt;&lt;br&gt;+ custom_node_loading(node_id, node_config) → Optional[DataFrame]&lt;br&gt;  # Override to customize how specific nodes are loaded" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="1668" width="900" height="130" as="geometry" />
+        </mxCell>
+
+        <!-- Summary Box -->
+        <mxCell id="basemodel-summary" value="&lt;b&gt;TOTAL: 40+ PUBLIC METHODS&lt;/b&gt;" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=11;fontStyle=1;fillColor=#fff3e0;" vertex="1" parent="basemodel-class">
+          <mxGeometry y="1798" width="900" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- Method Count Summary Box -->
+        <mxCell id="summary-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e3f2fd;strokeColor=#1976d2;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="100" width="700" height="450" as="geometry" />
+        </mxCell>
+        <mxCell id="summary-title" value="📊 BaseModel Method Summary" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=20;fontStyle=1;fontColor=#1976d2" vertex="1" parent="1">
+          <mxGeometry x="1070" y="115" width="400" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="summary-text" value="&lt;b&gt;File:&lt;/b&gt; models/base/model.py&lt;br&gt;&lt;b&gt;Lines:&lt;/b&gt; 1,313 lines&lt;br&gt;&lt;b&gt;Total Methods:&lt;/b&gt; 40+&lt;br&gt;&lt;br&gt;&lt;b&gt;Method Breakdown:&lt;/b&gt;&lt;br&gt;• Initialization &amp; Properties: 6 methods&lt;br&gt;• Graph Building: 5 methods&lt;br&gt;• Backend Abstraction: 2 methods&lt;br&gt;• Table Access: 9 methods&lt;br&gt;• Join Utilities: 3 methods&lt;br&gt;• Metadata: 2 methods&lt;br&gt;• Measure Calculations: 4 methods&lt;br&gt;• Persistence: 1 method&lt;br&gt;• Python Measures Support: 1 method&lt;br&gt;• Extension Points/Hooks: 3 methods&lt;br&gt;&lt;br&gt;&lt;b&gt;Key Features:&lt;/b&gt;&lt;br&gt;✅ Backend-agnostic (Spark + DuckDB)&lt;br&gt;✅ YAML-driven graph building&lt;br&gt;✅ Lazy loading with caching&lt;br&gt;✅ Cross-model references&lt;br&gt;✅ Hybrid measures (YAML + Python)&lt;br&gt;✅ Dynamic joins via graph edges&lt;br&gt;✅ Extension hooks for customization&lt;br&gt;&lt;br&gt;&lt;b&gt;Imports:&lt;/b&gt;&lt;br&gt;• abc (ABC)&lt;br&gt;• typing (Dict, Any, Optional, List, Tuple, Union)&lt;br&gt;• dataclasses (dataclass)&lt;br&gt;• pathlib (Path)&lt;br&gt;• logging&lt;br&gt;• pyspark.sql (DataFrame, functions) [optional]&lt;br&gt;• models.api.dal (StorageRouter, BronzeTable)&lt;br&gt;• models.base.measures.executor (MeasureExecutor) [lazy]&lt;br&gt;• models.api.query_planner (GraphQueryPlanner) [lazy]&lt;br&gt;• config.model_loader (ModelConfigLoader) [lazy]" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=11;fontFamily=Courier New" vertex="1" parent="1">
+          <mxGeometry x="1070" y="160" width="660" height="375" as="geometry" />
+        </mxCell>
+
+        <!-- Inheritance Note Box -->
+        <mxCell id="inheritance-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="580" width="700" height="350" as="geometry" />
+        </mxCell>
+        <mxCell id="inheritance-title" value="🔗 Model Implementations (Inherit from BaseModel)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=18;fontStyle=1;fontColor=#e65100" vertex="1" parent="1">
+          <mxGeometry x="1070" y="595" width="600" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="inheritance-text" value="All domain models inherit ALL methods from BaseModel and can:&lt;br&gt;• Override hooks: before_build(), after_build(), custom_node_loading()&lt;br&gt;• Add domain-specific methods&lt;br&gt;• Use inherited table access, measure calculation, persistence&lt;br&gt;&lt;br&gt;&lt;b&gt;Implemented Models:&lt;/b&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;1. CoreModel&lt;/b&gt; (models/implemented/core/model.py, 194 lines)&lt;br&gt;   + get_calendar(date_from, date_to, year, month)&lt;br&gt;   + get_weekdays(date_from, date_to)&lt;br&gt;   + get_weekends(date_from, date_to)&lt;br&gt;   + get_fiscal_year_dates(fiscal_year)&lt;br&gt;   + get_quarter_dates(year, quarter)&lt;br&gt;   + get_month_dates(year, month)&lt;br&gt;   + get_date_range_info(date_from, date_to)&lt;br&gt;   + get_calendar_config()&lt;br&gt;   &lt;i&gt;+ 40+ inherited from BaseModel&lt;/i&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;2. CompanyModel&lt;/b&gt; (models/implemented/company/model.py, 131 lines)&lt;br&gt;   + get_company_by_cik(cik)&lt;br&gt;   + get_company_by_ticker(ticker)&lt;br&gt;   + get_companies_by_sector(sector)&lt;br&gt;   + get_active_companies()&lt;br&gt;   + list_sectors()&lt;br&gt;   + get_company_count_by_sector()&lt;br&gt;   &lt;i&gt;+ 40+ inherited from BaseModel&lt;/i&gt;&lt;br&gt;&lt;br&gt;&lt;b&gt;3. StocksModel&lt;/b&gt; (models/implemented/stocks/model.py, 246 lines)&lt;br&gt;   + get_asset_type_filter() → 'stocks'&lt;br&gt;   + get_prices(ticker, start_date, end_date)&lt;br&gt;   + get_technicals(ticker, start_date, end_date)&lt;br&gt;   + get_stock_info(ticker)&lt;br&gt;   + get_stock_with_company(ticker)&lt;br&gt;   + get_stocks_by_sector(sector)&lt;br&gt;   + list_tickers(active_only=True)&lt;br&gt;   + list_sectors()&lt;br&gt;   + get_top_by_market_cap(limit=10)&lt;br&gt;   &lt;i&gt;+ 40+ inherited from BaseModel&lt;/i&gt;&lt;br&gt;   &lt;i&gt;+ Python measures: sharpe_ratio, volatility, beta, alpha, correlation, momentum&lt;/i&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=10;fontFamily=Courier New" vertex="1" parent="1">
+          <mxGeometry x="1070" y="635" width="660" height="285" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+
+</mxfile>
