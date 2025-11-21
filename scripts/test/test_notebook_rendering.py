@@ -27,7 +27,7 @@ def test_notebook_rendering():
     print("-" * 80)
 
     try:
-        from app.notebook.parsers.markdown_parser import parse_markdown_notebook
+        from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
 
         notebook_path = repo_root / "configs" / "notebooks" / "stocks" / "stock_analysis_v2.md"
 
@@ -39,10 +39,10 @@ def test_notebook_rendering():
                 print(f"  - {nb_file.relative_to(notebooks_dir)}")
             return
 
-        with open(notebook_path) as f:
-            content = f.read()
+        # Use the parser class
+        parser = MarkdownNotebookParser(repo_root)
+        notebook_config = parser.parse_file(notebook_path)
 
-        notebook_config = parse_markdown_notebook(content, notebook_path.stem)
         print(f"✓ Loaded notebook: {notebook_config.notebook.title}")
         print(f"  Exhibits: {len(notebook_config.exhibits)}")
 
