@@ -256,7 +256,15 @@ class BaseModel:
         else:
             # DuckDB - use project() method for column selection
             # project() takes column expressions as strings
-            col_expressions = [f"{expr} AS {out_name}" for out_name, expr in select_config.items()]
+            # Skip identity projections (e.g., "asset_type AS asset_type") to avoid DuckDB binder issues
+            col_expressions = []
+            for out_name, expr in select_config.items():
+                if out_name == expr:
+                    # Identity projection - just use column name
+                    col_expressions.append(expr)
+                else:
+                    # Rename or transform
+                    col_expressions.append(f"{expr} AS {out_name}")
             return df.project(','.join(col_expressions))
 
     def _apply_filters(self, df: DataFrame, filters: list) -> DataFrame:
