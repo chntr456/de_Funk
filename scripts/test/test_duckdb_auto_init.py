@@ -28,7 +28,7 @@ def test_auto_init():
 
     from core.duckdb_connection import DuckDBConnection
 
-    conn_memory = DuckDBConnection(database=":memory:", enable_delta=False)
+    conn_memory = DuckDBConnection(db_path=":memory:", enable_delta=False)
     print("✓ In-memory connection created (no view initialization expected)")
     conn_memory.stop()
 

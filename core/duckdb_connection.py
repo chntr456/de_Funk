@@ -641,13 +641,14 @@ class DuckDBConnection(DataConnection):
 
     def stop(self):
         """Close the DuckDB connection."""
-        # Clear cached tables
-        for name in list(self._cached_tables.keys()):
-            self.conn.execute(f"DROP TABLE IF EXISTS {name}")
-        self._cached_tables.clear()
+        # Clear cached tables (only if initialized)
+        if hasattr(self, '_cached_tables') and hasattr(self, 'conn') and self.conn:
+            for name in list(self._cached_tables.keys()):
+                self.conn.execute(f"DROP TABLE IF EXISTS {name}")
+            self._cached_tables.clear()
 
         # Close connection
-        if self.conn:
+        if hasattr(self, 'conn') and self.conn:
             self.conn.close()
             self.conn = None
 
@@ -691,4 +692,8 @@ class DuckDBConnection(DataConnection):
 
     def __del__(self):
         """Cleanup on deletion."""
-        self.stop()
+        try:
+            self.stop()
+        except Exception:
+            # Silently handle cleanup errors (object may be partially initialized)
+            pass

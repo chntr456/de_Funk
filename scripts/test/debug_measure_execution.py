@@ -110,7 +110,7 @@ def test_inherited_measure():
             storage_cfg = json.load(f)
 
         # Create DuckDB connection
-        conn = DuckDBConnection(database=":memory:")
+        conn = DuckDBConnection(db_path=":memory:")
 
         # Instantiate model
         from models.implemented.stocks.model import StocksModel
