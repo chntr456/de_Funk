@@ -1,6 +1,6 @@
-# Stocks graph definition - extends base securities graph
+# Stocks graph definition - TEMP: inheritance disabled for v1.x compatibility
 
-extends: _base.securities.graph
+# extends: _base.securities.graph  # DISABLED: base uses v2.0 schema
 
 nodes:
   dim_stock:
@@ -89,15 +89,14 @@ nodes:
     tags: [fact, technical]
 
 edges:
-  # Inherits from base: _prices_to_security, _prices_to_calendar
+  # NOTE: Base edges (_prices_to_security, _prices_to_calendar) not inherited since extends is disabled
 
-  # Stocks-specific edges
-  stock_to_company:
-    from: dim_stock
-    to: company.dim_company
-    on: ["company_id=company_id"]
-    type: many_to_one
-    description: "Stock belongs to a company (corporate entity)"
+  # stock_to_company: DISABLED - company_id not available in v1.x
+  #   from: dim_stock
+  #   to: company.dim_company
+  #   on: ["company_id=company_id"]
+  #   type: many_to_one
+  #   description: "Stock belongs to a company (corporate entity)"
 
   prices_to_stock:
     from: fact_stock_prices
@@ -105,6 +104,13 @@ edges:
     on: ["ticker=ticker"]
     type: many_to_one
     description: "Prices belong to a stock"
+
+  prices_to_calendar:
+    from: fact_stock_prices
+    to: core.dim_calendar
+    on: ["trade_date=date"]
+    type: left
+    description: "Join prices to calendar for date filtering"
 
   technicals_to_stock:
     from: fact_stock_technicals
