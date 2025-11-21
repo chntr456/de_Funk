@@ -1,49 +1,34 @@
-# Stocks graph definition - TEMP: inheritance disabled for v1.x compatibility
+# Stocks graph definition - v2.0 with base inheritance
 
-# extends: _base.securities.graph  # DISABLED: base uses v2.0 schema
+extends: _base.securities.graph
 
 nodes:
   dim_stock:
-    from: bronze.ref_ticker  # TEMP: Using v1.x table until v2.0 bronze data is ingested
+    extends: _base.securities._dim_security_base
     filters:
-      # - "asset_type = 'stocks'"  # DISABLED: v1.x data doesn't have asset_type
-      # - "active = true"  # DISABLED: column doesn't exist in bronze data
+      - "asset_type = 'stocks'"
+      - "is_active = true"
     select:
-      # Base fields (only those available in v1.x ref_ticker)
-      ticker: ticker
-      security_name: name
-      # asset_type: asset_type  # DISABLED: not in v1.x
-      exchange_code: exchange_code
-      # currency: currency  # DISABLED: not in v1.x
-      # is_active: is_active  # DISABLED: not in v1.x
-      # Stocks-specific fields - DISABLED: not in v1.x
-      # cik: cik
-      # shares_outstanding: shares_outstanding
-      # market_cap: market_cap
-      # sector: sector
-      # industry: industry
+      # Inherited from base: ticker, security_name, asset_type, exchange_code, currency, is_active
+      # Add stocks-specific fields from Alpha Vantage
+      cik: cik
+      shares_outstanding: shares_outstanding
+      market_cap: market_cap
+      sector: sector
+      industry: industry
     derive:
-      # company_id: "CONCAT('COMPANY_', cik)"  # DISABLED: cik not available
-      asset_type: "'stocks'"  # Hardcode since all ref_ticker are stocks
-      is_active: "true"  # Default to true since we don't have this column
+      # Inherited: security_id
+      company_id: "CONCAT('COMPANY_', cik)"  # Link to company model
     unique_key: [ticker]
     tags: [dim, stock]
 
   fact_stock_prices:
-    from: bronze.prices_daily  # TEMP: Using v1.x table until v2.0 bronze data is ingested
+    extends: _base.securities._fact_prices_base
     filters:
-      # - "asset_type = 'stocks'"  # DISABLED: v1.x data doesn't have asset_type
+      - "asset_type = 'stocks'"
       - "trade_date IS NOT NULL"
       - "ticker IS NOT NULL"
-    select:
-      ticker: ticker
-      trade_date: trade_date
-      open: open
-      high: high
-      low: low
-      close: close
-      volume: volume
-      volume_weighted: volume_weighted
+    # Inherits select from base (ticker, trade_date, open, high, low, close, volume, volume_weighted, transactions)
     tags: [fact, prices, stocks]
 
   fact_stock_technicals:
@@ -89,14 +74,14 @@ nodes:
     tags: [fact, technical]
 
 edges:
-  # NOTE: Base edges (_prices_to_security, _prices_to_calendar) not inherited since extends is disabled
+  # Inherit base edges: _prices_to_security, _prices_to_calendar
 
-  # stock_to_company: DISABLED - company_id not available in v1.x
-  #   from: dim_stock
-  #   to: company.dim_company
-  #   on: ["company_id=company_id"]
-  #   type: many_to_one
-  #   description: "Stock belongs to a company (corporate entity)"
+  stock_to_company:
+    from: dim_stock
+    to: company.dim_company
+    on: ["company_id=company_id"]
+    type: many_to_one
+    description: "Stock belongs to a company (corporate entity)"
 
   prices_to_stock:
     from: fact_stock_prices
