@@ -428,8 +428,17 @@ class UniversalSession:
             print(f"DEBUG: No graph or edges found")
             return mappings
 
+        # Handle both v1.x (list) and v2.0 (dict) edge formats
+        edges_config = model_config['graph']['edges']
+        if isinstance(edges_config, dict):
+            # v2.0 format: {edge_id: {from: ..., to: ...}}
+            edges_list = list(edges_config.values())
+        else:
+            # v1.x format: [{id: edge_id, from: ..., to: ...}]
+            edges_list = edges_config
+
         # Look for edges from this table to dim_calendar
-        for edge in model_config['graph']['edges']:
+        for edge in edges_list:
             edge_from = edge.get('from', '')
             edge_to = edge.get('to', '')
 

@@ -820,7 +820,16 @@ class BaseModel:
         graph = self.model_cfg.get('graph', {})
         relations = {}
 
-        for edge in graph.get('edges', []):
+        # Handle both v1.x (list) and v2.0 (dict) edge formats
+        edges_config = graph.get('edges', [])
+        if isinstance(edges_config, dict):
+            # v2.0 format: {edge_id: {from: ..., to: ...}}
+            edges_list = list(edges_config.values())
+        else:
+            # v1.x format: [{id: edge_id, from: ..., to: ...}]
+            edges_list = edges_config
+
+        for edge in edges_list:
             from_table = edge['from']
             to_table = edge['to']
 

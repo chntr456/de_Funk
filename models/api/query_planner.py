@@ -67,13 +67,31 @@ class GraphQueryPlanner:
 
         # Add nodes from graph.nodes (all tables defined in model)
         graph_config = self.model.model_cfg.get('graph', {})
-        for node in graph_config.get('nodes', []):
-            table_id = node['id']
-            table_type = 'dimension' if table_id.startswith('dim_') else 'fact'
-            g.add_node(table_id, type=table_type)
+        # Handle both v1.x (list) and v2.0 (dict) node formats
+        nodes_config = graph_config.get('nodes', [])
+        if isinstance(nodes_config, dict):
+            # v2.0 format: {node_id: {from: ..., select: ...}}
+            for node_id, node_data in nodes_config.items():
+                table_type = 'dimension' if node_id.startswith('dim_') else 'fact'
+                g.add_node(node_id, type=table_type)
+        else:
+            # v1.x format: [{id: node_id, from: ..., select: ...}]
+            for node in nodes_config:
+                table_id = node['id']
+                table_type = 'dimension' if table_id.startswith('dim_') else 'fact'
+                g.add_node(table_id, type=table_type)
+
+        # Handle both v1.x (list) and v2.0 (dict) edge formats
+        edges_config = graph_config.get('edges', [])
+        if isinstance(edges_config, dict):
+            # v2.0 format: {edge_id: {from: ..., to: ...}}
+            edges_list = list(edges_config.values())
+        else:
+            # v1.x format: [{id: edge_id, from: ..., to: ...}]
+            edges_list = edges_config
 
         # Add edges from graph.edges configuration
-        for edge in graph_config.get('edges', []):
+        for edge in edges_list:
             from_table = edge['from']
             to_table = edge['to']
 
