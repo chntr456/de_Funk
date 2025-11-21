@@ -59,13 +59,7 @@ def test_notebook_rendering():
     try:
         from app.notebook.api.notebook_session import NotebookSession
         from core.duckdb_connection import DuckDBConnection
-        from app.services.storage_service import SilverStorageService
         from models.registry import ModelRegistry
-        import json
-
-        # Load configs
-        with open(repo_root / "configs" / "storage.json") as f:
-            storage_cfg = json.load(f)
 
         # Create connection
         conn = DuckDBConnection()
@@ -73,17 +67,18 @@ def test_notebook_rendering():
         # Create model registry
         registry = ModelRegistry(repo_root / "configs" / "models")
 
-        # Create storage service
-        storage_service = SilverStorageService(conn, registry)
-
-        # Create notebook session
+        # Create notebook session (doesn't take notebook_config in init)
         notebook_session = NotebookSession(
-            notebook_config=notebook_config,
-            storage_service=storage_service,
-            connection=conn
+            connection=conn,
+            model_registry=registry,
+            repo_root=repo_root
         )
 
+        # Load the notebook
+        notebook_session.load_notebook(str(notebook_path))
+
         print(f"✓ Notebook session created")
+        print(f"  Notebook loaded: {notebook_session.notebook_config.notebook.title if notebook_session.notebook_config else 'None'}")
 
     except Exception as e:
         print(f"❌ Failed to create session: {e}")
@@ -95,12 +90,15 @@ def test_notebook_rendering():
     print("\n[3] Testing exhibit data retrieval...")
     print("-" * 80)
 
-    if len(notebook_config.exhibits) == 0:
+    # Use the notebook config from the session
+    nb_config = notebook_session.notebook_config
+
+    if not nb_config or len(nb_config.exhibits) == 0:
         print("⚠️ No exhibits found in notebook")
         return
 
     # Get first exhibit
-    first_exhibit = notebook_config.exhibits[0]
+    first_exhibit = nb_config.exhibits[0]
     print(f"Testing exhibit: {first_exhibit.id}")
     print(f"  Title: {first_exhibit.title}")
     print(f"  Type: {first_exhibit.type}")
