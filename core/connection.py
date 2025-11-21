@@ -11,6 +11,9 @@ from pathlib import Path
 import pandas as pd
 import logging
 
+from config.constants import DEFAULT_DUCKDB_PATH
+from utils.repo import get_repo_root
+
 logger = logging.getLogger(__name__)
 
 
@@ -525,10 +528,8 @@ def get_duckdb_connection(db_path: str = None, auto_init_views: bool = True, **k
         conn = get_duckdb_connection(db_path="path/to/custom.db")
     """
     if db_path is None:
-        # Default to analytics database
-        from pathlib import Path
-        from utils.repo import get_repo_root
+        # Default to analytics database using config constant
         repo_root = get_repo_root()
-        db_path = str(repo_root / "storage" / "duckdb" / "analytics.db")
+        db_path = str(repo_root / DEFAULT_DUCKDB_PATH)
 
     return ConnectionFactory.create("duckdb", db_path=db_path, auto_init_views=auto_init_views, **kwargs)
