@@ -235,6 +235,34 @@ class UniversalSession:
 
         return model
 
+    def _get_table_from_view_or_build(self, model, model_name: str, table_name: str) -> Any:
+        """
+        Try to get table from existing silver view, fall back to building from bronze.
+
+        This method is backend-agnostic - it uses the connection's table() method
+        which abstracts the underlying implementation.
+
+        Args:
+            model: Model instance
+            model_name: Name of the model
+            table_name: Name of the table
+
+        Returns:
+            DataFrame (relation or pandas)
+        """
+        # Try to query existing silver view first (if connection supports it)
+        if hasattr(self.connection, 'table'):
+            view_name = f"{model_name}.{table_name}"
+            try:
+                # This returns a proper relation object (DuckDB) or DataFrame
+                return self.connection.table(view_name)
+            except Exception:
+                # View doesn't exist, fall through to build from bronze
+                pass
+
+        # Fall back to building from bronze via model
+        return model.get_table(table_name)
+
     def get_table(
         self,
         model_name: str,
@@ -303,7 +331,7 @@ class UniversalSession:
 
         # If no specific columns requested, return full table (backward compatible)
         if not required_columns:
-            df = model.get_table(table_name)
+            df = self._get_table_from_view_or_build(model, model_name, table_name)
             # Apply filters if specified
             if filters:
                 df = FilterEngine.apply_from_session(df, filters, self)
@@ -316,14 +344,14 @@ class UniversalSession:
         except Exception as e:
             # If can't get schema, fall back to simple table access
             print(f"Warning: Could not get schema for {model_name}.{table_name}: {e}")
-            return model.get_table(table_name)
+            return self._get_table_from_view_or_build(model, model_name, table_name)
 
         # Find missing columns
         missing = [col for col in required_columns if col not in base_columns]
 
         # No missing columns - direct table access
         if not missing:
-            df = model.get_table(table_name)
+            df = self._get_table_from_view_or_build(model, model_name, table_name)
 
             # Apply filters BEFORE selecting/aggregating (pushdown optimization)
             if filters:
