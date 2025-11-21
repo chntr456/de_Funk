@@ -217,7 +217,7 @@ de_Funk/
 - **Purpose**: Store raw, unprocessed data from APIs
 - **Format**: Partitioned Parquet files
 - **Path**: `storage/bronze/{provider}/{table}/`
-- **Organization**: By data provider (polygon, bls, chicago)
+- **Organization**: By data provider (alpha_vantage, bls, chicago)
 - **Schema**: Facet-normalized schemas
 
 #### Silver Layer (Dimensional Models)
@@ -622,7 +622,7 @@ print(f"Models dir: {config.models_dir}")
 config = loader.load(connection_type="duckdb")
 
 # Access API configs (auto-discovered from configs/*.json)
-polygon_cfg = config.apis.get("polygon", {})
+alpha_vantage_cfg = config.apis.get("alpha_vantage", {})
 bls_cfg = config.apis.get("bls", {})
 ```
 
@@ -669,11 +669,10 @@ if ctx.config:
     print(f"Models directory: {ctx.config.models_dir}")
     print(f"Connection type: {ctx.config.connection.type}")
 
-# Backward compatible properties still work
-polygon_cfg = ctx.polygon_cfg  # Still works!
-
-# New method for any API provider
+# Access API configurations for any provider
+alpha_vantage_cfg = ctx.get_api_config("alpha_vantage")
 bls_cfg = ctx.get_api_config("bls")
+chicago_cfg = ctx.get_api_config("chicago")
 ```
 
 ### Environment Variables
@@ -682,7 +681,7 @@ Set in `.env` file (copy from `.env.example`):
 
 ```bash
 # API Keys (required for data ingestion)
-POLYGON_API_KEYS=your_key_here
+ALPHA_VANTAGE_API_KEYS=your_key_here
 BLS_API_KEYS=your_key_here
 CHICAGO_API_KEYS=your_key_here
 
@@ -787,7 +786,7 @@ When adding a new data source:
    - Implement data fetching logic
 
 3. **Configure API Endpoints**
-   - Update configuration files (e.g., `polygon_endpoints.json`)
+   - Update configuration files (e.g., `alpha_vantage_endpoints.json`, `bls_endpoints.json`)
    - Add API keys to `.env`
 
 4. **Run Ingestion**
