@@ -697,6 +697,16 @@ class BaseModel:
         Raises:
             KeyError: If table not found
         """
+        # For DuckDB, check if view exists in database first (silver tables)
+        if self.backend == 'duckdb':
+            view_name = f"{self.model_name}.{table_name}"
+            try:
+                # Try to query the view directly
+                return self.connection.execute(f"SELECT * FROM {view_name}")
+            except Exception:
+                # View doesn't exist, fall through to build from bronze
+                pass
+
         self.ensure_built()
 
         if table_name in self._dims:
