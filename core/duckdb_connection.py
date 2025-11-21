@@ -574,7 +574,7 @@ class DuckDBConnection(DataConnection):
         Convert DuckDB relation to pandas DataFrame.
 
         Args:
-            df: DuckDB relation or pandas DataFrame
+            df: DuckDB relation, pandas DataFrame, or QueryResult
 
         Returns:
             Pandas DataFrame
@@ -584,6 +584,13 @@ class DuckDBConnection(DataConnection):
         # Check if already pandas DataFrame
         if isinstance(df, pd.DataFrame):
             return df
+
+        # Handle QueryResult wrapper (from measure execution)
+        if hasattr(df, 'data'):
+            df = df.data
+            # Check if data is already pandas
+            if isinstance(df, pd.DataFrame):
+                return df
 
         # DuckDB relation has direct pandas conversion
         return df.df()

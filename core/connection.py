@@ -414,7 +414,27 @@ class SparkConnection(DataConnection):
         return df
 
     def to_pandas(self, df) -> pd.DataFrame:
-        """Convert Spark DataFrame to Pandas."""
+        """
+        Convert Spark DataFrame to pandas.
+
+        Args:
+            df: Spark DataFrame, pandas DataFrame, or QueryResult
+
+        Returns:
+            Pandas DataFrame
+        """
+        # Check if already pandas DataFrame
+        if isinstance(df, pd.DataFrame):
+            return df
+
+        # Handle QueryResult wrapper (from measure execution)
+        if hasattr(df, 'data'):
+            df = df.data
+            # Check if data is already pandas
+            if isinstance(df, pd.DataFrame):
+                return df
+
+        # Convert Spark DataFrame to pandas
         return df.toPandas()
 
     def count(self, df) -> int:

@@ -22,4 +22,4 @@ dimensions:
       tick_size: double
       tick_value: double
 
-facts: []
+facts: {}

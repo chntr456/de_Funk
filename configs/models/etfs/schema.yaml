@@ -20,4 +20,4 @@ dimensions:
       is_leveraged: boolean
       leverage_factor: double
 
-facts: []
+facts: {}
