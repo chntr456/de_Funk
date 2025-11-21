@@ -99,7 +99,20 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
             with st.spinner(f"Loading {exhibit.title or 'exhibit'}..."):
                 # Get data for exhibit
                 df = notebook_session.get_exhibit_data(exhibit_id)
+
+                # Debug: Check what type we got from get_exhibit_data
+                st.caption(f"DEBUG: df type = {type(df).__name__}, has .data = {hasattr(df, 'data')}")
+
                 pdf = connection.to_pandas(df)
+
+                # Debug: Check what type we got after conversion
+                st.caption(f"DEBUG: pdf type = {type(pdf).__name__}, shape = {pdf.shape if hasattr(pdf, 'shape') else 'N/A'}")
+
+                # Debug: Check column dtypes
+                if hasattr(pdf, 'dtypes'):
+                    problematic = [col for col in pdf.columns if pdf[col].dtype == 'object']
+                    if problematic:
+                        st.caption(f"DEBUG: Object columns = {problematic}")
 
             # Render based on type
             from app.notebook.schema import ExhibitType
