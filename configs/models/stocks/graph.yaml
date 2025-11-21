@@ -4,33 +4,35 @@ extends: _base.securities.graph
 
 nodes:
   dim_stock:
-    from: bronze.securities_reference
+    from: bronze.ref_ticker  # TEMP: Using v1.x table until v2.0 bronze data is ingested
     filters:
-      - "asset_type = 'stocks'"       # KEY FILTER - only stocks!
-      - "is_active = true"
+      # - "asset_type = 'stocks'"  # DISABLED: v1.x data doesn't have asset_type
+      - "active = true"  # v1.x uses 'active' not 'is_active'
     select:
-      # Base fields
+      # Base fields (only those available in v1.x ref_ticker)
       ticker: ticker
-      security_name: security_name
-      asset_type: asset_type
-      exchange_code: primary_exchange
-      currency: currency
-      is_active: is_active
-      # Stocks-specific fields
-      cik: cik  # SEC Central Index Key (10-digit, permanent identifier)
-      shares_outstanding: shares_outstanding
-      market_cap: market_cap
-      sector: sector
-      industry: industry
+      security_name: name
+      # asset_type: asset_type  # DISABLED: not in v1.x
+      exchange_code: exchange_code
+      # currency: currency  # DISABLED: not in v1.x
+      # is_active: is_active  # DISABLED: not in v1.x
+      # Stocks-specific fields - DISABLED: not in v1.x
+      # cik: cik
+      # shares_outstanding: shares_outstanding
+      # market_cap: market_cap
+      # sector: sector
+      # industry: industry
     derive:
-      company_id: "CONCAT('COMPANY_', cik)"  # Use permanent CIK for company linkage
+      # company_id: "CONCAT('COMPANY_', cik)"  # DISABLED: cik not available
+      asset_type: "'stocks'"  # Hardcode since all ref_ticker are stocks
+      is_active: "active"  # Map v1.x column
     unique_key: [ticker]
     tags: [dim, stock]
 
   fact_stock_prices:
-    from: bronze.securities_prices_daily
+    from: bronze.prices_daily  # TEMP: Using v1.x table until v2.0 bronze data is ingested
     filters:
-      - "asset_type = 'stocks'"       # KEY FILTER - only stock prices!
+      # - "asset_type = 'stocks'"  # DISABLED: v1.x data doesn't have asset_type
       - "trade_date IS NOT NULL"
       - "ticker IS NOT NULL"
     select:
