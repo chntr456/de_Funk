@@ -27,7 +27,7 @@
           <mxGeometry y="350" width="900" height="8" as="geometry" />
         </mxCell>
 
-        <!-- Methods Section 1: Initialization & Properties -->
+        <!-- Methods Section 1: Initialization &amp; Properties -->
         <mxCell id="basemodel-init" value="&lt;b&gt;## INITIALIZATION &amp; PROPERTIES (6 methods)&lt;/b&gt;&lt;br&gt;&lt;br&gt;+ __init__(connection, storage_cfg, model_cfg, params=None, repo_root=None)&lt;br&gt;+ @property backend() -> str&lt;br&gt;+ @property measures() -> MeasureExecutor&lt;br&gt;+ @property query_planner() -> GraphQueryPlanner&lt;br&gt;+ @property python_measures() -> Optional[Any]&lt;br&gt;- _detect_backend() -> str" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=top;spacingLeft=4;spacingRight=4;overflow=hidden;rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;fontFamily=Courier New;fontSize=9;" vertex="1" parent="basemodel-class">
           <mxGeometry y="358" width="900" height="120" as="geometry" />
         </mxCell>
@@ -539,8 +539,8 @@
     </mxGraphModel>
   </diagram>
 
-  <!-- TAB 5: Notebook Parser & Manager Architecture -->
-  <diagram id="notebook-parser" name="5. Notebook Parser & Manager">
+  <!-- TAB 5: Notebook Parser &amp; Manager Architecture -->
+  <diagram id="notebook-parser" name="5. Notebook Parser &amp; Manager">
     <mxGraphModel dx="2400" dy="1600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2800" pageHeight="2200" math="0" shadow="0">
       <root>
         <mxCell id="0" />
@@ -619,8 +619,8 @@
     </mxGraphModel>
   </diagram>
 
-  <!-- TAB 6: UI Components & Streamlit App -->
-  <diagram id="ui-components" name="6. UI Components & Streamlit">
+  <!-- TAB 6: UI Components &amp; Streamlit App -->
+  <diagram id="ui-components" name="6. UI Components &amp; Streamlit">
     <mxGraphModel dx="2400" dy="1600" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2800" pageHeight="2200" math="0" shadow="0">
       <root>
         <mxCell id="0" />
@@ -918,18 +918,18 @@
         <mxCell id="layer2-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#6a1b9a;" vertex="1" parent="1">
           <mxGeometry x="80" y="440" width="2600" height="350" as="geometry" />
         </mxCell>
-        <mxCell id="layer2-title" value="LAYER 2: Model Building & Silver Layer (Dimensional Models)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#6a1b9a" vertex="1" parent="1">
+        <mxCell id="layer2-title" value="LAYER 2: Model Building &amp; Silver Layer (Dimensional Models)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#6a1b9a" vertex="1" parent="1">
           <mxGeometry x="100" y="455" width="900" height="35" as="geometry" />
         </mxCell>
         <mxCell id="layer2-content" value="CONFIG-DRIVEN MODEL BUILDING:&lt;br&gt;&lt;br&gt;configs/models/stocks/model.yaml (modular v2.0)&lt;br&gt;  ├─ schema.yaml (extends _base.securities.schema)&lt;br&gt;  ├─ graph.yaml (nodes, edges, paths)&lt;br&gt;  └─ measures.yaml (YAML + Python hybrid)&lt;br&gt;  ↓&lt;br&gt;ModelConfigLoader.load_model_config('stocks')&lt;br&gt;  ↓ Resolve inheritance (_base.securities -> stocks)&lt;br&gt;  ↓ Deep merge schemas, graphs, measures&lt;br&gt;  ↓&lt;br&gt;StocksModel(connection, storage_cfg, model_cfg) [inherits from BaseModel]&lt;br&gt;  ↓ BaseModel.build() -> _build_nodes()&lt;br&gt;  ├─ Load Bronze: _load_bronze_table('securities_reference')&lt;br&gt;  ├─ Apply filters: asset_type = 'stocks'&lt;br&gt;  ├─ Transform: _apply_derive() for derived columns&lt;br&gt;  ├─ Join: Auto-discover edges from graph.yaml&lt;br&gt;  └─ Load Python measures: models/implemented/stocks/measures.py&lt;br&gt;  ↓&lt;br&gt;StocksModel.write_tables() -> Parquet&lt;br&gt;  ↓&lt;br&gt;storage/silver/stocks/&lt;br&gt;  ├─ dim_stock/ (ticker, company_id, market_cap, shares_outstanding)&lt;br&gt;  ├─ fact_prices/ (ticker, trade_date, open, high, low, close, volume)&lt;br&gt;  └─ fact_technicals/ (ticker, trade_date, rsi, macd, bollinger_bands)&lt;br&gt;&lt;br&gt;OTHER MODELS:&lt;br&gt;• company.dim_company (CIK-based, SEC identifiers)&lt;br&gt;• core.dim_calendar (date dimension)&lt;br&gt;&lt;br&gt;CROSS-MODEL JOINS:&lt;br&gt;stocks.dim_stock.company_id -> company.dim_company.company_id" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=9;fontFamily=Courier New" vertex="1" parent="1">
           <mxGeometry x="100" y="500" width="2560" height="275" as="geometry" />
         </mxCell>
 
-        <!-- Layer 3: Query & Session -->
+        <!-- Layer 3: Query &amp; Session -->
         <mxCell id="layer3-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e8f5e9;strokeColor=#2e7d32;" vertex="1" parent="1">
           <mxGeometry x="80" y="830" width="2600" height="250" as="geometry" />
         </mxCell>
-        <mxCell id="layer3-title" value="LAYER 3: Universal Session & Query Engine (Cross-Model Access)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#2e7d32" vertex="1" parent="1">
+        <mxCell id="layer3-title" value="LAYER 3: Universal Session &amp; Query Engine (Cross-Model Access)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#2e7d32" vertex="1" parent="1">
           <mxGeometry x="100" y="845" width="1000" height="35" as="geometry" />
         </mxCell>
         <mxCell id="layer3-content" value="UniversalSession(backend='duckdb', config=config)&lt;br&gt;  ↓ ModelRegistry discovers all models from configs/models/&lt;br&gt;  ↓ load_model('stocks'), load_model('company')&lt;br&gt;  ↓&lt;br&gt;session.get_table(&lt;br&gt;    model_name='stocks',&lt;br&gt;    table_name='fact_prices',&lt;br&gt;    filters=[{column: 'ticker', operator: 'in', value: ['AAPL', 'MSFT']}, ...],&lt;br&gt;    enrich_with=['company.sector', 'company.name']  # CROSS-MODEL JOIN&lt;br&gt;)&lt;br&gt;  ↓ _plan_auto_joins() -> discover join path: stocks.company_id = company.company_id&lt;br&gt;  ↓ _execute_auto_joins() -> load both tables, join, select columns&lt;br&gt;  ↓ FilterEngine.apply_filters() -> backend-agnostic filter application&lt;br&gt;  ↓&lt;br&gt;DataFrame with enriched data (prices + company info)&lt;br&gt;&lt;br&gt;PYTHON MEASURES:&lt;br&gt;session.calculate_measure('sharpe_ratio', model='stocks', ticker='AAPL', window_days=60)&lt;br&gt;  ↓ StocksModel._execute_python_measure('sharpe_ratio', ticker='AAPL', window_days=60)&lt;br&gt;  ↓ stocks/measures.py::StocksMeasures.calculate_sharpe_ratio()&lt;br&gt;  ↓ Complex pandas/numpy calculations&lt;br&gt;  ↓ Returns DataFrame with sharpe_ratio column" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=9;fontFamily=Courier New" vertex="1" parent="1">
@@ -940,18 +940,18 @@
         <mxCell id="layer4-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#e65100;" vertex="1" parent="1">
           <mxGeometry x="80" y="1120" width="2600" height="280" as="geometry" />
         </mxCell>
-        <mxCell id="layer4-title" value="LAYER 4: Notebook Parser & Manager (Markdown -> Exhibits)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#e65100" vertex="1" parent="1">
+        <mxCell id="layer4-title" value="LAYER 4: Notebook Parser &amp; Manager (Markdown -> Exhibits)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#e65100" vertex="1" parent="1">
           <mxGeometry x="100" y="1135" width="950" height="35" as="geometry" />
         </mxCell>
         <mxCell id="layer4-content" value="configs/notebooks/stocks/stock_analysis.md&lt;br&gt;  ↓&lt;br&gt;MarkdownNotebookParser.parse_file('stock_analysis.md')&lt;br&gt;  ├─ _extract_front_matter() -> YAML metadata (id, title, models: [stocks, company])&lt;br&gt;  ├─ _extract_dynamic_filters() -> $filter${type: multi_select, column: ticker, ...}&lt;br&gt;  └─ _extract_exhibits() -> $exhibit${type: line_chart, source: stocks.fact_prices, ...}&lt;br&gt;  ↓&lt;br&gt;NotebookConfig (front_matter, filters, exhibits, content_blocks)&lt;br&gt;  ↓&lt;br&gt;NotebookManager(notebook_config, repo_root, universal_session, folder_context)&lt;br&gt;  ├─ _initialize_model_sessions() -> Load stocks &amp; company models&lt;br&gt;  ├─ _merge_filters_unified() -> Merge folder filters + session state&lt;br&gt;  └─ get_filter_context() -> Current filter values&lt;br&gt;  ↓&lt;br&gt;manager.get_exhibit_data('price_chart')  # THE CORE METHOD&lt;br&gt;  ├─ _find_exhibit('price_chart') -> Exhibit config&lt;br&gt;  ├─ _parse_source('stocks.fact_prices') -> (model='stocks', table='fact_prices')&lt;br&gt;  ├─ _build_filters(exhibit) -> Merge exhibit filters + current filter context&lt;br&gt;  ├─ universal_session.get_table('stocks', 'fact_prices', filters=[...], enrich_with=[...])&lt;br&gt;  └─ Return DataFrame&lt;br&gt;&lt;br&gt;FILTER FLOW:&lt;br&gt;User changes filter -> Streamlit session_state updated -> manager._sync_session_state_to_filters()&lt;br&gt;-> filter_context updated -> next get_exhibit_data() uses new filters" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=9;fontFamily=Courier New" vertex="1" parent="1">
           <mxGeometry x="100" y="1180" width="2560" height="205" as="geometry" />
         </mxCell>
 
-        <!-- Layer 5: UI & Rendering -->
+        <!-- Layer 5: UI &amp; Rendering -->
         <mxCell id="layer5-box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fce4ec;strokeColor=#c2185b;" vertex="1" parent="1">
           <mxGeometry x="80" y="1440" width="2600" height="300" as="geometry" />
         </mxCell>
-        <mxCell id="layer5-title" value="LAYER 5: Streamlit UI & Exhibit Renderers (Interactive Visualization)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#c2185b" vertex="1" parent="1">
+        <mxCell id="layer5-title" value="LAYER 5: Streamlit UI &amp; Exhibit Renderers (Interactive Visualization)" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#c2185b" vertex="1" parent="1">
           <mxGeometry x="100" y="1455" width="1100" height="35" as="geometry" />
         </mxCell>
         <mxCell id="layer5-content" value="User opens browser -> http://localhost:8501&lt;br&gt;  ↓&lt;br&gt;NotebookVaultApp.__init__()&lt;br&gt;  ├─ Initialize UniversalSession(backend='duckdb')&lt;br&gt;  └─ Discover notebooks from configs/notebooks/&lt;br&gt;  ↓&lt;br&gt;NotebookVaultApp.run()&lt;br&gt;  ├─ _render_header() -> Logo + title&lt;br&gt;  ├─ Sidebar:&lt;br&gt;  │  ├─ Notebook selector dropdown&lt;br&gt;  │  ├─ _render_filter_editor() -> Dynamic filter UI (multiselect, date range, etc.)&lt;br&gt;  │  └─ Model graph viewer toggle&lt;br&gt;  └─ Main content area -> _render_notebook_content()&lt;br&gt;  ↓&lt;br&gt;_render_view_mode(notebook_id, notebook_config)&lt;br&gt;  ↓ Iterate through content_blocks:&lt;br&gt;  ├─ Markdown block -> st.markdown(content)&lt;br&gt;  ├─ Exhibit block:&lt;br&gt;  │  ├─ data = manager.get_exhibit_data(exhibit_id)  # Get DataFrame&lt;br&gt;  │  ├─ Select renderer: renderers[exhibit.type](session, manager)&lt;br&gt;  │  │  • ExhibitType.LINE_CHART -> LineChartRenderer&lt;br&gt;  │  │  • ExhibitType.BAR_CHART -> BarChartRenderer&lt;br&gt;  │  │  • ExhibitType.DATA_TABLE -> DataTableRenderer&lt;br&gt;  │  │  • ExhibitType.METRIC_CARDS -> MetricCardsRenderer&lt;br&gt;  │  │  • ExhibitType.WEIGHTED_AGGREGATE -> WeightedAggregateChartRenderer&lt;br&gt;  │  └─ renderer.render(exhibit, data)&lt;br&gt;  │     ├─ LineChartRenderer: Create Plotly figure, st.plotly_chart()&lt;br&gt;  │     ├─ DataTableRenderer: Format DataFrame, st.dataframe()&lt;br&gt;  │     └─ MetricCardsRenderer: Calculate KPIs, st.metric()&lt;br&gt;  └─ Collapsible section -> st.expander()&lt;br&gt;&lt;br&gt;USER INTERACTION:&lt;br&gt;User changes filter -> Streamlit reruns entire app -> New filter values -> Fresh data -> Updated exhibits" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=top;whiteSpace=wrap;rounded=0;fontSize=9;fontFamily=Courier New" vertex="1" parent="1">
