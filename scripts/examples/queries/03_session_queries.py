@@ -766,8 +766,8 @@ pivoted = df.groupBy('row_key').pivot('column_key').agg(F.sum('value'))
 ```
 
 FILES TO REFERENCE:
-- /home/user/de_Funk/models/api/session.py - UniversalSession
-- /home/user/de_Funk/models/base/model.py - BaseModel
+- models/api/session.py - UniversalSession
+- models/base/model.py - BaseModel
 - PySpark DataFrame docs: https://spark.apache.org/docs/latest/api/python/
 
 TROUBLESHOOTING:

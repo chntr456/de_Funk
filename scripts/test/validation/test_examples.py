@@ -519,8 +519,8 @@ class TestExampleIntegrity:
             file_path = examples_dir / 'queries' / example_file
             if file_path.exists():
                 content = file_path.read_text()
-                # Should use setup_repo_imports pattern
-                assert 'setup_repo_imports' in content, f"{example_file} should use setup_repo_imports"
+                # Should use get_repo_root pattern (bootstrap approach)
+                assert 'get_repo_root' in content, f"{example_file} should use get_repo_root"
 
     def test_no_hardcoded_paths(self):
         """Test that examples don't have hardcoded absolute paths."""
