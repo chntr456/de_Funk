@@ -9,23 +9,23 @@
 | Technology | Purpose | Version |
 |------------|---------|---------|
 | **Python** | Primary language | 3.x |
-| **DuckDB** | Analytics engine (primary) | Latest |
-| **PySpark** | ETL/transformations (optional) | 3.x |
+| **DuckDB** | Analytics engine | Latest |
+| **PySpark** | ETL/transformations | 3.x |
 | **Streamlit** | Web UI framework | Latest |
 
 ---
 
 ## Data Processing
 
-### DuckDB (Primary Backend)
+### DuckDB
 
-**Purpose**: High-performance analytics engine
+**Purpose**: Analytics engine
 
 **Advantages**:
-- 10-100x faster than Spark for analytics
 - No cluster setup required
 - Native Parquet support
 - SQL interface
+- In-process database
 
 **Usage**:
 ```python
@@ -35,9 +35,9 @@ session = UniversalSession(backend="duckdb")
 df = session.query("SELECT * FROM stocks.dim_stock")
 ```
 
-### PySpark (Optional Backend)
+### PySpark
 
-**Purpose**: Large-scale ETL and distributed processing
+**Purpose**: Distributed ETL and processing
 
 **When to Use**:
 - Processing datasets larger than memory
@@ -316,7 +316,7 @@ class AppConfig:
 # Core
 python>=3.8
 duckdb
-pyspark (optional)
+pyspark
 pandas
 pyarrow
 

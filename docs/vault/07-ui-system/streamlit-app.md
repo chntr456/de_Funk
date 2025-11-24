@@ -200,7 +200,7 @@ def get_session():
 
 **Strategies**:
 
-1. **Use DuckDB backend** (10-100x faster than Spark)
+1. **Choose appropriate backend** (DuckDB or Spark based on needs)
 2. **Cache parsed notebooks** (`@st.cache_data`)
 3. **Cache data queries** (`@st.cache_data(ttl=300)`)
 4. **Lazy load exhibits** (render only visible)

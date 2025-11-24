@@ -16,7 +16,7 @@ Used for partitioning Bronze tables and filtering in Silver models.
 ## B
 
 ### Backend
-The database engine used for queries. Supported: **DuckDB** (primary), **Spark** (optional).
+The database engine used for queries. Supported: **DuckDB**, **Spark**.
 
 ### BaseModel
 Foundation class for all dimensional models (`models/base/model.py`). Provides 40+ methods for graph building, data access, and measure execution.
@@ -83,7 +83,7 @@ Reference/lookup table in a star schema. Prefixed with `dim_`.
 Examples: `dim_calendar`, `dim_stock`, `dim_company`
 
 ### DuckDB
-High-performance analytics database. Primary backend for de_Funk. 10-100x faster than Spark for analytics queries.
+In-process analytics database. Supported backend for de_Funk with native Parquet support.
 
 ---
 
@@ -313,7 +313,7 @@ simple_measures:
 Dimensional model where dimensions have sub-dimensions (normalized).
 
 ### Spark
-Apache Spark, optional backend for distributed processing.
+Apache Spark, backend for distributed processing.
 
 ### Star Schema
 Dimensional model with a central fact table surrounded by dimension tables.

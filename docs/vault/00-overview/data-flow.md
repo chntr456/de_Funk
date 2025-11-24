@@ -190,7 +190,7 @@ User Request → UniversalSession → Model Resolution → Query Execution → R
 
 - **No Gold Layer**: Queries run directly on Silver Parquet files
 - **Catalog**: `storage/duckdb/analytics.db` stores metadata only
-- **Performance**: 10-100x faster than Spark for analytics
+- **In-Process**: Runs within the application process
 
 ---
 

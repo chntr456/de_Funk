@@ -157,8 +157,8 @@ CONNECTION_TYPE=duckdb
 ```
 
 **Notes**:
-- DuckDB is 10-100x faster for analytics
-- Spark is better for very large datasets (>100GB)
+- DuckDB: in-process, no cluster setup required
+- Spark: distributed processing for large datasets
 - Precedence: env var > storage.json > default
 
 ---
