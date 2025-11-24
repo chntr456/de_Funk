@@ -528,9 +528,9 @@ TESTING YOUR FACET:
    - Validate final schema matches FINAL_COLUMNS
 
 FILES TO REFERENCE:
-- /home/user/de_Funk/datapipelines/facets/base_facet.py - Base class
-- /home/user/de_Funk/datapipelines/providers/chicago/facets/*.py - Real examples
-- /home/user/de_Funk/datapipelines/providers/polygon/facets/*.py - More examples
+- datapipelines/facets/base_facet.py - Base class
+- datapipelines/providers/chicago/facets/*.py - Real examples
+- datapipelines/providers/alpha_vantage/facets/*.py - Current examples
 """
 
 
