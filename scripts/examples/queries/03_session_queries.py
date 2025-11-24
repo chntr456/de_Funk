@@ -9,7 +9,7 @@ UniversalSession provides:
 - Pandas integration for analysis
 - Flexible filtering and aggregation
 
-Based on: /home/user/de_Funk/models/api/session.py
+Based on: models/api/session.py
 
 Author: de_Funk Team
 Date: 2024-11-08

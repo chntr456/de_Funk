@@ -205,10 +205,10 @@ class TestWeightedCalculations:
         reason="Stocks model not available"
     )
     def test_volume_weighted_index(self):
-        """Test volume-weighted index calculation."""
+        """Test average close price calculation."""
         params = {
             'model': 'stocks',
-            'measure': 'volume_weighted_index',
+            'measure': 'avg_close_price',
             'tickers': ['AAPL'],
             'start_date': '2024-01-01',
             'end_date': '2024-01-31'
@@ -238,7 +238,7 @@ class TestWeightedCalculations:
         """Test calculation with multiple tickers."""
         params = {
             'model': 'stocks',
-            'measure': 'volume_weighted_index',
+            'measure': 'avg_close_price',
             'tickers': ['AAPL', 'MSFT'],
             'start_date': '2024-01-01',
             'end_date': '2024-01-31'
@@ -259,10 +259,10 @@ class TestWeightedCalculations:
         reason="Stocks model not available"
     )
     def test_compare_strategies(self):
-        """Test comparing multiple weighting strategies."""
+        """Test comparing multiple measures."""
         strategies = [
-            'equal_weighted_index',
-            'volume_weighted_index',
+            'avg_close_price',
+            'total_volume',
         ]
 
         results = self.calc.calculate_with_comparison(
