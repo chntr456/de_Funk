@@ -7,11 +7,12 @@ and returns calculation results.
 
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
+import sys
 from pathlib import Path
 
 # Setup repo imports first
-from utils.repo import setup_repo_imports
-setup_repo_imports()
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/parameter_interface/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 # Now import project dependencies
 import pandas as pd

@@ -15,8 +15,12 @@ Available strategies:
 - volatility: Inverse volatility (risk-adjusted)
 """
 
-from utils.repo import setup_repo_imports
-setup_repo_imports()
+import sys
+from pathlib import Path
+
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/weighting_strategies/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 from scripts.examples.parameter_interface import MeasureCalculator
 import pandas as pd

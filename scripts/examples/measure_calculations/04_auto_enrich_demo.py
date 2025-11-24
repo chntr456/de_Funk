@@ -5,10 +5,12 @@ Demonstrates the auto-enrichment implementation without requiring actual data.
 Shows how the system detects missing columns and plans joins.
 """
 
+import sys
 from pathlib import Path
-from utils.repo import setup_repo_imports
 
-repo_root = setup_repo_imports()
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/measure_calculations/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 from core.context import RepoContext
 from models.api.session import UniversalSession

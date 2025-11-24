@@ -5,9 +5,12 @@ Provides functions to discover available models, measures, and their parameters.
 """
 
 from typing import Any, Dict, List, Optional
-from utils.repo import setup_repo_imports
+import sys
+from pathlib import Path
 
-setup_repo_imports()
+# Setup repo imports first
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/parameter_interface/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 from core.context import RepoContext
 from models.api.session import UniversalSession

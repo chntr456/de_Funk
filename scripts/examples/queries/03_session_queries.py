@@ -15,11 +15,13 @@ Author: de_Funk Team
 Date: 2024-11-08
 """
 
+import sys
 from pathlib import Path
 from datetime import datetime, timedelta
-from utils.repo import setup_repo_imports
 
-repo_root = setup_repo_imports()
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/queries/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 from pyspark.sql import SparkSession, functions as F
 from models.api.session import UniversalSession

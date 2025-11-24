@@ -16,10 +16,9 @@ Note: Requires PySpark for Spark examples. Falls back to DuckDB-only if unavaila
 import sys
 from pathlib import Path
 
-# Add project root to path
-project_root = get_repo_root()
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/backend_comparison/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 from core.context import RepoContext
 from models.api.session import UniversalSession

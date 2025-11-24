@@ -18,10 +18,9 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 
-# Add project root to path if running as standalone script
-project_root = get_repo_root()
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/measure_calculations/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 # Import session and context
 from core.context import RepoContext

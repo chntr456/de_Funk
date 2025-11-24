@@ -5,8 +5,12 @@ Troubleshooting Guide - Common Issues and Solutions
 Demonstrates how to debug and resolve common problems with the measure framework.
 """
 
-from utils.repo import setup_repo_imports
-repo_root = setup_repo_imports()
+import sys
+from pathlib import Path
+
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/measure_calculations/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 
 def problem_1_measure_not_found():

@@ -8,7 +8,7 @@ A facet is responsible for:
 3. Handling schema inconsistencies
 4. Post-processing data
 
-Based on: /home/user/de_Funk/datapipelines/facets/base_facet.py
+Based on: datapipelines/facets/base_facet.py
 
 Author: de_Funk Team
 Date: 2024-11-08
@@ -21,8 +21,10 @@ from pyspark.sql.types import StringType, DoubleType, LongType, DateType
 # Import base facet class
 import sys
 from pathlib import Path
-from utils.repo import setup_repo_imports
-repo_root = setup_repo_imports()
+
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/extending/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 from datapipelines.facets.base_facet import Facet
 

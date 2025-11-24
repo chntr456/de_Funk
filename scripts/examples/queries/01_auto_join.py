@@ -5,10 +5,12 @@ This demonstrates the new auto-join capability where users can request
 any columns they need, and the system automatically figures out the joins.
 """
 
+import sys
 from pathlib import Path
-from utils.repo import setup_repo_imports
 
-repo_root = setup_repo_imports()
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/queries/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 from models.api.session import UniversalSession
 from core.connection import DataConnection

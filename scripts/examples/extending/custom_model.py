@@ -9,7 +9,7 @@ A model consists of:
 
 All core functionality (graph building, writing, querying) is inherited from BaseModel.
 
-Based on: /home/user/de_Funk/models/implemented/company/model.py
+Based on: models/implemented/company/model.py
 
 Author: de_Funk Team
 Date: 2024-11-08
@@ -19,9 +19,9 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-# Add de_Funk root to path
-from utils.repo import setup_repo_imports
-repo_root = setup_repo_imports()
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/extending/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 from pyspark.sql import DataFrame
 from models.base.model import BaseModel

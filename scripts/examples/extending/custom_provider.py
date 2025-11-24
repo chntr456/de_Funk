@@ -10,8 +10,8 @@ A provider consists of:
 3. Facets - Normalize data from API responses
 
 Based on existing providers:
-- /home/user/de_Funk/datapipelines/providers/bls/
-- /home/user/de_Funk/datapipelines/providers/chicago/
+- datapipelines/providers/bls/
+- datapipelines/providers/chicago/
 
 Author: de_Funk Team
 Date: 2024-11-08
@@ -22,9 +22,9 @@ from pathlib import Path
 from typing import Dict, List, Any, Iterator
 from urllib.parse import urlencode
 
-# Add de_Funk root to path
-from utils.repo import setup_repo_imports
-repo_root = setup_repo_imports()
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/extending/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 from pyspark.sql import SparkSession, DataFrame
 from datapipelines.base.registry import BaseRegistry

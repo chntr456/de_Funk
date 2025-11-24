@@ -8,8 +8,12 @@ All examples show how to use simple parameter dictionaries to get calculation re
 NO COMPLEX CODE REQUIRED - Just provide tickers, dates, and what you want to calculate!
 """
 
-from utils.repo import setup_repo_imports
-setup_repo_imports()
+import sys
+from pathlib import Path
+
+# Add repo to path
+repo_root = Path(__file__).resolve().parents[2]  # scripts/examples/ -> repo root
+sys.path.insert(0, str(repo_root))
 
 from scripts.examples.parameter_interface import MeasureCalculator
 from scripts.examples.parameter_interface.discovery import (
