@@ -228,10 +228,10 @@ print(f"Rows: {len(result)}")
 ### Slow Queries
 
 **Solutions**:
-1. **Use DuckDB**: 10-100x faster than Spark
-2. **Check partitioning**: Ensure data is properly partitioned
-3. **Push filters early**: Apply filters in SQL, not Python
-4. **Limit results**: Use `LIMIT` clause
+1. **Check partitioning**: Ensure data is properly partitioned
+2. **Push filters early**: Apply filters in SQL, not Python
+3. **Limit results**: Use `LIMIT` clause
+4. **Use appropriate backend**: Choose backend based on data size
 
 ### Memory Errors
 

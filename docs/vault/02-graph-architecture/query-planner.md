@@ -729,8 +729,8 @@ graph:
 | **Table Reference** | `read_parquet('path/*.parquet')` | DataFrame objects |
 | **Column Selection** | SQL SELECT | `.select()` method |
 | **Duplicate Handling** | SQL USING clause | Manual `.drop()` |
-| **Performance** | 10-100x faster | Slower but scalable |
-| **Recommended Use** | Small to medium data | Large-scale data |
+| **Scale** | Single machine | Distributed |
+| **Recommended Use** | Single-machine analytics | Large-scale distributed data |
 
 ---
 

@@ -1240,7 +1240,7 @@ avg_close_large_cap:
 | **CTEs** | Yes | Yes |
 | **QUALIFY Clause** | Yes | No |
 | **LATERAL Joins** | Yes | Limited |
-| **Execution Speed** | 10-100x faster | Slower but scalable |
+| **Execution** | In-process | Distributed |
 | **Auto-Enrichment** | Yes | Yes |
 
 ---

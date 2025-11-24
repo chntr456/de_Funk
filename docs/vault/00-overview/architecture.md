@@ -83,7 +83,7 @@
 │  └── Query planning with automatic joins                                 │
 │                                                                          │
 │  DuckDB Analytics                                                        │
-│  ├── 10-100x faster than Spark                                           │
+│  ├── In-process SQL engine                                               │
 │  ├── storage/duckdb/analytics.db (catalog/metadata only)                 │
 │  └── Direct Parquet queries (no data duplication)                        │
 └─────────────────────────────────────────────────────────────────────────┘

@@ -951,8 +951,8 @@ df = conn.read_table('/path/to/data')
 
 ## Best Practices
 
-1. **Use DuckDB for analytics**: 10-100x faster startup for interactive queries
-2. **Use Spark for ETL**: Better for large-scale distributed data processing
+1. **DuckDB for single-machine analytics**: No cluster setup required
+2. **Spark for distributed processing**: Better for large-scale data
 3. **Enable Delta Lake**: Provides ACID, time travel, and better reliability
 4. **Use Z-ordering**: Significantly improves query performance on Delta tables
 5. **Vacuum periodically**: But be careful with retention period

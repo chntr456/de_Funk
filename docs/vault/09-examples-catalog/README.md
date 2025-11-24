@@ -178,14 +178,14 @@ Demonstrates:
 - Backend-specific features
 - Choosing the right backend
 
-### Performance Comparison
+### Backend Characteristics
 
-| Operation | DuckDB | Spark |
-|-----------|--------|-------|
-| Simple query | 10-100x faster | Baseline |
-| Large joins | 10-50x faster | Baseline |
-| Window functions | 10-50x faster | Baseline |
-| Distributed | N/A | Supported |
+| Feature | DuckDB | Spark |
+|---------|--------|-------|
+| Setup | In-process, no cluster | Requires cluster config |
+| Scale | Single machine | Distributed |
+| SQL dialect | DuckDB SQL | Spark SQL |
+| Parquet support | Native | Native |
 
 ---
 

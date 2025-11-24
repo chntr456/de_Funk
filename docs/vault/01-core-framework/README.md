@@ -72,8 +72,8 @@ The `UniversalSession` provides a unified interface for:
 
 Manages database connections for:
 
-- **DuckDB**: Primary analytics backend (10-100x faster)
-- **Spark**: Optional for large-scale ETL
+- **DuckDB**: Analytics backend
+- **Spark**: Distributed processing backend
 
 ### Filter Engine
 
