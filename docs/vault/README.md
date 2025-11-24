@@ -2,222 +2,154 @@
 
 **Comprehensive technical reference for all de_Funk components**
 
-Last Updated: 2025-11-16
-Version: 1.0
+Last Updated: 2025-11-24
+Version: 2.0
 
 ---
 
-## Overview
+## Quick Start
 
-This documentation vault provides in-depth technical reference for every component in the de_Funk system.
+| I want to... | Go to... |
+|--------------|----------|
+| Understand the architecture | [00-overview](00-overview/README.md) |
+| Query data or build models | [01-core-framework](01-core-framework/README.md) |
+| Understand graph-based modeling | [02-graph-architecture](02-graph-architecture/README.md) |
+| Add a data source | [03-data-providers](03-data-providers/README.md) |
+| See what data is available | [04-implemented-models](04-implemented-models/README.md) |
+| Calculate metrics | [05-measure-framework](05-measure-framework/README.md) |
+| Run ETL pipelines | [06-pipelines](06-pipelines/README.md) |
+| Build dashboards | [07-ui-system](07-ui-system/README.md) |
+| Run scripts | [08-scripts-reference](08-scripts-reference/README.md) |
+| See code examples | [09-examples-catalog](09-examples-catalog/README.md) |
+| Write tests | [10-testing-guide](10-testing-guide/README.md) |
+| Configure the system | [11-configuration](11-configuration/README.md) |
+| Debug issues | [12-troubleshooting](12-troubleshooting/README.md) |
+| Review design proposals | [13-proposals](13-proposals/README.md) |
 
-**de_Funk** is a graphical overlay to a unified relational model enabling low-code interactions with data warehouses. It uses YAML-driven graph-based modeling to define dimensional schemas declaratively, abstracting away backend complexity.
-
-Each section includes method-level documentation, architecture explanations, and usage examples.
+---
 
 ## Documentation Structure
 
 ```
 docs/vault/
-├── README.md                          # This file - navigation hub
-├── 01-core-components/
-│   ├── base-model.md                  # BaseModel class - 40+ methods documented
-│   ├── universal-session.md           # UniversalSession - cross-model queries
-│   ├── connection-system.md           # Connection adapters (Spark/DuckDB)
-│   └── storage-router.md              # Storage path management
-├── 02-graph-architecture/
-│   ├── graph-overview.md              # Graph system architecture
-│   ├── nodes-edges-paths.md           # Graph components explained
-│   ├── dependency-resolution.md       # Model dependency graph
-│   └── cross-model-references.md      # Cross-model table access
-├── 03-model-framework/
-│   ├── model-lifecycle.md             # Build process and lifecycle
-│   ├── yaml-configuration.md          # YAML schema reference
-│   ├── measure-framework.md           # Measure types and calculations
-│   └── implemented-models.md          # All 8 models documented
-├── 04-data-pipelines/
-│   ├── pipeline-architecture.md       # Pipeline system overview
-│   ├── facets-system.md               # Facet transformations
-│   ├── ingestors.md                   # Data ingestion orchestration
-│   └── providers.md                   # Provider implementations
-├── 05-ui-system/
-│   ├── notebook-system.md             # Markdown notebook architecture
-│   ├── filter-engine.md               # Filter system and contexts
-│   ├── exhibits.md                    # Visualization system
-│   └── streamlit-app.md               # Streamlit UI components
-└── 06-configuration/
-    ├── config-loader.md               # ConfigLoader system
-    ├── environment-variables.md       # Environment configuration
-    └── api-configs.md                 # API endpoint configuration
+├── 00-overview/              # Architecture, data flow, technology stack
+├── 01-core-framework/        # BaseModel, UniversalSession, connections
+├── 02-graph-architecture/    # Nodes, edges, paths, dependency resolution
+├── 03-data-providers/        # Alpha Vantage, BLS, Chicago (with terms of use)
+├── 04-implemented-models/    # Model data dictionary (dims, facts, measures)
+├── 05-measure-framework/     # Simple, computed, weighted, Python measures
+├── 06-pipelines/             # Bronze/Silver layer, facets, ingestors
+├── 07-ui-system/             # Notebooks, filters, exhibits, Streamlit
+├── 08-scripts-reference/     # Build, ingest, forecast, maintenance scripts
+├── 09-examples-catalog/      # Code examples by category
+├── 10-testing-guide/         # Unit, integration, validation, performance
+├── 11-configuration/         # ConfigLoader, environment, API configs
+├── 12-troubleshooting/       # Common issues and solutions
+├── 13-proposals/             # Design proposals and RFCs
+└── archive/                  # Historical documentation
 ```
 
 ---
 
-## Quick Navigation
+## What is de_Funk?
 
-### By Component Type
+**de_Funk** is a graphical overlay to a unified relational model enabling low-code interactions with data warehouses.
 
-**Core Framework**
-- [BaseModel](01-core-components/base-model.md) - Foundation for all models
-- [UniversalSession](01-core-components/universal-session.md) - Unified query interface
-- [Connection System](01-core-components/connection-system.md) - Backend adapters
+### Key Features
 
-**Graph System**
-- [Graph Overview](02-graph-architecture/graph-overview.md) - Architecture explanation
-- [Nodes, Edges, Paths](02-graph-architecture/nodes-edges-paths.md) - Component details
-- [Cross-Model References](02-graph-architecture/cross-model-references.md) - Linking models
+- **YAML-Driven Modeling**: Define dimensional models declaratively
+- **Graph-Based Architecture**: Tables as nodes, relationships as edges
+- **Two-Layer Storage**: Bronze (raw) → Silver (dimensional)
+- **Backend Agnostic**: Supports both DuckDB and Spark
+- **Unified Query Interface**: Cross-model queries via UniversalSession
+- **Measure Framework**: Pre-defined calculations (YAML + Python)
+- **Interactive Analytics**: Markdown notebooks with dynamic filtering
 
-**Models & Measures**
-- [Model Lifecycle](03-model-framework/model-lifecycle.md) - Build process
-- [YAML Configuration](03-model-framework/yaml-configuration.md) - Schema reference
-- [Measure Framework](03-model-framework/measure-framework.md) - Calculations
+### Current Data Domain (Example)
 
-**Data Pipelines**
-- [Pipeline Architecture](04-data-pipelines/pipeline-architecture.md) - ETL overview
-- [Facets System](04-data-pipelines/facets-system.md) - Transformations
-- [Providers](04-data-pipelines/providers.md) - Data sources
+The framework is domain-agnostic, but the current implementation demonstrates financial/economic data:
 
-**UI & Analytics**
-- [Notebook System](05-ui-system/notebook-system.md) - Interactive analytics
-- [Filter Engine](05-ui-system/filter-engine.md) - Dynamic filtering
-- [Exhibits](05-ui-system/exhibits.md) - Visualizations
-
-### By Task
-
-**Building Models**
-1. [YAML Configuration](03-model-framework/yaml-configuration.md)
-2. [Model Lifecycle](03-model-framework/model-lifecycle.md)
-3. [BaseModel Reference](01-core-components/base-model.md)
-
-**Writing Queries**
-1. [UniversalSession](01-core-components/universal-session.md)
-2. [Measure Framework](03-model-framework/measure-framework.md)
-3. [Cross-Model References](02-graph-architecture/cross-model-references.md)
-
-**Creating Pipelines**
-1. [Pipeline Architecture](04-data-pipelines/pipeline-architecture.md)
-2. [Facets System](04-data-pipelines/facets-system.md)
-3. [Providers](04-data-pipelines/providers.md)
-
-**Building UI**
-1. [Notebook System](05-ui-system/notebook-system.md)
-2. [Filter Engine](05-ui-system/filter-engine.md)
-3. [Exhibits](05-ui-system/exhibits.md)
+| Model | Description | Data Source |
+|-------|-------------|-------------|
+| **core** | Calendar dimension (foundation) | Generated |
+| **company** | Corporate entities (CIK-based) | Alpha Vantage |
+| **stocks** | Stock securities with technicals | Alpha Vantage |
+| **macro** | Economic indicators (unemployment, CPI) | BLS |
+| **city_finance** | Municipal data (Chicago) | Chicago Data Portal |
+| **forecast** | Time series predictions | Derived |
 
 ---
 
-## Understanding Key Concepts
+## Navigation by Role
 
-### Why So Many Methods in BaseModel?
+### Data Engineer
+1. [Data Providers](03-data-providers/README.md) - Add/configure data sources
+2. [Pipelines](06-pipelines/README.md) - ETL processes
+3. [Implemented Models](04-implemented-models/README.md) - Data dictionary
+4. [Scripts Reference](08-scripts-reference/README.md) - Operational scripts
 
-BaseModel contains 40+ methods because it provides a **complete, YAML-driven graph building framework** that works for any dimensional model. Instead of duplicating graph-building logic in each model, all models inherit this powerful framework.
+### Data Analyst
+1. [Implemented Models](04-implemented-models/README.md) - Available data
+2. [Measure Framework](05-measure-framework/README.md) - Metrics and KPIs
+3. [Examples Catalog](09-examples-catalog/README.md) - Query examples
+4. [UI System](07-ui-system/README.md) - Notebooks and dashboards
 
-**Method Categories in BaseModel:**
-
-1. **Graph Building** (8 methods)
-   - `build()` - Main orchestrator
-   - `_build_nodes()` - Create nodes from YAML
-   - `_apply_edges()` - Validate relationships
-   - `_materialize_paths()` - Create joined views
-
-2. **Data Access** (7 methods)
-   - `get_table()` - Retrieve table
-   - `get_dimension_df()` - Get dimension
-   - `get_fact_df()` - Get fact
-   - `has_table()` - Check existence
-
-3. **Cross-Model Support** (3 methods)
-   - `set_session()` - Inject session reference
-   - `_resolve_node()` - Resolve cross-model refs
-   - `get_table_enriched()` - Fetch with joins
-
-4. **Measure Execution** (2 methods)
-   - `calculate_measure()` - Execute measure
-   - `calculate_measure_by_entity()` - Grouped calculation
-
-5. **Backend Abstraction** (8 methods)
-   - `_detect_backend()` - Identify Spark/DuckDB
-   - `_select_columns()` - Column operations
-   - `_apply_derive()` - Computed columns
-   - `_join_with_dedupe()` - Joining logic
-
-6. **Storage Operations** (3 methods)
-   - `write_tables()` - Persist to Silver
-   - `ensure_built()` - Lazy loading
-   - Custom hooks
-
-7. **Metadata & Introspection** (5 methods)
-   - `list_tables()` - Inventory
-   - `get_table_schema()` - Schema info
-   - `get_relations()` - Relationship map
-   - `get_metadata()` - Model metadata
-
-8. **Extension Points** (3 methods)
-   - `before_build()` - Pre-build hook
-   - `after_build()` - Post-build hook
-   - `custom_node_loading()` - Custom loaders
-
-**See**: [BaseModel Reference](01-core-components/base-model.md) for complete documentation of all methods.
-
-### Understanding Graphs in Models
-
-Models use a **directed acyclic graph (DAG)** to define dimensional schemas:
-
-- **Nodes**: Tables (dimensions and facts)
-- **Edges**: Relationships (foreign keys)
-- **Paths**: Materialized joins (denormalized views)
-
-This graph-based approach enables:
-- **Declarative modeling**: Define structure in YAML, not code
-- **Automatic joins**: Query planner traverses graph
-- **Cross-model queries**: Models link via dependency graph
-- **Backend agnostic**: Same graph works with Spark or DuckDB
-
-**See**: [Graph Architecture Overview](02-graph-architecture/graph-overview.md) for detailed explanation.
+### Developer
+1. [Core Framework](01-core-framework/README.md) - BaseModel, sessions
+2. [Graph Architecture](02-graph-architecture/README.md) - Model design
+3. [Testing Guide](10-testing-guide/README.md) - Test patterns
+4. [Proposals](13-proposals/README.md) - Design decisions
 
 ---
 
-## Architecture Diagram
+## Key Concepts
 
-Visual representation of the system architecture:
-- **File**: `docs/architecture-diagram.drawio`
-- **Tool**: Draw.io (https://app.diagrams.net)
+### Two-Layer Architecture
 
-Includes:
-- Two-layer architecture (Bronze → Silver)
-- Data flow from APIs to analytics
-- Model dependency graph
-- Universal Session architecture
-- Storage layer organization
+```
+API Data → Bronze Layer → Silver Layer → Analytics
+           (raw data)    (dimensional)   (queries)
+```
+
+- **Bronze**: Raw API data, partitioned Parquet files
+- **Silver**: Star/snowflake schemas, YAML-configured
+- **Analytics**: DuckDB queries directly on Silver (no separate Gold layer)
+
+### Model Dependency Graph
+
+```
+Tier 0: core (calendar)
+           ↓
+Tier 1: company, macro
+           ↓
+Tier 2: stocks → options, etfs, futures
+           ↓
+Tier 3: forecast, city_finance
+```
+
+### Measure Types
+
+| Type | Definition | Example |
+|------|------------|---------|
+| Simple | Direct aggregation | `AVG(close_price)` |
+| Computed | Expression-based | `(high - low) / open` |
+| Weighted | Weighted aggregation | Volume-weighted price |
+| Python | Complex calculations | Sharpe ratio, correlation |
 
 ---
 
-## Related Documentation
+## Related Resources
 
-### Getting Started
-- [QUICKSTART.md](/QUICKSTART.md) - Installation and first steps
-- [RUNNING.md](/RUNNING.md) - How to run the application
-- [CLAUDE.md](/CLAUDE.md) - AI assistant guide
-
-### Development Guides
-- [TESTING_GUIDE.md](/TESTING_GUIDE.md) - Testing strategies
-- [PIPELINE_GUIDE.md](/PIPELINE_GUIDE.md) - Data pipeline workflows
-- [docs/configuration.md](/docs/configuration.md) - Configuration system
-
-### Reference
-- [MODEL_DEPENDENCY_ANALYSIS.md](/MODEL_DEPENDENCY_ANALYSIS.md) - Model dependencies
-- [MODEL_EDGES_REFERENCE.md](/MODEL_EDGES_REFERENCE.md) - Cross-model relationships
-- [FORECAST_README.md](/FORECAST_README.md) - Forecasting models
+- [CLAUDE.md](/CLAUDE.md) - AI assistant guide (high-level)
+- [Architecture Diagram](/docs/architecture-diagram.drawio) - Visual system design
+- [Scripts Examples](/scripts/examples/) - Runnable code examples
+- [Configs](/configs/) - YAML model configurations
 
 ---
 
-## Contributing to Documentation
+## Version History
 
-When adding or modifying code, update the relevant documentation:
-
-1. **New component**: Create new file in appropriate vault section
-2. **New method**: Document in component's reference file
-3. **Architecture change**: Update graph architecture docs
-4. **Configuration change**: Update configuration docs
-
-Keep documentation synchronized with code to maintain accuracy.
+| Version | Date | Changes |
+|---------|------|---------|
+| 2.0 | 2025-11-24 | Consolidated vault structure, provider terms of use, model data dictionary |
+| 1.0 | 2025-11-16 | Initial vault creation |
