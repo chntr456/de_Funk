@@ -36,29 +36,29 @@ class TestParameterInterface:
         models = self.calc.list_models()
         assert isinstance(models, list)
         assert len(models) > 0
-        assert 'equity' in models or 'corporate' in models
+        assert 'stocks' in models or 'company' in models
 
     def test_list_measures(self):
         """Test listing measures for a model."""
-        # Skip if equity model not available
-        if 'equity' not in self.calc.list_models():
-            pytest.skip("Equity model not available")
+        # Skip if stocks model not available
+        if 'stocks' not in self.calc.list_models():
+            pytest.skip("Stocks model not available")
 
-        measures = self.calc.list_measures('equity')
+        measures = self.calc.list_measures('stocks')
         assert isinstance(measures, list)
         assert len(measures) > 0
 
     def test_get_measure_info(self):
         """Test getting measure information."""
-        if 'equity' not in self.calc.list_models():
-            pytest.skip("Equity model not available")
+        if 'stocks' not in self.calc.list_models():
+            pytest.skip("Stocks model not available")
 
-        measures = self.calc.list_measures('equity')
+        measures = self.calc.list_measures('stocks')
         if not measures:
             pytest.skip("No measures available")
 
         measure_name = measures[0]
-        info = self.calc.get_measure_info('equity', measure_name)
+        info = self.calc.get_measure_info('stocks', measure_name)
         assert isinstance(info, dict)
         assert 'type' in info
         assert 'source' in info
@@ -70,18 +70,18 @@ class TestCalculationRequest:
     def test_basic_request(self):
         """Test basic request creation."""
         request = CalculationRequest(
-            model='equity',
+            model='stocks',
             measure='avg_close_price',
             tickers=['AAPL'],
         )
-        assert request.model == 'equity'
+        assert request.model == 'stocks'
         assert request.measure == 'avg_close_price'
         assert request.tickers == ['AAPL']
 
     def test_request_with_dates(self):
         """Test request with date filters."""
         request = CalculationRequest(
-            model='equity',
+            model='stocks',
             measure='volume_weighted_index',
             tickers=['AAPL', 'MSFT'],
             start_date='2024-01-01',
@@ -97,7 +97,7 @@ class TestCalculationRequest:
     def test_request_to_filter_kwargs(self):
         """Test conversion to filter kwargs."""
         request = CalculationRequest(
-            model='equity',
+            model='stocks',
             measure='avg_close_price',
             tickers=['AAPL'],
             entity_column='ticker',
@@ -116,7 +116,7 @@ class TestParameterValidation:
     def test_valid_params(self):
         """Test validation of valid parameters."""
         params = {
-            'model': 'equity',
+            'model': 'stocks',
             'measure': 'avg_close_price',
             'tickers': ['AAPL', 'MSFT'],
             'start_date': '2024-01-01',
@@ -140,7 +140,7 @@ class TestParameterValidation:
     def test_missing_measure(self):
         """Test validation fails without measure."""
         params = {
-            'model': 'equity'
+            'model': 'stocks'
         }
 
         with pytest.raises(ParameterError, match="Missing required parameter: 'measure'"):
@@ -149,7 +149,7 @@ class TestParameterValidation:
     def test_invalid_date_format(self):
         """Test validation fails with invalid date."""
         params = {
-            'model': 'equity',
+            'model': 'stocks',
             'measure': 'avg_close_price',
             'start_date': 'invalid-date'
         }
@@ -160,7 +160,7 @@ class TestParameterValidation:
     def test_invalid_backend(self):
         """Test validation fails with invalid backend."""
         params = {
-            'model': 'equity',
+            'model': 'stocks',
             'measure': 'avg_close_price',
             'backend': 'invalid_backend'
         }
@@ -171,7 +171,7 @@ class TestParameterValidation:
     def test_date_range_validation(self):
         """Test validation of date ranges."""
         params = {
-            'model': 'equity',
+            'model': 'stocks',
             'measure': 'avg_close_price',
             'start_date': '2024-12-31',
             'end_date': '2024-01-01'  # End before start
@@ -183,7 +183,7 @@ class TestParameterValidation:
     def test_invalid_limit(self):
         """Test validation fails with invalid limit."""
         params = {
-            'model': 'equity',
+            'model': 'stocks',
             'measure': 'avg_close_price',
             'limit': -10  # Negative limit
         }
@@ -200,13 +200,13 @@ class TestWeightedCalculations:
         self.calc = MeasureCalculator(backend='duckdb')
 
     @pytest.mark.skipif(
-        'equity' not in MeasureCalculator(backend='duckdb').list_models(),
-        reason="Equity model not available"
+        'stocks' not in MeasureCalculator(backend='duckdb').list_models(),
+        reason="Stocks model not available"
     )
     def test_volume_weighted_index(self):
         """Test volume-weighted index calculation."""
         params = {
-            'model': 'equity',
+            'model': 'stocks',
             'measure': 'volume_weighted_index',
             'tickers': ['AAPL'],
             'start_date': '2024-01-01',
@@ -230,13 +230,13 @@ class TestWeightedCalculations:
         assert result.query_time_ms >= 0
 
     @pytest.mark.skipif(
-        'equity' not in MeasureCalculator(backend='duckdb').list_models(),
-        reason="Equity model not available"
+        'stocks' not in MeasureCalculator(backend='duckdb').list_models(),
+        reason="Stocks model not available"
     )
     def test_multiple_tickers(self):
         """Test calculation with multiple tickers."""
         params = {
-            'model': 'equity',
+            'model': 'stocks',
             'measure': 'volume_weighted_index',
             'tickers': ['AAPL', 'MSFT'],
             'start_date': '2024-01-01',
@@ -254,8 +254,8 @@ class TestWeightedCalculations:
         assert result.data is not None
 
     @pytest.mark.skipif(
-        'equity' not in MeasureCalculator(backend='duckdb').list_models(),
-        reason="Equity model not available"
+        'stocks' not in MeasureCalculator(backend='duckdb').list_models(),
+        reason="Stocks model not available"
     )
     def test_compare_strategies(self):
         """Test comparing multiple weighting strategies."""
@@ -265,7 +265,7 @@ class TestWeightedCalculations:
         ]
 
         results = self.calc.calculate_with_comparison(
-            model='equity',
+            model='stocks',
             measures=strategies,
             tickers=['AAPL'],
             start_date='2024-01-01',
