@@ -11,9 +11,11 @@ NO COMPLEX CODE REQUIRED - Just provide tickers, dates, and what you want to cal
 import sys
 from pathlib import Path
 
-# Add repo to path
-repo_root = Path(__file__).resolve().parents[2]  # scripts/examples/ -> repo root
-sys.path.insert(0, str(repo_root))
+# Bootstrap: add repo to path
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from utils.repo import get_repo_root
+repo_root = get_repo_root()
 
 from scripts.examples.parameter_interface import MeasureCalculator
 from scripts.examples.parameter_interface.discovery import (

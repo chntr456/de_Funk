@@ -22,9 +22,11 @@ from pyspark.sql.types import StringType, DoubleType, LongType, DateType
 import sys
 from pathlib import Path
 
-# Add repo to path
-repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/extending/ -> repo root
-sys.path.insert(0, str(repo_root))
+# Bootstrap: add repo to path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from utils.repo import get_repo_root
+repo_root = get_repo_root()
 
 from datapipelines.facets.base_facet import Facet
 

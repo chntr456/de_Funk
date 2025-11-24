@@ -9,9 +9,11 @@ import sys
 from pathlib import Path
 from typing import List, Optional
 
-# Add repo to path
-repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/queries/ -> repo root
-sys.path.insert(0, str(repo_root))
+# Bootstrap: add repo to path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from utils.repo import get_repo_root
+repo_root = get_repo_root()
 
 from core.context import RepoContext
 from models.api.session import UniversalSession

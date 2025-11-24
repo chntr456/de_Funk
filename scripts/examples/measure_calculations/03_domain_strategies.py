@@ -18,9 +18,11 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 
-# Add repo to path
-repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/measure_calculations/ -> repo root
-sys.path.insert(0, str(repo_root))
+# Bootstrap: add repo to path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from utils.repo import get_repo_root
+repo_root = get_repo_root()
 
 # Import session and context
 from core.context import RepoContext

@@ -8,9 +8,11 @@ Demonstrates how to debug and resolve common problems with the measure framework
 import sys
 from pathlib import Path
 
-# Add repo to path
-repo_root = Path(__file__).resolve().parents[3]  # scripts/examples/measure_calculations/ -> repo root
-sys.path.insert(0, str(repo_root))
+# Bootstrap: add repo to path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from utils.repo import get_repo_root
+repo_root = get_repo_root()
 
 
 def problem_1_measure_not_found():
