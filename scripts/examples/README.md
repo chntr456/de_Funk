@@ -44,10 +44,25 @@ scripts/examples/
 │   ├── 01_basic_weighted_price.py  # Basic weighted examples
 │   └── 02_compare_all_strategies.py # Compare strategies
 │
-├── measure_calculations/            # Basic measure examples
+├── measure_calculations/            # Measure framework examples
 │   ├── 01_basic_measures.py        # Simple calculations
 │   ├── 02_troubleshooting.py       # Debug guide
-│   └── 03_domain_strategies.py     # Domain-specific measures
+│   ├── 03_domain_strategies.py     # Domain-specific measures
+│   ├── 04_auto_enrich_demo.py      # Auto-enrichment demo
+│   └── 05_auto_enrich_example.py   # Auto-enrichment examples
+│
+├── queries/                         # Query system examples
+│   ├── README.md                   # Query examples guide
+│   ├── 01_auto_join.py             # Transparent auto-join
+│   ├── 02_query_planner.py         # Dynamic join planning
+│   └── 03_session_queries.py       # UniversalSession queries
+│
+├── extending/                       # Developer extension examples
+│   ├── README.md                   # Extension guide
+│   ├── custom_facet.py             # Custom data transformations
+│   ├── custom_model.py             # Custom domain models
+│   ├── custom_provider.py          # Custom data providers
+│   └── custom_notebook.md          # Custom notebooks
 │
 ├── backend_comparison/              # DuckDB vs Spark
 │   └── 01_dual_backend.py          # Backend compatibility
@@ -186,7 +201,43 @@ for strategy, result in results.items():
 
 **Import:** `from scripts.examples.parameter_interface import MeasureCalculator`
 
-### 4. Backend Comparison (`backend_comparison/`)
+### 4. Query System (`queries/`)
+
+**Focus:** Query capabilities and cross-model joins
+
+**Examples:**
+- Transparent auto-join functionality
+- Dynamic join planning with GraphQueryPlanner
+- UniversalSession for ad-hoc queries
+- Cross-model queries and joins
+
+**Use Cases:**
+- Understanding query system architecture
+- Building complex analytical queries
+- Leveraging automatic join detection
+- Model-agnostic data access
+
+**Run:** `python -m scripts.examples.queries.01_auto_join`
+
+### 5. Extending de_Funk (`extending/`)
+
+**Focus:** Developer examples for extending the framework
+
+**Examples:**
+- Custom facets for data transformations
+- Custom domain models
+- Custom data providers
+- Custom analysis notebooks
+
+**Use Cases:**
+- Adding new data sources
+- Implementing domain-specific models
+- Creating custom pipelines
+- Building specialized analytics
+
+**See:** `scripts/examples/extending/README.md` for detailed guide
+
+### 6. Backend Comparison (`backend_comparison/`)
 
 **Focus:** Compare DuckDB vs Spark performance
 

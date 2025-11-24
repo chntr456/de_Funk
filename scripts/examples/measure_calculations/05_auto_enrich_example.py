@@ -12,13 +12,10 @@ When auto_enrich=True, the system:
 This eliminates the need to pre-materialize all join combinations.
 """
 
-import sys
 from pathlib import Path
+from utils.repo import setup_repo_imports
 
-# Add project root to path if running as standalone script
-project_root = get_repo_root()
-if str(project_root) not in sys.path:
-    sys.path.insert(0, str(project_root))
+repo_root = setup_repo_imports()
 
 from core.context import RepoContext
 from models.api.session import UniversalSession

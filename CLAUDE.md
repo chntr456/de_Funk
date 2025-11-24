@@ -166,7 +166,6 @@ de_Funk/
 │   └── duckdb/              # DuckDB catalog (analytics.db)
 ├── docs/
 │   └── guide/               # Comprehensive documentation
-├── examples/                # Runnable code examples
 └── utils/                   # Utility functions
     ├── repo.py              # Centralized repo discovery (NEW)
     └── env_loader.py        # Environment variable loading
@@ -1180,8 +1179,9 @@ python scripts/test_filter_system.py
 
 ### Debug Resources
 
-- **`examples/measure_framework/01_basic_usage.py`**: Usage examples
-- **`examples/measure_framework/02_troubleshooting.py`**: Debug guide
+- **`scripts/examples/measure_calculations/01_basic_measures.py`**: Usage examples
+- **`scripts/examples/measure_calculations/02_troubleshooting.py`**: Debug guide
+- **`scripts/examples/README.md`**: Examples overview and guide
 - **`tests/pipeline_tester.py`**: Validate entire setup
 - **`TESTING_GUIDE.md`**: Comprehensive testing guide
 - **`MODEL_DEPENDENCY_ANALYSIS.md`**: Model dependency issues
@@ -1313,7 +1313,7 @@ If queries are slow:
 
 1. **Start with YAML configs**: Models defined in `/configs/models/`
 2. **Check documentation**: Review relevant `.md` files first
-3. **Use examples**: Look at `/examples/` for usage patterns
+3. **Use examples**: Look at `/scripts/examples/` for usage patterns
 4. **Follow imports**: Trace from high-level to implementation
 5. **Check tests**: Unit tests show expected behavior
 
@@ -1348,9 +1348,9 @@ If queries are slow:
 - `/orchestration/` → Pipeline orchestration
 - `/tests/` → Unit and integration tests
 - `/scripts/` → Operational scripts (use `python -m scripts.script_name`)
+  - `/scripts/examples/` → Runnable code examples (queries, measures, extending)
 - `/storage/` → Data storage (Bronze/Silver Parquet files, DuckDB catalog)
 - `/docs/` → Documentation
-- `/examples/` → Code examples
 - `/utils/` → **Utility functions** - repo.py for centralized repo discovery
 
 ### Backend Selection
@@ -1381,7 +1381,7 @@ API → Facet → Bronze → Model → Silver → Query → UI/Notebook
 ## Additional Resources
 
 - **GitHub Issues**: Report bugs and request features
-- **Code Examples**: `/examples/` directory
+- **Code Examples**: `/scripts/examples/` directory (queries, measures, extending)
 - **Documentation**: `/docs/guide/` directory
 - **Test Examples**: `/tests/` directory
 - **Notebook Examples**: `/configs/notebooks/` directory

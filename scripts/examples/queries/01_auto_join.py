@@ -6,14 +6,17 @@ any columns they need, and the system automatically figures out the joins.
 """
 
 from pathlib import Path
+from utils.repo import setup_repo_imports
+
+repo_root = setup_repo_imports()
+
 from models.api.session import UniversalSession
 from core.connection import DataConnection
 
 def demo_auto_join():
     """Demonstrate transparent auto-join functionality."""
 
-    # Setup
-    repo_root = get_repo_root()
+    # Setup - use repo_root from module level
     storage_cfg = {
         'bronze_root': repo_root / 'storage/bronze',
         'silver_root': repo_root / 'storage/silver'
