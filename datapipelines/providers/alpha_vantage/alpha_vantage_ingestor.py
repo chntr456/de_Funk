@@ -19,10 +19,70 @@ Rate Limiting Strategy:
 
 import time
 import threading
+from typing import Callable, Optional
 from urllib.parse import urlparse, parse_qs
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
 
 from datapipelines.providers.alpha_vantage.alpha_vantage_registry import AlphaVantageRegistry
+
+
+# ============================================================================
+# Progress Tracking
+# ============================================================================
+
+@dataclass
+class ProgressInfo:
+    """Information about current ingestion progress."""
+    phase: str           # 'reference', 'prices', 'bulk_listing'
+    current: int         # Current item number (1-indexed)
+    total: int           # Total items to process
+    ticker: str          # Current ticker being processed
+    success: bool        # Whether the current item succeeded
+    error: Optional[str] = None  # Error message if failed
+    elapsed_seconds: float = 0.0  # Time elapsed since phase start
+
+    @property
+    def percent_complete(self) -> float:
+        """Percentage complete (0-100)."""
+        return (self.current / self.total * 100) if self.total > 0 else 0.0
+
+    @property
+    def eta_seconds(self) -> Optional[float]:
+        """Estimated seconds remaining based on current pace."""
+        if self.current == 0 or self.elapsed_seconds == 0:
+            return None
+        rate = self.current / self.elapsed_seconds
+        remaining = self.total - self.current
+        return remaining / rate if rate > 0 else None
+
+    def format_eta(self) -> str:
+        """Format ETA as human-readable string."""
+        eta = self.eta_seconds
+        if eta is None:
+            return "calculating..."
+        if eta < 60:
+            return f"{eta:.0f}s"
+        elif eta < 3600:
+            return f"{eta/60:.1f}m"
+        else:
+            return f"{eta/3600:.1f}h"
+
+
+# Type alias for progress callback
+ProgressCallback = Callable[[ProgressInfo], None]
+
+
+def default_progress_callback(info: ProgressInfo) -> None:
+    """Default progress callback that prints status to console."""
+    status = "✓" if info.success else "✗"
+    eta_str = f" | ETA: {info.format_eta()}" if info.current > 1 else ""
+    error_str = f" | {info.error}" if info.error else ""
+
+    print(f"  [{info.phase}] {status} {info.current}/{info.total} "
+          f"({info.percent_complete:.1f}%) {info.ticker}{eta_str}{error_str}")
+
+
 from datapipelines.base.http_client import HttpClient
 from datapipelines.base.key_pool import ApiKeyPool
 from datapipelines.ingestors.bronze_sink import BronzeSink
@@ -83,7 +143,9 @@ class AlphaVantageIngestor(Ingestor):
         self.spark = spark
         self._http_lock = threading.Lock()
 
-    def _fetch_calls(self, calls, response_key=None):
+    def _fetch_calls(self, calls, response_key=None,
+                     progress_callback: Optional[ProgressCallback] = None,
+                     phase: str = "fetching"):
         """
         Fetch data from Alpha Vantage API.
 
@@ -93,17 +155,43 @@ class AlphaVantageIngestor(Ingestor):
         Args:
             calls: Iterator of call specs (ep_name, params)
             response_key: Key in response containing data (None for top-level)
+            progress_callback: Optional callback for progress updates
+            phase: Phase name for progress reporting (e.g., 'reference', 'prices')
 
         Returns:
             List of batches (one batch per call)
         """
         batches = []
-        for call in calls:
+        calls_list = list(calls)
+        total = len(calls_list)
+        start_time = time.time()
+
+        for i, call in enumerate(calls_list):
+            ticker = call["params"].get("symbol", "UNKNOWN")
             ep, path, query = self.registry.render(call["ep_name"], **call["params"])
 
             # Make request (thread-safe)
-            with self._http_lock:
-                payload = self.http.request(ep.base, path, query, ep.method)
+            error_msg = None
+            success = True
+            try:
+                with self._http_lock:
+                    payload = self.http.request(ep.base, path, query, ep.method)
+            except Exception as e:
+                payload = {}
+                error_msg = str(e)
+                success = False
+
+            # Check for API-level errors in response
+            if isinstance(payload, dict):
+                if "Error Message" in payload:
+                    error_msg = payload["Error Message"][:80]
+                    success = False
+                elif "Information" in payload and len(payload) == 1:
+                    error_msg = "API limit or invalid request"
+                    success = False
+                elif "Note" in payload:
+                    error_msg = "Rate limit warning"
+                    # Still considered success, just a warning
 
             # Extract data
             if response_key:
@@ -115,13 +203,32 @@ class AlphaVantageIngestor(Ingestor):
                     batches.append([payload])
                 else:
                     batches.append([])
+                    if success and not data:
+                        error_msg = f"No data for key '{response_key}'"
+                        success = False
             else:
                 # No response key - return entire payload
                 batches.append([payload])
 
+            # Report progress
+            if progress_callback:
+                elapsed = time.time() - start_time
+                info = ProgressInfo(
+                    phase=phase,
+                    current=i + 1,
+                    total=total,
+                    ticker=ticker,
+                    success=success,
+                    error=error_msg,
+                    elapsed_seconds=elapsed
+                )
+                progress_callback(info)
+
         return batches
 
-    def _fetch_calls_concurrent(self, calls, response_key=None, max_workers=5):
+    def _fetch_calls_concurrent(self, calls, response_key=None, max_workers=5,
+                                 progress_callback: Optional[ProgressCallback] = None,
+                                 phase: str = "fetching"):
         """
         Fetch data with concurrent requests.
 
@@ -132,31 +239,62 @@ class AlphaVantageIngestor(Ingestor):
             calls: Iterator of call specs
             response_key: Key in response containing data
             max_workers: Maximum concurrent workers (default: 5 for premium tier)
+            progress_callback: Optional callback for progress updates
+            phase: Phase name for progress reporting
 
         Returns:
             List of batches (one batch per call)
         """
-        batches = [None] * len(list(calls))  # Pre-allocate to maintain order
         calls_list = list(calls)
+        total = len(calls_list)
+        batches = [None] * total  # Pre-allocate to maintain order
+        completed = [0]  # Use list for mutable counter in nested function
+        start_time = time.time()
+        progress_lock = threading.Lock()
 
         def fetch_single_call(i, call):
+            ticker = call["params"].get("symbol", "UNKNOWN")
             ep, path, query = self.registry.render(call["ep_name"], **call["params"])
 
+            error_msg = None
+            success = True
+
             # Make request (thread-safe)
-            with self._http_lock:
-                payload = self.http.request(ep.base, path, query, ep.method)
+            try:
+                with self._http_lock:
+                    payload = self.http.request(ep.base, path, query, ep.method)
+            except Exception as e:
+                payload = {}
+                error_msg = str(e)
+                success = False
+
+            # Check for API-level errors
+            if isinstance(payload, dict):
+                if "Error Message" in payload:
+                    error_msg = payload["Error Message"][:80]
+                    success = False
+                elif "Information" in payload and len(payload) == 1:
+                    error_msg = "API limit or invalid request"
+                    success = False
+                elif "Note" in payload:
+                    error_msg = "Rate limit warning"
 
             # Extract data
+            batch = []
             if response_key:
                 data = payload.get(response_key)
                 if isinstance(data, list):
-                    return i, data
+                    batch = data
                 elif isinstance(data, dict):
-                    return i, [payload]
+                    batch = [payload]
                 else:
-                    return i, []
+                    if success and not data:
+                        error_msg = f"No data for key '{response_key}'"
+                        success = False
             else:
-                return i, [payload]
+                batch = [payload]
+
+            return i, batch, ticker, success, error_msg
 
         # Execute concurrently
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -166,12 +304,30 @@ class AlphaVantageIngestor(Ingestor):
             }
 
             for future in as_completed(futures):
-                i, batch = future.result()
+                i, batch, ticker, success, error_msg = future.result()
                 batches[i] = batch
+
+                # Report progress (thread-safe)
+                if progress_callback:
+                    with progress_lock:
+                        completed[0] += 1
+                        elapsed = time.time() - start_time
+                        info = ProgressInfo(
+                            phase=phase,
+                            current=completed[0],
+                            total=total,
+                            ticker=ticker,
+                            success=success,
+                            error=error_msg,
+                            elapsed_seconds=elapsed
+                        )
+                        progress_callback(info)
 
         return batches
 
-    def ingest_reference_data(self, tickers, table_name="securities_reference", use_concurrent=False):
+    def ingest_reference_data(self, tickers, table_name="securities_reference",
+                              use_concurrent=False, show_progress=True,
+                              progress_callback: Optional[ProgressCallback] = None):
         """
         Ingest reference data (company overview) for given tickers.
 
@@ -181,6 +337,8 @@ class AlphaVantageIngestor(Ingestor):
             tickers: List of ticker symbols
             table_name: Bronze table name (default: securities_reference)
             use_concurrent: Use concurrent requests (only for premium tier!)
+            show_progress: Show progress updates (default: True)
+            progress_callback: Custom progress callback (if None, uses default)
 
         Returns:
             Path to written bronze table
@@ -196,13 +354,22 @@ class AlphaVantageIngestor(Ingestor):
         calls = list(facet.calls())
         print(f"Generated {len(calls)} API calls")
 
+        # Determine progress callback
+        callback = progress_callback if progress_callback else (default_progress_callback if show_progress else None)
+
         # Fetch data (sequential or concurrent)
         if use_concurrent:
             print("WARNING: Using concurrent requests. Ensure you have premium tier!")
-            raw_batches = self._fetch_calls_concurrent(calls, response_key=None)
+            raw_batches = self._fetch_calls_concurrent(
+                calls, response_key=None,
+                progress_callback=callback, phase="reference"
+            )
         else:
             print(f"Fetching data sequentially (rate limit: {self.registry.rate_limit} calls/sec)")
-            raw_batches = self._fetch_calls(calls, response_key=None)
+            raw_batches = self._fetch_calls(
+                calls, response_key=None,
+                progress_callback=callback, phase="reference"
+            )
 
         # Check for API errors before normalizing
         error_count = 0
@@ -263,7 +430,9 @@ class AlphaVantageIngestor(Ingestor):
 
     def ingest_prices(self, tickers, date_from=None, date_to=None,
                      table_name="securities_prices_daily",
-                     adjusted=True, outputsize="full", use_concurrent=False):
+                     adjusted=True, outputsize="full", use_concurrent=False,
+                     show_progress=True,
+                     progress_callback: Optional[ProgressCallback] = None):
         """
         Ingest daily OHLCV prices for given tickers.
 
@@ -277,6 +446,8 @@ class AlphaVantageIngestor(Ingestor):
             adjusted: Use adjusted prices (default: True)
             outputsize: 'compact' (100 days) or 'full' (20+ years)
             use_concurrent: Use concurrent requests (only for premium tier!)
+            show_progress: Show progress updates (default: True)
+            progress_callback: Custom progress callback (if None, uses default)
 
         Returns:
             Path to written bronze table
@@ -301,13 +472,22 @@ class AlphaVantageIngestor(Ingestor):
         calls = list(facet.calls())
         print(f"Generated {len(calls)} API calls")
 
+        # Determine progress callback
+        callback = progress_callback if progress_callback else (default_progress_callback if show_progress else None)
+
         # Fetch data (sequential or concurrent)
         if use_concurrent:
             print("WARNING: Using concurrent requests. Ensure you have premium tier!")
-            raw_batches = self._fetch_calls_concurrent(calls, response_key="Time Series (Daily)")
+            raw_batches = self._fetch_calls_concurrent(
+                calls, response_key="Time Series (Daily)",
+                progress_callback=callback, phase="prices"
+            )
         else:
             print(f"Fetching data sequentially (rate limit: {self.registry.rate_limit} calls/sec)")
-            raw_batches = self._fetch_calls(calls, response_key="Time Series (Daily)")
+            raw_batches = self._fetch_calls(
+                calls, response_key="Time Series (Daily)",
+                progress_callback=callback, phase="prices"
+            )
 
         # Check for API errors before normalizing
         error_count = 0
@@ -483,7 +663,10 @@ class AlphaVantageIngestor(Ingestor):
 
     def run_all(self, tickers=None, date_from=None, date_to=None,
                 max_tickers=None, use_concurrent=False, use_bulk_listing=False,
-                skip_reference_refresh=False, outputsize="full", **kwargs):
+                skip_reference_refresh=False, outputsize="full",
+                show_progress=True,
+                progress_callback: Optional[ProgressCallback] = None,
+                **kwargs):
         """
         Run complete ingestion: reference data + prices.
 
@@ -499,6 +682,8 @@ class AlphaVantageIngestor(Ingestor):
             use_bulk_listing: Use LISTING_STATUS endpoint for bulk ticker discovery (ONE API call!)
             skip_reference_refresh: Skip OVERVIEW calls (saves ~50% time for daily updates, default: False)
             outputsize: 'compact' (100 days) or 'full' (20+ years) - use compact for daily updates
+            show_progress: Show progress updates during ingestion (default: True)
+            progress_callback: Custom progress callback function (if None, uses default)
             **kwargs: Additional arguments (ignored for compatibility)
 
         Returns:
@@ -572,7 +757,12 @@ class AlphaVantageIngestor(Ingestor):
         else:
             print("Step 1{'b' if use_bulk_listing else ''}: Ingesting reference data (OVERVIEW endpoint)...")
             print("-" * 80)
-            self.ingest_reference_data(tickers=tickers, use_concurrent=use_concurrent)
+            self.ingest_reference_data(
+                tickers=tickers,
+                use_concurrent=use_concurrent,
+                show_progress=show_progress,
+                progress_callback=progress_callback
+            )
             print()
 
         # Step 2: Ingest prices (same for both modes)
@@ -584,7 +774,9 @@ class AlphaVantageIngestor(Ingestor):
             date_from=date_from,
             date_to=date_to,
             outputsize=outputsize,  # Pass through outputsize parameter
-            use_concurrent=use_concurrent
+            use_concurrent=use_concurrent,
+            show_progress=show_progress,
+            progress_callback=progress_callback
         )
         print()
 
