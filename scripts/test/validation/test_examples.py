@@ -8,6 +8,7 @@ Note: Path setup is handled by conftest.py which uses the unified repo discovery
 """
 
 import pytest
+import importlib
 from pathlib import Path
 from typing import Dict, Any
 
@@ -349,8 +350,8 @@ class TestQueryExamples:
 
     def test_auto_join_example_imports(self):
         """Test that auto_join example can be imported."""
-        # Import should work without errors
-        import scripts.examples.queries.01_auto_join as auto_join
+        # Import should work without errors (use importlib for numeric prefix)
+        auto_join = importlib.import_module('scripts.examples.queries.01_auto_join')
 
         # Check that demo function exists
         assert hasattr(auto_join, 'demo_auto_join')
@@ -358,7 +359,7 @@ class TestQueryExamples:
 
     def test_query_planner_example_imports(self):
         """Test that query_planner example can be imported."""
-        import scripts.examples.queries.02_query_planner as query_planner
+        query_planner = importlib.import_module('scripts.examples.queries.02_query_planner')
 
         # Check that example functions exist
         assert hasattr(query_planner, 'example_basic_enrichment')
@@ -366,7 +367,7 @@ class TestQueryExamples:
 
     def test_session_queries_example_imports(self):
         """Test that session_queries example can be imported."""
-        import scripts.examples.queries.03_session_queries as session_queries
+        session_queries = importlib.import_module('scripts.examples.queries.03_session_queries')
 
         # Check that key functions exist
         assert hasattr(session_queries, 'create_session')
@@ -428,7 +429,7 @@ class TestAutoEnrichExamples:
 
     def test_auto_enrich_demo_imports(self):
         """Test that auto_enrich_demo can be imported."""
-        import scripts.examples.measure_calculations.04_auto_enrich_demo as auto_enrich_demo
+        auto_enrich_demo = importlib.import_module('scripts.examples.measure_calculations.04_auto_enrich_demo')
 
         # Check that demo functions exist
         assert hasattr(auto_enrich_demo, 'demo_measure_config')
@@ -436,7 +437,7 @@ class TestAutoEnrichExamples:
 
     def test_auto_enrich_example_imports(self):
         """Test that auto_enrich_example can be imported."""
-        import scripts.examples.measure_calculations.05_auto_enrich_example as auto_enrich_example
+        auto_enrich_example = importlib.import_module('scripts.examples.measure_calculations.05_auto_enrich_example')
 
         # Check that example functions exist
         assert hasattr(auto_enrich_example, 'example_simple_auto_enrich')
