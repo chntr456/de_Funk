@@ -214,29 +214,42 @@ class NotebookVaultApp:
             # Create columns for tabs
             tab_cols = st.columns(num_tabs)
 
-            # Render tab buttons
+            # Render tab buttons with close buttons
             for i, (notebook_id, notebook_path, notebook_config) in enumerate(st.session_state.open_tabs[:num_tabs]):
                 with tab_cols[i]:
                     is_active = st.session_state.active_tab == notebook_id
                     title = notebook_config.notebook.title
 
-                    # Truncate long titles
-                    if len(title) > 18:
-                        title = title[:15] + "..."
+                    # Truncate long titles (shorter to make room for close button)
+                    if len(title) > 14:
+                        title = title[:11] + "..."
 
                     button_type = "primary" if is_active else "secondary"
 
-                    if st.button(
-                        title,
-                        key=f"tab_btn_{notebook_id}",
-                        type=button_type,
-                        use_container_width=True,
-                        help=notebook_config.notebook.title
-                    ):
-                        # Switch to this notebook
-                        if st.session_state.active_tab != notebook_id:
-                            st.session_state.active_tab = notebook_id
-                            st.rerun()
+                    # Create sub-columns for tab title and close button
+                    tab_col, close_col = st.columns([0.85, 0.15])
+
+                    with tab_col:
+                        if st.button(
+                            title,
+                            key=f"tab_btn_{notebook_id}",
+                            type=button_type,
+                            use_container_width=True,
+                            help=notebook_config.notebook.title
+                        ):
+                            # Switch to this notebook
+                            if st.session_state.active_tab != notebook_id:
+                                st.session_state.active_tab = notebook_id
+                                st.rerun()
+
+                    with close_col:
+                        if st.button(
+                            "✕",
+                            key=f"close_tab_{notebook_id}",
+                            help=f"Close {notebook_config.notebook.title}",
+                            use_container_width=True
+                        ):
+                            close_tab(notebook_id)
 
             # Show indicator if more tabs exist
             if len(st.session_state.open_tabs) > num_tabs:
