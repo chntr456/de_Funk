@@ -439,10 +439,7 @@ def _render_nested_toggles(
                 body_content = '\n'.join(body_lines).strip()
             else:
                 # Non-header markdown - render directly (no toggle)
-                if editable:
-                    _render_inline_editor(block_index, content, on_block_edit)
-                else:
-                    _render_markdown_content(content)
+                _render_markdown_content(content)
                 continue
 
         elif block_type == 'exhibit':
@@ -463,8 +460,11 @@ def _render_nested_toggles(
 
         is_editing = st.session_state[edit_key]
 
-        if editable and not is_editing:
-            # Show toggle with edit/delete buttons on the right
+        # Gather full section content (this section + all nested children)
+        full_section_content = _gather_section_content(block)
+
+        # Only use columns at top level to avoid nesting error
+        if editable and depth == 0 and not is_editing:
             col_toggle, col_edit, col_delete = st.columns([0.90, 0.05, 0.05])
             with col_edit:
                 if st.button("✏️", key=f"edit_sec_{block_index}", help="Edit section"):
@@ -475,14 +475,14 @@ def _render_nested_toggles(
                     if on_block_delete:
                         on_block_delete(block_index)
                     st.rerun()
-            container_col = col_toggle
+            container = col_toggle
         else:
-            container_col = st.container()
+            container = st.container()
 
-        with container_col:
+        with container:
             if is_editing:
-                # Show editor for the whole section
-                _render_section_editor(block_index, content, first_line, on_block_edit)
+                # Show editor for the whole section including children
+                _render_section_editor(block_index, full_section_content, first_line, on_block_edit, children)
             else:
                 with ToggleContainer(
                     f"{icon} {label}",
@@ -492,6 +492,19 @@ def _render_nested_toggles(
                     context=context
                 ) as tc:
                     if tc.is_open:
+                        # For nested sections, show edit/delete buttons inside the toggle
+                        if editable and depth > 0:
+                            btn_col1, btn_col2, btn_col3 = st.columns([0.88, 0.06, 0.06])
+                            with btn_col2:
+                                if st.button("✏️", key=f"edit_sec_{block_index}", help="Edit"):
+                                    st.session_state[edit_key] = True
+                                    st.rerun()
+                            with btn_col3:
+                                if st.button("🗑️", key=f"del_sec_{block_index}", help="Delete"):
+                                    if on_block_delete:
+                                        on_block_delete(block_index)
+                                    st.rerun()
+
                         # Render body content (text after header)
                         if body_content:
                             _render_markdown_content(body_content)
@@ -515,20 +528,49 @@ def _render_nested_toggles(
             _render_insert_block_button(block_index, on_block_insert)
 
 
+def _gather_section_content(block: Dict[str, Any]) -> str:
+    """
+    Gather the full content of a section including all nested children.
+
+    This creates a single markdown string that includes the header,
+    body content, and all nested subsections.
+    """
+    content = block.get('content', '')
+    children = block.get('children', [])
+
+    if not children:
+        return content
+
+    # Build full content by appending children
+    parts = [content]
+    for child in children:
+        if child.get('type') == 'markdown':
+            child_content = _gather_section_content(child)
+            if child_content:
+                parts.append(child_content)
+
+    return '\n\n'.join(parts)
+
+
 def _render_section_editor(
     block_index: int,
     content: str,
     header_line: str,
-    on_edit: Optional[Callable[[int, str], None]] = None
+    on_edit: Optional[Callable[[int, str], None]] = None,
+    children: Optional[List[Dict[str, Any]]] = None
 ):
     """
-    Render an editor for a section (header + body content).
+    Render an editor for a section (header + body + nested content).
+
+    When a section has children (nested headers), the editor shows the full
+    grouped content so the user sees everything together.
 
     Args:
         block_index: Index of the block
-        content: Full content including header
+        content: Full content including header and nested sections
         header_line: The header line (e.g., "# Title")
         on_edit: Callback when content is saved
+        children: List of child blocks (for info display)
     """
     edit_key = f"edit_section_{block_index}"
     content_key = f"section_content_{block_index}"
@@ -537,12 +579,22 @@ def _render_section_editor(
     if content_key not in st.session_state:
         st.session_state[content_key] = content
 
-    st.markdown("**Edit Section**")
+    # Show header info
+    has_children = children and len(children) > 0
+    if has_children:
+        st.markdown(f"**Edit Section** *(includes {len(children)} subsection(s))*")
+        st.caption("Tip: Edit all content including nested headers here. They will be grouped together.")
+    else:
+        st.markdown("**Edit Section**")
+
+    # Calculate height based on content
+    line_count = content.count('\n') + 1
+    height = min(max(150, line_count * 20), 400)
 
     edited_content = st.text_area(
         "Content",
         value=st.session_state[content_key],
-        height=200,
+        height=height,
         key=f"section_editor_{block_index}",
         label_visibility="collapsed"
     )
