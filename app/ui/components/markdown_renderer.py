@@ -464,11 +464,16 @@ def _render_nested_toggles(
         is_editing = st.session_state[edit_key]
 
         if editable and not is_editing:
-            # Show toggle with edit button on the right
-            col_toggle, col_edit = st.columns([0.95, 0.05])
+            # Show toggle with edit/delete buttons on the right
+            col_toggle, col_edit, col_delete = st.columns([0.90, 0.05, 0.05])
             with col_edit:
                 if st.button("✏️", key=f"edit_sec_{block_index}", help="Edit section"):
                     st.session_state[edit_key] = True
+                    st.rerun()
+            with col_delete:
+                if st.button("🗑️", key=f"del_sec_{block_index}", help="Delete section"):
+                    if on_block_delete:
+                        on_block_delete(block_index)
                     st.rerun()
             container_col = col_toggle
         else:
