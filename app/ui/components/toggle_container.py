@@ -6,16 +6,89 @@ Replaces st.expander with a custom toggle-based container that:
 - Provides better control over appearance
 - Supports any nesting depth
 - Uses session state for persistent toggle state
+- Supports collapse/expand all functionality
 """
 
 import streamlit as st
-from typing import Optional, Callable, Any
+from typing import Optional, Callable, Any, List
 import hashlib
+
+
+# Registry key for tracking toggle containers per context (e.g., notebook)
+TOGGLE_REGISTRY_KEY = "toggle_container_registry"
 
 
 def _get_toggle_key(container_id: str) -> str:
     """Generate a unique session state key for a toggle container."""
     return f"toggle_container_{container_id}"
+
+
+def _register_toggle(context: str, toggle_key: str):
+    """Register a toggle container in the registry for collapse/expand all."""
+    if TOGGLE_REGISTRY_KEY not in st.session_state:
+        st.session_state[TOGGLE_REGISTRY_KEY] = {}
+
+    if context not in st.session_state[TOGGLE_REGISTRY_KEY]:
+        st.session_state[TOGGLE_REGISTRY_KEY][context] = set()
+
+    st.session_state[TOGGLE_REGISTRY_KEY][context].add(toggle_key)
+
+
+def clear_toggle_registry(context: str = None):
+    """Clear the toggle registry for a context or all contexts."""
+    if TOGGLE_REGISTRY_KEY not in st.session_state:
+        return
+
+    if context:
+        if context in st.session_state[TOGGLE_REGISTRY_KEY]:
+            st.session_state[TOGGLE_REGISTRY_KEY][context] = set()
+    else:
+        st.session_state[TOGGLE_REGISTRY_KEY] = {}
+
+
+def expand_all(context: str = "default"):
+    """Expand all toggle containers for a given context."""
+    if TOGGLE_REGISTRY_KEY not in st.session_state:
+        return
+
+    registry = st.session_state[TOGGLE_REGISTRY_KEY]
+    if context in registry:
+        for toggle_key in registry[context]:
+            st.session_state[toggle_key] = True
+
+
+def collapse_all(context: str = "default"):
+    """Collapse all toggle containers for a given context."""
+    if TOGGLE_REGISTRY_KEY not in st.session_state:
+        return
+
+    registry = st.session_state[TOGGLE_REGISTRY_KEY]
+    if context in registry:
+        for toggle_key in registry[context]:
+            st.session_state[toggle_key] = False
+
+
+def render_expand_collapse_buttons(context: str = "default", key_suffix: str = ""):
+    """
+    Render expand/collapse all buttons.
+
+    Args:
+        context: The context (e.g., notebook_id) to operate on
+        key_suffix: Optional suffix for button keys to ensure uniqueness
+    """
+    col1, col2, col3 = st.columns([0.15, 0.15, 0.7])
+
+    with col1:
+        if st.button("⊞ Expand All", key=f"expand_all_{context}_{key_suffix}",
+                     help="Expand all sections", use_container_width=True):
+            expand_all(context)
+            st.rerun()
+
+    with col2:
+        if st.button("⊟ Collapse All", key=f"collapse_all_{context}_{key_suffix}",
+                     help="Collapse all sections", use_container_width=True):
+            collapse_all(context)
+            st.rerun()
 
 
 def _generate_container_id(label: str, context: str = "") -> str:
@@ -176,7 +249,8 @@ class ToggleContainer:
         icon_open: str = "▼",
         icon_closed: str = "▶",
         key_prefix: str = "",
-        style: str = "default"  # "default", "minimal", "card"
+        style: str = "default",  # "default", "minimal", "card", "section"
+        context: str = "default"  # Context for collapse/expand all
     ):
         """
         Initialize a toggle container.
@@ -189,6 +263,7 @@ class ToggleContainer:
             icon_closed: Icon when collapsed
             key_prefix: Prefix for session state keys
             style: Visual style ("default", "minimal", "card", "section")
+            context: Context for grouping toggles (used by collapse/expand all)
         """
         self.label = label
         self.expanded = expanded
@@ -196,6 +271,7 @@ class ToggleContainer:
         self.icon_closed = icon_closed
         self.key_prefix = key_prefix
         self.style = style
+        self.context = context
 
         # Generate unique ID
         if container_id is None:
@@ -207,6 +283,9 @@ class ToggleContainer:
         self.toggle_key = _get_toggle_key(f"{key_prefix}_{self.container_id}")
         self.is_open = False
         self._container = None
+
+        # Register this toggle for collapse/expand all functionality
+        _register_toggle(self.context, self.toggle_key)
 
     def __enter__(self):
         """Enter the context manager, render header and determine state."""

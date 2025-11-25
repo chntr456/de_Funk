@@ -53,6 +53,7 @@ def render_notebook_exhibits(
             notebook_config,
             notebook_session,
             connection,
+            notebook_id=notebook_id,
             editable=editable,
             on_block_edit=on_block_edit,
             on_block_insert=on_block_insert,
