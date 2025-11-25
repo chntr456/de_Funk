@@ -61,35 +61,24 @@ def render_markdown_notebook(
             collapse_all(notebook_id)
             st.rerun()
 
+    # Build nested tree structure from header hierarchy
+    nested_blocks = _build_header_tree(notebook_config._content_blocks)
+
     # Insert block button at start if editable
     if editable:
         _render_insert_block_button(-1, on_block_insert)
 
-    # Render each block with toggle and editing controls
-    for block_index, block in enumerate(notebook_config._content_blocks):
-        block_type = block['type']
-
-        if editable:
-            # Use the full editable wrapper with edit/delete on right
-            render_editable_block_wrapper(
-                block_index=block_index,
-                block=block,
-                notebook_session=notebook_session,
-                connection=connection,
-                on_edit=on_block_edit,
-                on_delete=on_block_delete
-            )
-            # Insert button after each block
-            _render_insert_block_button(block_index, on_block_insert)
-        else:
-            # View mode - render with toggle containers
-            _render_block_in_toggle(
-                block_index=block_index,
-                block=block,
-                notebook_session=notebook_session,
-                connection=connection,
-                context=notebook_id
-            )
+    # Render blocks with nested toggle containers based on header hierarchy
+    _render_nested_toggles(
+        blocks=nested_blocks,
+        notebook_session=notebook_session,
+        connection=connection,
+        context=notebook_id,
+        editable=editable,
+        on_block_edit=on_block_edit,
+        on_block_insert=on_block_insert,
+        on_block_delete=on_block_delete
+    )
 
 
 def _render_block_in_toggle(
@@ -348,6 +337,153 @@ def _build_header_tree(content_blocks: List[Dict[str, Any]]) -> List[Dict[str, A
             stack.append(block)
 
     return root['children']
+
+
+def _render_nested_toggles(
+    blocks: List[Dict[str, Any]],
+    notebook_session,
+    connection,
+    context: str = "default",
+    depth: int = 0,
+    editable: bool = False,
+    on_block_edit: Optional[Callable[[int, str], None]] = None,
+    on_block_insert: Optional[Callable[[int, str, str], None]] = None,
+    on_block_delete: Optional[Callable[[int], None]] = None
+):
+    """
+    Render blocks with nested toggle containers based on header hierarchy.
+
+    Each header creates a collapsible toggle that contains:
+    - The header's body content (text after the header line)
+    - Any child blocks (nested headers or content)
+    """
+    for block in blocks:
+        block_type = block['type']
+        block_index = block.get('_index', 0)
+        children = block.get('children', [])
+        header_level = block.get('_header_level', 0)
+
+        # Get label for toggle
+        if block_type == 'markdown':
+            content = block.get('content', '')
+            lines = content.strip().split('\n')
+            first_line = lines[0] if lines else ''
+
+            if first_line.startswith('#'):
+                # This is a header - use header text as toggle label
+                label = first_line.lstrip('#').strip()
+                body_lines = lines[1:] if len(lines) > 1 else []
+                body_content = '\n'.join(body_lines).strip()
+            else:
+                # Non-header markdown - render directly (no toggle)
+                if editable:
+                    _render_editable_block(block_index, block, notebook_session, connection,
+                                          on_block_edit, on_block_delete)
+                    _render_insert_block_button(block_index, on_block_insert)
+                else:
+                    _render_markdown_content(content)
+                continue
+
+        elif block_type == 'exhibit':
+            # Exhibits without headers render directly
+            if editable:
+                _render_editable_block(block_index, block, notebook_session, connection,
+                                      on_block_edit, on_block_delete)
+                _render_insert_block_button(block_index, on_block_insert)
+            else:
+                render_exhibit_block(block, notebook_session, connection)
+            continue
+        else:
+            # Other block types - render directly
+            if editable:
+                _render_editable_block(block_index, block, notebook_session, connection,
+                                      on_block_edit, on_block_delete)
+                _render_insert_block_button(block_index, on_block_insert)
+            continue
+
+        # Create toggle for header sections
+        icon = "📑" if header_level == 1 else "📁" if header_level == 2 else "📄"
+
+        with ToggleContainer(
+            f"{icon} {label}",
+            expanded=(depth == 0),  # Top level expanded by default
+            container_id=f"section_{block_index}",
+            style="section" if depth == 0 else "default",
+            context=context
+        ) as tc:
+            if tc.is_open:
+                # Render body content (text after header)
+                if body_content:
+                    if editable:
+                        # Show edit controls for the body
+                        _render_editable_block(block_index, block, notebook_session, connection,
+                                              on_block_edit, on_block_delete)
+                    else:
+                        _render_markdown_content(body_content)
+
+                # Insert button after content if editable
+                if editable and body_content:
+                    _render_insert_block_button(block_index, on_block_insert)
+
+                # Render children recursively (nested sections)
+                if children:
+                    _render_nested_toggles(
+                        blocks=children,
+                        notebook_session=notebook_session,
+                        connection=connection,
+                        context=context,
+                        depth=depth + 1,
+                        editable=editable,
+                        on_block_edit=on_block_edit,
+                        on_block_insert=on_block_insert,
+                        on_block_delete=on_block_delete
+                    )
+
+
+def _render_editable_block(
+    block_index: int,
+    block: Dict[str, Any],
+    notebook_session,
+    connection,
+    on_edit: Optional[Callable[[int, str], None]] = None,
+    on_delete: Optional[Callable[[int], None]] = None
+):
+    """Render a block with edit/delete controls on the right."""
+    block_type = block['type']
+    edit_key = f"block_edit_mode_{block_index}"
+
+    if edit_key not in st.session_state:
+        st.session_state[edit_key] = False
+
+    is_editing = st.session_state[edit_key]
+
+    col_content, col_edit, col_delete = st.columns([0.90, 0.05, 0.05])
+
+    with col_edit:
+        if is_editing:
+            if st.button("✕", key=f"cancel_edit_{block_index}", help="Cancel"):
+                st.session_state[edit_key] = False
+                st.rerun()
+        else:
+            if st.button("✏️", key=f"start_edit_{block_index}", help="Edit"):
+                st.session_state[edit_key] = True
+                st.rerun()
+
+    with col_delete:
+        if not is_editing:
+            if st.button("🗑️", key=f"delete_block_{block_index}", help="Delete"):
+                if on_delete:
+                    on_delete(block_index)
+                st.rerun()
+
+    with col_content:
+        if is_editing:
+            _render_block_editor(block_index, block, on_edit, block_type)
+        else:
+            if block_type == 'markdown':
+                _render_markdown_content(block.get('content', ''))
+            elif block_type == 'exhibit':
+                render_exhibit_block(block, notebook_session, connection)
 
 
 def _render_nested_blocks(
@@ -1198,83 +1334,22 @@ def _render_insert_block_button(
     on_insert: Optional[Callable[[int, str, str], None]] = None
 ):
     """
-    Render an "Add Section" button with header level selector.
-
-    Sections are nested based on header level:
-    - # (H1) = Top level section
-    - ## (H2) = Nested under H1
-    - ### (H3) = Nested under H2
+    Render a simple "+" button to add a new section.
 
     Args:
         after_index: Index after which to insert (-1 for start)
         on_insert: Callback when block is inserted (after_index, block_type, content)
     """
-    insert_key = f"show_insert_menu_{after_index}"
-    title_key = f"section_title_{after_index}"
-    level_key = f"section_level_{after_index}"
-
-    # Initialize state
-    if insert_key not in st.session_state:
-        st.session_state[insert_key] = False
-    if title_key not in st.session_state:
-        st.session_state[title_key] = "New Section"
-    if level_key not in st.session_state:
-        st.session_state[level_key] = 2  # Default to H2
-
     # Centered insert button
-    col1, col2, col3 = st.columns([0.35, 0.3, 0.35])
+    col1, col2, col3 = st.columns([0.45, 0.1, 0.45])
 
     with col2:
-        if st.session_state[insert_key]:
-            # Show section creator
-            st.markdown("**Add Section**")
-
-            # Section title
-            title = st.text_input(
-                "Title",
-                value=st.session_state[title_key],
-                key=f"title_input_{after_index}",
-                label_visibility="collapsed",
-                placeholder="Section title"
-            )
-
-            # Header level (determines nesting)
-            level_labels = {
-                1: "# Top Level",
-                2: "## Subsection",
-                3: "### Sub-subsection"
-            }
-            level = st.selectbox(
-                "Level",
-                options=[1, 2, 3],
-                index=st.session_state[level_key] - 1,
-                format_func=lambda x: level_labels[x],
-                key=f"level_select_{after_index}",
-                label_visibility="collapsed"
-            )
-
-            col_add, col_cancel = st.columns(2)
-            with col_add:
-                if st.button("Add", key=f"add_section_{after_index}", use_container_width=True):
-                    # Create markdown with header
-                    header_prefix = "#" * level
-                    content = f"{header_prefix} {title}\n\nContent here."
-
-                    if on_insert:
-                        on_insert(after_index, 'markdown', content)
-
-                    st.session_state[insert_key] = False
-                    st.rerun()
-
-            with col_cancel:
-                if st.button("Cancel", key=f"cancel_insert_{after_index}", use_container_width=True):
-                    st.session_state[insert_key] = False
-                    st.rerun()
-        else:
-            # Show collapsed insert button
-            if st.button("+ Section", key=f"add_block_{after_index}", help="Add new section"):
-                st.session_state[insert_key] = True
-                st.rerun()
+        if st.button("➕", key=f"add_block_{after_index}", help="Add new section"):
+            # Add a new section with default content
+            content = "## New Section\n\nAdd your content here."
+            if on_insert:
+                on_insert(after_index, 'markdown', content)
+            st.rerun()
 
 
 def _get_default_block_content(block_type: str) -> str:
