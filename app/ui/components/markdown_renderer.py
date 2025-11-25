@@ -71,18 +71,116 @@ def render_markdown_notebook(
             # Add insert button after each block
             _render_insert_block_button(block_index, on_block_insert)
         else:
-            # Standard rendering
+            # Render each block in a collapsible toggle section
+            _render_block_with_toggle(
+                block_index=block_index,
+                block=block,
+                notebook_session=notebook_session,
+                connection=connection
+            )
+
+
+def _render_block_with_toggle(
+    block_index: int,
+    block: Dict[str, Any],
+    notebook_session,
+    connection
+):
+    """
+    Render a content block wrapped in a toggle container.
+
+    Each block (markdown, exhibit, collapsible) gets its own toggle button
+    so users can collapse/expand sections of the notebook.
+
+    Args:
+        block_index: Index of this block
+        block: Content block dictionary
+        notebook_session: NotebookSession for data retrieval
+        connection: DataConnection for converting to pandas
+    """
+    block_type = block['type']
+
+    # Determine toggle label based on block type
+    if block_type == 'markdown':
+        content = block.get('content', '')
+        # Extract first header or first line as label
+        lines = content.strip().split('\n')
+        first_line = lines[0] if lines else 'Text'
+        if first_line.startswith('#'):
+            # Extract header text without # symbols
+            label = first_line.lstrip('#').strip()
+        else:
+            # Use truncated first line
+            label = first_line[:40] + '...' if len(first_line) > 40 else first_line
+            if not label:
+                label = 'Text Block'
+        toggle_icon = "📝"
+
+    elif block_type == 'exhibit':
+        exhibit = block.get('exhibit')
+        label = exhibit.title if exhibit and exhibit.title else f"Exhibit {block_index + 1}"
+        toggle_icon = "📊"
+
+    elif block_type == 'collapsible':
+        label = block.get('summary', 'Section')
+        toggle_icon = "📁"
+
+    elif block_type == 'error':
+        label = "Error"
+        toggle_icon = "⚠️"
+
+    else:
+        label = f"Block {block_index + 1}"
+        toggle_icon = "📄"
+
+    # Render with toggle container
+    with ToggleContainer(
+        f"{toggle_icon} {label}",
+        expanded=True,  # Start expanded by default
+        container_id=f"block_{block_index}",
+        style="section"
+    ) as tc:
+        if tc.is_open:
             if block_type == 'markdown':
-                render_markdown_block(block['content'], block_index=block_index)
+                _render_markdown_content(block['content'])
 
             elif block_type == 'exhibit':
-                render_exhibit_block(block, notebook_session, connection)
+                render_exhibit_block(block, notebook_session, connection, in_collapsible=True)
 
             elif block_type == 'collapsible':
-                render_collapsible_section(block, notebook_session, connection, block_index=block_index)
+                # Render nested collapsible content directly (already in a toggle)
+                inner_blocks = block.get('content', [])
+                for inner_idx, inner_block in enumerate(inner_blocks):
+                    inner_type = inner_block['type']
+                    if inner_type == 'markdown':
+                        _render_markdown_content(inner_block.get('content', ''))
+                    elif inner_type == 'exhibit':
+                        render_exhibit_block(inner_block, notebook_session, connection, in_collapsible=True)
+                    elif inner_type == 'error':
+                        render_error_block(inner_block, block_index=f"{block_index}_{inner_idx}")
 
             elif block_type == 'error':
                 render_error_block(block, block_index=block_index)
+
+
+def _render_markdown_content(content: str):
+    """
+    Render markdown content directly (without additional toggle wrapper).
+
+    Args:
+        content: Markdown content string
+    """
+    md = markdown.Markdown(
+        extensions=[
+            'extra',
+            'codehilite',
+            'nl2br',
+            'sane_lists',
+            'toc',
+        ]
+    )
+    html = md.convert(content)
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in_collapsible: bool = False):

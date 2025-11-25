@@ -143,42 +143,22 @@ class NotebookVaultApp:
 
     def _render_header(self):
         """Render professional header with toolbar and tabs."""
-        # Row 1: Edit, Block Edit, Filter, and Theme buttons on the right
-        col_spacer, col_block, col_edit, col_filter, col_theme = st.columns([0.6, 0.1, 0.1, 0.1, 0.1])
+        # Row 1: Block Edit, Filter, and Theme buttons on the right
+        col_spacer, col_block, col_filter, col_theme = st.columns([0.7, 0.1, 0.1, 0.1])
 
         with col_block:
-            # Block edit toggle (only if active notebook and not in full edit mode)
+            # Block edit toggle (only if active notebook)
             if st.session_state.active_tab:
                 active_notebook = self._get_active_notebook()
                 if active_notebook:
                     notebook_id = active_notebook[0]
-                    in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
                     in_block_edit = st.session_state.block_edit_mode.get(notebook_id, False)
 
-                    if not in_edit_mode:
-                        block_icon = "🔲" if in_block_edit else "▢"
-                        block_help = "Disable block editing" if in_block_edit else "Enable block editing"
+                    block_icon = "✏️" if in_block_edit else "📝"
+                    block_help = "Exit edit mode" if in_block_edit else "Edit notebook blocks"
 
-                        if st.button(block_icon, help=block_help, key="toolbar_block_edit", use_container_width=True):
-                            st.session_state.block_edit_mode[notebook_id] = not in_block_edit
-                            st.rerun()
-
-        with col_edit:
-            # Edit button (only if active notebook)
-            if st.session_state.active_tab:
-                active_notebook = self._get_active_notebook()
-                if active_notebook:
-                    notebook_id = active_notebook[0]
-                    in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
-
-                    button_label = "👁️" if in_edit_mode else "✏️"
-                    button_help = "View mode" if in_edit_mode else "Edit full markdown"
-
-                    if st.button(button_label, help=button_help, key="toolbar_edit", use_container_width=True):
-                        st.session_state.edit_mode[notebook_id] = not in_edit_mode
-                        # Disable block edit mode when entering full edit mode
-                        if not in_edit_mode:
-                            st.session_state.block_edit_mode[notebook_id] = False
+                    if st.button(block_icon, help=block_help, key="toolbar_block_edit", use_container_width=True):
+                        st.session_state.block_edit_mode[notebook_id] = not in_block_edit
                         st.rerun()
 
         with col_filter:
@@ -208,25 +188,18 @@ class NotebookVaultApp:
 
         # Row 2: Tabs below (if any notebooks are open)
         if st.session_state.open_tabs:
-            # Calculate number of tabs to show (max 6 since we have full width)
             num_tabs = min(len(st.session_state.open_tabs), 6)
-
-            # Create columns for tabs
             tab_cols = st.columns(num_tabs)
 
-            # Render tab buttons with close buttons
             for i, (notebook_id, notebook_path, notebook_config) in enumerate(st.session_state.open_tabs[:num_tabs]):
                 with tab_cols[i]:
                     is_active = st.session_state.active_tab == notebook_id
                     title = notebook_config.notebook.title
 
-                    # Only truncate very long titles (hover shows full title)
                     if len(title) > 28:
                         title = title[:25] + "..."
 
                     button_type = "primary" if is_active else "secondary"
-
-                    # Create sub-columns for tab title and close button
                     tab_col, close_col = st.columns([0.92, 0.08])
 
                     with tab_col:
@@ -237,7 +210,6 @@ class NotebookVaultApp:
                             use_container_width=True,
                             help=notebook_config.notebook.title
                         ):
-                            # Switch to this notebook
                             if st.session_state.active_tab != notebook_id:
                                 st.session_state.active_tab = notebook_id
                                 st.rerun()
@@ -251,7 +223,6 @@ class NotebookVaultApp:
                         ):
                             close_tab(notebook_id)
 
-            # Show indicator if more tabs exist
             if len(st.session_state.open_tabs) > num_tabs:
                 st.caption(f"+ {len(st.session_state.open_tabs) - num_tabs} more tabs (use sidebar)")
 
@@ -884,56 +855,10 @@ class NotebookVaultApp:
 
             st.session_state.current_notebook_id = notebook_id
 
-        # Check edit mode
-        in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
+        # Render notebook content
+        self._render_notebook_view(notebook_id, notebook_config)
 
-        if in_edit_mode:
-            # Edit mode
-            self._render_edit_mode(notebook_id, notebook_path, notebook_config)
-        else:
-            # View mode
-            self._render_view_mode(notebook_id, notebook_config)
-
-    def _render_edit_mode(self, notebook_id, notebook_path, notebook_config):
-        """Render notebook in edit mode."""
-        # Header
-        st.info("📝 **Editing Markdown Notebook** - Changes save automatically")
-
-        # Load current content
-        if notebook_id not in st.session_state.markdown_content:
-            with open(notebook_path, 'r') as f:
-                st.session_state.markdown_content[notebook_id] = f.read()
-
-        # Editor with larger size (using default Streamlit styling)
-        edited_content = st.text_area(
-            "Markdown Content",
-            value=st.session_state.markdown_content[notebook_id],
-            height=800,  # Increased from 600
-            key=f"editor_{notebook_id}",
-            help="Edit your notebook content. Use markdown syntax with $exhibits${...} and $filter${...} blocks"
-        )
-
-        # Auto-save on change
-        if edited_content != st.session_state.markdown_content[notebook_id]:
-            st.session_state.markdown_content[notebook_id] = edited_content
-
-        # Save button
-        col1, col2, col3 = st.columns([0.2, 0.6, 0.2])
-        with col1:
-            if st.button("💾 Save", use_container_width=True):
-                with open(notebook_path, 'w') as f:
-                    f.write(edited_content)
-                st.success("✅ Saved successfully!")
-                # Reload notebook
-                st.session_state.edit_mode[notebook_id] = False
-                st.rerun()
-
-        with col3:
-            if st.button("Cancel", use_container_width=True):
-                st.session_state.edit_mode[notebook_id] = False
-                st.rerun()
-
-    def _render_view_mode(self, notebook_id, notebook_config):
+    def _render_notebook_view(self, notebook_id, notebook_config):
         """Render notebook in view mode."""
         # Check if block editing is enabled
         block_edit_enabled = st.session_state.block_edit_mode.get(notebook_id, False)

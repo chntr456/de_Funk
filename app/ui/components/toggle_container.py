@@ -188,7 +188,7 @@ class ToggleContainer:
             icon_open: Icon when expanded
             icon_closed: Icon when collapsed
             key_prefix: Prefix for session state keys
-            style: Visual style ("default", "minimal", "card")
+            style: Visual style ("default", "minimal", "card", "section")
         """
         self.label = label
         self.expanded = expanded
@@ -273,6 +273,29 @@ class ToggleContainer:
             ):
                 st.session_state[self.toggle_key] = not self.is_open
                 st.rerun()
+
+        elif self.style == "section":
+            # Section style - clean separator for notebook sections
+            col1, col2 = st.columns([0.05, 0.95])
+            with col1:
+                # Small toggle indicator
+                if st.button(
+                    icon,
+                    key=f"toggle_icon_{self.container_id}",
+                    type="secondary"
+                ):
+                    st.session_state[self.toggle_key] = not self.is_open
+                    st.rerun()
+            with col2:
+                # Section label (clickable)
+                if st.button(
+                    self.label,
+                    key=f"toggle_btn_{self.container_id}",
+                    type="secondary",
+                    use_container_width=True
+                ):
+                    st.session_state[self.toggle_key] = not self.is_open
+                    st.rerun()
 
         else:
             # Default style
