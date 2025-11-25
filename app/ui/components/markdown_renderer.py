@@ -50,13 +50,13 @@ def render_markdown_notebook(
     # Apply toggle container styles
     apply_toggle_styles()
 
-    # Toolbar with expand/collapse buttons
-    cols = st.columns([0.06, 0.06, 0.88])
-    with cols[0]:
+    # Toolbar with expand/collapse buttons on the right
+    cols = st.columns([0.88, 0.06, 0.06])
+    with cols[1]:
         if st.button("⊞", key=f"exp_{notebook_id}", help="Expand all sections"):
             expand_all(notebook_id)
             st.rerun()
-    with cols[1]:
+    with cols[2]:
         if st.button("⊟", key=f"col_{notebook_id}", help="Collapse all sections"):
             collapse_all(notebook_id)
             st.rerun()
@@ -463,7 +463,7 @@ def _render_nested_toggles(
         # Gather full section content (this section + all nested children)
         full_section_content = _gather_section_content(block)
 
-        # Only use columns at top level to avoid nesting error
+        # Show edit/delete buttons alongside toggle (always visible)
         if editable and depth == 0 and not is_editing:
             col_toggle, col_edit, col_delete = st.columns([0.90, 0.05, 0.05])
             with col_edit:
@@ -472,7 +472,20 @@ def _render_nested_toggles(
                     st.rerun()
             with col_delete:
                 if st.button("🗑️", key=f"del_sec_{block_index}", help="Delete section"):
-                    # Store content to delete in session state
+                    st.session_state['_content_to_delete'] = full_section_content
+                    if on_block_delete:
+                        on_block_delete(block_index)
+                    st.rerun()
+            container = col_toggle
+        elif editable and depth > 0 and not is_editing:
+            # Nested sections - show buttons alongside toggle too
+            col_toggle, col_edit, col_delete = st.columns([0.90, 0.05, 0.05])
+            with col_edit:
+                if st.button("✏️", key=f"edit_sec_{block_index}", help="Edit"):
+                    st.session_state[edit_key] = True
+                    st.rerun()
+            with col_delete:
+                if st.button("🗑️", key=f"del_sec_{block_index}", help="Delete"):
                     st.session_state['_content_to_delete'] = full_section_content
                     if on_block_delete:
                         on_block_delete(block_index)
@@ -494,21 +507,6 @@ def _render_nested_toggles(
                     context=context
                 ) as tc:
                     if tc.is_open:
-                        # For nested sections, show edit/delete buttons inside the toggle
-                        if editable and depth > 0:
-                            btn_col1, btn_col2, btn_col3 = st.columns([0.88, 0.06, 0.06])
-                            with btn_col2:
-                                if st.button("✏️", key=f"edit_sec_{block_index}", help="Edit"):
-                                    st.session_state[edit_key] = True
-                                    st.rerun()
-                            with btn_col3:
-                                if st.button("🗑️", key=f"del_sec_{block_index}", help="Delete"):
-                                    # Store content to delete in session state
-                                    st.session_state['_content_to_delete'] = full_section_content
-                                    if on_block_delete:
-                                        on_block_delete(block_index)
-                                    st.rerun()
-
                         # Render body content (text after header)
                         if body_content:
                             _render_markdown_content(body_content)
@@ -578,10 +576,14 @@ def _render_section_editor(
     """
     edit_key = f"edit_section_{block_index}"
     content_key = f"section_content_{block_index}"
+    original_key = f"section_original_{block_index}"
 
     # Store content in session state
     if content_key not in st.session_state:
         st.session_state[content_key] = content
+    # Store original content for find/replace
+    if original_key not in st.session_state:
+        st.session_state[original_key] = content
 
     # Show header info
     has_children = children and len(children) > 0
@@ -608,10 +610,15 @@ def _render_section_editor(
     with col1:
         if st.button("💾 Save", key=f"save_section_{block_index}", use_container_width=True):
             if on_edit:
+                # Store original content for replacement in handler
+                st.session_state['_content_to_replace'] = st.session_state.get(original_key, content)
+                st.session_state['_new_content'] = edited_content
                 on_edit(block_index, edited_content)
             st.session_state[edit_key] = False
             if content_key in st.session_state:
                 del st.session_state[content_key]
+            if original_key in st.session_state:
+                del st.session_state[original_key]
             st.rerun()
 
     with col2:
@@ -619,6 +626,8 @@ def _render_section_editor(
             st.session_state[edit_key] = False
             if content_key in st.session_state:
                 del st.session_state[content_key]
+            if original_key in st.session_state:
+                del st.session_state[original_key]
             st.rerun()
 
 
@@ -1594,7 +1603,7 @@ def _render_insert_block_button(
             level = st.radio(
                 "Level",
                 options=[1, 2, 3],
-                format_func=lambda x: {1: "# Top Level", 2: "## Subsection", 3: "### Sub-subsection"}[x],
+                format_func=lambda x: {1: "H1", 2: "H2", 3: "H3"}[x],
                 key=f"new_level_{after_index}",
                 horizontal=True,
                 label_visibility="collapsed"

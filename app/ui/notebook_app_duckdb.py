@@ -880,10 +880,10 @@ class NotebookVaultApp:
         """
         Handle block edit from the renderer.
 
-        Saves the updated block content to the notebook file.
+        Uses content-based find/replace to save changes.
 
         Args:
-            block_index: Index of the block that was edited
+            block_index: Index of the block (unused, kept for interface compatibility)
             new_content: New content for the block
         """
         active_notebook = self._get_active_notebook()
@@ -893,22 +893,48 @@ class NotebookVaultApp:
 
         notebook_id, notebook_path, notebook_config = active_notebook
 
+        # Get original content and new content from session state
+        original_content = st.session_state.get('_content_to_replace', '')
+        if not original_content:
+            st.error("No original content found for replacement")
+            return
+
         try:
-            # Use the parser to save the block update
-            from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
-            parser = MarkdownNotebookParser(self.ctx.repo)
-            parser.save_block_update(str(notebook_path), block_index, new_content)
+            from pathlib import Path
+            path = Path(notebook_path)
+            if not path.is_absolute():
+                path = self.ctx.repo / path
 
-            # Reload the notebook to reflect changes
-            updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+            # Read current file content
+            with open(path, 'r') as f:
+                file_content = f.read()
 
-            # Update the tab with new config
-            for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
-                if tab_id == notebook_id:
-                    st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
-                    break
+            # Find and replace the content
+            if original_content in file_content:
+                updated_content = file_content.replace(original_content, new_content, 1)
 
-            st.success(f"Block {block_index} saved!")
+                # Write back
+                with open(path, 'w') as f:
+                    f.write(updated_content)
+
+                # Clear session state
+                if '_content_to_replace' in st.session_state:
+                    del st.session_state['_content_to_replace']
+                if '_new_content' in st.session_state:
+                    del st.session_state['_new_content']
+
+                # Reload the notebook to reflect changes
+                updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+
+                # Update the tab with new config
+                for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
+                    if tab_id == notebook_id:
+                        st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
+                        break
+
+                st.success("Section saved!")
+            else:
+                st.error("Could not find original content in file")
 
         except Exception as e:
             st.error(f"Error saving block: {str(e)}")
