@@ -569,7 +569,10 @@ class NotebookVaultApp:
         )
 
     def _render_filter_editor(self):
-        """Render filter editor for the active notebook."""
+        """Render filter editor for the active notebook with full CRUD capabilities."""
+        import yaml
+        from pathlib import Path
+
         active_notebook = self._get_active_notebook()
         if not active_notebook:
             st.warning("No active notebook")
@@ -583,34 +586,40 @@ class NotebookVaultApp:
         st.caption(f"File: `{notebook_path.name}`")
         st.divider()
 
+        # Tab for view/edit/add
+        tab_view, tab_edit, tab_add = st.tabs(["📋 View Filters", "✏️ Edit Filter", "➕ Add Filter"])
+
+        with tab_view:
+            self._render_filter_view(notebook_config)
+
+        with tab_edit:
+            self._render_filter_edit_tab(notebook_path, notebook_config)
+
+        with tab_add:
+            self._render_filter_add_tab(notebook_path)
+
+        st.divider()
+
+        # Close button
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
+            if st.button("✅ Close Filter Editor", use_container_width=True, type="primary"):
+                st.session_state.filter_editor_open = False
+                st.rerun()
+
+    def _render_filter_view(self, notebook_config):
+        """View tab for filter editor."""
         # Check if notebook has filter collection
         if not hasattr(notebook_config, '_filter_collection') or not notebook_config._filter_collection:
             st.info("This notebook has no filters defined yet.")
-            st.markdown("""
-            **Add filters to your notebook** by editing the markdown file and adding `$filter${...}` blocks.
-
-            Example:
-            ```markdown
-            $filter${
-              id: ticker
-              label: Stock Tickers
-              type: select
-              multi: true
-              source: {model: company, table: fact_prices, column: ticker}
-              help_text: Select stocks to analyze
-            }
-            ```
-            """)
+            st.markdown("Use the **Add Filter** tab to create a new filter.")
             return
-
-        # Display current filters
-        st.subheader("📋 Current Filter Definitions")
 
         filter_collection = notebook_config._filter_collection
 
         # Show each filter in an expandable section
         for filter_id, filter_config in filter_collection.filters.items():
-            with st.expander(f"**{filter_config.label}** (`{filter_id}`)", expanded=True):
+            with st.expander(f"**{filter_config.label}** (`{filter_id}`)", expanded=False):
                 col1, col2 = st.columns(2)
 
                 with col1:
@@ -635,59 +644,373 @@ class NotebookVaultApp:
                     st.markdown("**Operator:**")
                     st.code(filter_config.operator.value if filter_config.operator else "N/A")
 
-                # Show current value from session state
-                filter_state = filter_collection.get_state(filter_id)
-                if filter_state:
-                    st.markdown("**Current Runtime Value:**")
-                    session_key = f"filter_{filter_id}"
-                    current_value = st.session_state.get(session_key, filter_state.current_value)
-                    st.json(current_value)
+    def _render_filter_edit_tab(self, notebook_path, notebook_config):
+        """Edit tab for filter editor."""
+        from pathlib import Path
+        import yaml
+        import re
 
-        st.divider()
+        if not hasattr(notebook_config, '_filter_collection') or not notebook_config._filter_collection:
+            st.info("No filters to edit. Use the Add Filter tab to create one.")
+            return
 
-        # Instructions for editing
-        st.subheader("✏️ How to Edit Filters")
-        st.markdown("""
-        To modify filter definitions:
+        filter_collection = notebook_config._filter_collection
+        filter_ids = list(filter_collection.filters.keys())
 
-        1. **Click the Edit button** (✏️) in the toolbar to switch to edit mode
-        2. **Edit the `$filter${...}` blocks** directly in the markdown
-        3. **Save your changes** to update the filters
+        # Select filter to edit
+        selected_filter = st.selectbox(
+            "Select filter to edit",
+            options=filter_ids,
+            format_func=lambda x: f"{filter_collection.filters[x].label} ({x})"
+        )
 
-        **Filter Properties:**
-        - `id`: Unique identifier for the filter
-        - `label`: Display name shown to users
-        - `type`: Filter type (`select`, `date_range`, `slider`, `text_search`, `boolean`, `number_range`)
-        - `multi`: (for select) Allow multiple selections
-        - `source`: Database source for dynamic options `{model: X, table: Y, column: Z}`
-        - `default`: Default value
-        - `operator`: SQL operator (`in`, `eq`, `gte`, `lte`, `between`, `like`)
-        - `help_text`: Help text shown to users
-        - `min_value`, `max_value`, `step`: (for slider/number_range)
-        - `placeholder`: Placeholder text
-        """)
+        if selected_filter:
+            filter_config = filter_collection.filters[selected_filter]
 
-        # Example template
-        with st.expander("📄 Filter Template"):
-            st.code("""$filter${
-  id: my_filter
-  label: My Filter Label
-  type: select
-  multi: true
-  source: {model: my_model, table: my_table, column: my_column}
-  default: []
-  operator: in
-  help_text: Description of what this filter does
-}""", language="markdown")
+            # Build YAML representation
+            filter_data = {
+                'id': selected_filter,
+                'label': filter_config.label,
+                'type': filter_config.type.value,
+            }
 
-        st.divider()
+            if filter_config.multi is not None:
+                filter_data['multi'] = filter_config.multi
+            if filter_config.source:
+                filter_data['source'] = {
+                    'model': filter_config.source.model,
+                    'table': filter_config.source.table,
+                    'column': filter_config.source.column
+                }
+            if filter_config.default is not None:
+                filter_data['default'] = filter_config.default
+            if filter_config.operator:
+                filter_data['operator'] = filter_config.operator.value
+            if filter_config.help_text:
+                filter_data['help_text'] = filter_config.help_text
+            if filter_config.min_value is not None:
+                filter_data['min_value'] = filter_config.min_value
+            if filter_config.max_value is not None:
+                filter_data['max_value'] = filter_config.max_value
+            if filter_config.step is not None:
+                filter_data['step'] = filter_config.step
+            if filter_config.placeholder:
+                filter_data['placeholder'] = filter_config.placeholder
+            if filter_config.options:
+                filter_data['options'] = filter_config.options
 
-        # Close button
-        col1, col2, col3 = st.columns([1, 1, 1])
+            yaml_content = yaml.dump(filter_data, default_flow_style=False, sort_keys=False)
+
+            # Editor
+            st.markdown("**Edit Filter YAML:**")
+            edit_key = f"filter_edit_{selected_filter}"
+            if edit_key not in st.session_state:
+                st.session_state[edit_key] = yaml_content
+
+            edited_yaml = st.text_area(
+                "Filter definition",
+                value=st.session_state[edit_key],
+                height=300,
+                key=f"filter_editor_{selected_filter}",
+                label_visibility="collapsed"
+            )
+            st.session_state[edit_key] = edited_yaml
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                if st.button("💾 Save Changes", key=f"save_filter_{selected_filter}"):
+                    try:
+                        self._save_filter_changes(notebook_path, selected_filter, edited_yaml)
+                        st.success(f"Filter '{selected_filter}' updated!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error saving filter: {str(e)}")
+
+            with col2:
+                if st.button("🔄 Reset", key=f"reset_filter_{selected_filter}"):
+                    st.session_state[edit_key] = yaml_content
+                    st.rerun()
+
+            with col3:
+                if st.button("🗑️ Delete Filter", key=f"delete_filter_{selected_filter}", type="secondary"):
+                    if st.session_state.get(f"confirm_delete_{selected_filter}", False):
+                        try:
+                            self._delete_filter(notebook_path, selected_filter)
+                            st.success(f"Filter '{selected_filter}' deleted!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deleting filter: {str(e)}")
+                    else:
+                        st.session_state[f"confirm_delete_{selected_filter}"] = True
+                        st.warning("Click Delete again to confirm")
+                        st.rerun()
+
+    def _render_filter_add_tab(self, notebook_path):
+        """Add tab for filter editor."""
+        st.markdown("### Create New Filter")
+
+        # Filter type selector
+        filter_type = st.selectbox(
+            "Filter Type",
+            options=["select", "date_range", "slider", "text_search", "boolean", "number_range"],
+            help="Choose the type of filter to create"
+        )
+
+        # Template based on type
+        templates = {
+            "select": """id: new_filter
+label: New Select Filter
+type: select
+multi: true
+source: {model: stocks, table: dim_stock, column: ticker}
+default: []
+operator: in
+help_text: Select items to filter by""",
+            "date_range": """id: date_filter
+label: Date Range
+type: date_range
+operator: between
+default: {start: "-30d", end: "today"}
+help_text: Select a date range""",
+            "slider": """id: slider_filter
+label: Value Slider
+type: slider
+min_value: 0
+max_value: 100
+step: 1
+default: 50
+operator: gte
+help_text: Slide to select minimum value""",
+            "text_search": """id: search_filter
+label: Search
+type: text_search
+operator: like
+placeholder: Enter search term...
+help_text: Search by text""",
+            "boolean": """id: bool_filter
+label: Toggle Option
+type: boolean
+default: false
+help_text: Enable or disable this option""",
+            "number_range": """id: range_filter
+label: Number Range
+type: number_range
+min_value: 0
+max_value: 1000000
+step: 1000
+operator: between
+help_text: Set minimum and maximum values"""
+        }
+
+        template = templates.get(filter_type, templates["select"])
+
+        # Editor for new filter
+        add_key = "new_filter_yaml"
+        if add_key not in st.session_state or st.session_state.get("last_filter_type") != filter_type:
+            st.session_state[add_key] = template
+            st.session_state["last_filter_type"] = filter_type
+
+        new_filter_yaml = st.text_area(
+            "Filter YAML",
+            value=st.session_state[add_key],
+            height=250,
+            key="new_filter_editor"
+        )
+        st.session_state[add_key] = new_filter_yaml
+
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("➕ Add Filter", type="primary"):
+                try:
+                    self._add_new_filter(notebook_path, new_filter_yaml)
+                    st.success("Filter added successfully!")
+                    # Reset the form
+                    st.session_state[add_key] = template
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error adding filter: {str(e)}")
+
         with col2:
-            if st.button("✅ Close Filter Editor", use_container_width=True, type="primary"):
-                st.session_state.filter_editor_open = False
+            if st.button("🔄 Reset to Template"):
+                st.session_state[add_key] = template
                 st.rerun()
+
+        # Help section
+        with st.expander("📖 Filter Properties Reference"):
+            st.markdown("""
+            **Common Properties:**
+            - `id`: Unique identifier (required)
+            - `label`: Display name (required)
+            - `type`: Filter type (required)
+            - `default`: Default value
+            - `operator`: SQL operator (`in`, `eq`, `gte`, `lte`, `between`, `like`)
+            - `help_text`: Help text for users
+
+            **Select Filter:**
+            - `multi`: Allow multiple selections (true/false)
+            - `source`: Database source `{model: X, table: Y, column: Z}`
+            - `options`: Static list of options
+
+            **Slider/Number Range:**
+            - `min_value`: Minimum value
+            - `max_value`: Maximum value
+            - `step`: Step increment
+
+            **Text Search:**
+            - `placeholder`: Placeholder text
+            - `fuzzy_enabled`: Enable fuzzy matching
+            """)
+
+    def _save_filter_changes(self, notebook_path, filter_id: str, new_yaml: str):
+        """Save changes to a filter in the notebook file."""
+        import yaml
+        import re
+        from pathlib import Path
+
+        path = Path(notebook_path)
+        if not path.is_absolute():
+            path = self.ctx.repo / path
+
+        # Read current file
+        with open(path, 'r') as f:
+            content = f.read()
+
+        # Parse new YAML to validate
+        new_data = yaml.safe_load(new_yaml)
+        if not new_data.get('id'):
+            raise ValueError("Filter must have an 'id' field")
+
+        # Find and replace the filter block
+        # Pattern matches $filter${ ... } with the matching filter_id
+        pattern = re.compile(
+            r'\$filters?\$\{\s*\n(.*?)\n\}',
+            re.MULTILINE | re.DOTALL
+        )
+
+        def replace_filter(match):
+            filter_yaml = match.group(1)
+            try:
+                data = yaml.safe_load(filter_yaml)
+                if data.get('id') == filter_id:
+                    # This is the filter to replace
+                    return f"$filter${{\n{new_yaml.strip()}\n}}"
+            except:
+                pass
+            return match.group(0)
+
+        updated_content = pattern.sub(replace_filter, content)
+
+        # Write back
+        with open(path, 'w') as f:
+            f.write(updated_content)
+
+        # Reload notebook
+        self._reload_active_notebook()
+
+    def _delete_filter(self, notebook_path, filter_id: str):
+        """Delete a filter from the notebook file."""
+        import yaml
+        import re
+        from pathlib import Path
+
+        path = Path(notebook_path)
+        if not path.is_absolute():
+            path = self.ctx.repo / path
+
+        # Read current file
+        with open(path, 'r') as f:
+            content = f.read()
+
+        # Find and remove the filter block
+        pattern = re.compile(
+            r'\$filters?\$\{\s*\n(.*?)\n\}\s*\n?',
+            re.MULTILINE | re.DOTALL
+        )
+
+        def remove_filter(match):
+            filter_yaml = match.group(1)
+            try:
+                data = yaml.safe_load(filter_yaml)
+                if data.get('id') == filter_id:
+                    return ''  # Remove this filter
+            except:
+                pass
+            return match.group(0)
+
+        updated_content = pattern.sub(remove_filter, content)
+
+        # Clean up extra blank lines
+        updated_content = re.sub(r'\n{3,}', '\n\n', updated_content)
+
+        # Write back
+        with open(path, 'w') as f:
+            f.write(updated_content)
+
+        # Reload notebook
+        self._reload_active_notebook()
+
+    def _add_new_filter(self, notebook_path, filter_yaml: str):
+        """Add a new filter to the notebook file."""
+        import yaml
+        import re
+        from pathlib import Path
+
+        path = Path(notebook_path)
+        if not path.is_absolute():
+            path = self.ctx.repo / path
+
+        # Validate YAML
+        filter_data = yaml.safe_load(filter_yaml)
+        if not filter_data.get('id'):
+            raise ValueError("Filter must have an 'id' field")
+        if not filter_data.get('label'):
+            raise ValueError("Filter must have a 'label' field")
+        if not filter_data.get('type'):
+            raise ValueError("Filter must have a 'type' field")
+
+        # Read current file
+        with open(path, 'r') as f:
+            content = f.read()
+
+        # Find the position to insert (after front matter and existing filters)
+        front_matter_pattern = re.compile(r'^---\s*\n.*?\n---\s*\n', re.MULTILINE | re.DOTALL)
+        front_matter_match = front_matter_pattern.match(content)
+
+        if front_matter_match:
+            # Find existing filter blocks
+            filter_pattern = re.compile(r'\$filters?\$\{\s*\n.*?\n\}', re.MULTILINE | re.DOTALL)
+            filter_matches = list(filter_pattern.finditer(content))
+
+            if filter_matches:
+                # Insert after the last filter
+                last_filter_end = filter_matches[-1].end()
+                new_filter_block = f"\n\n$filter${{\n{filter_yaml.strip()}\n}}"
+                updated_content = content[:last_filter_end] + new_filter_block + content[last_filter_end:]
+            else:
+                # Insert right after front matter
+                insert_pos = front_matter_match.end()
+                new_filter_block = f"\n$filter${{\n{filter_yaml.strip()}\n}}\n"
+                updated_content = content[:insert_pos] + new_filter_block + content[insert_pos:]
+        else:
+            raise ValueError("Notebook must have front matter (---...---)")
+
+        # Write back
+        with open(path, 'w') as f:
+            f.write(updated_content)
+
+        # Reload notebook
+        self._reload_active_notebook()
+
+    def _reload_active_notebook(self):
+        """Reload the active notebook after file changes."""
+        active_notebook = self._get_active_notebook()
+        if active_notebook:
+            notebook_id, notebook_path, _ = active_notebook
+            updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+            for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
+                if tab_id == notebook_id:
+                    st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
+                    break
 
     def _render_main_content(self):
         """Render main content area."""

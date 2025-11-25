@@ -502,6 +502,24 @@ class MarkdownNotebookParser:
                 applies_to=ds_data.get('applies_to', 'color')
             )
 
+        # Collect any unknown/extra properties into options dict
+        # This preserves custom properties like 'limit' that aren't in the schema
+        known_keys = {
+            'type', 'title', 'description', 'source', 'filters',
+            'x', 'y', 'x_axis', 'y_axis', 'y2', 'x_label', 'y_label', 'y2_label',
+            'color', 'size', 'legend', 'interactive',
+            'metrics', 'measure_selector', 'dimension_selector',
+            'collapsible', 'collapsible_title', 'collapsible_expanded', 'nest_in_expander',
+            'weighting', 'aggregate_by', 'value_measures', 'group_by', 'aggregations',
+            'columns', 'pagination', 'page_size', 'download', 'sortable', 'searchable',
+            'sort', 'layout', 'component', 'params', 'options',
+            'actual_column', 'predicted_column', 'confidence_bounds'
+        }
+        extra_options = {k: v for k, v in data.items() if k not in known_keys}
+        options = data.get('options', {}) or {}
+        if extra_options:
+            options.update(extra_options)
+
         return Exhibit(
             id=exhibit_id,
             type=exhibit_type,
@@ -542,7 +560,7 @@ class MarkdownNotebookParser:
             layout=None,
             component=data.get('component'),
             params=data.get('params'),
-            options=data.get('options'),
+            options=options if options else None,
             # Forecast chart specific
             actual_column=data.get('actual_column'),
             predicted_column=data.get('predicted_column'),
