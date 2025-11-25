@@ -1,35 +1,57 @@
 ---
 id: test_toggles
 title: Toggle Test
-description: Simple test of toggle sections
+description: Demonstrates nested collapsible sections with header hierarchy
 models: []
 ---
 
-# First Section
+# Overview Section
 
-This is the content of the first section. It should appear under a collapsible toggle labeled "First Section".
+This is a top-level section (H1). It creates a collapsible toggle at the highest level.
 
-# Second Section
+Content here can include:
+- Lists
+- **Bold** and *italic* text
+- Any other markdown
 
-This is the second section with different content.
+# Analysis Section
 
-Here is a list:
-- Item one
-- Item two
-- Item three
+This section demonstrates nested subsections.
 
-# Third Section
+## Summary
 
-The third section has some **bold** and *italic* text.
+This is an H2 subsection nested under "Analysis Section".
 
-## Subsection A
+When you add a new section, you can choose the header level:
+- **# Top Level** - Creates a new H1 section (peers with Overview, Analysis, etc.)
+- **## Subsection** - Creates an H2 nested under the current H1
+- **### Sub-subsection** - Creates an H3 nested even deeper
 
-This is a subsection under the third section.
+## Key Findings
 
-## Subsection B
+Another H2 subsection with bullet points:
+- Finding one
+- Finding two
+- Finding three
 
-Another subsection with more content.
+### Details
 
-# Fourth Section
+This H3 is nested under "Key Findings" (which is under "Analysis Section").
 
-Final section to test expand/collapse all functionality.
+The nesting depth can continue based on header levels.
+
+### More Details
+
+Another H3 sibling to "Details".
+
+# Appendix
+
+Final top-level section.
+
+## Supporting Data
+
+Supporting information nested under Appendix.
+
+## References
+
+References section nested under Appendix.
