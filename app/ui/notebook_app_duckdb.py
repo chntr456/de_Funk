@@ -766,48 +766,48 @@ class NotebookVaultApp:
 
         # Template based on type
         templates = {
-            "select": """id: new_filter
-label: New Select Filter
+            "select": """id: ticker
+label: Stock Tickers
 type: select
 multi: true
-source: {model: stocks, table: dim_stock, column: ticker}
+source: {model: stocks, table: fact_stock_prices, column: ticker}
 default: []
 operator: in
-help_text: Select items to filter by""",
-            "date_range": """id: date_filter
+help_text: Select stocks to analyze""",
+            "date_range": """id: date_range
 label: Date Range
 type: date_range
 operator: between
 default: {start: "-30d", end: "today"}
 help_text: Select a date range""",
-            "slider": """id: slider_filter
-label: Value Slider
+            "slider": """id: price_min
+label: Minimum Price
 type: slider
 min_value: 0
-max_value: 100
-step: 1
-default: 50
+max_value: 1000
+step: 10
+default: 0
 operator: gte
-help_text: Slide to select minimum value""",
-            "text_search": """id: search_filter
+help_text: Filter by minimum price""",
+            "text_search": """id: search
 label: Search
 type: text_search
 operator: like
 placeholder: Enter search term...
 help_text: Search by text""",
-            "boolean": """id: bool_filter
-label: Toggle Option
+            "boolean": """id: active_only
+label: Active Only
 type: boolean
 default: false
-help_text: Enable or disable this option""",
-            "number_range": """id: range_filter
-label: Number Range
+help_text: Show only active items""",
+            "number_range": """id: volume_range
+label: Volume Range
 type: number_range
 min_value: 0
-max_value: 1000000
-step: 1000
+max_value: 100000000
+step: 1000000
 operator: between
-help_text: Set minimum and maximum values"""
+help_text: Filter by trading volume"""
         }
 
         template = templates.get(filter_type, templates["select"])
