@@ -1,8 +1,9 @@
 ---
-id: test_toggles
-title: Toggle Test
+id: example_nested_sections
+title: Nested Sections Example
 description: Demonstrates nested collapsible sections with header hierarchy
 models: []
+tags: [example, documentation]
 ---
 
 # Overview Section

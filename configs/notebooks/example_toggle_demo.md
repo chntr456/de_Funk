@@ -1,11 +1,9 @@
 ---
-id: toggle_example
-title: Toggle Containers Example
+id: example_toggle_demo
+title: Toggle Demo
 description: Demonstrates the toggle container system and editable blocks
 models: []
-author: System
-created: 2025-11-25
-tags: [example, toggle, demo]
+tags: [example, documentation]
 ---
 
 # Toggle Container Demo
