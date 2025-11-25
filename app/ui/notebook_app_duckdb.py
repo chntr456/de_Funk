@@ -1014,11 +1014,24 @@ help_text: Filter by trading volume"""
         active_notebook = self._get_active_notebook()
         if active_notebook:
             notebook_id, notebook_path, _ = active_notebook
+            # Reload the notebook config from file
             updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+
+            # Update the tab with new config
             for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
                 if tab_id == notebook_id:
                     st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
                     break
+
+            # Also update the notebook manager's current config
+            self.notebook_manager.notebook_config = updated_config
+
+            # Clear cached model sessions so they reload with new config
+            if notebook_id in st.session_state.notebook_model_sessions:
+                del st.session_state.notebook_model_sessions[notebook_id]
+
+            # Reset current notebook id to force re-sync on next render
+            st.session_state.current_notebook_id = None
 
     def _render_main_content(self):
         """Render main content area."""
