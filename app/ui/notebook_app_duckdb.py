@@ -635,7 +635,15 @@ class NotebookVaultApp:
 
                 with col2:
                     st.markdown("**Default Value:**")
-                    st.json(filter_config.default)
+                    # Use code block for display to avoid JSON parse errors
+                    default_val = filter_config.default
+                    if isinstance(default_val, (dict, list)):
+                        import json
+                        st.code(json.dumps(default_val, indent=2), language="json")
+                    elif default_val is not None:
+                        st.code(str(default_val))
+                    else:
+                        st.caption("None")
 
                     if filter_config.source:
                         st.markdown("**Source:**")
