@@ -35,11 +35,11 @@ def test_facet_normalization():
 ```python
 def test_ingestor_writes_bronze():
     """Test ingestor writes to Bronze layer."""
-    ingestor = PolygonIngestor(spark, api_keys, storage_router)
+    ingestor = AlphaVantageIngestor(spark, api_keys, storage_router)
     ingestor.run(tickers=['TEST'], date_from='2024-01-01')
 
     # Verify Bronze data exists
-    bronze_path = storage_router.bronze_path('polygon_daily_prices')
+    bronze_path = storage_router.bronze_path('securities_prices_daily')
     df = spark.read.parquet(bronze_path)
     assert df.count() > 0
 ```

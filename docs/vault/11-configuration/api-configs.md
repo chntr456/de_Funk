@@ -12,7 +12,7 @@ Loader: `config.ConfigLoader` (auto-discovers all API configs)
 de_Funk uses **JSON configuration files** to define API endpoints for external data providers. Each provider has its own config file with endpoints, authentication, and rate limiting.
 
 **Supported Providers**:
-- **Polygon.io** - Stock market data (prices, companies, news)
+- **Alpha Vantage** - Stock market data (prices, fundamentals, technicals)
 - **Bureau of Labor Statistics (BLS)** - Economic indicators
 - **Chicago Data Portal** - Municipal finance data
 
@@ -24,7 +24,7 @@ de_Funk uses **JSON configuration files** to define API endpoints for external d
 
 | File | Provider | Purpose |
 |------|----------|---------|
-| `configs/polygon_endpoints.json` | Polygon.io | Stock market data |
+| `configs/alpha_vantage_endpoints.json` | Alpha Vantage | Stock market data |
 | `configs/bls_endpoints.json` | BLS | Economic indicators |
 | `configs/chicago_endpoints.json` | Chicago Data Portal | Municipal data |
 
@@ -37,7 +37,7 @@ loader = ConfigLoader()
 config = loader.load()
 
 # All API configs auto-discovered
-polygon_cfg = config.apis.get("polygon", {})
+alpha_vantage_cfg = config.apis.get("alpha_vantage", {})
 bls_cfg = config.apis.get("bls", {})
 chicago_cfg = config.apis.get("chicago", {})
 ```
@@ -106,8 +106,7 @@ All API config files follow this schema:
 **Example**:
 ```json
 "base_urls": {
-  "core": "https://api.polygon.io",
-  "reference": "https://reference.polygon.io"
+  "core": "https://www.alphavantage.co"
 }
 ```
 
@@ -124,14 +123,9 @@ All API config files follow this schema:
 **Example**:
 ```json
 "headers": {
-  "Authorization": "Bearer ${API_KEY}",
   "Content-Type": "application/json"
 }
 ```
-
-**Variable Substitution**:
-- `${API_KEY}` - Replaced with current API key
-- Rotation handled by provider
 
 ---
 
@@ -141,12 +135,13 @@ All API config files follow this schema:
 **Purpose**: Maximum requests per second
 **Example**:
 ```json
-"rate_limit_per_sec": 1.0
+"rate_limit_per_sec": 0.083
 ```
 
 **Provider Defaults**:
-- Polygon: 1.0 (60/min on free tier, but conservative)
-- BLS: 0.42 (~25/min on free tier)
+- Alpha Vantage Free: 0.083 (5/min)
+- Alpha Vantage Premium: 1.25 (75/min)
+- BLS: 0.42 (~25/min)
 - Chicago: 5.0
 
 **Notes**:
@@ -188,11 +183,7 @@ Each endpoint has these fields:
 
 **Type**: String
 **Purpose**: URL path with parameter placeholders
-**Example**: `"/v3/reference/tickers/{ticker}"`
-
-**Placeholders**:
-- `{param}` - Replaced with value from `path_params`
-- Use `required_params` to validate
+**Example**: `"/query"`
 
 ---
 
@@ -200,7 +191,7 @@ Each endpoint has these fields:
 
 **Type**: Array of strings
 **Purpose**: Required parameters for this endpoint
-**Example**: `["ticker", "date"]`
+**Example**: `["function", "symbol"]`
 
 **Validation**:
 - Provider validates before making request
@@ -215,8 +206,8 @@ Each endpoint has these fields:
 **Example**:
 ```json
 "default_query": {
-  "limit": 1000,
-  "adjusted": "true"
+  "function": "TIME_SERIES_DAILY",
+  "outputsize": "full"
 }
 ```
 
@@ -230,7 +221,7 @@ Each endpoint has these fields:
 
 **Type**: String (or null)
 **Purpose**: Key to extract data from response
-**Example**: `"response_key": "results"`
+**Example**: `"response_key": "Time Series (Daily)"`
 
 **Behavior**:
 - `"results"` - Extract `response["results"]`
@@ -238,67 +229,48 @@ Each endpoint has these fields:
 
 ---
 
-#### default_path_params
-
-**Type**: Object
-**Purpose**: Default values for path parameters
-**Example**:
-```json
-"default_path_params": {
-  "version": "v3"
-}
-```
-
----
-
-#### pagination_type
-
-**Type**: String (optional)
-**Purpose**: Pagination strategy
-**Values**: `"offset"`, `"cursor"`, `"page"`, `"none"`
-**Example**: `"pagination_type": "offset"`
-
----
-
 ## Provider Configurations
 
-### Polygon.io (Stock Market Data)
+### Alpha Vantage (Stock Market Data)
 
-**File**: `configs/polygon_endpoints.json`
+**File**: `configs/alpha_vantage_endpoints.json`
 
 **Endpoints**:
-- `ref_all_tickers` - List all tickers
-- `ref_ticker` - Single ticker details
-- `exchanges` - Stock exchanges
-- `prices_daily_grouped` - Daily prices for all tickers
-- `news_by_date` - News articles by date range
+- `time_series_daily` - Daily OHLCV prices
+- `time_series_daily_adjusted` - Adjusted daily prices
+- `company_overview` - Company fundamentals
+- `sma` - Simple Moving Average
+- `ema` - Exponential Moving Average
+- `rsi` - Relative Strength Index
+- `macd` - MACD indicator
 
 **Example Endpoint**:
 ```json
-"prices_daily_grouped": {
+"time_series_daily": {
   "base": "core",
   "method": "GET",
-  "path_template": "/v2/aggs/grouped/locale/us/market/stocks/{date}",
-  "required_params": ["date"],
+  "path_template": "/query",
+  "required_params": ["symbol"],
   "default_query": {
-    "adjusted": "true"
+    "function": "TIME_SERIES_DAILY",
+    "outputsize": "full"
   },
-  "response_key": "results"
+  "response_key": "Time Series (Daily)"
 }
 ```
 
 **Usage**:
 ```python
-from datapipelines.providers.polygon import PolygonProvider
+from datapipelines.providers.alpha_vantage import AlphaVantageProvider
 
-provider = PolygonProvider(config)
-data = provider.get_daily_prices(date="2024-01-15")
+provider = AlphaVantageProvider(config)
+data = provider.get_daily_prices(symbol="AAPL")
 ```
 
 **Rate Limits**:
-- Free: 5 requests/minute
-- Basic: 100 requests/minute
-- Configured: 1.0 req/sec (conservative for free tier)
+- Free: 5 requests/minute, 500/day
+- Premium: 75 requests/minute
+- Configured: 0.083 req/sec (5/min for free tier)
 
 ---
 
@@ -404,17 +376,17 @@ data = provider.get_building_permits(
 
 ### Adding a New Endpoint
 
-1. **Edit config file** (e.g., `configs/polygon_endpoints.json`):
+1. **Edit config file** (e.g., `configs/alpha_vantage_endpoints.json`):
 
 ```json
 "endpoints": {
   "new_endpoint": {
     "base": "core",
     "method": "GET",
-    "path_template": "/v3/new/resource/{id}",
-    "required_params": ["id"],
+    "path_template": "/query",
+    "required_params": ["symbol"],
     "default_query": {
-      "limit": 100
+      "function": "NEW_FUNCTION"
     },
     "response_key": "data"
   }
@@ -424,19 +396,19 @@ data = provider.get_building_permits(
 2. **Update provider class**:
 
 ```python
-class PolygonProvider:
-    def get_new_resource(self, resource_id: str):
+class AlphaVantageProvider:
+    def get_new_data(self, symbol: str):
         return self.call_endpoint(
             'new_endpoint',
-            path_params={'id': resource_id}
+            query_params={'symbol': symbol}
         )
 ```
 
 3. **Test endpoint**:
 
 ```python
-provider = PolygonProvider(config)
-data = provider.get_new_resource('test123')
+provider = AlphaVantageProvider(config)
+data = provider.get_new_data('AAPL')
 ```
 
 ---
@@ -522,12 +494,7 @@ def call_endpoint(self, endpoint_name, **kwargs):
 
 **Conservative** (avoid rate limit errors):
 ```json
-"rate_limit_per_sec": 0.5
-```
-
-**Aggressive** (maximize throughput):
-```json
-"rate_limit_per_sec": 5.0
+"rate_limit_per_sec": 0.05
 ```
 
 **Based on API Plan**:
@@ -538,11 +505,11 @@ def call_endpoint(self, endpoint_name, **kwargs):
 
 ## Authentication Patterns
 
-### Bearer Token (Polygon)
+### Query Parameter (Alpha Vantage)
 
 ```json
-"headers": {
-  "Authorization": "Bearer ${API_KEY}"
+"default_query": {
+  "apikey": "${API_KEY}"
 }
 ```
 
@@ -554,7 +521,7 @@ def call_endpoint(self, endpoint_name, **kwargs):
 }
 ```
 
-### Query Parameter (BLS)
+### POST Body (BLS)
 
 ```json
 "default_query": {
@@ -566,7 +533,7 @@ def call_endpoint(self, endpoint_name, **kwargs):
 
 ```bash
 # .env
-POLYGON_API_KEYS=key1,key2,key3
+ALPHA_VANTAGE_API_KEYS=key1,key2,key3
 ```
 
 Provider rotates through keys automatically.
@@ -596,33 +563,13 @@ data = provider.get(limit=1000, offset=1000)
 
 ---
 
-### Cursor-Based (Polygon)
-
-```json
-"pagination_type": "cursor",
-"response_key": "results",
-"cursor_key": "next_url"
-```
-
-**Usage**:
-```python
-cursor = None
-while True:
-    data = provider.get(cursor=cursor)
-    if not data['next_url']:
-        break
-    cursor = data['next_url']
-```
-
----
-
-### No Pagination (BLS)
+### No Pagination (Alpha Vantage, BLS)
 
 ```json
 "pagination_type": "none"
 ```
 
-BLS returns all data for requested time period in single response.
+Alpha Vantage and BLS return all data in single responses.
 
 ---
 
@@ -630,10 +577,10 @@ BLS returns all data for requested time period in single response.
 
 ### Config Not Found
 
-**Symptom**: `KeyError: 'polygon'`
+**Symptom**: `KeyError: 'alpha_vantage'`
 
 **Solution**:
-- Check file exists: `configs/polygon_endpoints.json`
+- Check file exists: `configs/alpha_vantage_endpoints.json`
 - Check file is valid JSON
 - Check ConfigLoader auto-discovery
 
@@ -668,13 +615,13 @@ BLS returns all data for requested time period in single response.
 **Solutions**:
 1. Check `.env` has correct variable name
 2. Check API key is valid
-3. Check header format matches API docs
+3. Check header/query param format matches API docs
 
 ---
 
 ## Related Documentation
 
 - [Environment Variables](environment-variables.md) - API key configuration
-- [Providers](../04-data-pipelines/providers.md) - Provider implementations
-- [Ingestors](../04-data-pipelines/ingestors.md) - Orchestration layer
+- [Providers](../06-pipelines/providers.md) - Provider implementations
+- [Ingestors](../06-pipelines/ingestors.md) - Orchestration layer
 - [ConfigLoader](config-loader.md) - Configuration system

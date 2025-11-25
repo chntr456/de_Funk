@@ -92,14 +92,14 @@ Initialize query planner for a model.
 from models.api.registry import get_model_registry
 
 registry = get_model_registry()
-equity_model = registry.get_model('equity')
+stocks_model = registry.get_model('stocks')
 
 # Query planner is automatically created by BaseModel
-planner = equity_model.query_planner
+planner = stocks_model.query_planner
 
 # Or create manually
 from models.api.query_planner import GraphQueryPlanner
-planner = GraphQueryPlanner(equity_model)
+planner = GraphQueryPlanner(stocks_model)
 ```
 
 ---
@@ -118,8 +118,8 @@ Get table with optional enrichment via dynamic joins.
 3. Select only requested columns (if specified)
 
 **Parameters:**
-- `table_name` - Base table name (e.g., `'fact_equity_prices'`)
-- `enrich_with` - List of tables to join (e.g., `['dim_equity', 'dim_exchange']`)
+- `table_name` - Base table name (e.g., `'fact_stock_prices'`)
+- `enrich_with` - List of tables to join (e.g., `['dim_stock', 'dim_exchange']`)
 - `columns` - Columns to select (default: all columns)
 
 **Returns:** DataFrame with enrichment applied
@@ -129,22 +129,22 @@ Get table with optional enrichment via dynamic joins.
 **No Enrichment:**
 ```python
 # Just get base table
-df = planner.get_table_enriched('fact_equity_prices')
-# Returns fact_equity_prices DataFrame
+df = planner.get_table_enriched('fact_stock_prices')
+# Returns fact_stock_prices DataFrame
 ```
 
 **Single Table Enrichment:**
 ```python
 # Get prices with company info
 df = planner.get_table_enriched(
-    'fact_equity_prices',
-    enrich_with=['dim_equity'],
+    'fact_stock_prices',
+    enrich_with=['dim_stock'],
     columns=['ticker', 'trade_date', 'close', 'company_name']
 )
 
 # Query planner:
 # 1. Checks for materialized view matching this pattern
-# 2. If not found, builds join: fact_equity_prices -> dim_equity
+# 2. If not found, builds join: fact_stock_prices -> dim_stock
 # 3. Selects only specified columns
 ```
 
@@ -152,15 +152,15 @@ df = planner.get_table_enriched(
 ```python
 # Get prices with company and exchange info
 df = planner.get_table_enriched(
-    'fact_equity_prices',
-    enrich_with=['dim_equity', 'dim_exchange'],
+    'fact_stock_prices',
+    enrich_with=['dim_stock', 'dim_exchange'],
     columns=['ticker', 'trade_date', 'close', 'company_name', 'exchange_name']
 )
 
 # Query planner:
-# 1. Checks for materialized view: equity_prices_with_company_and_exchange
+# 1. Checks for materialized view: stock_prices_with_company_and_exchange
 # 2. If not found, builds join chain:
-#    fact_equity_prices -> dim_equity -> dim_exchange
+#    fact_stock_prices -> dim_stock -> dim_exchange
 # 3. Returns enriched DataFrame
 ```
 
@@ -168,8 +168,8 @@ df = planner.get_table_enriched(
 ```python
 # Used by MeasureExecutor for auto-enrichment
 df = planner.get_table_enriched(
-    'fact_equity_prices',
-    enrich_with=['dim_equity', 'dim_exchange'],
+    'fact_stock_prices',
+    enrich_with=['dim_stock', 'dim_exchange'],
     columns=['ticker', 'close', 'exchange_name']  # exchange_name from dim_exchange!
 )
 ```
@@ -191,15 +191,15 @@ Useful for debugging and understanding table relationships.
 **Example:**
 ```python
 # Find path from prices to exchange
-path = planner.get_join_path('fact_equity_prices', 'dim_exchange')
-# ['fact_equity_prices', 'dim_equity', 'dim_exchange']
+path = planner.get_join_path('fact_stock_prices', 'dim_exchange')
+# ['fact_stock_prices', 'dim_stock', 'dim_exchange']
 
 # Direct path
-path = planner.get_join_path('fact_equity_prices', 'dim_equity')
-# ['fact_equity_prices', 'dim_equity']
+path = planner.get_join_path('fact_stock_prices', 'dim_stock')
+# ['fact_stock_prices', 'dim_stock']
 
 # No path
-path = planner.get_join_path('dim_equity', 'fact_macro_unemployment')
+path = planner.get_join_path('dim_stock', 'fact_macro_unemployment')
 # None (tables not connected)
 ```
 
@@ -222,17 +222,17 @@ Get all relationships for a table.
 
 **Example:**
 ```python
-rels = planner.get_table_relationships('fact_equity_prices')
+rels = planner.get_table_relationships('fact_stock_prices')
 # {
-#     'can_join_to': ['dim_equity'],
+#     'can_join_to': ['dim_stock'],
 #     'can_be_joined_from': [],
 #     'graph_depth': 0
 # }
 
-rels = planner.get_table_relationships('dim_equity')
+rels = planner.get_table_relationships('dim_stock')
 # {
 #     'can_join_to': ['dim_exchange'],
-#     'can_be_joined_from': ['fact_equity_prices'],
+#     'can_be_joined_from': ['fact_stock_prices'],
 #     'graph_depth': 1
 # }
 ```
@@ -263,7 +263,7 @@ tables = planner.find_tables_with_column('exchange_name')
 
 # Find tables with 'ticker' column
 tables = planner.find_tables_with_column('ticker')
-# ['dim_equity', 'fact_equity_prices', 'fact_equity_news']
+# ['dim_stock', 'fact_stock_prices', 'fact_equity_news']
 
 # Column not in any table
 tables = planner.find_tables_with_column('nonexistent_column')
@@ -292,13 +292,13 @@ Creates a directed graph where:
 **Graph Structure:**
 ```python
 # Nodes
-g.add_node('fact_equity_prices', type='fact')
-g.add_node('dim_equity', type='dimension')
+g.add_node('fact_stock_prices', type='fact')
+g.add_node('dim_stock', type='dimension')
 
 # Edges
 g.add_edge(
-    'fact_equity_prices',
-    'dim_equity',
+    'fact_stock_prices',
+    'dim_stock',
     join_on=['ticker=ticker'],
     join_type='left',
     description='Equity dimension'
@@ -328,22 +328,22 @@ Searches through model's paths configuration to find a pre-computed view that jo
 graph:
   paths:
     - id: equity_prices_with_company
-      hops: fact_equity_prices -> dim_equity
+      hops: fact_stock_prices -> dim_stock
 ```
 
 **Lookup:**
 ```python
 # Find materialized view
 path_id = planner._find_materialized_view(
-    'fact_equity_prices',
-    ['dim_equity']
+    'fact_stock_prices',
+    ['dim_stock']
 )
 # 'equity_prices_with_company'
 
 # No matching view
 path_id = planner._find_materialized_view(
-    'fact_equity_prices',
-    ['dim_equity', 'dim_exchange']
+    'fact_stock_prices',
+    ['dim_stock', 'dim_exchange']
 )
 # None
 ```
@@ -394,8 +394,8 @@ Constructs a SQL query with JOINs based on graph edges, then executes it via Duc
 **Generated SQL Structure:**
 ```sql
 SELECT t0.ticker, t0.close, t1.company_name, t2.exchange_name
-FROM read_parquet('/path/to/fact_equity_prices/*.parquet') AS t0
-LEFT JOIN read_parquet('/path/to/dim_equity/*.parquet') AS t1
+FROM read_parquet('/path/to/fact_stock_prices/*.parquet') AS t0
+LEFT JOIN read_parquet('/path/to/dim_stock/*.parquet') AS t1
   ON t0.ticker = t1.ticker
 LEFT JOIN read_parquet('/path/to/dim_exchange/*.parquet') AS t2
   ON t1.exchange_id = t2.exchange_id
@@ -423,8 +423,8 @@ Uses the model's schema to resolve table paths, ensuring tables are looked up wi
 
 **Example:**
 ```python
-ref = planner._get_duckdb_table_reference('fact_equity_prices')
-# "read_parquet('storage/silver/equity/facts/fact_equity_prices/*.parquet')"
+ref = planner._get_duckdb_table_reference('fact_stock_prices')
+# "read_parquet('storage/silver/equity/facts/fact_stock_prices/*.parquet')"
 ```
 
 ---
@@ -564,13 +564,13 @@ from models.api.registry import get_model_registry
 
 # Get model
 registry = get_model_registry()
-equity_model = registry.get_model('equity')
-planner = equity_model.query_planner
+stocks_model = registry.get_model('stocks')
+planner = stocks_model.query_planner
 
 # Get enriched table
 df = planner.get_table_enriched(
-    'fact_equity_prices',
-    enrich_with=['dim_equity'],
+    'fact_stock_prices',
+    enrich_with=['dim_stock'],
     columns=['ticker', 'trade_date', 'close', 'company_name']
 )
 
@@ -584,13 +584,13 @@ df = planner.get_table_enriched(
 ```python
 # Join across 3 tables
 df = planner.get_table_enriched(
-    'fact_equity_prices',
-    enrich_with=['dim_equity', 'dim_exchange'],
+    'fact_stock_prices',
+    enrich_with=['dim_stock', 'dim_exchange'],
     columns=['ticker', 'close', 'company_name', 'exchange_name', 'exchange_country']
 )
 
 # Query planner:
-# 1. Finds path: fact_equity_prices -> dim_equity -> dim_exchange
+# 1. Finds path: fact_stock_prices -> dim_stock -> dim_exchange
 # 2. Builds join chain
 # 3. Returns enriched DataFrame
 ```
@@ -601,17 +601,17 @@ df = planner.get_table_enriched(
 
 ```python
 # Check if join path exists
-path = planner.get_join_path('fact_equity_prices', 'dim_exchange')
+path = planner.get_join_path('fact_stock_prices', 'dim_exchange')
 if path:
     print(f"Join path: {' -> '.join(path)}")
-    # Join path: fact_equity_prices -> dim_equity -> dim_exchange
+    # Join path: fact_stock_prices -> dim_stock -> dim_exchange
 else:
     print("No join path available")
 
 # Get table relationships
-rels = planner.get_table_relationships('fact_equity_prices')
+rels = planner.get_table_relationships('fact_stock_prices')
 print(f"Can join to: {rels['can_join_to']}")
-# Can join to: ['dim_equity']
+# Can join to: ['dim_stock']
 
 # Find tables with specific column
 tables = planner.find_tables_with_column('exchange_name')
@@ -629,7 +629,7 @@ print(f"Tables with exchange_name: {tables}")
 measures:
   avg_close_by_exchange:
     type: simple
-    source: fact_equity_prices.close
+    source: fact_stock_prices.close
     aggregation: avg
     auto_enrich: true
 ```
@@ -641,18 +641,18 @@ executor = MeasureExecutor(equity_model, backend='duckdb')
 
 result = executor.execute_measure(
     'avg_close_by_exchange',
-    entity_column='exchange_name'  # Not in fact_equity_prices!
+    entity_column='exchange_name'  # Not in fact_stock_prices!
 )
 
 # Behind the scenes:
 # 1. MeasureExecutor detects exchange_name missing
 # 2. Calls planner.find_tables_with_column('exchange_name')
 #    → ['dim_exchange']
-# 3. Calls planner.get_join_path('fact_equity_prices', 'dim_exchange')
-#    → ['fact_equity_prices', 'dim_equity', 'dim_exchange']
+# 3. Calls planner.get_join_path('fact_stock_prices', 'dim_exchange')
+#    → ['fact_stock_prices', 'dim_stock', 'dim_exchange']
 # 4. Calls planner.get_table_enriched(
-#       'fact_equity_prices',
-#       enrich_with=['dim_equity', 'dim_exchange']
+#       'fact_stock_prices',
+#       enrich_with=['dim_stock', 'dim_exchange']
 #    )
 # 5. Executes measure on enriched table
 ```
@@ -667,15 +667,15 @@ result = executor.execute_measure(
 graph:
   paths:
     - id: equity_prices_with_company
-      hops: fact_equity_prices -> dim_equity
+      hops: fact_stock_prices -> dim_stock
 ```
 
 **Usage:**
 ```python
 # Request enrichment
 df = planner.get_table_enriched(
-    'fact_equity_prices',
-    enrich_with=['dim_equity']
+    'fact_stock_prices',
+    enrich_with=['dim_stock']
 )
 
 # Query planner:
@@ -712,8 +712,8 @@ Graph edges support multiple join type specifications that are mapped to standar
 # Model config
 graph:
   edges:
-    - from: fact_equity_prices
-      to: dim_equity
+    - from: fact_stock_prices
+      to: dim_stock
       on: [ticker = ticker]
       type: many_to_one  # Mapped to LEFT join
 ```
@@ -740,22 +740,22 @@ Example NetworkX graph structure:
 
 ```
 Nodes (Tables):
-  - fact_equity_prices (type: fact)
-  - dim_equity (type: dimension)
+  - fact_stock_prices (type: fact)
+  - dim_stock (type: dimension)
   - dim_exchange (type: dimension)
 
 Edges (Joins):
-  fact_equity_prices -> dim_equity
+  fact_stock_prices -> dim_stock
     join_on: ['ticker = ticker']
     join_type: 'left'
 
-  dim_equity -> dim_exchange
+  dim_stock -> dim_exchange
     join_on: ['exchange_id = exchange_id']
     join_type: 'left'
 
 Join Paths:
-  fact_equity_prices -> dim_exchange:
-    ['fact_equity_prices', 'dim_equity', 'dim_exchange']
+  fact_stock_prices -> dim_exchange:
+    ['fact_stock_prices', 'dim_stock', 'dim_exchange']
 ```
 
 ---
@@ -764,7 +764,7 @@ Join Paths:
 
 ### No Join Path
 
-**Error:** `ValueError: No join path from fact_equity_prices to dim_exchange in equity model`
+**Error:** `ValueError: No join path from fact_stock_prices to dim_exchange in equity model`
 
 **Cause:** Tables are not connected via edges in graph
 
@@ -772,7 +772,7 @@ Join Paths:
 ```yaml
 graph:
   edges:
-    - from: dim_equity
+    - from: dim_stock
       to: dim_exchange
       on: [exchange_id = exchange_id]
 ```
@@ -789,8 +789,8 @@ graph:
 ```yaml
 schema:
   facts:
-    fact_equity_prices:
-      path: facts/fact_equity_prices
+    fact_stock_prices:
+      path: facts/fact_stock_prices
       columns: {...}
 ```
 
@@ -821,7 +821,7 @@ from models.api.session import UniversalSession
 session = UniversalSession(backend='duckdb')
 df = session.get_table(
     'equity',
-    'fact_equity_prices',
+    'fact_stock_prices',
     required_columns=['ticker', 'close', 'calendar_date']  # calendar_date from core.dim_calendar
 )
 ```

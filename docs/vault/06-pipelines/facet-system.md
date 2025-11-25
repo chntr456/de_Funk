@@ -4,8 +4,8 @@
 
 Files:
 - `datapipelines/facets/base_facet.py` - Base Facet class
-- `datapipelines/facets/polygon/polygon_base_facet.py` - Polygon-specific base
-- `datapipelines/facets/polygon/*.py` - Polygon facet implementations
+- `datapipelines/facets/alpha_vantage/alpha_vantage_base_facet.py` - Alpha Vantage base
+- `datapipelines/facets/alpha_vantage/*.py` - Alpha Vantage facet implementations
 - `datapipelines/facets/bls/*.py` - BLS facet implementations
 - `datapipelines/facets/chicago/*.py` - Chicago facet implementations
 
@@ -89,14 +89,13 @@ class Facet:
 
 **Example:**
 ```python
-class PricesDailyFacet(Facet):
+class SecuritiesPricesFacet(Facet):
     NUMERIC_COERCE = {
-        "o": "double",   # open
-        "h": "double",   # high
-        "l": "double",   # low
-        "c": "double",   # close
-        "v": "double",   # volume
-        "t": "long"      # timestamp
+        "open": "double",
+        "high": "double",
+        "low": "double",
+        "close": "double",
+        "volume": "double"
     }
 ```
 
@@ -116,7 +115,7 @@ class PricesDailyFacet(Facet):
 
 **Example:**
 ```python
-class PricesDailyFacet(Facet):
+class SecuritiesPricesFacet(Facet):
     SPARK_CASTS = {
         "open": "double",
         "high": "double",
@@ -140,7 +139,7 @@ class PricesDailyFacet(Facet):
 
 **Example:**
 ```python
-class PricesDailyFacet(Facet):
+class SecuritiesPricesFacet(Facet):
     FINAL_COLUMNS = [
         ("trade_date", "date"),
         ("ticker", "string"),
@@ -175,7 +174,7 @@ Initialize facet instance.
 from pyspark.sql import SparkSession
 
 spark = SparkSession.builder.getOrCreate()
-facet = PricesDailyFacet(
+facet = SecuritiesPricesFacet(
     spark,
     tickers=['AAPL', 'MSFT'],
     date_from='2024-01-01',
@@ -209,11 +208,11 @@ facet = PricesDailyFacet(
 # Raw API responses (from ingestor)
 raw_batches = [
     [
-        {"t": 1704067200000, "o": 185.5, "h": 187.2, "c": 186.8, "v": 45000000},
-        {"t": 1704153600000, "o": 186.9, "h": 188.5, "c": 188.1, "v": 52000000}
+        {"trade_date": "2024-01-01", "open": 185.5, "high": 187.2, "close": 186.8, "volume": 45000000},
+        {"trade_date": "2024-01-02", "open": 186.9, "high": 188.5, "close": 188.1, "volume": 52000000}
     ],
     [
-        {"t": 1704240000000, "o": 188.2, "h": 189.0, "c": 187.5, "v": 48000000}
+        {"trade_date": "2024-01-03", "open": 188.2, "high": 189.0, "close": 187.5, "volume": 48000000}
     ]
 ]
 
@@ -245,15 +244,10 @@ def postprocess(self, df):
 
 **Example:**
 ```python
-class PricesDailyFacet(Facet):
+class SecuritiesPricesFacet(Facet):
     def postprocess(self, df):
-        # Rename API columns to business names
-        df = df.withColumnRenamed("o", "open")
-        df = df.withColumnRenamed("h", "high")
-        df = df.withColumnRenamed("c", "close")
-
         # Add derived column
-        df = df.withColumn("trade_date", epoch_ms_to_date("t"))
+        df = df.withColumn("trade_date", F.to_date(F.col("timestamp")))
 
         # Filter invalid rows
         df = df.filter(F.col("open") > 0)
@@ -284,15 +278,15 @@ Pre-coerce numeric fields in raw JSON rows to ensure consistent types.
 ```python
 # Input (inconsistent types)
 rows = [
-    {"o": 150, "h": 155, "c": 152},      # ints
-    {"o": 151.5, "h": 156.2, "c": 154}   # floats
+    {"open": 150, "high": 155, "close": 152},      # ints
+    {"open": 151.5, "high": 156.2, "close": 154}   # floats
 ]
 
 # Output (consistent types)
 coerced = facet._coerce_rows(rows)
 # [
-#     {"o": 150.0, "h": 155.0, "c": 152.0},
-#     {"o": 151.5, "h": 156.2, "c": 154.0}
+#     {"open": 150.0, "high": 155.0, "close": 152.0},
+#     {"open": 151.5, "high": 156.2, "close": 154.0}
 # ]
 ```
 
@@ -410,12 +404,10 @@ Convert type string to Spark DataType.
 
 ```
 Facet (base)
-├── PolygonFacet (provider-specific base)
-│   ├── PricesDailyFacet
-│   ├── RefAllTickersFacet
-│   ├── NewsByDateFacet
-│   ├── ExchangeFacet
-│   └── PricesDailyGroupedFacet
+├── AlphaVantageFacet (provider-specific base)
+│   ├── SecuritiesReferenceFacet
+│   ├── SecuritiesPricesDailyFacet
+│   └── TechnicalIndicatorsFacet
 ├── BLSFacet (provider-specific base)
 │   ├── UnemploymentFacet
 │   └── CPIFacet
@@ -497,7 +489,7 @@ class MyProviderFacet(Facet):
 
 **Example:**
 ```python
-class PricesDailyFacet(PolygonFacet):
+class SecuritiesPricesFacet(AlphaVantageFacet):
     def __init__(self, spark, tickers, date_from, date_to):
         super().__init__(spark, tickers=tickers, date_from=date_from, date_to=date_to)
         self._call_contexts = []  # Track which call returned which data
@@ -508,7 +500,7 @@ class PricesDailyFacet(PolygonFacet):
         for ticker in self.tickers:
             params = {"ticker": ticker, "from": self.date_from, "to": self.date_to}
             self._call_contexts.append({"ticker": ticker})
-            yield {"ep_name": "prices_daily", "params": params}
+            yield {"ep_name": "securities_prices_daily", "params": params}
 
     def normalize(self, raw_batches):
         """Enrich rows with ticker before normalizing."""
@@ -522,7 +514,7 @@ class PricesDailyFacet(PolygonFacet):
 
             # Inject ticker into each row
             if ticker:
-                rows = [{**r, "T": ticker} for r in (rows or [])]
+                rows = [{**r, "ticker": ticker} for r in (rows or [])]
 
             enriched.append(rows or [])
 
@@ -550,7 +542,7 @@ df = facet.normalize(raw_batches)
 ### Complex Postprocessing
 
 ```python
-class NewsByDateFacet(Facet):
+class NewsFacet(Facet):
     def postprocess(self, df):
         # Rename columns
         df = df.withColumnRenamed("published_utc", "published_timestamp")
@@ -611,7 +603,7 @@ from datapipelines.ingestors.base_ingestor import BaseIngestor
 class MyIngestor(BaseIngestor):
     def run(self, tickers, date_from, date_to):
         # Create facet
-        facet = PricesDailyFacet(
+        facet = SecuritiesPricesFacet(
             self.spark,
             tickers=tickers,
             date_from=date_from,
@@ -631,7 +623,7 @@ class MyIngestor(BaseIngestor):
         df = facet.normalize(raw_batches)
 
         # Write to Bronze
-        bronze_path = self.storage_router.bronze_path("prices_daily")
+        bronze_path = self.storage_router.bronze_path("securities_prices_daily")
         df.write.mode("overwrite").parquet(bronze_path)
 ```
 
@@ -779,4 +771,4 @@ FINAL_COLUMNS = [
 - [Pipeline Architecture](pipeline-architecture.md) - Overall pipeline design
 - [Ingestors](ingestors.md) - Facet consumers
 - [Providers](providers.md) - Provider-specific implementations
-- [Bronze Layer](../CLAUDE.md#bronze-layer-raw-data) - Facet output destination
+- [Bronze Layer](../00-overview/architecture.md#bronze-layer-raw-data) - Facet output destination

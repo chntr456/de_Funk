@@ -73,22 +73,21 @@ class BaseIngestor(ABC):
 
 ## Ingestor Implementations
 
-### Polygon Ingestor
+### Alpha Vantage Ingestor
 
-**File**: `datapipelines/ingestors/polygon_ingestor.py`
+**File**: `datapipelines/ingestors/alpha_vantage_ingestor.py`
 
-**Purpose**: Ingest stock market data from Polygon.io
+**Purpose**: Ingest stock market data from Alpha Vantage
 
 **Tables Ingested**:
-- `polygon_daily_prices` - OHLCV data
-- `polygon_ref_tickers` - Ticker reference data
-- `polygon_news` - Company news
+- `securities_prices_daily` - OHLCV data
+- `securities_reference` - Ticker reference data with CIK
 
 **Example**:
 ```python
-from datapipelines.ingestors.polygon_ingestor import PolygonIngestor
+from datapipelines.ingestors.alpha_vantage_ingestor import AlphaVantageIngestor
 
-ingestor = PolygonIngestor(spark, api_keys, storage_router)
+ingestor = AlphaVantageIngestor(spark, api_keys, storage_router)
 ingestor.run(
     tickers=['AAPL', 'MSFT', 'GOOGL'],
     date_from='2024-01-01',
@@ -164,17 +163,18 @@ def fetch_with_retry(self, call_spec, max_retries=3):
 
 ## Bronze Output
 
-**Path Pattern**: `storage/bronze/{provider}/{table}/`
+**Path Pattern**: `storage/bronze/{table}/`
 
 **Partitioning**:
 ```python
-# Partition by date
-df.write.partitionBy('dt').parquet(bronze_path)
+# Partition by date and asset type
+df.write.partitionBy('trade_date', 'asset_type').parquet(bronze_path)
 
 # Result:
-# storage/bronze/polygon/daily_prices/
-#   ├── dt=2024-01-01/*.parquet
-#   └── dt=2024-01-02/*.parquet
+# storage/bronze/securities_prices_daily/
+#   ├── asset_type=stocks/
+#   │   ├── year=2024/
+#   │   │   └── month=01/*.parquet
 ```
 
 ---
@@ -188,19 +188,19 @@ df.write.partitionBy('dt').parquet(bronze_path)
 python run_full_pipeline.py --top-n 100
 
 # Single provider
-python scripts/run_polygon_ingestion.py --tickers AAPL,MSFT
+python scripts/run_alpha_vantage_ingestion.py --tickers AAPL,MSFT
 ```
 
 ### Programmatic
 
 ```python
 from core.context import RepoContext
-from datapipelines.ingestors.polygon_ingestor import PolygonIngestor
+from datapipelines.ingestors.alpha_vantage_ingestor import AlphaVantageIngestor
 
 ctx = RepoContext.from_repo_root()
-ingestor = PolygonIngestor(
+ingestor = AlphaVantageIngestor(
     ctx.spark,
-    ctx.polygon_cfg['api_keys'],
+    ctx.alpha_vantage_cfg['api_keys'],
     ctx.storage_router
 )
 
@@ -218,4 +218,4 @@ ingestor.run(
 - [Facet System](facet-system.md) - Data normalization
 - [Providers](providers.md) - API clients
 - [Pipeline Architecture](pipeline-architecture.md) - Overall design
-- [Bronze Layer](/CLAUDE.md#bronze-layer-raw-data) - Storage details
+- [Bronze Layer](../00-overview/architecture.md#bronze-layer-raw-data) - Storage details

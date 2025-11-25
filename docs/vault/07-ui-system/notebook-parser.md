@@ -112,10 +112,10 @@ Parse a markdown notebook file.
 **Example:**
 ```python
 # Parse notebook
-config = parser.parse_file('configs/notebooks/equity/analysis.md')
+config = parser.parse_file('configs/notebooks/stocks/analysis.md')
 
 # Access parsed data
-print(config.notebook.title)        # "Equity Analysis"
+print(config.notebook.title)        # "Stock Analysis"
 print(len(config.exhibits))         # 5
 print(len(config._content_blocks))  # 12
 ```
@@ -146,9 +146,9 @@ Parse markdown content into NotebookConfig.
 **Example:**
 ```python
 markdown = """---
-id: equity-analysis
-title: Equity Analysis
-models: [equity, corporate]
+id: stock-analysis
+title: Stock Analysis
+models: [stocks, company]
 ---
 
 # Price Trends
@@ -162,7 +162,7 @@ column: trade_date
 $exhibits${
 type: line_chart
 title: Price History
-source: equity.fact_equity_prices
+source: stocks.fact_stock_prices
 x: trade_date
 y: close
 }
@@ -190,10 +190,10 @@ Extract and parse YAML front matter.
 id: notebook-id
 title: Notebook Title
 description: Optional description
-models: [equity, corporate]
+models: [stocks, company]
 author: Author Name
 created: 2024-01-01
-tags: [equity, analysis]
+tags: [stocks, analysis]
 ---
 ```
 
@@ -239,8 +239,8 @@ label: Tickers
 column: ticker
 source:
   type: dimension
-  model: equity
-  dimension: dim_equity
+  model: stocks
+  dimension: dim_stock
   column: ticker
 }
 ```
@@ -430,7 +430,7 @@ metrics:
 **Tables:**
 ```yaml
 type: table
-source: equity.fact_equity_prices
+source: stocks.fact_stock_prices
 columns: [ticker, trade_date, close, volume]
 sortable: true
 pagination: true
@@ -516,12 +516,12 @@ class MarkdownNotebook:
 ---
 id: simple-analysis
 title: Simple Analysis
-models: [equity]
+models: [stocks]
 ---
 
 # Price Analysis
 
-This notebook analyzes equity prices.
+This notebook analyzes stock prices.
 
 $filter${
 type: date_range
@@ -535,7 +535,7 @@ default:
 $exhibits${
 type: line_chart
 title: Price Over Time
-source: equity.fact_equity_prices
+source: stocks.fact_stock_prices
 x: trade_date
 y: close
 color: ticker
@@ -550,7 +550,7 @@ color: ticker
 ---
 id: cross-model
 title: Cross-Model Analysis
-models: [equity, macro, corporate]
+models: [stocks, macro, company]
 ---
 
 # Economic Impact on Stocks
@@ -561,15 +561,15 @@ label: Select Tickers
 column: ticker
 source:
   type: dimension
-  model: equity
-  dimension: dim_equity
+  model: stocks
+  dimension: dim_stock
   column: ticker
 }
 
 $exhibits${
 type: line_chart
 title: Stock Prices
-source: equity.fact_equity_prices
+source: stocks.fact_stock_prices
 x: trade_date
 y: close
 color: ticker
@@ -592,7 +592,7 @@ y: unemployment_rate
 ---
 id: advanced
 title: Advanced Analysis
-models: [equity]
+models: [stocks]
 ---
 
 # Main Analysis
@@ -648,7 +648,7 @@ y2_label: Volume
 $exhibits${
 type: table
 title: Price Data
-source: equity.fact_equity_prices
+source: stocks.fact_stock_prices
 columns: [ticker, trade_date, open, high, low, close, volume]
 sortable: true
 pagination: true
@@ -724,7 +724,7 @@ metrics:
 ---
 id: my-notebook
 title: My Notebook
-models: [equity]
+models: [stocks]
 ---
 ```
 
@@ -866,7 +866,7 @@ Parsed notebooks are rendered by the Streamlit UI:
 from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
 
 parser = MarkdownNotebookParser()
-config = parser.parse_file('configs/notebooks/equity/analysis.md')
+config = parser.parse_file('configs/notebooks/stocks/analysis.md')
 
 # Render in Streamlit
 from app.notebook.exhibits.renderer import ExhibitRenderer
