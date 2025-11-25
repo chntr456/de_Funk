@@ -42,12 +42,38 @@ Usage:
         date_from='2024-01-01',
         date_to='2024-12-31'
     )
+
+Progress Tracking:
+    The ingestor provides real-time progress updates during API fetches.
+    Progress is enabled by default and shows: current/total, ticker, ETA.
+
+    # Use default progress (prints to console)
+    ingestor.run_all(tickers=['AAPL', 'MSFT'], show_progress=True)
+
+    # Disable progress updates
+    ingestor.run_all(tickers=['AAPL', 'MSFT'], show_progress=False)
+
+    # Custom progress callback
+    from datapipelines.providers.alpha_vantage import ProgressInfo
+
+    def my_progress(info: ProgressInfo):
+        print(f"{info.phase}: {info.percent_complete:.1f}% - {info.ticker}")
+
+    ingestor.run_all(tickers=['AAPL', 'MSFT'], progress_callback=my_progress)
 """
 
-from .alpha_vantage_ingestor import AlphaVantageIngestor
+from .alpha_vantage_ingestor import (
+    AlphaVantageIngestor,
+    ProgressInfo,
+    ProgressCallback,
+    default_progress_callback,
+)
 from .alpha_vantage_registry import AlphaVantageRegistry
 
 __all__ = [
     'AlphaVantageIngestor',
     'AlphaVantageRegistry',
+    'ProgressInfo',
+    'ProgressCallback',
+    'default_progress_callback',
 ]
