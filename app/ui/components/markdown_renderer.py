@@ -62,23 +62,34 @@ def render_markdown_notebook(
             st.rerun()
 
     # Build nested tree structure from header hierarchy
-    nested_blocks = _build_header_tree(notebook_config._content_blocks)
+    try:
+        nested_blocks = _build_header_tree(notebook_config._content_blocks)
+    except Exception as e:
+        st.error(f"Error building notebook structure: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc()[:1000])
+        return
 
     # Insert block button at start if editable
     if editable:
         _render_insert_block_button(-1, on_block_insert)
 
     # Render blocks with nested toggle containers based on header hierarchy
-    _render_nested_toggles(
-        blocks=nested_blocks,
-        notebook_session=notebook_session,
-        connection=connection,
-        context=notebook_id,
-        editable=editable,
-        on_block_edit=on_block_edit,
-        on_block_insert=on_block_insert,
-        on_block_delete=on_block_delete
-    )
+    try:
+        _render_nested_toggles(
+            blocks=nested_blocks,
+            notebook_session=notebook_session,
+            connection=connection,
+            context=notebook_id,
+            editable=editable,
+            on_block_edit=on_block_edit,
+            on_block_insert=on_block_insert,
+            on_block_delete=on_block_delete
+        )
+    except Exception as e:
+        st.error(f"Error rendering notebook content: {str(e)}")
+        import traceback
+        st.code(traceback.format_exc()[:1000])
 
 
 def _render_block_in_toggle(
@@ -421,12 +432,38 @@ def _render_nested_toggles(
     - Any child blocks (nested headers or content)
     """
     for idx, block in enumerate(blocks):
-        block_type = block['type']
-        block_index = block.get('_index', 0)
+        block_type = block.get('type', 'unknown')
+        block_index = block.get('_index', idx)
         children = block.get('children', [])
         header_level = block.get('_header_level', 0)
 
-        # Get label for toggle
+        # Handle exhibits - render with error handling
+        if block_type == 'exhibit':
+            try:
+                # Verify exhibit has required data
+                if 'exhibit' not in block or 'id' not in block:
+                    st.warning(f"Exhibit block missing required data")
+                    continue
+                render_exhibit_block(block, notebook_session, connection)
+            except Exception as e:
+                st.error(f"Error rendering exhibit: {str(e)}")
+                import traceback
+                st.caption(traceback.format_exc()[:500])
+            continue
+
+        # Handle error blocks from parsing
+        if block_type == 'error':
+            st.error(f"Block error: {block.get('message', 'Unknown error')}")
+            with st.expander("Show details"):
+                st.code(block.get('content', ''), language='yaml')
+            continue
+
+        # Handle collapsible blocks
+        if block_type == 'collapsible':
+            render_collapsible_section(block, notebook_session, connection, block_index=block_index)
+            continue
+
+        # Handle non-header markdown
         if block_type == 'markdown':
             content = block.get('content', '')
             lines = content.strip().split('\n')
@@ -441,13 +478,8 @@ def _render_nested_toggles(
                 # Non-header markdown - render directly (no toggle)
                 _render_markdown_content(content)
                 continue
-
-        elif block_type == 'exhibit':
-            # Exhibits render directly (no toggle)
-            render_exhibit_block(block, notebook_session, connection)
-            continue
         else:
-            # Other block types - skip
+            # Other block types - skip with warning in debug
             continue
 
         # Create toggle for header sections
@@ -461,9 +493,13 @@ def _render_nested_toggles(
         is_editing = st.session_state[edit_key]
 
         # Gather full section content (this section + all nested children)
-        full_section_content = _gather_section_content(block)
+        # Include exhibits so they're preserved when editing
+        full_section_content = _gather_section_content(block, include_exhibits=True)
 
-        # Show edit/delete buttons alongside toggle (always visible)
+        # Check if section contains exhibits (for user info)
+        exhibit_count = _count_section_exhibits(block)
+
+        # Show edit/delete buttons alongside toggle (always visible) - only at top level
         if editable and depth == 0 and not is_editing:
             col_toggle, col_edit, col_delete = st.columns([0.90, 0.05, 0.05])
             with col_edit:
@@ -477,27 +513,16 @@ def _render_nested_toggles(
                         on_block_delete(block_index)
                     st.rerun()
             container = col_toggle
-        elif editable and depth > 0 and not is_editing:
-            # Nested sections - show buttons alongside toggle too
-            col_toggle, col_edit, col_delete = st.columns([0.90, 0.05, 0.05])
-            with col_edit:
-                if st.button("✏️", key=f"edit_sec_{block_index}", help="Edit"):
-                    st.session_state[edit_key] = True
-                    st.rerun()
-            with col_delete:
-                if st.button("🗑️", key=f"del_sec_{block_index}", help="Delete"):
-                    st.session_state['_content_to_delete'] = full_section_content
-                    if on_block_delete:
-                        on_block_delete(block_index)
-                    st.rerun()
-            container = col_toggle
         else:
             container = st.container()
 
         with container:
             if is_editing:
                 # Show editor for the whole section including children
-                _render_section_editor(block_index, full_section_content, first_line, on_block_edit, children)
+                _render_section_editor(
+                    block_index, full_section_content, first_line,
+                    on_block_edit, children, exhibit_count
+                )
             else:
                 with ToggleContainer(
                     f"{icon} {label}",
@@ -507,11 +532,25 @@ def _render_nested_toggles(
                     context=context
                 ) as tc:
                     if tc.is_open:
+                        # Show edit/delete for nested sections inside the toggle
+                        if editable and depth > 0:
+                            edit_cols = st.columns([0.88, 0.06, 0.06])
+                            with edit_cols[1]:
+                                if st.button("✏️", key=f"edit_nested_{block_index}", help="Edit"):
+                                    st.session_state[edit_key] = True
+                                    st.rerun()
+                            with edit_cols[2]:
+                                if st.button("🗑️", key=f"del_nested_{block_index}", help="Delete"):
+                                    st.session_state['_content_to_delete'] = full_section_content
+                                    if on_block_delete:
+                                        on_block_delete(block_index)
+                                    st.rerun()
+
                         # Render body content (text after header)
                         if body_content:
                             _render_markdown_content(body_content)
 
-                        # Render children recursively (nested sections)
+                        # Render children recursively (nested sections and exhibits)
                         if children:
                             _render_nested_toggles(
                                 blocks=children,
@@ -530,12 +569,20 @@ def _render_nested_toggles(
             _render_insert_block_button(block_index, on_block_insert)
 
 
-def _gather_section_content(block: Dict[str, Any]) -> str:
+def _gather_section_content(block: Dict[str, Any], include_exhibits: bool = False) -> str:
     """
     Gather the full content of a section including all nested children.
 
     This creates a single markdown string that includes the header,
-    body content, and all nested subsections.
+    body content, and all nested subsections. Exhibits are optionally
+    included (for display purposes) or excluded (for editing).
+
+    Args:
+        block: The section block to gather content from
+        include_exhibits: If True, include exhibit blocks as $exhibits${} syntax
+
+    Returns:
+        Combined markdown content as a string
     """
     content = block.get('content', '')
     children = block.get('children', [])
@@ -546,12 +593,54 @@ def _gather_section_content(block: Dict[str, Any]) -> str:
     # Build full content by appending children
     parts = [content]
     for child in children:
-        if child.get('type') == 'markdown':
-            child_content = _gather_section_content(child)
+        child_type = child.get('type', '')
+
+        if child_type == 'markdown':
+            child_content = _gather_section_content(child, include_exhibits=include_exhibits)
             if child_content:
                 parts.append(child_content)
+        elif child_type == 'exhibit' and include_exhibits:
+            # Convert exhibit back to syntax for editing
+            exhibit = child.get('exhibit')
+            if exhibit:
+                parts.append(_exhibit_to_syntax(exhibit))
 
     return '\n\n'.join(parts)
+
+
+def _exhibit_to_syntax(exhibit) -> str:
+    """Convert an Exhibit object to $exhibits${} syntax."""
+    if not exhibit:
+        return ''
+
+    lines = [f"type: {exhibit.type.value}"]
+
+    if exhibit.title:
+        lines.append(f"title: {exhibit.title}")
+    if exhibit.source:
+        lines.append(f"source: {exhibit.source}")
+    if exhibit.x_axis and exhibit.x_axis.dimension:
+        lines.append(f"x: {exhibit.x_axis.dimension}")
+    if exhibit.y_axis:
+        if exhibit.y_axis.measure:
+            lines.append(f"y: {exhibit.y_axis.measure}")
+    if exhibit.color_by:
+        lines.append(f"color: {exhibit.color_by}")
+
+    yaml_content = '\n  '.join(lines)
+    return f"$exhibits${{\n  {yaml_content}\n}}"
+
+
+def _count_section_exhibits(block: Dict[str, Any]) -> int:
+    """Count exhibits in a section and its children."""
+    count = 0
+    children = block.get('children', [])
+    for child in children:
+        if child.get('type') == 'exhibit':
+            count += 1
+        elif child.get('type') == 'markdown':
+            count += _count_section_exhibits(child)
+    return count
 
 
 def _render_section_editor(
@@ -559,20 +648,23 @@ def _render_section_editor(
     content: str,
     header_line: str,
     on_edit: Optional[Callable[[int, str], None]] = None,
-    children: Optional[List[Dict[str, Any]]] = None
+    children: Optional[List[Dict[str, Any]]] = None,
+    exhibit_count: int = 0
 ):
     """
     Render an editor for a section (header + body + nested content).
 
     When a section has children (nested headers), the editor shows the full
-    grouped content so the user sees everything together.
+    grouped content so the user sees everything together. Exhibits within
+    the section are shown as $exhibits${} syntax for editing.
 
     Args:
         block_index: Index of the block
-        content: Full content including header and nested sections
+        content: Full content including header, nested sections, and exhibits
         header_line: The header line (e.g., "# Title")
         on_edit: Callback when content is saved
         children: List of child blocks (for info display)
+        exhibit_count: Number of exhibits in this section
     """
     edit_key = f"edit_section_{block_index}"
     content_key = f"section_content_{block_index}"
@@ -587,9 +679,17 @@ def _render_section_editor(
 
     # Show header info
     has_children = children and len(children) > 0
+    info_parts = []
     if has_children:
-        st.markdown(f"**Edit Section** *(includes {len(children)} subsection(s))*")
-        st.caption("Tip: Edit all content including nested headers here. They will be grouped together.")
+        info_parts.append(f"{len(children)} subsection(s)")
+    if exhibit_count > 0:
+        info_parts.append(f"{exhibit_count} exhibit(s)")
+
+    if info_parts:
+        st.markdown(f"**Edit Section** *({', '.join(info_parts)})*")
+        st.caption("Tip: Edit all content including nested headers and exhibits here.")
+        if exhibit_count > 0:
+            st.caption("Exhibits are shown as `$exhibits${...}` syntax and will be rendered after saving.")
     else:
         st.markdown("**Edit Section**")
 
@@ -966,20 +1066,7 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
             with st.spinner(f"Loading {exhibit.title or 'exhibit'}..."):
                 # Get data for exhibit
                 df = notebook_session.get_exhibit_data(exhibit_id)
-
-                # Debug: Check what type we got from get_exhibit_data
-                st.caption(f"DEBUG: df type = {type(df).__name__}, has .data = {hasattr(df, 'data')}")
-
                 pdf = connection.to_pandas(df)
-
-                # Debug: Check what type we got after conversion
-                st.caption(f"DEBUG: pdf type = {type(pdf).__name__}, shape = {pdf.shape if hasattr(pdf, 'shape') else 'N/A'}")
-
-                # Debug: Check column dtypes
-                if hasattr(pdf, 'dtypes'):
-                    problematic = [col for col in pdf.columns if pdf[col].dtype == 'object']
-                    if problematic:
-                        st.caption(f"DEBUG: Object columns = {problematic}")
 
             # Render based on type
             from app.notebook.schema import ExhibitType

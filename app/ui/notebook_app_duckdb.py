@@ -881,6 +881,7 @@ class NotebookVaultApp:
         Handle block edit from the renderer.
 
         Uses content-based find/replace to save changes.
+        Handles whitespace normalization for robust matching.
 
         Args:
             block_index: Index of the block (unused, kept for interface compatibility)
@@ -909,32 +910,70 @@ class NotebookVaultApp:
             with open(path, 'r') as f:
                 file_content = f.read()
 
-            # Find and replace the content
+            # Try exact match first
             if original_content in file_content:
                 updated_content = file_content.replace(original_content, new_content, 1)
-
-                # Write back
-                with open(path, 'w') as f:
-                    f.write(updated_content)
-
-                # Clear session state
-                if '_content_to_replace' in st.session_state:
-                    del st.session_state['_content_to_replace']
-                if '_new_content' in st.session_state:
-                    del st.session_state['_new_content']
-
-                # Reload the notebook to reflect changes
-                updated_config = self.notebook_manager.load_notebook(str(notebook_path))
-
-                # Update the tab with new config
-                for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
-                    if tab_id == notebook_id:
-                        st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
-                        break
-
-                st.success("Section saved!")
             else:
-                st.error("Could not find original content in file")
+                # Try normalized matching (handle whitespace differences)
+                # The content might have been stripped during parsing
+                found = False
+
+                # Try to find the content by matching the first header line
+                original_lines = original_content.strip().split('\n')
+                if original_lines and original_lines[0].strip().startswith('#'):
+                    header_line = original_lines[0].strip()
+
+                    # Find the header in the file
+                    file_lines = file_content.split('\n')
+                    for i, line in enumerate(file_lines):
+                        if line.strip() == header_line:
+                            # Found the header, now find the extent of this section
+                            # by looking for the next header of same or higher level
+                            header_level = len(header_line) - len(header_line.lstrip('#'))
+                            section_start = i
+                            section_end = len(file_lines)
+
+                            for j in range(i + 1, len(file_lines)):
+                                next_line = file_lines[j].strip()
+                                if next_line.startswith('#'):
+                                    next_level = len(next_line) - len(next_line.lstrip('#'))
+                                    if next_level <= header_level:
+                                        section_end = j
+                                        break
+
+                            # Replace this section with new content
+                            new_lines = file_lines[:section_start] + new_content.split('\n') + file_lines[section_end:]
+                            updated_content = '\n'.join(new_lines)
+                            found = True
+                            break
+
+                    if not found:
+                        st.error(f"Could not find section '{header_line}' in file")
+                        return
+                else:
+                    st.error("Could not find original content in file (no header match)")
+                    return
+
+            # Write back
+            with open(path, 'w') as f:
+                f.write(updated_content)
+
+            # Clear session state
+            if '_content_to_replace' in st.session_state:
+                del st.session_state['_content_to_replace']
+            if '_new_content' in st.session_state:
+                del st.session_state['_new_content']
+
+            # Reload the notebook to reflect changes
+            updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+
+            # Update the tab with new config
+            for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
+                if tab_id == notebook_id:
+                    st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
+                    break
+
+            st.success("Section saved!")
 
         except Exception as e:
             st.error(f"Error saving block: {str(e)}")
@@ -998,6 +1037,7 @@ class NotebookVaultApp:
         Handle block delete from the renderer.
 
         Uses content stored in session state to find and remove the section.
+        Handles whitespace normalization for robust matching.
 
         Args:
             block_index: Index of the block (unused, kept for interface compatibility)
@@ -1017,6 +1057,8 @@ class NotebookVaultApp:
 
         try:
             from pathlib import Path
+            import re
+
             path = Path(notebook_path)
             if not path.is_absolute():
                 path = self.ctx.repo / path
@@ -1025,35 +1067,69 @@ class NotebookVaultApp:
             with open(path, 'r') as f:
                 file_content = f.read()
 
-            # Find and remove the content
             # Try exact match first
             if content_to_delete in file_content:
                 updated_content = file_content.replace(content_to_delete, '', 1)
-                # Clean up extra blank lines
-                import re
-                updated_content = re.sub(r'\n{3,}', '\n\n', updated_content)
-                updated_content = updated_content.strip() + '\n'
-
-                # Write back
-                with open(path, 'w') as f:
-                    f.write(updated_content)
-
-                # Clear the session state
-                if '_content_to_delete' in st.session_state:
-                    del st.session_state['_content_to_delete']
-
-                # Reload the notebook to reflect changes
-                updated_config = self.notebook_manager.load_notebook(str(notebook_path))
-
-                # Update the tab with new config
-                for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
-                    if tab_id == notebook_id:
-                        st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
-                        break
-
-                st.success("Section deleted!")
             else:
-                st.error("Could not find content to delete in file")
+                # Try header-based matching (for nested sections)
+                delete_lines = content_to_delete.strip().split('\n')
+                if delete_lines and delete_lines[0].strip().startswith('#'):
+                    header_line = delete_lines[0].strip()
+                    header_level = len(header_line) - len(header_line.lstrip('#'))
+
+                    # Find and remove the section
+                    file_lines = file_content.split('\n')
+                    found = False
+
+                    for i, line in enumerate(file_lines):
+                        if line.strip() == header_line:
+                            # Found the header, find extent of section
+                            section_start = i
+                            section_end = len(file_lines)
+
+                            for j in range(i + 1, len(file_lines)):
+                                next_line = file_lines[j].strip()
+                                if next_line.startswith('#'):
+                                    next_level = len(next_line) - len(next_line.lstrip('#'))
+                                    if next_level <= header_level:
+                                        section_end = j
+                                        break
+
+                            # Remove this section
+                            new_lines = file_lines[:section_start] + file_lines[section_end:]
+                            updated_content = '\n'.join(new_lines)
+                            found = True
+                            break
+
+                    if not found:
+                        st.error(f"Could not find section '{header_line}' to delete")
+                        return
+                else:
+                    st.error("Could not find content to delete in file")
+                    return
+
+            # Clean up extra blank lines
+            updated_content = re.sub(r'\n{3,}', '\n\n', updated_content)
+            updated_content = updated_content.strip() + '\n'
+
+            # Write back
+            with open(path, 'w') as f:
+                f.write(updated_content)
+
+            # Clear the session state
+            if '_content_to_delete' in st.session_state:
+                del st.session_state['_content_to_delete']
+
+            # Reload the notebook to reflect changes
+            updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+
+            # Update the tab with new config
+            for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
+                if tab_id == notebook_id:
+                    st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
+                    break
+
+            st.success("Section deleted!")
 
         except Exception as e:
             st.error(f"Error deleting block: {str(e)}")
