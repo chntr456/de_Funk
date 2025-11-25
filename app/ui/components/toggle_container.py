@@ -250,7 +250,9 @@ class ToggleContainer:
         icon_closed: str = "▶",
         key_prefix: str = "",
         style: str = "default",  # "default", "minimal", "card", "section"
-        context: str = "default"  # Context for collapse/expand all
+        context: str = "default",  # Context for collapse/expand all
+        editable: bool = False,  # Whether label can be edited
+        on_label_change: Optional[Callable[[str], None]] = None  # Callback when label changes
     ):
         """
         Initialize a toggle container.
@@ -264,6 +266,8 @@ class ToggleContainer:
             key_prefix: Prefix for session state keys
             style: Visual style ("default", "minimal", "card", "section")
             context: Context for grouping toggles (used by collapse/expand all)
+            editable: Whether the label can be edited inline
+            on_label_change: Callback when label is changed (receives new label)
         """
         self.label = label
         self.expanded = expanded
@@ -272,6 +276,8 @@ class ToggleContainer:
         self.key_prefix = key_prefix
         self.style = style
         self.context = context
+        self.editable = editable
+        self.on_label_change = on_label_change
 
         # Generate unique ID
         if container_id is None:
@@ -281,6 +287,7 @@ class ToggleContainer:
             self.container_id = container_id
 
         self.toggle_key = _get_toggle_key(f"{key_prefix}_{self.container_id}")
+        self.edit_label_key = f"edit_label_{self.container_id}"
         self.is_open = False
         self._container = None
 
@@ -355,26 +362,91 @@ class ToggleContainer:
 
         elif self.style == "section":
             # Section style - clean separator for notebook sections
-            col1, col2 = st.columns([0.05, 0.95])
-            with col1:
-                # Small toggle indicator
-                if st.button(
-                    icon,
-                    key=f"toggle_icon_{self.container_id}",
-                    type="secondary"
-                ):
-                    st.session_state[self.toggle_key] = not self.is_open
-                    st.rerun()
-            with col2:
-                # Section label (clickable)
-                if st.button(
-                    self.label,
-                    key=f"toggle_btn_{self.container_id}",
-                    type="secondary",
-                    use_container_width=True
-                ):
-                    st.session_state[self.toggle_key] = not self.is_open
-                    st.rerun()
+            # Check if we're in label edit mode
+            is_editing_label = st.session_state.get(self.edit_label_key, False)
+
+            if self.editable and is_editing_label:
+                # Edit mode - show text input for label
+                col_icon, col_input, col_save, col_cancel = st.columns([0.05, 0.75, 0.1, 0.1])
+
+                with col_icon:
+                    st.markdown(f"<span style='font-size: 1.2em;'>{icon}</span>", unsafe_allow_html=True)
+
+                with col_input:
+                    # Strip icon prefix if present for editing
+                    clean_label = self.label
+                    for prefix in ["📝 ", "📊 ", "📁 ", "⚠️ ", "📄 ", "📑 "]:
+                        if clean_label.startswith(prefix):
+                            clean_label = clean_label[len(prefix):]
+                            break
+
+                    new_label = st.text_input(
+                        "Edit header",
+                        value=clean_label,
+                        key=f"label_input_{self.container_id}",
+                        label_visibility="collapsed"
+                    )
+
+                with col_save:
+                    if st.button("✓", key=f"save_label_{self.container_id}", help="Save"):
+                        if self.on_label_change and new_label != clean_label:
+                            self.on_label_change(new_label)
+                        st.session_state[self.edit_label_key] = False
+                        st.rerun()
+
+                with col_cancel:
+                    if st.button("✕", key=f"cancel_label_{self.container_id}", help="Cancel"):
+                        st.session_state[self.edit_label_key] = False
+                        st.rerun()
+
+            elif self.editable:
+                # Editable mode but not currently editing - show edit button
+                col_icon, col_label, col_edit = st.columns([0.05, 0.85, 0.1])
+
+                with col_icon:
+                    if st.button(
+                        icon,
+                        key=f"toggle_icon_{self.container_id}",
+                        type="secondary"
+                    ):
+                        st.session_state[self.toggle_key] = not self.is_open
+                        st.rerun()
+
+                with col_label:
+                    if st.button(
+                        self.label,
+                        key=f"toggle_btn_{self.container_id}",
+                        type="secondary",
+                        use_container_width=True
+                    ):
+                        st.session_state[self.toggle_key] = not self.is_open
+                        st.rerun()
+
+                with col_edit:
+                    if st.button("✎", key=f"edit_label_btn_{self.container_id}", help="Edit header"):
+                        st.session_state[self.edit_label_key] = True
+                        st.rerun()
+
+            else:
+                # Non-editable section style
+                col1, col2 = st.columns([0.05, 0.95])
+                with col1:
+                    if st.button(
+                        icon,
+                        key=f"toggle_icon_{self.container_id}",
+                        type="secondary"
+                    ):
+                        st.session_state[self.toggle_key] = not self.is_open
+                        st.rerun()
+                with col2:
+                    if st.button(
+                        self.label,
+                        key=f"toggle_btn_{self.container_id}",
+                        type="secondary",
+                        use_container_width=True
+                    ):
+                        st.session_state[self.toggle_key] = not self.is_open
+                        st.rerun()
 
         else:
             # Default style

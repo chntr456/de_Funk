@@ -13,8 +13,9 @@ from app.notebook.schema import NotebookConfig
 from .toggle_container import (
     ToggleContainer,
     apply_toggle_styles,
-    render_expand_collapse_buttons,
-    clear_toggle_registry
+    clear_toggle_registry,
+    expand_all,
+    collapse_all
 )
 
 
@@ -26,7 +27,8 @@ def render_markdown_notebook(
     editable: bool = False,
     on_block_edit: Optional[Callable[[int, str], None]] = None,
     on_block_insert: Optional[Callable[[int, str, str], None]] = None,
-    on_block_delete: Optional[Callable[[int], None]] = None
+    on_block_delete: Optional[Callable[[int], None]] = None,
+    on_header_edit: Optional[Callable[[int, str], None]] = None
 ):
     """
     Render a markdown-based notebook.
@@ -40,6 +42,7 @@ def render_markdown_notebook(
         on_block_edit: Callback when a block is edited (block_index, new_content)
         on_block_insert: Callback when a block is inserted (after_index, block_type, content)
         on_block_delete: Callback when a block is deleted (block_index)
+        on_header_edit: Callback when a header is renamed (block_index, new_header)
     """
     if not hasattr(notebook_config, '_content_blocks') or not notebook_config._content_blocks:
         st.error("This notebook has no markdown content blocks")
@@ -54,54 +57,26 @@ def render_markdown_notebook(
     # Initialize view mode state
     view_mode_key = f"notebook_view_mode_{notebook_id}"
     if view_mode_key not in st.session_state:
-        st.session_state[view_mode_key] = "flat"  # Default to flat view
+        st.session_state[view_mode_key] = "flat"
 
-    # Render controls: expand/collapse all + view mode toggle
-    col1, col2, col3, col4 = st.columns([0.15, 0.15, 0.15, 0.55])
+    # Compact toolbar
+    current_mode = st.session_state[view_mode_key]
+    nested_label = "📄 Flat" if current_mode == "nested" else "🗂️ Nested"
 
-    with col1:
-        if st.button("⊞ Expand All", key=f"expand_all_{notebook_id}_top",
-                     help="Expand all sections", use_container_width=True):
-            from .toggle_container import expand_all
+    cols = st.columns([0.08, 0.08, 0.08, 0.76])
+    with cols[0]:
+        if st.button("⊞", key=f"exp_{notebook_id}", help="Expand all"):
             expand_all(notebook_id)
             st.rerun()
-
-    with col2:
-        if st.button("⊟ Collapse All", key=f"collapse_all_{notebook_id}_top",
-                     help="Collapse all sections", use_container_width=True):
-            from .toggle_container import collapse_all
+    with cols[1]:
+        if st.button("⊟", key=f"col_{notebook_id}", help="Collapse all"):
             collapse_all(notebook_id)
             st.rerun()
-
-    with col3:
-        # View mode toggle
-        current_mode = st.session_state[view_mode_key]
-        if current_mode == "flat":
-            if st.button("🗂️ Nest by Headers", key=f"view_mode_{notebook_id}",
-                         help="Organize sections by header hierarchy", use_container_width=True):
-                st.session_state[view_mode_key] = "nested"
-                clear_toggle_registry(notebook_id)
-                st.rerun()
-        else:
-            if st.button("📄 Flat View", key=f"view_mode_{notebook_id}",
-                         help="Show all sections at same level", use_container_width=True):
-                st.session_state[view_mode_key] = "flat"
-                clear_toggle_registry(notebook_id)
-                st.rerun()
-
-    # Import exhibit renderers
-    from .exhibits import (
-        render_metric_cards,
-        render_line_chart,
-        render_bar_chart,
-        render_data_table,
-    )
-    from .exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_chart
-    from .exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
-
-    # Render "Add Block at Start" button if editable
-    if editable:
-        _render_insert_block_button(-1, on_block_insert)
+    with cols[2]:
+        if st.button(nested_label, key=f"view_{notebook_id}", help="Toggle view mode"):
+            st.session_state[view_mode_key] = "flat" if current_mode == "nested" else "nested"
+            clear_toggle_registry(notebook_id)
+            st.rerun()
 
     # Get view mode
     use_nested_view = st.session_state[view_mode_key] == "nested"
@@ -114,34 +89,23 @@ def render_markdown_notebook(
             notebook_session,
             connection,
             context=notebook_id,
-            depth=0
+            depth=0,
+            editable=editable,
+            on_header_edit=on_header_edit
         )
     else:
-        # Render each content block (flat view or editable mode)
+        # Render each content block (flat view)
         for block_index, block in enumerate(notebook_config._content_blocks):
-            block_type = block['type']
-
-            # Wrap in editable container if enabled
-            if editable:
-                render_editable_block_wrapper(
-                    block_index=block_index,
-                    block=block,
-                    notebook_session=notebook_session,
-                    connection=connection,
-                    on_edit=on_block_edit,
-                    on_delete=on_block_delete
-                )
-                # Add insert button after each block
-                _render_insert_block_button(block_index, on_block_insert)
-            else:
-                # Render each block in a collapsible toggle section
-                _render_block_with_toggle(
-                    block_index=block_index,
-                    block=block,
-                    notebook_session=notebook_session,
-                    connection=connection,
-                    context=notebook_id
-                )
+            _render_block_with_toggle(
+                block_index=block_index,
+                block=block,
+                notebook_session=notebook_session,
+                connection=connection,
+                context=notebook_id,
+                editable=editable,
+                on_header_edit=on_header_edit,
+                on_block_edit=on_block_edit
+            )
 
 
 def _render_block_with_toggle(
@@ -149,13 +113,13 @@ def _render_block_with_toggle(
     block: Dict[str, Any],
     notebook_session,
     connection,
-    context: str = "default"
+    context: str = "default",
+    editable: bool = False,
+    on_header_edit: Optional[Callable[[int, str], None]] = None,
+    on_block_edit: Optional[Callable[[int, str], None]] = None
 ):
     """
     Render a content block wrapped in a toggle container.
-
-    Each block (markdown, exhibit, collapsible) gets its own toggle button
-    so users can collapse/expand sections of the notebook.
 
     Args:
         block_index: Index of this block
@@ -163,20 +127,22 @@ def _render_block_with_toggle(
         notebook_session: NotebookSession for data retrieval
         connection: DataConnection for converting to pandas
         context: Context for collapse/expand all functionality
+        editable: Whether headers can be edited
+        on_header_edit: Callback when header is edited
+        on_block_edit: Callback when block content is edited
     """
     block_type = block['type']
 
-    # Determine toggle label based on block type
+    # Determine toggle label and header level
+    header_level = 0
     if block_type == 'markdown':
         content = block.get('content', '')
-        # Extract first header or first line as label
         lines = content.strip().split('\n')
         first_line = lines[0] if lines else 'Text'
         if first_line.startswith('#'):
-            # Extract header text without # symbols
             label = first_line.lstrip('#').strip()
+            header_level = len(first_line) - len(first_line.lstrip('#'))
         else:
-            # Use truncated first line
             label = first_line[:40] + '...' if len(first_line) > 40 else first_line
             if not label:
                 label = 'Text Block'
@@ -199,13 +165,20 @@ def _render_block_with_toggle(
         label = f"Block {block_index + 1}"
         toggle_icon = "📄"
 
+    # Create header edit callback for this block
+    def handle_label_change(new_label: str):
+        if on_header_edit and header_level > 0:
+            on_header_edit(block_index, new_label)
+
     # Render with toggle container
     with ToggleContainer(
         f"{toggle_icon} {label}",
-        expanded=True,  # Start expanded by default
+        expanded=True,
         container_id=f"block_{block_index}",
         style="section",
-        context=context
+        context=context,
+        editable=editable and header_level > 0,  # Only headers are editable
+        on_label_change=handle_label_change if editable else None
     ) as tc:
         if tc.is_open:
             if block_type == 'markdown':
@@ -215,7 +188,6 @@ def _render_block_with_toggle(
                 render_exhibit_block(block, notebook_session, connection, in_collapsible=True)
 
             elif block_type == 'collapsible':
-                # Render nested collapsible content directly (already in a toggle)
                 inner_blocks = block.get('content', [])
                 for inner_idx, inner_block in enumerate(inner_blocks):
                     inner_type = inner_block['type']
@@ -336,7 +308,9 @@ def _render_nested_blocks(
     notebook_session,
     connection,
     context: str = "default",
-    depth: int = 0
+    depth: int = 0,
+    editable: bool = False,
+    on_header_edit: Optional[Callable[[int, str], None]] = None
 ):
     """
     Render blocks with nested toggle containers based on header hierarchy.
@@ -347,6 +321,8 @@ def _render_nested_blocks(
         connection: DataConnection for converting to pandas
         context: Context for collapse/expand all functionality
         depth: Current nesting depth
+        editable: Whether headers can be edited
+        on_header_edit: Callback when header is edited
     """
     for block in blocks:
         block_type = block['type']
@@ -365,7 +341,7 @@ def _render_nested_blocks(
                 label = first_line[:40] + '...' if len(first_line) > 40 else first_line
                 if not label:
                     label = 'Text Block'
-            toggle_icon = "📝" if header_level == 0 else f"{'  ' * (header_level - 1)}📑"
+            toggle_icon = "📝" if header_level == 0 else "📑"
 
         elif block_type == 'exhibit':
             exhibit = block.get('exhibit')
@@ -384,24 +360,31 @@ def _render_nested_blocks(
             label = f"Block {block_index + 1}"
             toggle_icon = "📄"
 
+        # Create header edit callback for this block
+        def make_handler(idx, lvl):
+            def handler(new_label: str):
+                if on_header_edit and lvl > 0:
+                    on_header_edit(idx, new_label)
+            return handler
+
         # If this block has children (is a header section), render with toggle
         if children or header_level > 0:
-            # Determine style based on depth
             style = "section" if depth == 0 else "default"
 
             with ToggleContainer(
                 f"{toggle_icon} {label}",
-                expanded=(depth == 0),  # Only top-level expanded by default
+                expanded=(depth == 0),
                 container_id=f"nested_{block_index}_{depth}",
                 style=style,
-                context=context
+                context=context,
+                editable=editable and header_level > 0,
+                on_label_change=make_handler(block_index, header_level) if editable else None
             ) as tc:
                 if tc.is_open:
                     # Render this block's content (if it has body text beyond header)
                     if block_type == 'markdown':
                         content = block.get('content', '')
                         lines = content.strip().split('\n')
-                        # Skip the header line, render the rest
                         body_lines = [l for l in lines[1:] if l.strip()] if len(lines) > 1 else []
                         if body_lines:
                             _render_markdown_content('\n'.join(body_lines))
@@ -416,7 +399,9 @@ def _render_nested_blocks(
                             notebook_session,
                             connection,
                             context=context,
-                            depth=depth + 1
+                            depth=depth + 1,
+                            editable=editable,
+                            on_header_edit=on_header_edit
                         )
         else:
             # Render without toggle (simple content)

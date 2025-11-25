@@ -863,10 +863,6 @@ class NotebookVaultApp:
         # Check if block editing is enabled
         block_edit_enabled = st.session_state.block_edit_mode.get(notebook_id, False)
 
-        if block_edit_enabled:
-            # Show block editing indicator
-            st.info("🔲 **Block Editing Mode** - Click ✏️ to edit, ➕ to add, 🗑️ to delete blocks")
-
         # Render notebook exhibits with editable flag
         render_notebook_exhibits(
             notebook_id,
@@ -876,7 +872,8 @@ class NotebookVaultApp:
             editable=block_edit_enabled,
             on_block_edit=self._handle_block_edit if block_edit_enabled else None,
             on_block_insert=self._handle_block_insert if block_edit_enabled else None,
-            on_block_delete=self._handle_block_delete if block_edit_enabled else None
+            on_block_delete=self._handle_block_delete if block_edit_enabled else None,
+            on_header_edit=self._handle_header_edit if block_edit_enabled else None
         )
 
     def _handle_block_edit(self, block_index: int, new_content: str):
@@ -993,6 +990,79 @@ class NotebookVaultApp:
 
         except Exception as e:
             st.error(f"Error deleting block: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+
+    def _handle_header_edit(self, block_index: int, new_header: str):
+        """
+        Handle header edit from the renderer.
+
+        Updates the header text in the markdown block while preserving
+        the header level and rest of the content.
+
+        Args:
+            block_index: Index of the block containing the header
+            new_header: New header text (without # symbols)
+        """
+        active_notebook = self._get_active_notebook()
+        if not active_notebook:
+            st.error("No active notebook")
+            return
+
+        notebook_id, notebook_path, notebook_config = active_notebook
+
+        try:
+            # Get the current block content
+            blocks = notebook_config._content_blocks
+            if block_index >= len(blocks):
+                st.error("Invalid block index")
+                return
+
+            block = blocks[block_index]
+            if block['type'] != 'markdown':
+                return
+
+            content = block.get('content', '')
+            lines = content.split('\n')
+
+            # Find and update the header line
+            for i, line in enumerate(lines):
+                if line.strip().startswith('#'):
+                    # Get the current header level (number of #)
+                    header_prefix = ''
+                    for char in line:
+                        if char == '#':
+                            header_prefix += '#'
+                        elif char == ' ':
+                            header_prefix += ' '
+                            break
+                        else:
+                            break
+
+                    # Create new header with same level
+                    lines[i] = header_prefix + new_header
+                    break
+
+            # Save the updated content
+            new_content = '\n'.join(lines)
+
+            from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
+            parser = MarkdownNotebookParser(self.ctx.repo)
+            parser.save_block_update(str(notebook_path), block_index, new_content)
+
+            # Reload the notebook
+            updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+
+            # Update the tab
+            for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
+                if tab_id == notebook_id:
+                    st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
+                    break
+
+            st.success("Header updated!")
+
+        except Exception as e:
+            st.error(f"Error updating header: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
 
