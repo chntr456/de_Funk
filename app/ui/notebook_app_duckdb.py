@@ -579,6 +579,7 @@ class NotebookVaultApp:
             return
 
         notebook_id, notebook_path, notebook_config = active_notebook
+        folder_path = notebook_path.parent
 
         # Header
         st.title("🔍 Filter Editor")
@@ -586,8 +587,18 @@ class NotebookVaultApp:
         st.caption(f"File: `{notebook_path.name}`")
         st.divider()
 
-        # Tab for view/edit/add
-        tab_view, tab_edit, tab_add = st.tabs(["📋 View Filters", "✏️ Edit Filter", "➕ Add Filter"])
+        # Two main sections: Folder Filters (values) and Inline Filters (definitions)
+        st.subheader("📁 Folder Filters")
+        st.caption("Filter values shared by all notebooks in this folder (`.filter_context.yaml`)")
+        self._render_folder_filter_editor(folder_path)
+
+        st.divider()
+
+        st.subheader("📝 Inline Filter Definitions")
+        st.caption("Filter definitions in this notebook file (`$filter${...}` blocks)")
+
+        # Tab for view/edit/add inline filters
+        tab_view, tab_edit, tab_add = st.tabs(["📋 View", "✏️ Edit", "➕ Add"])
 
         with tab_view:
             self._render_filter_view(notebook_config)
@@ -606,6 +617,134 @@ class NotebookVaultApp:
             if st.button("✅ Close Filter Editor", use_container_width=True, type="primary"):
                 st.session_state.filter_editor_open = False
                 st.rerun()
+
+    def _render_folder_filter_editor(self, folder_path):
+        """Render folder filter context editor (.filter_context.yaml)."""
+        import yaml
+        from pathlib import Path
+        from app.notebook.folder_context import FolderFilterContextManager
+
+        context_file = folder_path / '.filter_context.yaml'
+
+        # Load current content
+        if context_file.exists():
+            with open(context_file, 'r') as f:
+                current_content = f.read()
+        else:
+            # Default template
+            from datetime import datetime
+            current_content = f"""# Folder Filter Context
+# Filter values shared by all notebooks in this folder
+
+filters:
+  # Example: Set default ticker
+  # ticker: AAPL
+  #
+  # Example: Set date range
+  # trade_date:
+  #   start: "2024-01-01"
+  #   end: "2024-12-31"
+  #
+  # Example: Set multiple tickers
+  # ticker:
+  #   - AAPL
+  #   - MSFT
+  #   - GOOGL
+
+metadata:
+  created: "{datetime.now().isoformat()}"
+  last_updated: "{datetime.now().isoformat()}"
+  folder: "{folder_path.name}"
+"""
+
+        # Initialize session state for folder filter editor
+        folder_key = f"folder_filter_edit_{folder_path.name}"
+        if folder_key not in st.session_state:
+            st.session_state[folder_key] = current_content
+
+        # Show file path
+        st.caption(f"File: `{context_file.relative_to(folder_path.parent) if context_file.exists() else context_file.name}`")
+
+        # Editor
+        edited_content = st.text_area(
+            "Folder filter context (YAML)",
+            value=st.session_state[folder_key],
+            height=250,
+            key=f"folder_filter_textarea_{folder_path.name}",
+            label_visibility="collapsed"
+        )
+        st.session_state[folder_key] = edited_content
+
+        # Buttons
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("💾 Save Folder Filters", key="save_folder_filters"):
+                try:
+                    # Validate YAML
+                    parsed = yaml.safe_load(edited_content)
+                    if parsed is None:
+                        parsed = {'filters': {}, 'metadata': {}}
+
+                    # Ensure folder exists
+                    folder_path.mkdir(parents=True, exist_ok=True)
+
+                    # Save to file
+                    with open(context_file, 'w') as f:
+                        f.write(edited_content)
+
+                    # Clear cached folder context in notebook manager
+                    if hasattr(self.notebook_manager, 'folder_context_manager'):
+                        folder_key_cache = str(folder_path)
+                        if folder_key_cache in self.notebook_manager.folder_context_manager._contexts:
+                            del self.notebook_manager.folder_context_manager._contexts[folder_key_cache]
+
+                    # Reload active notebook (clears filter state automatically)
+                    self._reload_active_notebook()
+
+                    st.success("Folder filters saved!")
+                    st.rerun()
+                except yaml.YAMLError as e:
+                    st.error(f"Invalid YAML: {str(e)}")
+                except Exception as e:
+                    st.error(f"Error saving: {str(e)}")
+
+        with col2:
+            if st.button("🔄 Reset", key="reset_folder_filters"):
+                st.session_state[folder_key] = current_content
+                st.rerun()
+
+        with col3:
+            if context_file.exists():
+                if st.button("🗑️ Delete File", key="delete_folder_filters", type="secondary"):
+                    confirm_key = "confirm_delete_folder_filters"
+                    if st.session_state.get(confirm_key, False):
+                        try:
+                            context_file.unlink()
+                            if hasattr(self.notebook_manager, 'folder_context_manager'):
+                                folder_key_cache = str(folder_path)
+                                if folder_key_cache in self.notebook_manager.folder_context_manager._contexts:
+                                    del self.notebook_manager.folder_context_manager._contexts[folder_key_cache]
+
+                            # Reload active notebook (clears filter state automatically)
+                            self._reload_active_notebook()
+                            st.success("Folder filter file deleted!")
+                            del st.session_state[folder_key]
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Error deleting: {str(e)}")
+                    else:
+                        st.session_state[confirm_key] = True
+                        st.warning("Click Delete again to confirm")
+                        st.rerun()
+
+        # Show parsed filters preview
+        try:
+            parsed = yaml.safe_load(edited_content)
+            if parsed and parsed.get('filters'):
+                with st.expander("Preview parsed filters", expanded=False):
+                    st.json(parsed.get('filters', {}))
+        except:
+            pass
 
     def _render_filter_view(self, notebook_config):
         """View tab for filter editor."""
@@ -1009,11 +1148,27 @@ help_text: Filter by trading volume"""
         # Reload notebook
         self._reload_active_notebook()
 
-    def _reload_active_notebook(self):
-        """Reload the active notebook after file changes."""
+    def _reload_active_notebook(self, clear_filter_state: bool = True):
+        """
+        Reload the active notebook after file changes.
+
+        Args:
+            clear_filter_state: If True, clears filter session state to force reload
+        """
         active_notebook = self._get_active_notebook()
         if active_notebook:
             notebook_id, notebook_path, _ = active_notebook
+
+            # Clear filter session state so filters reload with fresh values
+            if clear_filter_state:
+                keys_to_delete = [k for k in st.session_state.keys() if k.startswith('filter_')]
+                for key in keys_to_delete:
+                    del st.session_state[key]
+
+                # Force folder change detection
+                if 'last_filter_folder' in st.session_state:
+                    del st.session_state['last_filter_folder']
+
             # Reload the notebook config from file
             updated_config = self.notebook_manager.load_notebook(str(notebook_path))
 
