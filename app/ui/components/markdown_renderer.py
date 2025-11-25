@@ -1198,49 +1198,81 @@ def _render_insert_block_button(
     on_insert: Optional[Callable[[int, str, str], None]] = None
 ):
     """
-    Render an "Insert Block" button with type selector.
+    Render an "Add Section" button with header level selector.
+
+    Sections are nested based on header level:
+    - # (H1) = Top level section
+    - ## (H2) = Nested under H1
+    - ### (H3) = Nested under H2
 
     Args:
         after_index: Index after which to insert (-1 for start)
         on_insert: Callback when block is inserted (after_index, block_type, content)
     """
     insert_key = f"show_insert_menu_{after_index}"
+    title_key = f"section_title_{after_index}"
+    level_key = f"section_level_{after_index}"
 
     # Initialize state
     if insert_key not in st.session_state:
         st.session_state[insert_key] = False
+    if title_key not in st.session_state:
+        st.session_state[title_key] = "New Section"
+    if level_key not in st.session_state:
+        st.session_state[level_key] = 2  # Default to H2
 
     # Centered insert button
-    col1, col2, col3 = st.columns([0.4, 0.2, 0.4])
+    col1, col2, col3 = st.columns([0.35, 0.3, 0.35])
 
     with col2:
         if st.session_state[insert_key]:
-            # Show insert menu
-            st.markdown("**Insert Block:**")
+            # Show section creator
+            st.markdown("**Add Section**")
 
-            block_types = {
-                'markdown': '📝 Markdown',
-                'exhibit': '📊 Exhibit',
-                'collapsible': '📁 Collapsible'
+            # Section title
+            title = st.text_input(
+                "Title",
+                value=st.session_state[title_key],
+                key=f"title_input_{after_index}",
+                label_visibility="collapsed",
+                placeholder="Section title"
+            )
+
+            # Header level (determines nesting)
+            level_labels = {
+                1: "# Top Level",
+                2: "## Subsection",
+                3: "### Sub-subsection"
             }
+            level = st.selectbox(
+                "Level",
+                options=[1, 2, 3],
+                index=st.session_state[level_key] - 1,
+                format_func=lambda x: level_labels[x],
+                key=f"level_select_{after_index}",
+                label_visibility="collapsed"
+            )
 
-            for btype, label in block_types.items():
-                if st.button(label, key=f"insert_{btype}_{after_index}", use_container_width=True):
-                    # Get default content for block type
-                    default_content = _get_default_block_content(btype)
+            col_add, col_cancel = st.columns(2)
+            with col_add:
+                if st.button("Add", key=f"add_section_{after_index}", use_container_width=True):
+                    # Create markdown with header
+                    header_prefix = "#" * level
+                    content = f"{header_prefix} {title}\n\nContent here."
 
                     if on_insert:
-                        on_insert(after_index, btype, default_content)
+                        on_insert(after_index, 'markdown', content)
 
                     st.session_state[insert_key] = False
                     st.rerun()
 
-            if st.button("Cancel", key=f"cancel_insert_{after_index}", use_container_width=True):
-                st.session_state[insert_key] = False
-                st.rerun()
+            with col_cancel:
+                if st.button("Cancel", key=f"cancel_insert_{after_index}", use_container_width=True):
+                    st.session_state[insert_key] = False
+                    st.rerun()
         else:
             # Show collapsed insert button
-            if st.button("➕", key=f"add_block_{after_index}", help="Insert new block here"):
+            if st.button("+ Section", key=f"add_block_{after_index}", help="Add new section"):
                 st.session_state[insert_key] = True
                 st.rerun()
 
