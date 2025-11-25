@@ -472,6 +472,8 @@ def _render_nested_toggles(
                     st.rerun()
             with col_delete:
                 if st.button("🗑️", key=f"del_sec_{block_index}", help="Delete section"):
+                    # Store content to delete in session state
+                    st.session_state['_content_to_delete'] = full_section_content
                     if on_block_delete:
                         on_block_delete(block_index)
                     st.rerun()
@@ -501,6 +503,8 @@ def _render_nested_toggles(
                                     st.rerun()
                             with btn_col3:
                                 if st.button("🗑️", key=f"del_sec_{block_index}", help="Delete"):
+                                    # Store content to delete in session state
+                                    st.session_state['_content_to_delete'] = full_section_content
                                     if on_block_delete:
                                         on_block_delete(block_index)
                                     st.rerun()
@@ -1560,22 +1564,61 @@ def _render_insert_block_button(
     on_insert: Optional[Callable[[int, str, str], None]] = None
 ):
     """
-    Render a simple "+" button to add a new section.
+    Render an "Add Section" button with header level selection.
 
     Args:
-        after_index: Index after which to insert (-1 for start)
+        after_index: Index after which to insert (-1 for start, 999 for end)
         on_insert: Callback when block is inserted (after_index, block_type, content)
     """
+    insert_key = f"show_insert_{after_index}"
+
+    if insert_key not in st.session_state:
+        st.session_state[insert_key] = False
+
     # Centered insert button
-    col1, col2, col3 = st.columns([0.45, 0.1, 0.45])
+    col1, col2, col3 = st.columns([0.40, 0.20, 0.40])
 
     with col2:
-        if st.button("➕", key=f"add_block_{after_index}", help="Add new section"):
-            # Add a new section with default content
-            content = "## New Section\n\nAdd your content here."
-            if on_insert:
-                on_insert(after_index, 'markdown', content)
-            st.rerun()
+        if st.session_state[insert_key]:
+            # Show header level selection
+            st.markdown("**Add Section**")
+
+            title = st.text_input(
+                "Title",
+                value="New Section",
+                key=f"new_title_{after_index}",
+                label_visibility="collapsed",
+                placeholder="Section title"
+            )
+
+            level = st.radio(
+                "Level",
+                options=[1, 2, 3],
+                format_func=lambda x: {1: "# Top Level", 2: "## Subsection", 3: "### Sub-subsection"}[x],
+                key=f"new_level_{after_index}",
+                horizontal=True,
+                label_visibility="collapsed"
+            )
+
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                if st.button("Add", key=f"confirm_add_{after_index}", use_container_width=True):
+                    header = "#" * level
+                    content = f"{header} {title}\n\nAdd your content here."
+                    if on_insert:
+                        # Use 999 to signal "append to end"
+                        on_insert(999, 'markdown', content)
+                    st.session_state[insert_key] = False
+                    st.rerun()
+
+            with btn_col2:
+                if st.button("Cancel", key=f"cancel_add_{after_index}", use_container_width=True):
+                    st.session_state[insert_key] = False
+                    st.rerun()
+        else:
+            if st.button("➕", key=f"add_block_{after_index}", help="Add new section"):
+                st.session_state[insert_key] = True
+                st.rerun()
 
 
 def _get_default_block_content(block_type: str) -> str:

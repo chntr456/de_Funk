@@ -919,10 +919,10 @@ class NotebookVaultApp:
         """
         Handle block insert from the renderer.
 
-        Inserts a new block after the specified index.
+        Inserts a new block. If after_index is 999, appends to end of file.
 
         Args:
-            after_index: Index after which to insert (-1 for start)
+            after_index: Index after which to insert (-1 for start, 999 for end)
             block_type: Type of block ('markdown', 'exhibit', 'collapsible')
             content: Content for the new block
         """
@@ -934,10 +934,22 @@ class NotebookVaultApp:
         notebook_id, notebook_path, notebook_config = active_notebook
 
         try:
-            # Use the parser to insert the block
-            from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
-            parser = MarkdownNotebookParser(self.ctx.repo)
-            parser.insert_block(str(notebook_path), after_index, block_type, content)
+            from pathlib import Path
+            path = Path(notebook_path)
+            if not path.is_absolute():
+                path = self.ctx.repo / path
+
+            # Read current file content
+            with open(path, 'r') as f:
+                file_content = f.read()
+
+            # Append new content to end of file
+            new_content = f"\n\n{content}"
+            updated_content = file_content.rstrip() + new_content
+
+            # Write back
+            with open(path, 'w') as f:
+                f.write(updated_content)
 
             # Reload the notebook to reflect changes
             updated_config = self.notebook_manager.load_notebook(str(notebook_path))
@@ -948,7 +960,7 @@ class NotebookVaultApp:
                     st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
                     break
 
-            st.success(f"New {block_type} block added!")
+            st.success(f"New section added!")
 
         except Exception as e:
             st.error(f"Error inserting block: {str(e)}")
@@ -959,10 +971,10 @@ class NotebookVaultApp:
         """
         Handle block delete from the renderer.
 
-        Deletes the block at the specified index.
+        Uses content stored in session state to find and remove the section.
 
         Args:
-            block_index: Index of the block to delete
+            block_index: Index of the block (unused, kept for interface compatibility)
         """
         active_notebook = self._get_active_notebook()
         if not active_notebook:
@@ -971,22 +983,51 @@ class NotebookVaultApp:
 
         notebook_id, notebook_path, notebook_config = active_notebook
 
+        # Get content to delete from session state
+        content_to_delete = st.session_state.get('_content_to_delete', '')
+        if not content_to_delete:
+            st.error("No content selected for deletion")
+            return
+
         try:
-            # Use the parser to delete the block
-            from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
-            parser = MarkdownNotebookParser(self.ctx.repo)
-            parser.delete_block(str(notebook_path), block_index)
+            from pathlib import Path
+            path = Path(notebook_path)
+            if not path.is_absolute():
+                path = self.ctx.repo / path
 
-            # Reload the notebook to reflect changes
-            updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+            # Read current file content
+            with open(path, 'r') as f:
+                file_content = f.read()
 
-            # Update the tab with new config
-            for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
-                if tab_id == notebook_id:
-                    st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
-                    break
+            # Find and remove the content
+            # Try exact match first
+            if content_to_delete in file_content:
+                updated_content = file_content.replace(content_to_delete, '', 1)
+                # Clean up extra blank lines
+                import re
+                updated_content = re.sub(r'\n{3,}', '\n\n', updated_content)
+                updated_content = updated_content.strip() + '\n'
 
-            st.success("Block deleted!")
+                # Write back
+                with open(path, 'w') as f:
+                    f.write(updated_content)
+
+                # Clear the session state
+                if '_content_to_delete' in st.session_state:
+                    del st.session_state['_content_to_delete']
+
+                # Reload the notebook to reflect changes
+                updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+
+                # Update the tab with new config
+                for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
+                    if tab_id == notebook_id:
+                        st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
+                        break
+
+                st.success("Section deleted!")
+            else:
+                st.error("Could not find content to delete in file")
 
         except Exception as e:
             st.error(f"Error deleting block: {str(e)}")
