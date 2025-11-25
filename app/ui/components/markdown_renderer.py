@@ -61,18 +61,22 @@ def render_markdown_notebook(
             collapse_all(notebook_id)
             st.rerun()
 
-    # Render each content block with toggle
-    for block_index, block in enumerate(notebook_config._content_blocks):
-        _render_block_with_toggle(
-            block_index=block_index,
-            block=block,
-            notebook_session=notebook_session,
-            connection=connection,
-            context=notebook_id,
-            editable=editable,
-            on_header_edit=on_header_edit,
-            on_block_edit=on_block_edit
-        )
+    # Build header tree for nested rendering
+    header_tree = _build_header_tree(notebook_config._content_blocks)
+
+    # Render nested blocks with editing support
+    _render_nested_blocks(
+        header_tree,
+        notebook_session,
+        connection,
+        context=notebook_id,
+        depth=0,
+        editable=editable,
+        on_header_edit=on_header_edit,
+        on_block_edit=on_block_edit,
+        on_block_insert=on_block_insert,
+        on_block_delete=on_block_delete
+    )
 
 
 def _render_block_with_toggle(
@@ -277,7 +281,10 @@ def _render_nested_blocks(
     context: str = "default",
     depth: int = 0,
     editable: bool = False,
-    on_header_edit: Optional[Callable[[int, str], None]] = None
+    on_header_edit: Optional[Callable[[int, str], None]] = None,
+    on_block_edit: Optional[Callable[[int, str], None]] = None,
+    on_block_insert: Optional[Callable[[int, str, str], None]] = None,
+    on_block_delete: Optional[Callable[[int], None]] = None
 ):
     """
     Render blocks with nested toggle containers based on header hierarchy.
@@ -288,8 +295,11 @@ def _render_nested_blocks(
         connection: DataConnection for converting to pandas
         context: Context for collapse/expand all functionality
         depth: Current nesting depth
-        editable: Whether headers can be edited
+        editable: Whether headers/blocks can be edited
         on_header_edit: Callback when header is edited
+        on_block_edit: Callback when block content is edited
+        on_block_insert: Callback when block is inserted
+        on_block_delete: Callback when block is deleted
     """
     for block in blocks:
         block_type = block['type']
@@ -368,16 +378,98 @@ def _render_nested_blocks(
                             context=context,
                             depth=depth + 1,
                             editable=editable,
-                            on_header_edit=on_header_edit
+                            on_header_edit=on_header_edit,
+                            on_block_edit=on_block_edit,
+                            on_block_insert=on_block_insert,
+                            on_block_delete=on_block_delete
                         )
+
+                    # Show edit/delete buttons if editable
+                    if editable:
+                        _render_block_edit_buttons(
+                            block_index, block, on_block_edit, on_block_delete
+                        )
+
         else:
-            # Render without toggle (simple content)
-            if block_type == 'markdown':
-                _render_markdown_content(block.get('content', ''))
-            elif block_type == 'exhibit':
-                render_exhibit_block(block, notebook_session, connection, in_collapsible=True)
-            elif block_type == 'error':
-                render_error_block(block, block_index=block_index)
+            # Render without toggle (simple content like non-header text)
+            if editable:
+                # Show with edit controls
+                col1, col2 = st.columns([0.95, 0.05])
+                with col1:
+                    if block_type == 'markdown':
+                        _render_markdown_content(block.get('content', ''))
+                    elif block_type == 'exhibit':
+                        render_exhibit_block(block, notebook_session, connection, in_collapsible=True)
+                    elif block_type == 'error':
+                        render_error_block(block, block_index=block_index)
+                with col2:
+                    _render_block_edit_buttons(
+                        block_index, block, on_block_edit, on_block_delete, compact=True
+                    )
+            else:
+                if block_type == 'markdown':
+                    _render_markdown_content(block.get('content', ''))
+                elif block_type == 'exhibit':
+                    render_exhibit_block(block, notebook_session, connection, in_collapsible=True)
+                elif block_type == 'error':
+                    render_error_block(block, block_index=block_index)
+
+
+def _render_block_edit_buttons(
+    block_index: int,
+    block: Dict[str, Any],
+    on_block_edit: Optional[Callable[[int, str], None]] = None,
+    on_block_delete: Optional[Callable[[int], None]] = None,
+    compact: bool = False
+):
+    """Render edit/delete buttons for a block."""
+    edit_key = f"edit_mode_block_{block_index}"
+
+    if edit_key not in st.session_state:
+        st.session_state[edit_key] = False
+
+    is_editing = st.session_state[edit_key]
+
+    if is_editing:
+        # Show editor
+        block_type = block['type']
+        if block_type == 'markdown':
+            content = block.get('content', '')
+            new_content = st.text_area(
+                "Edit content",
+                value=content,
+                key=f"editor_{block_index}",
+                height=200,
+                label_visibility="collapsed"
+            )
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Save", key=f"save_{block_index}"):
+                    if on_block_edit:
+                        on_block_edit(block_index, new_content)
+                    st.session_state[edit_key] = False
+                    st.rerun()
+            with col2:
+                if st.button("Cancel", key=f"cancel_{block_index}"):
+                    st.session_state[edit_key] = False
+                    st.rerun()
+    else:
+        # Show edit/delete buttons
+        if compact:
+            if st.button("✏️", key=f"edit_btn_{block_index}", help="Edit"):
+                st.session_state[edit_key] = True
+                st.rerun()
+        else:
+            col1, col2 = st.columns([0.5, 0.5])
+            with col1:
+                if st.button("✏️ Edit", key=f"edit_btn_{block_index}"):
+                    st.session_state[edit_key] = True
+                    st.rerun()
+            with col2:
+                if st.button("🗑️", key=f"del_btn_{block_index}", help="Delete"):
+                    if on_block_delete:
+                        on_block_delete(block_index)
+                    st.rerun()
 
 
 def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in_collapsible: bool = False):
