@@ -39,12 +39,21 @@ from ..markdown_parser_filter_helpers import parse_filter
 
 
 @dataclass
+class BlockPosition:
+    """Tracks the source position of a content block in the original markdown."""
+    start: int  # Start character offset in original content
+    end: int    # End character offset in original content
+    block_type: str  # Type of block (markdown, exhibit, collapsible)
+
+
+@dataclass
 class MarkdownNotebook:
     """Parsed markdown notebook structure."""
     front_matter: Dict[str, Any]
     filters: Dict[str, Variable]
     exhibits: List[Tuple[str, Exhibit]]  # List of (markdown_content, exhibit) pairs
     content_blocks: List[Dict[str, Any]]  # List of {type: 'markdown'|'exhibit', content: ...}
+    block_positions: Optional[List[BlockPosition]] = None  # Source positions for editing
 
 
 class MarkdownNotebookParser:
@@ -87,32 +96,40 @@ class MarkdownNotebookParser:
 
         return self.parse_markdown(content)
 
-    def parse_markdown(self, content: str) -> NotebookConfig:
+    def parse_markdown(self, content: str, track_positions: bool = True) -> NotebookConfig:
         """
         Parse markdown content into NotebookConfig.
 
         Args:
             content: Markdown content string
+            track_positions: Whether to track block positions for editing
 
         Returns:
             NotebookConfig object
         """
+        # Store original content for position tracking and editing
+        self._original_content = content
+
         # Extract front matter
         front_matter = self._extract_front_matter(content)
         if not front_matter:
             raise ValueError("Markdown notebook must have YAML front matter (---\\n...\\n---)")
 
+        # Find where front matter ends
+        front_matter_match = self.FRONT_MATTER_PATTERN.match(content)
+        self._content_start_offset = front_matter_match.end() if front_matter_match else 0
+
         # Remove front matter from content
-        content = self.FRONT_MATTER_PATTERN.sub('', content, count=1)
+        content_without_front_matter = self.FRONT_MATTER_PATTERN.sub('', content, count=1)
 
         # Extract filters (new $filter${} syntax)
-        filter_collection = self._extract_dynamic_filters(content)
+        filter_collection = self._extract_dynamic_filters(content_without_front_matter)
 
         # Remove filter blocks from content (they don't render in notebook view)
-        content = self.FILTER_PATTERN.sub('', content)
+        content_for_parsing = self.FILTER_PATTERN.sub('', content_without_front_matter)
 
-        # Extract exhibits and build content structure
-        exhibits, content_blocks = self._extract_exhibits(content)
+        # Extract exhibits and build content structure (with positions if requested)
+        exhibits, content_blocks = self._extract_exhibits(content_for_parsing, track_positions=track_positions)
 
         # Build NotebookConfig
         return self._build_config(front_matter, filter_collection, exhibits, content_blocks)
@@ -180,13 +197,19 @@ class MarkdownNotebookParser:
             return [v.strip() for v in default_str.split(',')]
         return None
 
-    def _extract_exhibits(self, content: str) -> Tuple[List[Exhibit], List[Dict[str, Any]]]:
+    def _extract_exhibits(self, content: str, track_positions: bool = True) -> Tuple[List[Exhibit], List[Dict[str, Any]]]:
         """
         Extract exhibits from markdown content and handle collapsible sections.
+
+        Args:
+            content: Markdown content to parse
+            track_positions: Whether to track source positions for editing
 
         Returns:
             Tuple of (exhibits list, content_blocks list)
         """
+        # Initialize position tracking
+        self._block_positions = [] if track_positions else None
         # First, process collapsible sections (details tags)
         # Replace them with placeholders and extract their content
         collapsible_sections = {}
@@ -589,4 +612,221 @@ class MarkdownNotebookParser:
             _filter_collection=filter_collection
         )
 
+        # Store block positions in config for editing
+        if hasattr(self, '_block_positions') and self._block_positions:
+            config._block_positions = self._block_positions
+
         return config
+
+    def update_block_content(
+        self,
+        notebook_path: str,
+        block_index: int,
+        new_content: str
+    ) -> str:
+        """
+        Update a specific content block in a notebook file.
+
+        Reconstructs the markdown file with the updated block content.
+
+        Args:
+            notebook_path: Path to the notebook file
+            block_index: Index of the block to update
+            new_content: New content for the block
+
+        Returns:
+            The updated full markdown content
+
+        Raises:
+            ValueError: If block_index is invalid
+        """
+        path = Path(notebook_path)
+        if not path.is_absolute():
+            path = self.repo_root / path
+
+        with open(path, 'r') as f:
+            original_content = f.read()
+
+        # Re-parse to get current blocks
+        config = self.parse_markdown(original_content, track_positions=True)
+
+        if not hasattr(config, '_content_blocks') or not config._content_blocks:
+            raise ValueError("No content blocks found in notebook")
+
+        if block_index < 0 or block_index >= len(config._content_blocks):
+            raise ValueError(f"Invalid block index: {block_index}")
+
+        # Reconstruct the markdown
+        updated_content = self._reconstruct_markdown(
+            original_content,
+            config._content_blocks,
+            block_index,
+            new_content
+        )
+
+        return updated_content
+
+    def save_block_update(
+        self,
+        notebook_path: str,
+        block_index: int,
+        new_content: str
+    ) -> None:
+        """
+        Update a specific block and save to file.
+
+        Args:
+            notebook_path: Path to the notebook file
+            block_index: Index of the block to update
+            new_content: New content for the block
+        """
+        path = Path(notebook_path)
+        if not path.is_absolute():
+            path = self.repo_root / path
+
+        updated_content = self.update_block_content(str(path), block_index, new_content)
+
+        with open(path, 'w') as f:
+            f.write(updated_content)
+
+    def _reconstruct_markdown(
+        self,
+        original_content: str,
+        content_blocks: List[Dict[str, Any]],
+        updated_block_index: int,
+        new_content: str
+    ) -> str:
+        """
+        Reconstruct the markdown file with an updated block.
+
+        This is a simplified approach that reconstructs the file from
+        the content blocks rather than trying to patch the original.
+
+        Args:
+            original_content: Original markdown content
+            content_blocks: List of content blocks
+            updated_block_index: Index of block to update
+            new_content: New content for the block
+
+        Returns:
+            Reconstructed markdown content
+        """
+        # Extract front matter
+        front_matter_match = self.FRONT_MATTER_PATTERN.match(original_content)
+        front_matter = original_content[:front_matter_match.end()] if front_matter_match else ""
+
+        # Extract filter blocks (we want to preserve them)
+        content_after_front = original_content[front_matter_match.end():] if front_matter_match else original_content
+        filter_blocks = []
+        for match in self.FILTER_PATTERN.finditer(content_after_front):
+            filter_blocks.append(f"$filter${{\n{match.group(1)}\n}}")
+
+        # Build the new content
+        parts = [front_matter.rstrip()]
+
+        # Add filter blocks after front matter
+        for fb in filter_blocks:
+            parts.append(fb)
+
+        # Add each content block
+        for i, block in enumerate(content_blocks):
+            block_type = block['type']
+
+            if i == updated_block_index:
+                # Use new content for the updated block
+                if block_type == 'markdown':
+                    parts.append(new_content)
+                elif block_type == 'exhibit':
+                    # For exhibits, new_content should be the YAML
+                    parts.append(f"$exhibits${{\n{new_content}\n}}")
+                elif block_type == 'collapsible':
+                    # Preserve collapsible structure
+                    parts.append(self._reconstruct_collapsible_block(block, new_content))
+            else:
+                # Use original content
+                if block_type == 'markdown':
+                    parts.append(block.get('content', ''))
+                elif block_type == 'exhibit':
+                    parts.append(self._reconstruct_exhibit_block(block))
+                elif block_type == 'collapsible':
+                    parts.append(self._reconstruct_collapsible_block(block))
+                elif block_type == 'error':
+                    # Preserve error blocks as original YAML
+                    parts.append(f"$exhibits${{\n{block.get('content', '')}\n}}")
+
+        return '\n\n'.join(parts)
+
+    def _reconstruct_exhibit_block(self, block: Dict[str, Any]) -> str:
+        """Reconstruct an exhibit block as $exhibits${...} syntax."""
+        exhibit = block.get('exhibit')
+        if not exhibit:
+            return ""
+
+        # Convert exhibit back to YAML-like format
+        yaml_parts = [f"type: {exhibit.type.value}"]
+
+        if exhibit.title:
+            yaml_parts.append(f"title: {exhibit.title}")
+        if exhibit.description:
+            yaml_parts.append(f"description: {exhibit.description}")
+        if exhibit.source:
+            yaml_parts.append(f"source: {exhibit.source}")
+
+        # X/Y axis
+        if exhibit.x_axis and exhibit.x_axis.dimension:
+            yaml_parts.append(f"x: {exhibit.x_axis.dimension}")
+        if exhibit.y_axis:
+            if exhibit.y_axis.measure:
+                yaml_parts.append(f"y: {exhibit.y_axis.measure}")
+            elif exhibit.y_axis.measures:
+                yaml_parts.append(f"y: [{', '.join(exhibit.y_axis.measures)}]")
+
+        if exhibit.color_by:
+            yaml_parts.append(f"color: {exhibit.color_by}")
+
+        yaml_content = '\n'.join(f"  {line}" for line in yaml_parts)
+        return f"$exhibits${{\n{yaml_content}\n}}"
+
+    def _reconstruct_collapsible_block(
+        self,
+        block: Dict[str, Any],
+        new_content: Optional[str] = None
+    ) -> str:
+        """Reconstruct a collapsible block as <details> HTML."""
+        summary = block.get('summary', 'Details')
+        inner_blocks = block.get('content', [])
+
+        inner_parts = []
+        for inner_block in inner_blocks:
+            inner_type = inner_block['type']
+            if inner_type == 'markdown':
+                inner_parts.append(inner_block.get('content', ''))
+            elif inner_type == 'exhibit':
+                inner_parts.append(self._reconstruct_exhibit_block(inner_block))
+
+        inner_content = new_content if new_content else '\n\n'.join(inner_parts)
+
+        return f"<details>\n<summary>{summary}</summary>\n\n{inner_content}\n\n</details>"
+
+    def get_block_raw_content(self, block: Dict[str, Any]) -> str:
+        """
+        Get the raw content of a block for editing.
+
+        Args:
+            block: Content block
+
+        Returns:
+            Raw content string suitable for editing
+        """
+        block_type = block['type']
+
+        if block_type == 'markdown':
+            return block.get('content', '')
+        elif block_type == 'exhibit':
+            return self._reconstruct_exhibit_block(block)
+        elif block_type == 'collapsible':
+            return self._reconstruct_collapsible_block(block)
+        elif block_type == 'error':
+            return block.get('content', '')
+
+        return ''

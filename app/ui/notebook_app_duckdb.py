@@ -65,11 +65,17 @@ if 'active_tab' not in st.session_state:
 if 'edit_mode' not in st.session_state:
     st.session_state.edit_mode = {}
 
+if 'block_edit_mode' not in st.session_state:
+    st.session_state.block_edit_mode = {}  # Per-notebook block editing toggle
+
 if 'markdown_content' not in st.session_state:
     st.session_state.markdown_content = {}
 
 if 'theme' not in st.session_state:
     st.session_state.theme = 'dark'
+
+if 'show_notebook_creator' not in st.session_state:
+    st.session_state.show_notebook_creator = False
 
 # Cache model sessions per notebook to avoid reinitializing
 if 'notebook_model_sessions' not in st.session_state:
@@ -137,8 +143,25 @@ class NotebookVaultApp:
 
     def _render_header(self):
         """Render professional header with toolbar and tabs."""
-        # Row 1: Edit, Filter, and Theme buttons on the right
-        col_spacer, col_edit, col_filter, col_theme = st.columns([0.7, 0.1, 0.1, 0.1])
+        # Row 1: Edit, Block Edit, Filter, and Theme buttons on the right
+        col_spacer, col_block, col_edit, col_filter, col_theme = st.columns([0.6, 0.1, 0.1, 0.1, 0.1])
+
+        with col_block:
+            # Block edit toggle (only if active notebook and not in full edit mode)
+            if st.session_state.active_tab:
+                active_notebook = self._get_active_notebook()
+                if active_notebook:
+                    notebook_id = active_notebook[0]
+                    in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
+                    in_block_edit = st.session_state.block_edit_mode.get(notebook_id, False)
+
+                    if not in_edit_mode:
+                        block_icon = "🔲" if in_block_edit else "▢"
+                        block_help = "Disable block editing" if in_block_edit else "Enable block editing"
+
+                        if st.button(block_icon, help=block_help, key="toolbar_block_edit", use_container_width=True):
+                            st.session_state.block_edit_mode[notebook_id] = not in_block_edit
+                            st.rerun()
 
         with col_edit:
             # Edit button (only if active notebook)
@@ -149,10 +172,13 @@ class NotebookVaultApp:
                     in_edit_mode = st.session_state.edit_mode.get(notebook_id, False)
 
                     button_label = "👁️" if in_edit_mode else "✏️"
-                    button_help = "View mode" if in_edit_mode else "Edit markdown"
+                    button_help = "View mode" if in_edit_mode else "Edit full markdown"
 
                     if st.button(button_label, help=button_help, key="toolbar_edit", use_container_width=True):
                         st.session_state.edit_mode[notebook_id] = not in_edit_mode
+                        # Disable block edit mode when entering full edit mode
+                        if not in_edit_mode:
+                            st.session_state.block_edit_mode[notebook_id] = False
                         st.rerun()
 
         with col_filter:
@@ -681,6 +707,11 @@ class NotebookVaultApp:
 
     def _render_main_content(self):
         """Render main content area."""
+        # Check if notebook creator is open
+        if st.session_state.get('show_notebook_creator', False):
+            self._render_notebook_creator()
+            return
+
         # Check if graph viewer is open
         if st.session_state.get('show_graph_viewer', False):
             self._render_graph_viewer()
@@ -699,6 +730,58 @@ class NotebookVaultApp:
         active_notebook = self._get_active_notebook()
         if active_notebook:
             self._render_notebook_content(active_notebook)
+
+    def _render_notebook_creator(self):
+        """Render the notebook creation form."""
+        from app.ui.components.notebook_creator import render_notebook_creator
+
+        # Header with close button
+        col1, col2 = st.columns([0.9, 0.1])
+        with col1:
+            st.title("Create New Notebook")
+        with col2:
+            if st.button("✕", help="Close", key="close_creator"):
+                st.session_state.show_notebook_creator = False
+                st.rerun()
+
+        st.divider()
+
+        # Get available models
+        try:
+            available_models = list(self.model_registry.list_models())
+        except Exception:
+            available_models = []
+
+        # Render the creator
+        render_notebook_creator(
+            notebooks_root=self.notebooks_root,
+            available_models=available_models,
+            on_create=self._handle_notebook_created
+        )
+
+    def _handle_notebook_created(self, notebook_path: Path):
+        """
+        Handle notebook creation callback.
+
+        Opens the newly created notebook.
+
+        Args:
+            notebook_path: Path to the created notebook
+        """
+        # Close the creator
+        st.session_state.show_notebook_creator = False
+
+        # Open the new notebook
+        notebook_id = str(notebook_path.relative_to(self.notebooks_root))
+
+        try:
+            notebook_config = self.notebook_manager.load_notebook(str(notebook_path))
+            st.session_state.open_tabs.append((notebook_id, notebook_path, notebook_config))
+            st.session_state.active_tab = notebook_id
+            st.session_state.edit_mode[notebook_id] = True  # Open in edit mode
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error opening notebook: {str(e)}")
 
     def _render_graph_viewer(self):
         """Render full model graph viewer."""
@@ -839,13 +922,61 @@ class NotebookVaultApp:
 
     def _render_view_mode(self, notebook_id, notebook_config):
         """Render notebook in view mode."""
-        # Render notebook exhibits
+        # Check if block editing is enabled
+        block_edit_enabled = st.session_state.block_edit_mode.get(notebook_id, False)
+
+        if block_edit_enabled:
+            # Show block editing indicator
+            st.info("🔲 **Block Editing Mode** - Click ✏️ on any block to edit it individually")
+
+        # Render notebook exhibits with editable flag
         render_notebook_exhibits(
             notebook_id,
             notebook_config,
             self.notebook_manager,
-            self.ctx.connection
+            self.ctx.connection,
+            editable=block_edit_enabled,
+            on_block_edit=self._handle_block_edit if block_edit_enabled else None
         )
+
+    def _handle_block_edit(self, block_index: int, new_content: str):
+        """
+        Handle block edit from the renderer.
+
+        Saves the updated block content to the notebook file.
+
+        Args:
+            block_index: Index of the block that was edited
+            new_content: New content for the block
+        """
+        active_notebook = self._get_active_notebook()
+        if not active_notebook:
+            st.error("No active notebook")
+            return
+
+        notebook_id, notebook_path, notebook_config = active_notebook
+
+        try:
+            # Use the parser to save the block update
+            from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
+            parser = MarkdownNotebookParser(self.ctx.repo)
+            parser.save_block_update(str(notebook_path), block_index, new_content)
+
+            # Reload the notebook to reflect changes
+            updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+
+            # Update the tab with new config
+            for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
+                if tab_id == notebook_id:
+                    st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
+                    break
+
+            st.success(f"Block {block_index} saved successfully!")
+
+        except Exception as e:
+            st.error(f"Error saving block: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
 
     def _render_welcome(self):
         """Render welcome screen."""

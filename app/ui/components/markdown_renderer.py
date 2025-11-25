@@ -2,15 +2,23 @@
 Markdown renderer component for notebook UI.
 
 Renders markdown content with embedded exhibits and collapsible sections.
+Uses ToggleContainer instead of st.expander to avoid nesting issues.
 """
 
 import streamlit as st
 import markdown
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Callable, Union
 from app.notebook.schema import NotebookConfig
+from .toggle_container import ToggleContainer, apply_toggle_styles
 
 
-def render_markdown_notebook(notebook_config: NotebookConfig, notebook_session, connection):
+def render_markdown_notebook(
+    notebook_config: NotebookConfig,
+    notebook_session,
+    connection,
+    editable: bool = False,
+    on_block_edit: Optional[Callable[[int, str], None]] = None
+):
     """
     Render a markdown-based notebook.
 
@@ -18,10 +26,15 @@ def render_markdown_notebook(notebook_config: NotebookConfig, notebook_session, 
         notebook_config: NotebookConfig with markdown content
         notebook_session: NotebookSession for data retrieval
         connection: DataConnection for converting to pandas
+        editable: Whether blocks can be edited inline
+        on_block_edit: Callback when a block is edited (block_index, new_content)
     """
     if not hasattr(notebook_config, '_content_blocks') or not notebook_config._content_blocks:
         st.error("This notebook has no markdown content blocks")
         return
+
+    # Apply toggle container styles
+    apply_toggle_styles()
 
     # Import exhibit renderers
     from .exhibits import (
@@ -34,26 +47,31 @@ def render_markdown_notebook(notebook_config: NotebookConfig, notebook_session, 
     from .exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
 
     # Render each content block
-    for block in notebook_config._content_blocks:
+    for block_index, block in enumerate(notebook_config._content_blocks):
         block_type = block['type']
 
-        if block_type == 'markdown':
-            # Render markdown content
-            render_markdown_block(block['content'])
+        # Wrap in editable container if enabled
+        if editable:
+            render_editable_block_wrapper(
+                block_index=block_index,
+                block=block,
+                notebook_session=notebook_session,
+                connection=connection,
+                on_edit=on_block_edit
+            )
+        else:
+            # Standard rendering
+            if block_type == 'markdown':
+                render_markdown_block(block['content'], block_index=block_index)
 
-        elif block_type == 'exhibit':
-            # Render exhibit
-            render_exhibit_block(block, notebook_session, connection)
+            elif block_type == 'exhibit':
+                render_exhibit_block(block, notebook_session, connection)
 
-        elif block_type == 'collapsible':
-            # Render collapsible section with st.expander
-            render_collapsible_section(block, notebook_session, connection)
+            elif block_type == 'collapsible':
+                render_collapsible_section(block, notebook_session, connection, block_index=block_index)
 
-        elif block_type == 'error':
-            # Render error block
-            st.error(f"Error: {block['message']}")
-            with st.expander("Show exhibit YAML"):
-                st.code(block['content'], language='yaml')
+            elif block_type == 'error':
+                render_error_block(block, block_index=block_index)
 
 
 def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in_collapsible: bool = False):
@@ -138,53 +156,71 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
             import traceback
             st.code(traceback.format_exc())
 
-    # Wrap in expander if collapsible or has selectors
+    # Wrap in ToggleContainer if collapsible
     if is_collapsible:
-        with st.expander(collapsible_title, expanded=collapsible_expanded):
-            _render_exhibit_content()
+        with ToggleContainer(
+            collapsible_title,
+            expanded=collapsible_expanded,
+            container_id=f"exhibit_{exhibit_id}",
+            style="card"
+        ) as tc:
+            if tc.is_open:
+                _render_exhibit_content()
     else:
         _render_exhibit_content()
 
 
-def render_collapsible_section(block: Dict[str, Any], notebook_session, connection):
+def render_collapsible_section(block: Dict[str, Any], notebook_session, connection, block_index: int = 0):
     """
-    Render a collapsible section using st.expander.
+    Render a collapsible section using ToggleContainer.
+
+    Uses ToggleContainer instead of st.expander to avoid nesting issues.
 
     Args:
         block: Content block with summary and inner content
         notebook_session: NotebookSession for data retrieval
         connection: DataConnection for converting to pandas
+        block_index: Index of this block for unique keys
     """
     summary = block['summary']
     inner_blocks = block['content']
 
-    # Use st.expander for collapsible sections
-    with st.expander(summary, expanded=False):
-        # Render inner content blocks
-        for inner_block in inner_blocks:
-            inner_type = inner_block['type']
+    # Use ToggleContainer for collapsible sections (no nesting issues)
+    with ToggleContainer(
+        summary,
+        expanded=False,
+        container_id=f"collapsible_{block_index}",
+        style="default"
+    ) as tc:
+        if tc.is_open:
+            # Render inner content blocks
+            for inner_idx, inner_block in enumerate(inner_blocks):
+                inner_type = inner_block['type']
 
-            if inner_type == 'markdown':
-                # Pass in_collapsible=True to prevent nested expanders
-                render_markdown_block(inner_block['content'], in_collapsible=True)
+                if inner_type == 'markdown':
+                    # No need for in_collapsible flag with ToggleContainer
+                    render_markdown_block(
+                        inner_block['content'],
+                        in_collapsible=True,
+                        block_index=f"{block_index}_{inner_idx}"
+                    )
 
-            elif inner_type == 'exhibit':
-                render_exhibit_block(inner_block, notebook_session, connection, in_collapsible=True)
+                elif inner_type == 'exhibit':
+                    render_exhibit_block(inner_block, notebook_session, connection, in_collapsible=True)
 
-            elif inner_type == 'error':
-                st.error(f"Error: {inner_block['message']}")
-                # Don't use expander - already inside one
-                st.caption("Exhibit YAML:")
-                st.code(inner_block['content'], language='yaml')
+                elif inner_type == 'error':
+                    render_error_block(inner_block, block_index=f"{block_index}_{inner_idx}")
 
 
-def render_markdown_block(content: str, in_collapsible: bool = False):
+def render_markdown_block(content: str, in_collapsible: bool = False, block_index: Any = 0):
     """
     Render a markdown content block.
 
-    Text paragraphs are wrapped in a collapsible "📄 Details" expander
-    to enable a clean view of just exhibits and headers (unless already
-    inside a collapsible section to avoid nesting).
+    Text paragraphs are wrapped in a ToggleContainer (not expander) to enable
+    a clean view of just exhibits and headers (unless already inside a
+    collapsible section).
+
+    Uses ToggleContainer instead of st.expander to avoid nesting issues.
 
     Supports:
     - Standard markdown (headers, bold, italic, lists, etc.)
@@ -196,6 +232,7 @@ def render_markdown_block(content: str, in_collapsible: bool = False):
     Args:
         content: Markdown content string
         in_collapsible: True if already rendering inside a collapsible section
+        block_index: Index of this block for unique keys
     """
     # Check if this content is substantial text (more than just a header)
     lines = content.strip().split('\n')
@@ -225,12 +262,20 @@ def render_markdown_block(content: str, in_collapsible: bool = False):
     if is_header_only:
         st.markdown(html, unsafe_allow_html=True)
     elif in_collapsible:
-        # Already inside a collapsible section - don't nest expanders
+        # Already inside a collapsible section - render directly
         st.markdown(html, unsafe_allow_html=True)
     else:
-        # Wrap text paragraphs in collapsible section for clean view
-        with st.expander("📄 Details", expanded=False):
-            st.markdown(html, unsafe_allow_html=True)
+        # Wrap text paragraphs in ToggleContainer for clean view
+        with ToggleContainer(
+            "Details",
+            expanded=False,
+            container_id=f"md_details_{block_index}",
+            icon_open="📄",
+            icon_closed="📄",
+            style="minimal"
+        ) as tc:
+            if tc.is_open:
+                st.markdown(html, unsafe_allow_html=True)
 
 
 def render_notebook_header(notebook_config: NotebookConfig):
@@ -387,3 +432,156 @@ def apply_markdown_styles():
     }
     </style>
     """, unsafe_allow_html=True)
+
+
+def render_error_block(block: Dict[str, Any], block_index: Any = 0):
+    """
+    Render an error block with YAML content display.
+
+    Args:
+        block: Error block with message and content
+        block_index: Index of this block for unique keys
+    """
+    st.error(f"Error: {block['message']}")
+
+    # Use ToggleContainer to show exhibit YAML
+    with ToggleContainer(
+        "Show exhibit YAML",
+        expanded=False,
+        container_id=f"error_yaml_{block_index}",
+        style="minimal"
+    ) as tc:
+        if tc.is_open:
+            st.code(block['content'], language='yaml')
+
+
+def render_editable_block_wrapper(
+    block_index: int,
+    block: Dict[str, Any],
+    notebook_session,
+    connection,
+    on_edit: Optional[Callable[[int, str], None]] = None
+):
+    """
+    Wrap a content block with editing controls.
+
+    Provides inline editing capability for individual blocks.
+
+    Args:
+        block_index: Index of this block
+        block: Content block data
+        notebook_session: NotebookSession for data retrieval
+        connection: DataConnection for converting to pandas
+        on_edit: Callback when block is edited
+    """
+    block_type = block['type']
+
+    # Generate unique key for this block's edit state
+    edit_key = f"block_edit_mode_{block_index}"
+
+    # Initialize edit state
+    if edit_key not in st.session_state:
+        st.session_state[edit_key] = False
+
+    is_editing = st.session_state[edit_key]
+
+    # Create container for the block with edit controls
+    col_content, col_edit = st.columns([0.95, 0.05])
+
+    with col_edit:
+        # Edit button (only for markdown blocks)
+        if block_type == 'markdown':
+            if is_editing:
+                if st.button("✕", key=f"cancel_edit_{block_index}", help="Cancel editing"):
+                    st.session_state[edit_key] = False
+                    st.rerun()
+            else:
+                if st.button("✏️", key=f"start_edit_{block_index}", help="Edit this block"):
+                    st.session_state[edit_key] = True
+                    st.rerun()
+
+    with col_content:
+        if is_editing and block_type == 'markdown':
+            # Edit mode for markdown
+            _render_block_editor(block_index, block, on_edit)
+        else:
+            # View mode
+            if block_type == 'markdown':
+                render_markdown_block(block['content'], block_index=block_index)
+            elif block_type == 'exhibit':
+                render_exhibit_block(block, notebook_session, connection)
+            elif block_type == 'collapsible':
+                render_collapsible_section(block, notebook_session, connection, block_index=block_index)
+            elif block_type == 'error':
+                render_error_block(block, block_index=block_index)
+
+
+def _render_block_editor(
+    block_index: int,
+    block: Dict[str, Any],
+    on_edit: Optional[Callable[[int, str], None]] = None
+):
+    """
+    Render inline editor for a content block.
+
+    Args:
+        block_index: Index of the block being edited
+        block: Block data containing content
+        on_edit: Callback when content is saved
+    """
+    content = block.get('content', '')
+    edit_key = f"block_edit_mode_{block_index}"
+    content_key = f"block_content_{block_index}"
+
+    # Store original content for comparison
+    if content_key not in st.session_state:
+        st.session_state[content_key] = content
+
+    # Editor
+    st.markdown("**Editing Block**")
+
+    edited_content = st.text_area(
+        "Content",
+        value=st.session_state[content_key],
+        height=200,
+        key=f"editor_textarea_{block_index}",
+        label_visibility="collapsed"
+    )
+
+    # Update stored content
+    st.session_state[content_key] = edited_content
+
+    # Action buttons
+    col1, col2, col3 = st.columns([0.2, 0.2, 0.6])
+
+    with col1:
+        if st.button("💾 Save", key=f"save_block_{block_index}", type="primary"):
+            # Call the on_edit callback if provided
+            if on_edit:
+                on_edit(block_index, edited_content)
+
+            # Exit edit mode
+            st.session_state[edit_key] = False
+            st.success("Block saved!")
+            st.rerun()
+
+    with col2:
+        if st.button("Cancel", key=f"cancel_block_{block_index}"):
+            # Reset content and exit edit mode
+            st.session_state[content_key] = content
+            st.session_state[edit_key] = False
+            st.rerun()
+
+    # Show preview
+    with ToggleContainer(
+        "Preview",
+        expanded=True,
+        container_id=f"preview_{block_index}",
+        style="minimal"
+    ) as tc:
+        if tc.is_open:
+            md = markdown.Markdown(
+                extensions=['extra', 'codehilite', 'nl2br', 'sane_lists', 'toc']
+            )
+            html = md.convert(edited_content)
+            st.markdown(html, unsafe_allow_html=True)
