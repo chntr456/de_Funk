@@ -75,8 +75,8 @@ label: Select Tickers
 column: ticker
 source:
   type: dimension
-  model: equity
-  dimension: dim_equity
+  model: stocks
+  dimension: dim_stock
   column: ticker
 default: [AAPL, MSFT, GOOGL]
 }
@@ -137,8 +137,8 @@ default:
 
 **Example**:
 ```
-configs/notebooks/equity/
-├── .filter_context.yaml  # Applies to all notebooks in equity/
+configs/notebooks/stocks/
+├── .filter_context.yaml  # Applies to all notebooks in stocks/
 ├── price-analysis.md
 └── volume-analysis.md
 ```
@@ -158,8 +158,8 @@ filters:
     column: ticker
     source:
       type: dimension
-      model: equity
-      dimension: dim_equity
+      model: stocks
+      dimension: dim_stock
       column: ticker
 ```
 
@@ -215,11 +215,11 @@ st.session_state.filters['trade_date'] = {
 
 **Example**:
 ```python
-# Load ticker options from dim_equity
+# Load ticker options from dim_stock
 source = {
     'type': 'dimension',
-    'model': 'equity',
-    'dimension': 'dim_equity',
+    'model': 'stocks',
+    'dimension': 'dim_stock',
     'column': 'ticker'
 }
 
@@ -277,7 +277,7 @@ query_filters = {
 
 # Execute query with filters
 df = session.query("""
-    SELECT * FROM equity.fact_equity_prices
+    SELECT * FROM stocks.fact_stock_prices
     WHERE ticker IN :ticker
       AND trade_date BETWEEN :start_date AND :end_date
 """, filters=query_filters)
