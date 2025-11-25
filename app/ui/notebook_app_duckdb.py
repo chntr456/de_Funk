@@ -220,14 +220,14 @@ class NotebookVaultApp:
                     is_active = st.session_state.active_tab == notebook_id
                     title = notebook_config.notebook.title
 
-                    # Truncate long titles (shorter to make room for close button)
-                    if len(title) > 14:
-                        title = title[:11] + "..."
+                    # Only truncate very long titles (hover shows full title)
+                    if len(title) > 28:
+                        title = title[:25] + "..."
 
                     button_type = "primary" if is_active else "secondary"
 
                     # Create sub-columns for tab title and close button
-                    tab_col, close_col = st.columns([0.85, 0.15])
+                    tab_col, close_col = st.columns([0.92, 0.08])
 
                     with tab_col:
                         if st.button(
