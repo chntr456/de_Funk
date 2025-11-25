@@ -283,11 +283,63 @@ def _get_header_level(content: str) -> int:
     return 0
 
 
+def _split_markdown_by_headers(content: str) -> List[Dict[str, Any]]:
+    """
+    Split markdown content into separate blocks at each header.
+
+    For example:
+        "# Title\ncontent\n## Sub\nmore"
+    Becomes:
+        [
+            {'type': 'markdown', 'content': '# Title\ncontent'},
+            {'type': 'markdown', 'content': '## Sub\nmore'}
+        ]
+    """
+    import re
+
+    if not content or not content.strip():
+        return []
+
+    # Pattern to match headers at start of line
+    header_pattern = re.compile(r'^(#{1,6})\s+', re.MULTILINE)
+
+    blocks = []
+    lines = content.split('\n')
+    current_block_lines = []
+
+    for line in lines:
+        # Check if this line starts with a header
+        if header_pattern.match(line):
+            # Save previous block if any
+            if current_block_lines:
+                block_content = '\n'.join(current_block_lines).strip()
+                if block_content:
+                    blocks.append({
+                        'type': 'markdown',
+                        'content': block_content
+                    })
+            # Start new block with this header
+            current_block_lines = [line]
+        else:
+            current_block_lines.append(line)
+
+    # Don't forget the last block
+    if current_block_lines:
+        block_content = '\n'.join(current_block_lines).strip()
+        if block_content:
+            blocks.append({
+                'type': 'markdown',
+                'content': block_content
+            })
+
+    return blocks
+
+
 def _build_header_tree(content_blocks: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Build a tree structure from content blocks based on header levels.
 
-    Headers create nested sections:
+    First splits markdown blocks by headers, then builds nested structure:
     - H1 creates top-level sections
     - H2 nests under H1
     - H3 nests under H2
@@ -302,9 +354,20 @@ def _build_header_tree(content_blocks: List[Dict[str, Any]]) -> List[Dict[str, A
     if not content_blocks:
         return []
 
-    # Add header level info to each block
+    # First, split markdown blocks by headers
+    split_blocks = []
+    for block in content_blocks:
+        if block['type'] == 'markdown':
+            # Split this markdown block by headers
+            sub_blocks = _split_markdown_by_headers(block.get('content', ''))
+            split_blocks.extend(sub_blocks)
+        else:
+            # Keep non-markdown blocks as-is
+            split_blocks.append(block)
+
+    # Add header level and index info to each block
     blocks_with_levels = []
-    for i, block in enumerate(content_blocks):
+    for i, block in enumerate(split_blocks):
         block_copy = block.copy()
         block_copy['_index'] = i
 
@@ -376,29 +439,15 @@ def _render_nested_toggles(
                 body_content = '\n'.join(body_lines).strip()
             else:
                 # Non-header markdown - render directly (no toggle)
-                if editable:
-                    _render_editable_block(block_index, block, notebook_session, connection,
-                                          on_block_edit, on_block_delete)
-                    _render_insert_block_button(block_index, on_block_insert)
-                else:
-                    _render_markdown_content(content)
+                _render_markdown_content(content)
                 continue
 
         elif block_type == 'exhibit':
-            # Exhibits without headers render directly
-            if editable:
-                _render_editable_block(block_index, block, notebook_session, connection,
-                                      on_block_edit, on_block_delete)
-                _render_insert_block_button(block_index, on_block_insert)
-            else:
-                render_exhibit_block(block, notebook_session, connection)
+            # Exhibits render directly (no toggle)
+            render_exhibit_block(block, notebook_session, connection)
             continue
         else:
-            # Other block types - render directly
-            if editable:
-                _render_editable_block(block_index, block, notebook_session, connection,
-                                      on_block_edit, on_block_delete)
-                _render_insert_block_button(block_index, on_block_insert)
+            # Other block types - skip
             continue
 
         # Create toggle for header sections
@@ -414,16 +463,7 @@ def _render_nested_toggles(
             if tc.is_open:
                 # Render body content (text after header)
                 if body_content:
-                    if editable:
-                        # Show edit controls for the body
-                        _render_editable_block(block_index, block, notebook_session, connection,
-                                              on_block_edit, on_block_delete)
-                    else:
-                        _render_markdown_content(body_content)
-
-                # Insert button after content if editable
-                if editable and body_content:
-                    _render_insert_block_button(block_index, on_block_insert)
+                    _render_markdown_content(body_content)
 
                 # Render children recursively (nested sections)
                 if children:
