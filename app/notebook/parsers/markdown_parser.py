@@ -830,3 +830,214 @@ class MarkdownNotebookParser:
             return block.get('content', '')
 
         return ''
+
+    def insert_block(
+        self,
+        notebook_path: str,
+        after_index: int,
+        block_type: str,
+        content: str
+    ) -> None:
+        """
+        Insert a new block after the specified index.
+
+        Args:
+            notebook_path: Path to the notebook file
+            after_index: Index after which to insert (-1 for start)
+            block_type: Type of block ('markdown', 'exhibit', 'collapsible')
+            content: Content for the new block
+        """
+        path = Path(notebook_path)
+        if not path.is_absolute():
+            path = self.repo_root / path
+
+        with open(path, 'r') as f:
+            original_content = f.read()
+
+        # Re-parse to get current blocks
+        config = self.parse_markdown(original_content, track_positions=True)
+
+        if not hasattr(config, '_content_blocks'):
+            config._content_blocks = []
+
+        # Build new block markdown
+        if block_type == 'markdown':
+            new_block_md = content
+        elif block_type == 'exhibit':
+            new_block_md = f"$exhibits${{\n{content}\n}}"
+        elif block_type == 'collapsible':
+            # First line is summary, rest is content
+            lines = content.split('\n', 1)
+            summary = lines[0] if lines else "Details"
+            inner = lines[1] if len(lines) > 1 else ""
+            new_block_md = f"<details>\n<summary>{summary}</summary>\n\n{inner}\n\n</details>"
+        else:
+            new_block_md = content
+
+        # Reconstruct with new block inserted
+        updated_content = self._reconstruct_with_insert(
+            original_content,
+            config._content_blocks,
+            after_index,
+            new_block_md
+        )
+
+        with open(path, 'w') as f:
+            f.write(updated_content)
+
+    def delete_block(
+        self,
+        notebook_path: str,
+        block_index: int
+    ) -> None:
+        """
+        Delete a block at the specified index.
+
+        Args:
+            notebook_path: Path to the notebook file
+            block_index: Index of block to delete
+        """
+        path = Path(notebook_path)
+        if not path.is_absolute():
+            path = self.repo_root / path
+
+        with open(path, 'r') as f:
+            original_content = f.read()
+
+        # Re-parse to get current blocks
+        config = self.parse_markdown(original_content, track_positions=True)
+
+        if not hasattr(config, '_content_blocks') or not config._content_blocks:
+            raise ValueError("No content blocks found in notebook")
+
+        if block_index < 0 or block_index >= len(config._content_blocks):
+            raise ValueError(f"Invalid block index: {block_index}")
+
+        # Reconstruct without the deleted block
+        updated_content = self._reconstruct_with_delete(
+            original_content,
+            config._content_blocks,
+            block_index
+        )
+
+        with open(path, 'w') as f:
+            f.write(updated_content)
+
+    def _reconstruct_with_insert(
+        self,
+        original_content: str,
+        content_blocks: List[Dict[str, Any]],
+        after_index: int,
+        new_block_md: str
+    ) -> str:
+        """
+        Reconstruct markdown with a new block inserted.
+
+        Args:
+            original_content: Original markdown content
+            content_blocks: List of content blocks
+            after_index: Index after which to insert (-1 for start)
+            new_block_md: Markdown content for new block
+
+        Returns:
+            Reconstructed markdown content
+        """
+        # Extract front matter
+        front_matter_match = self.FRONT_MATTER_PATTERN.match(original_content)
+        front_matter = original_content[:front_matter_match.end()] if front_matter_match else ""
+
+        # Extract filter blocks
+        content_after_front = original_content[front_matter_match.end():] if front_matter_match else original_content
+        filter_blocks = []
+        for match in self.FILTER_PATTERN.finditer(content_after_front):
+            filter_blocks.append(f"$filter${{\n{match.group(1)}\n}}")
+
+        # Build parts list
+        parts = [front_matter.rstrip()]
+
+        # Add filter blocks
+        for fb in filter_blocks:
+            parts.append(fb)
+
+        # Add content blocks with new block inserted
+        for i, block in enumerate(content_blocks):
+            # Insert new block after after_index
+            if i == after_index + 1 or (after_index == -1 and i == 0):
+                if after_index == -1:
+                    # Insert at start
+                    parts.append(new_block_md)
+                    parts.append(self._block_to_markdown(block))
+                else:
+                    parts.append(self._block_to_markdown(block))
+            else:
+                parts.append(self._block_to_markdown(block))
+
+            # Insert after current block if it matches after_index
+            if i == after_index:
+                parts.append(new_block_md)
+
+        # Handle insert at end
+        if after_index >= len(content_blocks) - 1 and after_index != -1:
+            parts.append(new_block_md)
+
+        # Handle empty notebook
+        if not content_blocks and after_index == -1:
+            parts.append(new_block_md)
+
+        return '\n\n'.join(parts)
+
+    def _reconstruct_with_delete(
+        self,
+        original_content: str,
+        content_blocks: List[Dict[str, Any]],
+        delete_index: int
+    ) -> str:
+        """
+        Reconstruct markdown with a block deleted.
+
+        Args:
+            original_content: Original markdown content
+            content_blocks: List of content blocks
+            delete_index: Index of block to delete
+
+        Returns:
+            Reconstructed markdown content
+        """
+        # Extract front matter
+        front_matter_match = self.FRONT_MATTER_PATTERN.match(original_content)
+        front_matter = original_content[:front_matter_match.end()] if front_matter_match else ""
+
+        # Extract filter blocks
+        content_after_front = original_content[front_matter_match.end():] if front_matter_match else original_content
+        filter_blocks = []
+        for match in self.FILTER_PATTERN.finditer(content_after_front):
+            filter_blocks.append(f"$filter${{\n{match.group(1)}\n}}")
+
+        # Build parts list
+        parts = [front_matter.rstrip()]
+
+        # Add filter blocks
+        for fb in filter_blocks:
+            parts.append(fb)
+
+        # Add content blocks except deleted one
+        for i, block in enumerate(content_blocks):
+            if i != delete_index:
+                parts.append(self._block_to_markdown(block))
+
+        return '\n\n'.join(parts)
+
+    def _block_to_markdown(self, block: Dict[str, Any]) -> str:
+        """Convert a content block back to markdown."""
+        block_type = block['type']
+
+        if block_type == 'markdown':
+            return block.get('content', '')
+        elif block_type == 'exhibit':
+            return self._reconstruct_exhibit_block(block)
+        elif block_type == 'collapsible':
+            return self._reconstruct_collapsible_block(block)
+        elif block_type == 'error':
+            return f"$exhibits${{\n{block.get('content', '')}\n}}"
+
+        return ''

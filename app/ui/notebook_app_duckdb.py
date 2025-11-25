@@ -927,7 +927,7 @@ class NotebookVaultApp:
 
         if block_edit_enabled:
             # Show block editing indicator
-            st.info("🔲 **Block Editing Mode** - Click ✏️ on any block to edit it individually")
+            st.info("🔲 **Block Editing Mode** - Click ✏️ to edit, ➕ to add, 🗑️ to delete blocks")
 
         # Render notebook exhibits with editable flag
         render_notebook_exhibits(
@@ -936,7 +936,9 @@ class NotebookVaultApp:
             self.notebook_manager,
             self.ctx.connection,
             editable=block_edit_enabled,
-            on_block_edit=self._handle_block_edit if block_edit_enabled else None
+            on_block_edit=self._handle_block_edit if block_edit_enabled else None,
+            on_block_insert=self._handle_block_insert if block_edit_enabled else None,
+            on_block_delete=self._handle_block_delete if block_edit_enabled else None
         )
 
     def _handle_block_edit(self, block_index: int, new_content: str):
@@ -971,10 +973,88 @@ class NotebookVaultApp:
                     st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
                     break
 
-            st.success(f"Block {block_index} saved successfully!")
+            st.success(f"Block {block_index} saved!")
 
         except Exception as e:
             st.error(f"Error saving block: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+
+    def _handle_block_insert(self, after_index: int, block_type: str, content: str):
+        """
+        Handle block insert from the renderer.
+
+        Inserts a new block after the specified index.
+
+        Args:
+            after_index: Index after which to insert (-1 for start)
+            block_type: Type of block ('markdown', 'exhibit', 'collapsible')
+            content: Content for the new block
+        """
+        active_notebook = self._get_active_notebook()
+        if not active_notebook:
+            st.error("No active notebook")
+            return
+
+        notebook_id, notebook_path, notebook_config = active_notebook
+
+        try:
+            # Use the parser to insert the block
+            from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
+            parser = MarkdownNotebookParser(self.ctx.repo)
+            parser.insert_block(str(notebook_path), after_index, block_type, content)
+
+            # Reload the notebook to reflect changes
+            updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+
+            # Update the tab with new config
+            for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
+                if tab_id == notebook_id:
+                    st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
+                    break
+
+            st.success(f"New {block_type} block added!")
+
+        except Exception as e:
+            st.error(f"Error inserting block: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
+
+    def _handle_block_delete(self, block_index: int):
+        """
+        Handle block delete from the renderer.
+
+        Deletes the block at the specified index.
+
+        Args:
+            block_index: Index of the block to delete
+        """
+        active_notebook = self._get_active_notebook()
+        if not active_notebook:
+            st.error("No active notebook")
+            return
+
+        notebook_id, notebook_path, notebook_config = active_notebook
+
+        try:
+            # Use the parser to delete the block
+            from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
+            parser = MarkdownNotebookParser(self.ctx.repo)
+            parser.delete_block(str(notebook_path), block_index)
+
+            # Reload the notebook to reflect changes
+            updated_config = self.notebook_manager.load_notebook(str(notebook_path))
+
+            # Update the tab with new config
+            for i, (tab_id, tab_path, tab_config) in enumerate(st.session_state.open_tabs):
+                if tab_id == notebook_id:
+                    st.session_state.open_tabs[i] = (tab_id, tab_path, updated_config)
+                    break
+
+            st.success("Block deleted!")
+
+        except Exception as e:
+            st.error(f"Error deleting block: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
 

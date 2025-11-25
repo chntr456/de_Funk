@@ -24,7 +24,9 @@ def render_notebook_exhibits(
     notebook_session,
     connection,
     editable: bool = False,
-    on_block_edit: Optional[Callable[[int, str], None]] = None
+    on_block_edit: Optional[Callable[[int, str], None]] = None,
+    on_block_insert: Optional[Callable[[int, str, str], None]] = None,
+    on_block_delete: Optional[Callable[[int], None]] = None
 ):
     """
     Render all notebook exhibits according to layout.
@@ -39,6 +41,8 @@ def render_notebook_exhibits(
         connection: DataConnection for converting to pandas (DuckDB or Spark)
         editable: Whether blocks can be edited inline
         on_block_edit: Callback when a block is edited (block_index, new_content)
+        on_block_insert: Callback when a block is inserted (after_index, block_type, content)
+        on_block_delete: Callback when a block is deleted (block_index)
     """
     # Check if this is a markdown notebook
     if hasattr(notebook_config, '_is_markdown') and notebook_config._is_markdown:
@@ -50,7 +54,9 @@ def render_notebook_exhibits(
             notebook_session,
             connection,
             editable=editable,
-            on_block_edit=on_block_edit
+            on_block_edit=on_block_edit,
+            on_block_insert=on_block_insert,
+            on_block_delete=on_block_delete
         )
     else:
         # Render YAML notebook (traditional layout sections)

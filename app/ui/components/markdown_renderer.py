@@ -17,7 +17,9 @@ def render_markdown_notebook(
     notebook_session,
     connection,
     editable: bool = False,
-    on_block_edit: Optional[Callable[[int, str], None]] = None
+    on_block_edit: Optional[Callable[[int, str], None]] = None,
+    on_block_insert: Optional[Callable[[int, str, str], None]] = None,
+    on_block_delete: Optional[Callable[[int], None]] = None
 ):
     """
     Render a markdown-based notebook.
@@ -28,6 +30,8 @@ def render_markdown_notebook(
         connection: DataConnection for converting to pandas
         editable: Whether blocks can be edited inline
         on_block_edit: Callback when a block is edited (block_index, new_content)
+        on_block_insert: Callback when a block is inserted (after_index, block_type, content)
+        on_block_delete: Callback when a block is deleted (block_index)
     """
     if not hasattr(notebook_config, '_content_blocks') or not notebook_config._content_blocks:
         st.error("This notebook has no markdown content blocks")
@@ -46,6 +50,10 @@ def render_markdown_notebook(
     from .exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_chart
     from .exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
 
+    # Render "Add Block at Start" button if editable
+    if editable:
+        _render_insert_block_button(-1, on_block_insert)
+
     # Render each content block
     for block_index, block in enumerate(notebook_config._content_blocks):
         block_type = block['type']
@@ -57,8 +65,11 @@ def render_markdown_notebook(
                 block=block,
                 notebook_session=notebook_session,
                 connection=connection,
-                on_edit=on_block_edit
+                on_edit=on_block_edit,
+                on_delete=on_block_delete
             )
+            # Add insert button after each block
+            _render_insert_block_button(block_index, on_block_insert)
         else:
             # Standard rendering
             if block_type == 'markdown':
@@ -460,12 +471,13 @@ def render_editable_block_wrapper(
     block: Dict[str, Any],
     notebook_session,
     connection,
-    on_edit: Optional[Callable[[int, str], None]] = None
+    on_edit: Optional[Callable[[int, str], None]] = None,
+    on_delete: Optional[Callable[[int], None]] = None
 ):
     """
     Wrap a content block with editing controls.
 
-    Provides inline editing capability for individual blocks.
+    Provides inline editing capability for all block types.
 
     Args:
         block_index: Index of this block
@@ -473,6 +485,7 @@ def render_editable_block_wrapper(
         notebook_session: NotebookSession for data retrieval
         connection: DataConnection for converting to pandas
         on_edit: Callback when block is edited
+        on_delete: Callback when block is deleted
     """
     block_type = block['type']
 
@@ -485,12 +498,15 @@ def render_editable_block_wrapper(
 
     is_editing = st.session_state[edit_key]
 
+    # Editable block types
+    editable_types = ['markdown', 'exhibit', 'collapsible', 'error']
+
     # Create container for the block with edit controls
-    col_content, col_edit = st.columns([0.95, 0.05])
+    col_content, col_edit, col_delete = st.columns([0.90, 0.05, 0.05])
 
     with col_edit:
-        # Edit button (only for markdown blocks)
-        if block_type == 'markdown':
+        # Edit button (for all editable block types)
+        if block_type in editable_types:
             if is_editing:
                 if st.button("✕", key=f"cancel_edit_{block_index}", help="Cancel editing"):
                     st.session_state[edit_key] = False
@@ -500,12 +516,22 @@ def render_editable_block_wrapper(
                     st.session_state[edit_key] = True
                     st.rerun()
 
+    with col_delete:
+        # Delete button
+        if not is_editing:
+            if st.button("🗑️", key=f"delete_block_{block_index}", help="Delete this block"):
+                if on_delete:
+                    on_delete(block_index)
+                st.rerun()
+
     with col_content:
-        if is_editing and block_type == 'markdown':
-            # Edit mode for markdown
-            _render_block_editor(block_index, block, on_edit)
+        if is_editing:
+            # Edit mode for any block type
+            _render_block_editor(block_index, block, on_edit, block_type)
         else:
-            # View mode
+            # View mode - show block type badge
+            _render_block_type_badge(block_type)
+
             if block_type == 'markdown':
                 render_markdown_block(block['content'], block_index=block_index)
             elif block_type == 'exhibit':
@@ -516,40 +542,85 @@ def render_editable_block_wrapper(
                 render_error_block(block, block_index=block_index)
 
 
+def _render_block_type_badge(block_type: str):
+    """Render a small badge showing the block type."""
+    type_labels = {
+        'markdown': '📝 Markdown',
+        'exhibit': '📊 Exhibit',
+        'collapsible': '📁 Collapsible',
+        'error': '⚠️ Error'
+    }
+    label = type_labels.get(block_type, block_type)
+    st.caption(label)
+
+
 def _render_block_editor(
     block_index: int,
     block: Dict[str, Any],
-    on_edit: Optional[Callable[[int, str], None]] = None
+    on_edit: Optional[Callable[[int, str], None]] = None,
+    block_type: str = 'markdown'
 ):
     """
     Render inline editor for a content block.
+
+    Supports editing all block types:
+    - markdown: Plain text editor with preview
+    - exhibit: YAML editor for exhibit configuration
+    - collapsible: Summary + content editor
 
     Args:
         block_index: Index of the block being edited
         block: Block data containing content
         on_edit: Callback when content is saved
+        block_type: Type of block being edited
     """
-    content = block.get('content', '')
     edit_key = f"block_edit_mode_{block_index}"
     content_key = f"block_content_{block_index}"
 
+    # Get content based on block type
+    if block_type == 'markdown':
+        original_content = block.get('content', '')
+    elif block_type == 'exhibit':
+        # Convert exhibit to YAML for editing
+        original_content = _exhibit_to_yaml(block.get('exhibit'))
+    elif block_type == 'collapsible':
+        # Get summary and inner content
+        original_content = _collapsible_to_editable(block)
+    else:
+        original_content = block.get('content', '')
+
     # Store original content for comparison
     if content_key not in st.session_state:
-        st.session_state[content_key] = content
+        st.session_state[content_key] = original_content
 
-    # Editor
-    st.markdown("**Editing Block**")
+    # Editor header
+    type_labels = {
+        'markdown': '📝 Editing Markdown Block',
+        'exhibit': '📊 Editing Exhibit (YAML)',
+        'collapsible': '📁 Editing Collapsible Section',
+        'error': '⚠️ Editing Error Block'
+    }
+    st.markdown(f"**{type_labels.get(block_type, 'Editing Block')}**")
+
+    # Editor height based on content type
+    height = 300 if block_type == 'exhibit' else 200
 
     edited_content = st.text_area(
         "Content",
         value=st.session_state[content_key],
-        height=200,
+        height=height,
         key=f"editor_textarea_{block_index}",
         label_visibility="collapsed"
     )
 
     # Update stored content
     st.session_state[content_key] = edited_content
+
+    # Help text based on block type
+    if block_type == 'exhibit':
+        st.caption("Edit the exhibit YAML configuration. Properties: type, title, source, x, y, color, etc.")
+    elif block_type == 'collapsible':
+        st.caption("First line is the summary (clickable header). Rest is the inner content.")
 
     # Action buttons
     col1, col2, col3 = st.columns([0.2, 0.2, 0.6])
@@ -562,17 +633,21 @@ def _render_block_editor(
 
             # Exit edit mode
             st.session_state[edit_key] = False
+            # Clear stored content so it reloads next time
+            if content_key in st.session_state:
+                del st.session_state[content_key]
             st.success("Block saved!")
             st.rerun()
 
     with col2:
         if st.button("Cancel", key=f"cancel_block_{block_index}"):
             # Reset content and exit edit mode
-            st.session_state[content_key] = content
+            if content_key in st.session_state:
+                del st.session_state[content_key]
             st.session_state[edit_key] = False
             st.rerun()
 
-    # Show preview
+    # Show preview based on block type
     with ToggleContainer(
         "Preview",
         expanded=True,
@@ -580,8 +655,144 @@ def _render_block_editor(
         style="minimal"
     ) as tc:
         if tc.is_open:
-            md = markdown.Markdown(
-                extensions=['extra', 'codehilite', 'nl2br', 'sane_lists', 'toc']
-            )
-            html = md.convert(edited_content)
-            st.markdown(html, unsafe_allow_html=True)
+            if block_type == 'markdown':
+                md = markdown.Markdown(
+                    extensions=['extra', 'codehilite', 'nl2br', 'sane_lists', 'toc']
+                )
+                html = md.convert(edited_content)
+                st.markdown(html, unsafe_allow_html=True)
+            elif block_type == 'exhibit':
+                st.code(edited_content, language='yaml')
+                st.caption("Exhibit will be rendered after save")
+            elif block_type == 'collapsible':
+                lines = edited_content.split('\n', 1)
+                summary = lines[0] if lines else "Details"
+                content = lines[1] if len(lines) > 1 else ""
+                st.markdown(f"**Summary:** {summary}")
+                st.markdown("**Content:**")
+                st.markdown(content)
+
+
+def _exhibit_to_yaml(exhibit) -> str:
+    """Convert an Exhibit object to YAML string for editing."""
+    if not exhibit:
+        return "type: line_chart\ntitle: New Chart\nsource: model.table\nx: dimension\ny: measure"
+
+    lines = []
+    lines.append(f"type: {exhibit.type.value}")
+
+    if exhibit.title:
+        lines.append(f"title: {exhibit.title}")
+    if exhibit.description:
+        lines.append(f"description: {exhibit.description}")
+    if exhibit.source:
+        lines.append(f"source: {exhibit.source}")
+
+    # Axis configuration
+    if exhibit.x_axis:
+        if exhibit.x_axis.dimension:
+            lines.append(f"x: {exhibit.x_axis.dimension}")
+        elif exhibit.x_axis.measure:
+            lines.append(f"x: {exhibit.x_axis.measure}")
+
+    if exhibit.y_axis:
+        if exhibit.y_axis.measure:
+            lines.append(f"y: {exhibit.y_axis.measure}")
+        elif exhibit.y_axis.measures:
+            lines.append(f"y: [{', '.join(exhibit.y_axis.measures)}]")
+
+    if exhibit.color_by:
+        lines.append(f"color: {exhibit.color_by}")
+
+    if exhibit.collapsible:
+        lines.append(f"collapsible: true")
+        if exhibit.collapsible_title:
+            lines.append(f"collapsible_title: {exhibit.collapsible_title}")
+
+    return '\n'.join(lines)
+
+
+def _collapsible_to_editable(block: Dict[str, Any]) -> str:
+    """Convert a collapsible block to editable format."""
+    summary = block.get('summary', 'Details')
+    inner_blocks = block.get('content', [])
+
+    # Build inner content from blocks
+    inner_parts = []
+    for inner_block in inner_blocks:
+        inner_type = inner_block['type']
+        if inner_type == 'markdown':
+            inner_parts.append(inner_block.get('content', ''))
+        elif inner_type == 'exhibit':
+            inner_parts.append(f"$exhibits${{\n{_exhibit_to_yaml(inner_block.get('exhibit'))}\n}}")
+
+    inner_content = '\n\n'.join(inner_parts)
+    return f"{summary}\n{inner_content}"
+
+
+def _render_insert_block_button(
+    after_index: int,
+    on_insert: Optional[Callable[[int, str, str], None]] = None
+):
+    """
+    Render an "Insert Block" button with type selector.
+
+    Args:
+        after_index: Index after which to insert (-1 for start)
+        on_insert: Callback when block is inserted (after_index, block_type, content)
+    """
+    insert_key = f"show_insert_menu_{after_index}"
+
+    # Initialize state
+    if insert_key not in st.session_state:
+        st.session_state[insert_key] = False
+
+    # Centered insert button
+    col1, col2, col3 = st.columns([0.4, 0.2, 0.4])
+
+    with col2:
+        if st.session_state[insert_key]:
+            # Show insert menu
+            st.markdown("**Insert Block:**")
+
+            block_types = {
+                'markdown': '📝 Markdown',
+                'exhibit': '📊 Exhibit',
+                'collapsible': '📁 Collapsible'
+            }
+
+            for btype, label in block_types.items():
+                if st.button(label, key=f"insert_{btype}_{after_index}", use_container_width=True):
+                    # Get default content for block type
+                    default_content = _get_default_block_content(btype)
+
+                    if on_insert:
+                        on_insert(after_index, btype, default_content)
+
+                    st.session_state[insert_key] = False
+                    st.rerun()
+
+            if st.button("Cancel", key=f"cancel_insert_{after_index}", use_container_width=True):
+                st.session_state[insert_key] = False
+                st.rerun()
+        else:
+            # Show collapsed insert button
+            if st.button("➕", key=f"add_block_{after_index}", help="Insert new block here"):
+                st.session_state[insert_key] = True
+                st.rerun()
+
+
+def _get_default_block_content(block_type: str) -> str:
+    """Get default content for a new block."""
+    if block_type == 'markdown':
+        return "## New Section\n\nAdd your content here."
+    elif block_type == 'exhibit':
+        return """type: line_chart
+title: New Chart
+source: model.table
+x: date
+y: value
+color: category"""
+    elif block_type == 'collapsible':
+        return "Click to expand\nAdd your collapsible content here."
+    return ""
