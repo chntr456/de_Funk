@@ -61,22 +61,98 @@ def render_markdown_notebook(
             collapse_all(notebook_id)
             st.rerun()
 
-    # Build header tree for nested rendering
-    header_tree = _build_header_tree(notebook_config._content_blocks)
+    # Insert block button at start if editable
+    if editable:
+        _render_insert_block_button(-1, on_block_insert)
 
-    # Render nested blocks with editing support
-    _render_nested_blocks(
-        header_tree,
-        notebook_session,
-        connection,
-        context=notebook_id,
-        depth=0,
-        editable=editable,
-        on_header_edit=on_header_edit,
-        on_block_edit=on_block_edit,
-        on_block_insert=on_block_insert,
-        on_block_delete=on_block_delete
-    )
+    # Render each block with toggle and editing controls
+    for block_index, block in enumerate(notebook_config._content_blocks):
+        block_type = block['type']
+
+        if editable:
+            # Use the full editable wrapper with edit/delete on right
+            render_editable_block_wrapper(
+                block_index=block_index,
+                block=block,
+                notebook_session=notebook_session,
+                connection=connection,
+                on_edit=on_block_edit,
+                on_delete=on_block_delete
+            )
+            # Insert button after each block
+            _render_insert_block_button(block_index, on_block_insert)
+        else:
+            # View mode - render with toggle containers
+            _render_block_in_toggle(
+                block_index=block_index,
+                block=block,
+                notebook_session=notebook_session,
+                connection=connection,
+                context=notebook_id
+            )
+
+
+def _render_block_in_toggle(
+    block_index: int,
+    block: Dict[str, Any],
+    notebook_session,
+    connection,
+    context: str = "default"
+):
+    """
+    Render a block inside a toggle container for view mode.
+    """
+    block_type = block['type']
+
+    # Determine label from content
+    if block_type == 'markdown':
+        content = block.get('content', '')
+        lines = content.strip().split('\n')
+        first_line = lines[0] if lines else 'Content'
+        if first_line.startswith('#'):
+            label = first_line.lstrip('#').strip()
+            toggle_icon = "📑"
+        else:
+            label = first_line[:50] + '...' if len(first_line) > 50 else first_line
+            if not label:
+                label = 'Text'
+            toggle_icon = "📝"
+
+    elif block_type == 'exhibit':
+        exhibit = block.get('exhibit')
+        label = exhibit.title if exhibit and exhibit.title else f"Exhibit {block_index + 1}"
+        toggle_icon = "📊"
+
+    elif block_type == 'collapsible':
+        label = block.get('summary', 'Section')
+        toggle_icon = "📁"
+
+    else:
+        label = f"Block {block_index + 1}"
+        toggle_icon = "📄"
+
+    # Render in toggle container
+    with ToggleContainer(
+        f"{toggle_icon} {label}",
+        expanded=True,
+        container_id=f"block_{block_index}",
+        style="section",
+        context=context
+    ) as tc:
+        if tc.is_open:
+            if block_type == 'markdown':
+                _render_markdown_content(block['content'])
+            elif block_type == 'exhibit':
+                render_exhibit_block(block, notebook_session, connection, in_collapsible=True)
+            elif block_type == 'collapsible':
+                inner_blocks = block.get('content', [])
+                for inner_block in inner_blocks:
+                    if inner_block['type'] == 'markdown':
+                        _render_markdown_content(inner_block.get('content', ''))
+                    elif inner_block['type'] == 'exhibit':
+                        render_exhibit_block(inner_block, notebook_session, connection, in_collapsible=True)
+            elif block_type == 'error':
+                render_error_block(block, block_index=block_index)
 
 
 def _render_block_with_toggle(
