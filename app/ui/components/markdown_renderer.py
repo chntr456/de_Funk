@@ -13,7 +13,6 @@ from app.notebook.schema import NotebookConfig
 from .toggle_container import (
     ToggleContainer,
     apply_toggle_styles,
-    clear_toggle_registry,
     expand_all,
     collapse_all
 )
@@ -51,61 +50,29 @@ def render_markdown_notebook(
     # Apply toggle container styles
     apply_toggle_styles()
 
-    # Clear toggle registry for this notebook to avoid stale entries
-    clear_toggle_registry(notebook_id)
-
-    # Initialize view mode state
-    view_mode_key = f"notebook_view_mode_{notebook_id}"
-    if view_mode_key not in st.session_state:
-        st.session_state[view_mode_key] = "flat"
-
-    # Compact toolbar
-    current_mode = st.session_state[view_mode_key]
-    nested_label = "📄 Flat" if current_mode == "nested" else "🗂️ Nested"
-
-    cols = st.columns([0.08, 0.08, 0.08, 0.76])
+    # Toolbar with expand/collapse buttons
+    cols = st.columns([0.06, 0.06, 0.88])
     with cols[0]:
-        if st.button("⊞", key=f"exp_{notebook_id}", help="Expand all"):
+        if st.button("⊞", key=f"exp_{notebook_id}", help="Expand all sections"):
             expand_all(notebook_id)
             st.rerun()
     with cols[1]:
-        if st.button("⊟", key=f"col_{notebook_id}", help="Collapse all"):
+        if st.button("⊟", key=f"col_{notebook_id}", help="Collapse all sections"):
             collapse_all(notebook_id)
             st.rerun()
-    with cols[2]:
-        if st.button(nested_label, key=f"view_{notebook_id}", help="Toggle view mode"):
-            st.session_state[view_mode_key] = "flat" if current_mode == "nested" else "nested"
-            clear_toggle_registry(notebook_id)
-            st.rerun()
 
-    # Get view mode
-    use_nested_view = st.session_state[view_mode_key] == "nested"
-
-    if use_nested_view and not editable:
-        # Build header tree and render nested
-        header_tree = _build_header_tree(notebook_config._content_blocks)
-        _render_nested_blocks(
-            header_tree,
-            notebook_session,
-            connection,
+    # Render each content block with toggle
+    for block_index, block in enumerate(notebook_config._content_blocks):
+        _render_block_with_toggle(
+            block_index=block_index,
+            block=block,
+            notebook_session=notebook_session,
+            connection=connection,
             context=notebook_id,
-            depth=0,
             editable=editable,
-            on_header_edit=on_header_edit
+            on_header_edit=on_header_edit,
+            on_block_edit=on_block_edit
         )
-    else:
-        # Render each content block (flat view)
-        for block_index, block in enumerate(notebook_config._content_blocks):
-            _render_block_with_toggle(
-                block_index=block_index,
-                block=block,
-                notebook_session=notebook_session,
-                connection=connection,
-                context=notebook_id,
-                editable=editable,
-                on_header_edit=on_header_edit,
-                on_block_edit=on_block_edit
-            )
 
 
 def _render_block_with_toggle(

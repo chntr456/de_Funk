@@ -1,7 +1,7 @@
 ---
 id: toggle_example
 title: Toggle Containers Example
-description: Demonstrates the new toggle container system and editable blocks
+description: Demonstrates the toggle container system and editable blocks
 models: []
 author: System
 created: 2025-11-25
@@ -10,65 +10,41 @@ tags: [example, toggle, demo]
 
 # Toggle Container Demo
 
-This notebook demonstrates the new toggle container system that replaces `st.expander` to avoid nesting issues.
+This notebook demonstrates the new toggle container system.
 
-## Features Demonstrated
+## Features
 
-1. **Toggle Containers** - Click to expand/collapse sections
-2. **Editable Blocks** - Enable block editing mode to edit individual sections
-3. **Nested Content** - Toggle containers work at any depth without UI issues
+- Click section headers to expand/collapse
+- Use the edit button to rename headers
+- Expand/collapse all sections with toolbar buttons
 
-## Basic Toggle Sections
+## First Section
 
-This paragraph will be wrapped in a toggle container in view mode. Click the toggle button to expand it.
+This is the first section content. Each section with a header becomes a collapsible toggle.
 
-<details>
-<summary>Click here to see a collapsible section</summary>
+You can add lists:
+- Item one
+- Item two
+- Item three
 
-This content is inside a collapsible section using the `<details>` HTML tag.
+And **bold** or *italic* text.
 
-You can put any markdown content here:
-- Lists
-- **Bold text**
-- *Italic text*
-- `Code snippets`
+## Second Section
 
-And even nested toggles work fine now!
+More content in the second section.
 
-</details>
+Tables also work:
 
-## Another Section
+| Column A | Column B |
+|----------|----------|
+| Value 1  | Value 2  |
+| Value 3  | Value 4  |
 
-Here's more content that demonstrates the clean separation between blocks.
+## Third Section
 
-<details>
-<summary>Technical Details</summary>
+Final section to test with.
 
-### How Toggle Containers Work
-
-The `ToggleContainer` component uses Streamlit session state to track open/closed status:
-
-```python
-with ToggleContainer("Section Title", expanded=False) as tc:
-    if tc.is_open:
-        st.write("Content here")
-```
-
-**Benefits:**
-- No nesting issues (unlike st.expander)
-- Consistent styling across the app
-- Multiple style options: "default", "minimal", "card"
-- Persistent state across reruns
-
-</details>
-
-## Block Editing Guide
-
-When you enable **Block Editing Mode** (click the grid icon in the toolbar):
-
-1. Each markdown block gets an edit button
-2. Click the edit button to modify that block inline
-3. See a live preview as you type
-4. Save or cancel your changes
-
-This makes it easy to update specific parts of a notebook without editing the entire file.
+When you enable edit mode (pencil icon in toolbar), you can:
+1. Click the edit button next to any header
+2. Rename the header inline
+3. Save or cancel your changes
