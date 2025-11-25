@@ -420,7 +420,7 @@ def _render_nested_toggles(
     - The header's body content (text after the header line)
     - Any child blocks (nested headers or content)
     """
-    for block in blocks:
+    for idx, block in enumerate(blocks):
         block_type = block['type']
         block_index = block.get('_index', 0)
         children = block.get('children', [])
@@ -439,7 +439,10 @@ def _render_nested_toggles(
                 body_content = '\n'.join(body_lines).strip()
             else:
                 # Non-header markdown - render directly (no toggle)
-                _render_markdown_content(content)
+                if editable:
+                    _render_inline_editor(block_index, content, on_block_edit)
+                else:
+                    _render_markdown_content(content)
                 continue
 
         elif block_type == 'exhibit':
@@ -453,31 +456,157 @@ def _render_nested_toggles(
         # Create toggle for header sections
         icon = "📑" if header_level == 1 else "📁" if header_level == 2 else "📄"
 
-        with ToggleContainer(
-            f"{icon} {label}",
-            expanded=(depth == 0),  # Top level expanded by default
-            container_id=f"section_{block_index}",
-            style="section" if depth == 0 else "default",
-            context=context
-        ) as tc:
-            if tc.is_open:
-                # Render body content (text after header)
-                if body_content:
-                    _render_markdown_content(body_content)
+        # Edit state for this section
+        edit_key = f"edit_section_{block_index}"
+        if edit_key not in st.session_state:
+            st.session_state[edit_key] = False
 
-                # Render children recursively (nested sections)
-                if children:
-                    _render_nested_toggles(
-                        blocks=children,
-                        notebook_session=notebook_session,
-                        connection=connection,
-                        context=context,
-                        depth=depth + 1,
-                        editable=editable,
-                        on_block_edit=on_block_edit,
-                        on_block_insert=on_block_insert,
-                        on_block_delete=on_block_delete
-                    )
+        is_editing = st.session_state[edit_key]
+
+        if editable and not is_editing:
+            # Show toggle with edit button on the right
+            col_toggle, col_edit = st.columns([0.95, 0.05])
+            with col_edit:
+                if st.button("✏️", key=f"edit_sec_{block_index}", help="Edit section"):
+                    st.session_state[edit_key] = True
+                    st.rerun()
+            container_col = col_toggle
+        else:
+            container_col = st.container()
+
+        with container_col:
+            if is_editing:
+                # Show editor for the whole section
+                _render_section_editor(block_index, content, first_line, on_block_edit)
+            else:
+                with ToggleContainer(
+                    f"{icon} {label}",
+                    expanded=(depth == 0),  # Top level expanded by default
+                    container_id=f"section_{block_index}",
+                    style="section" if depth == 0 else "default",
+                    context=context
+                ) as tc:
+                    if tc.is_open:
+                        # Render body content (text after header)
+                        if body_content:
+                            _render_markdown_content(body_content)
+
+                        # Render children recursively (nested sections)
+                        if children:
+                            _render_nested_toggles(
+                                blocks=children,
+                                notebook_session=notebook_session,
+                                connection=connection,
+                                context=context,
+                                depth=depth + 1,
+                                editable=editable,
+                                on_block_edit=on_block_edit,
+                                on_block_insert=on_block_insert,
+                                on_block_delete=on_block_delete
+                            )
+
+        # Add insert button after each top-level section
+        if editable and depth == 0:
+            _render_insert_block_button(block_index, on_block_insert)
+
+
+def _render_section_editor(
+    block_index: int,
+    content: str,
+    header_line: str,
+    on_edit: Optional[Callable[[int, str], None]] = None
+):
+    """
+    Render an editor for a section (header + body content).
+
+    Args:
+        block_index: Index of the block
+        content: Full content including header
+        header_line: The header line (e.g., "# Title")
+        on_edit: Callback when content is saved
+    """
+    edit_key = f"edit_section_{block_index}"
+    content_key = f"section_content_{block_index}"
+
+    # Store content in session state
+    if content_key not in st.session_state:
+        st.session_state[content_key] = content
+
+    st.markdown("**Edit Section**")
+
+    edited_content = st.text_area(
+        "Content",
+        value=st.session_state[content_key],
+        height=200,
+        key=f"section_editor_{block_index}",
+        label_visibility="collapsed"
+    )
+    st.session_state[content_key] = edited_content
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("💾 Save", key=f"save_section_{block_index}", use_container_width=True):
+            if on_edit:
+                on_edit(block_index, edited_content)
+            st.session_state[edit_key] = False
+            if content_key in st.session_state:
+                del st.session_state[content_key]
+            st.rerun()
+
+    with col2:
+        if st.button("Cancel", key=f"cancel_section_{block_index}", use_container_width=True):
+            st.session_state[edit_key] = False
+            if content_key in st.session_state:
+                del st.session_state[content_key]
+            st.rerun()
+
+
+def _render_inline_editor(
+    block_index: int,
+    content: str,
+    on_edit: Optional[Callable[[int, str], None]] = None
+):
+    """
+    Render an inline editor for non-header markdown content.
+
+    Args:
+        block_index: Index of the block
+        content: Markdown content
+        on_edit: Callback when content is saved
+    """
+    edit_key = f"inline_edit_{block_index}"
+
+    if edit_key not in st.session_state:
+        st.session_state[edit_key] = False
+
+    col_content, col_edit = st.columns([0.95, 0.05])
+
+    with col_edit:
+        if st.session_state[edit_key]:
+            if st.button("✕", key=f"cancel_inline_{block_index}", help="Cancel"):
+                st.session_state[edit_key] = False
+                st.rerun()
+        else:
+            if st.button("✏️", key=f"edit_inline_{block_index}", help="Edit"):
+                st.session_state[edit_key] = True
+                st.rerun()
+
+    with col_content:
+        if st.session_state[edit_key]:
+            edited = st.text_area(
+                "Edit",
+                value=content,
+                height=150,
+                key=f"inline_editor_{block_index}",
+                label_visibility="collapsed"
+            )
+            if st.button("💾 Save", key=f"save_inline_{block_index}"):
+                if on_edit:
+                    on_edit(block_index, edited)
+                st.session_state[edit_key] = False
+                st.rerun()
+        else:
+            _render_markdown_content(content)
 
 
 def _render_editable_block(
