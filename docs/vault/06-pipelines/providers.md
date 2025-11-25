@@ -17,28 +17,28 @@ Related: [Pipeline Architecture](pipeline-architecture.md)
 
 ## Implemented Providers
 
-### Polygon Provider
+### Alpha Vantage Provider
 
-**File**: `datapipelines/providers/polygon/`
+**File**: `datapipelines/providers/alpha_vantage/`
 
-**API**: Polygon.io (Stock market data)
+**API**: Alpha Vantage (Stock market data)
 
 **Features**:
-- Multi-key rotation for rate limit bypass
+- Multi-key rotation for rate limit management
 - Retry logic with exponential backoff
-- Endpoint configuration from `polygon_endpoints.json`
+- Endpoint configuration from `alpha_vantage_endpoints.json`
 
 **Endpoints**:
 - Daily prices (OHLCV)
-- Ticker reference data
-- Company news
+- Ticker reference data with CIK
+- Company overview/fundamentals
 - Technical indicators
 
 **Example**:
 ```python
-from datapipelines.providers.polygon.client import PolygonClient
+from datapipelines.providers.alpha_vantage.client import AlphaVantageClient
 
-client = PolygonClient(api_keys=['key1', 'key2', 'key3'])
+client = AlphaVantageClient(api_keys=['key1', 'key2', 'key3'])
 
 # Fetch daily prices
 prices = client.get_daily_prices(
@@ -154,7 +154,7 @@ class KeyPool:
 **Usage**:
 ```bash
 # .env file
-POLYGON_API_KEYS=key1,key2,key3
+ALPHA_VANTAGE_API_KEYS=key1,key2,key3
 ```
 
 ---
@@ -165,7 +165,7 @@ POLYGON_API_KEYS=key1,key2,key3
 
 ```json
 {
-  "base_url": "https://api.polygon.io",
+  "base_url": "https://www.alphavantage.co",
   "rate_limit": {
     "calls": 5,
     "period": 60
@@ -219,12 +219,12 @@ To add a new data source:
 
 **Example Structure**:
 ```
-datapipelines/providers/alpha_vantage/
+datapipelines/providers/new_provider/
 ├── __init__.py
-├── client.py           # AlphaVantageClient
+├── client.py           # NewProviderClient
 └── facets/
-    ├── stock_facet.py
-    └── forex_facet.py
+    ├── data_facet.py
+    └── reference_facet.py
 ```
 
 ---
@@ -234,4 +234,4 @@ datapipelines/providers/alpha_vantage/
 - [Ingestors](ingestors.md) - Orchestration layer
 - [Facet System](facet-system.md) - Data normalization
 - [Pipeline Architecture](pipeline-architecture.md) - Overall design
-- [Configuration](/CLAUDE.md#api-conventions) - API key setup
+- [Configuration](../11-configuration/api-configs.md) - API key setup

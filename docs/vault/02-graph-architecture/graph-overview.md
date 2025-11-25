@@ -33,41 +33,41 @@ The BaseModel framework then:
 
 ```python
 # Old way: Manual, repetitive, error-prone
-def build_equity_model():
+def build_stocks_model():
     # Load tables
-    ticker_df = spark.read.parquet("bronze/ref_ticker")
-    prices_df = spark.read.parquet("bronze/prices_daily")
+    ticker_df = spark.read.parquet("bronze/securities_reference")
+    prices_df = spark.read.parquet("bronze/securities_prices_daily")
 
     # Transform
-    dim_equity = ticker_df.select("ticker", "name", "primary_exchange")
+    dim_stock = ticker_df.select("ticker", "name", "primary_exchange")
     fact_prices = prices_df.select("ticker", "trade_date", "open", "close")
 
     # Join
-    prices_with_company = fact_prices.join(dim_equity, "ticker")
+    prices_with_company = fact_prices.join(dim_stock, "ticker")
 
     # Write
-    dim_equity.write.parquet("silver/equity/dims/dim_equity")
-    fact_prices.write.parquet("silver/equity/facts/fact_equity_prices")
+    dim_stock.write.parquet("silver/stocks/dims/dim_stock")
+    fact_prices.write.parquet("silver/stocks/facts/fact_stock_prices")
 
-    return dim_equity, fact_prices
+    return dim_stock, fact_prices
 ```
 
 ### Graph-Based Approach (Declarative)
 
 ```yaml
 # New way: Declarative, reusable, validated
-model: equity
+model: stocks
 graph:
   nodes:
-    - id: dim_equity
-      from: bronze.ref_ticker
+    - id: dim_stock
+      from: bronze.securities_reference
       select:
         ticker: ticker
         name: name
         exchange: primary_exchange
 
-    - id: fact_equity_prices
-      from: bronze.prices_daily
+    - id: fact_stock_prices
+      from: bronze.securities_prices_daily
       select:
         ticker: ticker
         trade_date: trade_date
@@ -75,13 +75,13 @@ graph:
         close_price: close
 
   edges:
-    - from: fact_equity_prices
-      to: dim_equity
+    - from: fact_stock_prices
+      to: dim_stock
       on: [ticker = ticker]
 
   paths:
-    - id: equity_prices_with_company
-      hops: fact_equity_prices -> dim_equity
+    - id: stock_prices_with_company
+      hops: fact_stock_prices -> dim_stock
 ```
 
 **Benefits:**
@@ -108,30 +108,30 @@ graph:
 
 ```yaml
 nodes:
-  - id: dim_equity                    # Unique node identifier
-    from: bronze.ref_ticker          # Source: bronze layer table
-    select:                          # Column selection/aliasing
+  - id: dim_stock                     # Unique node identifier
+    from: bronze.securities_reference # Source: bronze layer table
+    select:                           # Column selection/aliasing
       ticker: ticker
       name: name
       exchange: primary_exchange
-    derive:                          # Computed columns
-      equity_key: sha1(ticker)
+    derive:                           # Computed columns
+      stock_key: sha1(ticker)
       upper_ticker: UPPER(ticker)
-    unique_key: [ticker]             # Deduplication constraint
+    unique_key: [ticker]              # Deduplication constraint
 ```
 
 **Loading Sources:**
 
 1. **From Bronze**: `from: bronze.table_name`
    ```yaml
-   - id: dim_equity
-     from: bronze.ref_ticker
+   - id: dim_stock
+     from: bronze.securities_reference
    ```
 
 2. **From Another Node**: `from: node_id`
    ```yaml
    - id: fact_prices_normalized
-     from: fact_equity_prices    # Derive from existing node
+     from: fact_stock_prices    # Derive from existing node
    ```
 
 3. **Cross-Model**: Handled via edges/paths, not direct node loading
@@ -176,11 +176,11 @@ unique_key: [ticker, trade_date]  # Composite key
 
 ```yaml
 edges:
-  - from: fact_equity_prices      # Source table
-    to: dim_equity                # Target table
+  - from: fact_stock_prices       # Source table
+    to: dim_stock                 # Target table
     on: [ticker = ticker]         # Join condition
 
-  - from: fact_equity_prices
+  - from: fact_stock_prices
     to: core.dim_calendar         # Cross-model reference
     on: [trade_date = date]
 ```
@@ -211,14 +211,14 @@ BaseModel automatically validates edges during build:
 ```yaml
 edges:
   # Link to calendar dimension in core model
-  - from: fact_equity_prices
+  - from: fact_stock_prices
     to: core.dim_calendar
     on: [trade_date = date]
 
-  # Link to company dimension in corporate model
-  - from: dim_equity
-    to: corporate.dim_company
-    on: [ticker = ticker]
+  # Link to company dimension in company model
+  - from: dim_stock
+    to: company.dim_company
+    on: [company_id = company_id]
 ```
 
 ---
@@ -236,28 +236,28 @@ edges:
 
 ```yaml
 paths:
-  - id: equity_prices_with_company
-    hops: fact_equity_prices -> dim_equity -> corporate.dim_company
+  - id: stock_prices_with_company
+    hops: fact_stock_prices -> dim_stock -> company.dim_company
 ```
 
 **Hop Specifications:**
 
 **Multi-hop Path:**
 ```yaml
-hops: fact_equity_prices -> dim_equity -> corporate.dim_company
+hops: fact_stock_prices -> dim_stock -> company.dim_company
 ```
 
 **Two-node Path:**
 ```yaml
-hops: fact_equity_prices -> dim_equity
+hops: fact_stock_prices -> dim_stock
 ```
 
 **Array Format:**
 ```yaml
 hops:
-  - fact_equity_prices
-  - dim_equity
-  - corporate.dim_company
+  - fact_stock_prices
+  - dim_stock
+  - company.dim_company
 ```
 
 **Path Materialization Process:**
@@ -276,14 +276,14 @@ hops:
 ```yaml
 # YAML definition
 paths:
-  - id: equity_prices_enriched
-    hops: fact_equity_prices -> dim_equity -> corporate.dim_company
+  - id: stock_prices_enriched
+    hops: fact_stock_prices -> dim_stock -> company.dim_company
 ```
 
 Produces DataFrame with columns from all three tables:
-- `fact_equity_prices`: ticker, trade_date, open, close, volume
-- `dim_equity`: name, exchange, sector
-- `corporate.dim_company`: company_name, headquarters, industry
+- `fact_stock_prices`: ticker, trade_date, open, close, volume
+- `dim_stock`: name, exchange, sector
+- `company.dim_company`: company_name, headquarters, industry
 
 ---
 
@@ -327,26 +327,26 @@ Nodes must be defined in dependency order in YAML:
 ```yaml
 # Correct order
 nodes:
-  - id: dim_equity          # Built first
-    from: bronze.ref_ticker
+  - id: dim_stock               # Built first
+    from: bronze.securities_reference
 
-  - id: fact_equity_prices  # Built second
-    from: bronze.prices_daily
+  - id: fact_stock_prices       # Built second
+    from: bronze.securities_prices_daily
 
   - id: fact_prices_normalized  # Built third
-    from: fact_equity_prices    # Depends on previous node
+    from: fact_stock_prices     # Depends on previous node
 ```
 
 **Incorrect Order:**
 
 ```yaml
-# WRONG: fact_prices_normalized built before fact_equity_prices
+# WRONG: fact_prices_normalized built before fact_stock_prices
 nodes:
   - id: fact_prices_normalized
-    from: fact_equity_prices   # ERROR: not built yet!
+    from: fact_stock_prices   # ERROR: not built yet!
 
-  - id: fact_equity_prices
-    from: bronze.prices_daily
+  - id: fact_stock_prices
+    from: bronze.securities_prices_daily
 ```
 
 ---
@@ -362,11 +362,11 @@ Tier 0 (Foundation):
   └── core (calendar dimension)
 
 Tier 1 (Independent):
-  ├── corporate (company entities)
+  ├── company (corporate entities)
   └── macro (economic indicators)
 
 Tier 2 (Dependent):
-  └── equity (securities) → depends on: core, corporate
+  └── stocks (securities) → depends on: core, company
 ```
 
 ### Declaring Dependencies
@@ -374,11 +374,11 @@ Tier 2 (Dependent):
 **YAML Configuration:**
 
 ```yaml
-model: equity
-version: 1
+model: stocks
+version: 2.0
 depends_on:
   - core
-  - corporate
+  - company
 ```
 
 ### Using Cross-Model References
@@ -392,31 +392,31 @@ depends_on:
 **In Edges:**
 ```yaml
 edges:
-  - from: fact_equity_prices
+  - from: fact_stock_prices
     to: core.dim_calendar      # Cross-model edge
     on: [trade_date = date]
 
-  - from: dim_equity
-    to: corporate.dim_company  # Cross-model edge
-    on: [ticker = ticker]
+  - from: dim_stock
+    to: company.dim_company    # Cross-model edge
+    on: [company_id = company_id]
 ```
 
 **In Paths:**
 ```yaml
 paths:
-  - id: equity_prices_enriched
-    hops: fact_equity_prices -> dim_equity -> corporate.dim_company
+  - id: stock_prices_enriched
+    hops: fact_stock_prices -> dim_stock -> company.dim_company
 ```
 
 ### Cross-Model Resolution Process
 
-When `_resolve_node()` encounters `corporate.dim_company`:
+When `_resolve_node()` encounters `company.dim_company`:
 
-1. Parse `model_name.table_name` → `("corporate", "dim_company")`
+1. Parse `model_name.table_name` → `("company", "dim_company")`
 2. Check if `model.session` is set (injected by UniversalSession)
-3. Get corporate model instance: `session.get_model_instance("corporate")`
-4. Ensure corporate model is built: `corporate_model.ensure_built()`
-5. Fetch table: `corporate_model.get_dimension_df("dim_company")`
+3. Get company model instance: `session.get_model_instance("company")`
+4. Ensure company model is built: `company_model.ensure_built()`
+5. Fetch table: `company_model.get_dimension_df("dim_company")`
 6. Return DataFrame
 
 **Requires:** Model must have session injected via `set_session()`
@@ -437,7 +437,7 @@ When `_resolve_node()` encounters `corporate.dim_company`:
 **Example:**
 ```python
 ctx = RepoContext.from_repo_root(connection_type="spark")
-model = registry.create_model_instance("equity", ctx.connection, ctx.storage)
+model = registry.create_model_instance("stocks", ctx.connection, ctx.storage)
 ```
 
 ### DuckDB Backend
@@ -455,7 +455,7 @@ model = registry.create_model_instance("equity", ctx.connection, ctx.storage)
 **Example:**
 ```python
 ctx = RepoContext.from_repo_root(connection_type="duckdb")
-model = registry.create_model_instance("equity", ctx.connection, ctx.storage)
+model = registry.create_model_instance("stocks", ctx.connection, ctx.storage)
 ```
 
 ---
@@ -466,27 +466,31 @@ model = registry.create_model_instance("equity", ctx.connection, ctx.storage)
 
 ```mermaid
 graph LR
-    %% Nodes
-    BP[bronze.prices_daily]
-    BT[bronze.ref_ticker]
-    DE[dim_equity]
-    FP[fact_equity_prices]
-    DC[corporate.dim_company]
+    %% Bronze Sources
+    BP[bronze.securities_prices_daily]
+    BT[bronze.securities_reference]
+
+    %% Silver Tables
+    DS[dim_stock]
+    FP[fact_stock_prices]
+
+    %% Cross-Model References
+    DC[company.dim_company]
     CAL[core.dim_calendar]
 
     %% Edges
     BP -->|select/derive| FP
-    BT -->|select/derive| DE
-    FP -->|ticker| DE
+    BT -->|select/derive| DS
+    FP -->|ticker| DS
     FP -->|trade_date| CAL
-    DE -->|ticker| DC
+    DS -->|company_id| DC
 
     %% Path
-    FP -.->|path| DE
-    DE -.->|path| DC
+    FP -.->|path| DS
+    DS -.->|path| DC
 
     style FP fill:#f9f,stroke:#333
-    style DE fill:#bbf,stroke:#333
+    style DS fill:#bbf,stroke:#333
     style DC fill:#bbf,stroke:#333
     style CAL fill:#bbf,stroke:#333
     style BP fill:#ffc,stroke:#333
@@ -511,17 +515,17 @@ See: `models/api/graph.py` for model-level graph management
 
 ```yaml
 # Dimensions: dim_ prefix
-- id: dim_equity
+- id: dim_stock
 - id: dim_company
 - id: dim_calendar
 
 # Facts: fact_ prefix
-- id: fact_equity_prices
+- id: fact_stock_prices
 - id: fact_news
 - id: fact_forecasts
 
 # Paths: descriptive names
-- id: equity_prices_with_company
+- id: stock_prices_with_company
 - id: news_with_company
 ```
 
@@ -530,8 +534,8 @@ See: `models/api/graph.py` for model-level graph management
 ```yaml
 # Always define edges explicitly for clarity
 edges:
-  - from: fact_equity_prices
-    to: dim_equity
+  - from: fact_stock_prices
+    to: dim_stock
     on: [ticker = ticker]   # Explicit join keys preferred
 ```
 
@@ -541,8 +545,8 @@ edges:
 # Create paths for common query patterns
 paths:
   # Analysts frequently join prices with company info
-  - id: equity_prices_with_company
-    hops: fact_equity_prices -> dim_equity -> corporate.dim_company
+  - id: stock_prices_with_company
+    hops: fact_stock_prices -> dim_stock -> company.dim_company
 ```
 
 ### 4. Cross-Model References
@@ -551,11 +555,11 @@ paths:
 # Declare dependencies in YAML
 depends_on:
   - core
-  - corporate
+  - company
 
 # Use in edges and paths
 edges:
-  - from: fact_equity_prices
+  - from: fact_stock_prices
     to: core.dim_calendar
     on: [trade_date = date]
 ```
@@ -565,9 +569,9 @@ edges:
 ```yaml
 # Dependencies first, then dependents
 nodes:
-  - id: dim_equity          # Independent
-  - id: fact_equity_prices  # Independent
-  - id: fact_normalized     # Depends on fact_equity_prices
+  - id: dim_stock           # Independent
+  - id: fact_stock_prices   # Independent
+  - id: fact_normalized     # Depends on fact_stock_prices
 ```
 
 ---
@@ -579,17 +583,17 @@ nodes:
 ```yaml
 # Central fact surrounded by dimensions
 nodes:
-  - id: fact_equity_prices  # Fact (center)
-  - id: dim_equity          # Dimension
+  - id: fact_stock_prices   # Fact (center)
+  - id: dim_stock           # Dimension
   - id: dim_calendar        # Dimension
   - id: dim_exchange        # Dimension
 
 edges:
-  - from: fact_equity_prices
-    to: dim_equity
-  - from: fact_equity_prices
+  - from: fact_stock_prices
+    to: dim_stock
+  - from: fact_stock_prices
     to: dim_calendar
-  - from: fact_equity_prices
+  - from: fact_stock_prices
     to: dim_exchange
 ```
 
@@ -598,15 +602,15 @@ edges:
 ```yaml
 # Dimensions connect to other dimensions
 nodes:
-  - id: fact_equity_prices
-  - id: dim_equity
+  - id: fact_stock_prices
+  - id: dim_stock
   - id: dim_company
   - id: dim_industry
 
 edges:
-  - from: fact_equity_prices
-    to: dim_equity
-  - from: dim_equity
+  - from: fact_stock_prices
+    to: dim_stock
+  - from: dim_stock
     to: dim_company
   - from: dim_company
     to: dim_industry
@@ -617,11 +621,11 @@ edges:
 ```yaml
 # Create fact from another fact
 nodes:
-  - id: fact_equity_prices
-    from: bronze.prices_daily
+  - id: fact_stock_prices
+    from: bronze.securities_prices_daily
 
   - id: fact_daily_returns
-    from: fact_equity_prices
+    from: fact_stock_prices
     derive:
       daily_return: (close - open) / open * 100
 ```
@@ -632,7 +636,7 @@ nodes:
 
 ### Node Not Found
 
-**Error:** `Node 'dim_equity' not found`
+**Error:** `Node 'dim_stock' not found`
 
 **Causes:**
 - Typo in node ID
@@ -643,7 +647,7 @@ nodes:
 
 ### Edge Validation Failed
 
-**Error:** `Edge validation failed: fact_prices -> dim_equity`
+**Error:** `Edge validation failed: fact_prices -> dim_stock`
 
 **Causes:**
 - Join column doesn't exist
@@ -668,7 +672,7 @@ nodes:
 
 ### Path Materialization Failed
 
-**Error:** `Path materialization failed for 'equity_prices_enriched'`
+**Error:** `Path materialization failed for 'stock_prices_enriched'`
 
 **Causes:**
 - Invalid hop chain
@@ -681,8 +685,8 @@ nodes:
 
 ## Related Documentation
 
-- [BaseModel Reference](../01-core-components/base-model.md)
+- [BaseModel Reference](../01-core-framework/base-model.md)
 - [Nodes, Edges, Paths Details](nodes-edges-paths.md)
 - [Cross-Model References](cross-model-references.md)
-- [YAML Configuration](../03-model-framework/yaml-configuration.md)
+- [YAML Configuration](../05-measure-framework/yaml-configuration.md)
 - [Model Dependency Analysis](/MODEL_DEPENDENCY_ANALYSIS.md)

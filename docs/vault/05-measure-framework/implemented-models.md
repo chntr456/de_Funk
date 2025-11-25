@@ -1,6 +1,6 @@
 # Implemented Models
 
-**Reference for all 8 domain models**
+**Reference for all domain models**
 
 Location: `configs/models/`, `models/implemented/`
 
@@ -8,7 +8,7 @@ Location: `configs/models/`, `models/implemented/`
 
 ## Overview
 
-de_Funk currently implements **8 domain models** organized in a 3-tier dependency hierarchy. All models follow the same YAML-driven graph-based architecture.
+de_Funk implements domain models organized in a tiered dependency hierarchy. All models follow the same YAML-driven graph-based architecture.
 
 **Note**: The framework is domain-agnostic - you can model any domain using the same patterns.
 
@@ -19,13 +19,11 @@ de_Funk currently implements **8 domain models** organized in a 3-tier dependenc
 | Model | Tier | Depends On | Purpose | Tables |
 |-------|------|------------|---------|--------|
 | core | 0 | - | Time dimension | 1 dim |
-| macro | 1 | core | Economic indicators | 3 facts |
-| corporate | 1 | core | Company entities | 1 dim |
-| equity | 2 | core, corporate | Securities & prices | 1 dim, 1 fact |
+| company | 1 | core | Corporate entities | 1 dim |
+| macro | 1 | core | Economic indicators | 4 facts |
+| stocks | 2 | core, company | Stock securities & prices | 1 dim, 2 facts |
 | city_finance | 2 | core, macro | Municipal data | 2 facts |
-| etf | 3 | core, equity | ETF holdings | 1 dim, 1 fact |
-| forecast | 3 | core, equity | Price predictions | 2 facts |
-| ~~company~~ | - | core | **DEPRECATED** | - |
+| forecast | 3 | core, stocks | Price predictions | 3 facts |
 
 ---
 
@@ -38,7 +36,7 @@ de_Funk currently implements **8 domain models** organized in a 3-tier dependenc
 **Location**: `configs/models/core.yaml`
 
 **Tables**:
-- `dim_calendar` - Date dimension with year, quarter, month, week attributes
+- `dim_calendar` - Date dimension with year, quarter, month, week attributes (23 columns)
 
 **Usage**: All time-based models reference `core.dim_calendar`
 
@@ -48,6 +46,22 @@ de_Funk currently implements **8 domain models** organized in a 3-tier dependenc
 
 ## Tier 1: Core Domains
 
+### company
+
+**Purpose**: Corporate entities (companies linked via CIK)
+
+**Location**: `configs/models/company.yaml`
+
+**Tables**:
+- `dim_company` - Company fundamentals, sector, industry, CIK identifier
+
+**Relationships**:
+- ← `stocks.dim_stock` (stocks belong to companies via company_id)
+
+**Data Source**: Alpha Vantage API
+
+---
+
 ### macro
 
 **Purpose**: Macroeconomic indicators
@@ -55,45 +69,37 @@ de_Funk currently implements **8 domain models** organized in a 3-tier dependenc
 **Location**: `configs/models/macro.yaml`
 
 **Tables**:
+- `dim_economic_series` - Series metadata
 - `fact_unemployment` - Unemployment rates by date
 - `fact_cpi` - Consumer Price Index
+- `fact_employment` - Total nonfarm employment
+- `fact_wages` - Average hourly earnings
 - `economic_indicators_wide` - Wide-format macro indicators
 
 **Data Source**: Bureau of Labor Statistics (BLS) API
 
 ---
 
-### corporate
-
-**Purpose**: Corporate entities (companies)
-
-**Location**: `configs/models/corporate.yaml`
-
-**Tables**:
-- `dim_corporate` - Company fundamentals, sector, industry
-
-**Relationships**:
-- ↔ `equity.dim_equity` (bidirectional - companies have tickers, tickers belong to companies)
-
----
-
 ## Tier 2: Market Data
 
-### equity
+### stocks
 
-**Purpose**: Tradable securities and stock prices
+**Purpose**: Stock securities and daily prices
 
-**Location**: `configs/models/equity.yaml`
+**Location**: `configs/models/stocks/` (modular: model.yaml, schema.yaml, graph.yaml, measures.yaml)
 
 **Tables**:
-- `dim_equity` - Equity instruments (tickers, exchanges)
-- `fact_equity_prices` - Daily OHLCV data
+- `dim_stock` - Stock instruments (tickers, exchanges, company_id)
+- `fact_stock_prices` - Daily OHLCV data
+- `fact_stock_technicals` - Technical indicators (SMA, EMA, RSI, MACD)
 
 **Relationships**:
-- → `corporate.dim_corporate` (equities belong to companies)
+- → `company.dim_company` (stocks belong to companies via company_id)
 - → `core.dim_calendar` (prices have dates)
 
-**Data Source**: Polygon.io API
+**Data Source**: Alpha Vantage API
+
+**Inheritance**: Extends `_base.securities` template
 
 ---
 
@@ -104,38 +110,19 @@ de_Funk currently implements **8 domain models** organized in a 3-tier dependenc
 **Location**: `configs/models/city_finance.yaml`
 
 **Tables**:
+- `dim_community_area` - Chicago community areas
 - `fact_local_unemployment` - Chicago unemployment rates
 - `fact_building_permits` - Building permit data
 
 **Relationships**:
 - → `core.dim_calendar`
-- → `macro` (declared dependency, edge not yet implemented)
+- → `macro` (declared dependency)
 
 **Data Source**: Chicago Data Portal (Socrata API)
 
 ---
 
-## Tier 3: Portfolio & Analytics
-
-### etf
-
-**Purpose**: ETF holdings and prices
-
-**Location**: `configs/models/etf.yaml`
-
-**Tables**:
-- `dim_etf_holdings` - Fund composition
-- `fact_etf_prices` - ETF price history
-
-**Relationships**:
-- → `equity.dim_equity` (holdings reference equities)
-- → `core.dim_calendar`
-
-**Data Source**: Polygon.io API
-
-**Status**: ⚠️ Currently references deprecated `company` model - needs migration to `equity`
-
----
+## Tier 3: Analytics
 
 ### forecast
 
@@ -145,29 +132,26 @@ de_Funk currently implements **8 domain models** organized in a 3-tier dependenc
 
 **Tables**:
 - `fact_forecasts` - Price predictions with confidence intervals
-- `fact_forecast_metrics` - Model performance metrics (RMSE, MAE, etc.)
+- `fact_forecast_metrics` - Model performance metrics (RMSE, MAE, MAPE)
+- `fact_model_registry` - Registry of trained models
 
 **Relationships**:
-- → `equity` (forecasts predict equity prices)
+- → `stocks` (forecasts predict stock prices)
 - → `core.dim_calendar`
 
-**Forecast Models**: ARIMA, Prophet, Linear Regression
-
-**Status**: ⚠️ Currently references deprecated `company` model - needs migration
+**Forecast Models**: ARIMA, Prophet, Random Forest
 
 ---
 
-## Deprecated Models
+## Partial/Skeleton Models
 
-### ~~company~~ (DEPRECATED)
+These models have YAML configurations but are not fully implemented:
 
-**Status**: Being migrated to `equity` + `corporate` split
-
-**Issue**: Still referenced by `etf` and `forecast` models
-
-**Action Required**: Update all references to use `equity`/`corporate`
-
-**See**: [Dependency Resolution](../02-graph-architecture/dependency-resolution.md#critical-issues)
+| Model | Status | Notes |
+|-------|--------|-------|
+| options | Partial | Schema defined, needs Python implementation |
+| etfs | Skeleton | Basic structure, needs data integration |
+| futures | Skeleton | Basic structure, needs data source |
 
 ---
 
@@ -175,11 +159,11 @@ de_Funk currently implements **8 domain models** organized in a 3-tier dependenc
 
 | Stat | Count |
 |------|-------|
-| **Active models** | 7 |
-| **Total dimensions** | 4 |
-| **Total facts** | 9 |
-| **Cross-model edges** | 8 |
-| **Measures defined** | 20+ |
+| **Production models** | 6 |
+| **Total dimensions** | 5 |
+| **Total facts** | 12+ |
+| **Cross-model edges** | 6 |
+| **Measures defined** | 30+ |
 
 ---
 
@@ -187,39 +171,34 @@ de_Funk currently implements **8 domain models** organized in a 3-tier dependenc
 
 To add a new model:
 
-1. **Create YAML**: `configs/models/new_model.yaml`
+1. **Create YAML**: `configs/models/new_model/` (modular) or `configs/models/new_model.yaml`
 2. **Define schema**: dimensions, facts, columns
 3. **Define graph**: nodes, edges, paths
-4. **Define measures**: simple, computed, weighted
+4. **Define measures**: simple, computed, weighted, Python
 5. **Create Bronze data**: Run ingestion pipeline
-6. **Build model**: `python scripts/rebuild_model.py --model new_model`
-
-**Example Domains** (not yet implemented):
-- Options (derivatives)
-- Crypto (cryptocurrency)
-- FX (foreign exchange)
-- Commodities
-- Fixed Income
+6. **Build model**: `python -m scripts.build.rebuild_model --model new_model`
 
 ---
 
 ## Model File Locations
 
-**YAML Configs**: `/configs/models/{model}.yaml`
+**YAML Configs**:
+- Modular (v2.0): `/configs/models/{model}/model.yaml`, `schema.yaml`, `graph.yaml`, `measures.yaml`
+- Single file (v1.x): `/configs/models/{model}.yaml`
 
 **Python Implementations**: `/models/implemented/{model}/`
 - Most models don't need custom Python (YAML is enough)
-- Custom Python only for special logic
+- Custom Python for special logic or Python measures
 
 **Example Custom Model**:
 ```python
-# models/implemented/equity/equity_model.py
-class EquityModel(BaseModel):
-    """Equity model with custom ticker validation."""
+# models/implemented/stocks/model.py
+class StocksModel(BaseModel):
+    """Stocks model with technical indicators."""
 
-    def before_build(self):
-        # Custom validation before build
-        self.validate_tickers()
+    def after_build(self):
+        # Calculate technical indicators
+        self._calculate_technicals()
 ```
 
 ---
@@ -229,4 +208,4 @@ class EquityModel(BaseModel):
 - [Model Lifecycle](model-lifecycle.md) - Build process
 - [YAML Configuration](yaml-configuration.md) - Config format
 - [Dependency Resolution](../02-graph-architecture/dependency-resolution.md) - Build order
-- [BaseModel](../01-core-components/base-model.md) - Implementation
+- [BaseModel](../01-core-framework/base-model.md) - Implementation

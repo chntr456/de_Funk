@@ -24,7 +24,7 @@ de_Funk uses **environment variables** for sensitive configuration (API keys) an
 
 ```bash
 # API Keys (required for data ingestion)
-POLYGON_API_KEYS=your_key_here
+ALPHA_VANTAGE_API_KEYS=your_key_here
 BLS_API_KEYS=your_key_here
 CHICAGO_API_KEYS=your_key_here
 ```
@@ -64,8 +64,8 @@ cp .env.example .env
 Edit `.env` and replace placeholder values:
 
 ```bash
-# Polygon.io - Get from: https://polygon.io/dashboard/api-keys
-POLYGON_API_KEYS=pk_live_abc123xyz
+# Alpha Vantage - Get from: https://www.alphavantage.co/support/#api-key
+ALPHA_VANTAGE_API_KEYS=your_key_here
 
 # BLS - Register at: https://data.bls.gov/registrationEngine/
 BLS_API_KEYS=blskey123abc
@@ -84,26 +84,25 @@ CHICAGO_API_KEYS=apptoken123
 
 ### API Keys
 
-#### POLYGON_API_KEYS
+#### ALPHA_VANTAGE_API_KEYS
 
-**Purpose**: Polygon.io API authentication
+**Purpose**: Alpha Vantage API authentication
 **Format**: Comma-separated list of API keys
 **Required**: Yes (for stock market data ingestion)
 **Example**:
 ```bash
 # Single key
-POLYGON_API_KEYS=pk_live_abc123
+ALPHA_VANTAGE_API_KEYS=your_api_key
 
 # Multiple keys (for rate limit rotation)
-POLYGON_API_KEYS=pk_live_abc123,pk_live_xyz789
+ALPHA_VANTAGE_API_KEYS=key1,key2,key3
 ```
 
-**Get Key**: https://polygon.io/dashboard/api-keys
+**Get Key**: https://www.alphavantage.co/support/#api-key
 
 **Rate Limits**:
-- Free tier: 5 requests/minute
-- Basic: 100 requests/minute
-- Starter/Developer: 1000 requests/minute
+- Free tier: 5 requests/minute, 500 requests/day
+- Premium: 75 requests/minute (varies by plan)
 
 ---
 
@@ -157,7 +156,7 @@ CONNECTION_TYPE=duckdb
 ```
 
 **Notes**:
-- DuckDB: in-process, no cluster setup required
+- DuckDB: in-process analytics database
 - Spark: distributed processing for large datasets
 - Precedence: env var > storage.json > default
 
@@ -299,13 +298,13 @@ print(config.log_level)         # From LOG_LEVEL
 ### Legacy System (Deprecated)
 
 ```python
-from utils.env_loader import load_dotenv, get_polygon_api_keys
+from utils.env_loader import load_dotenv, get_alpha_vantage_api_keys
 
 # Manually load .env
 load_dotenv()
 
 # Get API keys
-polygon_keys = get_polygon_api_keys()
+av_keys = get_alpha_vantage_api_keys()
 ```
 
 ---
@@ -316,7 +315,7 @@ de_Funk supports **multiple API keys** for the same provider to work around rate
 
 **Example**:
 ```bash
-POLYGON_API_KEYS=key1,key2,key3
+ALPHA_VANTAGE_API_KEYS=key1,key2,key3
 ```
 
 **How It Works**:
@@ -329,7 +328,7 @@ POLYGON_API_KEYS=key1,key2,key3
 # In provider code
 from utils.env_loader import get_api_keys
 
-api_keys = get_api_keys('POLYGON_API_KEYS')
+api_keys = get_api_keys('ALPHA_VANTAGE_API_KEYS')
 # Returns: ['key1', 'key2', 'key3']
 
 # Rotate on each request
@@ -367,10 +366,10 @@ chmod 600 .env
 
 ```bash
 # Development
-POLYGON_API_KEYS=dev_key_here
+ALPHA_VANTAGE_API_KEYS=dev_key_here
 
 # Production
-POLYGON_API_KEYS=prod_key_here
+ALPHA_VANTAGE_API_KEYS=prod_key_here
 ```
 
 ---
@@ -408,17 +407,17 @@ POLYGON_API_KEYS=prod_key_here
 
 ### API Key Not Found
 
-**Symptom**: `Warning: POLYGON_API_KEYS not set`
+**Symptom**: `Warning: ALPHA_VANTAGE_API_KEYS not set`
 
 **Solutions**:
 
 1. **Check key name** (must be exact):
    ```bash
    # Correct
-   POLYGON_API_KEYS=abc123
+   ALPHA_VANTAGE_API_KEYS=abc123
 
    # Wrong
-   POLYGON_API_KEY=abc123  # Missing 'S'
+   ALPHA_VANTAGE_API_KEY=abc123  # Missing 'S'
    ```
 
 2. **Check quotes** (optional but must match):
@@ -442,16 +441,16 @@ POLYGON_API_KEYS=prod_key_here
 
 1. **Add multiple keys**:
    ```bash
-   POLYGON_API_KEYS=key1,key2,key3
+   ALPHA_VANTAGE_API_KEYS=key1,key2,key3
    ```
 
-2. **Reduce rate limit**:
-   - Edit `configs/polygon_endpoints.json`
+2. **Reduce request rate**:
+   - Edit `configs/alpha_vantage_endpoints.json`
    - Lower `rate_limit_per_sec` value
 
 3. **Upgrade API plan**:
    - Free tier: 5 req/min
-   - Basic: 100 req/min
+   - Premium: 75 req/min
 
 ---
 
@@ -459,5 +458,5 @@ POLYGON_API_KEYS=prod_key_here
 
 - [ConfigLoader](config-loader.md) - Centralized configuration system
 - [API Configs](api-configs.md) - API endpoint configuration
-- [Providers](../04-data-pipelines/providers.md) - API client implementations
+- [Providers](../06-pipelines/providers.md) - API client implementations
 - `/QUICKSTART.md` - Getting started guide

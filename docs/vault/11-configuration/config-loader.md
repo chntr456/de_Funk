@@ -37,7 +37,7 @@ print(config.repo_root)             # Path('/home/user/de_Funk')
 print(config.models_dir)            # Path('configs/models')
 
 # API configs (auto-discovered)
-polygon_cfg = config.apis.get("polygon", {})
+alpha_vantage_cfg = config.apis.get("alpha_vantage", {})
 ```
 
 ---
@@ -87,7 +87,7 @@ Set in `.env` file (copy from `.env.example`):
 CONNECTION_TYPE=duckdb
 
 # API Keys
-POLYGON_API_KEYS=your_key_here
+ALPHA_VANTAGE_API_KEYS=your_key_here
 BLS_API_KEYS=your_key_here
 
 # DuckDB

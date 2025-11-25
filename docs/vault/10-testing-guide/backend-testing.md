@@ -37,8 +37,8 @@ def test_backend_consistency():
     duckdb_session = UniversalSession(backend='duckdb')
     spark_session = UniversalSession(backend='spark')
 
-    duckdb_result = duckdb_session.query("SELECT AVG(close) FROM equity.fact_equity_prices")
-    spark_result = spark_session.query("SELECT AVG(close) FROM equity.fact_equity_prices")
+    duckdb_result = duckdb_session.query("SELECT AVG(close) FROM stocks.fact_stock_prices")
+    spark_result = spark_session.query("SELECT AVG(close) FROM stocks.fact_stock_prices")
 
     assert_dataframes_equal(duckdb_result.data, spark_result.data)
 ```
