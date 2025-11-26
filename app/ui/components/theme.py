@@ -99,6 +99,16 @@ def apply_professional_theme():
             margin-bottom: 1rem;
         }}
 
+        /* Close button styling for tabs */
+        [data-testid="column"] button[kind="secondary"]:has([data-testid="baseButton-secondary"]) {{
+            min-width: auto;
+        }}
+
+        /* Style close buttons specifically (buttons with single character) */
+        button[data-testid="baseButton-secondary"] {{
+            padding: 0.25rem 0.5rem;
+        }}
+
         /* Code editor */
         .stCodeBlock {{
             background-color: {colors['card_bg']};

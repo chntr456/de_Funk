@@ -6,7 +6,7 @@ Provides directory tree navigation for notebooks with tab management.
 
 import streamlit as st
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 
 class SidebarNavigator:
@@ -25,7 +25,14 @@ class SidebarNavigator:
 
     def render(self):
         """Render sidebar navigation."""
-        st.header("📚 Notebooks")
+        # Header with New Notebook button
+        col1, col2 = st.columns([0.7, 0.3])
+        with col1:
+            st.header("📚 Notebooks")
+        with col2:
+            if st.button("➕", key="new_nb_btn", help="Create new notebook"):
+                st.session_state.show_notebook_creator = True
+                st.rerun()
 
         # Scan for notebooks
         notebooks = self._scan_notebooks()

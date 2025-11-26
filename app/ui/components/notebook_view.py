@@ -6,6 +6,7 @@ Supports both YAML and Markdown notebook formats.
 """
 
 import streamlit as st
+from typing import Optional, Callable
 from app.notebook.schema import ExhibitType
 from .exhibits import (
     render_metric_cards,
@@ -17,25 +18,46 @@ from .exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_c
 from .exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
 
 
-def render_notebook_exhibits(notebook_id: str, notebook_config, notebook_session, connection):
+def render_notebook_exhibits(
+    notebook_id: str,
+    notebook_config,
+    notebook_session,
+    connection,
+    editable: bool = False,
+    on_block_edit: Optional[Callable[[int, str], None]] = None,
+    on_block_insert: Optional[Callable[[int, str, str], None]] = None,
+    on_block_delete: Optional[Callable[[int], None]] = None,
+    on_header_edit: Optional[Callable[[int, str], None]] = None
+):
     """
     Render all notebook exhibits according to layout.
-
-    Supports both YAML and Markdown notebook formats. Markdown notebooks
-    are rendered with embedded exhibits inline with content.
 
     Args:
         notebook_id: Unique identifier for the notebook
         notebook_config: NotebookConfig with exhibits and layout
         notebook_session: NotebookSession for data retrieval
-        connection: DataConnection for converting to pandas (DuckDB or Spark)
+        connection: DataConnection for converting to pandas
+        editable: Whether blocks can be edited inline
+        on_block_edit: Callback when a block is edited
+        on_block_insert: Callback when a block is inserted
+        on_block_delete: Callback when a block is deleted
+        on_header_edit: Callback when a header is renamed
     """
     # Check if this is a markdown notebook
     if hasattr(notebook_config, '_is_markdown') and notebook_config._is_markdown:
-        # Render markdown notebook
         from .markdown_renderer import render_markdown_notebook, apply_markdown_styles
         apply_markdown_styles()
-        render_markdown_notebook(notebook_config, notebook_session, connection)
+        render_markdown_notebook(
+            notebook_config,
+            notebook_session,
+            connection,
+            notebook_id=notebook_id,
+            editable=editable,
+            on_block_edit=on_block_edit,
+            on_block_insert=on_block_insert,
+            on_block_delete=on_block_delete,
+            on_header_edit=on_header_edit
+        )
     else:
         # Render YAML notebook (traditional layout sections)
         for section in notebook_config.layout:
