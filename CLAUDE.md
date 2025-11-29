@@ -46,6 +46,15 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
 10. [Important Files Reference](#important-files-reference)
 11. [Best Practices for AI Assistants](#best-practices-for-ai-assistants)
 12. [⚠️ Code Quality Rules (MUST FOLLOW)](#️-code-quality-rules-must-follow) ← **READ THIS BEFORE WRITING CODE**
+    - [File Size Limits](#file-size-limits-enforced)
+    - [Error Handling Rules](#error-handling-rules-enforced)
+    - [Logging Rules](#logging-rules-enforced)
+    - [Documentation Rules](#documentation-rules)
+    - [Testing Rules](#testing-rules)
+    - [Script Conventions](#script-conventions)
+    - [Commit Message Conventions](#commit-message-conventions)
+    - [When to Ask for Clarification](#when-to-ask-for-clarification)
+    - [Session Handoff Notes](#session-handoff-notes)
 
 ---
 
@@ -1506,6 +1515,342 @@ For detailed architectural guidance, see these proposals in `docs/vault/13-propo
 | `009-architecture-guidelines.md` | Layer boundaries and module responsibilities |
 | `005-logging-error-handling.md` | Logging framework and exception hierarchy |
 | `007-codebase-review-ratings.md` | Current quality ratings and issues |
+
+### Documentation Rules
+
+**When to Update Documentation**:
+
+| Change Type | Documentation Required |
+|-------------|----------------------|
+| New module/file | Docstring at top explaining purpose |
+| New class | Class docstring with usage example |
+| New public function | Docstring with Args, Returns, Raises |
+| New model | Update CLAUDE.md model list |
+| New pattern | Add to CLAUDE.md or create proposal |
+| Bug fix | Update related docs if behavior changed |
+| Config change | Update relevant section in CLAUDE.md |
+
+**Docstring Standards**:
+```python
+def calculate_measure(
+    self,
+    measure_name: str,
+    filters: Optional[Dict] = None,
+    **kwargs
+) -> Any:
+    """
+    Calculate a measure by name.
+
+    Args:
+        measure_name: Name of the measure from YAML config
+        filters: Optional filters to apply before calculation
+        **kwargs: Additional parameters passed to measure function
+
+    Returns:
+        Calculated measure value (type depends on measure definition)
+
+    Raises:
+        MeasureNotFoundError: If measure_name not in config
+        MeasureError: If calculation fails
+
+    Example:
+        >>> model.calculate_measure("avg_close_price", filters={"ticker": "AAPL"})
+        185.50
+    """
+```
+
+**Module Docstrings** (required at top of every new file):
+```python
+"""
+Module Name - Brief description.
+
+Purpose:
+    What this module does and why it exists.
+
+Key Classes/Functions:
+    - ClassName: What it does
+    - function_name: What it does
+
+Usage:
+    from module import ClassName
+    obj = ClassName(...)
+
+Note:
+    Any important caveats or dependencies.
+"""
+```
+
+### Testing Rules
+
+**When Tests Are Required**:
+
+| Change Type | Test Required? | Test Type |
+|-------------|---------------|-----------|
+| New function with logic | ✅ Yes | Unit test |
+| Bug fix | ✅ Yes | Regression test |
+| New model | ✅ Yes | Integration test |
+| New API endpoint | ✅ Yes | Integration test |
+| Config change only | ⚠️ Maybe | If affects behavior |
+| Documentation only | ❌ No | - |
+| Refactoring (no behavior change) | ✅ Yes | Verify existing tests pass |
+
+**Test File Location**:
+```
+scripts/test/
+├── unit/                    # Pure function tests, no I/O
+│   └── test_{module}.py
+├── integration/             # Tests with database/files
+│   └── test_{feature}.py
+├── validation/              # Data validation tests
+│   └── test_{model}_data.py
+└── performance/             # Timing/load tests
+    └── test_{operation}_perf.py
+```
+
+**Test Naming Convention**:
+```python
+# File: test_{module_name}.py
+
+def test_{function_name}_{scenario}_{expected_result}():
+    """Test that {function} does {expected} when {scenario}."""
+
+# Examples:
+def test_calculate_measure_with_filters_returns_filtered_result():
+def test_apply_filters_empty_list_returns_unchanged():
+def test_load_config_missing_file_raises_config_error():
+```
+
+**Test Structure (AAA Pattern)**:
+```python
+def test_calculate_measure_returns_correct_value():
+    """Test measure calculation with known data."""
+    # Arrange - Set up test data and dependencies
+    model = create_test_model()
+    expected = 100.0
+
+    # Act - Execute the code under test
+    result = model.calculate_measure("test_measure")
+
+    # Assert - Verify the result
+    assert result == expected
+```
+
+**Always Run Before Committing**:
+```bash
+# Run relevant tests
+pytest scripts/test/unit/test_{module}.py -v
+
+# Run full test suite if touching core modules
+pytest scripts/test/ -v --ignore=scripts/test/performance/
+```
+
+### Script Conventions
+
+**Script Location by Purpose**:
+```
+scripts/
+├── build/           # Model building scripts
+├── ingest/          # Data ingestion scripts
+├── forecast/        # Forecasting scripts
+├── test/            # Test scripts (see Testing Rules)
+├── examples/        # Usage examples (READ-ONLY, don't modify)
+└── maintenance/     # Cleanup, migration scripts
+```
+
+**Script Template**:
+```python
+#!/usr/bin/env python
+"""
+Script Name - Brief description.
+
+Purpose:
+    What this script does.
+
+Usage:
+    python -m scripts.category.script_name [--options]
+
+Examples:
+    python -m scripts.build.rebuild_model --model stocks
+    python -m scripts.ingest.run_pipeline --provider alpha_vantage
+"""
+from __future__ import annotations  # MUST BE FIRST IMPORT
+
+import argparse
+import sys
+from pathlib import Path
+
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
+
+from config.logging import setup_logging, get_logger
+
+logger = get_logger(__name__)
+
+
+def main():
+    """Main entry point."""
+    setup_logging()
+    parser = argparse.ArgumentParser(description=__doc__)
+    # Add arguments...
+    args = parser.parse_args()
+
+    try:
+        # Script logic here
+        logger.info("Script completed successfully")
+    except Exception as e:
+        logger.error(f"Script failed: {e}", exc_info=True)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
+```
+
+**Script Rules**:
+1. Always use `python -m scripts.category.name` syntax
+2. Always call `setup_repo_imports()` before other imports
+3. Always use argparse for CLI arguments
+4. Always use logger, not print (except for user-facing output)
+5. Always exit with non-zero code on failure
+
+### Commit Message Conventions
+
+**Format**:
+```
+type: Short description (imperative mood, <50 chars)
+
+Longer description if needed. Explain WHY not just WHAT.
+Wrap at 72 characters.
+
+Refs: #issue-number (if applicable)
+```
+
+**Types**:
+| Type | When to Use |
+|------|-------------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `docs` | Documentation only |
+| `refactor` | Code change that doesn't fix bug or add feature |
+| `test` | Adding or updating tests |
+| `chore` | Maintenance (deps, config, etc.) |
+| `perf` | Performance improvement |
+
+**Examples**:
+```bash
+# Good
+feat: Add Black-Scholes option pricing to options model
+fix: Resolve syntax error in forecast scripts
+docs: Add code quality rules to CLAUDE.md
+refactor: Extract TableAccessor from BaseModel
+test: Add unit tests for measure calculation
+
+# Bad
+update code  # Too vague
+Fixed stuff  # Not imperative, not descriptive
+WIP          # Don't commit WIP
+```
+
+### When to Ask for Clarification
+
+**STOP and ask the user when**:
+
+1. **Ambiguous requirements**
+   - "Make it better" → Better how? Performance? Readability?
+   - "Add error handling" → What errors? How to handle?
+
+2. **Multiple valid approaches**
+   - Should this be a new module or extend existing?
+   - Sync or async implementation?
+   - Which design pattern fits best?
+
+3. **Breaking changes**
+   - Changing function signatures
+   - Modifying config file structure
+   - Removing deprecated code
+
+4. **Large scope**
+   - Task would touch >5 files
+   - Estimated >500 lines of changes
+   - Requires new dependencies
+
+5. **Unclear priority**
+   - Multiple tasks requested, unclear order
+   - Conflict between requirements
+
+**How to ask**:
+```
+Before I proceed, I have a question:
+
+[Specific question]
+
+Option A: [Description]
+- Pros: ...
+- Cons: ...
+
+Option B: [Description]
+- Pros: ...
+- Cons: ...
+
+Which approach would you prefer?
+```
+
+### Session Handoff Notes
+
+**When ending a session with incomplete work**:
+
+1. **Update TODO comments** in code:
+   ```python
+   # TODO(session-date): Description of what's incomplete
+   # - What's done
+   # - What's remaining
+   # - Any blockers
+   ```
+
+2. **Create/update proposal** if architectural decision needed
+
+3. **Commit with WIP prefix** (only if user requests):
+   ```bash
+   git commit -m "WIP: Partial implementation of X
+
+   Completed:
+   - Item 1
+   - Item 2
+
+   Remaining:
+   - Item 3
+   - Item 4
+
+   Next steps: [description]"
+   ```
+
+4. **Leave breadcrumbs** - Add comments that help the next session:
+   ```python
+   # NOTE: This implementation is incomplete. See proposal 010 for full design.
+   # The next step is to implement the _calculate_metrics method.
+   ```
+
+### Configuration Management
+
+**When adding new configuration**:
+
+1. **Add to appropriate location**:
+   - Environment secret → `.env` (never commit)
+   - API endpoint → `configs/{provider}_endpoints.json`
+   - Model config → `configs/models/{model}/*.yaml`
+   - App setting → `config/constants.py`
+
+2. **Add type-safe access**:
+   ```python
+   # In config/models.py, add to appropriate dataclass
+   @dataclass
+   class NewConfig:
+       setting_name: str = "default_value"
+   ```
+
+3. **Document in CLAUDE.md** if it's a new pattern
+
+4. **Add validation** in `config/loader.py` if required
 
 ---
 
