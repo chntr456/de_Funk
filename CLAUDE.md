@@ -1,13 +1,20 @@
 # CLAUDE.md - AI Assistant Guide for de_Funk
 
-**Last Updated**: 2025-11-18
-**Version**: 2.0
+**Last Updated**: 2025-11-29
+**Version**: 2.1
 
 This document provides comprehensive guidance for AI assistants (like Claude) working with the de_Funk codebase. It covers project structure, architecture patterns, development workflows, and key conventions.
 
 **Architecture Diagram**: See `docs/architecture-diagram.drawio` for visual representation of the system architecture.
 
-**Recent Updates (v2.0)**:
+**Recent Updates (v2.1)** - Code Quality & Architecture Guidelines:
+- **⚠️ Code Quality Rules**: Mandatory rules for file size, error handling, logging
+- **Architecture Boundaries**: Clear layer definitions with import rules
+- **Anti-Pattern Documentation**: What NOT to do and why
+- **Pre-Commit Checklist**: Verification steps before committing code
+- **Proposals Reference**: Links to detailed architectural proposals in `docs/vault/13-proposals/`
+
+**Previous Updates (v2.0)**:
 - **Modular YAML Architecture**: Models now split into schema.yaml, graph.yaml, measures.yaml
 - **Model Inheritance**: Base securities templates with `extends` and `inherits_from` keywords
 - **Python Measures**: Hybrid measure system (YAML for simple, Python for complex)
@@ -37,6 +44,8 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
 8. [Common Operations](#common-operations)
 9. [Troubleshooting](#troubleshooting)
 10. [Important Files Reference](#important-files-reference)
+11. [Best Practices for AI Assistants](#best-practices-for-ai-assistants)
+12. [⚠️ Code Quality Rules (MUST FOLLOW)](#️-code-quality-rules-must-follow) ← **READ THIS BEFORE WRITING CODE**
 
 ---
 
@@ -1332,6 +1341,171 @@ If queries are slow:
 3. **Add tests first**: TDD approach preferred
 4. **Update YAML configs**: Keep configuration in sync
 5. **Document thoroughly**: Update relevant `.md` files
+
+---
+
+## ⚠️ Code Quality Rules (MUST FOLLOW)
+
+**Reference**: See `docs/vault/13-proposals/draft/` for detailed proposals on architecture and code quality.
+
+### File Size Limits (ENFORCED)
+
+| Threshold | Action Required |
+|-----------|-----------------|
+| **<300 lines** | ✅ Target size - proceed normally |
+| **300-500 lines** | ⚠️ Warning - consider splitting before adding more |
+| **500-800 lines** | 🟠 Must justify why not splitting |
+| **>800 lines** | 🔴 **STOP** - Must refactor before adding ANY new code |
+
+**Before adding code to a file >300 lines**:
+1. Check if function belongs in this file's responsibility
+2. If file is approaching limit, extract to new module FIRST
+3. Never add "just one more function" to a large file
+
+### Error Handling Rules (ENFORCED)
+
+```python
+# ❌ NEVER DO THIS - Bare except catches everything including Ctrl+C
+try:
+    do_something()
+except:
+    pass
+
+# ❌ NEVER DO THIS - Silent failure masks bugs
+except Exception:
+    pass
+
+# ❌ NEVER DO THIS - Catching too broadly
+except Exception as e:
+    print(f"Error: {e}")  # No logging, continues silently
+
+# ✅ CORRECT - Specific exceptions with proper handling
+try:
+    do_something()
+except ValueError as e:
+    logger.warning(f"Invalid value: {e}")
+    raise
+except FileNotFoundError as e:
+    logger.error(f"File not found: {e}")
+    raise ConfigurationError(f"Missing file: {e}") from e
+```
+
+**Rules**:
+1. **Never use bare `except:`** - always specify exception types
+2. **Never silently pass** - at minimum log the error
+3. **Use `from e`** for exception chaining
+4. **Reraise unexpected exceptions** - don't swallow bugs
+
+### Logging Rules (ENFORCED)
+
+```python
+# ❌ NEVER DO THIS in production code
+print(f"Processing {item}...")
+print(f"Done!")
+print(f"Error: {e}")
+
+# ✅ CORRECT - Use logger
+from config.logging import get_logger
+logger = get_logger(__name__)
+
+logger.info(f"Processing {item}")
+logger.debug(f"Details: {details}")
+logger.error(f"Failed to process", exc_info=True)
+```
+
+**Rules**:
+1. **No print statements** except in CLI scripts for user output
+2. **Use `get_logger(__name__)`** for module-specific loggers
+3. **Use appropriate levels**: DEBUG for details, INFO for progress, WARNING for issues, ERROR for failures
+4. **Include `exc_info=True`** when logging exceptions
+
+### Code Duplication Rules
+
+**Before implementing ANY new functionality**:
+1. **Search the codebase** for similar code: `grep -r "function_name" .`
+2. If similar code exists:
+   - **Extend existing** if it's close to what you need
+   - **Refactor to shared location** if duplicating
+3. **Never create a "similar but different" version**
+
+**Known Duplications to Avoid**:
+- FilterEngine - USE `core/session/filters.py` ONLY (extend if needed)
+- Configuration loading - USE `config/loader.py` ONLY
+- Backend detection - USE existing patterns, don't recreate
+
+### Architecture Boundaries
+
+**Layer Rules** - Code must stay in its layer:
+
+| Layer | Location | Responsibilities | Does NOT Do |
+|-------|----------|------------------|-------------|
+| **Config** | `config/`, `configs/` | Load/validate configuration | Query data, HTTP requests |
+| **Core** | `core/` | DB connections, filters, infrastructure | Business logic, UI |
+| **Pipelines** | `datapipelines/` | Fetch external APIs, write Bronze | Query data, build models |
+| **Models** | `models/` | Domain models, measures, Silver layer | Fetch APIs, handle UI |
+| **App** | `app/` | Streamlit UI, notebooks | Direct DB queries, API calls |
+
+**Import Rules**:
+```python
+# ❌ WRONG - UI importing from pipeline layer
+# app/ui/notebook_app.py
+from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
+
+# ✅ CORRECT - UI calls service, service calls pipeline
+# app/ui/notebook_app.py
+from app.services import DataService
+```
+
+### Where Does New Code Go? (Decision Tree)
+
+```
+Q1: Fetching external data?          → datapipelines/providers/{provider}/
+Q2: Transforming raw data?           → datapipelines/facets/
+Q3: Loading/validating config?       → config/ (Python) or configs/ (YAML)
+Q4: Reusable infrastructure?         → core/
+Q5: Specific domain model?           → models/implemented/{domain}/
+Q6: Measure framework itself?        → models/measures/
+Q7: Model discovery/cross-model?     → models/api/
+Q8: UI rendering?                    → app/ui/components/
+Q9: Application state?               → app/ui/state/
+Q10: Notebook parsing?               → app/notebook/
+Q11: Operational script?             → scripts/{category}/
+```
+
+### Anti-Patterns to Avoid
+
+| Anti-Pattern | Example | Correct Approach |
+|--------------|---------|------------------|
+| **God File** | 1,885 line markdown_renderer.py | Split into focused modules |
+| **Bare Except** | `except: pass` | Specific exceptions with logging |
+| **Print Debugging** | `print(f"here: {x}")` | `logger.debug(f"value: {x}")` |
+| **Duplicate Implementation** | 3 FilterEngines | One implementation, extend if needed |
+| **Cross-Layer Import** | UI imports from pipelines | Add service layer between |
+| **Magic Numbers** | `cols = st.columns([0.88, 0.06, 0.06])` | Named constants |
+| **Silent Failure** | `except Exception: pass` | Log error, handle or reraise |
+
+### Pre-Commit Checklist
+
+Before committing ANY code change:
+
+- [ ] Target file is <300 lines (or I'm extracting, not adding)
+- [ ] No bare `except:` clauses added
+- [ ] No `print()` statements added (use logger)
+- [ ] Searched for existing similar code first
+- [ ] Imports don't cross layer boundaries
+- [ ] Added/updated tests if behavior changed
+- [ ] Updated CLAUDE.md if new patterns introduced
+
+### Proposals Reference
+
+For detailed architectural guidance, see these proposals in `docs/vault/13-proposals/draft/`:
+
+| Proposal | Topic |
+|----------|-------|
+| `008-large-file-refactoring.md` | Specific plans to split large files |
+| `009-architecture-guidelines.md` | Layer boundaries and module responsibilities |
+| `005-logging-error-handling.md` | Logging framework and exception hierarchy |
+| `007-codebase-review-ratings.md` | Current quality ratings and issues |
 
 ---
 
