@@ -47,6 +47,8 @@ Draft → Active → Accepted/Rejected → (Archived)
 | [005-logging-error-handling](draft/005-logging-error-handling.md) | Centralized Logging & Error Handling | High | 2025-11-29 |
 | [006-metadata-model](draft/006-metadata-model.md) | Metadata Model & Platform Observability | Medium | 2025-11-29 |
 | [007-codebase-review-ratings](draft/007-codebase-review-ratings.md) | Codebase Quality Review (1-5 Ratings) | Medium | 2025-11-29 |
+| [008-large-file-refactoring](draft/008-large-file-refactoring.md) | Large File Refactoring & Duplication Elimination | High | 2025-11-29 |
+| [009-architecture-guidelines](draft/009-architecture-guidelines.md) | Architecture Boundaries & Claude Guidelines | High | 2025-11-29 |
 
 ---
 
