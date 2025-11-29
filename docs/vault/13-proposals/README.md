@@ -38,7 +38,15 @@ Draft → Active → Accepted/Rejected → (Archived)
 
 ### Draft (Under Discussion)
 
-*None currently*
+| Proposal | Title | Priority | Date |
+|----------|-------|----------|------|
+| [001-parallel-ingestion-architecture](draft/001-parallel-ingestion-architecture.md) | Parallel Ingestion & Task Queue System | High | 2025-11-29 |
+| [002-chicago-domain-model-architecture](draft/002-chicago-domain-model-architecture.md) | Chicago Domain Model with Dept Inheritance | High | 2025-11-29 |
+| [003-geography-dimension](draft/003-geography-dimension.md) | Core Geography Dimension (GIS) | High | 2025-11-29 |
+| [004-forecasting-enhancement](draft/004-forecasting-enhancement.md) | Forecasting Fixes, Backtesting & Black-Scholes | High | 2025-11-29 |
+| [005-logging-error-handling](draft/005-logging-error-handling.md) | Centralized Logging & Error Handling | High | 2025-11-29 |
+| [006-metadata-model](draft/006-metadata-model.md) | Metadata Model & Platform Observability | Medium | 2025-11-29 |
+| [007-codebase-review-ratings](draft/007-codebase-review-ratings.md) | Codebase Quality Review (1-5 Ratings) | Medium | 2025-11-29 |
 
 ---
 
