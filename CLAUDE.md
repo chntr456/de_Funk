@@ -207,7 +207,7 @@ de_Funk/
 
 ### Core Technologies
 - **Python 3.x**: Primary programming language
-- **DuckDB**: High-performance analytics engine (10-100x faster than Spark)
+- **DuckDB**: High-performance analytics engine (BI and realtime reporting)
 - **PySpark** (Optional): ETL pipelines and transformations
 - **Streamlit**: Web-based UI framework
 
@@ -253,7 +253,7 @@ de_Funk/
 #### Analytics Layer (DuckDB Catalog)
 - **Purpose**: Business-ready analytics and insights
 - **Interface**: Notebooks and dashboards query Silver directly
-- **Query Engine**: DuckDB (10-100x faster than Spark)
+- **Query Engine**: DuckDB (optimized for BI and realtime analytics)
 - **Database File**: `storage/duckdb/analytics.db` (persistent catalog/metadata)
 - **Features**: Dynamic filtering and visualization
 - **Note**: No separate "Gold" layer - queries run directly against Silver Parquet files. The DuckDB file stores catalog metadata, views, and query workspace but does NOT duplicate the data.
@@ -1214,7 +1214,7 @@ python scripts/test_filter_system.py
 
 If queries are slow:
 
-1. **Use DuckDB instead of Spark**: 10-100x faster
+1. **Use DuckDB instead of Spark**: Better suited for interactive BI queries
 2. **Check partitioning**: Ensure data is properly partitioned
 3. **Verify indexes**: Check if indexes exist on join columns
 4. **Optimize filters**: Push filters down to storage layer
@@ -1308,7 +1308,7 @@ If queries are slow:
 
 ### Backend Support
 
-- **DuckDB**: Primary backend, fully supported (10-100x faster)
+- **DuckDB**: Primary backend for BI and realtime analytics
 - **Spark**: Optional backend, maintained for compatibility
 - Most operations tested on both backends
 
@@ -1909,7 +1909,7 @@ result = session.query("SELECT ...")
 | **Bronze → Silver transforms** | **Spark** | Batch processing, scheduled |
 | **Pre-calculation tasks** | **Spark** | Metadata collection, aggregations |
 | **Column profiling** | **Spark** | Full table scans |
-| **Interactive queries** | **DuckDB** | Fast response for UI (10-100x faster) |
+| **Interactive queries** | **DuckDB** | BI and realtime reporting needs |
 | **Notebook execution** | **DuckDB** | User-facing, needs speed |
 | **Dashboard rendering** | **DuckDB** | Point queries, small result sets |
 | **Ad-hoc analysis** | **DuckDB** | Exploratory queries |
