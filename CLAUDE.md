@@ -1,13 +1,19 @@
 # CLAUDE.md - AI Assistant Guide for de_Funk
 
-**Last Updated**: 2025-11-29
-**Version**: 2.1
+**Last Updated**: 2025-11-30
+**Version**: 2.2
 
 This document provides comprehensive guidance for AI assistants (like Claude) working with the de_Funk codebase. It covers project structure, architecture patterns, development workflows, and key conventions.
 
 **Architecture Diagram**: See `docs/architecture-diagram.drawio` for visual representation of the system architecture.
 
-**Recent Updates (v2.1)** - Code Quality & Architecture Guidelines:
+**Recent Updates (v2.2)** - Backend Abstraction Rules:
+- **⚠️ Backend Selection Guidelines**: When to use Spark vs DuckDB (ENFORCED)
+- **Session Abstraction Required**: Never import `duckdb` or `pyspark` directly
+- **Decision Tree**: Clear guidance for backend selection
+- **Pre-Commit Checklist**: Added backend abstraction checks
+
+**Previous Updates (v2.1)** - Code Quality & Architecture Guidelines:
 - **⚠️ Code Quality Rules**: Mandatory rules for file size, error handling, logging
 - **Architecture Boundaries**: Clear layer definitions with import rules
 - **Anti-Pattern Documentation**: What NOT to do and why
@@ -1492,6 +1498,7 @@ Q11: Operational script?             → scripts/{category}/
 | **Cross-Layer Import** | UI imports from pipelines | Add service layer between |
 | **Magic Numbers** | `cols = st.columns([0.88, 0.06, 0.06])` | Named constants |
 | **Silent Failure** | `except Exception: pass` | Log error, handle or reraise |
+| **Direct Backend Import** | `import duckdb` in services | Use `UniversalSession(backend=...)` |
 
 ### Pre-Commit Checklist
 
@@ -1502,6 +1509,8 @@ Before committing ANY code change:
 - [ ] No `print()` statements added (use logger)
 - [ ] Searched for existing similar code first
 - [ ] Imports don't cross layer boundaries
+- [ ] No direct `import duckdb` or `import pyspark` (use session abstraction)
+- [ ] Correct backend selected (Spark for batch, DuckDB for interactive)
 - [ ] Added/updated tests if behavior changed
 - [ ] Updated CLAUDE.md if new patterns introduced
 
@@ -1872,15 +1881,49 @@ Which approach would you prefer?
 - `/docs/` → Documentation
 - `/utils/` → **Utility functions** - repo.py for centralized repo discovery
 
-### Backend Selection
+### Backend Selection (ENFORCED)
+
+**CRITICAL**: Always use session abstraction. NEVER import `duckdb` or `pyspark` directly in application code.
 
 ```python
-# Use DuckDB (recommended - fast)
-from core.session.universal_session import UniversalSession
-session = UniversalSession(backend="duckdb")
+# ❌ NEVER DO THIS - Direct backend import
+import duckdb
+conn = duckdb.connect()
+result = conn.execute("SELECT ...").fetchdf()
 
-# Use Spark (optional - for large datasets)
-session = UniversalSession(backend="spark")
+# ❌ NEVER DO THIS - Direct Spark import in models/services
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.getOrCreate()
+
+# ✅ CORRECT - Always use session abstraction
+from core.session.universal_session import UniversalSession
+session = UniversalSession(backend="duckdb")  # or "spark"
+result = session.query("SELECT ...")
+```
+
+**Backend Selection Rules**:
+
+| Use Case | Backend | Rationale |
+|----------|---------|-----------|
+| **Model building** | **Spark** | ETL, full table transformations |
+| **Bronze → Silver transforms** | **Spark** | Batch processing, scheduled |
+| **Pre-calculation tasks** | **Spark** | Metadata collection, aggregations |
+| **Column profiling** | **Spark** | Full table scans |
+| **Interactive queries** | **DuckDB** | Fast response for UI (10-100x faster) |
+| **Notebook execution** | **DuckDB** | User-facing, needs speed |
+| **Dashboard rendering** | **DuckDB** | Point queries, small result sets |
+| **Ad-hoc analysis** | **DuckDB** | Exploratory queries |
+| **Unit tests** | **DuckDB** | In-memory, fast isolation |
+
+**Decision Tree**:
+```
+Is this a scheduled/batch operation?
+  └── YES → Use Spark
+  └── NO → Is this user-facing (UI/notebook)?
+              └── YES → Use DuckDB
+              └── NO → Is it a full table scan or heavy aggregation?
+                        └── YES → Use Spark
+                        └── NO → Use DuckDB (default for queries)
 ```
 
 ### Model Lifecycle

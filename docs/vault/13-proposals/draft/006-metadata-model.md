@@ -330,6 +330,10 @@ schema:
 Metadata Collector Service.
 
 Gathers statistics from all models and tables.
+
+IMPORTANT: This service uses Spark for batch processing (pre-calculation)
+and session abstraction for backend-agnostic queries. Never import
+DuckDB or Spark directly - use UniversalSession or SparkSession from core.
 """
 
 import os
@@ -341,9 +345,9 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, asdict
 
 import pandas as pd
-import duckdb
 
 from config.logging import get_logger
+from core.session.universal_session import UniversalSession
 from models.registry import ModelRegistry
 
 logger = get_logger(__name__)
@@ -384,12 +388,18 @@ class ColumnStats:
 
 
 class MetadataCollector:
-    """Collect metadata from all models and tables."""
+    """Collect metadata from all models and tables.
 
-    def __init__(self, registry: ModelRegistry, storage_root: Path):
+    Uses Spark backend for batch processing since metadata collection
+    is a pre-calculation task that benefits from Spark's distributed
+    processing capabilities.
+    """
+
+    def __init__(self, registry: ModelRegistry, storage_root: Path, backend: str = "spark"):
         self.registry = registry
         self.storage_root = storage_root
-        self.conn = duckdb.connect()
+        # Use session abstraction - Spark preferred for batch/pre-calculation tasks
+        self.session = UniversalSession(backend=backend)
 
     def collect_all(self) -> Dict[str, pd.DataFrame]:
         """Collect all metadata and return as DataFrames."""
@@ -541,7 +551,7 @@ class MetadataCollector:
         snapshot_ts: datetime,
         snapshot_date: date
     ) -> Optional[TableStats]:
-        """Profile a single table."""
+        """Profile a single table using session abstraction."""
         try:
             # Count files and size
             parquet_files = list(table_path.glob("**/*.parquet"))
@@ -551,24 +561,28 @@ class MetadataCollector:
             if file_count == 0:
                 return None
 
-            # Query for row count and date range
-            df = self.conn.execute(f"""
+            # Query for row count using session abstraction (backend-agnostic)
+            df = self.session.query(f"""
                 SELECT
                     COUNT(*) as row_count,
                     COUNT(DISTINCT *) as distinct_count
                 FROM read_parquet('{table_path}/**/*.parquet')
-            """).fetchdf()
+            """)
 
             row_count = int(df['row_count'].iloc[0])
+
+            # Get column count via schema inspection
+            schema_df = self.session.query(f"""
+                SELECT * FROM read_parquet('{table_path}/**/*.parquet') LIMIT 0
+            """)
+            column_count = len(schema_df.columns)
 
             return TableStats(
                 table_id=table_id,
                 snapshot_ts=snapshot_ts,
                 snapshot_date=snapshot_date,
                 row_count=row_count,
-                column_count=len(self.conn.execute(f"""
-                    SELECT * FROM read_parquet('{table_path}/**/*.parquet') LIMIT 0
-                """).description),
+                column_count=column_count,
                 partition_count=len(list(table_path.iterdir())),
                 file_count=file_count,
                 size_bytes=size_bytes,
@@ -581,7 +595,7 @@ class MetadataCollector:
             )
 
         except Exception as e:
-            logger.error(f"Failed to profile table {table_id}: {e}")
+            logger.error(f"Failed to profile table {table_id}: {e}", exc_info=True)
             return None
 
     def _calculate_tier(self, model_name: str) -> int:
@@ -813,9 +827,52 @@ ORDER BY snapshot_date;
 
 ---
 
+## Backend Selection Guidelines
+
+The metadata model follows the platform's backend-agnostic architecture:
+
+### When to Use Spark (Default for Metadata Collection)
+
+| Operation | Backend | Rationale |
+|-----------|---------|-----------|
+| Metadata collection | **Spark** | Batch processing, can run scheduled |
+| Table profiling | **Spark** | Full table scans, distributed |
+| Column statistics | **Spark** | Aggregations over large datasets |
+| Build history recording | **Spark** | Part of model build pipeline |
+
+### When to Use DuckDB
+
+| Operation | Backend | Rationale |
+|-----------|---------|-----------|
+| Freshness queries | **DuckDB** | Simple lookups, interactive |
+| Dashboard rendering | **DuckDB** | Fast response for UI |
+| SLA violation alerts | **DuckDB** | Point queries on small result sets |
+
+### Code Pattern
+
+```python
+# ❌ WRONG - Never import backend directly
+import duckdb
+conn = duckdb.connect()
+result = conn.execute("SELECT ...").fetchdf()
+
+# ✅ CORRECT - Always use session abstraction
+from core.session.universal_session import UniversalSession
+
+# For batch/pre-calculation tasks (metadata, model builds)
+session = UniversalSession(backend="spark")
+
+# For interactive/query tasks (UI, notebooks)
+session = UniversalSession(backend="duckdb")
+
+result = session.query("SELECT ...")
+```
+
+---
+
 ## Implementation Plan
 
-### Phase 1: Foundation (Week 1)
+### Phase 1: Foundation
 1. Create `meta` model directory structure
 2. Define schema YAML
 3. Implement `MetadataCollector`
