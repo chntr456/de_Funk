@@ -69,24 +69,42 @@ $exhibits${
 
 ## Implementation
 
-### Key Components
+### Key Components (v2.2 Modular Architecture)
 
-**`markdown_renderer.py`**
-- `_split_markdown_by_headers()` - Splits content at header boundaries
-- `_build_header_tree()` - Creates nested tree from headers
-- `_render_nested_toggles()` - Renders collapsible sections with error handling
-- `_gather_section_content()` - Collects section + children content (including exhibits)
-- `_count_section_exhibits()` - Counts exhibits in sections
-- `_exhibit_to_syntax()` - Converts exhibit objects back to markdown syntax
+The markdown rendering system has been split into a modular subpackage under `app/ui/components/markdown/`:
 
-**`toggle_container.py`**
-- `ToggleContainer` - Custom component replacing st.expander
-- `expand_all()` / `collapse_all()` - Bulk operations
-- Toggle registry for state management
+**Core Modules:**
+- `renderer.py` (286 lines) - Main orchestrator, entry point
+- `parser.py` (238 lines) - Markdown parsing and header extraction
+- `styles.py` (142 lines) - CSS constants and styling
+- `utils.py` (285 lines) - Utility functions
 
-**`notebook_app_duckdb.py`**
-- `_handle_block_edit()` - Content-based save with header fallback
-- `_handle_block_delete()` - Content-based delete with header fallback
+**Block Renderers** (`blocks/`):
+- `text.py` - Markdown text block rendering
+- `exhibit.py` - Data exhibit rendering
+- `collapsible.py` - Collapsible section handling
+- `error.py` - Error block display
+- `header.py` - Notebook header rendering
+
+**Section Editors** (`editors/`):
+- `section_editor.py` - Section content editing
+- `inline_editor.py` - Inline text editing
+- `block_editor.py` - Block-level editing
+- `insert_button.py` - New section insertion
+
+**Toggle Component:**
+- `toggle_container.py` - Custom component replacing st.expander
+  - `ToggleContainer` class
+  - `expand_all()` / `collapse_all()` functions
+  - Toggle registry for state management
+
+**State & Callbacks** (`app/ui/`):
+- `state/session_state.py` - Session state management
+- `callbacks/block_callbacks.py` - Block edit/delete callbacks
+
+**`notebook_app_duckdb.py`** (thin orchestrator):
+- Delegates to state and callback modules
+- Uses modular markdown renderer
 
 ### Content-Based Operations
 Edit and delete operations use content-based find/replace:

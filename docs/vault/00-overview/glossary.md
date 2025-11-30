@@ -19,7 +19,12 @@ Used for partitioning Bronze tables and filtering in Silver models.
 The database engine used for queries. Supported: **DuckDB**, **Spark**.
 
 ### BaseModel
-Foundation class for all dimensional models (`models/base/model.py`). Provides 40+ methods for graph building, data access, and measure execution.
+Foundation class for all dimensional models. Located at `models/base/` (v2.2 modular architecture):
+- `model.py` (397 lines) - Thin orchestrator
+- `graph_builder.py` (418 lines) - Graph construction
+- `table_accessor.py` (250 lines) - Table access and schema
+- `measure_calculator.py` (277 lines) - Measure execution
+- `model_writer.py` (261 lines) - Persistence
 
 ### Bronze Layer
 First storage layer containing raw, normalized API data. Located at `storage/bronze/`.
@@ -345,7 +350,10 @@ unique_key: [ticker]
 ```
 
 ### UniversalSession
-Unified query interface for accessing all models.
+Unified query interface for accessing all models. Located at `models/api/` (v2.2 modular architecture):
+- `session.py` (410 lines) - Thin orchestrator
+- `auto_join.py` (450 lines) - Automatic join operations
+- `aggregation.py` (272 lines) - Data aggregation
 
 ```python
 session = UniversalSession(backend="duckdb")

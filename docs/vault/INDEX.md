@@ -15,10 +15,10 @@
 
 ### 01 - Core Framework
 - [README](01-core-framework/README.md) - Core concepts
-- [BaseModel](01-core-framework/base-model.md) - Foundation class (40+ methods)
-- [UniversalSession](01-core-framework/universal-session.md) - Query interface
+- [BaseModel](01-core-framework/base-model.md) - Foundation class (v2.2: modular composition)
+- [UniversalSession](01-core-framework/universal-session.md) - Query interface (v2.2: modular)
 - [Connection System](01-core-framework/connection-system.md) - Backend adapters
-- [Filter Engine](01-core-framework/filter-engine.md) - Filter application
+- [Filter Engine](01-core-framework/filter-engine.md) - Filter application (v2.2: consolidated)
 - [Storage Router](01-core-framework/storage-router.md) - Path management
 
 ### 02 - Graph Architecture

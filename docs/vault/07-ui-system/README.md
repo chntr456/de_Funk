@@ -22,11 +22,11 @@ de_Funk provides a Streamlit-based UI for interactive analytics, featuring markd
 
 ---
 
-## Architecture
+## Architecture (v2.2 Modular)
 
 ```
 ┌────────────────────────────────────────────────────┐
-│                 Streamlit App                       │
+│        Streamlit App (thin orchestrator)           │
 ├────────────────────────────────────────────────────┤
 │                                                    │
 │  ┌──────────────┐  ┌──────────────┐               │
@@ -36,11 +36,17 @@ de_Funk provides a Streamlit-based UI for interactive analytics, featuring markd
 │  └──────────────┘  └──────────────┘               │
 │                                                    │
 ├────────────────────────────────────────────────────┤
+│   State Module        │   Callbacks Module         │
+│   (session_state.py)  │   (block_callbacks.py)     │
+├────────────────────────────────────────────────────┤
+│   Markdown Renderer (17 modular files)             │
+│   components/markdown/{renderer,parser,blocks/...} │
+├────────────────────────────────────────────────────┤
 │              Notebook Manager                       │
 │  (Loads/parses markdown notebooks)                 │
 ├────────────────────────────────────────────────────┤
 │              Filter Engine                          │
-│  (Applies filters to queries)                      │
+│  (Uses core.session.filters - single source)       │
 ├────────────────────────────────────────────────────┤
 │              Universal Session                      │
 │  (Executes queries against Silver layer)           │

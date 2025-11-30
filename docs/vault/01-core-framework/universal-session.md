@@ -2,8 +2,11 @@
 
 **Complete documentation for the UniversalSession class**
 
-File: `models/api/session.py`
-Line: 47-1063
+File: `models/api/session.py` (410 lines - thin orchestrator)
+
+**v2.2 Modular Architecture** - UniversalSession now uses composition with helper modules:
+- `models/api/auto_join.py` - Auto-join operations (450 lines)
+- `models/api/aggregation.py` - Data aggregation (272 lines)
 
 ---
 
@@ -21,9 +24,33 @@ Line: 47-1063
 - **Backend abstraction**: Works with both Spark and DuckDB
 - **Session injection**: Models can reference each other via injected session
 
+### Modular Architecture (v2.2)
+
+As of v2.2, UniversalSession uses **composition with lazy-loaded handler modules**:
+
+```python
+class UniversalSession:
+    def __init__(self, ...):
+        # Composition helpers (lazy-loaded)
+        self._auto_join_handler = None    # AutoJoinHandler
+        self._aggregation_handler = None  # AggregationHandler
+
+    def _get_auto_join_handler(self):
+        if self._auto_join_handler is None:
+            from models.api.auto_join import AutoJoinHandler
+            self._auto_join_handler = AutoJoinHandler(self)
+        return self._auto_join_handler
+```
+
+**Benefits:**
+- **Focused modules**: Auto-join logic isolated from core session
+- **Testability**: Handlers can be tested independently
+- **Lazy loading**: Only loaded when auto-join/aggregation needed
+
 ### Design Patterns
 
-- **Lazy Loading**: Models loaded on first access, cached thereafter
+- **Composition Pattern**: Auto-join and aggregation split into handler classes (v2.2)
+- **Lazy Loading**: Models and handlers loaded on first access, cached thereafter
 - **Dependency Injection**: Session injected into models for cross-model access
 - **Graph Traversal**: Uses model dependency graph for join planning
 - **Strategy Pattern**: Different backends (Spark/DuckDB) use different execution strategies

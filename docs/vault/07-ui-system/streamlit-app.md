@@ -29,20 +29,38 @@ Streamlit UI
 
 ---
 
-## Application Structure
+## Application Structure (v2.2 Modular Architecture)
 
 ```
 app/
 ├── ui/
-│   ├── notebook_app_duckdb.py    # Main app (DuckDB backend)
-│   ├── components/               # Reusable UI components
+│   ├── notebook_app_duckdb.py    # Main app (thin orchestrator)
+│   ├── state/                    # Session state management (v2.2)
+│   │   └── session_state.py      # State initialization & access
+│   ├── callbacks/                # UI callbacks (v2.2)
+│   │   └── block_callbacks.py    # Block edit/delete handlers
+│   ├── components/
+│   │   ├── markdown/             # Modular markdown renderer (v2.2)
+│   │   │   ├── renderer.py       # Main orchestrator
+│   │   │   ├── parser.py         # Markdown parsing
+│   │   │   ├── styles.py         # CSS constants
+│   │   │   ├── utils.py          # Utilities
+│   │   │   ├── blocks/           # Block renderers
+│   │   │   └── editors/          # Section editors
+│   │   └── ...                   # Other components
 │   └── utils/                    # UI utilities
 └── notebook/
     ├── managers/                 # Notebook management
     ├── parsers/                  # Markdown parsing
-    ├── filters/                  # Filter system
+    ├── filters/                  # Filter system (re-exports from core)
     └── exhibits/                 # Visualization rendering
 ```
+
+**v2.2 Refactoring Notes:**
+- `notebook_app_duckdb.py` reduced from ~1,000+ lines to thin orchestrator
+- State management extracted to `state/session_state.py`
+- Block callbacks extracted to `callbacks/block_callbacks.py`
+- Markdown rendering split into 17 focused modules under `components/markdown/`
 
 ---
 
