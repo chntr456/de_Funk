@@ -7,7 +7,12 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
 
 **Architecture Diagram**: See `docs/architecture-diagram.drawio` for visual representation of the system architecture.
 
-**Recent Updates (v2.2)** - Backend Abstraction Rules:
+**Recent Updates (v2.2)** - Large File Refactoring & Backend Abstraction:
+- **✅ Large File Refactoring**: Proposal 008 implemented (see `docs/vault/13-proposals/accepted/`)
+  - `models/base/model.py`: 1,312 → 397 lines (composition with graph_builder, table_accessor, etc.)
+  - `models/api/session.py`: 1,122 → 410 lines (extracted auto_join, aggregation handlers)
+  - `markdown_renderer.py`: 1,885 → 110 lines (17 modular files in markdown/)
+  - FilterEngine: Consolidated to single implementation, removed 380 lines dead code
 - **⚠️ Backend Selection Guidelines**: When to use Spark vs DuckDB (ENFORCED)
 - **Session Abstraction Required**: Never import `duckdb` or `pyspark` directly
 - **Decision Tree**: Clear guidance for backend selection
@@ -109,6 +114,10 @@ de_Funk/
 │   ├── notebook/            # Notebook system (parsers, managers, filters)
 │   ├── services/            # Business logic services
 │   └── ui/                  # Streamlit components & main app
+│       ├── components/
+│       │   └── markdown/    # Modular markdown renderer (v2.2 refactor)
+│       ├── state/           # Session state management (v2.2)
+│       └── callbacks/       # UI event handlers (v2.2)
 ├── config/                   # Centralized configuration system
 │   ├── __init__.py          # ConfigLoader and typed models
 │   ├── loader.py            # Configuration loading with precedence
@@ -143,7 +152,15 @@ de_Funk/
 │       └── bls/             # Economic data (Bureau of Labor Statistics)
 ├── models/
 │   ├── api/                 # Model sessions & registry
-│   ├── base/                # BaseModel class framework (v2.0: Python measures support)
+│   │   ├── session.py       # UniversalSession (v2.2: modular)
+│   │   ├── auto_join.py     # Auto-join operations (v2.2)
+│   │   └── aggregation.py   # Data aggregation (v2.2)
+│   ├── base/                # BaseModel class framework (v2.2: modular)
+│   │   ├── model.py         # Core BaseModel (composition pattern)
+│   │   ├── graph_builder.py # Graph building and node loading
+│   │   ├── table_accessor.py # Table access and schema inspection
+│   │   ├── measure_calculator.py # Measure calculations
+│   │   └── model_writer.py  # Persistence to storage
 │   ├── builders/            # Model building utilities
 │   ├── measures/            # Measure framework (simple, computed, weighted, Python)
 │   └── implemented/         # Domain models
@@ -1259,18 +1276,25 @@ If queries are slow:
 
 | Module | Purpose |
 |--------|---------|
-| `config/loader.py` | **ConfigLoader** - Centralized configuration loading (NEW) |
-| `config/models.py` | Type-safe configuration dataclasses (NEW) |
-| `utils/repo.py` | **Repo discovery** - Find repo root and setup imports (NEW) |
+| `config/loader.py` | **ConfigLoader** - Centralized configuration loading |
+| `config/models.py` | Type-safe configuration dataclasses |
+| `utils/repo.py` | **Repo discovery** - Find repo root and setup imports |
 | `core/context.py` | **RepoContext** - Now uses ConfigLoader internally |
-| `models/base/model.py` | BaseModel class - foundation for all models |
+| `core/session/filters.py` | **FilterEngine** - Canonical filter implementation (v2.2) |
+| `models/base/model.py` | BaseModel class - thin orchestrator (v2.2: 397 lines) |
+| `models/base/graph_builder.py` | Graph building and node loading (v2.2) |
+| `models/base/table_accessor.py` | Table access and schema inspection (v2.2) |
+| `models/base/measure_calculator.py` | Measure calculations (v2.2) |
+| `models/base/model_writer.py` | Persistence to storage (v2.2) |
+| `models/api/session.py` | UniversalSession - thin orchestrator (v2.2: 410 lines) |
+| `models/api/auto_join.py` | Auto-join operations (v2.2) |
+| `models/api/aggregation.py` | Data aggregation (v2.2) |
 | `models/api/registry.py` | Model registry - discover and manage models |
-| `core/session/universal_session.py` | Unified query interface |
-| `core/session/filters.py` | Backend-agnostic filter application |
 | `models/measures/framework.py` | Measure calculation framework |
 | `datapipelines/base/facet.py` | Base facet transformation class |
-| `app/notebook/parser.py` | Markdown notebook parser |
-| `app/notebook/manager.py` | Notebook management |
+| `app/notebook/parsers/markdown_parser.py` | Markdown notebook parser |
+| `app/notebook/managers/notebook_manager.py` | Notebook management |
+| `app/ui/components/markdown/renderer.py` | Markdown rendering (v2.2: modular) |
 
 ### Key Scripts
 
