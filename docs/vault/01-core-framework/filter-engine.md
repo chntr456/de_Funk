@@ -24,12 +24,16 @@ File: `core/session/filters.py`
 - **Strategy Pattern**: Different backends use different implementations
 - **Filter Specification**: Declarative filter definition
 
-### Consolidates
+### Consolidation Complete (v2.2)
 
-Previously duplicated across:
-- `models/base/service.py` (BaseAPI._apply_filters)
-- `app/notebook/api/notebook_session.py` (_build_filters)
-- `app/services/storage_service.py` (filter application)
+**FilterEngine is now the single source of truth for filter application.**
+
+Previously duplicated code has been removed:
+- ~~`app/notebook/filters/engine.py`~~ - **DELETED** (was 346 lines of dead code)
+- ~~`app/notebook/filters/types.py`~~ - **DELETED** (was 34 lines, only used by deleted engine)
+- `app/notebook/filters/__init__.py` now re-exports from `core.session.filters`
+
+All filter application now goes through `FilterEngine` in `core/session/filters.py`.
 
 ---
 

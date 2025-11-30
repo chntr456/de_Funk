@@ -2,8 +2,13 @@
 
 **Complete documentation for the BaseModel class**
 
-File: `models/base/model.py`
-Line: 67-1230
+File: `models/base/model.py` (397 lines - thin orchestrator)
+
+**v2.2 Modular Architecture** - BaseModel now uses composition with helper modules:
+- `models/base/graph_builder.py` - Graph building and node loading (418 lines)
+- `models/base/table_accessor.py` - Table access and schema inspection (250 lines)
+- `models/base/measure_calculator.py` - Measure calculations (277 lines)
+- `models/base/model_writer.py` - Persistence to storage (261 lines)
 
 ---
 
@@ -11,17 +16,37 @@ Line: 67-1230
 
 `BaseModel` is the **foundation class for all dimensional models** in de_Funk. It provides a complete YAML-driven framework for building, querying, and managing dimensional models with automatic graph building, cross-model references, and backend abstraction.
 
-### Why BaseModel Has 40+ Methods
+### Modular Architecture (v2.2)
 
-Instead of duplicating graph-building logic across 8+ models, BaseModel centralizes all functionality into a single, powerful base class. This provides:
+As of v2.2, BaseModel uses **composition with lazy-loaded helper modules** instead of a monolithic class:
 
-- **Consistency**: All models work the same way
-- **Maintainability**: Fix bugs once, all models benefit
-- **Extensibility**: Override specific methods for custom behavior
-- **Backend Agnostic**: Same code works with Spark or DuckDB
+```python
+class BaseModel:
+    def __init__(self, ...):
+        # Composition helpers (lazy-loaded)
+        self._graph_builder = None      # GraphBuilder
+        self._table_accessor = None     # TableAccessor
+        self._measure_calculator = None # MeasureCalculator
+        self._model_writer = None       # ModelWriter
+
+    def ensure_built(self):
+        if not self._is_built:
+            if self._graph_builder is None:
+                from models.base.graph_builder import GraphBuilder
+                self._graph_builder = GraphBuilder(self)
+            self._dims, self._facts = self._graph_builder.build()
+            self._is_built = True
+```
+
+**Benefits of Modular Architecture:**
+- **Smaller files**: Each module is <450 lines (target: <300)
+- **Testability**: Components can be tested in isolation
+- **Maintainability**: Focused modules are easier to understand
+- **Lazy loading**: Modules only loaded when needed
 
 ### Design Patterns
 
+- **Composition Pattern**: Functionality split into focused helper classes (v2.2)
 - **Template Method Pattern**: `build()` orchestrates standard workflow, subclasses override hooks
 - **Lazy Loading**: Tables built on first access via `ensure_built()`
 - **Backend Abstraction**: Methods automatically adapt to Spark or DuckDB
