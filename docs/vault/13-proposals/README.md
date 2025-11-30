@@ -49,6 +49,7 @@ Draft → Active → Accepted/Rejected → (Archived)
 | [007-codebase-review-ratings](draft/007-codebase-review-ratings.md) | Codebase Quality Review (1-5 Ratings) | Medium | 2025-11-29 |
 | [008-large-file-refactoring](draft/008-large-file-refactoring.md) | Large File Refactoring & Duplication Elimination | High | 2025-11-29 |
 | [009-architecture-guidelines](draft/009-architecture-guidelines.md) | Architecture Boundaries & Claude Guidelines | High | 2025-11-29 |
+| [010-alpha-vantage-expansion-unified-cashflow](draft/010-alpha-vantage-expansion-unified-cashflow.md) | Alpha Vantage Expansion & Unified Cashflow Model | High | 2025-11-30 |
 
 ---
 
