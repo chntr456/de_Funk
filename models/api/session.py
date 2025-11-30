@@ -1,3 +1,19 @@
+"""
+UniversalSession - Model-agnostic session for cross-model queries.
+
+Provides:
+- Dynamic model loading from registry
+- Cross-model queries and joins
+- Auto-join support via graph traversal
+- Aggregation with measure metadata
+
+REFACTORED: This file now uses composition with:
+- AutoJoinHandler: Automatic join operations
+- AggregationHandler: Data aggregation
+
+All auto-join and aggregation logic has been extracted to separate modules.
+"""
+
 from __future__ import annotations
 import json
 from pathlib import Path
@@ -9,11 +25,9 @@ else:
     SparkDataFrame = Any
 
 # Import StorageRouter separately to avoid pyspark dependency
-# StorageRouter is just a dataclass for paths, doesn't require Spark
 try:
     from models.api.dal import StorageRouter, BronzeTable
 except ImportError:
-    # If pyspark not available, only import StorageRouter (doesn't need Spark)
     from dataclasses import dataclass
     from typing import Dict, Any as DictAny
 
@@ -30,19 +44,15 @@ except ImportError:
             root = self.storage_cfg["roots"]["silver"].rstrip("/")
             return f"{root}/{logical_rel}"
 
-    BronzeTable = None  # Not needed for DuckDB
+    BronzeTable = None
 
 from core.session.filters import FilterEngine
 
 try:
-    import yaml  # type: ignore
+    import yaml
 except Exception:
     yaml = None
 
-
-# ============================================================
-# UNIVERSAL SESSION (Model-Agnostic)
-# ============================================================
 
 class UniversalSession:
     """
@@ -95,7 +105,7 @@ class UniversalSession:
         self.registry = ModelRegistry(models_dir)
 
         # Cache loaded models
-        self._models: Dict[str, Any] = {}  # model_name -> BaseModel instance
+        self._models: Dict[str, Any] = {}
 
         # Build model dependency graph
         from models.api.graph import ModelGraph
@@ -105,39 +115,50 @@ class UniversalSession:
         except Exception as e:
             print(f"Warning: Could not build model graph: {e}")
 
+        # Composition helpers (lazy-loaded)
+        self._auto_join_handler = None
+        self._aggregation_handler = None
+
         # Pre-load specified models
         if models:
             for model_name in models:
                 self.load_model(model_name)
 
+    # ============================================================
+    # PROPERTIES
+    # ============================================================
+
     @property
     def backend(self) -> str:
-        """
-        Detect backend type from connection.
-
-        Returns:
-            'spark' or 'duckdb'
-
-        Raises:
-            ValueError: If connection type is unknown
-        """
+        """Detect backend type from connection."""
         connection_type = str(type(self.connection))
 
-        # Check for Spark
         if 'spark' in connection_type.lower() or hasattr(self.connection, 'sql'):
             return 'spark'
 
-        # Check for DuckDB
         if 'duckdb' in connection_type.lower() or (
             hasattr(self.connection, '_conn') and 'duckdb' in str(type(self.connection._conn)).lower()
         ):
             return 'duckdb'
 
-        # Unknown connection type
         raise ValueError(f"Unknown connection type: {connection_type}")
 
+    def _get_auto_join_handler(self):
+        """Get or create AutoJoinHandler instance."""
+        if self._auto_join_handler is None:
+            from models.api.auto_join import AutoJoinHandler
+            self._auto_join_handler = AutoJoinHandler(self)
+        return self._auto_join_handler
+
+    def _get_aggregation_handler(self):
+        """Get or create AggregationHandler instance."""
+        if self._aggregation_handler is None:
+            from models.api.aggregation import AggregationHandler
+            self._aggregation_handler = AggregationHandler(self)
+        return self._aggregation_handler
+
     # ============================================================
-    # GRAPH ORCHESTRATION METHODS
+    # GRAPH ORCHESTRATION
     # ============================================================
 
     def should_apply_cross_model_filter(
@@ -151,34 +172,18 @@ class UniversalSession:
         Returns True if:
         - Same model (always apply)
         - Models are related via graph (cross-model filter is valid)
-
-        Args:
-            source_model: Model that defines the filter
-            target_model: Model being queried
-
-        Returns:
-            True if filter should be applied
-
-        Example:
-            # Apply equity filters to equity model
-            session.should_apply_cross_model_filter('equity', 'equity')  # True
-
-            # Apply equity filters to forecast model (related via graph)
-            session.should_apply_cross_model_filter('equity', 'forecast')  # True
-
-            # Don't apply equity filters to unrelated city_finance
-            session.should_apply_cross_model_filter('equity', 'city_finance')  # False
         """
-        # Same model - always apply
         if source_model == target_model:
             return True
 
-        # Check if models are related via graph
         if hasattr(self, 'model_graph') and self.model_graph:
             return self.model_graph.are_related(target_model, source_model)
 
-        # No graph available - be conservative, don't apply cross-model filters
         return False
+
+    # ============================================================
+    # MODEL LOADING
+    # ============================================================
 
     def load_model(self, model_name: str):
         """
@@ -190,73 +195,50 @@ class UniversalSession:
         3. Instantiate model
         4. Inject session for cross-model access
         5. Cache instance
-
-        Args:
-            model_name: Name of model to load
-
-        Returns:
-            BaseModel instance
         """
-        # Return cached if already loaded
         if model_name in self._models:
             return self._models[model_name]
 
-        # Get config and class from registry
         model_config = self.registry.get_model_config(model_name)
 
-        # Try to get model class, fall back to BaseModel if not registered
         try:
             model_class = self.registry.get_model_class(model_name)
         except ValueError:
-            # No custom class registered, use BaseModel
             from models.base.model import BaseModel
             model_class = BaseModel
             print(f"⚠ No custom class for {model_name}, using BaseModel")
 
-        # Instantiate model
         model = model_class(
             connection=self.connection,
             storage_cfg=self.storage_cfg,
             model_cfg=model_config,
             params={},
-            repo_root=self.repo_root  # Pass repo_root for absolute paths
+            repo_root=self.repo_root
         )
 
-        # Inject session for cross-model access
         if hasattr(model, 'set_session'):
             model.set_session(self)
 
-        # Cache
         self._models[model_name] = model
-
         return model
 
+    def get_model_instance(self, model_name: str):
+        """Get the model instance directly."""
+        return self.load_model(model_name)
+
+    # ============================================================
+    # TABLE ACCESS
+    # ============================================================
+
     def _get_table_from_view_or_build(self, model, model_name: str, table_name: str) -> Any:
-        """
-        Try to get table from existing silver view, fall back to building from bronze.
-
-        This method is backend-agnostic - it uses the connection's table() method
-        which abstracts the underlying implementation.
-
-        Args:
-            model: Model instance
-            model_name: Name of the model
-            table_name: Name of the table
-
-        Returns:
-            DataFrame (relation or pandas)
-        """
-        # Try to query existing silver view first (if connection supports it)
+        """Try to get table from existing silver view, fall back to building."""
         if hasattr(self.connection, 'table'):
             view_name = f"{model_name}.{table_name}"
             try:
-                # This returns a proper relation object (DuckDB) or DataFrame
                 return self.connection.table(view_name)
             except Exception:
-                # View doesn't exist, fall through to build from bronze
                 pass
 
-        # Fall back to building from bronze via model
         return model.get_table(table_name)
 
     def get_table(
@@ -273,62 +255,29 @@ class UniversalSession:
         Get a table from any model with transparent auto-join and aggregation support.
 
         If required_columns are specified and some don't exist in the base table,
-        the system automatically uses the model graph to find join paths and
-        retrieve the missing columns.
+        the system automatically uses the model graph to find join paths.
 
-        If group_by is specified, the data is aggregated to the new grain using
-        measure metadata from the model configuration.
-
-        This makes materialized views a performance optimization rather than
-        a user-facing concept - users just specify what columns they need and
-        at what grain.
+        If group_by is specified, the data is aggregated using measure metadata.
 
         Args:
             model_name: Name of the model
             table_name: Name of the base table
-            required_columns: Optional list of columns needed. If specified and some
-                            columns don't exist in base table, auto-joins are performed
-            filters: Optional filters to apply (pushed down before joins/aggregation)
-            group_by: Optional list of columns to group by (dimensions at new grain)
-            aggregations: Optional dict mapping measure columns to aggregation functions
-                        (avg, sum, max, min, count, first). If not provided, uses measure
-                        metadata from model config.
+            required_columns: Optional list of columns needed
+            filters: Optional filters to apply
+            group_by: Optional list of columns to group by
+            aggregations: Optional dict mapping measure columns to agg functions
             use_cache: Whether to use cached data (kept for backwards compatibility)
 
         Returns:
             DataFrame with requested columns (auto-joined and aggregated if needed)
-
-        Examples:
-            # Simple usage - get full table
-            df = session.get_table('company', 'fact_prices')
-
-            # Auto-join usage - exchange_name not in fact_prices, auto-joins via graph
-            df = session.get_table(
-                'company', 'fact_prices',
-                required_columns=['ticker', 'close', 'exchange_name']
-            )
-            # System transparently joins: fact_prices -> dim_company -> dim_exchange
-
-            # Aggregation usage - change grain from ticker to exchange
-            df = session.get_table(
-                'company', 'fact_prices',
-                required_columns=['trade_date', 'exchange_name', 'close', 'volume'],
-                group_by=['trade_date', 'exchange_name'],
-                aggregations={'close': 'avg', 'volume': 'sum'}
-            )
-            # System auto-joins exchange_name, then aggregates to exchange-level
-
-        Note:
-            The use_cache parameter is kept for backwards compatibility with old
-            SilverStorageService API but is not used. Model caching is handled
-            automatically via the _models cache in UniversalSession.
         """
         model = self.load_model(model_name)
+        auto_join = self._get_auto_join_handler()
+        aggregation = self._get_aggregation_handler()
 
-        # If no specific columns requested, return full table (backward compatible)
+        # If no specific columns requested, return full table
         if not required_columns:
             df = self._get_table_from_view_or_build(model, model_name, table_name)
-            # Apply filters if specified
             if filters:
                 df = FilterEngine.apply_from_session(df, filters, self)
             return df
@@ -338,7 +287,6 @@ class UniversalSession:
             schema = model.get_table_schema(table_name)
             base_columns = set(schema.keys())
         except Exception as e:
-            # If can't get schema, fall back to simple table access
             print(f"Warning: Could not get schema for {model_name}.{table_name}: {e}")
             return self._get_table_from_view_or_build(model, model_name, table_name)
 
@@ -349,58 +297,50 @@ class UniversalSession:
         if not missing:
             df = self._get_table_from_view_or_build(model, model_name, table_name)
 
-            # Apply filters BEFORE selecting/aggregating (pushdown optimization)
             if filters:
                 df = FilterEngine.apply_from_session(df, filters, self)
 
-            # Select only requested columns
-            df = self._select_columns(df, required_columns)
+            df = auto_join.select_columns(df, required_columns)
 
-            # Apply aggregation if group_by specified
             if group_by:
-                df = self._aggregate_data(model_name, df, required_columns, group_by, aggregations)
+                df = aggregation.aggregate_data(model_name, df, required_columns, group_by, aggregations)
 
             return df
 
         # Missing columns - try auto-join strategies
         print(f"🔗 Auto-join: {missing} not in {table_name}, searching for join path...")
 
-        # Strategy 1: Check if a materialized view has all columns
-        materialized_table = self._find_materialized_view(model_name, required_columns)
+        # Strategy 1: Check for materialized view
+        materialized_table = auto_join.find_materialized_view(model_name, required_columns)
         if materialized_table:
             print(f"✓ Using materialized view: {materialized_table}")
             df = model.get_table(materialized_table)
 
-            # Apply filters BEFORE selecting/aggregating (pushdown optimization)
             if filters:
                 df = FilterEngine.apply_from_session(df, filters, self)
 
-            # Select only requested columns
-            df = self._select_columns(df, required_columns)
+            df = auto_join.select_columns(df, required_columns)
 
-            # Apply aggregation if group_by specified
             if group_by:
-                df = self._aggregate_data(model_name, df, required_columns, group_by, aggregations)
+                df = aggregation.aggregate_data(model_name, df, required_columns, group_by, aggregations)
 
             return df
 
         # Strategy 2: Build joins from graph
         try:
-            join_plan = self._plan_auto_joins(model_name, table_name, missing)
+            join_plan = auto_join.plan_auto_joins(model_name, table_name, missing)
             print(f"✓ Join plan: {' -> '.join(join_plan['table_sequence'])}")
-            df = self._execute_auto_joins(model_name, join_plan, required_columns, filters)
+            df = auto_join.execute_auto_joins(model_name, join_plan, required_columns, filters)
         except Exception as e:
             print(f"❌ Auto-join failed: {e}")
             print(f"   Falling back to base table {table_name}")
             df = model.get_table(table_name)
 
-            # Apply filters even in fallback path
             if filters:
                 df = FilterEngine.apply_from_session(df, filters, self)
 
-        # Apply aggregation if group_by specified
         if group_by:
-            df = self._aggregate_data(model_name, df, required_columns, group_by, aggregations)
+            df = aggregation.aggregate_data(model_name, df, required_columns, group_by, aggregations)
 
         return df
 
@@ -409,713 +349,62 @@ class UniversalSession:
         Get automatic filter column mappings based on model graph edges.
 
         Examines graph edges to find joins to dim_calendar and extracts
-        column mappings. This allows filters like 'trade_date' to be
-        automatically mapped to table-specific columns like 'metric_date'.
-
-        Args:
-            model_name: Name of the model
-            table_name: Name of the table
-
-        Returns:
-            Dictionary mapping standard filter columns to table columns
-            Example: {'trade_date': 'metric_date'}
-
-        Example:
-            If forecast model has this edge:
-                from: fact_forecast_metrics
-                to: core.dim_calendar
-                on: [metric_date = trade_date]
-
-            Then get_filter_column_mappings('forecast', 'fact_forecast_metrics')
-            returns: {'trade_date': 'metric_date'}
+        column mappings for filter translation.
         """
         mappings = {}
 
-        # Get model config
         try:
             model_config = self.registry.get_model_config(model_name)
         except Exception:
-            return mappings  # No model config, no mappings
+            return mappings
 
-        # Check if model has graph metadata
         if 'graph' not in model_config or 'edges' not in model_config['graph']:
             return mappings
 
         # Handle both v1.x (list) and v2.0 (dict) edge formats
         edges_config = model_config['graph']['edges']
         if isinstance(edges_config, dict):
-            # v2.0 format: {edge_id: {from: ..., to: ...}}
             edges_list = list(edges_config.values())
         else:
-            # v1.x format: [{id: edge_id, from: ..., to: ...}]
             edges_list = edges_config
 
-        # Look for edges from this table to dim_calendar
         for edge in edges_list:
             edge_from = edge.get('from', '')
             edge_to = edge.get('to', '')
 
-            # Check if this edge is from our table to dim_calendar
             if edge_from == table_name and 'dim_calendar' in edge_to:
-                # Extract column mapping from 'on' condition
-                # Note: YAML parser converts 'on:' to boolean True (reserved word)
-                # So we need to check both 'on' and True keys
                 on_conditions = edge.get('on', edge.get(True, []))
 
                 for condition in on_conditions:
                     if isinstance(condition, str):
-                        # Format: "metric_date = trade_date"
                         parts = condition.split('=')
                         if len(parts) == 2:
                             table_col = parts[0].strip()
                             calendar_col = parts[1].strip()
-                            # Map calendar column to table column
-                            # e.g., trade_date → metric_date
                             mappings[calendar_col] = table_col
 
         return mappings
 
     def get_dimension_df(self, model_name: str, dim_id: str) -> Any:
-        """Get a dimension table from a model"""
+        """Get a dimension table from a model."""
         model = self.load_model(model_name)
         return model.get_dimension_df(dim_id)
 
     def get_fact_df(self, model_name: str, fact_id: str) -> Any:
-        """Get a fact table from a model"""
+        """Get a fact table from a model."""
         model = self.load_model(model_name)
         return model.get_fact_df(fact_id)
 
     def list_models(self) -> list[str]:
-        """List all available models"""
+        """List all available models."""
         return self.registry.list_models()
 
     def list_tables(self, model_name: str) -> Dict[str, list[str]]:
-        """
-        List all tables in a model.
-
-        Returns:
-            Dictionary with 'dimensions' and 'facts' keys
-        """
+        """List all tables in a model."""
         model = self.load_model(model_name)
         return model.list_tables()
 
     def get_model_metadata(self, model_name: str) -> Dict[str, Any]:
-        """Get metadata for a model"""
+        """Get metadata for a model."""
         model = self.load_model(model_name)
         return model.get_metadata()
-
-    def get_model_instance(self, model_name: str):
-        """
-        Get the model instance directly.
-
-        Useful for accessing model-specific methods.
-
-        Args:
-            model_name: Name of the model
-
-        Returns:
-            BaseModel instance
-        """
-        return self.load_model(model_name)
-
-    # ============================================================
-    # AUTO-JOIN SUPPORT (Transparent Graph Traversal)
-    # ============================================================
-
-    def _select_columns(self, df: Any, columns: List[str]) -> Any:
-        """
-        Select specific columns from DataFrame (backend agnostic).
-
-        Args:
-            df: DataFrame (Spark or DuckDB)
-            columns: List of column names to select
-
-        Returns:
-            DataFrame with only specified columns
-        """
-        import pandas as pd
-
-        if self.backend == 'spark':
-            return df.select(*columns)
-        else:
-            # DuckDB - check if already pandas DataFrame or DuckDB relation
-            if isinstance(df, pd.DataFrame):
-                # Already pandas - filter to only columns that exist
-                available_columns = [col for col in columns if col in df.columns]
-                if not available_columns:
-                    # If no columns available, return empty dataframe with requested columns
-                    return pd.DataFrame(columns=columns)
-                return df[available_columns]
-            else:
-                # DuckDB relation - use project() method
-                # Filter to columns that exist in the relation
-                relation_columns = df.columns
-                available_columns = [col for col in columns if col in relation_columns]
-                if not available_columns:
-                    # Return empty result if no columns match
-                    return df.limit(0)
-                return df.project(','.join(available_columns))
-
-    def _find_materialized_view(
-        self,
-        model_name: str,
-        required_columns: List[str]
-    ) -> Optional[str]:
-        """
-        Find a materialized view that contains all required columns.
-
-        This allows the system to use pre-computed joins when available,
-        making materialized views a performance optimization.
-
-        Args:
-            model_name: Model to search in
-            required_columns: Columns needed
-
-        Returns:
-            Table name of materialized view, or None if not found
-        """
-        try:
-            model = self.load_model(model_name)
-            tables = model.list_tables()
-
-            # Search in facts (where materialized paths are stored)
-            for table_name in tables.get('facts', []):
-                try:
-                    schema = model.get_table_schema(table_name)
-                    table_columns = set(schema.keys())
-
-                    # Check if this table has all required columns
-                    if all(col in table_columns for col in required_columns):
-                        return table_name
-                except Exception:
-                    continue
-
-            return None
-        except Exception as e:
-            print(f"Warning: Error finding materialized view: {e}")
-            return None
-
-    def _plan_auto_joins(
-        self,
-        model_name: str,
-        base_table: str,
-        missing_columns: List[str]
-    ) -> Dict[str, Any]:
-        """
-        Plan join sequence to get missing columns using model graph.
-
-        Args:
-            model_name: Model name
-            base_table: Starting table
-            missing_columns: Columns to find
-
-        Returns:
-            Join plan dict with:
-                - table_sequence: List of tables to join
-                - join_keys: List of (left_col, right_col) pairs for each join
-                - target_columns: Which columns come from which table
-
-        Raises:
-            ValueError: If no join path found
-        """
-        model_config = self.registry.get_model_config(model_name)
-        graph_config = model_config.get('graph', {})
-
-        if not graph_config or 'edges' not in graph_config:
-            raise ValueError(f"No graph edges defined for model {model_name}")
-
-        # Build column-to-table index
-        column_index = self._build_column_index(model_name)
-
-        # Find which tables have the missing columns
-        target_tables = {}
-        for col in missing_columns:
-            if col in column_index:
-                target_tables[col] = column_index[col][0]  # Use first table that has it
-            else:
-                raise ValueError(f"Column '{col}' not found in any table in model {model_name}")
-
-        # Find join path from base_table to target tables
-        table_sequence = [base_table]
-        join_keys = []
-        seen_tables = {base_table}
-
-        # Simple greedy algorithm: find edges from current tables to target tables
-        edges = graph_config.get('edges', [])
-        current_tables = {base_table}
-
-        # Keep adding tables until we have all target tables
-        while not all(tbl in seen_tables for tbl in target_tables.values()):
-            added_table = False
-
-            for edge in edges:
-                edge_from = edge.get('from', '')
-                edge_to = edge.get('to', '')
-
-                # Skip cross-model edges for now
-                if '.' in edge_to:
-                    continue
-
-                # Check if this edge connects a current table to a new table
-                if edge_from in current_tables and edge_to not in seen_tables:
-                    # Add this table to sequence
-                    table_sequence.append(edge_to)
-                    seen_tables.add(edge_to)
-                    current_tables.add(edge_to)
-
-                    # Extract join keys
-                    on_conditions = edge.get('on', edge.get(True, []))
-                    if on_conditions:
-                        # Parse "col1=col2" format
-                        join_pair = self._parse_join_condition(on_conditions[0])
-                        join_keys.append(join_pair)
-
-                    added_table = True
-                    break
-
-            if not added_table:
-                raise ValueError(
-                    f"Cannot find join path from {base_table} to {missing_columns}. "
-                    f"Reached: {seen_tables}, Need: {set(target_tables.values())}"
-                )
-
-        return {
-            'table_sequence': table_sequence,
-            'join_keys': join_keys,
-            'target_columns': target_tables
-        }
-
-    def _build_column_index(self, model_name: str) -> Dict[str, List[str]]:
-        """
-        Build reverse index: column_name -> [table_names].
-
-        Args:
-            model_name: Model to index
-
-        Returns:
-            Dict mapping column names to list of tables that have that column
-        """
-        index = {}
-        model = self.load_model(model_name)
-        tables = model.list_tables()
-
-        # Index all tables (dims and facts)
-        for table_name in tables.get('dimensions', []) + tables.get('facts', []):
-            try:
-                schema = model.get_table_schema(table_name)
-                for column_name in schema.keys():
-                    if column_name not in index:
-                        index[column_name] = []
-                    index[column_name].append(table_name)
-            except Exception:
-                continue
-
-        return index
-
-    def _parse_join_condition(self, condition: str) -> Tuple[str, str]:
-        """
-        Parse join condition like "ticker=ticker" or "exchange_code=exchange_code".
-
-        Args:
-            condition: Join condition string
-
-        Returns:
-            Tuple of (left_column, right_column)
-        """
-        parts = condition.split('=')
-        if len(parts) == 2:
-            return (parts[0].strip(), parts[1].strip())
-        raise ValueError(f"Invalid join condition: {condition}")
-
-    def _execute_auto_joins(
-        self,
-        model_name: str,
-        join_plan: Dict[str, Any],
-        required_columns: List[str],
-        filters: Optional[Dict[str, Any]] = None
-    ) -> Any:
-        """
-        Execute the join plan to get required columns.
-
-        Args:
-            model_name: Model name
-            join_plan: Join plan from _plan_auto_joins
-            required_columns: Columns to return
-            filters: Optional filters to apply after joins
-
-        Returns:
-            DataFrame with required columns (filtered if filters specified)
-        """
-        model = self.load_model(model_name)
-        table_sequence = join_plan['table_sequence']
-        join_keys = join_plan['join_keys']
-
-        if self.backend == 'spark':
-            # Spark: Use DataFrame API
-            df = model.get_table(table_sequence[0])
-
-            # Apply filters to base table BEFORE joins (pushdown)
-            if filters:
-                df = FilterEngine.apply_from_session(df, filters, self)
-
-            # Join each subsequent table
-            for i, next_table in enumerate(table_sequence[1:]):
-                right_df = model.get_table(next_table)
-                left_col, right_col = join_keys[i]
-                df = df.join(right_df, df[left_col] == right_df[right_col], 'left')
-
-            # Select only required columns
-            return self._select_columns(df, required_columns)
-
-        else:
-            # DuckDB: Use SQL for joins (more efficient)
-            # Build SQL query with LEFT JOINS
-            base_table = table_sequence[0]
-
-            # Create temporary views from the tables
-            temp_tables = {}
-            try:
-                for table_name in table_sequence:
-                    df_temp = model.get_table(table_name)
-                    temp_name = f"_autojoin_{table_name}"
-                    # Register as temp table in DuckDB
-                    temp_df = df_temp.df()  # Convert to pandas
-                    print(f"DEBUG: Registering {temp_name}: shape={temp_df.shape}, columns={list(temp_df.columns)}")
-                    self.connection.conn.register(temp_name, temp_df)
-                    temp_tables[table_name] = temp_name
-
-                # Build SQL with proper qualified column names to avoid ambiguity
-                base_temp = temp_tables[base_table]
-                select_cols = []
-                for col in required_columns:
-                    # Try to find which table has this column
-                    found = False
-                    for table_name in table_sequence:
-                        try:
-                            df = model.get_table(table_name)
-                            if col in df.columns:
-                                select_cols.append(f"{temp_tables[table_name]}.{col}")
-                                found = True
-                                break
-                        except:
-                            continue
-                    if not found:
-                        # If not found, just use unqualified column name
-                        select_cols.append(col)
-
-                sql = f"SELECT {', '.join(select_cols)} FROM {base_temp}"
-
-                # Add each join - use PREVIOUS table, not base table
-                # For chain: fact_prices -> dim_company -> dim_exchange
-                # Join 1: fact_prices.ticker = dim_company.ticker
-                # Join 2: dim_company.exchange_code = dim_exchange.exchange_code (NOT fact_prices!)
-                for i in range(1, len(table_sequence)):
-                    left_table = table_sequence[i - 1]
-                    right_table = table_sequence[i]
-                    left_temp = temp_tables[left_table]
-                    right_temp = temp_tables[right_table]
-                    left_col, right_col = join_keys[i - 1]
-                    sql += f" LEFT JOIN {right_temp} ON {left_temp}.{left_col} = {right_temp}.{right_col}"
-
-                # Add WHERE clause for filter pushdown
-                if filters:
-                    where_clauses = []
-                    for col, filter_val in filters.items():
-                        if isinstance(filter_val, dict):
-                            # Range filter: {'start': ..., 'end': ...} or {'min': ..., 'max': ...}
-                            if 'start' in filter_val and 'end' in filter_val:
-                                where_clauses.append(f"{base_temp}.{col} BETWEEN '{filter_val['start']}' AND '{filter_val['end']}'")
-                            elif 'min' in filter_val and 'max' in filter_val:
-                                where_clauses.append(f"{base_temp}.{col} BETWEEN {filter_val['min']} AND {filter_val['max']}")
-                            elif 'min' in filter_val:
-                                where_clauses.append(f"{base_temp}.{col} >= {filter_val['min']}")
-                            elif 'max' in filter_val:
-                                where_clauses.append(f"{base_temp}.{col} <= {filter_val['max']}")
-                        elif isinstance(filter_val, list):
-                            # IN filter
-                            if all(isinstance(v, str) for v in filter_val):
-                                vals = "', '".join(filter_val)
-                                where_clauses.append(f"{base_temp}.{col} IN ('{vals}')")
-                            else:
-                                vals = ", ".join(str(v) for v in filter_val)
-                                where_clauses.append(f"{base_temp}.{col} IN ({vals})")
-                        else:
-                            # Equality filter
-                            if isinstance(filter_val, str):
-                                where_clauses.append(f"{base_temp}.{col} = '{filter_val}'")
-                            else:
-                                where_clauses.append(f"{base_temp}.{col} = {filter_val}")
-
-                    if where_clauses:
-                        sql += " WHERE " + " AND ".join(where_clauses)
-
-                print(f"DEBUG: Auto-join SQL: {sql}")
-
-                # Execute the join query
-                result = self.connection.conn.execute(sql)
-                result_df = result.fetchdf()
-                print(f"DEBUG: Query result: shape={result_df.shape}, columns={list(result_df.columns)}")
-                print(f"DEBUG: First few rows:\n{result_df.head()}")
-
-                # Unregister temp tables
-                for temp_name in temp_tables.values():
-                    try:
-                        self.connection.conn.unregister(temp_name)
-                    except:
-                        pass
-
-                # Convert to DuckDB relation
-                final_relation = self.connection.conn.from_df(result_df)
-                print(f"DEBUG: Final relation columns: {final_relation.columns}")
-                return final_relation
-
-            except Exception as e:
-                print(f"ERROR: Auto-join SQL failed: {e}")
-                import traceback
-                traceback.print_exc()
-
-                # Clean up temp tables
-                for temp_name in temp_tables.values():
-                    try:
-                        self.connection.conn.unregister(temp_name)
-                    except:
-                        pass
-
-                # Fall back to base table
-                df = model.get_table(table_sequence[0])
-
-                # Apply filters even in fallback path
-                if filters:
-                    df = FilterEngine.apply_from_session(df, filters, self)
-
-                return df
-
-    def _aggregate_data(
-        self,
-        model_name: str,
-        df: Any,
-        required_columns: List[str],
-        group_by: List[str],
-        aggregations: Optional[Dict[str, str]] = None
-    ) -> Any:
-        """
-        Aggregate data to a new grain using group_by and measure aggregations.
-
-        Args:
-            model_name: Name of the model (for measure metadata lookup)
-            df: DataFrame to aggregate
-            required_columns: All columns that should be in result
-            group_by: Columns to group by (dimensions at new grain)
-            aggregations: Optional dict mapping measure columns to agg functions.
-                        If not provided, infers from measure metadata.
-
-        Returns:
-            Aggregated DataFrame
-
-        Example:
-            Input df: ticker-level daily prices (10M rows)
-            group_by: ['trade_date', 'exchange_name']
-            aggregations: {'close': 'avg', 'volume': 'sum'}
-            Output: exchange-level daily prices (5 exchanges * 365 days = 1,825 rows)
-        """
-        print(f"🔢 Aggregating to grain: {group_by}")
-
-        # Determine which columns are measures (need aggregation)
-        measure_cols = [col for col in required_columns if col not in group_by]
-
-        if not measure_cols:
-            # No measures, just distinct dimensions
-            if self.backend == 'spark':
-                return df.select(*group_by).distinct()
-            else:  # duckdb
-                # DuckDB relations don't have .select(), need to use SQL
-                distinct_query = f"SELECT DISTINCT {', '.join(group_by)} FROM df"
-                return self.connection.conn.execute(distinct_query).df()
-
-        # Get or infer aggregations for each measure
-        if not aggregations:
-            aggregations = self._infer_aggregations(model_name, measure_cols)
-
-        print(f"   Measures: {aggregations}")
-
-        # Apply aggregations based on backend
-        if self.backend == 'spark':
-            return self._aggregate_spark(df, group_by, aggregations)
-        else:  # duckdb
-            return self._aggregate_duckdb(df, group_by, aggregations)
-
-    def _infer_aggregations(self, model_name: str, measure_cols: List[str]) -> Dict[str, str]:
-        """
-        Infer aggregation functions for measures from model metadata.
-
-        Checks model config for measure definitions and uses specified aggregations.
-        Falls back to sensible defaults: avg for prices, sum for volumes/counts.
-
-        Args:
-            model_name: Model to look up metadata
-            measure_cols: Measure columns to infer aggregations for
-
-        Returns:
-            Dict mapping measure column to aggregation function
-        """
-        aggregations = {}
-
-        try:
-            model_config = self.registry.get_model_config(model_name)
-            measures = model_config.get('measures', {})
-
-            for col in measure_cols:
-                # Check if measure is defined in config
-                if col in measures:
-                    measure_def = measures[col]
-                    # Use configured aggregation if available
-                    agg_func = measure_def.get('aggregation', 'avg')
-                    aggregations[col] = agg_func
-                else:
-                    # Fallback defaults based on column name
-                    aggregations[col] = self._default_aggregation(col)
-
-        except Exception as e:
-            print(f"   Warning: Could not load measure metadata: {e}")
-            # Use defaults for all
-            for col in measure_cols:
-                aggregations[col] = self._default_aggregation(col)
-
-        return aggregations
-
-    def _default_aggregation(self, column_name: str) -> str:
-        """
-        Determine default aggregation based on column name.
-
-        Args:
-            column_name: Name of the measure column
-
-        Returns:
-            Aggregation function: avg, sum, max, min, or first
-        """
-        col_lower = column_name.lower()
-
-        # Sum aggregations
-        if any(term in col_lower for term in ['volume', 'count', 'total', 'quantity', 'qty']):
-            return 'sum'
-
-        # Max aggregations
-        if any(term in col_lower for term in ['high', 'max', 'peak']):
-            return 'max'
-
-        # Min aggregations
-        if any(term in col_lower for term in ['low', 'min']):
-            return 'min'
-
-        # Default to average for prices and other numeric measures
-        return 'avg'
-
-    def _aggregate_spark(
-        self,
-        df: Any,
-        group_by: List[str],
-        aggregations: Dict[str, str]
-    ) -> Any:
-        """
-        Aggregate Spark DataFrame using groupBy and agg.
-
-        Args:
-            df: Spark DataFrame
-            group_by: Columns to group by
-            aggregations: Dict of column -> agg function
-
-        Returns:
-            Aggregated Spark DataFrame
-        """
-        try:
-            from pyspark.sql import functions as F
-        except ImportError:
-            raise RuntimeError("PySpark is required for Spark backend but not installed")
-
-        # Build aggregation expressions
-        agg_exprs = []
-        for col, agg_func in aggregations.items():
-            if agg_func == 'avg':
-                agg_exprs.append(F.avg(col).alias(col))
-            elif agg_func == 'sum':
-                agg_exprs.append(F.sum(col).alias(col))
-            elif agg_func == 'max':
-                agg_exprs.append(F.max(col).alias(col))
-            elif agg_func == 'min':
-                agg_exprs.append(F.min(col).alias(col))
-            elif agg_func == 'count':
-                agg_exprs.append(F.count(col).alias(col))
-            elif agg_func == 'first':
-                agg_exprs.append(F.first(col).alias(col))
-            else:
-                # Default to avg if unknown function
-                print(f"   Warning: Unknown aggregation '{agg_func}' for {col}, using avg")
-                agg_exprs.append(F.avg(col).alias(col))
-
-        # Group and aggregate
-        result = df.groupBy(*group_by).agg(*agg_exprs)
-
-        # Reorder columns to match group_by + measures order
-        measure_order = list(aggregations.keys())
-        result = result.select(*group_by, *measure_order)
-
-        return result
-
-    def _aggregate_duckdb(
-        self,
-        df: Any,
-        group_by: List[str],
-        aggregations: Dict[str, str]
-    ) -> Any:
-        """
-        Aggregate DuckDB relation using SQL GROUP BY.
-
-        Args:
-            df: DuckDB relation or pandas DataFrame
-            group_by: Columns to group by
-            aggregations: Dict of column -> agg function
-
-        Returns:
-            Aggregated DuckDB relation
-        """
-        # Build aggregation SQL
-        select_parts = []
-
-        # Add group by columns
-        for col in group_by:
-            select_parts.append(col)
-
-        # Add aggregated measures
-        for col, agg_func in aggregations.items():
-            if agg_func == 'avg':
-                select_parts.append(f"AVG({col}) as {col}")
-            elif agg_func == 'sum':
-                select_parts.append(f"SUM({col}) as {col}")
-            elif agg_func == 'max':
-                select_parts.append(f"MAX({col}) as {col}")
-            elif agg_func == 'min':
-                select_parts.append(f"MIN({col}) as {col}")
-            elif agg_func == 'count':
-                select_parts.append(f"COUNT({col}) as {col}")
-            elif agg_func == 'first':
-                select_parts.append(f"FIRST({col}) as {col}")
-            else:
-                # Default to AVG
-                print(f"   Warning: Unknown aggregation '{agg_func}' for {col}, using AVG")
-                select_parts.append(f"AVG({col}) as {col}")
-
-        # Build complete SQL
-        select_clause = ", ".join(select_parts)
-        group_clause = ", ".join(group_by)
-        sql = f"SELECT {select_clause} FROM df GROUP BY {group_clause}"
-
-        print(f"   Aggregation SQL: {sql}")
-
-        # Execute query
-        try:
-            result = self.connection.conn.execute(sql)
-            return result.df()
-        except Exception as e:
-            print(f"   Error in DuckDB aggregation: {e}")
-            # Return original data if aggregation fails
-            return df
