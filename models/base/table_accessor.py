@@ -43,10 +43,8 @@ class TableAccessor:
         return self.model.model_name
 
     def ensure_built(self):
-        """Lazy build pattern - only build when needed."""
-        if not self.model._is_built:
-            self.model._dims, self.model._facts = self.model._graph_builder.build()
-            self.model._is_built = True
+        """Lazy build pattern - delegates to model's ensure_built."""
+        self.model.ensure_built()
 
     def get_table(self, table_name: str) -> DataFrame:
         """
