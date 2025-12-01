@@ -16,37 +16,44 @@ from pathlib import Path
 import sys
 
 # Setup imports
-try:
-    from utils.repo import setup_repo_imports
-    setup_repo_imports()
-except:
-    # Fallback: add parent directory to path
-    sys.path.insert(0, str(Path(__file__).parent.parent))
+from utils.repo import setup_repo_imports
+setup_repo_imports()
 
 from config.model_loader import ModelConfigLoader
+from config.logging import get_logger, setup_logging
 from models.registry import ModelRegistry
 from pprint import pprint
+
+logger = get_logger(__name__)
+
+
+def print_header(text: str, char: str = "=") -> None:
+    """Print a formatted header line."""
+    line = char * 80
+    print(f"\n{line}")
+    print(text)
+    print(line)
 
 
 def test_model_config_loader():
     """Test ModelConfigLoader with modular YAMLs."""
-    print("=" * 80)
-    print("TEST 1: ModelConfigLoader - Load Modular Configurations")
-    print("=" * 80)
+    print_header("TEST 1: ModelConfigLoader - Load Modular Configurations")
+    logger.info("Starting ModelConfigLoader tests")
 
     models_dir = Path("configs/models")
     loader = ModelConfigLoader(models_dir)
 
     # Test loading stocks model (modular)
-    print("\n📦 Loading 'stocks' model (modular structure)...")
+    print("\nLoading 'stocks' model (modular structure)...")
     try:
         stocks_config = loader.load_model_config('stocks')
-        print(f"✅ Loaded stocks model successfully")
+        print(f"  Loaded stocks model successfully")
         print(f"   Model name: {stocks_config.get('model')}")
         print(f"   Version: {stocks_config.get('version')}")
         print(f"   Inherits from: {stocks_config.get('inherits_from')}")
         print(f"   Depends on: {stocks_config.get('depends_on')}")
         print(f"   Components: {list(stocks_config.get('components', {}).keys())}")
+        logger.info(f"Loaded stocks model: version={stocks_config.get('version')}")
 
         # Check if schema was merged
         if 'schema' in stocks_config:
@@ -63,81 +70,91 @@ def test_model_config_loader():
                 print(f"   Example Python measures: {list(python_measures.keys())[:3]}")
 
     except Exception as e:
-        print(f"❌ Failed to load stocks model: {e}")
+        logger.error(f"Failed to load stocks model: {e}", exc_info=True)
+        print(f"  Failed to load stocks model: {e}")
         import traceback
         traceback.print_exc()
 
     # Test loading company model (modular)
-    print("\n📦 Loading 'company' model (modular structure)...")
+    print("\nLoading 'company' model (modular structure)...")
     try:
         company_config = loader.load_model_config('company')
-        print(f"✅ Loaded company model successfully")
+        print(f"  Loaded company model successfully")
         print(f"   Model name: {company_config.get('model')}")
         print(f"   Version: {company_config.get('version')}")
         print(f"   Depends on: {company_config.get('depends_on')}")
+        logger.info(f"Loaded company model: version={company_config.get('version')}")
     except Exception as e:
-        print(f"❌ Failed to load company model: {e}")
+        logger.error(f"Failed to load company model: {e}")
+        print(f"  Failed to load company model: {e}")
 
     # Test loading legacy model (single YAML)
-    print("\n📦 Loading legacy model (single YAML file)...")
+    print("\nLoading legacy model (single YAML file)...")
     try:
         # Try to load a legacy model if it exists
         for legacy_model in ['equity', 'corporate', 'core']:
             legacy_path = models_dir / f"{legacy_model}.yaml"
             if legacy_path.exists():
                 config = loader.load_model_config(legacy_model)
-                print(f"✅ Loaded legacy model '{legacy_model}' successfully")
+                print(f"  Loaded legacy model '{legacy_model}' successfully")
+                logger.info(f"Loaded legacy model: {legacy_model}")
                 break
     except Exception as e:
+        logger.debug(f"No legacy models to test: {e}")
         print(f"   (No legacy models to test, which is OK)")
 
 
 def test_model_registry():
     """Test ModelRegistry with modular models."""
-    print("\n" + "=" * 80)
-    print("TEST 2: ModelRegistry - Discover Modular Models")
-    print("=" * 80)
+    print_header("TEST 2: ModelRegistry - Discover Modular Models")
+    logger.info("Starting ModelRegistry tests")
 
     models_dir = Path("configs/models")
     registry = ModelRegistry(models_dir)
 
-    print(f"\n📋 Discovered models: {registry.list_models()}")
+    discovered = registry.list_models()
+    print(f"\nDiscovered models: {discovered}")
+    logger.info(f"Discovered {len(discovered)} models: {discovered}")
 
     # Test modular models
     for model_name in ['stocks', 'company', 'options']:
-        print(f"\n🔍 Testing model: {model_name}")
+        print(f"\nTesting model: {model_name}")
         try:
             if registry.has_model(model_name):
                 model_config = registry.get_model(model_name)
-                print(f"   ✅ Model '{model_name}' found in registry")
+                print(f"   Model '{model_name}' found in registry")
                 print(f"      Tables: {model_config.list_tables()[:5]}")  # First 5 tables
                 print(f"      Measures: {model_config.list_measures()[:5]}")  # First 5 measures
+                logger.debug(f"Model {model_name}: tables={model_config.list_tables()[:5]}")
             else:
-                print(f"   ⚠️  Model '{model_name}' not found in registry")
+                print(f"   Model '{model_name}' not found in registry")
+                logger.warning(f"Model {model_name} not found")
         except Exception as e:
-            print(f"   ❌ Error accessing model '{model_name}': {e}")
+            logger.error(f"Error accessing model {model_name}: {e}")
+            print(f"   Error accessing model '{model_name}': {e}")
 
     # Test model class registration
-    print("\n🔧 Testing model class registration...")
+    print("\nTesting model class registration...")
     for model_name in ['stocks', 'company']:
         try:
             model_class = registry.get_model_class(model_name)
-            print(f"   ✅ Model class for '{model_name}': {model_class.__name__}")
+            print(f"   Model class for '{model_name}': {model_class.__name__}")
+            logger.debug(f"Model class for {model_name}: {model_class.__name__}")
         except Exception as e:
-            print(f"   ⚠️  Model class for '{model_name}' not registered (OK if model not implemented yet)")
+            logger.debug(f"Model class for {model_name} not registered: {e}")
+            print(f"   Model class for '{model_name}' not registered (OK if model not implemented yet)")
 
 
 def test_inheritance_resolution():
     """Test that YAML inheritance resolves correctly."""
-    print("\n" + "=" * 80)
-    print("TEST 3: Inheritance Resolution")
-    print("=" * 80)
+    print_header("TEST 3: Inheritance Resolution")
+    logger.info("Starting inheritance resolution tests")
 
     models_dir = Path("configs/models")
     loader = ModelConfigLoader(models_dir)
 
     # Test stocks inheriting from securities
-    print("\n🧬 Testing inheritance: stocks extends _base.securities")
+    print("\nTesting inheritance: stocks extends _base.securities")
     try:
         stocks_config = loader.load_model_config('stocks')
 
@@ -151,18 +168,22 @@ def test_inheritance_resolution():
         stocks_fields = ['company_id', 'cik', 'shares_outstanding']
 
         print(f"   Checking inherited base fields...")
+        inherited_base = 0
         for field in base_fields:
             if field in columns:
-                print(f"      ✅ '{field}' present (inherited)")
+                print(f"      '{field}' present (inherited)")
+                inherited_base += 1
             else:
-                print(f"      ❌ '{field}' missing (should be inherited)")
+                print(f"      '{field}' missing (should be inherited)")
 
         print(f"   Checking stocks-specific fields...")
         for field in stocks_fields:
             if field in columns:
-                print(f"      ✅ '{field}' present (stocks-specific)")
+                print(f"      '{field}' present (stocks-specific)")
             else:
-                print(f"      ⚠️  '{field}' missing")
+                print(f"      '{field}' missing")
+
+        logger.info(f"Inheritance check: {inherited_base}/{len(base_fields)} base fields inherited")
 
         # Check if base measures were inherited
         measures = stocks_config.get('measures', {})
@@ -176,49 +197,59 @@ def test_inheritance_resolution():
         for measure in base_measures:
             if measure in simple_measures:
                 inherited_count += 1
-        print(f"      ✅ {inherited_count}/{len(base_measures)} base measures inherited")
+        print(f"      {inherited_count}/{len(base_measures)} base measures inherited")
+        logger.info(f"Measure inheritance: {inherited_count}/{len(base_measures)} base measures")
 
     except Exception as e:
-        print(f"   ❌ Inheritance test failed: {e}")
+        logger.error(f"Inheritance test failed: {e}", exc_info=True)
+        print(f"   Inheritance test failed: {e}")
         import traceback
         traceback.print_exc()
 
 
 def test_python_measures_discovery():
     """Test Python measures module discovery."""
-    print("\n" + "=" * 80)
-    print("TEST 4: Python Measures Discovery")
-    print("=" * 80)
+    print_header("TEST 4: Python Measures Discovery")
+    logger.info("Starting Python measures discovery tests")
 
     models_dir = Path("configs/models")
     loader = ModelConfigLoader(models_dir)
 
     # Test stocks Python measures
-    print("\n🐍 Testing Python measures for 'stocks' model...")
+    print("\nTesting Python measures for 'stocks' model...")
     try:
         stocks_measures_class = loader.load_python_measures('stocks')
         if stocks_measures_class:
-            print(f"   ✅ Python measures class loaded: {stocks_measures_class.__class__.__name__}")
+            print(f"   Python measures class loaded: {stocks_measures_class.__class__.__name__}")
+            logger.info(f"Loaded Python measures: {stocks_measures_class.__class__.__name__}")
 
             # Check if it has expected methods
             expected_methods = ['calculate_sharpe_ratio', 'calculate_correlation_matrix',
                               'calculate_momentum_score']
+            found_methods = 0
             for method in expected_methods:
                 if hasattr(stocks_measures_class, method):
-                    print(f"      ✅ Method '{method}' found")
+                    print(f"      Method '{method}' found")
+                    found_methods += 1
                 else:
-                    print(f"      ❌ Method '{method}' missing")
+                    print(f"      Method '{method}' missing")
+            logger.info(f"Python measures: {found_methods}/{len(expected_methods)} methods found")
         else:
-            print(f"   ⚠️  No Python measures found for 'stocks' (might not be instantiated yet)")
+            logger.warning("No Python measures found for stocks")
+            print(f"   No Python measures found for 'stocks' (might not be instantiated yet)")
     except Exception as e:
-        print(f"   ❌ Failed to load Python measures: {e}")
+        logger.error(f"Failed to load Python measures: {e}", exc_info=True)
+        print(f"   Failed to load Python measures: {e}")
 
 
 def main():
     """Run all tests."""
-    print("\n" + "🧪" * 40)
+    setup_logging()
+
+    print("\n" + "=" * 80)
     print(" MODULAR YAML ARCHITECTURE TEST SUITE")
-    print("🧪" * 40 + "\n")
+    print("=" * 80 + "\n")
+    logger.info("Starting modular YAML architecture test suite")
 
     try:
         test_model_config_loader()
@@ -226,18 +257,18 @@ def main():
         test_inheritance_resolution()
         test_python_measures_discovery()
 
-        print("\n" + "=" * 80)
-        print("✅ TEST SUITE COMPLETE")
-        print("=" * 80)
-        print("\n🎯 Summary:")
+        print_header("TEST SUITE COMPLETE")
+        print("\nSummary:")
         print("   - ModelConfigLoader can load modular YAMLs")
         print("   - Model registry discovers modular models")
         print("   - YAML inheritance resolves correctly")
         print("   - Python measures can be discovered")
-        print("\n📝 Note: Some warnings are OK if models aren't fully implemented yet")
+        print("\nNote: Some warnings are OK if models aren't fully implemented yet")
+        logger.info("Test suite completed successfully")
 
     except Exception as e:
-        print(f"\n❌ Test suite failed with error: {e}")
+        logger.error(f"Test suite failed: {e}", exc_info=True)
+        print(f"\nTest suite failed with error: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

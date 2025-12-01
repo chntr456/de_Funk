@@ -27,6 +27,10 @@ import json
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
+from config.logging import get_logger, setup_logging
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class ScriptTestResult:
@@ -60,11 +64,11 @@ class ScriptTestResult:
     def status_icon(self) -> str:
         """Visual status icon."""
         if self.passed:
-            return "✅"
+            return "PASS"
         elif self.syntax_valid:
-            return "⚠️"
+            return "WARN"
         else:
-            return "❌"
+            return "FAIL"
 
 
 @dataclass
@@ -146,6 +150,7 @@ class ScriptTester:
                 for script_path in sorted(cat_dir.glob("*.sh")):
                     scripts.append((cat, script_path))
 
+        logger.debug(f"Discovered {len(scripts)} scripts")
         return scripts
 
     def test_script(self, category: str, script_path: Path) -> ScriptTestResult:
@@ -171,6 +176,7 @@ class ScriptTester:
             result.line_count = len(content.split('\n'))
         except Exception as e:
             result.import_error = f"Failed to read file: {e}"
+            logger.error(f"Failed to read {script_path}: {e}")
             return result
 
         # Shell scripts - different validation
@@ -214,9 +220,11 @@ class ScriptTester:
 
         except SyntaxError as e:
             result.syntax_error = f"Line {e.lineno}: {e.msg}"
+            logger.warning(f"Syntax error in {script_path.name}: {result.syntax_error}")
             return result
         except Exception as e:
             result.syntax_error = str(e)
+            logger.warning(f"Parse error in {script_path.name}: {e}")
             return result
 
         # Test 4: Import test (try to import as module)
@@ -231,6 +239,7 @@ class ScriptTester:
                 result.importable = True
         except Exception as e:
             result.import_error = str(e)
+            logger.debug(f"Import check failed for {script_path.name}: {e}")
 
         # Test 5: Help flag test (if has main)
         if result.has_main:
@@ -251,6 +260,7 @@ class ScriptTester:
 
             except subprocess.TimeoutExpired:
                 result.help_error = "Timeout (5s)"
+                logger.debug(f"Help timeout for {script_path.name}")
             except Exception as e:
                 result.help_error = str(e)
 
@@ -280,6 +290,7 @@ class ScriptTester:
 
         except Exception as e:
             result.syntax_error = str(e)
+            logger.error(f"Error testing shell script {script_path.name}: {e}")
 
         return result
 
@@ -294,6 +305,7 @@ class ScriptTester:
             Test summary
         """
         self.summary.start_time = datetime.now()
+        logger.info(f"Starting script tests (category={category or 'all'})")
 
         # Discover scripts
         scripts = self.discover_scripts(category)
@@ -326,19 +338,21 @@ class ScriptTester:
                 self.summary.total_passed += 1
                 self.summary.by_category[cat]['passed'] += 1
                 if self.verbose:
-                    print("✅ PASS")
+                    print("PASS")
             elif result.syntax_valid:
                 self.summary.total_warnings += 1
                 self.summary.by_category[cat]['warnings'] += 1
                 if self.verbose:
-                    print("⚠️  WARN")
+                    print("WARN")
             else:
                 self.summary.total_failed += 1
                 self.summary.by_category[cat]['failed'] += 1
                 if self.verbose:
-                    print("❌ FAIL")
+                    print("FAIL")
 
         self.summary.end_time = datetime.now()
+        logger.info(f"Script tests complete: {self.summary.total_passed}/{self.summary.total_scripts} passed, "
+                   f"{self.summary.total_failed} failed, {self.summary.total_warnings} warnings")
 
         return self.summary
 
@@ -351,9 +365,9 @@ class ScriptTester:
 
         # Overall stats
         print(f"Total Scripts:  {self.summary.total_scripts}")
-        print(f"✅ Passed:      {self.summary.total_passed}")
-        print(f"⚠️  Warnings:    {self.summary.total_warnings}")
-        print(f"❌ Failed:      {self.summary.total_failed}")
+        print(f"Passed:         {self.summary.total_passed}")
+        print(f"Warnings:       {self.summary.total_warnings}")
+        print(f"Failed:         {self.summary.total_failed}")
         print(f"Pass Rate:      {self.summary.pass_rate:.1f}%")
         print(f"Duration:       {self.summary.duration:.2f}s")
         print()
@@ -368,11 +382,11 @@ class ScriptTester:
             desc = self.SCRIPT_CATEGORIES.get(cat, "Unknown")
             pass_rate = (stats['passed'] / stats['total'] * 100) if stats['total'] > 0 else 0
 
-            print(f"📁 {cat.upper()} - {desc}")
+            print(f"{cat.upper()} - {desc}")
             print(f"   Total: {stats['total']}, "
-                  f"✅ {stats['passed']}, "
-                  f"⚠️  {stats['warnings']}, "
-                  f"❌ {stats['failed']} "
+                  f"Passed: {stats['passed']}, "
+                  f"Warnings: {stats['warnings']}, "
+                  f"Failed: {stats['failed']} "
                   f"({pass_rate:.0f}% pass)")
             print()
 
@@ -383,7 +397,7 @@ class ScriptTester:
         print()
 
         for result in sorted(self.summary.results, key=lambda r: (r.category, r.script_name)):
-            print(f"{result.status_icon} {result.category}/{result.script_name}")
+            print(f"[{result.status_icon}] {result.category}/{result.script_name}")
             print(f"   Lines: {result.line_count}")
 
             if result.docstring:
@@ -392,45 +406,45 @@ class ScriptTester:
             # Show test details
             checks = []
             if result.syntax_valid:
-                checks.append("✓ Syntax")
+                checks.append("Syntax OK")
             else:
-                checks.append("✗ Syntax")
+                checks.append("Syntax FAIL")
 
             if result.has_docstring:
-                checks.append("✓ Doc")
+                checks.append("Doc OK")
             else:
-                checks.append("✗ Doc")
+                checks.append("Doc FAIL")
 
             if result.importable:
-                checks.append("✓ Import")
+                checks.append("Import OK")
             else:
-                checks.append("✗ Import")
+                checks.append("Import FAIL")
 
             if result.has_main and result.has_help:
-                checks.append("✓ Help")
+                checks.append("Help OK")
             elif result.has_main:
-                checks.append("~ Help")
+                checks.append("Help N/A")
 
             print(f"   Checks: {', '.join(checks)}")
 
             # Show errors
             if result.syntax_error:
-                print(f"   ❌ Syntax Error: {result.syntax_error}")
+                print(f"   Syntax Error: {result.syntax_error}")
             if result.import_error:
-                print(f"   ⚠️  Import Issue: {result.import_error}")
+                print(f"   Import Issue: {result.import_error}")
             if result.help_error:
-                print(f"   ⚠️  Help Issue: {result.help_error}")
+                print(f"   Help Issue: {result.help_error}")
 
             print()
 
         # Final summary
         print("=" * 100)
         if self.summary.total_failed == 0 and self.summary.total_warnings == 0:
-            print("✅ ALL SCRIPTS VALIDATED SUCCESSFULLY")
+            print("ALL SCRIPTS VALIDATED SUCCESSFULLY")
         elif self.summary.total_failed == 0:
-            print(f"⚠️  ALL SCRIPTS PASSED WITH {self.summary.total_warnings} WARNING(S)")
+            print(f"ALL SCRIPTS PASSED WITH {self.summary.total_warnings} WARNING(S)")
         else:
-            print(f"❌ {self.summary.total_failed} SCRIPT(S) FAILED VALIDATION")
+            print(f"{self.summary.total_failed} SCRIPT(S) FAILED VALIDATION")
         print("=" * 100)
 
     def save_report(self, output_file: Path):
@@ -477,12 +491,15 @@ class ScriptTester:
         with open(output_file, 'w') as f:
             json.dump(report, f, indent=2)
 
-        print(f"\n📄 Report saved to: {output_file}")
+        logger.info(f"Report saved to: {output_file}")
+        print(f"\nReport saved to: {output_file}")
 
 
 def main():
     """Main entry point."""
     import argparse
+
+    setup_logging()
 
     parser = argparse.ArgumentParser(
         description="Comprehensive script validation tester",
@@ -515,8 +532,9 @@ def main():
     tester = ScriptTester(scripts_dir, verbose=args.verbose)
 
     # Run tests
-    print("🔍 Testing scripts...")
+    print("Testing scripts...")
     print()
+    logger.info("Starting comprehensive script tests")
 
     tester.test_all(category=args.category)
 
