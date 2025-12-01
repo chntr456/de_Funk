@@ -16,17 +16,30 @@ import sys
 import subprocess
 from pathlib import Path
 
+# Initialize logging early
+from config.logging import setup_logging, get_logger
+
+# Setup logging before anything else
+repo_root = Path(__file__).parent
+setup_logging(repo_root=repo_root)
+logger = get_logger(__name__)
+
+
 def main():
+    """Main entry point for the notebook application."""
+    # User-facing banner (print is appropriate for CLI output)
     print("=" * 50)
     print("  Starting Notebook Application (DuckDB)")
     print("=" * 50)
     print()
 
+    logger.info("Starting notebook application")
+
     # Check if running from repo root
-    repo_root = Path(__file__).parent
     notebooks_dir = repo_root / "configs" / "notebooks"
 
     if not notebooks_dir.exists():
+        logger.error(f"Notebooks directory not found: {notebooks_dir}")
         print("ERROR: configs/notebooks directory not found.")
         print()
         print("Please run this script from the repository root directory.")
@@ -40,15 +53,19 @@ def main():
     app_path = repo_root / "app" / "ui" / "notebook_app_duckdb.py"
 
     if not app_path.exists():
+        logger.error(f"Application not found: {app_path}")
         print(f"ERROR: Application not found at {app_path}")
         sys.exit(1)
 
+    # User-facing instructions
     print("Starting Streamlit application...")
     print()
     print("The app will open in your browser at: http://localhost:8501")
     print()
     print("Press Ctrl+C to stop the server.")
     print()
+
+    logger.info(f"Launching Streamlit: {app_path}")
 
     try:
         # Run streamlit
@@ -60,7 +77,9 @@ def main():
     except KeyboardInterrupt:
         print()
         print("Shutting down...")
+        logger.info("Application shutdown requested by user")
     except FileNotFoundError:
+        logger.error("Streamlit not found - not installed")
         print()
         print("ERROR: Streamlit is not installed.")
         print()
@@ -70,6 +89,11 @@ def main():
         print("Note: pyspark is NOT required for this DuckDB-powered app!")
         print()
         sys.exit(1)
+    except Exception as e:
+        logger.exception(f"Unexpected error running application: {e}")
+        print(f"ERROR: Unexpected error: {e}")
+        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

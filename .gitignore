@@ -52,6 +52,9 @@ storage/
 
 # Logs
 *.log
+logs/*.log
+logs/*.json
+!logs/.gitkeep
 
 # Environment variables
 .env

@@ -6,6 +6,7 @@ This module provides a centralized, type-safe configuration system that:
 - Validates configuration values
 - Supports clear precedence: env vars > explicit params > config files > defaults
 - Eliminates hardcoded values scattered throughout the codebase
+- Provides centralized logging configuration
 """
 
 from .loader import ConfigLoader
@@ -17,8 +18,16 @@ from .models import (
     SparkConfig,
     DuckDBConfig,
 )
+from .logging import (
+    setup_logging,
+    get_logger,
+    LogConfig,
+    LogTimer,
+    log_function_call,
+)
 
 __all__ = [
+    # Configuration
     "ConfigLoader",
     "AppConfig",
     "ConnectionConfig",
@@ -26,4 +35,10 @@ __all__ = [
     "APIConfig",
     "SparkConfig",
     "DuckDBConfig",
+    # Logging
+    "setup_logging",
+    "get_logger",
+    "LogConfig",
+    "LogTimer",
+    "log_function_call",
 ]
