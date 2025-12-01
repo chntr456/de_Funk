@@ -15,32 +15,35 @@ Market Cap Calculation:
 
 Usage:
     # Run for companies > $100M market cap (default)
-    python -m scripts.run_forecasts_large_cap
+    python -m scripts.forecast.run_forecasts_large_cap
 
     # Run for companies > $500M market cap
-    python -m scripts.run_forecasts_large_cap --min-market-cap 500000000
+    python -m scripts.forecast.run_forecasts_large_cap --min-market-cap 500000000
 
     # Run for companies > $1B market cap, specific models only
-    python -m scripts.run_forecasts_large_cap --min-market-cap 1000000000 --models arima_30d,prophet_30d
+    python -m scripts.forecast.run_forecasts_large_cap --min-market-cap 1000000000 --models arima_30d,prophet_30d
 
     # Dry run - show which companies would be processed
-    python -m scripts.run_forecasts_large_cap --dry-run
+    python -m scripts.forecast.run_forecasts_large_cap --dry-run
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path
-
-from __future__ import annotations
 import argparse
 from datetime import datetime
 import yaml
 import json
+import traceback
 
-from utils.repo import setup_repo_imports
+from utils.repo import setup_repo_imports, get_repo_root
 repo_root = setup_repo_imports()
 
+from config.logging import get_logger, setup_logging
 from models.implemented.forecast import ForecastModel
 from models.api.session import UniversalSession
+
+logger = get_logger(__name__)
 
 
 def load_config(config_path: str) -> dict:
@@ -122,17 +125,19 @@ def get_large_cap_tickers(
         con.close()
 
         if df.empty:
-            print(f"⚠️  Warning: No companies found with market cap >= ${min_market_cap:,.0f}")
+            logger.warning(f"No companies found with market cap >= ${min_market_cap:,.0f}")
+            print(f"Warning: No companies found with market cap >= ${min_market_cap:,.0f}")
             return []
 
         # Return list of (ticker, market_cap) tuples
         result = list(zip(df['ticker'].tolist(), df['market_cap'].tolist()))
+        logger.info(f"Found {len(result)} companies above ${min_market_cap:,.0f}")
 
         return result
 
     except Exception as e:
-        print(f"✗ Error loading tickers: {e}")
-        import traceback
+        logger.error(f"Error loading tickers: {e}", exc_info=True)
+        print(f"Error loading tickers: {e}")
         traceback.print_exc()
         return []
 
@@ -147,6 +152,14 @@ def format_market_cap(market_cap: float) -> str:
         return f"${market_cap / 1_000:.2f}K"
     else:
         return f"${market_cap:.2f}"
+
+
+def print_header(text: str, char: str = "=") -> None:
+    """Print a formatted header line."""
+    line = char * 80
+    print(line)
+    print(text)
+    print(line)
 
 
 def run_forecast_pipeline(
@@ -169,15 +182,14 @@ def run_forecast_pipeline(
     Returns:
         Dictionary with pipeline results
     """
-    print("=" * 80)
-    print("LARGE CAP FORECAST PIPELINE")
-    print("=" * 80)
+    print_header("LARGE CAP FORECAST PIPELINE")
     print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"Market cap threshold: {format_market_cap(min_market_cap)}")
     if dry_run:
         print("Mode: DRY RUN (no forecasts will be generated)")
     print("=" * 80)
     print()
+    logger.info(f"Starting large cap forecast pipeline, min_market_cap={format_market_cap(min_market_cap)}, dry_run={dry_run}")
 
     # Initialize Spark
     from orchestration.common.spark_session import get_spark
@@ -192,8 +204,9 @@ def run_forecast_pipeline(
     storage_cfg = load_config(config_root / "storage.json")
     forecast_cfg = load_config(config_root / "models" / "forecast.yaml")
 
-    print(f"  ✓ Loaded storage config")
-    print(f"  ✓ Loaded forecast config")
+    logger.debug("Configurations loaded")
+    print(f"  Loaded storage config")
+    print(f"  Loaded forecast config")
     print()
 
     # Step 1: Get large cap tickers
@@ -203,7 +216,8 @@ def run_forecast_pipeline(
     ticker_data = get_large_cap_tickers(storage_cfg, min_market_cap)
 
     if not ticker_data:
-        print("✗ No companies found matching criteria. Exiting.")
+        print("No companies found matching criteria. Exiting.")
+        logger.warning("No companies found matching market cap criteria")
         return {
             'tickers_processed': 0,
             'tickers_failed': 0,
@@ -215,7 +229,7 @@ def run_forecast_pipeline(
     tickers = [t[0] for t in ticker_data]
     market_caps = {t[0]: t[1] for t in ticker_data}
 
-    print(f"  ✓ Found {len(tickers)} companies above {format_market_cap(min_market_cap)}")
+    print(f"  Found {len(tickers)} companies above {format_market_cap(min_market_cap)}")
     print()
     print("  Top 10 companies by market cap:")
     for i, (ticker, mcap) in enumerate(ticker_data[:10], 1):
@@ -225,11 +239,10 @@ def run_forecast_pipeline(
     print()
 
     if dry_run:
-        print("=" * 80)
-        print("DRY RUN COMPLETE")
-        print("=" * 80)
+        print_header("DRY RUN COMPLETE")
         print(f"Would process {len(tickers)} companies for forecasting")
         print("\nRun without --dry-run to execute forecasts")
+        logger.info(f"Dry run complete: {len(tickers)} companies identified")
         return {
             'tickers_processed': 0,
             'tickers_failed': 0,
@@ -244,11 +257,13 @@ def run_forecast_pipeline(
     if refresh_data:
         print("Step 2: Refreshing recent data...")
         print("-" * 80)
+        logger.info(f"Refreshing data for {refresh_days} days")
         try:
             from scripts.refresh_data import refresh_recent_data
             refresh_recent_data(days=refresh_days, max_tickers=None)
         except Exception as e:
-            print(f"⚠️  Warning: Data refresh failed: {e}")
+            logger.warning(f"Data refresh failed: {e}")
+            print(f"Warning: Data refresh failed: {e}")
             print("Continuing with existing data...")
         print()
 
@@ -257,11 +272,11 @@ def run_forecast_pipeline(
     print("-" * 80)
 
     # Create universal session for cross-model access
-    repo_root = get_repo_root()
+    repo_root_path = get_repo_root()
     session = UniversalSession(
         connection=spark,
         storage_cfg=storage_cfg,
-        repo_root=repo_root
+        repo_root=repo_root_path
     )
 
     forecast_model = ForecastModel(
@@ -277,9 +292,10 @@ def run_forecast_pipeline(
     # Get output directory from storage config
     forecast_root = storage_cfg['roots'].get('forecast_silver', 'storage/silver/forecast')
 
-    print(f"  ✓ Forecast model initialized")
-    print(f"  ✓ Session configured for cross-model access")
-    print(f"  ✓ Output directory: {forecast_root}")
+    logger.info(f"Forecast model initialized, output: {forecast_root}")
+    print(f"  Forecast model initialized")
+    print(f"  Session configured for cross-model access")
+    print(f"  Output directory: {forecast_root}")
     print()
 
     # Step 4: Run forecasts for each ticker
@@ -301,6 +317,7 @@ def run_forecast_pipeline(
         mcap = market_caps[ticker]
         print(f"\n[{i}/{len(tickers)}] Processing {ticker} ({format_market_cap(mcap)})...")
         print("-" * 40)
+        logger.debug(f"Processing ticker {i}/{len(tickers)}: {ticker}")
 
         try:
             ticker_results = forecast_model.run_forecast_for_ticker(
@@ -315,12 +332,14 @@ def run_forecast_pipeline(
             if ticker_results['errors']:
                 results['errors'].extend(ticker_results['errors'])
 
-            print(f"  ✓ {ticker}: {ticker_results['models_trained']} models, "
+            print(f"  {ticker}: {ticker_results['models_trained']} models, "
                   f"{ticker_results['forecasts_generated']} forecasts")
+            logger.info(f"{ticker}: {ticker_results['models_trained']} models, {ticker_results['forecasts_generated']} forecasts")
 
         except Exception as e:
             error_msg = f"{ticker}: {str(e)}"
-            print(f"  ✗ {error_msg}")
+            logger.error(f"Forecast failed for {ticker}: {e}")
+            print(f"  Error: {error_msg}")
             results['tickers_failed'] += 1
             results['errors'].append(error_msg)
 
@@ -329,9 +348,7 @@ def run_forecast_pipeline(
 
     # Step 5: Print summary
     print()
-    print("=" * 80)
-    print("FORECAST PIPELINE SUMMARY")
-    print("=" * 80)
+    print_header("FORECAST PIPELINE SUMMARY")
     print(f"Market cap threshold: {format_market_cap(min_market_cap)}")
     print(f"Total market cap coverage: {format_market_cap(results['total_market_cap'])}")
     print(f"Duration: {results['duration']:.1f} seconds")
@@ -339,6 +356,9 @@ def run_forecast_pipeline(
     print(f"Tickers failed: {results['tickers_failed']}")
     print(f"Total models trained: {results['total_models']}")
     print(f"Total forecasts generated: {results['total_forecasts']}")
+
+    logger.info(f"Pipeline complete: {results['tickers_processed']}/{len(tickers)} tickers, "
+               f"{results['total_forecasts']} forecasts in {results['duration']:.1f}s")
 
     if results['errors']:
         print(f"\nErrors ({len(results['errors'])}):")
@@ -353,27 +373,30 @@ def run_forecast_pipeline(
 
     # Clean up
     spark.stop()
+    logger.debug("Spark session stopped")
 
     return results
 
 
 def main():
+    setup_logging()
+
     parser = argparse.ArgumentParser(
         description="Run time series forecasts for large cap companies only",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Run for companies > $100M (default)
-  python -m scripts.run_forecasts_large_cap
+  python -m scripts.forecast.run_forecasts_large_cap
 
   # Run for companies > $500M
-  python -m scripts.run_forecasts_large_cap --min-market-cap 500000000
+  python -m scripts.forecast.run_forecasts_large_cap --min-market-cap 500000000
 
   # Run for companies > $1B with specific models
-  python -m scripts.run_forecasts_large_cap --min-market-cap 1000000000 --models arima_30d,prophet_30d
+  python -m scripts.forecast.run_forecasts_large_cap --min-market-cap 1000000000 --models arima_30d,prophet_30d
 
   # Dry run to see which companies would be processed
-  python -m scripts.run_forecasts_large_cap --dry-run
+  python -m scripts.forecast.run_forecasts_large_cap --dry-run
 
   # Common market cap thresholds:
   #   $100M   = 100000000  (Small Cap)
@@ -413,6 +436,7 @@ Examples:
     )
 
     args = parser.parse_args()
+    logger.info(f"Starting forecast script with args: {args}")
 
     # Parse comma-separated model list
     models = args.models.split(',') if args.models else None
@@ -432,10 +456,12 @@ Examples:
             sys.exit(1)
 
     except KeyboardInterrupt:
-        print("\n\n✗ Interrupted by user")
+        logger.info("Interrupted by user")
+        print("\n\nInterrupted by user")
         sys.exit(1)
     except Exception as e:
-        print(f"\n✗ Pipeline failed with error: {str(e)}")
+        logger.error(f"Pipeline failed: {e}", exc_info=True)
+        print(f"\nPipeline failed with error: {str(e)}")
         traceback.print_exc()
         sys.exit(1)
 
