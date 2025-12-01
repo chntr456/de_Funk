@@ -24,7 +24,10 @@ from urllib.parse import urlparse, parse_qs
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
+from config.logging import get_logger
 from datapipelines.providers.alpha_vantage.alpha_vantage_registry import AlphaVantageRegistry
+
+logger = get_logger(__name__)
 
 
 # ============================================================================
@@ -74,13 +77,20 @@ ProgressCallback = Callable[[ProgressInfo], None]
 
 
 def default_progress_callback(info: ProgressInfo) -> None:
-    """Default progress callback that prints status to console."""
+    """Default progress callback that prints status to console and logs."""
     status = "✓" if info.success else "✗"
     eta_str = f" | ETA: {info.format_eta()}" if info.current > 1 else ""
     error_str = f" | {info.error}" if info.error else ""
 
-    print(f"  [{info.phase}] {status} {info.current}/{info.total} "
-          f"({info.percent_complete:.1f}%) {info.ticker}{eta_str}{error_str}")
+    msg = (f"  [{info.phase}] {status} {info.current}/{info.total} "
+           f"({info.percent_complete:.1f}%) {info.ticker}{eta_str}{error_str}")
+    print(msg)
+
+    # Also log (debug for success, warning for failure)
+    if info.success:
+        logger.debug(f"[{info.phase}] {info.ticker} ({info.current}/{info.total})")
+    else:
+        logger.warning(f"[{info.phase}] {info.ticker} failed: {info.error}")
 
 
 from datapipelines.base.http_client import HttpClient
