@@ -27,7 +27,18 @@ from utils.repo import setup_repo_imports
 setup_repo_imports()
 
 from config import ConfigLoader
+from config.logging import get_logger, setup_logging
 from pyspark.sql import SparkSession
+
+logger = get_logger(__name__)
+
+
+def print_header(text: str, char: str = "=") -> None:
+    """Print a formatted header line."""
+    line = char * 60
+    print(f"\n{line}")
+    print(text)
+    print(line)
 
 
 def check_api_key(config):
@@ -36,7 +47,8 @@ def check_api_key(config):
     api_keys = alpha_vantage_cfg.get('credentials', {}).get('api_keys', [])
 
     if not api_keys:
-        print("❌ ERROR: No Alpha Vantage API key found!")
+        logger.error("No Alpha Vantage API key found")
+        print("ERROR: No Alpha Vantage API key found!")
         print("\nTo fix this:")
         print("1. Get a free API key: https://www.alphavantage.co/support/#api-key")
         print("2. Add to .env file:")
@@ -44,13 +56,15 @@ def check_api_key(config):
         print()
         return False
 
-    print(f"✓ Found {len(api_keys)} Alpha Vantage API key(s)")
+    logger.info(f"Found {len(api_keys)} Alpha Vantage API key(s)")
+    print(f"Found {len(api_keys)} Alpha Vantage API key(s)")
     return True
 
 
 def create_spark_session():
     """Create Spark session for ingestion."""
-    print("\n📊 Creating Spark session...")
+    print("\nCreating Spark session...")
+    logger.info("Creating Spark session")
 
     spark = (SparkSession.builder
              .appName("AlphaVantage_Test_Ingestion")
@@ -58,19 +72,19 @@ def create_spark_session():
              .config("spark.sql.shuffle.partitions", "10")
              .getOrCreate())
 
-    print(f"✓ Spark session created (version {spark.version})")
+    logger.info(f"Spark session created (version {spark.version})")
+    print(f"Spark session created (version {spark.version})")
     return spark
 
 
 def test_reference_data_ingestion(ingestor, tickers, output_dir):
     """Test ingesting reference data (company overview)."""
-    print(f"\n{'='*60}")
-    print("📋 STEP 1: Ingesting Reference Data (Company Overview)")
-    print(f"{'='*60}")
+    print_header("STEP 1: Ingesting Reference Data (Company Overview)")
     print(f"Tickers: {', '.join(tickers)}")
     print(f"Endpoint: Alpha Vantage OVERVIEW")
     print(f"Rate Limit: 5 calls/minute (free tier)")
     print()
+    logger.info(f"Starting reference data ingestion for {len(tickers)} tickers")
 
     try:
         table_path = ingestor.ingest_reference_data(
@@ -78,7 +92,8 @@ def test_reference_data_ingestion(ingestor, tickers, output_dir):
             use_concurrent=False  # Sequential for free tier
         )
 
-        print(f"\n✅ SUCCESS: Reference data written to:")
+        logger.info(f"Reference data written to: {table_path}")
+        print(f"\nSUCCESS: Reference data written to:")
         print(f"   {table_path}")
         print()
 
@@ -90,21 +105,21 @@ def test_reference_data_ingestion(ingestor, tickers, output_dir):
         return True
 
     except Exception as e:
-        print(f"\n❌ ERROR: Reference data ingestion failed!")
+        logger.error(f"Reference data ingestion failed: {e}", exc_info=True)
+        print(f"\nERROR: Reference data ingestion failed!")
         print(f"   {type(e).__name__}: {e}")
         return False
 
 
 def test_prices_ingestion(ingestor, tickers, date_from, date_to, output_dir):
     """Test ingesting daily prices."""
-    print(f"\n{'='*60}")
-    print("📈 STEP 2: Ingesting Daily Prices")
-    print(f"{'='*60}")
+    print_header("STEP 2: Ingesting Daily Prices")
     print(f"Tickers: {', '.join(tickers)}")
     print(f"Date Range: {date_from} to {date_to}")
     print(f"Endpoint: Alpha Vantage TIME_SERIES_DAILY_ADJUSTED")
     print(f"Rate Limit: 5 calls/minute (free tier)")
     print()
+    logger.info(f"Starting prices ingestion for {len(tickers)} tickers, {date_from} to {date_to}")
 
     try:
         table_path = ingestor.ingest_prices(
@@ -116,7 +131,8 @@ def test_prices_ingestion(ingestor, tickers, date_from, date_to, output_dir):
             use_concurrent=False  # Sequential for free tier
         )
 
-        print(f"\n✅ SUCCESS: Prices written to:")
+        logger.info(f"Prices written to: {table_path}")
+        print(f"\nSUCCESS: Prices written to:")
         print(f"   {table_path}")
         print()
 
@@ -126,21 +142,30 @@ def test_prices_ingestion(ingestor, tickers, date_from, date_to, output_dir):
         df.select("ticker", "trade_date", "open", "high", "low", "close", "volume", "adjusted_close").show(5, truncate=False)
 
         # Show summary stats
+        row_count = df.count()
+        date_min = df.agg({'trade_date': 'min'}).collect()[0][0]
+        date_max = df.agg({'trade_date': 'max'}).collect()[0][0]
+        ticker_count = df.select('ticker').distinct().count()
+
         print("\nData Summary:")
-        print(f"  Total rows: {df.count()}")
-        print(f"  Date range: {df.agg({'trade_date': 'min'}).collect()[0][0]} to {df.agg({'trade_date': 'max'}).collect()[0][0]}")
-        print(f"  Tickers: {df.select('ticker').distinct().count()}")
+        print(f"  Total rows: {row_count}")
+        print(f"  Date range: {date_min} to {date_max}")
+        print(f"  Tickers: {ticker_count}")
+        logger.info(f"Prices summary: {row_count} rows, {ticker_count} tickers, {date_min} to {date_max}")
 
         return True
 
     except Exception as e:
-        print(f"\n❌ ERROR: Prices ingestion failed!")
+        logger.error(f"Prices ingestion failed: {e}", exc_info=True)
+        print(f"\nERROR: Prices ingestion failed!")
         print(f"   {type(e).__name__}: {e}")
         return False
 
 
 def main():
     """Main test execution."""
+    setup_logging()
+
     parser = argparse.ArgumentParser(
         description='Test Alpha Vantage data ingestion',
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -171,26 +196,27 @@ def main():
 
     args = parser.parse_args()
 
-    print(f"\n{'='*60}")
-    print("🚀 Alpha Vantage Ingestion Test")
-    print(f"{'='*60}")
+    print_header("Alpha Vantage Ingestion Test")
     print(f"Timestamp: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print()
+    logger.info(f"Starting Alpha Vantage ingestion test with tickers: {args.tickers}")
 
     # Calculate date range
     date_to = datetime.now().strftime('%Y-%m-%d')
     date_from = (datetime.now() - timedelta(days=args.days_back)).strftime('%Y-%m-%d')
 
     # Load configuration
-    print("⚙️  Loading configuration...")
+    print("Loading configuration...")
     try:
         loader = ConfigLoader()
         config = loader.load()
-        print(f"✓ Configuration loaded")
+        logger.info(f"Configuration loaded from {config.repo_root}")
+        print(f"Configuration loaded")
         print(f"  Repo root: {config.repo_root}")
         print(f"  Bronze path: {config.storage.get('roots', {}).get('bronze', 'storage/bronze')}")
     except Exception as e:
-        print(f"❌ ERROR: Failed to load configuration: {e}")
+        logger.error(f"Failed to load configuration: {e}", exc_info=True)
+        print(f"ERROR: Failed to load configuration: {e}")
         return 1
 
     # Check API key
@@ -201,11 +227,12 @@ def main():
     try:
         spark = create_spark_session()
     except Exception as e:
-        print(f"❌ ERROR: Failed to create Spark session: {e}")
+        logger.error(f"Failed to create Spark session: {e}", exc_info=True)
+        print(f"ERROR: Failed to create Spark session: {e}")
         return 1
 
     # Initialize Alpha Vantage ingestor
-    print("\n🔌 Initializing Alpha Vantage ingestor...")
+    print("\nInitializing Alpha Vantage ingestor...")
     try:
         from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
 
@@ -214,10 +241,12 @@ def main():
             storage_cfg=config.storage,
             spark=spark
         )
-        print("✓ Ingestor initialized")
+        logger.info(f"Ingestor initialized with rate limit: {ingestor.registry.rate_limit}")
+        print("Ingestor initialized")
         print(f"  Rate limit: {ingestor.registry.rate_limit} calls/sec")
     except Exception as e:
-        print(f"❌ ERROR: Failed to initialize ingestor: {e}")
+        logger.error(f"Failed to initialize ingestor: {e}", exc_info=True)
+        print(f"ERROR: Failed to initialize ingestor: {e}")
         spark.stop()
         return 1
 
@@ -237,26 +266,28 @@ def main():
             success = False
 
     # Cleanup
-    print(f"\n{'='*60}")
-    print("🧹 Cleaning up...")
+    print_header("Cleaning up...")
     spark.stop()
-    print("✓ Spark session stopped")
+    logger.info("Spark session stopped")
+    print("Spark session stopped")
 
     # Final summary
-    print(f"\n{'='*60}")
+    print_header("TEST RESULTS")
     if success:
-        print("✅ ALL TESTS PASSED")
-        print(f"{'='*60}")
-        print("\n📁 Bronze Data Location:")
+        logger.info("All Alpha Vantage ingestion tests passed")
+        print("ALL TESTS PASSED")
+        print()
+        print("Bronze Data Location:")
         print(f"   {output_dir}")
-        print("\n📝 Next Steps:")
+        print("\nNext Steps:")
         print("   1. Build silver models: python -m scripts.rebuild_model --model stocks")
         print("   2. Query data: python -m scripts.query_stocks")
         print("   3. Test Python measures: model.calculate_measure('sharpe_ratio', ticker='AAPL')")
     else:
-        print("❌ SOME TESTS FAILED")
-        print(f"{'='*60}")
-        print("\n🔍 Troubleshooting:")
+        logger.warning("Some Alpha Vantage ingestion tests failed")
+        print("SOME TESTS FAILED")
+        print()
+        print("Troubleshooting:")
         print("   - Check API key is valid")
         print("   - Verify rate limit not exceeded (5 calls/min for free tier)")
         print("   - Check network connectivity")
