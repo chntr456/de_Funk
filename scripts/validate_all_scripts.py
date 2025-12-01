@@ -28,6 +28,10 @@ import json
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
+from config.logging import get_logger, setup_logging
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class ScriptRunResult:
@@ -226,6 +230,7 @@ class ScriptValidator:
         """
         # Check if script should be skipped
         if config.get('skip', False):
+            logger.debug(f"Skipping {category}/{script}: {config.get('skip_reason', 'configured')}")
             return ScriptRunResult(
                 script=script,
                 category=category,
@@ -238,6 +243,7 @@ class ScriptValidator:
 
         # Check if maintenance script without flag
         if config.get('requires_flag', False) and not self.include_maintenance:
+            logger.debug(f"Skipping maintenance script {category}/{script}")
             return ScriptRunResult(
                 script=script,
                 category=category,
@@ -268,6 +274,8 @@ class ScriptValidator:
             print(f"Timeout: {timeout}s")
             print(f"{'='*70}")
 
+        logger.info(f"Running {category}/{script} with timeout={timeout}s")
+
         try:
             start = datetime.now()
             proc = subprocess.run(
@@ -284,6 +292,12 @@ class ScriptValidator:
             result.stderr = proc.stderr
             result.success = proc.returncode == 0
 
+            if result.success:
+                logger.info(f"{category}/{script} PASSED ({result.duration:.2f}s)")
+            else:
+                logger.warning(f"{category}/{script} FAILED (exit code {proc.returncode})")
+                logger.debug(f"stderr: {proc.stderr[:500] if proc.stderr else 'none'}")
+
             if self.verbose:
                 print(f"Duration: {result.duration:.2f}s")
                 print(f"Return Code: {proc.returncode}")
@@ -295,9 +309,11 @@ class ScriptValidator:
         except subprocess.TimeoutExpired:
             result.error = f"Timeout after {timeout}s"
             result.success = False
+            logger.error(f"{category}/{script} TIMEOUT after {timeout}s")
         except Exception as e:
             result.error = str(e)
             result.success = False
+            logger.error(f"{category}/{script} ERROR: {e}", exc_info=True)
 
         return result
 
@@ -314,13 +330,15 @@ class ScriptValidator:
         results = []
 
         if category not in self.SCRIPT_CONFIGS:
-            print(f"⚠️  Unknown category: {category}")
+            logger.warning(f"Unknown category: {category}")
+            print(f"Unknown category: {category}")
             return results
 
         scripts = self.SCRIPT_CONFIGS[category]
         print(f"\n{'='*70}")
         print(f"Validating {category.upper()} scripts ({len(scripts)} scripts)")
         print(f"{'='*70}")
+        logger.info(f"Validating {category} category ({len(scripts)} scripts)")
 
         for script, config in scripts.items():
             if not self.verbose:
@@ -331,11 +349,11 @@ class ScriptValidator:
 
             if not self.verbose:
                 if result.skipped:
-                    print("⏭️  SKIP")
+                    print("SKIP")
                 elif result.success:
-                    print(f"✅ PASS ({result.duration:.1f}s)")
+                    print(f"PASS ({result.duration:.1f}s)")
                 else:
-                    print(f"❌ FAIL ({result.error or 'non-zero exit'})")
+                    print(f"FAIL ({result.error or 'non-zero exit'})")
 
         return results
 
@@ -350,6 +368,7 @@ class ScriptValidator:
             ValidationSummary
         """
         self.summary.start_time = datetime.now()
+        logger.info(f"Starting validation (filter={category_filter or 'all'})")
 
         categories = [category_filter] if category_filter else self.SCRIPT_CONFIGS.keys()
 
@@ -368,6 +387,8 @@ class ScriptValidator:
                 self.summary.failed += 1
 
         self.summary.end_time = datetime.now()
+        logger.info(f"Validation complete: {self.summary.passed}/{self.summary.total} passed, "
+                   f"{self.summary.failed} failed, {self.summary.skipped} skipped")
         return self.summary
 
     def print_summary(self):
@@ -378,9 +399,9 @@ class ScriptValidator:
         print()
 
         print(f"Total Scripts:   {self.summary.total}")
-        print(f"✅ Passed:       {self.summary.passed}")
-        print(f"❌ Failed:       {self.summary.failed}")
-        print(f"⏭️  Skipped:      {self.summary.skipped}")
+        print(f"Passed:          {self.summary.passed}")
+        print(f"Failed:          {self.summary.failed}")
+        print(f"Skipped:         {self.summary.skipped}")
         print(f"Pass Rate:       {self.summary.pass_rate:.1f}%")
         print(f"Duration:        {self.summary.duration:.1f}s")
         print()
@@ -394,7 +415,7 @@ class ScriptValidator:
 
             for result in self.summary.results:
                 if not result.success and not result.skipped:
-                    print(f"❌ {result.category}/{result.script}")
+                    print(f"  {result.category}/{result.script}")
                     print(f"   Command: {' '.join(result.command)}")
                     print(f"   Error: {result.error or 'Non-zero exit code'}")
                     if result.stderr:
@@ -410,16 +431,16 @@ class ScriptValidator:
 
             for result in self.summary.results:
                 if result.skipped:
-                    print(f"⏭️  {result.category}/{result.script}")
+                    print(f"  {result.category}/{result.script}")
                     print(f"   Reason: {result.skip_reason}")
                     print()
 
         # Final status
         print("="*70)
         if self.summary.failed == 0:
-            print("✅ ALL SCRIPTS VALIDATED SUCCESSFULLY")
+            print("ALL SCRIPTS VALIDATED SUCCESSFULLY")
         else:
-            print(f"❌ {self.summary.failed} SCRIPT(S) FAILED VALIDATION")
+            print(f"{self.summary.failed} SCRIPT(S) FAILED VALIDATION")
         print("="*70)
 
     def save_report(self, output_file: Path):
@@ -459,11 +480,14 @@ class ScriptValidator:
         with open(output_file, 'w') as f:
             json.dump(report, f, indent=2)
 
-        print(f"\n📄 Report saved to: {output_file}")
+        logger.info(f"Report saved to: {output_file}")
+        print(f"\nReport saved to: {output_file}")
 
 
 def main():
     """Main entry point."""
+    setup_logging()
+
     parser = argparse.ArgumentParser(
         description="Validate all scripts by running them with test parameters",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -498,19 +522,22 @@ def main():
 
     # Warning for maintenance scripts
     if args.include_maintenance:
-        print("⚠️  WARNING: Including maintenance scripts!")
+        print("WARNING: Including maintenance scripts!")
         print("   These scripts may modify or delete data.")
         print("   Press Ctrl+C within 3 seconds to cancel...")
+        logger.warning("Including maintenance scripts - waiting for confirmation")
         import time
         try:
             time.sleep(3)
         except KeyboardInterrupt:
-            print("\n❌ Cancelled")
+            print("\nCancelled")
+            logger.info("Cancelled by user")
             sys.exit(1)
 
     # Run validation
-    print("🔍 Validating all scripts with test parameters...")
+    print("Validating all scripts with test parameters...")
     print()
+    logger.info("Starting script validation")
 
     validator = ScriptValidator(
         verbose=args.verbose,
