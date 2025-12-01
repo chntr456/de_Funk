@@ -7,10 +7,10 @@ with proper precedence, validation, and error handling.
 
 import json
 import os
-import warnings
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
+from .logging import get_logger
 from .models import (
     AppConfig,
     ConnectionConfig,
@@ -31,6 +31,8 @@ from .constants import (
     DEFAULT_DUCKDB_MEMORY_LIMIT,
     DEFAULT_DUCKDB_THREADS,
 )
+
+logger = get_logger(__name__)
 
 # Import centralized repo root discovery
 try:
@@ -119,7 +121,7 @@ class ConfigLoader:
             env_file = self._repo_root / ".env"
 
         if not env_file.exists():
-            warnings.warn(f"No .env file found at {env_file}. Using environment variables only.")
+            logger.debug(f"No .env file found at {env_file}. Using environment variables only.")
             self._env_loaded = True
             return
 
@@ -150,9 +152,10 @@ class ConfigLoader:
                             os.environ[key] = value
 
             self._env_loaded = True
+            logger.debug(f"Loaded environment from {env_file}")
 
-        except Exception as e:
-            warnings.warn(f"Failed to load .env file: {e}")
+        except (IOError, OSError) as e:
+            logger.warning(f"Failed to load .env file: {e}")
             self._env_loaded = True
 
     def _get_api_keys(self, provider: str) -> List[str]:
@@ -277,7 +280,7 @@ class ConfigLoader:
         api_keys = self._get_api_keys(provider)
 
         if not api_keys:
-            warnings.warn(
+            logger.debug(
                 f"No API keys found for {provider}. "
                 f"Set {provider.upper()}_API_KEYS in .env file or environment."
             )
@@ -335,8 +338,9 @@ class ConfigLoader:
                     endpoint_json = self._load_json_config(endpoint_file.name)
                     # Just inject API keys, don't transform structure
                     apis[provider_name] = self._inject_api_keys(provider_name, endpoint_json)
+                    logger.debug(f"Loaded API config for {provider_name}")
                 except ValueError as e:
-                    warnings.warn(f"Could not load {provider_name} API config: {e}")
+                    logger.warning(f"Could not load {provider_name} API config: {e}")
 
         # Get log level
         log_level = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()

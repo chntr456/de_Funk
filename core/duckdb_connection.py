@@ -14,7 +14,8 @@ Delta Lake Support:
 from typing import Dict, Any, Optional, List
 import pandas as pd
 from pathlib import Path
-import logging
+
+from config.logging import get_logger
 
 try:
     import duckdb
@@ -30,7 +31,7 @@ except ImportError:
 
 from .connection import DataConnection
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class DuckDBConnection(DataConnection):
@@ -512,7 +513,7 @@ class DuckDBConnection(DataConnection):
             return self.conn.from_df(pd.DataFrame())
         except Exception as e:
             # Fallback: create empty DataFrame
-            print(f"Warning: Could not parse schema for createDataFrame: {e}")
+            logger.warning(f"Could not parse schema for createDataFrame: {e}")
             return self.conn.from_df(pd.DataFrame())
 
     def apply_filters(self, df: Any, filters: Dict[str, Any]) -> Any:

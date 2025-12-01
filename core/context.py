@@ -3,6 +3,10 @@ from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 from config import ConfigLoader, AppConfig
+from config.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class RepoContext:
@@ -47,6 +51,7 @@ class RepoContext:
         # Use ConfigLoader for centralized config management
         loader = ConfigLoader()
         config = loader.load(connection_type=connection_type)
+        logger.debug(f"Loaded configuration from {config.repo_root}")
 
         # Create connection based on type
         spark = None
@@ -58,6 +63,7 @@ class RepoContext:
             duckdb_path = config.connection.duckdb.database_path
             duckdb_path.parent.mkdir(parents=True, exist_ok=True)
             connection = ConnectionFactory.create("duckdb", db_path=str(duckdb_path))
+            logger.info(f"Created DuckDB connection: {duckdb_path}")
             # DuckDB-only mode: No Spark needed for UI/analytics
             spark = None
         else:
@@ -67,6 +73,7 @@ class RepoContext:
             spark = get_spark("CompanyPipeline", spark_config=config.connection.spark)
             from core.connection import ConnectionFactory
             connection = ConnectionFactory.create("spark", spark_session=spark)
+            logger.info("Created Spark connection")
 
         # Pass through storage config as-is (raw JSON from storage.json)
         # ConfigLoader already loaded it - no transformation needed
