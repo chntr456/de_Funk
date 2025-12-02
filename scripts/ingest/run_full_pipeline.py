@@ -141,7 +141,11 @@ def run_full_pipeline(
             print()
 
             print("Initializing Alpha Vantage ingestor...")
-            ingestor = AlphaVantageIngestor(ctx)
+            ingestor = AlphaVantageIngestor(
+                alpha_vantage_cfg=ctx.get_api_config('alpha_vantage'),
+                storage_cfg=ctx.storage,
+                spark=ctx.spark
+            )
             print("  ✓ Ingestor initialized")
             print()
 
@@ -157,27 +161,33 @@ def run_full_pipeline(
                 sort_by_market_cap=sort_by_market_cap,
                 min_market_cap=min_market_cap,
                 include_fundamentals=include_fundamentals,
-                include_technicals=True,
-                include_news=include_news
+                include_options=False  # Options require premium tier
             )
+
+            # Extract results
+            ingested_tickers = ingestion_results.get('tickers', [])
+            tickers_count = len(ingested_tickers) if ingested_tickers else 0
 
             print()
             print(f"✓ Data ingestion completed!")
-            print(f"  Tickers processed: {ingestion_results.get('tickers_processed', 0)}")
-            print(f"  Price records: {ingestion_results.get('prices', {}).get('records', 0):,}")
+            print(f"  Tickers processed: {tickers_count}")
             if include_fundamentals:
-                fundamentals = ingestion_results.get('fundamentals', {})
-                print(f"  Income statements: {fundamentals.get('income_statements', {}).get('records', 0):,}")
-                print(f"  Balance sheets: {fundamentals.get('balance_sheets', {}).get('records', 0):,}")
-                print(f"  Cash flows: {fundamentals.get('cash_flows', {}).get('records', 0):,}")
-                print(f"  Earnings: {fundamentals.get('earnings', {}).get('records', 0):,}")
+                print(f"  Income statements: {'✓' if ingestion_results.get('income_statements') else '✗'}")
+                print(f"  Balance sheets: {'✓' if ingestion_results.get('balance_sheets') else '✗'}")
+                print(f"  Cash flows: {'✓' if ingestion_results.get('cash_flows') else '✗'}")
+                print(f"  Earnings: {'✓' if ingestion_results.get('earnings') else '✗'}")
             print()
 
             results['data_ingestion'] = {
                 'status': 'success',
-                'tickers_processed': ingestion_results.get('tickers_processed', 0),
-                'prices': ingestion_results.get('prices', {}),
-                'fundamentals': ingestion_results.get('fundamentals', {}),
+                'tickers_processed': tickers_count,
+                'tickers': ingested_tickers,
+                'fundamentals': {
+                    'income_statements': ingestion_results.get('income_statements'),
+                    'balance_sheets': ingestion_results.get('balance_sheets'),
+                    'cash_flows': ingestion_results.get('cash_flows'),
+                    'earnings': ingestion_results.get('earnings'),
+                } if include_fundamentals else {},
                 'date_from': date_from,
                 'date_to': date_to
             }
@@ -279,15 +289,12 @@ def run_full_pipeline(
         if results['data_ingestion']['status'] == 'success':
             print(f"  ✓ Status: Success")
             print(f"  Tickers processed: {results['data_ingestion'].get('tickers_processed', 0)}")
-            prices = results['data_ingestion'].get('prices', {})
-            if prices:
-                print(f"  Price records: {prices.get('records', 0):,}")
             fundamentals = results['data_ingestion'].get('fundamentals', {})
             if fundamentals:
                 print(f"  Fundamentals:")
                 for key, val in fundamentals.items():
-                    if isinstance(val, dict) and 'records' in val:
-                        print(f"    - {key}: {val['records']:,} records")
+                    if val:  # Path exists means it was written
+                        print(f"    - {key}: ✓")
         elif results['data_ingestion']['status'] == 'skipped':
             print(f"  - Status: Skipped")
         else:
