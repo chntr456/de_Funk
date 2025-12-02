@@ -279,6 +279,10 @@ def train_random_forest_model(
     )
     model.fit(X, y)
 
+    # Reset index to make it a regular column for the metadata
+    ts_feat_reset = ts_feat.reset_index()
+    ts_feat_reset = ts_feat_reset.rename(columns={'index': 'trade_date'})
+
     metadata = {
         'ticker': ticker,
         'target': target,
@@ -289,7 +293,8 @@ def train_random_forest_model(
         'training_end': ts_feat.index[-1].strftime('%Y-%m-%d'),
         'n_estimators': n_estimators,
         'max_depth': max_depth,
-        'feature_cols': feature_cols
+        'feature_cols': feature_cols,
+        'training_data': ts_feat_reset  # Include training data for iterative forecasting
     }
 
     return model, metadata

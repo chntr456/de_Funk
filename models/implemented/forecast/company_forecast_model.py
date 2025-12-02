@@ -7,10 +7,35 @@ Specific implementation of TimeSeriesForecastModel that forecasts:
 
 Data source: CompanyModel (fact_prices table)
 """
+from __future__ import annotations
 
-from typing import Dict
-from pyspark.sql import DataFrame, Row
-from pyspark.sql.types import StructType
+from typing import Dict, TYPE_CHECKING
+
+# Optional PySpark import - allows DuckDB-only usage
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame as SparkDataFrame, Row as SparkRow
+    from pyspark.sql.types import StructType as SparkStructType
+
+try:
+    from pyspark.sql import DataFrame, Row
+    from pyspark.sql.types import (
+        StructType, StructField, StringType, IntegerType,
+        DoubleType, DateType, LongType, BooleanType
+    )
+    HAS_SPARK = True
+except ImportError:
+    HAS_SPARK = False
+    DataFrame = None  # type: ignore
+    Row = None  # type: ignore
+    StructType = None  # type: ignore
+    StructField = None  # type: ignore
+    StringType = None  # type: ignore
+    IntegerType = None  # type: ignore
+    DoubleType = None  # type: ignore
+    DateType = None  # type: ignore
+    LongType = None  # type: ignore
+    BooleanType = None  # type: ignore
+
 from models.base.forecast_model import TimeSeriesForecastModel
 
 
@@ -119,7 +144,7 @@ class CompanyForecastModel(TimeSeriesForecastModel):
             except Exception:
                 return self._create_empty_table(table_name)
 
-    def _create_empty_table(self, table_name: str) -> DataFrame:
+    def _create_empty_table(self, table_name: str):
         """
         Create empty table with proper schema.
 
@@ -129,8 +154,10 @@ class CompanyForecastModel(TimeSeriesForecastModel):
             table_name: Table name
 
         Returns:
-            Empty DataFrame with schema
+            Empty DataFrame with schema (Spark or pandas depending on backend)
         """
+        import pandas as pd
+
         # Map short names to fact table names
         name_to_fact_map = {
             'forecasts': 'fact_forecasts',
@@ -148,27 +175,29 @@ class CompanyForecastModel(TimeSeriesForecastModel):
 
         # Find matching table by fact table name
         table_def = schema_config.get(fact_table_name)
+
+        if not HAS_SPARK or self.backend != 'spark':
+            # DuckDB or no Spark - return empty pandas DataFrame
+            if table_def:
+                columns = list(table_def['columns'].keys())
+                return pd.DataFrame(columns=columns)
+            return pd.DataFrame()
+
+        # Spark backend - create typed schema
+        type_map = {
+            'string': StringType(),
+            'int': IntegerType(),
+            'double': DoubleType(),
+            'date': DateType(),
+            'long': LongType(),
+            'boolean': BooleanType(),
+        }
+
         if table_def:
-            # Create empty DataFrame with schema
-            from pyspark.sql.types import (
-                StructType, StructField, StringType, IntegerType,
-                DoubleType, DateType, LongType, BooleanType
-            )
-
-            type_map = {
-                'string': StringType(),
-                'int': IntegerType(),
-                'double': DoubleType(),
-                'date': DateType(),
-                'long': LongType(),
-                'boolean': BooleanType(),
-            }
-
             fields = [
                 StructField(col_name, type_map.get(col_type, StringType()), True)
                 for col_name, col_type in table_def['columns'].items()
             ]
-
             schema = StructType(fields)
             return self.connection.spark.createDataFrame([], schema)
 

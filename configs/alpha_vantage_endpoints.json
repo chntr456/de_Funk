@@ -124,6 +124,115 @@
       "response_key": "Technical Analysis: MACD",
       "default_path_params": {},
       "comment": "Moving Average Convergence Divergence"
+    },
+    "income_statement": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "INCOME_STATEMENT"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "comment": "Annual and quarterly income statements. Returns annualReports and quarterlyReports arrays with revenue, expenses, net income, etc."
+    },
+    "balance_sheet": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "BALANCE_SHEET"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "comment": "Annual and quarterly balance sheets with GAAP/IFRS normalized fields. Includes assets, liabilities, equity."
+    },
+    "cash_flow": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "CASH_FLOW"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "comment": "Annual and quarterly cash flow statements. Operating, investing, and financing cash flows."
+    },
+    "earnings": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "EARNINGS"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "comment": "Annual and quarterly earnings (EPS actual vs estimate, surprise percentage)."
+    },
+    "earnings_calendar": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": [],
+      "default_query": {
+        "function": "EARNINGS_CALENDAR",
+        "horizon": "3month"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "comment": "Upcoming earnings announcements. Returns CSV format. horizon: 3month, 6month, 12month."
+    },
+    "historical_options": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "HISTORICAL_OPTIONS"
+      },
+      "response_key": "data",
+      "default_path_params": {},
+      "comment": "Historical options chain data including strike, expiry, bid/ask, Greeks, implied volatility. Premium endpoint."
+    },
+    "realtime_options": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "REALTIME_OPTIONS"
+      },
+      "response_key": "data",
+      "default_path_params": {},
+      "comment": "Real-time options chain data. Premium endpoint."
+    },
+    "etf_profile": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "ETF_PROFILE"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "comment": "ETF profile including holdings, sector weights, expense ratio, AUM."
+    },
+    "top_gainers_losers": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": [],
+      "default_query": {
+        "function": "TOP_GAINERS_LOSERS"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "comment": "Top 20 gainers, losers, and most actively traded tickers. Useful for large-cap discovery."
     }
   }
 }

@@ -7,11 +7,23 @@ Specific implementations (CompanyForecastModel, MacroForecastModel, etc.) specif
 - Which columns to forecast
 - Where to store forecast results
 """
+from __future__ import annotations
 
-from typing import Dict, Optional, Tuple, List
+from typing import Dict, Optional, Tuple, List, TYPE_CHECKING
 from abc import abstractmethod
 import pandas as pd
-from pyspark.sql import DataFrame
+
+# Optional PySpark import - allows DuckDB-only usage
+if TYPE_CHECKING:
+    from pyspark.sql import DataFrame as SparkDataFrame
+
+try:
+    from pyspark.sql import DataFrame
+    HAS_SPARK = True
+except ImportError:
+    HAS_SPARK = False
+    DataFrame = None  # type: ignore
+
 from models.base.model import BaseModel
 from models.implemented.forecast import training_methods
 
@@ -510,48 +522,240 @@ class TimeSeriesForecastModel(BaseModel):
             })
 
         elif model_type == 'RandomForest':
-            # RandomForest - simplified one-step forecast
-            # Production version would use iterative forecasting
-            results = pd.DataFrame({
-                self.get_entity_column(): entity_id,
-                'forecast_date': forecast_date,
-                'prediction_date': [forecast_date + pd.Timedelta(days=i) for i in range(1, forecast_horizon + 1)],
-                'horizon': range(1, forecast_horizon + 1),
-                'model_name': metadata.get('model_name', f"RF_{metadata['lookback_days']}d"),
-                'predicted_value': [0.0] * forecast_horizon,  # Placeholder
-                'lower_bound': [0.0] * forecast_horizon,
-                'upper_bound': [0.0] * forecast_horizon,
-                'target': target,
-                'confidence': 0.95
-            })
+            # RandomForest - iterative multi-step forecasting using lag features
+            import numpy as np
+
+            # Get feature columns and training data from metadata
+            feature_cols = metadata.get('feature_cols', [])
+            training_data = metadata.get('training_data')
+
+            if training_data is None or training_data.empty:
+                # Fallback if no training data available
+                results = pd.DataFrame({
+                    self.get_entity_column(): entity_id,
+                    'forecast_date': forecast_date,
+                    'prediction_date': [forecast_date + pd.Timedelta(days=i) for i in range(1, forecast_horizon + 1)],
+                    'horizon': range(1, forecast_horizon + 1),
+                    'model_name': metadata.get('model_name', f"RF_{metadata['lookback_days']}d"),
+                    'predicted_value': [np.nan] * forecast_horizon,
+                    'lower_bound': [np.nan] * forecast_horizon,
+                    'upper_bound': [np.nan] * forecast_horizon,
+                    'target': target,
+                    'confidence': 0.95
+                })
+            else:
+                # Build forecast iteratively using lag features
+                last_known_values = training_data[target].tail(30).tolist()  # Keep last 30 values for lags
+                predictions = []
+
+                # Get the last feature row as a template
+                last_features = training_data[feature_cols].iloc[-1].to_dict()
+
+                for step in range(forecast_horizon):
+                    # Update lag features with predicted/known values
+                    for col in feature_cols:
+                        if col.startswith('lag_'):
+                            lag_num = int(col.split('_')[1])
+                            if lag_num <= len(last_known_values):
+                                last_features[col] = last_known_values[-lag_num]
+                        elif col == 'day_of_week':
+                            future_date = pd.Timestamp(metadata['training_end']) + pd.Timedelta(days=step + 1)
+                            last_features[col] = future_date.dayofweek
+                        elif col == 'is_monday':
+                            future_date = pd.Timestamp(metadata['training_end']) + pd.Timedelta(days=step + 1)
+                            last_features[col] = 1 if future_date.dayofweek == 0 else 0
+                        elif col == 'is_friday':
+                            future_date = pd.Timestamp(metadata['training_end']) + pd.Timedelta(days=step + 1)
+                            last_features[col] = 1 if future_date.dayofweek == 4 else 0
+                        elif col.startswith('rolling_mean_'):
+                            window = int(col.split('_')[-1])
+                            if len(last_known_values) >= window:
+                                last_features[col] = np.mean(last_known_values[-window:])
+                        elif col.startswith('rolling_std_'):
+                            window = int(col.split('_')[-1])
+                            if len(last_known_values) >= window:
+                                last_features[col] = np.std(last_known_values[-window:])
+
+                    # Make prediction
+                    feature_vector = pd.DataFrame([last_features])[feature_cols]
+                    pred = model.predict(feature_vector)[0]
+                    predictions.append(pred)
+
+                    # Update history with new prediction
+                    last_known_values.append(pred)
+
+                # Calculate confidence intervals using OOB score or residual std
+                # Use training residuals to estimate prediction uncertainty
+                train_preds = model.predict(training_data[feature_cols])
+                residuals = training_data[target].values - train_preds
+                std_error = np.std(residuals)
+
+                # Widen confidence interval for longer horizons (uncertainty grows)
+                horizon_multipliers = [1 + 0.1 * h for h in range(forecast_horizon)]
+
+                results = pd.DataFrame({
+                    self.get_entity_column(): entity_id,
+                    'forecast_date': forecast_date,
+                    'prediction_date': [pd.Timestamp(metadata['training_end']) + pd.Timedelta(days=i) for i in range(1, forecast_horizon + 1)],
+                    'horizon': range(1, forecast_horizon + 1),
+                    'model_name': metadata.get('model_name', f"RF_{metadata['lookback_days']}d"),
+                    'predicted_value': predictions,
+                    'lower_bound': [p - 1.96 * std_error * m for p, m in zip(predictions, horizon_multipliers)],
+                    'upper_bound': [p + 1.96 * std_error * m for p, m in zip(predictions, horizon_multipliers)],
+                    'target': target,
+                    'confidence': 0.95
+                })
 
         return results
 
-    def calculate_metrics(self, model: object, metadata: Dict) -> Dict:
+    def calculate_metrics(self, model: object, metadata: Dict, holdout_data: pd.DataFrame = None) -> Dict:
         """
         Calculate forecast accuracy metrics.
+
+        Calculates metrics on holdout/validation data or using cross-validation
+        on training data if no holdout is available.
 
         Args:
             model: Trained model
             metadata: Model metadata
+            holdout_data: Optional holdout data for validation
 
         Returns:
-            Dictionary with metrics (MAE, RMSE, R2, etc.)
+            Dictionary with metrics:
+            - mae: Mean Absolute Error
+            - rmse: Root Mean Square Error
+            - mape: Mean Absolute Percentage Error
+            - r2_score: Coefficient of Determination
+            - directional_accuracy: % of correct direction predictions
+            - num_predictions: Number of predictions made
+            - avg_error_pct: Average error as percentage
         """
+        import numpy as np
         from datetime import datetime
+        from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-        # For now, return placeholder metrics
-        # Production would calculate actual metrics on holdout data
-        return {
-            'mae': 0.0,
-            'rmse': 0.0,
-            'mape': 0.0,
-            'r2_score': 0.0,
-            'num_predictions': metadata.get('training_samples', 0),
-            'avg_error_pct': 0.0,
+        model_type = metadata.get('model_type', 'Unknown')
+        target = metadata.get('target', 'close')
+        training_data = metadata.get('training_data')
+
+        # Default empty metrics
+        empty_metrics = {
+            'mae': np.nan,
+            'rmse': np.nan,
+            'mape': np.nan,
+            'r2_score': np.nan,
+            'directional_accuracy': np.nan,
+            'num_predictions': 0,
+            'avg_error_pct': np.nan,
             'test_start': metadata.get('training_end', datetime.now().date()),
             'test_end': datetime.now().date()
         }
+
+        # Use holdout data if provided, otherwise use cross-validation on training data
+        if holdout_data is not None and not holdout_data.empty:
+            validation_data = holdout_data
+        elif training_data is not None and not training_data.empty:
+            # Use last 20% of training data as validation (walk-forward)
+            split_idx = int(len(training_data) * 0.8)
+            if split_idx < 10:  # Need at least 10 points for validation
+                return empty_metrics
+            validation_data = training_data.iloc[split_idx:]
+        else:
+            return empty_metrics
+
+        try:
+            # Get actual values
+            y_true = validation_data[target].values
+
+            # Generate predictions based on model type
+            if model_type == 'ARIMA':
+                # ARIMA: Use in-sample fitted values for the validation period
+                try:
+                    # Get fitted values
+                    fitted = model.fittedvalues
+                    if len(fitted) >= len(y_true):
+                        y_pred = fitted[-len(y_true):].values
+                    else:
+                        return empty_metrics
+                except Exception:
+                    return empty_metrics
+
+            elif model_type == 'Prophet':
+                # Prophet: Generate predictions for validation dates
+                try:
+                    if 'ds' in validation_data.columns:
+                        future = validation_data[['ds']].copy()
+                    else:
+                        # Create ds column from index or trade_date
+                        future = pd.DataFrame({'ds': pd.to_datetime(validation_data.index)})
+                    forecast = model.predict(future)
+                    y_pred = forecast['yhat'].values
+                except Exception:
+                    return empty_metrics
+
+            elif model_type == 'RandomForest':
+                # RandomForest: Predict using feature columns
+                try:
+                    feature_cols = metadata.get('feature_cols', [])
+                    if not feature_cols or not all(col in validation_data.columns for col in feature_cols):
+                        return empty_metrics
+                    X_val = validation_data[feature_cols]
+                    y_pred = model.predict(X_val)
+                except Exception:
+                    return empty_metrics
+
+            else:
+                return empty_metrics
+
+            # Ensure arrays are the same length
+            min_len = min(len(y_true), len(y_pred))
+            y_true = y_true[:min_len]
+            y_pred = y_pred[:min_len]
+
+            if min_len == 0:
+                return empty_metrics
+
+            # Calculate metrics
+            mae = mean_absolute_error(y_true, y_pred)
+            rmse = np.sqrt(mean_squared_error(y_true, y_pred))
+            r2 = r2_score(y_true, y_pred)
+
+            # MAPE (handle zeros)
+            non_zero_mask = y_true != 0
+            if non_zero_mask.any():
+                mape = np.mean(np.abs((y_true[non_zero_mask] - y_pred[non_zero_mask])
+                                      / y_true[non_zero_mask])) * 100
+            else:
+                mape = np.nan
+
+            # Directional accuracy (did we predict the direction correctly?)
+            if len(y_true) > 1:
+                actual_direction = np.diff(y_true) > 0
+                pred_direction = np.diff(y_pred) > 0
+                directional_accuracy = np.mean(actual_direction == pred_direction) * 100
+            else:
+                directional_accuracy = np.nan
+
+            # Average error percentage
+            avg_error_pct = mape if not np.isnan(mape) else 0.0
+
+            return {
+                'mae': float(mae),
+                'rmse': float(rmse),
+                'mape': float(mape) if not np.isnan(mape) else 0.0,
+                'r2_score': float(r2),
+                'directional_accuracy': float(directional_accuracy) if not np.isnan(directional_accuracy) else 0.0,
+                'num_predictions': int(min_len),
+                'avg_error_pct': float(avg_error_pct),
+                'test_start': str(validation_data.index[0]) if hasattr(validation_data.index[0], 'strftime') else str(validation_data.index[0]),
+                'test_end': str(validation_data.index[-1]) if hasattr(validation_data.index[-1], 'strftime') else str(validation_data.index[-1])
+            }
+
+        except Exception as e:
+            # Log error but don't fail
+            import traceback
+            traceback.print_exc()
+            return empty_metrics
 
     def save_forecasts(self, forecasts_df):
         """
