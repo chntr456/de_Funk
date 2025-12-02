@@ -76,9 +76,9 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
         except Exception as e:
             logger.warning(f"Could not load tickers from stocks Silver: {e}")
 
-    # Fallback: Bronze prices_daily
+    # Fallback: v2.0 Bronze securities_prices_daily
     bronze_root = storage_cfg["roots"].get("bronze", "storage/bronze")
-    prices_path = Path(bronze_root) / "prices_daily"
+    prices_path = Path(bronze_root) / "securities_prices_daily"
 
     if prices_path.exists():
         try:
@@ -89,10 +89,26 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
             if limit:
                 tickers = tickers[:limit]
 
-            logger.info(f"Loaded {len(tickers)} tickers from Bronze layer")
+            logger.info(f"Loaded {len(tickers)} tickers from v2.0 Bronze layer")
             return tickers
         except Exception as e:
-            logger.warning(f"Could not load tickers from Bronze layer: {e}")
+            logger.warning(f"Could not load tickers from v2.0 Bronze layer: {e}")
+
+    # Legacy fallback: v1.x Bronze prices_daily
+    legacy_prices_path = Path(bronze_root) / "prices_daily"
+    if legacy_prices_path.exists():
+        try:
+            dataset = ds.dataset(legacy_prices_path, format='parquet')
+            table = dataset.to_table(columns=['ticker'])
+            tickers = table.column('ticker').unique().to_pylist()
+
+            if limit:
+                tickers = tickers[:limit]
+
+            logger.info(f"Loaded {len(tickers)} tickers from legacy Bronze layer")
+            return tickers
+        except Exception as e:
+            logger.warning(f"Could not load tickers from legacy Bronze layer: {e}")
 
     # Return empty list if no data sources available
     logger.warning("No ticker data sources available")

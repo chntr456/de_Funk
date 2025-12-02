@@ -229,11 +229,46 @@ def run_full_pipeline(
         }
 
     # =========================================================================
-    # STEP 2: FORECASTING
+    # STEP 2: BUILD SILVER LAYER (required for forecasting)
     # =========================================================================
     if not skip_forecasts:
         print("=" * 80)
-        print("STEP 2: TIME SERIES FORECASTING")
+        print("STEP 2: BUILDING SILVER LAYER")
+        print("=" * 80)
+        print()
+
+        try:
+            from models.api.registry import get_model_registry
+
+            print("Building stocks model from bronze data...")
+            registry = get_model_registry()
+
+            # Build stocks model (required for forecasting)
+            stocks_model = registry.get_model('stocks')
+            if stocks_model:
+                stocks_model.build()
+                print("  ✓ Stocks model built successfully")
+            else:
+                print("  ⚠ Could not load stocks model")
+
+            results['silver_build'] = {'status': 'success'}
+
+        except Exception as e:
+            error_msg = f"Silver layer build failed: {str(e)}"
+            print(f"  ⚠ {error_msg}")
+            import traceback
+            traceback.print_exc()
+            results['silver_build'] = {'status': 'failed', 'error': error_msg}
+            # Continue anyway - forecasting may still work with existing data
+
+        print()
+
+    # =========================================================================
+    # STEP 3: FORECASTING
+    # =========================================================================
+    if not skip_forecasts:
+        print("=" * 80)
+        print("STEP 3: TIME SERIES FORECASTING")
         print("=" * 80)
         print()
 
@@ -241,9 +276,14 @@ def run_full_pipeline(
             # Import forecast pipeline
             from scripts.forecast.run_forecasts import run_forecast_pipeline
 
+            # Get tickers from ingestion step (if available)
+            ingested_tickers = results.get('data_ingestion', {}).get('tickers', None)
+            if ingested_tickers:
+                print(f"Using {len(ingested_tickers)} tickers from ingestion step...")
+
             print("Running forecast pipeline...")
             forecast_results = run_forecast_pipeline(
-                tickers=None,  # Use all available tickers
+                tickers=ingested_tickers,  # Use tickers from ingestion step
                 refresh_data=False,  # We already refreshed in Step 1
                 refresh_days=0,
                 models=forecast_models,
@@ -272,7 +312,7 @@ def run_full_pipeline(
             results['errors'].append(error_msg)
     else:
         print("=" * 80)
-        print("STEP 2: FORECASTING - SKIPPED")
+        print("STEP 2 & 3: SILVER BUILD & FORECASTING - SKIPPED")
         print("=" * 80)
         print()
         results['forecasting'] = {
