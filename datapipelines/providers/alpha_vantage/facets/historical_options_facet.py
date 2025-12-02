@@ -106,17 +106,19 @@ class HistoricalOptionsFacet(Facet):
         ("snapshot_date", "date"),
     ]
 
-    def __init__(self, spark, ticker: str = None, underlying_price: float = None, **kwargs):
+    def __init__(self, spark, ticker: str = None, underlying_ticker: str = None,
+                 underlying_price: float = None, **kwargs):
         """
         Initialize Historical Options Facet.
 
         Args:
             spark: Spark session
-            ticker: Underlying ticker symbol
+            ticker: Underlying ticker symbol (alias for underlying_ticker)
+            underlying_ticker: Underlying ticker symbol
             underlying_price: Current underlying price (for moneyness calculation)
         """
         super().__init__(spark, **kwargs)
-        self.ticker = ticker
+        self.ticker = underlying_ticker or ticker
         self.underlying_price = underlying_price
 
     def normalize(self, raw_response: dict) -> DataFrame:

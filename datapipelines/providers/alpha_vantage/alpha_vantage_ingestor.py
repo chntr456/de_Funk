@@ -792,3 +792,482 @@ class AlphaVantageIngestor(Ingestor):
 
         print(f"✓ Full ingestion complete for {len(tickers)} tickers")
         return tickers
+
+    # =========================================================================
+    # Financial Statement Ingestion Methods
+    # =========================================================================
+
+    def ingest_income_statements(self, tickers, table_name="income_statements",
+                                  use_concurrent=False, show_progress=True,
+                                  progress_callback: Optional[ProgressCallback] = None):
+        """
+        Ingest income statement data for given tickers.
+
+        Uses Alpha Vantage INCOME_STATEMENT endpoint to get annual and quarterly
+        income statements with revenue, expenses, net income, etc.
+
+        Args:
+            tickers: List of ticker symbols
+            table_name: Bronze table name (default: income_statements)
+            use_concurrent: Use concurrent requests (only for premium tier!)
+            show_progress: Show progress updates (default: True)
+            progress_callback: Custom progress callback
+
+        Returns:
+            Path to written bronze table
+        """
+        from datapipelines.providers.alpha_vantage.facets import IncomeStatementFacet
+
+        print(f"Ingesting income statements for {len(tickers)} tickers...")
+
+        # Generate API calls
+        calls = [{"ep_name": "income_statement", "params": {"symbol": t}} for t in tickers]
+        print(f"Generated {len(calls)} API calls")
+
+        callback = progress_callback if progress_callback else (default_progress_callback if show_progress else None)
+
+        # Fetch data
+        if use_concurrent:
+            raw_batches = self._fetch_calls_concurrent(
+                calls, response_key=None,
+                progress_callback=callback, phase="income_statements"
+            )
+        else:
+            raw_batches = self._fetch_calls(
+                calls, response_key=None,
+                progress_callback=callback, phase="income_statements"
+            )
+
+        # Process each response
+        all_dfs = []
+        for i, batch in enumerate(raw_batches):
+            if not batch or len(batch) == 0:
+                continue
+
+            response = batch[0] if isinstance(batch, list) else batch
+            if isinstance(response, dict) and "Error Message" not in response:
+                ticker = tickers[i] if i < len(tickers) else None
+                facet = IncomeStatementFacet(self.spark, ticker=ticker)
+                try:
+                    df = facet.normalize(response)
+                    if df.count() > 0:
+                        all_dfs.append(df)
+                except Exception as e:
+                    logger.warning(f"Failed to normalize income statement for {ticker}: {e}")
+
+        if not all_dfs:
+            print("No income statement data to write")
+            return None
+
+        # Union all DataFrames
+        from functools import reduce
+        final_df = reduce(lambda a, b: a.union(b), all_dfs)
+
+        # Write to bronze
+        table_path = self.sink.write(final_df, table_name, partitions=["ticker", "report_type"])
+        print(f"Written {final_df.count()} income statement records to {table_path}")
+
+        return table_path
+
+    def ingest_balance_sheets(self, tickers, table_name="balance_sheets",
+                               use_concurrent=False, show_progress=True,
+                               progress_callback: Optional[ProgressCallback] = None):
+        """
+        Ingest balance sheet data for given tickers.
+
+        Uses Alpha Vantage BALANCE_SHEET endpoint for assets, liabilities, equity.
+
+        Args:
+            tickers: List of ticker symbols
+            table_name: Bronze table name (default: balance_sheets)
+            use_concurrent: Use concurrent requests (only for premium tier!)
+            show_progress: Show progress updates (default: True)
+            progress_callback: Custom progress callback
+
+        Returns:
+            Path to written bronze table
+        """
+        from datapipelines.providers.alpha_vantage.facets import BalanceSheetFacet
+
+        print(f"Ingesting balance sheets for {len(tickers)} tickers...")
+
+        calls = [{"ep_name": "balance_sheet", "params": {"symbol": t}} for t in tickers]
+        print(f"Generated {len(calls)} API calls")
+
+        callback = progress_callback if progress_callback else (default_progress_callback if show_progress else None)
+
+        if use_concurrent:
+            raw_batches = self._fetch_calls_concurrent(
+                calls, response_key=None,
+                progress_callback=callback, phase="balance_sheets"
+            )
+        else:
+            raw_batches = self._fetch_calls(
+                calls, response_key=None,
+                progress_callback=callback, phase="balance_sheets"
+            )
+
+        all_dfs = []
+        for i, batch in enumerate(raw_batches):
+            if not batch or len(batch) == 0:
+                continue
+
+            response = batch[0] if isinstance(batch, list) else batch
+            if isinstance(response, dict) and "Error Message" not in response:
+                ticker = tickers[i] if i < len(tickers) else None
+                facet = BalanceSheetFacet(self.spark, ticker=ticker)
+                try:
+                    df = facet.normalize(response)
+                    if df.count() > 0:
+                        all_dfs.append(df)
+                except Exception as e:
+                    logger.warning(f"Failed to normalize balance sheet for {ticker}: {e}")
+
+        if not all_dfs:
+            print("No balance sheet data to write")
+            return None
+
+        from functools import reduce
+        final_df = reduce(lambda a, b: a.union(b), all_dfs)
+
+        table_path = self.sink.write(final_df, table_name, partitions=["ticker", "report_type"])
+        print(f"Written {final_df.count()} balance sheet records to {table_path}")
+
+        return table_path
+
+    def ingest_cash_flows(self, tickers, table_name="cash_flows",
+                          use_concurrent=False, show_progress=True,
+                          progress_callback: Optional[ProgressCallback] = None):
+        """
+        Ingest cash flow statement data for given tickers.
+
+        Uses Alpha Vantage CASH_FLOW endpoint for operating, investing,
+        and financing cash flows.
+
+        Args:
+            tickers: List of ticker symbols
+            table_name: Bronze table name (default: cash_flows)
+            use_concurrent: Use concurrent requests (only for premium tier!)
+            show_progress: Show progress updates (default: True)
+            progress_callback: Custom progress callback
+
+        Returns:
+            Path to written bronze table
+        """
+        from datapipelines.providers.alpha_vantage.facets import CashFlowFacet
+
+        print(f"Ingesting cash flows for {len(tickers)} tickers...")
+
+        calls = [{"ep_name": "cash_flow", "params": {"symbol": t}} for t in tickers]
+        print(f"Generated {len(calls)} API calls")
+
+        callback = progress_callback if progress_callback else (default_progress_callback if show_progress else None)
+
+        if use_concurrent:
+            raw_batches = self._fetch_calls_concurrent(
+                calls, response_key=None,
+                progress_callback=callback, phase="cash_flows"
+            )
+        else:
+            raw_batches = self._fetch_calls(
+                calls, response_key=None,
+                progress_callback=callback, phase="cash_flows"
+            )
+
+        all_dfs = []
+        for i, batch in enumerate(raw_batches):
+            if not batch or len(batch) == 0:
+                continue
+
+            response = batch[0] if isinstance(batch, list) else batch
+            if isinstance(response, dict) and "Error Message" not in response:
+                ticker = tickers[i] if i < len(tickers) else None
+                facet = CashFlowFacet(self.spark, ticker=ticker)
+                try:
+                    df = facet.normalize(response)
+                    if df.count() > 0:
+                        all_dfs.append(df)
+                except Exception as e:
+                    logger.warning(f"Failed to normalize cash flow for {ticker}: {e}")
+
+        if not all_dfs:
+            print("No cash flow data to write")
+            return None
+
+        from functools import reduce
+        final_df = reduce(lambda a, b: a.union(b), all_dfs)
+
+        table_path = self.sink.write(final_df, table_name, partitions=["ticker", "report_type"])
+        print(f"Written {final_df.count()} cash flow records to {table_path}")
+
+        return table_path
+
+    def ingest_earnings(self, tickers, table_name="earnings",
+                        use_concurrent=False, show_progress=True,
+                        progress_callback: Optional[ProgressCallback] = None):
+        """
+        Ingest earnings data (EPS actual vs estimate) for given tickers.
+
+        Uses Alpha Vantage EARNINGS endpoint for EPS and surprise data.
+
+        Args:
+            tickers: List of ticker symbols
+            table_name: Bronze table name (default: earnings)
+            use_concurrent: Use concurrent requests (only for premium tier!)
+            show_progress: Show progress updates (default: True)
+            progress_callback: Custom progress callback
+
+        Returns:
+            Path to written bronze table
+        """
+        from datapipelines.providers.alpha_vantage.facets import EarningsFacet
+
+        print(f"Ingesting earnings for {len(tickers)} tickers...")
+
+        calls = [{"ep_name": "earnings", "params": {"symbol": t}} for t in tickers]
+        print(f"Generated {len(calls)} API calls")
+
+        callback = progress_callback if progress_callback else (default_progress_callback if show_progress else None)
+
+        if use_concurrent:
+            raw_batches = self._fetch_calls_concurrent(
+                calls, response_key=None,
+                progress_callback=callback, phase="earnings"
+            )
+        else:
+            raw_batches = self._fetch_calls(
+                calls, response_key=None,
+                progress_callback=callback, phase="earnings"
+            )
+
+        all_dfs = []
+        for i, batch in enumerate(raw_batches):
+            if not batch or len(batch) == 0:
+                continue
+
+            response = batch[0] if isinstance(batch, list) else batch
+            if isinstance(response, dict) and "Error Message" not in response:
+                ticker = tickers[i] if i < len(tickers) else None
+                facet = EarningsFacet(self.spark, ticker=ticker)
+                try:
+                    df = facet.normalize(response)
+                    if df.count() > 0:
+                        all_dfs.append(df)
+                except Exception as e:
+                    logger.warning(f"Failed to normalize earnings for {ticker}: {e}")
+
+        if not all_dfs:
+            print("No earnings data to write")
+            return None
+
+        from functools import reduce
+        final_df = reduce(lambda a, b: a.union(b), all_dfs)
+
+        table_path = self.sink.write(final_df, table_name, partitions=["ticker", "report_type"])
+        print(f"Written {final_df.count()} earnings records to {table_path}")
+
+        return table_path
+
+    def ingest_historical_options(self, tickers, table_name="historical_options",
+                                   use_concurrent=False, show_progress=True,
+                                   progress_callback: Optional[ProgressCallback] = None):
+        """
+        Ingest historical options chain data for given tickers.
+
+        Uses Alpha Vantage HISTORICAL_OPTIONS endpoint for options data
+        including strike, expiry, Greeks, and implied volatility.
+
+        Note: This is a premium endpoint requiring an upgraded API key.
+
+        Args:
+            tickers: List of ticker symbols (underlying stocks)
+            table_name: Bronze table name (default: historical_options)
+            use_concurrent: Use concurrent requests (only for premium tier!)
+            show_progress: Show progress updates (default: True)
+            progress_callback: Custom progress callback
+
+        Returns:
+            Path to written bronze table
+        """
+        from datapipelines.providers.alpha_vantage.facets import HistoricalOptionsFacet
+
+        print(f"Ingesting historical options for {len(tickers)} underlyings...")
+        print("Note: HISTORICAL_OPTIONS requires a premium Alpha Vantage subscription")
+
+        calls = [{"ep_name": "historical_options", "params": {"symbol": t}} for t in tickers]
+        print(f"Generated {len(calls)} API calls")
+
+        callback = progress_callback if progress_callback else (default_progress_callback if show_progress else None)
+
+        if use_concurrent:
+            raw_batches = self._fetch_calls_concurrent(
+                calls, response_key="data",
+                progress_callback=callback, phase="historical_options"
+            )
+        else:
+            raw_batches = self._fetch_calls(
+                calls, response_key="data",
+                progress_callback=callback, phase="historical_options"
+            )
+
+        all_dfs = []
+        for i, batch in enumerate(raw_batches):
+            if not batch or len(batch) == 0:
+                continue
+
+            # For options, batch is the data array directly
+            ticker = tickers[i] if i < len(tickers) else None
+            facet = HistoricalOptionsFacet(self.spark, underlying_ticker=ticker)
+            try:
+                df = facet.normalize(batch)
+                if df.count() > 0:
+                    all_dfs.append(df)
+            except Exception as e:
+                logger.warning(f"Failed to normalize options for {ticker}: {e}")
+
+        if not all_dfs:
+            print("No historical options data to write")
+            return None
+
+        from functools import reduce
+        final_df = reduce(lambda a, b: a.union(b), all_dfs)
+
+        table_path = self.sink.write(final_df, table_name, partitions=["underlying_ticker", "option_type"])
+        print(f"Written {final_df.count()} options records to {table_path}")
+
+        return table_path
+
+    def ingest_fundamentals(self, tickers, use_concurrent=False, show_progress=True,
+                            progress_callback: Optional[ProgressCallback] = None):
+        """
+        Ingest complete fundamentals for given tickers.
+
+        This is a convenience method that ingests:
+        - Income statements
+        - Balance sheets
+        - Cash flows
+        - Earnings
+
+        Args:
+            tickers: List of ticker symbols
+            use_concurrent: Use concurrent requests (premium tier only)
+            show_progress: Show progress updates
+            progress_callback: Custom progress callback
+
+        Returns:
+            Dict with paths to all written tables
+        """
+        print(f"Ingesting complete fundamentals for {len(tickers)} tickers...")
+        print("=" * 80)
+
+        results = {}
+
+        print("\n📊 Step 1/4: Income Statements")
+        print("-" * 40)
+        results['income_statements'] = self.ingest_income_statements(
+            tickers, use_concurrent=use_concurrent,
+            show_progress=show_progress, progress_callback=progress_callback
+        )
+
+        print("\n📊 Step 2/4: Balance Sheets")
+        print("-" * 40)
+        results['balance_sheets'] = self.ingest_balance_sheets(
+            tickers, use_concurrent=use_concurrent,
+            show_progress=show_progress, progress_callback=progress_callback
+        )
+
+        print("\n📊 Step 3/4: Cash Flows")
+        print("-" * 40)
+        results['cash_flows'] = self.ingest_cash_flows(
+            tickers, use_concurrent=use_concurrent,
+            show_progress=show_progress, progress_callback=progress_callback
+        )
+
+        print("\n📊 Step 4/4: Earnings")
+        print("-" * 40)
+        results['earnings'] = self.ingest_earnings(
+            tickers, use_concurrent=use_concurrent,
+            show_progress=show_progress, progress_callback=progress_callback
+        )
+
+        print("\n" + "=" * 80)
+        print("✓ Complete fundamentals ingestion finished")
+
+        return results
+
+    def run_comprehensive(self, tickers=None, date_from=None, date_to=None,
+                          max_tickers=None, use_concurrent=False, use_bulk_listing=False,
+                          include_fundamentals=True, include_options=False,
+                          skip_reference_refresh=False, outputsize="full",
+                          show_progress=True,
+                          progress_callback: Optional[ProgressCallback] = None,
+                          **kwargs):
+        """
+        Run comprehensive ingestion: reference + prices + fundamentals + options.
+
+        This is the extended version of run_all that supports the full data
+        coverage needed for forecasting and analysis.
+
+        Args:
+            tickers: List of ticker symbols (default: top tickers from bulk listing)
+            date_from: Start date for prices (YYYY-MM-DD)
+            date_to: End date for prices (YYYY-MM-DD)
+            max_tickers: Limit number of tickers (default: 2000 for fundamentals)
+            use_concurrent: Use concurrent requests (premium tier only)
+            use_bulk_listing: Use LISTING_STATUS for bulk ticker discovery
+            include_fundamentals: Include income statements, balance sheets, cash flows, earnings
+            include_options: Include historical options data (premium endpoint)
+            skip_reference_refresh: Skip OVERVIEW calls
+            outputsize: 'compact' or 'full' for price data
+            show_progress: Show progress updates
+            progress_callback: Custom progress callback
+
+        Returns:
+            Dict with ingested tickers and paths
+        """
+        # First run the standard ingestion (reference + prices)
+        ingested_tickers = self.run_all(
+            tickers=tickers,
+            date_from=date_from,
+            date_to=date_to,
+            max_tickers=max_tickers,
+            use_concurrent=use_concurrent,
+            use_bulk_listing=use_bulk_listing,
+            skip_reference_refresh=skip_reference_refresh,
+            outputsize=outputsize,
+            show_progress=show_progress,
+            progress_callback=progress_callback,
+            **kwargs
+        )
+
+        results = {'tickers': ingested_tickers}
+
+        # Ingest fundamentals if requested
+        if include_fundamentals and ingested_tickers:
+            print("\n" + "=" * 80)
+            print("FUNDAMENTALS INGESTION")
+            print("=" * 80)
+            fundamentals_results = self.ingest_fundamentals(
+                ingested_tickers,
+                use_concurrent=use_concurrent,
+                show_progress=show_progress,
+                progress_callback=progress_callback
+            )
+            results.update(fundamentals_results)
+
+        # Ingest options if requested (premium endpoint)
+        if include_options and ingested_tickers:
+            print("\n" + "=" * 80)
+            print("OPTIONS INGESTION (Premium Endpoint)")
+            print("=" * 80)
+            results['historical_options'] = self.ingest_historical_options(
+                ingested_tickers,
+                use_concurrent=use_concurrent,
+                show_progress=show_progress,
+                progress_callback=progress_callback
+            )
+
+        print("\n" + "=" * 80)
+        print(f"✓ Comprehensive ingestion complete for {len(ingested_tickers)} tickers")
+
+        return results

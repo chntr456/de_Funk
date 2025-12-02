@@ -1,9 +1,31 @@
 # Proposal: Alpha Vantage Pipeline Expansion & Unified Cashflow Model
 
-**Status**: Draft
+**Status**: Partially Accepted
 **Author**: Claude
 **Date**: 2025-11-30
+**Updated**: 2025-12-02
 **Priority**: High
+
+## Implementation Notes (2025-12-02)
+
+Part 1 (Alpha Vantage Pipeline Expansion) has been implemented:
+- Added endpoints to `configs/alpha_vantage_endpoints.json` for income_statement, balance_sheet, cash_flow, earnings, historical_options, etf_profile, earnings_calendar, realtime_options, top_gainers_losers
+- Created facets in `datapipelines/providers/alpha_vantage/facets/`:
+  - `income_statement_facet.py`
+  - `balance_sheet_facet.py`
+  - `cash_flow_facet.py`
+  - `earnings_facet.py`
+  - `historical_options_facet.py`
+- Added ingestion methods to `AlphaVantageIngestor`:
+  - `ingest_income_statements()`
+  - `ingest_balance_sheets()`
+  - `ingest_cash_flows()`
+  - `ingest_earnings()`
+  - `ingest_historical_options()`
+  - `ingest_fundamentals()` - convenience method for all fundamentals
+  - `run_comprehensive()` - extended pipeline with fundamentals and options
+
+Part 2 (Unified Cashflow Model) is deferred to future work.
 
 ---
 
