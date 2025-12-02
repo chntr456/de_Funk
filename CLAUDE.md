@@ -1277,9 +1277,12 @@ If queries are slow:
 | Module | Purpose |
 |--------|---------|
 | `config/loader.py` | **ConfigLoader** - Centralized configuration loading |
+| `config/logging.py` | **Logging Framework** - setup_logging(), get_logger(), LogTimer (Dec 2025) |
 | `config/models.py` | Type-safe configuration dataclasses |
 | `utils/repo.py` | **Repo discovery** - Find repo root and setup imports |
 | `core/context.py` | **RepoContext** - Now uses ConfigLoader internally |
+| `core/exceptions.py` | **Exception Hierarchy** - DeFunkError and subclasses with recovery hints (Dec 2025) |
+| `core/error_handling.py` | **Error Utilities** - @handle_exceptions, @retry_on_exception, safe_call (Dec 2025) |
 | `core/session/filters.py` | **FilterEngine** - Canonical filter implementation (v2.2) |
 | `models/base/model.py` | BaseModel class - thin orchestrator (v2.2: 397 lines) |
 | `models/base/graph_builder.py` | Graph building and node loading (v2.2) |
@@ -1437,26 +1440,86 @@ except FileNotFoundError as e:
 
 ### Logging Rules (ENFORCED)
 
+**Centralized Logging Framework** (December 2025): `config/logging.py`
+
 ```python
 # ❌ NEVER DO THIS in production code
 print(f"Processing {item}...")
 print(f"Done!")
 print(f"Error: {e}")
 
-# ✅ CORRECT - Use logger
-from config.logging import get_logger
+# ✅ CORRECT - Use centralized logging
+from config.logging import setup_logging, get_logger, LogTimer
+
+# Initialize at script startup (once)
+setup_logging()
+
+# Get module-specific logger
 logger = get_logger(__name__)
 
-logger.info(f"Processing {item}")
-logger.debug(f"Details: {details}")
-logger.error(f"Failed to process", exc_info=True)
+# Use appropriate log levels
+logger.debug(f"Details: {details}")      # Debug info (file only by default)
+logger.info(f"Processing {item}")        # Progress updates (console + file)
+logger.warning(f"Rate limit reached")    # Issues that don't stop execution
+logger.error(f"Failed to process", exc_info=True)  # Errors with stack trace
+
+# Use LogTimer for timing operations
+with LogTimer(logger, "Building model"):
+    model.build()
+# Output: "Building model completed in 2.35s"
 ```
 
+**Log File Location**: `logs/de_funk.log` (10MB max, 5 file rotation)
+
 **Rules**:
-1. **No print statements** except in CLI scripts for user output
-2. **Use `get_logger(__name__)`** for module-specific loggers
-3. **Use appropriate levels**: DEBUG for details, INFO for progress, WARNING for issues, ERROR for failures
-4. **Include `exc_info=True`** when logging exceptions
+1. **No print statements** except in CLI scripts for user-facing output
+2. **Call `setup_logging()`** once at script startup (idempotent)
+3. **Use `get_logger(__name__)`** for module-specific loggers
+4. **Use appropriate levels**: DEBUG for details, INFO for progress, WARNING for issues, ERROR for failures
+5. **Include `exc_info=True`** when logging exceptions to capture stack traces
+6. **Use `LogTimer`** for timing long operations
+
+**Custom Exception Hierarchy** (December 2025): `core/exceptions.py`
+
+```python
+from core.exceptions import (
+    DeFunkError,           # Base class for all de_Funk errors
+    ConfigurationError,    # Config loading issues
+    ModelNotFoundError,    # Model doesn't exist
+    MeasureError,          # Measure calculation failed
+    RateLimitError,        # API rate limit exceeded
+    IngestionError,        # Data ingestion failed
+)
+
+# All exceptions include recovery hints
+try:
+    model = registry.get_model("stocks")
+except ModelNotFoundError as e:
+    print(e)              # "Model not found: 'stocks'"
+    print(e.recovery_hint)  # "Available models: core, company"
+    print(e.details)       # {'model': 'stocks', 'available': [...]}
+```
+
+**Error Handling Decorators** (December 2025): `core/error_handling.py`
+
+```python
+from core.error_handling import handle_exceptions, retry_on_exception, safe_call
+
+# Automatic error handling with default return
+@handle_exceptions(ValueError, TypeError, default_return=None)
+def parse_config(data):
+    return json.loads(data)
+
+# Automatic retry with exponential backoff
+@retry_on_exception(ConnectionError, max_retries=3, delay_seconds=1.0)
+def fetch_api_data(url):
+    return requests.get(url)
+
+# Safe function call with default
+result = safe_call(risky_function, default="fallback_value")
+```
+
+**Validation Script**: `python -m scripts.test.validate_logging_framework`
 
 ### Code Duplication Rules
 
