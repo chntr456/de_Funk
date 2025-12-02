@@ -268,7 +268,7 @@ def run_full_pipeline(
                 params={}
             )
             stocks_model.build()
-            stocks_model.write()
+            stocks_model.write_tables()
             print("  ✓ Stocks model built and saved successfully")
 
             # Clean up Spark session
