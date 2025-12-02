@@ -1401,54 +1401,38 @@ class AlphaVantageIngestor(Ingestor):
             print("Selecting top stocks by market capitalization...")
             print()
 
-            # Check if we have existing market cap data
-            ranked_tickers = self.get_tickers_by_market_cap(
-                max_tickers=max_tickers or 2000,
-                min_market_cap=min_market_cap
+            # Fetch market cap data for all tickers via LISTING_STATUS + OVERVIEW
+            print("Fetching market cap rankings...")
+            print("  1. LISTING_STATUS to get all tickers (1 API call)")
+            print("  2. OVERVIEW for each ticker to get market cap")
+            print()
+
+            # Request more than needed to ensure we have enough after filtering
+            refresh_count = min((max_tickers or 2000) * 2, 5000)
+
+            # Run the refresh - populates bronze/securities_reference with market cap
+            tickers = self.refresh_market_cap_rankings(
+                use_bulk_listing=True,
+                max_tickers=refresh_count,
+                show_progress=show_progress,
+                progress_callback=progress_callback
             )
 
-            if len(ranked_tickers) >= (max_tickers or 2000):
-                # We have enough data - use it
-                tickers = ranked_tickers[:max_tickers] if max_tickers else ranked_tickers
-                print(f"Using {len(tickers)} tickers from existing market cap rankings")
-            else:
-                # Not enough data - auto-bootstrap market cap rankings
-                print(f"Insufficient market cap data ({len(ranked_tickers)} tickers).")
-                print()
-                print("Auto-bootstrapping market cap rankings...")
-                print("This will:")
-                print("  1. Fetch all tickers via LISTING_STATUS (1 API call)")
-                print("  2. Fetch OVERVIEW for tickers to get market cap data")
-                print("  3. Sort by market cap and select top tickers")
-                print()
+            # Mark that we just refreshed - skip reference refresh in run_all
+            just_bootstrapped = True
 
-                # Determine how many tickers to refresh
-                # Request more than needed to ensure we have enough after filtering
-                refresh_count = min((max_tickers or 2000) * 2, 5000)
+            # Apply the requested limit
+            if max_tickers and len(tickers) > max_tickers:
+                tickers = tickers[:max_tickers]
+                print(f"Selected top {max_tickers} tickers by market cap")
 
-                # Run the refresh - this will populate bronze/securities_reference
-                tickers = self.refresh_market_cap_rankings(
-                    use_bulk_listing=True,
-                    max_tickers=refresh_count,
-                    show_progress=show_progress,
-                    progress_callback=progress_callback
+            # Apply minimum market cap filter if specified
+            if min_market_cap and tickers:
+                tickers = self.get_tickers_by_market_cap(
+                    max_tickers=max_tickers,
+                    min_market_cap=min_market_cap
                 )
-
-                # Mark that we just bootstrapped - skip reference refresh in run_all
-                just_bootstrapped = True
-
-                # Now apply the requested limit
-                if max_tickers and len(tickers) > max_tickers:
-                    tickers = tickers[:max_tickers]
-                    print(f"Limited to top {max_tickers} tickers by market cap")
-
-                # Apply minimum market cap filter if specified
-                if min_market_cap and tickers:
-                    tickers = self.get_tickers_by_market_cap(
-                        max_tickers=max_tickers,
-                        min_market_cap=min_market_cap
-                    )
-                    print(f"After min market cap filter: {len(tickers)} tickers")
+                print(f"After min market cap filter: {len(tickers)} tickers")
 
             print()
 
