@@ -1390,9 +1390,6 @@ class AlphaVantageIngestor(Ingestor):
         Returns:
             Dict with ingested tickers and paths
         """
-        # Track whether we just bootstrapped (to avoid redundant OVERVIEW calls)
-        just_bootstrapped = False
-
         # If sorting by market cap and no specific tickers provided
         if sort_by_market_cap and tickers is None:
             print("=" * 80)
@@ -1401,47 +1398,31 @@ class AlphaVantageIngestor(Ingestor):
             print("Selecting top stocks by market capitalization...")
             print()
 
-            # Fetch market cap data for all tickers via LISTING_STATUS + OVERVIEW
-            print("Fetching market cap rankings...")
-            print("  1. LISTING_STATUS to get all tickers (1 API call)")
-            print("  2. OVERVIEW for each ticker to get market cap")
-            print()
-
-            # Request more than needed to ensure we have enough after filtering
-            refresh_count = min((max_tickers or 2000) * 2, 5000)
-
-            # Run the refresh - populates bronze/securities_reference with market cap
-            tickers = self.refresh_market_cap_rankings(
-                use_bulk_listing=True,
-                max_tickers=refresh_count,
-                show_progress=show_progress,
-                progress_callback=progress_callback
+            # Use existing market cap data from securities_reference
+            tickers = self.get_tickers_by_market_cap(
+                max_tickers=max_tickers or 2000,
+                min_market_cap=min_market_cap
             )
 
-            # Mark that we just refreshed - skip reference refresh in run_all
-            just_bootstrapped = True
+            if len(tickers) < (max_tickers or 2000):
+                print()
+                print(f"⚠️  Only {len(tickers)} tickers have market cap data.")
+                print(f"   Requested: {max_tickers or 2000}")
+                print()
+                print("To populate market cap rankings, run:")
+                print(f"  python -m scripts.ingest.refresh_market_cap_rankings --max-tickers {(max_tickers or 2000) * 2}")
+                print()
 
-            # Apply the requested limit
-            if max_tickers and len(tickers) > max_tickers:
-                tickers = tickers[:max_tickers]
-                print(f"Selected top {max_tickers} tickers by market cap")
+                if len(tickers) == 0:
+                    print("ERROR: No market cap data available. Cannot proceed with market cap sorting.")
+                    print("Run the refresh script first, or use --no-sort-by-market-cap")
+                    raise ValueError("No market cap data available for sorting")
 
-            # Apply minimum market cap filter if specified
-            if min_market_cap and tickers:
-                tickers = self.get_tickers_by_market_cap(
-                    max_tickers=max_tickers,
-                    min_market_cap=min_market_cap
-                )
-                print(f"After min market cap filter: {len(tickers)} tickers")
-
+            print(f"Using {len(tickers)} tickers from existing market cap rankings")
             print()
 
         # First run the standard ingestion (reference + prices)
-        # If we just bootstrapped, skip reference refresh to avoid redundant OVERVIEW calls
-        effective_skip_reference = skip_reference_refresh or just_bootstrapped
-        if just_bootstrapped:
-            print("(Skipping reference refresh - already populated during bootstrap)")
-            print()
+        effective_skip_reference = skip_reference_refresh
 
         ingested_tickers = self.run_all(
             tickers=tickers,
