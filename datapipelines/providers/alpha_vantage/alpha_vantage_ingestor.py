@@ -818,7 +818,7 @@ class AlphaVantageIngestor(Ingestor):
         print("Loading market cap rankings from existing reference data...")
 
         # Read from bronze securities_reference
-        bronze_path = Path(self.sink.storage_cfg.get("bronze", "storage/bronze"))
+        bronze_path = Path(self.sink.cfg["roots"]["bronze"])
         ref_path = bronze_path / "securities_reference"
 
         if not ref_path.exists():
