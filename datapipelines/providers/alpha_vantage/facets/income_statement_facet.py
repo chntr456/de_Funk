@@ -98,6 +98,38 @@ class IncomeStatementFacet(Facet):
         super().__init__(spark, **kwargs)
         self.ticker = ticker
 
+    def get_input_schema(self):
+        """
+        Get explicit schema to avoid CANNOT_DETERMINE_TYPE errors.
+
+        When all values in a column are NULL, Spark can't infer the type.
+        This provides explicit types for all columns.
+        """
+        from pyspark.sql.types import (
+            StructType, StructField, StringType, LongType,
+            DateType, TimestampType
+        )
+
+        type_map = {
+            "string": StringType(),
+            "long": LongType(),
+            "date": DateType(),
+            "timestamp": TimestampType(),
+        }
+
+        fields = []
+        for col_name, col_type in self.FINAL_COLUMNS:
+            # For date fields that come in as strings initially
+            if col_name == "fiscal_date_ending":
+                fields.append(StructField(col_name, StringType(), True))
+            elif col_name == "snapshot_date":
+                fields.append(StructField(col_name, DateType(), True))
+            else:
+                spark_type = type_map.get(col_type, StringType())
+                fields.append(StructField(col_name, spark_type, True))
+
+        return StructType(fields)
+
     def normalize(self, raw_response: dict) -> DataFrame:
         """
         Normalize income statement response.
@@ -128,8 +160,9 @@ class IncomeStatementFacet(Facet):
         # Coerce numeric types
         all_reports = self._coerce_rows(all_reports)
 
-        # Create DataFrame
-        df = self.spark.createDataFrame(all_reports, samplingRatio=1.0)
+        # Create DataFrame with explicit schema to avoid CANNOT_DETERMINE_TYPE errors
+        schema = self.get_input_schema()
+        df = self.spark.createDataFrame(all_reports, schema=schema)
         df = self.postprocess(df)
         df = self._apply_final_casts(df)
         df = self._apply_final_columns(df)

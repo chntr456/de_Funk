@@ -111,6 +111,32 @@ class CashFlowFacet(Facet):
         super().__init__(spark, **kwargs)
         self.ticker = ticker
 
+    def get_input_schema(self):
+        """Get explicit schema to avoid CANNOT_DETERMINE_TYPE errors."""
+        from pyspark.sql.types import (
+            StructType, StructField, StringType, LongType,
+            DateType, TimestampType
+        )
+
+        type_map = {
+            "string": StringType(),
+            "long": LongType(),
+            "date": DateType(),
+            "timestamp": TimestampType(),
+        }
+
+        fields = []
+        for col_name, col_type in self.FINAL_COLUMNS:
+            if col_name == "fiscal_date_ending":
+                fields.append(StructField(col_name, StringType(), True))
+            elif col_name == "snapshot_date":
+                fields.append(StructField(col_name, DateType(), True))
+            else:
+                spark_type = type_map.get(col_type, StringType())
+                fields.append(StructField(col_name, spark_type, True))
+
+        return StructType(fields)
+
     def normalize(self, raw_response: dict) -> DataFrame:
         """
         Normalize cash flow response.
@@ -141,8 +167,9 @@ class CashFlowFacet(Facet):
         # Coerce numeric types
         all_reports = self._coerce_rows(all_reports)
 
-        # Create DataFrame
-        df = self.spark.createDataFrame(all_reports, samplingRatio=1.0)
+        # Create DataFrame with explicit schema
+        schema = self.get_input_schema()
+        df = self.spark.createDataFrame(all_reports, schema=schema)
         df = self.postprocess(df)
         df = self._apply_final_casts(df)
         df = self._apply_final_columns(df)
