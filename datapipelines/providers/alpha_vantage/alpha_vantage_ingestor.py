@@ -794,6 +794,151 @@ class AlphaVantageIngestor(Ingestor):
         return tickers
 
     # =========================================================================
+    # Market Cap Ranking Methods
+    # =========================================================================
+
+    def get_tickers_by_market_cap(self, max_tickers: int = None,
+                                   min_market_cap: float = None) -> list:
+        """
+        Get tickers sorted by market cap from existing reference data.
+
+        Uses bronze/securities_reference data to rank stocks by market cap.
+        This requires that ingest_reference_data() has been run previously.
+
+        Args:
+            max_tickers: Maximum number of tickers to return
+            min_market_cap: Minimum market cap filter (in dollars)
+
+        Returns:
+            List of ticker symbols sorted by market cap (descending)
+        """
+        from pyspark.sql.functions import col, desc
+        from pathlib import Path
+
+        print("Loading market cap rankings from existing reference data...")
+
+        # Read from bronze securities_reference
+        bronze_path = Path(self.sink.storage_cfg.get("bronze", "storage/bronze"))
+        ref_path = bronze_path / "securities_reference"
+
+        if not ref_path.exists():
+            print("Warning: No securities_reference data found. Run ingest_reference_data() first.")
+            print("Falling back to default ticker list.")
+            return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
+
+        try:
+            # Read reference data
+            df = self.spark.read.parquet(str(ref_path))
+
+            # Filter to stocks with market cap data
+            df_with_cap = df.filter(
+                (col("market_cap").isNotNull()) &
+                (col("market_cap") > 0) &
+                (col("asset_type") == "stocks") &
+                (col("is_active") == True)
+            )
+
+            # Apply minimum market cap filter if specified
+            if min_market_cap:
+                df_with_cap = df_with_cap.filter(col("market_cap") >= min_market_cap)
+                print(f"Applied minimum market cap filter: ${min_market_cap:,.0f}")
+
+            # Sort by market cap descending and get distinct tickers
+            df_ranked = (df_with_cap
+                        .select("ticker", "market_cap", "security_name")
+                        .orderBy(desc("market_cap"))
+                        .dropDuplicates(["ticker"]))
+
+            # Apply limit
+            if max_tickers:
+                df_ranked = df_ranked.limit(max_tickers)
+
+            # Collect tickers
+            tickers = [row.ticker for row in df_ranked.select("ticker").collect()]
+
+            # Print summary
+            if tickers:
+                sample_df = df_ranked.limit(10).collect()
+                print(f"\n📊 Top {len(tickers)} stocks by market cap:")
+                print("-" * 60)
+                for i, row in enumerate(sample_df[:10], 1):
+                    cap_billions = row.market_cap / 1e9 if row.market_cap else 0
+                    print(f"  {i:3}. {row.ticker:6} - ${cap_billions:>8.1f}B - {row.security_name[:30] if row.security_name else 'N/A'}")
+                if len(tickers) > 10:
+                    print(f"  ... and {len(tickers) - 10} more")
+                print()
+
+            return tickers
+
+        except Exception as e:
+            logger.warning(f"Failed to load market cap rankings: {e}")
+            print(f"Warning: Could not load market cap data: {e}")
+            print("Falling back to default ticker list.")
+            return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
+
+    def refresh_market_cap_rankings(self, source_tickers: list = None,
+                                     use_bulk_listing: bool = True,
+                                     max_tickers: int = 3000,
+                                     show_progress: bool = True,
+                                     progress_callback: Optional[ProgressCallback] = None) -> list:
+        """
+        Refresh market cap data by fetching OVERVIEW for tickers.
+
+        This is useful when you want to update the market cap rankings
+        before running a comprehensive ingestion.
+
+        Args:
+            source_tickers: List of tickers to fetch (default: from bulk listing)
+            use_bulk_listing: Use LISTING_STATUS to get ticker list
+            max_tickers: Maximum tickers to refresh (default: 3000 to cover top 2000)
+            show_progress: Show progress updates
+            progress_callback: Custom progress callback
+
+        Returns:
+            List of tickers sorted by market cap
+        """
+        print("=" * 80)
+        print("REFRESHING MARKET CAP RANKINGS")
+        print("=" * 80)
+
+        # Step 1: Get source tickers
+        if source_tickers:
+            tickers = source_tickers[:max_tickers]
+        elif use_bulk_listing:
+            print("\nStep 1: Fetching ticker list from LISTING_STATUS...")
+            _, all_tickers, ticker_exchanges = self.ingest_bulk_listing()
+
+            # Filter to US exchanges
+            us_exchanges = self.alpha_vantage_cfg.get("us_exchanges", [
+                "NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"
+            ])
+            tickers = [t for t in all_tickers if ticker_exchanges.get(t) in us_exchanges]
+            tickers = tickers[:max_tickers]
+            print(f"Selected {len(tickers)} US exchange tickers")
+        else:
+            print("Error: No tickers provided and use_bulk_listing=False")
+            return []
+
+        # Step 2: Fetch OVERVIEW data to get market caps
+        print(f"\nStep 2: Fetching OVERVIEW data for {len(tickers)} tickers...")
+        print("This will populate market_cap field in securities_reference")
+        self.ingest_reference_data(
+            tickers=tickers,
+            use_concurrent=False,
+            show_progress=show_progress,
+            progress_callback=progress_callback
+        )
+
+        # Step 3: Return sorted tickers
+        print("\nStep 3: Ranking tickers by market cap...")
+        ranked_tickers = self.get_tickers_by_market_cap(max_tickers=max_tickers)
+
+        print("=" * 80)
+        print(f"✓ Market cap rankings refreshed for {len(ranked_tickers)} tickers")
+
+        return ranked_tickers
+
+    # =========================================================================
     # Financial Statement Ingestion Methods
     # =========================================================================
 
@@ -1199,6 +1344,7 @@ class AlphaVantageIngestor(Ingestor):
                           max_tickers=None, use_concurrent=False, use_bulk_listing=False,
                           include_fundamentals=True, include_options=False,
                           skip_reference_refresh=False, outputsize="full",
+                          sort_by_market_cap=True, min_market_cap=None,
                           show_progress=True,
                           progress_callback: Optional[ProgressCallback] = None,
                           **kwargs):
@@ -1209,7 +1355,7 @@ class AlphaVantageIngestor(Ingestor):
         coverage needed for forecasting and analysis.
 
         Args:
-            tickers: List of ticker symbols (default: top tickers from bulk listing)
+            tickers: List of ticker symbols (default: top tickers by market cap)
             date_from: Start date for prices (YYYY-MM-DD)
             date_to: End date for prices (YYYY-MM-DD)
             max_tickers: Limit number of tickers (default: 2000 for fundamentals)
@@ -1219,12 +1365,44 @@ class AlphaVantageIngestor(Ingestor):
             include_options: Include historical options data (premium endpoint)
             skip_reference_refresh: Skip OVERVIEW calls
             outputsize: 'compact' or 'full' for price data
+            sort_by_market_cap: Sort tickers by market cap descending (default: True)
+            min_market_cap: Minimum market cap filter in dollars (e.g., 1e9 for $1B)
             show_progress: Show progress updates
             progress_callback: Custom progress callback
 
         Returns:
             Dict with ingested tickers and paths
         """
+        # If sorting by market cap and no specific tickers provided
+        if sort_by_market_cap and tickers is None:
+            print("=" * 80)
+            print("MARKET CAP RANKING MODE")
+            print("=" * 80)
+            print("Selecting top stocks by market capitalization...")
+            print()
+
+            # Check if we have existing market cap data
+            ranked_tickers = self.get_tickers_by_market_cap(
+                max_tickers=max_tickers or 2000,
+                min_market_cap=min_market_cap
+            )
+
+            if len(ranked_tickers) >= (max_tickers or 2000) * 0.5:
+                # We have enough data - use it
+                tickers = ranked_tickers
+                print(f"Using {len(tickers)} tickers from existing market cap rankings")
+            else:
+                # Not enough data - need to refresh
+                print(f"Insufficient market cap data ({len(ranked_tickers)} tickers).")
+                print("To populate market cap data, first run:")
+                print("  ingestor.refresh_market_cap_rankings(max_tickers=3000)")
+                print()
+                print("Falling back to bulk listing without market cap sorting...")
+                use_bulk_listing = True
+                tickers = None
+
+            print()
+
         # First run the standard ingestion (reference + prices)
         ingested_tickers = self.run_all(
             tickers=tickers,
