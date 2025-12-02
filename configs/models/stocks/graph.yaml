@@ -1,4 +1,5 @@
 # Stocks graph definition - v2.0 with base inheritance
+# Consolidated: fact_stock_prices includes all OHLCV + technical indicators
 
 extends: _base.securities.graph
 
@@ -29,19 +30,8 @@ nodes:
       - "trade_date IS NOT NULL"
       - "ticker IS NOT NULL"
     # Inherits select from base (ticker, trade_date, open, high, low, close, volume, volume_weighted, transactions)
-    tags: [fact, prices, stocks]
-
-  fact_stock_technicals:
-    from: fact_stock_prices
-    select:
-      ticker: ticker
-      trade_date: trade_date
-      close: close
-      high: high
-      low: low
-      volume: volume
     derive:
-      # Returns
+      # Daily Returns
       daily_return: "(close - LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date)) / NULLIF(LAG(close) OVER (PARTITION BY ticker ORDER BY trade_date), 0) * 100"
 
       # Simple Moving Averages
@@ -71,7 +61,7 @@ nodes:
       volume_sma_20: "AVG(volume) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)"
       volume_ratio: "volume / NULLIF(volume_sma_20, 0)"
 
-    tags: [fact, technical]
+    tags: [fact, prices, stocks, technical]
 
 edges:
   # Inherit base edges: _prices_to_security, _prices_to_calendar
@@ -96,17 +86,3 @@ edges:
     on: ["trade_date=date"]
     type: left
     description: "Join prices to calendar for date filtering"
-
-  technicals_to_stock:
-    from: fact_stock_technicals
-    to: dim_stock
-    on: ["ticker=ticker"]
-    type: many_to_one
-    description: "Technical indicators belong to a stock"
-
-  technicals_to_calendar:
-    from: fact_stock_technicals
-    to: core.dim_calendar
-    on: ["trade_date=date"]
-    type: left
-    description: "Link technicals to calendar for date filtering"

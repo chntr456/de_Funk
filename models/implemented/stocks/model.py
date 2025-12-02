@@ -87,7 +87,7 @@ class StocksModel(BaseModel):
                        start_date: Optional[str] = None,
                        end_date: Optional[str] = None) -> Any:
         """
-        Get technical indicators.
+        Get technical indicators (from fact_stock_prices which now includes all technicals).
 
         Args:
             ticker: Specific ticker (optional)
@@ -95,27 +95,10 @@ class StocksModel(BaseModel):
             end_date: End date filter
 
         Returns:
-            DataFrame with technical indicators
+            DataFrame with price data including technical indicators
         """
-        technicals_df = self.get_table('fact_stock_technicals')
-
-        # Apply filters
-        if self._backend == 'spark':
-            if ticker:
-                technicals_df = technicals_df.filter(technicals_df.ticker == ticker)
-            if start_date:
-                technicals_df = technicals_df.filter(technicals_df.trade_date >= start_date)
-            if end_date:
-                technicals_df = technicals_df.filter(technicals_df.trade_date <= end_date)
-        else:  # duckdb/pandas
-            if ticker:
-                technicals_df = technicals_df[technicals_df['ticker'] == ticker]
-            if start_date:
-                technicals_df = technicals_df[technicals_df['trade_date'] >= start_date]
-            if end_date:
-                technicals_df = technicals_df[technicals_df['trade_date'] <= end_date]
-
-        return technicals_df
+        # Technical indicators are now consolidated into fact_stock_prices
+        return self.get_prices(ticker=ticker, start_date=start_date, end_date=end_date)
 
     def get_stock_info(self, ticker: Optional[str] = None) -> Any:
         """

@@ -116,12 +116,19 @@ def main():
             print(f"⚠️  No parquet files found in {model_dir}")
             continue
 
-        # Group by table (immediate subdirectory of model)
+        # Group by table (dims/table_name or facts/table_name)
+        # Structure: model/dims/dim_name/... or model/facts/fact_name/...
         by_table = defaultdict(list)
         for pf in parquet_files:
             rel_path = pf.relative_to(model_dir)
-            table = rel_path.parts[0]
-            by_table[table].append(pf)
+            # Get the table type (dims/facts) and actual table name
+            if len(rel_path.parts) >= 2:
+                table_type = rel_path.parts[0]  # 'dims' or 'facts'
+                table_name = rel_path.parts[1]  # actual table name
+                table_key = f"{table_type}/{table_name}"
+            else:
+                table_key = rel_path.parts[0]
+            by_table[table_key].append(pf)
 
         print(f"\nTables found: {list(by_table.keys())}")
 
