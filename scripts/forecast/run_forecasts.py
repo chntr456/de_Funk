@@ -44,7 +44,9 @@ def load_config(config_path: str) -> dict:
 
 def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
     """
-    Get list of active tickers from the company Silver layer.
+    Get list of active tickers from the stocks Silver layer.
+
+    Falls back to bronze layer if silver not available.
 
     Args:
         storage_cfg: Storage configuration
@@ -53,28 +55,48 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
     Returns:
         List of ticker symbols
     """
-    import duckdb
+    from pathlib import Path
+    import pyarrow.dataset as ds
 
-    company_root = storage_cfg["roots"].get("company_silver", "storage/silver/company")
-    dim_company_path = f"{company_root}/dims/dim_company"
+    # Try stocks Silver layer first
+    stocks_root = storage_cfg["roots"].get("stocks_silver", "storage/silver/stocks")
+    dim_stock_path = Path(stocks_root) / "dims" / "dim_stock"
 
-    try:
-        con = duckdb.connect(database=':memory:')
-        query = f"SELECT DISTINCT ticker FROM read_parquet('{dim_company_path}/**/*.parquet') ORDER BY ticker"
+    if dim_stock_path.exists():
+        try:
+            dataset = ds.dataset(dim_stock_path, format='parquet')
+            table = dataset.to_table(columns=['ticker'])
+            tickers = table.column('ticker').unique().to_pylist()
 
-        if limit:
-            query += f" LIMIT {limit}"
+            if limit:
+                tickers = tickers[:limit]
 
-        df = con.execute(query).fetchdf()
-        con.close()
+            logger.info(f"Loaded {len(tickers)} tickers from stocks Silver layer")
+            return tickers
+        except Exception as e:
+            logger.warning(f"Could not load tickers from stocks Silver: {e}")
 
-        logger.info(f"Loaded {len(df)} tickers from Silver layer")
-        return df['ticker'].tolist()
-    except Exception as e:
-        logger.warning(f"Could not load tickers from Silver layer: {e}")
-        print(f"Warning: Could not load tickers from Silver layer: {e}")
-        print("Using default tickers...")
-        return ["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN"]
+    # Fallback: Bronze prices_daily
+    bronze_root = storage_cfg["roots"].get("bronze", "storage/bronze")
+    prices_path = Path(bronze_root) / "prices_daily"
+
+    if prices_path.exists():
+        try:
+            dataset = ds.dataset(prices_path, format='parquet')
+            table = dataset.to_table(columns=['ticker'])
+            tickers = table.column('ticker').unique().to_pylist()
+
+            if limit:
+                tickers = tickers[:limit]
+
+            logger.info(f"Loaded {len(tickers)} tickers from Bronze layer")
+            return tickers
+        except Exception as e:
+            logger.warning(f"Could not load tickers from Bronze layer: {e}")
+
+    # Return empty list if no data sources available
+    logger.warning("No ticker data sources available")
+    return []
 
 
 def print_header(text: str, char: str = "=") -> None:
@@ -111,7 +133,7 @@ def run_forecast_pipeline(
     print()
     logger.info("Starting time series forecast pipeline")
 
-    # Initialize Spark
+    # Initialize Spark connection (required for ETL operations)
     from orchestration.common.spark_session import get_spark
     from core.connection import ConnectionFactory
     spark_session = get_spark("ForecastPipeline")

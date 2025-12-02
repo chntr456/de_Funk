@@ -321,14 +321,18 @@ class TimeSeriesForecastModel(BaseModel):
         """
         config = self.get_model_config(config_name)
 
-        # Get training data as Spark DataFrame
+        # Get training data
         training_data = self.get_training_data(
             entity_id,
             lookback_days=config.get('lookback_days', 60)
         )
 
         # Convert to pandas for ML training
-        data_pdf = training_data.toPandas()
+        if hasattr(training_data, 'toPandas'):
+            data_pdf = training_data.toPandas()
+        else:
+            # Already a pandas DataFrame
+            data_pdf = training_data.copy() if hasattr(training_data, 'copy') else training_data
 
         # Rename date column to standard name for training
         date_col = self.get_date_column()
@@ -365,14 +369,17 @@ class TimeSeriesForecastModel(BaseModel):
         """
         config = self.get_model_config(config_name)
 
-        # Get training data as Spark DataFrame
+        # Get training data
         training_data = self.get_training_data(
             entity_id,
             lookback_days=config.get('lookback_days', 60)
         )
 
         # Convert to pandas for ML training
-        data_pdf = training_data.toPandas()
+        if hasattr(training_data, 'toPandas'):
+            data_pdf = training_data.toPandas()
+        else:
+            data_pdf = training_data.copy() if hasattr(training_data, 'copy') else training_data
 
         # Rename date column to standard name for training
         date_col = self.get_date_column()
@@ -408,14 +415,17 @@ class TimeSeriesForecastModel(BaseModel):
         """
         config = self.get_model_config(config_name)
 
-        # Get training data as Spark DataFrame
+        # Get training data
         training_data = self.get_training_data(
             entity_id,
             lookback_days=config.get('lookback_days', 60)
         )
 
         # Convert to pandas for ML training
-        data_pdf = training_data.toPandas()
+        if hasattr(training_data, 'toPandas'):
+            data_pdf = training_data.toPandas()
+        else:
+            data_pdf = training_data.copy() if hasattr(training_data, 'copy') else training_data
 
         # Rename date column to standard name for training
         date_col = self.get_date_column()
