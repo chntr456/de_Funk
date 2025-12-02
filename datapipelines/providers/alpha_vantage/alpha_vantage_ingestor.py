@@ -843,11 +843,12 @@ class AlphaVantageIngestor(Ingestor):
                 df_with_cap = df_with_cap.filter(col("market_cap") >= min_market_cap)
                 print(f"Applied minimum market cap filter: ${min_market_cap:,.0f}")
 
-            # Sort by market cap descending and get distinct tickers
+            # Deduplicate first, then sort by market cap descending
+            # (dropDuplicates destroys sort order, so we must sort AFTER deduplication)
             df_ranked = (df_with_cap
                         .select("ticker", "market_cap", "security_name")
-                        .orderBy(desc("market_cap"))
-                        .dropDuplicates(["ticker"]))
+                        .dropDuplicates(["ticker"])
+                        .orderBy(desc("market_cap")))
 
             # Apply limit
             if max_tickers:

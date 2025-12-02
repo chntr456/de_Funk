@@ -13,7 +13,7 @@ Facets handle:
 from __future__ import annotations
 
 # Core securities facets (existing)
-from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import AlphaVantageBaseFacet
+from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import AlphaVantageFacet
 from datapipelines.providers.alpha_vantage.facets.securities_reference_facet import SecuritiesReferenceFacetAV
 from datapipelines.providers.alpha_vantage.facets.securities_prices_facet import SecuritiesPricesFacetAV
 
@@ -26,7 +26,7 @@ from datapipelines.providers.alpha_vantage.facets.historical_options_facet impor
 
 __all__ = [
     # Base and core facets
-    'AlphaVantageBaseFacet',
+    'AlphaVantageFacet',
     'SecuritiesReferenceFacetAV',
     'SecuritiesPricesFacetAV',
     # Financial statements
