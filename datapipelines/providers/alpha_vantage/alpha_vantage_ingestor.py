@@ -870,15 +870,15 @@ class AlphaVantageIngestor(Ingestor):
             if max_tickers:
                 df_ranked = df_ranked.limit(max_tickers)
 
-            # Collect tickers
-            tickers = [row.ticker for row in df_ranked.select("ticker").collect()]
+            # Collect full rows to preserve sort order (Spark may drop sort on select)
+            rows = df_ranked.collect()
+            tickers = [row.ticker for row in rows]
 
             # Print summary
             if tickers:
-                sample_df = df_ranked.limit(10).collect()
                 print(f"\n📊 Top {len(tickers)} stocks by market cap:")
                 print("-" * 60)
-                for i, row in enumerate(sample_df[:10], 1):
+                for i, row in enumerate(rows[:10], 1):
                     cap_billions = row.market_cap / 1e9 if row.market_cap else 0
                     print(f"  {i:3}. {row.ticker:6} - ${cap_billions:>8.1f}B - {row.security_name[:30] if row.security_name else 'N/A'}")
                 if len(tickers) > 10:
