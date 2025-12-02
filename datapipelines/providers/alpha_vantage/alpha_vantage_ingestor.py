@@ -1390,6 +1390,9 @@ class AlphaVantageIngestor(Ingestor):
         Returns:
             Dict with ingested tickers and paths
         """
+        # Track whether we just bootstrapped (to avoid redundant OVERVIEW calls)
+        just_bootstrapped = False
+
         # If sorting by market cap and no specific tickers provided
         if sort_by_market_cap and tickers is None:
             print("=" * 80)
@@ -1409,18 +1412,53 @@ class AlphaVantageIngestor(Ingestor):
                 tickers = ranked_tickers
                 print(f"Using {len(tickers)} tickers from existing market cap rankings")
             else:
-                # Not enough data - need to refresh
+                # Not enough data - auto-bootstrap market cap rankings
                 print(f"Insufficient market cap data ({len(ranked_tickers)} tickers).")
-                print("To populate market cap data, first run:")
-                print("  ingestor.refresh_market_cap_rankings(max_tickers=3000)")
                 print()
-                print("Falling back to bulk listing without market cap sorting...")
-                use_bulk_listing = True
-                tickers = None
+                print("Auto-bootstrapping market cap rankings...")
+                print("This will:")
+                print("  1. Fetch all tickers via LISTING_STATUS (1 API call)")
+                print("  2. Fetch OVERVIEW for tickers to get market cap data")
+                print("  3. Sort by market cap and select top tickers")
+                print()
+
+                # Determine how many tickers to refresh
+                # Request more than needed to ensure we have enough after filtering
+                refresh_count = min((max_tickers or 2000) * 2, 5000)
+
+                # Run the refresh - this will populate bronze/securities_reference
+                tickers = self.refresh_market_cap_rankings(
+                    use_bulk_listing=True,
+                    max_tickers=refresh_count,
+                    show_progress=show_progress,
+                    progress_callback=progress_callback
+                )
+
+                # Mark that we just bootstrapped - skip reference refresh in run_all
+                just_bootstrapped = True
+
+                # Now apply the requested limit
+                if max_tickers and len(tickers) > max_tickers:
+                    tickers = tickers[:max_tickers]
+                    print(f"Limited to top {max_tickers} tickers by market cap")
+
+                # Apply minimum market cap filter if specified
+                if min_market_cap and tickers:
+                    tickers = self.get_tickers_by_market_cap(
+                        max_tickers=max_tickers,
+                        min_market_cap=min_market_cap
+                    )
+                    print(f"After min market cap filter: {len(tickers)} tickers")
 
             print()
 
         # First run the standard ingestion (reference + prices)
+        # If we just bootstrapped, skip reference refresh to avoid redundant OVERVIEW calls
+        effective_skip_reference = skip_reference_refresh or just_bootstrapped
+        if just_bootstrapped:
+            print("(Skipping reference refresh - already populated during bootstrap)")
+            print()
+
         ingested_tickers = self.run_all(
             tickers=tickers,
             date_from=date_from,
@@ -1428,7 +1466,7 @@ class AlphaVantageIngestor(Ingestor):
             max_tickers=max_tickers,
             use_concurrent=use_concurrent,
             use_bulk_listing=use_bulk_listing,
-            skip_reference_refresh=skip_reference_refresh,
+            skip_reference_refresh=effective_skip_reference,
             outputsize=outputsize,
             show_progress=show_progress,
             progress_callback=progress_callback,
