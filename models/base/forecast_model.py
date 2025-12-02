@@ -749,6 +749,25 @@ class TimeSeriesForecastModel(BaseModel):
             # Average error percentage
             avg_error_pct = mape if not np.isnan(mape) else 0.0
 
+            # Convert index values to date objects for parquet compatibility
+            test_start_val = validation_data.index[0]
+            test_end_val = validation_data.index[-1]
+
+            # Handle various date/timestamp types
+            if hasattr(test_start_val, 'date'):
+                test_start_date = test_start_val.date()
+            elif hasattr(test_start_val, 'to_pydatetime'):
+                test_start_date = test_start_val.to_pydatetime().date()
+            else:
+                test_start_date = datetime.now().date()
+
+            if hasattr(test_end_val, 'date'):
+                test_end_date = test_end_val.date()
+            elif hasattr(test_end_val, 'to_pydatetime'):
+                test_end_date = test_end_val.to_pydatetime().date()
+            else:
+                test_end_date = datetime.now().date()
+
             return {
                 'mae': float(mae),
                 'rmse': float(rmse),
@@ -757,8 +776,8 @@ class TimeSeriesForecastModel(BaseModel):
                 'directional_accuracy': float(directional_accuracy) if not np.isnan(directional_accuracy) else 0.0,
                 'num_predictions': int(min_len),
                 'avg_error_pct': float(avg_error_pct),
-                'test_start': str(validation_data.index[0]) if hasattr(validation_data.index[0], 'strftime') else str(validation_data.index[0]),
-                'test_end': str(validation_data.index[-1]) if hasattr(validation_data.index[-1], 'strftime') else str(validation_data.index[-1])
+                'test_start': test_start_date,
+                'test_end': test_end_date
             }
 
         except Exception as e:
@@ -843,12 +862,19 @@ class TimeSeriesForecastModel(BaseModel):
             metrics_df: pandas DataFrame with metrics
         """
         from pathlib import Path
+        from datetime import date
 
         # Get forecast Silver root
         forecast_root = self.storage_cfg['roots'].get(
             'forecast_silver',
             'storage/silver/forecast'
         )
+
+        # Normalize date columns to ensure consistent types
+        date_columns = ['metric_date', 'training_start', 'training_end', 'test_start', 'test_end']
+        for col in date_columns:
+            if col in metrics_df.columns:
+                metrics_df[col] = pd.to_datetime(metrics_df[col]).dt.date
 
         # Determine output path according to schema
         output_path = Path(forecast_root) / 'facts' / 'forecast_metrics'
@@ -864,6 +890,12 @@ class TimeSeriesForecastModel(BaseModel):
         if file_path.exists():
             # Read existing data and append new data
             existing_df = pd.read_parquet(file_path)
+
+            # Normalize date columns in existing data as well
+            for col in date_columns:
+                if col in existing_df.columns:
+                    existing_df[col] = pd.to_datetime(existing_df[col]).dt.date
+
             combined_df = pd.concat([existing_df, metrics_df], ignore_index=True)
             combined_df.to_parquet(file_path, index=False, compression='snappy')
             print(f"    Appended {len(metrics_df)} metric records (total: {len(combined_df)}) to {file_path}")

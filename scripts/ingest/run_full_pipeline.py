@@ -238,18 +238,41 @@ def run_full_pipeline(
         print()
 
         try:
-            from models.api.registry import get_model_registry
+            from config.model_loader import ModelConfigLoader
+            from models.implemented.stocks.model import StocksModel
+            from orchestration.common.spark_session import get_spark
+            from core.connection import ConnectionFactory
 
             print("Building stocks model from bronze data...")
-            registry = get_model_registry()
 
-            # Build stocks model (required for forecasting)
-            stocks_model = registry.get_model('stocks')
-            if stocks_model:
-                stocks_model.build()
-                print("  ✓ Stocks model built successfully")
-            else:
-                print("  ⚠ Could not load stocks model")
+            # Load stock model configuration
+            config_root = Path(repo_root) / "configs" / "models"
+            loader = ModelConfigLoader(config_root)
+            model_cfg = loader.load_model_config("stocks")
+
+            # Load storage configuration
+            import json
+            storage_path = Path(repo_root) / "configs" / "storage.json"
+            with open(storage_path, 'r') as f:
+                storage_cfg = json.load(f)
+
+            # Initialize Spark connection
+            spark_session = get_spark("StocksBuild")
+            spark = ConnectionFactory.create("spark", spark_session=spark_session)
+
+            # Build stocks model
+            stocks_model = StocksModel(
+                connection=spark,
+                storage_cfg=storage_cfg,
+                model_cfg=model_cfg,
+                params={}
+            )
+            stocks_model.build()
+            stocks_model.write()
+            print("  ✓ Stocks model built and saved successfully")
+
+            # Clean up Spark session
+            spark.stop()
 
             results['silver_build'] = {'status': 'success'}
 
