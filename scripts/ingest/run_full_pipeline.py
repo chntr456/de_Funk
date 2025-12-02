@@ -31,6 +31,7 @@ Examples:
 from __future__ import annotations
 
 import sys
+import traceback
 from pathlib import Path
 import argparse
 from datetime import datetime, timedelta
@@ -49,7 +50,7 @@ def run_full_pipeline(
     skip_reference_refresh: bool = False,
     use_concurrent: bool = True,
     include_news: bool = False,
-    include_fundamentals: bool = False,
+    include_fundamentals: bool = True,
     sort_by_market_cap: bool = True,
     min_market_cap: float = None,
     forecast_models: list = None
@@ -238,7 +239,7 @@ def run_full_pipeline(
 
         try:
             # Import forecast pipeline
-            from scripts.run_forecasts import run_forecast_pipeline
+            from scripts.forecast.run_forecasts import run_forecast_pipeline
 
             print("Running forecast pipeline...")
             forecast_results = run_forecast_pipeline(
@@ -422,7 +423,13 @@ Examples:
     parser.add_argument(
         '--include-fundamentals',
         action='store_true',
-        help='Include fundamentals (income statements, balance sheets, cash flows, earnings)'
+        default=True,
+        help='Include fundamentals (income statements, balance sheets, cash flows, earnings) - default: True'
+    )
+    parser.add_argument(
+        '--no-fundamentals',
+        action='store_true',
+        help='Skip fundamentals ingestion (only reference + prices)'
     )
     parser.add_argument(
         '--skip-reference-refresh',
@@ -484,6 +491,9 @@ Examples:
     # Handle concurrent flag (--no-concurrent overrides default)
     use_concurrent = not args.no_concurrent
 
+    # Handle fundamentals flag (--no-fundamentals overrides default)
+    include_fundamentals = not args.no_fundamentals
+
     # Run pipeline
     try:
         results = run_full_pipeline(
@@ -496,7 +506,7 @@ Examples:
             skip_reference_refresh=args.skip_reference_refresh,
             use_concurrent=use_concurrent,
             include_news=args.include_news,
-            include_fundamentals=args.include_fundamentals,
+            include_fundamentals=include_fundamentals,
             sort_by_market_cap=sort_by_market_cap,
             min_market_cap=args.min_market_cap,
             forecast_models=models
@@ -508,7 +518,6 @@ Examples:
 
     except Exception as e:
         print(f"\n✗ Pipeline failed with error: {str(e)}")
-        import traceback
         traceback.print_exc()
         sys.exit(1)
 
