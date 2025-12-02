@@ -46,6 +46,8 @@ def run_full_pipeline(
     max_tickers: int = None,
     skip_data_refresh: bool = False,
     skip_forecasts: bool = False,
+    skip_reference_refresh: bool = False,
+    use_concurrent: bool = True,
     include_news: bool = False,
     include_fundamentals: bool = False,
     sort_by_market_cap: bool = True,
@@ -62,6 +64,9 @@ def run_full_pipeline(
         max_tickers: Optional limit on number of tickers
         skip_data_refresh: Skip data ingestion step
         skip_forecasts: Skip forecast generation step
+        skip_reference_refresh: Skip OVERVIEW calls (use existing reference data).
+                               Saves ~50% of API calls for daily price updates.
+        use_concurrent: Use concurrent API requests (default: True)
         include_news: Whether to include news in data ingestion
         include_fundamentals: Whether to include fundamentals (income, balance, cash flow, earnings)
         sort_by_market_cap: Sort tickers by market cap descending (default: True)
@@ -113,6 +118,8 @@ def run_full_pipeline(
     if min_market_cap:
         print(f"  Min market cap: ${min_market_cap:,.0f}")
     print(f"  Skip data refresh: {skip_data_refresh}")
+    print(f"  Skip reference refresh: {skip_reference_refresh} {'(prices only - saves 50% API calls)' if skip_reference_refresh else ''}")
+    print(f"  Concurrent requests: {use_concurrent}")
     print(f"  Skip forecasts: {skip_forecasts}")
     print(f"  Include news: {include_news}")
     print(f"  Include fundamentals: {include_fundamentals}")
@@ -161,7 +168,9 @@ def run_full_pipeline(
                 sort_by_market_cap=sort_by_market_cap,
                 min_market_cap=min_market_cap,
                 include_fundamentals=include_fundamentals,
-                include_options=False  # Options require premium tier
+                include_options=False,  # Options require premium tier
+                skip_reference_refresh=skip_reference_refresh,
+                use_concurrent=use_concurrent
             )
 
             # Extract results
@@ -415,6 +424,22 @@ Examples:
         action='store_true',
         help='Include fundamentals (income statements, balance sheets, cash flows, earnings)'
     )
+    parser.add_argument(
+        '--skip-reference-refresh',
+        action='store_true',
+        help='Skip OVERVIEW calls - only fetch prices (saves 50%% API calls for daily updates)'
+    )
+    parser.add_argument(
+        '--concurrent',
+        action='store_true',
+        default=True,
+        help='Use concurrent API requests (default: True)'
+    )
+    parser.add_argument(
+        '--no-concurrent',
+        action='store_true',
+        help='Disable concurrent requests (sequential API calls)'
+    )
 
     # Market cap options
     parser.add_argument(
@@ -456,6 +481,9 @@ Examples:
     # Handle market cap sorting flag (--no-sort-by-market-cap overrides default)
     sort_by_market_cap = not args.no_sort_by_market_cap
 
+    # Handle concurrent flag (--no-concurrent overrides default)
+    use_concurrent = not args.no_concurrent
+
     # Run pipeline
     try:
         results = run_full_pipeline(
@@ -465,6 +493,8 @@ Examples:
             max_tickers=args.max_tickers,
             skip_data_refresh=args.skip_data_refresh,
             skip_forecasts=args.skip_forecasts,
+            skip_reference_refresh=args.skip_reference_refresh,
+            use_concurrent=use_concurrent,
             include_news=args.include_news,
             include_fundamentals=args.include_fundamentals,
             sort_by_market_cap=sort_by_market_cap,
