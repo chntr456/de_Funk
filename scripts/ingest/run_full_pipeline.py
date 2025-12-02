@@ -96,12 +96,22 @@ def run_full_pipeline(
 
     # Determine date range
     if days:
+        # --days takes precedence: calculate range from today
         date_to_obj = datetime.now().date()
         date_from_obj = date_to_obj - timedelta(days=days)
         date_from = date_from_obj.isoformat()
         date_to = date_to_obj.isoformat()
-    elif not date_from or not date_to:
-        # Default: last 30 days
+    elif date_from or date_to:
+        # User specified at least one date - fill in the missing one
+        if not date_to:
+            # --from specified, default --to to today
+            date_to = datetime.now().date().isoformat()
+        if not date_from:
+            # --to specified but not --from, default to 1 year before --to
+            date_to_obj = datetime.fromisoformat(date_to).date()
+            date_from = (date_to_obj - timedelta(days=365)).isoformat()
+    else:
+        # Neither specified: default to last 30 days
         date_to_obj = datetime.now().date()
         date_from_obj = date_to_obj - timedelta(days=30)
         date_from = date_from_obj.isoformat()
