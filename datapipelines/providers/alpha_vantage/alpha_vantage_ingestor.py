@@ -893,126 +893,26 @@ class AlphaVantageIngestor(Ingestor):
             print("Falling back to default ticker list.")
             return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
 
-    def fetch_bulk_quotes(self, tickers: list, batch_size: int = 100,
-                           show_progress: bool = True) -> list:
-        """
-        Fetch real-time quotes for tickers using REALTIME_BULK_QUOTES endpoint.
-
-        This is much more efficient than individual GLOBAL_QUOTE calls.
-        Accepts up to 100 symbols per API call.
-
-        Args:
-            tickers: List of ticker symbols
-            batch_size: Number of symbols per API call (max 100)
-            show_progress: Show progress updates
-
-        Returns:
-            List of quote dictionaries with ticker, price, volume, trading_value
-        """
-        batch_size = min(batch_size, 100)  # API limit is 100 symbols
-        all_quotes = []
-        total_batches = (len(tickers) + batch_size - 1) // batch_size
-
-        print(f"Fetching bulk quotes for {len(tickers)} tickers in {total_batches} batches...")
-
-        for batch_idx in range(0, len(tickers), batch_size):
-            batch = tickers[batch_idx:batch_idx + batch_size]
-            batch_num = batch_idx // batch_size + 1
-
-            if show_progress:
-                print(f"  Batch {batch_num}/{total_batches}: {len(batch)} symbols...", end=" ")
-
-            # Build comma-separated symbol list
-            symbols = ",".join(batch)
-
-            try:
-                # Make API call
-                response = self.http.request(
-                    "realtime_bulk_quotes",
-                    params={"symbol": symbols}
-                )
-
-                # Parse response - check for data key
-                if isinstance(response, dict):
-                    if "data" in response:
-                        quotes = response["data"]
-                    elif "Error Message" in response or "Information" in response:
-                        error_msg = response.get("Error Message") or response.get("Information")
-                        if show_progress:
-                            print(f"✗ API error: {error_msg[:50]}...")
-                        continue
-                    else:
-                        quotes = [response]  # Single response
-                elif isinstance(response, list):
-                    quotes = response
-                else:
-                    if show_progress:
-                        print(f"✗ Unexpected response type")
-                    continue
-
-                # Process quotes
-                batch_quotes = []
-                for quote in quotes:
-                    if not isinstance(quote, dict):
-                        continue
-
-                    # Extract fields (Alpha Vantage uses various key names)
-                    ticker = quote.get("symbol") or quote.get("01. symbol")
-                    price_str = quote.get("price") or quote.get("05. price") or quote.get("close")
-                    volume_str = quote.get("volume") or quote.get("06. volume")
-
-                    if not ticker:
-                        continue
-
-                    try:
-                        price = float(price_str) if price_str else 0
-                        volume = float(volume_str) if volume_str else 0
-                        trading_value = price * volume  # Proxy for market cap
-
-                        batch_quotes.append({
-                            "ticker": ticker,
-                            "price": price,
-                            "volume": volume,
-                            "trading_value": trading_value
-                        })
-                    except (ValueError, TypeError):
-                        continue
-
-                all_quotes.extend(batch_quotes)
-
-                if show_progress:
-                    print(f"✓ {len(batch_quotes)} quotes")
-
-            except Exception as e:
-                if show_progress:
-                    print(f"✗ Error: {str(e)[:50]}")
-                logger.warning(f"Bulk quotes batch {batch_num} failed: {e}")
-
-        print(f"Fetched {len(all_quotes)} quotes from {total_batches} API calls")
-        return all_quotes
-
     def refresh_market_cap_rankings(self, source_tickers: list = None,
                                      use_bulk_listing: bool = True,
                                      max_tickers: int = 3000,
-                                     use_bulk_quotes: bool = True,
                                      show_progress: bool = True,
                                      progress_callback: Optional[ProgressCallback] = None) -> list:
         """
-        Refresh market cap data by fetching bulk quotes or OVERVIEW for tickers.
+        Refresh market cap data by fetching OVERVIEW for tickers.
 
-        Uses REALTIME_BULK_QUOTES (100 symbols per call) for efficient ranking
-        by trading value (price × volume) as a proxy for market cap.
+        This is useful when you want to update the market cap rankings
+        before running a comprehensive ingestion.
 
         Args:
             source_tickers: List of tickers to fetch (default: from bulk listing)
             use_bulk_listing: Use LISTING_STATUS to get ticker list
             max_tickers: Maximum tickers to refresh (default: 3000 to cover top 2000)
-            use_bulk_quotes: Use efficient bulk quotes endpoint (default: True)
             show_progress: Show progress updates
             progress_callback: Custom progress callback
 
         Returns:
-            List of tickers sorted by trading value (descending)
+            List of tickers sorted by market cap
         """
         print("=" * 80)
         print("REFRESHING MARKET CAP RANKINGS")
@@ -1036,41 +936,7 @@ class AlphaVantageIngestor(Ingestor):
             print("Error: No tickers provided and use_bulk_listing=False")
             return []
 
-        # Step 2: Fetch quotes using bulk endpoint (efficient)
-        if use_bulk_quotes:
-            print(f"\nStep 2: Fetching bulk quotes for {len(tickers)} tickers...")
-            print("Using REALTIME_BULK_QUOTES (100 symbols per API call)")
-            api_calls_needed = (len(tickers) + 99) // 100
-            print(f"This will use {api_calls_needed} API calls (vs {len(tickers)} for individual calls)")
-
-            quotes = self.fetch_bulk_quotes(tickers, show_progress=show_progress)
-
-            if quotes:
-                # Sort by trading value (price × volume) descending
-                quotes_sorted = sorted(quotes, key=lambda x: x.get("trading_value", 0), reverse=True)
-
-                # Extract top tickers
-                ranked_tickers = [q["ticker"] for q in quotes_sorted[:max_tickers]]
-
-                # Print summary
-                print(f"\n📊 Top {min(10, len(ranked_tickers))} stocks by trading value:")
-                print("-" * 60)
-                for i, q in enumerate(quotes_sorted[:10], 1):
-                    tv_millions = q.get("trading_value", 0) / 1e6
-                    price = q.get("price", 0)
-                    print(f"  {i:3}. {q['ticker']:6} - ${price:>8.2f} - Trading value: ${tv_millions:>10.1f}M")
-                if len(ranked_tickers) > 10:
-                    print(f"  ... and {len(ranked_tickers) - 10} more")
-                print()
-
-                print("=" * 80)
-                print(f"✓ Rankings refreshed for {len(ranked_tickers)} tickers ({api_calls_needed} API calls)")
-
-                return ranked_tickers
-            else:
-                print("Warning: Bulk quotes failed, falling back to OVERVIEW method...")
-
-        # Fallback: Fetch OVERVIEW data to get market caps (slower)
+        # Step 2: Fetch OVERVIEW data to get market caps
         print(f"\nStep 2: Fetching OVERVIEW data for {len(tickers)} tickers...")
         print("This will populate market_cap field in securities_reference")
         self.ingest_reference_data(
@@ -1546,38 +1412,43 @@ class AlphaVantageIngestor(Ingestor):
                 tickers = ranked_tickers
                 print(f"Using {len(tickers)} tickers from existing market cap rankings")
             else:
-                # Not enough data - auto-bootstrap using bulk quotes
+                # Not enough data - auto-bootstrap market cap rankings
                 print(f"Insufficient market cap data ({len(ranked_tickers)} tickers).")
                 print()
-                print("Auto-bootstrapping rankings using REALTIME_BULK_QUOTES...")
+                print("Auto-bootstrapping market cap rankings...")
                 print("This will:")
                 print("  1. Fetch all tickers via LISTING_STATUS (1 API call)")
-                print("  2. Fetch bulk quotes (100 symbols per call) for trading value")
-                print("  3. Sort by trading value (price × volume) as proxy for market cap")
+                print("  2. Fetch OVERVIEW for tickers to get market cap data")
+                print("  3. Sort by market cap and select top tickers")
                 print()
 
                 # Determine how many tickers to refresh
                 # Request more than needed to ensure we have enough after filtering
                 refresh_count = min((max_tickers or 2000) * 2, 5000)
 
-                # Run the refresh using bulk quotes (much faster than OVERVIEW)
-                # use_bulk_quotes=True by default - uses ~50 API calls for 5000 tickers
-                # vs 5000 API calls for individual OVERVIEW requests
+                # Run the refresh - this will populate bronze/securities_reference
                 tickers = self.refresh_market_cap_rankings(
                     use_bulk_listing=True,
                     max_tickers=refresh_count,
-                    use_bulk_quotes=True,  # Use efficient bulk endpoint
                     show_progress=show_progress,
                     progress_callback=progress_callback
                 )
 
-                # Note: bulk quotes don't populate securities_reference, so we still
-                # need OVERVIEW calls in run_all() - don't set just_bootstrapped=True
+                # Mark that we just bootstrapped - skip reference refresh in run_all
+                just_bootstrapped = True
 
                 # Now apply the requested limit
                 if max_tickers and len(tickers) > max_tickers:
                     tickers = tickers[:max_tickers]
-                    print(f"Limited to top {max_tickers} tickers by trading value")
+                    print(f"Limited to top {max_tickers} tickers by market cap")
+
+                # Apply minimum market cap filter if specified
+                if min_market_cap and tickers:
+                    tickers = self.get_tickers_by_market_cap(
+                        max_tickers=max_tickers,
+                        min_market_cap=min_market_cap
+                    )
+                    print(f"After min market cap filter: {len(tickers)} tickers")
 
             print()
 
