@@ -828,31 +828,44 @@ class AlphaVantageIngestor(Ingestor):
         df = None
         source_name = None
 
+        def has_valid_market_cap(dataframe):
+            """Check if dataframe has actual market cap values (not just the column)."""
+            if "market_cap" not in dataframe.columns:
+                return False
+            # Check for at least one non-null, positive market cap
+            count = dataframe.filter(
+                (col("market_cap").isNotNull()) &
+                (col("market_cap") > 0)
+            ).limit(1).count()
+            return count > 0
+
         # Try bronze securities_reference first
         if ref_path.exists():
             try:
-                df = self.spark.read.parquet(str(ref_path))
-                if "market_cap" in df.columns:
+                temp_df = self.spark.read.parquet(str(ref_path))
+                if has_valid_market_cap(temp_df):
+                    df = temp_df
                     source_name = "bronze/securities_reference"
                 else:
-                    df = None  # No market_cap column
-            except Exception:
-                df = None
+                    print("  bronze/securities_reference exists but has no market cap values")
+            except Exception as e:
+                print(f"  Could not read bronze/securities_reference: {e}")
 
         # Fallback to silver dim_stock
         if df is None and silver_dim_path.exists():
             try:
-                df = self.spark.read.parquet(str(silver_dim_path))
-                if "market_cap" in df.columns:
+                temp_df = self.spark.read.parquet(str(silver_dim_path))
+                if has_valid_market_cap(temp_df):
+                    df = temp_df
                     source_name = "silver/stocks/dims/dim_stock"
                 else:
-                    df = None
-            except Exception:
-                df = None
+                    print("  silver/stocks/dims/dim_stock exists but has no market cap values")
+            except Exception as e:
+                print(f"  Could not read silver dim_stock: {e}")
 
         if df is None:
-            print("Warning: No market cap data found in bronze or silver layers.")
-            print("Run ingest_reference_data() or build silver layer first.")
+            print("\nWarning: No valid market cap data found in bronze or silver layers.")
+            print("Run: python -m scripts.ingest.refresh_market_cap_rankings")
             return []
 
         print(f"  Using data from: {source_name}")
