@@ -1407,9 +1407,9 @@ class AlphaVantageIngestor(Ingestor):
                 min_market_cap=min_market_cap
             )
 
-            if len(ranked_tickers) >= (max_tickers or 2000) * 0.5:
+            if len(ranked_tickers) >= (max_tickers or 2000):
                 # We have enough data - use it
-                tickers = ranked_tickers
+                tickers = ranked_tickers[:max_tickers] if max_tickers else ranked_tickers
                 print(f"Using {len(tickers)} tickers from existing market cap rankings")
             else:
                 # Not enough data - auto-bootstrap market cap rankings
