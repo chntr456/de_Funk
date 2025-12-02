@@ -6,20 +6,26 @@ This script runs the complete end-to-end pipeline:
 2. Forecasting: Generate time series forecasts for all tickers
 
 Usage:
-    python -m scripts.run_full_pipeline [options]
+    python -m scripts.ingest.run_full_pipeline [options]
 
 Examples:
-    # Run full pipeline for last 30 days, all tickers
-    python -m scripts.run_full_pipeline --days 30
+    # Run full pipeline for top 2000 stocks by market cap
+    python -m scripts.ingest.run_full_pipeline --days 30 --max-tickers 2000
+
+    # Run with minimum market cap filter ($1B+)
+    python -m scripts.ingest.run_full_pipeline --days 30 --max-tickers 2000 --min-market-cap 1e9
 
     # Run for specific date range with ticker limit (testing)
-    python -m scripts.run_full_pipeline --from 2024-01-01 --to 2024-12-31 --max-tickers 20
+    python -m scripts.ingest.run_full_pipeline --from 2024-01-01 --to 2024-12-31 --max-tickers 20
 
     # Run only forecasts (skip data refresh)
-    python -m scripts.run_full_pipeline --skip-data-refresh
+    python -m scripts.ingest.run_full_pipeline --skip-data-refresh
+
+    # Include fundamentals (income statements, balance sheets, cash flows, earnings)
+    python -m scripts.ingest.run_full_pipeline --days 90 --include-fundamentals
 
     # Run with specific models
-    python -m scripts.run_full_pipeline --days 90 --models arima_30d,prophet_30d
+    python -m scripts.ingest.run_full_pipeline --days 90 --models arima_30d,prophet_30d
 """
 
 from __future__ import annotations
@@ -41,6 +47,9 @@ def run_full_pipeline(
     skip_data_refresh: bool = False,
     skip_forecasts: bool = False,
     include_news: bool = False,
+    include_fundamentals: bool = False,
+    sort_by_market_cap: bool = True,
+    min_market_cap: float = None,
     forecast_models: list = None
 ) -> dict:
     """
@@ -54,6 +63,9 @@ def run_full_pipeline(
         skip_data_refresh: Skip data ingestion step
         skip_forecasts: Skip forecast generation step
         include_news: Whether to include news in data ingestion
+        include_fundamentals: Whether to include fundamentals (income, balance, cash flow, earnings)
+        sort_by_market_cap: Sort tickers by market cap descending (default: True)
+        min_market_cap: Minimum market cap filter (e.g., 1e9 for $1B+)
         forecast_models: List of model names to run
 
     Returns:
@@ -97,9 +109,13 @@ def run_full_pipeline(
         print(f"  Max tickers: {max_tickers}")
     else:
         print(f"  Max tickers: All active tickers")
+    print(f"  Sort by market cap: {sort_by_market_cap}")
+    if min_market_cap:
+        print(f"  Min market cap: ${min_market_cap:,.0f}")
     print(f"  Skip data refresh: {skip_data_refresh}")
     print(f"  Skip forecasts: {skip_forecasts}")
     print(f"  Include news: {include_news}")
+    print(f"  Include fundamentals: {include_fundamentals}")
     if forecast_models:
         print(f"  Forecast models: {', '.join(forecast_models)}")
     else:
@@ -117,30 +133,51 @@ def run_full_pipeline(
 
         try:
             from core.context import RepoContext
-            from orchestration.orchestrator import Orchestrator
+            from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
 
             print("Initializing context...")
             ctx = RepoContext.from_repo_root()
             print("  ✓ Context initialized")
             print()
 
-            print("Running data ingestion pipeline...")
-            orchestrator = Orchestrator(ctx)
-            final_df = orchestrator.run_company_pipeline(
+            print("Initializing Alpha Vantage ingestor...")
+            ingestor = AlphaVantageIngestor(ctx)
+            print("  ✓ Ingestor initialized")
+            print()
+
+            print("Running comprehensive data ingestion pipeline...")
+            if sort_by_market_cap:
+                print("  (Sorting tickers by market cap descending)")
+
+            ingestion_results = ingestor.run_comprehensive(
+                tickers=None,  # Will use default or market-cap sorted list
                 date_from=date_from,
                 date_to=date_to,
-                max_tickers=max_tickers
+                max_tickers=max_tickers,
+                sort_by_market_cap=sort_by_market_cap,
+                min_market_cap=min_market_cap,
+                include_fundamentals=include_fundamentals,
+                include_technicals=True,
+                include_news=include_news
             )
 
-            record_count = final_df.count()
             print()
             print(f"✓ Data ingestion completed!")
-            print(f"  Total records: {record_count:,}")
+            print(f"  Tickers processed: {ingestion_results.get('tickers_processed', 0)}")
+            print(f"  Price records: {ingestion_results.get('prices', {}).get('records', 0):,}")
+            if include_fundamentals:
+                fundamentals = ingestion_results.get('fundamentals', {})
+                print(f"  Income statements: {fundamentals.get('income_statements', {}).get('records', 0):,}")
+                print(f"  Balance sheets: {fundamentals.get('balance_sheets', {}).get('records', 0):,}")
+                print(f"  Cash flows: {fundamentals.get('cash_flows', {}).get('records', 0):,}")
+                print(f"  Earnings: {fundamentals.get('earnings', {}).get('records', 0):,}")
             print()
 
             results['data_ingestion'] = {
                 'status': 'success',
-                'records': record_count,
+                'tickers_processed': ingestion_results.get('tickers_processed', 0),
+                'prices': ingestion_results.get('prices', {}),
+                'fundamentals': ingestion_results.get('fundamentals', {}),
                 'date_from': date_from,
                 'date_to': date_to
             }
@@ -241,7 +278,16 @@ def run_full_pipeline(
         print("Data Ingestion:")
         if results['data_ingestion']['status'] == 'success':
             print(f"  ✓ Status: Success")
-            print(f"  Records: {results['data_ingestion']['records']:,}")
+            print(f"  Tickers processed: {results['data_ingestion'].get('tickers_processed', 0)}")
+            prices = results['data_ingestion'].get('prices', {})
+            if prices:
+                print(f"  Price records: {prices.get('records', 0):,}")
+            fundamentals = results['data_ingestion'].get('fundamentals', {})
+            if fundamentals:
+                print(f"  Fundamentals:")
+                for key, val in fundamentals.items():
+                    if isinstance(val, dict) and 'records' in val:
+                        print(f"    - {key}: {val['records']:,} records")
         elif results['data_ingestion']['status'] == 'skipped':
             print(f"  - Status: Skipped")
         else:
@@ -287,23 +333,32 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run full pipeline for last 30 days
-  python -m scripts.run_full_pipeline --days 30
+  # Run full pipeline for top 2000 stocks by market cap
+  python -m scripts.ingest.run_full_pipeline --days 30 --max-tickers 2000
+
+  # Run with minimum market cap filter ($1B+)
+  python -m scripts.ingest.run_full_pipeline --days 30 --max-tickers 2000 --min-market-cap 1e9
 
   # Run with specific date range
-  python -m scripts.run_full_pipeline --from 2024-01-01 --to 2024-12-31
+  python -m scripts.ingest.run_full_pipeline --from 2024-01-01 --to 2024-12-31
 
   # Run with ticker limit (for testing)
-  python -m scripts.run_full_pipeline --days 90 --max-tickers 20
+  python -m scripts.ingest.run_full_pipeline --days 90 --max-tickers 20
 
   # Skip data refresh, just run forecasts
-  python -m scripts.run_full_pipeline --skip-data-refresh
+  python -m scripts.ingest.run_full_pipeline --skip-data-refresh
 
-  # Run with specific models
-  python -m scripts.run_full_pipeline --days 90 --models arima_30d,prophet_30d
+  # Include fundamentals (income statements, balance sheets, cash flows, earnings)
+  python -m scripts.ingest.run_full_pipeline --days 90 --include-fundamentals
 
-  # Full production run (all tickers, all models, 90 days)
-  python -m scripts.run_full_pipeline --days 90
+  # Run with specific forecast models
+  python -m scripts.ingest.run_full_pipeline --days 90 --models arima_30d,prophet_30d
+
+  # Full production run (top 2000 by market cap, all models, 90 days)
+  python -m scripts.ingest.run_full_pipeline --days 90 --max-tickers 2000
+
+  # Disable market cap sorting (use alphabetical order)
+  python -m scripts.ingest.run_full_pipeline --days 30 --no-sort-by-market-cap
         """
     )
 
@@ -348,6 +403,30 @@ Examples:
         action='store_true',
         help='Include news data in ingestion (slower)'
     )
+    parser.add_argument(
+        '--include-fundamentals',
+        action='store_true',
+        help='Include fundamentals (income statements, balance sheets, cash flows, earnings)'
+    )
+
+    # Market cap options
+    parser.add_argument(
+        '--sort-by-market-cap',
+        action='store_true',
+        default=True,
+        help='Sort tickers by market cap descending (default: True)'
+    )
+    parser.add_argument(
+        '--no-sort-by-market-cap',
+        action='store_true',
+        help='Disable market cap sorting (use default ticker order)'
+    )
+    parser.add_argument(
+        '--min-market-cap',
+        type=float,
+        default=None,
+        help='Minimum market cap filter in dollars (e.g., 1e9 for $1B+)'
+    )
 
     # Forecasting options
     parser.add_argument(
@@ -367,6 +446,9 @@ Examples:
     # Parse models
     models = args.models.split(',') if args.models else None
 
+    # Handle market cap sorting flag (--no-sort-by-market-cap overrides default)
+    sort_by_market_cap = not args.no_sort_by_market_cap
+
     # Run pipeline
     try:
         results = run_full_pipeline(
@@ -377,6 +459,9 @@ Examples:
             skip_data_refresh=args.skip_data_refresh,
             skip_forecasts=args.skip_forecasts,
             include_news=args.include_news,
+            include_fundamentals=args.include_fundamentals,
+            sort_by_market_cap=sort_by_market_cap,
+            min_market_cap=args.min_market_cap,
             forecast_models=models
         )
 
