@@ -802,8 +802,9 @@ class AlphaVantageIngestor(Ingestor):
         """
         Get tickers sorted by market cap from existing reference data.
 
-        Uses bronze/securities_reference data to rank stocks by market cap.
-        This requires that ingest_reference_data() has been run previously.
+        Checks multiple data sources in order:
+        1. bronze/securities_reference (OVERVIEW data)
+        2. silver/stocks/dims/dim_stock (if silver layer is built)
 
         Args:
             max_tickers: Maximum number of tickers to return
@@ -815,43 +816,74 @@ class AlphaVantageIngestor(Ingestor):
         from pyspark.sql.functions import col, desc
         from pathlib import Path
 
-        print("Loading market cap rankings from existing reference data...")
+        print("Loading market cap rankings from existing data...")
 
-        # Read from bronze securities_reference
+        # Check multiple data sources in order of preference
         bronze_path = Path(self.sink.cfg["roots"]["bronze"])
-        ref_path = bronze_path / "securities_reference"
+        silver_path = Path(self.sink.cfg["roots"]["silver"])
 
-        if not ref_path.exists():
-            print("Warning: No securities_reference data found. Run ingest_reference_data() first.")
-            print("Falling back to default ticker list.")
-            return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
+        ref_path = bronze_path / "securities_reference"
+        silver_dim_path = silver_path / "stocks" / "dims" / "dim_stock"
+
+        df = None
+        source_name = None
+
+        # Try bronze securities_reference first
+        if ref_path.exists():
+            try:
+                df = self.spark.read.parquet(str(ref_path))
+                if "market_cap" in df.columns:
+                    source_name = "bronze/securities_reference"
+                else:
+                    df = None  # No market_cap column
+            except Exception:
+                df = None
+
+        # Fallback to silver dim_stock
+        if df is None and silver_dim_path.exists():
+            try:
+                df = self.spark.read.parquet(str(silver_dim_path))
+                if "market_cap" in df.columns:
+                    source_name = "silver/stocks/dims/dim_stock"
+                else:
+                    df = None
+            except Exception:
+                df = None
+
+        if df is None:
+            print("Warning: No market cap data found in bronze or silver layers.")
+            print("Run ingest_reference_data() or build silver layer first.")
+            return []
+
+        print(f"  Using data from: {source_name}")
 
         try:
-            from pyspark.sql.functions import isnan, upper
+            from pyspark.sql.functions import isnan, upper, lit
 
-            # Read reference data
-            df = self.spark.read.parquet(str(ref_path))
+            columns = df.columns
 
-            # Filter to common stocks with valid market cap data
-            # Exclude: warrants (-WS, W suffix), preferred (-P-), units (-U, -UN), rights (-R)
+            # Start with market cap filter (required)
             df_with_cap = df.filter(
-                # Must have valid numeric market cap (not null, not NaN, > 0)
                 (col("market_cap").isNotNull()) &
                 (~isnan(col("market_cap"))) &
-                (col("market_cap") > 0) &
-                # Must be active stock
-                (col("asset_type") == "stocks") &
-                (col("is_active") == True) &
-                # Exclude warrants (end with W, -WS, WS)
+                (col("market_cap") > 0)
+            )
+
+            # Apply asset_type filter only if column exists
+            if "asset_type" in columns:
+                df_with_cap = df_with_cap.filter(col("asset_type") == "stocks")
+
+            # Apply is_active filter only if column exists
+            if "is_active" in columns:
+                df_with_cap = df_with_cap.filter(col("is_active") == True)
+
+            # Exclude warrants, preferred shares, units, rights
+            df_with_cap = df_with_cap.filter(
                 (~upper(col("ticker")).rlike(r".*[-]?W[S]?$")) &
-                # Exclude preferred shares (contain -P- or end with -P followed by letter)
                 (~upper(col("ticker")).rlike(r".*-P-.*|.*-P[A-Z]$")) &
-                # Exclude units (end with -U, -UN, U)
                 (~upper(col("ticker")).rlike(r".*-U[N]?$")) &
-                # Exclude rights (end with -R, -RT)
                 (~upper(col("ticker")).rlike(r".*-R[T]?$")) &
-                # Exclude other special suffixes
-                (~upper(col("ticker")).rlike(r".*[-][A-Z]{2,}$"))  # Generic: exclude -XX suffixes
+                (~upper(col("ticker")).rlike(r".*[-][A-Z]{2,}$"))
             )
 
             # Apply minimum market cap filter if specified
@@ -859,10 +891,16 @@ class AlphaVantageIngestor(Ingestor):
                 df_with_cap = df_with_cap.filter(col("market_cap") >= min_market_cap)
                 print(f"Applied minimum market cap filter: ${min_market_cap:,.0f}")
 
+            # Determine name column (security_name or name)
+            name_col = "security_name" if "security_name" in columns else ("name" if "name" in columns else None)
+
             # Deduplicate first, then sort by market cap descending
-            # (dropDuplicates destroys sort order, so we must sort AFTER deduplication)
+            select_cols = ["ticker", "market_cap"]
+            if name_col:
+                select_cols.append(name_col)
+
             df_ranked = (df_with_cap
-                        .select("ticker", "market_cap", "security_name")
+                        .select(*select_cols)
                         .dropDuplicates(["ticker"])
                         .orderBy(desc("market_cap")))
 
@@ -880,7 +918,10 @@ class AlphaVantageIngestor(Ingestor):
                 print("-" * 60)
                 for i, row in enumerate(rows[:10], 1):
                     cap_billions = row.market_cap / 1e9 if row.market_cap else 0
-                    print(f"  {i:3}. {row.ticker:6} - ${cap_billions:>8.1f}B - {row.security_name[:30] if row.security_name else 'N/A'}")
+                    # Get name from whichever column exists
+                    name_val = getattr(row, name_col, None) if name_col else None
+                    name_display = name_val[:30] if name_val else 'N/A'
+                    print(f"  {i:3}. {row.ticker:6} - ${cap_billions:>8.1f}B - {name_display}")
                 if len(tickers) > 10:
                     print(f"  ... and {len(tickers) - 10} more")
                 print()
@@ -890,8 +931,7 @@ class AlphaVantageIngestor(Ingestor):
         except Exception as e:
             logger.warning(f"Failed to load market cap rankings: {e}")
             print(f"Warning: Could not load market cap data: {e}")
-            print("Falling back to default ticker list.")
-            return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
+            return []
 
     def fetch_bulk_quotes(self, tickers: list, show_progress: bool = True) -> list:
         """
