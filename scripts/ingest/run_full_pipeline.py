@@ -136,8 +136,8 @@ def run_full_pipeline(
             from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
 
             print("Initializing context...")
-            ctx = RepoContext.from_repo_root()
-            print("  ✓ Context initialized")
+            ctx = RepoContext.from_repo_root(connection_type="spark")
+            print("  ✓ Context initialized (Spark mode)")
             print()
 
             print("Initializing Alpha Vantage ingestor...")
