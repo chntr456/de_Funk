@@ -46,6 +46,7 @@ def run_full_pipeline(
     days: int = None,
     max_tickers: int = None,
     skip_data_refresh: bool = False,
+    skip_silver_build: bool = False,
     skip_forecasts: bool = False,
     skip_reference_refresh: bool = False,
     use_concurrent: bool = True,
@@ -64,6 +65,7 @@ def run_full_pipeline(
         days: Number of recent days (alternative to date_from/date_to)
         max_tickers: Optional limit on number of tickers
         skip_data_refresh: Skip data ingestion step
+        skip_silver_build: Skip silver layer build
         skip_forecasts: Skip forecast generation step
         skip_reference_refresh: Skip OVERVIEW calls (use existing reference data).
                                Saves ~50% of API calls for daily price updates.
@@ -239,9 +241,9 @@ def run_full_pipeline(
         }
 
     # =========================================================================
-    # STEP 2: BUILD SILVER LAYER (required for forecasting)
+    # STEP 2: BUILD SILVER LAYER
     # =========================================================================
-    if not skip_forecasts:
+    if not skip_silver_build:
         print("=" * 80)
         print("STEP 2: BUILDING SILVER LAYER")
         print("=" * 80)
@@ -295,6 +297,12 @@ def run_full_pipeline(
             # Continue anyway - forecasting may still work with existing data
 
         print()
+    else:
+        print("=" * 80)
+        print("STEP 2: SILVER BUILD - SKIPPED")
+        print("=" * 80)
+        print()
+        results['silver_build'] = {'status': 'skipped'}
 
     # =========================================================================
     # STEP 3: FORECASTING
@@ -345,12 +353,10 @@ def run_full_pipeline(
             results['errors'].append(error_msg)
     else:
         print("=" * 80)
-        print("STEP 2 & 3: SILVER BUILD & FORECASTING - SKIPPED")
+        print("STEP 3: FORECASTING - SKIPPED")
         print("=" * 80)
         print()
-        results['forecasting'] = {
-            'status': 'skipped'
-        }
+        results['forecasting'] = {'status': 'skipped'}
 
     # =========================================================================
     # SUMMARY
@@ -486,7 +492,12 @@ Examples:
     parser.add_argument(
         '--skip-data-refresh',
         action='store_true',
-        help='Skip data ingestion step (use existing data)'
+        help='Skip data ingestion step (use existing bronze data)'
+    )
+    parser.add_argument(
+        '--skip-silver-build',
+        action='store_true',
+        help='Skip silver layer build'
     )
     parser.add_argument(
         '--include-news',
@@ -575,6 +586,7 @@ Examples:
             days=args.days,
             max_tickers=args.max_tickers,
             skip_data_refresh=args.skip_data_refresh,
+            skip_silver_build=args.skip_silver_build,
             skip_forecasts=args.skip_forecasts,
             skip_reference_refresh=args.skip_reference_refresh,
             use_concurrent=use_concurrent,
