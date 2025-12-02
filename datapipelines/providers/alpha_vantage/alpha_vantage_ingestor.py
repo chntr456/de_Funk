@@ -1497,7 +1497,7 @@ class AlphaVantageIngestor(Ingestor):
                 print(f"   Requested: {max_tickers}")
                 print()
                 print("To populate market cap rankings, run:")
-                print(f"  python -m scripts.ingest.refresh_market_cap_rankings --max-tickers {max_tickers * 2}")
+                print("  python -m scripts.ingest.refresh_market_cap_rankings")
                 print()
 
                 if len(tickers) == 0:
