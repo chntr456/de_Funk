@@ -827,15 +827,31 @@ class AlphaVantageIngestor(Ingestor):
             return ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
 
         try:
+            from pyspark.sql.functions import isnan, upper
+
             # Read reference data
             df = self.spark.read.parquet(str(ref_path))
 
-            # Filter to stocks with market cap data
+            # Filter to common stocks with valid market cap data
+            # Exclude: warrants (-WS, W suffix), preferred (-P-), units (-U, -UN), rights (-R)
             df_with_cap = df.filter(
+                # Must have valid numeric market cap (not null, not NaN, > 0)
                 (col("market_cap").isNotNull()) &
+                (~isnan(col("market_cap"))) &
                 (col("market_cap") > 0) &
+                # Must be active stock
                 (col("asset_type") == "stocks") &
-                (col("is_active") == True)
+                (col("is_active") == True) &
+                # Exclude warrants (end with W, -WS, WS)
+                (~upper(col("ticker")).rlike(r".*[-]?W[S]?$")) &
+                # Exclude preferred shares (contain -P- or end with -P followed by letter)
+                (~upper(col("ticker")).rlike(r".*-P-.*|.*-P[A-Z]$")) &
+                # Exclude units (end with -U, -UN, U)
+                (~upper(col("ticker")).rlike(r".*-U[N]?$")) &
+                # Exclude rights (end with -R, -RT)
+                (~upper(col("ticker")).rlike(r".*-R[T]?$")) &
+                # Exclude other special suffixes
+                (~upper(col("ticker")).rlike(r".*[-][A-Z]{2,}$"))  # Generic: exclude -XX suffixes
             )
 
             # Apply minimum market cap filter if specified
