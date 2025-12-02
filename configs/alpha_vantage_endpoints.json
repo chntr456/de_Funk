@@ -233,6 +233,18 @@
       "response_key": null,
       "default_path_params": {},
       "comment": "Top 20 gainers, losers, and most actively traded tickers. Useful for large-cap discovery."
+    },
+    "realtime_bulk_quotes": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "",
+      "required_params": ["symbol"],
+      "default_query": {
+        "function": "REALTIME_BULK_QUOTES"
+      },
+      "response_key": "data",
+      "default_path_params": {},
+      "comment": "Bulk quotes for up to 100 symbols per call. Returns price, volume. Use comma-separated symbols."
     }
   }
 }

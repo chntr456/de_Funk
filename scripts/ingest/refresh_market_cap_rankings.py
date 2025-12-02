@@ -1,22 +1,16 @@
 """
 Refresh Market Cap Rankings
 
-Fetches OVERVIEW data for all US-listed tickers to populate market cap
+Fetches OVERVIEW data for US-listed tickers to populate market cap
 rankings in bronze/securities_reference. Run this before using
 --sort-by-market-cap in the pipeline.
 
 Usage:
-    python -m scripts.ingest.refresh_market_cap_rankings [options]
+    python -m scripts.ingest.refresh_market_cap_rankings --max-tickers 1000
 
 Examples:
-    # Refresh top 1000 tickers (default)
-    python -m scripts.ingest.refresh_market_cap_rankings
-
-    # Refresh top 2000 tickers
+    python -m scripts.ingest.refresh_market_cap_rankings --max-tickers 500
     python -m scripts.ingest.refresh_market_cap_rankings --max-tickers 2000
-
-    # Refresh all US tickers (slow - ~10,000 API calls)
-    python -m scripts.ingest.refresh_market_cap_rankings --all
 """
 
 from __future__ import annotations
@@ -31,23 +25,17 @@ repo_root = setup_repo_imports()
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Refresh market cap rankings by fetching OVERVIEW for all tickers"
+        description="Refresh market cap rankings by fetching OVERVIEW for tickers"
     )
     parser.add_argument(
-        "--max-tickers", type=int, default=1000,
-        help="Maximum tickers to refresh (default: 1000)"
-    )
-    parser.add_argument(
-        "--all", action="store_true",
-        help="Refresh ALL US tickers (slow - thousands of API calls)"
+        "--max-tickers", type=int, required=True,
+        help="Number of tickers to refresh (required)"
     )
     parser.add_argument(
         "--concurrent", action="store_true",
         help="Use concurrent requests (premium tier only)"
     )
     args = parser.parse_args()
-
-    max_tickers = None if args.all else args.max_tickers
 
     print("=" * 80)
     print("REFRESH MARKET CAP RANKINGS")
@@ -57,12 +45,9 @@ def main():
     print("This script fetches OVERVIEW data for US-listed tickers to populate")
     print("market cap rankings in bronze/securities_reference.")
     print()
-    if max_tickers:
-        print(f"Max tickers: {max_tickers}")
-        print(f"Estimated API calls: {max_tickers} (OVERVIEW) + 1 (LISTING_STATUS)")
-        print(f"Estimated time at 1 call/sec: ~{max_tickers // 60} minutes")
-    else:
-        print("Max tickers: ALL (this will take a long time)")
+    print(f"Max tickers: {args.max_tickers}")
+    print(f"Estimated API calls: {args.max_tickers} (OVERVIEW) + 1 (LISTING_STATUS)")
+    print(f"Estimated time at 1 call/sec: ~{args.max_tickers // 60} minutes")
     print()
 
     try:
@@ -86,7 +71,7 @@ def main():
         # Run the refresh
         ranked_tickers = ingestor.refresh_market_cap_rankings(
             use_bulk_listing=True,
-            max_tickers=max_tickers or 10000,
+            max_tickers=args.max_tickers,
             show_progress=True
         )
 
@@ -95,7 +80,7 @@ def main():
         print(f"✓ Market cap rankings refreshed for {len(ranked_tickers)} tickers")
         print()
         print("You can now run the pipeline with market cap sorting:")
-        print("  python -m scripts.ingest.run_full_pipeline --max-tickers 500")
+        print(f"  python -m scripts.ingest.run_full_pipeline --max-tickers {min(args.max_tickers, 500)}")
         print("=" * 80)
 
     except KeyboardInterrupt:
