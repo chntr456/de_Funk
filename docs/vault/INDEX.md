@@ -20,6 +20,7 @@
 - [Connection System](01-core-framework/connection-system.md) - Backend adapters
 - [Filter Engine](01-core-framework/filter-engine.md) - Filter application (v2.2: consolidated)
 - [Storage Router](01-core-framework/storage-router.md) - Path management
+- [Logging & Error Handling](01-core-framework/logging-error-handling.md) - Observability framework
 
 ### 02 - Graph Architecture
 - [README](02-graph-architecture/README.md) - Graph concepts
@@ -171,7 +172,7 @@
 | Section | Files | Status |
 |---------|-------|--------|
 | 00-overview | 5 | Complete |
-| 01-core-framework | 6 | Complete |
+| 01-core-framework | 7 | Complete |
 | 02-graph-architecture | 6 | Complete |
 | 03-data-providers | 12 | Complete |
 | 04-implemented-models | 30+ | Complete |

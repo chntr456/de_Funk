@@ -19,6 +19,7 @@ The core framework provides the foundational components that power de_Funk's mod
 | [Connection System](connection-system.md) | Database connection management |
 | [Filter Engine](filter-engine.md) | Backend-agnostic filter application |
 | [Storage Router](storage-router.md) | Bronze/Silver path resolution |
+| [Logging & Error Handling](logging-error-handling.md) | Centralized logging and exception framework |
 
 ---
 
