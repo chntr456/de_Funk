@@ -9,23 +9,26 @@ stock prices and volumes. It:
 4. Stores forecast results and accuracy metrics in the Silver layer
 
 Usage:
-    python -m scripts.run_forecasts [--tickers AAPL,GOOGL] [--refresh-days 7] [--models arima_30d,prophet_30d]
+    python -m scripts.forecast.run_forecasts [--tickers AAPL,GOOGL] [--refresh-days 7] [--models arima_30d,prophet_30d]
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path
-
-from __future__ import annotations
 import argparse
 from datetime import datetime
 import yaml
 import json
+import traceback
 
-from utils.repo import setup_repo_imports
+from utils.repo import setup_repo_imports, get_repo_root
 repo_root = setup_repo_imports()
 
+from config.logging import get_logger, setup_logging
 from models.implemented.forecast import ForecastModel
 from models.api.session import UniversalSession
+
+logger = get_logger(__name__)
 
 
 def load_config(config_path: str) -> dict:
@@ -65,11 +68,21 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
         df = con.execute(query).fetchdf()
         con.close()
 
+        logger.info(f"Loaded {len(df)} tickers from Silver layer")
         return df['ticker'].tolist()
     except Exception as e:
+        logger.warning(f"Could not load tickers from Silver layer: {e}")
         print(f"Warning: Could not load tickers from Silver layer: {e}")
         print("Using default tickers...")
         return ["AAPL", "GOOGL", "MSFT", "TSLA", "AMZN"]
+
+
+def print_header(text: str, char: str = "=") -> None:
+    """Print a formatted header line."""
+    line = char * 80
+    print(line)
+    print(text)
+    print(line)
 
 
 def run_forecast_pipeline(
@@ -92,12 +105,11 @@ def run_forecast_pipeline(
     Returns:
         Dictionary with pipeline results
     """
-    print("=" * 80)
-    print("TIME SERIES FORECAST PIPELINE")
-    print("=" * 80)
+    print_header("TIME SERIES FORECAST PIPELINE")
     print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 80)
     print()
+    logger.info("Starting time series forecast pipeline")
 
     # Initialize Spark
     from orchestration.common.spark_session import get_spark
@@ -112,18 +124,21 @@ def run_forecast_pipeline(
     storage_cfg = load_config(config_root / "storage.json")
     forecast_cfg = load_config(config_root / "models" / "forecast.yaml")
 
-    print(f"  ✓ Loaded storage config")
-    print(f"  ✓ Loaded forecast config")
+    logger.debug("Configurations loaded")
+    print(f"  Loaded storage config")
+    print(f"  Loaded forecast config")
     print()
 
     # Step 1: Refresh data if requested
     if refresh_data:
         print("Step 1: Refreshing recent data...")
         print("-" * 80)
+        logger.info(f"Refreshing data for {refresh_days} days")
         try:
             from scripts.refresh_data import refresh_recent_data
             refresh_recent_data(days=refresh_days, max_tickers=max_tickers)
         except Exception as e:
+            logger.warning(f"Data refresh failed: {e}")
             print(f"Warning: Data refresh failed: {e}")
             print("Continuing with existing data...")
         print()
@@ -135,7 +150,8 @@ def run_forecast_pipeline(
     if tickers is None:
         tickers = get_active_tickers(storage_cfg, limit=max_tickers)
 
-    print(f"  ✓ Processing {len(tickers)} tickers: {', '.join(tickers[:5])}")
+    logger.info(f"Processing {len(tickers)} tickers")
+    print(f"  Processing {len(tickers)} tickers: {', '.join(tickers[:5])}")
     if len(tickers) > 5:
         print(f"    ... and {len(tickers) - 5} more")
     print()
@@ -145,11 +161,11 @@ def run_forecast_pipeline(
     print("-" * 80)
 
     # Create universal session for cross-model access
-    repo_root = get_repo_root()
+    repo_root_path = get_repo_root()
     session = UniversalSession(
         connection=spark,
         storage_cfg=storage_cfg,
-        repo_root=repo_root
+        repo_root=repo_root_path
     )
 
     forecast_model = ForecastModel(
@@ -165,9 +181,10 @@ def run_forecast_pipeline(
     # Get output directory from storage config
     forecast_root = storage_cfg['roots'].get('forecast_silver', 'storage/silver/forecast')
 
-    print(f"  ✓ Forecast model initialized")
-    print(f"  ✓ Session configured for cross-model access")
-    print(f"  ✓ Output directory: {forecast_root}")
+    logger.info(f"Forecast model initialized, output: {forecast_root}")
+    print(f"  Forecast model initialized")
+    print(f"  Session configured for cross-model access")
+    print(f"  Output directory: {forecast_root}")
     print()
 
     # Step 4: Run forecasts for each ticker
@@ -186,6 +203,7 @@ def run_forecast_pipeline(
     for i, ticker in enumerate(tickers, 1):
         print(f"\n[{i}/{len(tickers)}] Processing {ticker}...")
         print("-" * 40)
+        logger.debug(f"Processing ticker {i}/{len(tickers)}: {ticker}")
 
         try:
             ticker_results = forecast_model.run_forecast_for_ticker(
@@ -200,11 +218,13 @@ def run_forecast_pipeline(
             if ticker_results['errors']:
                 results['errors'].extend(ticker_results['errors'])
 
-            print(f"  ✓ {ticker}: {ticker_results['models_trained']} models, {ticker_results['forecasts_generated']} forecasts")
+            print(f"  {ticker}: {ticker_results['models_trained']} models, {ticker_results['forecasts_generated']} forecasts")
+            logger.info(f"{ticker}: {ticker_results['models_trained']} models, {ticker_results['forecasts_generated']} forecasts")
 
         except Exception as e:
             error_msg = f"{ticker}: {str(e)}"
-            print(f"  ✗ {error_msg}")
+            logger.error(f"Forecast failed for {ticker}: {e}")
+            print(f"  Error: {error_msg}")
             results['tickers_failed'] += 1
             results['errors'].append(error_msg)
 
@@ -213,14 +233,15 @@ def run_forecast_pipeline(
 
     # Step 5: Print summary
     print()
-    print("=" * 80)
-    print("FORECAST PIPELINE SUMMARY")
-    print("=" * 80)
+    print_header("FORECAST PIPELINE SUMMARY")
     print(f"Duration: {results['duration']:.1f} seconds")
     print(f"Tickers processed: {results['tickers_processed']}/{len(tickers)}")
     print(f"Tickers failed: {results['tickers_failed']}")
     print(f"Total models trained: {results['total_models']}")
     print(f"Total forecasts generated: {results['total_forecasts']}")
+
+    logger.info(f"Pipeline complete: {results['tickers_processed']}/{len(tickers)} tickers, "
+               f"{results['total_forecasts']} forecasts in {results['duration']:.1f}s")
 
     if results['errors']:
         print(f"\nErrors ({len(results['errors'])}):")
@@ -235,11 +256,14 @@ def run_forecast_pipeline(
 
     # Clean up
     spark.stop()
+    logger.debug("Spark session stopped")
 
     return results
 
 
 def main():
+    setup_logging()
+
     parser = argparse.ArgumentParser(
         description="Run time series forecasts for stock prices and volumes"
     )
@@ -274,6 +298,7 @@ def main():
     )
 
     args = parser.parse_args()
+    logger.info(f"Starting forecast script with args: {args}")
 
     # Parse comma-separated lists
     tickers = args.tickers.split(',') if args.tickers else None
@@ -293,9 +318,13 @@ def main():
         if results['tickers_failed'] > 0:
             sys.exit(1)
 
+    except KeyboardInterrupt:
+        logger.info("Interrupted by user")
+        print("\n\nInterrupted by user")
+        sys.exit(1)
     except Exception as e:
-        print(f"\n✗ Pipeline failed with error: {str(e)}")
-        import traceback
+        logger.error(f"Pipeline failed: {e}", exc_info=True)
+        print(f"\nPipeline failed with error: {str(e)}")
         traceback.print_exc()
         sys.exit(1)
 
