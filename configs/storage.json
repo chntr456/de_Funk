@@ -28,10 +28,10 @@
     "securities_reference": { "root": "bronze", "rel": "securities_reference", "partitions": ["snapshot_dt", "asset_type"], "comment": "v2.0 unified reference data with CIK" },
     "securities_prices_daily": { "root": "bronze", "rel": "securities_prices_daily", "partitions": ["asset_type", "year", "month"], "comment": "v2.0 unified daily OHLCV for all asset types (year/month partitioning avoids partition sprawl)" },
 
-    "income_statements": { "root": "bronze", "rel": "income_statements", "partitions": ["ticker", "report_type"], "comment": "Alpha Vantage INCOME_STATEMENT - quarterly/annual" },
-    "balance_sheets": { "root": "bronze", "rel": "balance_sheets", "partitions": ["ticker", "report_type"], "comment": "Alpha Vantage BALANCE_SHEET - quarterly/annual" },
-    "cash_flows": { "root": "bronze", "rel": "cash_flows", "partitions": ["ticker", "report_type"], "comment": "Alpha Vantage CASH_FLOW - quarterly/annual" },
-    "earnings": { "root": "bronze", "rel": "earnings", "partitions": ["ticker", "report_type"], "comment": "Alpha Vantage EARNINGS - quarterly/annual" },
+    "income_statements": { "root": "bronze", "rel": "income_statements", "partitions": ["report_type", "snapshot_date"], "comment": "Alpha Vantage INCOME_STATEMENT - partitioned by report_type + snapshot_date (not ticker to avoid file sprawl)" },
+    "balance_sheets": { "root": "bronze", "rel": "balance_sheets", "partitions": ["report_type", "snapshot_date"], "comment": "Alpha Vantage BALANCE_SHEET - partitioned by report_type + snapshot_date" },
+    "cash_flows": { "root": "bronze", "rel": "cash_flows", "partitions": ["report_type", "snapshot_date"], "comment": "Alpha Vantage CASH_FLOW - partitioned by report_type + snapshot_date" },
+    "earnings": { "root": "bronze", "rel": "earnings", "partitions": ["report_type", "snapshot_date"], "comment": "Alpha Vantage EARNINGS - partitioned by report_type + snapshot_date" },
     "historical_options": { "root": "bronze", "rel": "historical_options", "partitions": ["underlying_ticker", "expiration_date"], "comment": "Alpha Vantage HISTORICAL_OPTIONS" },
 
     "ref_all_tickers": { "root": "bronze", "rel": "ref_all_tickers", "partitions": ["snapshot_dt"], "comment": "v1.x legacy - use securities_reference" },

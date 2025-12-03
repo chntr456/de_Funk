@@ -1268,8 +1268,11 @@ class AlphaVantageIngestor(Ingestor):
         from functools import reduce
         final_df = reduce(lambda a, b: a.union(b), all_dfs)
 
-        # Write to bronze
-        table_path = self.sink.write(final_df, table_name, partitions=["ticker", "report_type"])
+        # Write to bronze - partition by report_type and snapshot_date (NOT ticker)
+        # This reduces file count from 8000+ × 2 to just 2-4 files per ingestion
+        # Coalesce to reduce file count further
+        final_df = final_df.coalesce(4)
+        table_path = self.sink.write(final_df, table_name, partitions=["report_type", "snapshot_date"])
         print(f"Written {final_df.count()} income statement records to {table_path}")
 
         return table_path
@@ -1335,7 +1338,9 @@ class AlphaVantageIngestor(Ingestor):
         from functools import reduce
         final_df = reduce(lambda a, b: a.union(b), all_dfs)
 
-        table_path = self.sink.write(final_df, table_name, partitions=["ticker", "report_type"])
+        # Partition by report_type and snapshot_date (NOT ticker) to reduce file count
+        final_df = final_df.coalesce(4)
+        table_path = self.sink.write(final_df, table_name, partitions=["report_type", "snapshot_date"])
         print(f"Written {final_df.count()} balance sheet records to {table_path}")
 
         return table_path
@@ -1402,7 +1407,9 @@ class AlphaVantageIngestor(Ingestor):
         from functools import reduce
         final_df = reduce(lambda a, b: a.union(b), all_dfs)
 
-        table_path = self.sink.write(final_df, table_name, partitions=["ticker", "report_type"])
+        # Partition by report_type and snapshot_date (NOT ticker) to reduce file count
+        final_df = final_df.coalesce(4)
+        table_path = self.sink.write(final_df, table_name, partitions=["report_type", "snapshot_date"])
         print(f"Written {final_df.count()} cash flow records to {table_path}")
 
         return table_path
@@ -1468,7 +1475,9 @@ class AlphaVantageIngestor(Ingestor):
         from functools import reduce
         final_df = reduce(lambda a, b: a.union(b), all_dfs)
 
-        table_path = self.sink.write(final_df, table_name, partitions=["ticker", "report_type"])
+        # Partition by report_type and snapshot_date (NOT ticker) to reduce file count
+        final_df = final_df.coalesce(4)
+        table_path = self.sink.write(final_df, table_name, partitions=["report_type", "snapshot_date"])
         print(f"Written {final_df.count()} earnings records to {table_path}")
 
         return table_path
