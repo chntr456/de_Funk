@@ -948,7 +948,11 @@ class AlphaVantageIngestor(Ingestor):
         # Try bronze securities_reference first
         if ref_path.exists():
             try:
-                temp_df = self.spark.read.parquet(str(ref_path))
+                # Auto-detect Delta vs Parquet
+                if (ref_path / "_delta_log").exists():
+                    temp_df = self.spark.read.format("delta").load(str(ref_path))
+                else:
+                    temp_df = self.spark.read.parquet(str(ref_path))
                 if has_valid_market_cap(temp_df):
                     df = temp_df
                     source_name = "bronze/securities_reference"
@@ -960,7 +964,11 @@ class AlphaVantageIngestor(Ingestor):
         # Fallback to silver dim_stock
         if df is None and silver_dim_path.exists():
             try:
-                temp_df = self.spark.read.parquet(str(silver_dim_path))
+                # Auto-detect Delta vs Parquet
+                if (silver_dim_path / "_delta_log").exists():
+                    temp_df = self.spark.read.format("delta").load(str(silver_dim_path))
+                else:
+                    temp_df = self.spark.read.parquet(str(silver_dim_path))
                 if has_valid_market_cap(temp_df):
                     df = temp_df
                     source_name = "silver/stocks/dims/dim_stock"

@@ -119,12 +119,17 @@ class CompanyForecastModel(TimeSeriesForecastModel):
 
         if self.backend == 'spark':
             try:
+                # Auto-detect Delta vs Parquet
+                from pathlib import Path as PathLib
+                if (PathLib(path) / "_delta_log").exists():
+                    return self.connection.spark.read.format("delta").load(path)
                 return self.connection.spark.read.parquet(path)
             except Exception:
                 return self._create_empty_table(table_name)
         else:
             try:
-                return self.connection.read_parquet(path)
+                # DuckDB read_table auto-detects format
+                return self.connection.read_table(path)
             except Exception:
                 return self._create_empty_table(table_name)
 

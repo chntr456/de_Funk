@@ -258,8 +258,8 @@ def build_calendar_table(
 
     df = builder.build_spark_dataframe(spark)
 
-    # Write to parquet
-    df.write.mode('overwrite').parquet(output_path)
+    # Write to Delta Lake (default format)
+    df.write.format("delta").mode('overwrite').save(output_path)
 
     print(f"✓ Calendar dimension created: {df.count()} dates")
     print(f"✓ Date range: {start_date} to {end_date}")

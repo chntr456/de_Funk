@@ -1,5 +1,20 @@
 # src/ingest/company_ingestor.py
+"""
+DEPRECATED: This module uses Polygon.io API which was removed in v2.0.
+
+Use AlphaVantageIngestor instead:
+    from datapipelines.providers.alpha_vantage.alpha_vantage_ingestor import AlphaVantageIngestor
+
+This file is kept for reference only and will be removed in a future version.
+"""
 from __future__ import annotations
+
+import warnings
+warnings.warn(
+    "company_ingestor.py is deprecated. Use AlphaVantageIngestor instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 from datetime import date
 from typing import List, Optional

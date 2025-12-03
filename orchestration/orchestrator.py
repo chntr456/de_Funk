@@ -1,5 +1,22 @@
 # src/orchestration/orchestrator.py
+"""
+DEPRECATED: This orchestrator uses legacy v1.x patterns and Polygon.io API.
+
+The v2.0 architecture uses:
+- AlphaVantageIngestor for data ingestion
+- BaseModel with graph.yaml for model building
+- Direct script execution via python -m
+
+This file is kept for reference only and will be removed in a future version.
+"""
 from __future__ import annotations
+
+import warnings
+warnings.warn(
+    "orchestrator.py is deprecated. Use AlphaVantageIngestor and model build scripts instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 import json
 from pathlib import Path
