@@ -48,6 +48,10 @@ def get_spark(
         .config("spark.driver.maxResultSize", "2g")
         .config("spark.python.worker.faulthandler.enabled", "true")
         .config("spark.sql.execution.pyspark.udf.faulthandler.enabled", "true")
+        # Delta Lake support (v2.3 migration)
+        .config("spark.jars.packages", "io.delta:delta-spark_2.12:3.1.0")
+        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
     )
 
     # Apply additional legacy config if provided (overrides SparkConfig)

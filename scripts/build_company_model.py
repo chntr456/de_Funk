@@ -30,13 +30,15 @@ def main():
 
     # Initialize Spark (required for model builds)
     try:
-        from pyspark.sql import SparkSession
-        spark = SparkSession.builder \
-            .appName("BuildCompanyModel") \
-            .config("spark.driver.memory", "8g") \
-            .config("spark.sql.parquet.compression.codec", "snappy") \
-            .getOrCreate()
-        print("✓ Spark session created")
+        from orchestration.common.spark_session import get_spark
+        spark = get_spark(
+            app_name="BuildCompanyModel",
+            config={
+                "spark.driver.memory": "8g",
+                "spark.sql.parquet.compression.codec": "snappy",
+            }
+        )
+        print("✓ Spark session created (with Delta Lake support)")
     except Exception as e:
         print(f"✗ Failed to create Spark session: {e}")
         return 1

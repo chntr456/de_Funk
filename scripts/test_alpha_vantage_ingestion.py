@@ -28,7 +28,6 @@ setup_repo_imports()
 
 from config import ConfigLoader
 from config.logging import get_logger, setup_logging
-from pyspark.sql import SparkSession
 
 logger = get_logger(__name__)
 
@@ -62,18 +61,21 @@ def check_api_key(config):
 
 
 def create_spark_session():
-    """Create Spark session for ingestion."""
+    """Create Spark session for ingestion with Delta Lake support."""
     print("\nCreating Spark session...")
     logger.info("Creating Spark session")
 
-    spark = (SparkSession.builder
-             .appName("AlphaVantage_Test_Ingestion")
-             .config("spark.driver.memory", "4g")
-             .config("spark.sql.shuffle.partitions", "10")
-             .getOrCreate())
+    from orchestration.common.spark_session import get_spark
+    spark = get_spark(
+        app_name="AlphaVantage_Test_Ingestion",
+        config={
+            "spark.driver.memory": "4g",
+            "spark.sql.shuffle.partitions": "10",
+        }
+    )
 
     logger.info(f"Spark session created (version {spark.version})")
-    print(f"Spark session created (version {spark.version})")
+    print(f"Spark session created (version {spark.version}) with Delta Lake support")
     return spark
 
 
