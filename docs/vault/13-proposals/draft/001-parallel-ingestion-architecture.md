@@ -3,8 +3,48 @@
 **Status**: Draft
 **Author**: Claude
 **Date**: 2025-11-29
-**Updated**: 2025-11-29
+**Updated**: 2025-12-02
 **Priority**: High
+
+---
+
+## Current Implementation Status (Dec 2025)
+
+### What Was Implemented
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `REALTIME_BULK_QUOTES` endpoint | ✅ Added | 100 symbols per call |
+| `refresh_market_cap_rankings.py` | ✅ Created | Standalone OVERVIEW ingestion |
+| `--skip-silver-build` flag | ✅ Added | Separate build from forecast |
+| Time estimation | ✅ Added | Shows estimated runtime before long operations |
+| Confirmation prompts | ✅ Added | User approval for 2+ hour operations |
+
+### What Was NOT Implemented
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Celery task queue | ❌ Not started | Proposal only |
+| Redis backend | ❌ Not started | Proposal only |
+| Token bucket rate limiter | ❌ Not started | Still using simple throttle |
+| Checkpoint/resume | ❌ Not started | No crash recovery |
+| Circuit breaker | ❌ Not started | Proposal only |
+| Scheduled jobs | ❌ Not started | Manual execution only |
+| Per-provider rate limiting | ❌ Not started | Global throttle still used |
+
+### Data Quality Blockers
+
+| Issue | Impact |
+|-------|--------|
+| `securities_reference` has 0 market_cap values | Must run OVERVIEW for all tickers first |
+| OVERVIEW requires 1 call per ticker | ~7,000 calls = ~2 hours at premium rate |
+| No parallel workers | Sequential processing only |
+
+---
+
+## Next Steps: Mini-PC Cluster Extension
+
+See **Proposal 011: Distributed Cluster Architecture** for extending this proposal with mini-PC worker nodes.
 
 ---
 

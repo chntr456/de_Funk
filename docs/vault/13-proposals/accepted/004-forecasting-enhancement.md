@@ -1,11 +1,72 @@
 # Proposal: Forecasting Enhancement & Black-Scholes Integration
 
-**Status**: Accepted
+**Status**: Accepted (Partially Implemented)
 **Author**: Claude
 **Date**: 2025-11-29
 **Updated**: 2025-12-02
-**Implemented**: 2025-12-02
+**Implemented**: 2025-12-02 (Phase 1 only)
 **Priority**: High
+
+---
+
+## Implementation Status
+
+### ✅ Phase 1: Bug Fixes (COMPLETED - Dec 2025)
+
+| Issue | Status | Commit/Notes |
+|-------|--------|--------------|
+| `from __future__` placement | ✅ Fixed | Syntax error resolved |
+| Missing `get_repo_root` import | ✅ Fixed | Added to forecast scripts |
+| Deprecated model refs (equity/corporate) | ✅ Fixed | Updated to stocks/company |
+| PySpark unconditional import | ✅ Fixed | Made optional |
+| Forecast pipeline integration | ✅ Fixed | Added silver build step, ticker passthrough |
+| Fundamentals ingestion | ✅ Added | `--include-fundamentals` flag |
+
+### ⏳ Phase 2: Core Functionality (NOT STARTED)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| RandomForest forecasting | ❌ Placeholder | Returns zeros, needs proper lag features |
+| Metrics calculation | ❌ Placeholder | Returns zeros, needs holdout validation |
+| Prophet/pmdarima handling | ❌ Not implemented | Optional dependencies not handled |
+
+### ❌ Phase 3: Black-Scholes (NOT STARTED)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `options/measures.py` | ❌ Not created | Code exists in proposal only |
+| Pricing and Greeks | ❌ Not implemented | |
+| Implied volatility solver | ❌ Not implemented | |
+
+### ❌ Phase 4: Backtesting (NOT STARTED)
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| BacktestEngine | ❌ Not created | Code exists in proposal only |
+| Built-in strategies | ❌ Not implemented | |
+| Results storage | ❌ Not implemented | |
+
+---
+
+## Additional Changes Made This Session (Dec 2025)
+
+### Ingestion Pipeline Enhancements
+
+| Change | Description |
+|--------|-------------|
+| Market cap sorting | Added `--max-tickers` with market cap ranking |
+| Silver layer fallback | `get_tickers_by_market_cap()` checks silver if bronze empty |
+| `--skip-silver-build` flag | Separate silver build from forecasting |
+| `refresh_market_cap_rankings.py` | Standalone script for OVERVIEW data |
+| REALTIME_BULK_QUOTES | Added endpoint for 100 symbols per call |
+| Removed defaults | Require explicit `--max-tickers` |
+
+### Data Quality Issues Identified
+
+| Issue | Status |
+|-------|--------|
+| `securities_reference` has 12K rows but 0 market_cap | Needs OVERVIEW calls |
+| LISTING_STATUS only provides basic ticker info | By design (Alpha Vantage limitation) |
 
 ---
 
