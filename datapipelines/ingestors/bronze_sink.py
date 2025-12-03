@@ -24,7 +24,7 @@ class BronzeSink:
         df.write.mode("overwrite").parquet(str(path))
         return True
 
-    def write(self, df, table, partitions=None):
+    def write(self, df, table, partitions=None, mode="overwrite"):
         """
         Write DataFrame to bronze table with partitioning.
 
@@ -32,11 +32,17 @@ class BronzeSink:
             df: Spark DataFrame to write
             table: Table name (must exist in storage config)
             partitions: List of partition column names (e.g., ["snapshot_dt", "asset_type"])
+            mode: Write mode - "overwrite" (default) or "append"
+                  Use "append" when writing in batches to avoid overwriting previous data.
 
         Returns:
             Path to written table
         """
         from datetime import date
+
+        # Validate mode
+        if mode not in ("overwrite", "append"):
+            raise ValueError(f"Invalid write mode: {mode}. Must be 'overwrite' or 'append'.")
 
         # Get base path for table
         table_cfg = self._table_cfg(table)
@@ -50,8 +56,8 @@ class BronzeSink:
 
         # Write with partitioning
         if partitions:
-            df.write.mode("overwrite").partitionBy(*partitions).parquet(str(base_path))
+            df.write.mode(mode).partitionBy(*partitions).parquet(str(base_path))
         else:
-            df.write.mode("overwrite").parquet(str(base_path))
+            df.write.mode(mode).parquet(str(base_path))
 
         return str(base_path)

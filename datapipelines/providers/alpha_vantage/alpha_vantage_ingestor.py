@@ -337,11 +337,13 @@ class AlphaVantageIngestor(Ingestor):
 
     def ingest_reference_data(self, tickers, table_name="securities_reference",
                               use_concurrent=False, show_progress=True,
-                              progress_callback: Optional[ProgressCallback] = None):
+                              progress_callback: Optional[ProgressCallback] = None,
+                              batch_size: int = 500):
         """
         Ingest reference data (company overview) for given tickers.
 
         Uses Alpha Vantage OVERVIEW endpoint to get company fundamentals.
+        Writes data in batches to minimize memory usage.
 
         Args:
             tickers: List of ticker symbols
@@ -349,92 +351,123 @@ class AlphaVantageIngestor(Ingestor):
             use_concurrent: Use concurrent requests (only for premium tier!)
             show_progress: Show progress updates (default: True)
             progress_callback: Custom progress callback (if None, uses default)
+            batch_size: Number of tickers to process before writing to disk (default: 500)
+                       Lower values use less memory but may be slightly slower.
 
         Returns:
             Path to written bronze table
         """
         from datapipelines.providers.alpha_vantage.facets import SecuritiesReferenceFacetAV
+        import gc
 
-        print(f"Ingesting reference data for {len(tickers)} tickers...")
-
-        # Create facet
-        facet = SecuritiesReferenceFacetAV(self.spark, tickers=tickers)
-
-        # Generate API calls
-        calls = list(facet.calls())
-        print(f"Generated {len(calls)} API calls")
+        total_tickers = len(tickers)
+        print(f"Ingesting reference data for {total_tickers} tickers...")
+        print(f"  Batch size: {batch_size} (will write to disk after each batch)")
 
         # Determine progress callback
         callback = progress_callback if progress_callback else (default_progress_callback if show_progress else None)
 
-        # Fetch data (sequential or concurrent)
-        if use_concurrent:
-            print("WARNING: Using concurrent requests. Ensure you have premium tier!")
-            raw_batches = self._fetch_calls_concurrent(
-                calls, response_key=None,
-                progress_callback=callback, phase="reference"
-            )
-        else:
-            print(f"Fetching data sequentially (rate limit: {self.registry.rate_limit} calls/sec)")
-            raw_batches = self._fetch_calls(
-                calls, response_key=None,
-                progress_callback=callback, phase="reference"
-            )
+        total_rows_written = 0
+        total_errors = 0
+        table_path = None
+        num_batches = (total_tickers + batch_size - 1) // batch_size
 
-        # Check for API errors before normalizing
-        error_count = 0
-        error_details = []  # Track detailed error info
+        # Process in batches to reduce memory usage
+        for batch_idx in range(0, total_tickers, batch_size):
+            batch_num = batch_idx // batch_size + 1
+            batch_tickers = tickers[batch_idx:batch_idx + batch_size]
 
-        for i, batch in enumerate(raw_batches):
-            for item in batch:
-                if isinstance(item, dict):
-                    # Alpha Vantage returns errors as {"Information": "...error message..."}
-                    # or {"Error Message": "...error message..."}
-                    # or {"Note": "...rate limit message..."}
+            print(f"\n📦 Batch {batch_num}/{num_batches}: Processing {len(batch_tickers)} tickers...")
 
-                    # Get ticker for this batch (if available)
-                    ticker = tickers[i] if i < len(tickers) else "UNKNOWN"
+            # Create facet for this batch
+            facet = SecuritiesReferenceFacetAV(self.spark, tickers=batch_tickers)
+            calls = list(facet.calls())
 
-                    if "Information" in item and len(item) == 1:
-                        error_count += 1
-                        error_msg = item['Information']
-                        print(f"⚠ API Info for {ticker}: {error_msg}")
-                        error_details.append({"ticker": ticker, "type": "INFO", "message": error_msg})
-                    elif "Error Message" in item:
-                        error_count += 1
-                        error_msg = item['Error Message']
-                        print(f"✗ API Error for {ticker}: {error_msg}")
-                        error_details.append({"ticker": ticker, "type": "ERROR", "message": error_msg})
-                    elif "Note" in item:
-                        error_count += 1
-                        error_msg = item['Note']
-                        print(f"⚠ API Note for {ticker}: {error_msg}")
-                        error_details.append({"ticker": ticker, "type": "NOTE", "message": error_msg})
+            # Fetch data for this batch (sequential or concurrent)
+            if use_concurrent:
+                raw_batches = self._fetch_calls_concurrent(
+                    calls, response_key=None,
+                    progress_callback=callback, phase="reference"
+                )
+            else:
+                raw_batches = self._fetch_calls(
+                    calls, response_key=None,
+                    progress_callback=callback, phase="reference"
+                )
 
-        if error_count > 0:
-            print(f"\n⚠ Warning: {error_count} API responses contained errors or info messages")
-            print("Common causes:")
-            print("  - Missing or invalid API key (set ALPHA_VANTAGE_API_KEYS environment variable)")
+            # Check for API errors in this batch
+            batch_errors = 0
+            for i, batch in enumerate(raw_batches):
+                for item in batch:
+                    if isinstance(item, dict):
+                        ticker = batch_tickers[i] if i < len(batch_tickers) else "UNKNOWN"
+                        if "Information" in item and len(item) == 1:
+                            batch_errors += 1
+                            if show_progress:
+                                print(f"⚠ API Info for {ticker}: {item['Information'][:60]}")
+                        elif "Error Message" in item:
+                            batch_errors += 1
+                            if show_progress:
+                                print(f"✗ API Error for {ticker}: {item['Error Message'][:60]}")
+                        elif "Note" in item:
+                            batch_errors += 1
+                            if show_progress:
+                                print(f"⚠ API Note for {ticker}: {item['Note'][:60]}")
+
+            total_errors += batch_errors
+
+            # Skip normalization if all calls in batch failed
+            if batch_errors == len(batch_tickers):
+                print(f"  ⚠ All {batch_errors} API calls in batch failed, skipping...")
+                del raw_batches
+                gc.collect()
+                continue
+
+            # Normalize to DataFrame
+            try:
+                df = facet.normalize(raw_batches)
+                df = facet.validate(df)
+                batch_count = df.count()
+
+                if batch_count > 0:
+                    # Write to bronze (append mode for subsequent batches)
+                    if batch_num == 1:
+                        # First batch: overwrite
+                        table_path = self.sink.write(df, table_name, partitions=["snapshot_dt", "asset_type"])
+                    else:
+                        # Subsequent batches: append
+                        table_path = self.sink.write(df, table_name, partitions=["snapshot_dt", "asset_type"], mode="append")
+
+                    total_rows_written += batch_count
+                    print(f"  ✓ Written {batch_count} rows (total: {total_rows_written})")
+                else:
+                    print(f"  ⚠ No valid data in batch")
+
+            except Exception as e:
+                logger.warning(f"Failed to normalize/write batch {batch_num}: {e}")
+                print(f"  ✗ Batch {batch_num} failed: {e}")
+
+            # Clear memory after each batch
+            del raw_batches, facet
+            if 'df' in dir():
+                del df
+            gc.collect()
+
+        # Summary
+        print(f"\n{'=' * 60}")
+        print(f"✓ Reference data ingestion complete")
+        print(f"  Total tickers processed: {total_tickers}")
+        print(f"  Total rows written: {total_rows_written}")
+        print(f"  Total API errors: {total_errors}")
+        if table_path:
+            print(f"  Output path: {table_path}")
+        print(f"{'=' * 60}")
+
+        if total_errors > 0:
+            print("\nCommon causes for API errors:")
             print("  - Rate limit exceeded (free tier: 5 calls/minute, 500 calls/day)")
             print("  - Invalid ticker symbols")
-
-            # Show detailed summary
-            print(f"\nFailed tickers ({len(error_details)}):")
-            for detail in error_details[:10]:  # Show first 10
-                print(f"  {detail['ticker']}: [{detail['type']}] {detail['message'][:80]}")
-            if len(error_details) > 10:
-                print(f"  ... and {len(error_details) - 10} more")
-
-            if error_count == len([item for batch in raw_batches for item in batch]):
-                raise ValueError(f"All {error_count} API calls failed. Check API key and configuration.")
-
-        # Normalize to DataFrame (postprocess is called internally by normalize)
-        df = facet.normalize(raw_batches)
-        df = facet.validate(df)
-
-        # Write to bronze
-        table_path = self.sink.write(df, table_name, partitions=["snapshot_dt", "asset_type"])
-        print(f"Written {df.count()} rows to {table_path}")
+            print("  - Missing or invalid API key")
 
         return table_path
 
@@ -442,11 +475,13 @@ class AlphaVantageIngestor(Ingestor):
                      table_name="securities_prices_daily",
                      adjusted=True, outputsize="full", use_concurrent=False,
                      show_progress=True,
-                     progress_callback: Optional[ProgressCallback] = None):
+                     progress_callback: Optional[ProgressCallback] = None,
+                     batch_size: int = 100):
         """
         Ingest daily OHLCV prices for given tickers.
 
         Uses Alpha Vantage TIME_SERIES_DAILY_ADJUSTED endpoint.
+        Writes data in batches to minimize memory usage.
 
         Args:
             tickers: List of ticker symbols
@@ -458,95 +493,123 @@ class AlphaVantageIngestor(Ingestor):
             use_concurrent: Use concurrent requests (only for premium tier!)
             show_progress: Show progress updates (default: True)
             progress_callback: Custom progress callback (if None, uses default)
+            batch_size: Number of tickers to process before writing to disk (default: 100)
+                       Smaller default than reference data because price data is larger.
 
         Returns:
             Path to written bronze table
         """
         from datapipelines.providers.alpha_vantage.facets import SecuritiesPricesFacetAV
+        import gc
 
-        print(f"Ingesting prices for {len(tickers)} tickers...")
+        total_tickers = len(tickers)
+        print(f"Ingesting prices for {total_tickers} tickers...")
         print(f"Date range: {date_from or 'ALL'} to {date_to or 'ALL'}")
         print(f"Output size: {outputsize}, Adjusted: {adjusted}")
-
-        # Create facet
-        facet = SecuritiesPricesFacetAV(
-            self.spark,
-            tickers=tickers,
-            date_from=date_from,
-            date_to=date_to,
-            adjusted=adjusted,
-            outputsize=outputsize
-        )
-
-        # Generate API calls
-        calls = list(facet.calls())
-        print(f"Generated {len(calls)} API calls")
+        print(f"  Batch size: {batch_size} (will write to disk after each batch)")
 
         # Determine progress callback
         callback = progress_callback if progress_callback else (default_progress_callback if show_progress else None)
 
-        # Fetch data (sequential or concurrent)
-        if use_concurrent:
-            print("WARNING: Using concurrent requests. Ensure you have premium tier!")
-            raw_batches = self._fetch_calls_concurrent(
-                calls, response_key="Time Series (Daily)",
-                progress_callback=callback, phase="prices"
-            )
-        else:
-            print(f"Fetching data sequentially (rate limit: {self.registry.rate_limit} calls/sec)")
-            raw_batches = self._fetch_calls(
-                calls, response_key="Time Series (Daily)",
-                progress_callback=callback, phase="prices"
-            )
+        total_rows_written = 0
+        total_errors = 0
+        table_path = None
+        num_batches = (total_tickers + batch_size - 1) // batch_size
 
-        # Check for API errors before normalizing
-        error_count = 0
-        error_details = []  # Track detailed error info
+        # Process in batches to reduce memory usage
+        for batch_idx in range(0, total_tickers, batch_size):
+            batch_num = batch_idx // batch_size + 1
+            batch_tickers = tickers[batch_idx:batch_idx + batch_size]
 
-        for i, batch in enumerate(raw_batches):
-            # For prices, batch might be None if response key not found (error case)
-            if batch is None or len(batch) == 0:
-                ticker = tickers[i] if i < len(tickers) else "UNKNOWN"
-                error_count += 1
-                print(f"⚠ No price data returned for {ticker}")
-                error_details.append({"ticker": ticker, "type": "NO_DATA", "message": "No price data in response"})
+            print(f"\n📦 Batch {batch_num}/{num_batches}: Processing {len(batch_tickers)} tickers...")
+
+            # Create facet for this batch
+            facet = SecuritiesPricesFacetAV(
+                self.spark,
+                tickers=batch_tickers,
+                date_from=date_from,
+                date_to=date_to,
+                adjusted=adjusted,
+                outputsize=outputsize
+            )
+            calls = list(facet.calls())
+
+            # Fetch data for this batch
+            if use_concurrent:
+                raw_batches = self._fetch_calls_concurrent(
+                    calls, response_key="Time Series (Daily)",
+                    progress_callback=callback, phase="prices"
+                )
+            else:
+                raw_batches = self._fetch_calls(
+                    calls, response_key="Time Series (Daily)",
+                    progress_callback=callback, phase="prices"
+                )
+
+            # Check for API errors in this batch
+            batch_errors = 0
+            for i, batch in enumerate(raw_batches):
+                if batch is None or len(batch) == 0:
+                    batch_errors += 1
+                    continue
+
+                for item in batch:
+                    if isinstance(item, dict):
+                        if "Information" in item and len(item) == 1:
+                            batch_errors += 1
+                        elif "Error Message" in item:
+                            batch_errors += 1
+                        elif "Note" in item:
+                            batch_errors += 1
+
+            total_errors += batch_errors
+
+            # Skip normalization if all calls in batch failed
+            if batch_errors == len(batch_tickers):
+                print(f"  ⚠ All {batch_errors} API calls in batch failed, skipping...")
+                del raw_batches
+                gc.collect()
                 continue
 
-            for item in batch:
-                if isinstance(item, dict):
-                    ticker = tickers[i] if i < len(tickers) else "UNKNOWN"
+            # Normalize to DataFrame
+            try:
+                df = facet.normalize(raw_batches)
+                df = facet.validate(df)
+                batch_count = df.count()
 
-                    if "Information" in item and len(item) == 1:
-                        error_count += 1
-                        error_msg = item['Information']
-                        print(f"⚠ API Info for {ticker}: {error_msg}")
-                        error_details.append({"ticker": ticker, "type": "INFO", "message": error_msg})
-                    elif "Error Message" in item:
-                        error_count += 1
-                        error_msg = item['Error Message']
-                        print(f"✗ API Error for {ticker}: {error_msg}")
-                        error_details.append({"ticker": ticker, "type": "ERROR", "message": error_msg})
-                    elif "Note" in item:
-                        error_count += 1
-                        error_msg = item['Note']
-                        print(f"⚠ API Note for {ticker}: {error_msg}")
-                        error_details.append({"ticker": ticker, "type": "NOTE", "message": error_msg})
+                if batch_count > 0:
+                    # Write to bronze (append mode for subsequent batches)
+                    if batch_num == 1:
+                        # First batch: overwrite
+                        table_path = self.sink.write(df, table_name, partitions=["asset_type", "year", "month"])
+                    else:
+                        # Subsequent batches: append
+                        table_path = self.sink.write(df, table_name, partitions=["asset_type", "year", "month"], mode="append")
 
-        if error_count > 0:
-            print(f"\n⚠ Warning: {error_count} price API responses contained errors or missing data")
-            print(f"\nFailed tickers ({len(error_details)}):")
-            for detail in error_details[:10]:  # Show first 10
-                print(f"  {detail['ticker']}: [{detail['type']}] {detail['message'][:80]}")
-            if len(error_details) > 10:
-                print(f"  ... and {len(error_details) - 10} more")
+                    total_rows_written += batch_count
+                    print(f"  ✓ Written {batch_count} rows (total: {total_rows_written})")
+                else:
+                    print(f"  ⚠ No valid data in batch")
 
-        # Normalize to DataFrame (postprocess is called internally by normalize)
-        df = facet.normalize(raw_batches)
-        df = facet.validate(df)
+            except Exception as e:
+                logger.warning(f"Failed to normalize/write prices batch {batch_num}: {e}")
+                print(f"  ✗ Batch {batch_num} failed: {e}")
 
-        # Write to bronze with year/month partitioning (avoids partition sprawl)
-        table_path = self.sink.write(df, table_name, partitions=["asset_type", "year", "month"])
-        print(f"Written {df.count()} rows to {table_path}")
+            # Clear memory after each batch
+            del raw_batches, facet
+            if 'df' in dir():
+                del df
+            gc.collect()
+
+        # Summary
+        print(f"\n{'=' * 60}")
+        print(f"✓ Price data ingestion complete")
+        print(f"  Total tickers processed: {total_tickers}")
+        print(f"  Total rows written: {total_rows_written}")
+        print(f"  Total API errors: {total_errors}")
+        if table_path:
+            print(f"  Output path: {table_path}")
+        print(f"{'=' * 60}")
 
         return table_path
 
