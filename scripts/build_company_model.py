@@ -8,6 +8,7 @@ Usage:
 from __future__ import annotations
 
 import sys
+import json
 from pathlib import Path
 
 from utils.repo import setup_repo_imports
@@ -40,13 +41,39 @@ def main():
         print(f"✗ Failed to create Spark session: {e}")
         return 1
 
-    # Load model
+    # Load configuration
+    try:
+        # Load storage config
+        storage_path = repo_root / "configs" / "storage.json"
+        with open(storage_path) as f:
+            storage_cfg = json.load(f)
+        print("✓ Storage config loaded")
+
+        # Load model config using ModelConfigLoader (handles modular YAMLs)
+        from config.model_loader import ModelConfigLoader
+        models_dir = repo_root / "configs" / "models"
+        loader = ModelConfigLoader(models_dir)
+        model_cfg = loader.load_model_config("company")
+        print("✓ Model config loaded")
+
+    except Exception as e:
+        print(f"✗ Failed to load configuration: {e}")
+        spark.stop()
+        return 1
+
+    # Load model with correct initialization
     try:
         from models.implemented.company.model import CompanyModel
 
-        print("\nLoading company model configuration...")
-        model = CompanyModel(spark=spark)
-        print(f"✓ Model loaded: {model.name}")
+        print("\nInitializing company model...")
+        model = CompanyModel(
+            connection=spark,
+            storage_cfg=storage_cfg,
+            model_cfg=model_cfg,
+            params={},
+            repo_root=repo_root
+        )
+        print(f"✓ Model initialized: {model.model_name}")
 
     except Exception as e:
         print(f"✗ Failed to load model: {e}")
@@ -83,8 +110,12 @@ def main():
         print("\nWriting to silver layer...")
         print("-" * 70)
 
-        model.write()
-        print("✓ Written to silver layer")
+        # Determine output root from storage config
+        silver_root = storage_cfg.get("roots", {}).get("company_silver", "storage/silver/company")
+        output_path = repo_root / silver_root
+
+        model.write_tables(output_root=str(output_path))
+        print(f"✓ Written to silver layer: {output_path}")
 
     except Exception as e:
         print(f"✗ Write failed: {e}")
