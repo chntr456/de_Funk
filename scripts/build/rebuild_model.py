@@ -42,7 +42,7 @@ except ImportError:
     DUCKDB_AVAILABLE = False
 
 from models.registry import ModelRegistry
-from scripts.reset_model import ModelResetter
+from scripts.maintenance.reset_model import ModelResetter
 
 logging.basicConfig(
     level=logging.INFO,
