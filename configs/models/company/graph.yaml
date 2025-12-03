@@ -1,6 +1,13 @@
 # Company graph definition
+#
+# Financial statements (income_statements, balance_sheets, cash_flows) are linked
+# via ticker → securities_reference → cik. This allows company-level reporting
+# even when tickers change (CIK is permanent).
 
 nodes:
+  # ===========================================================================
+  # DIMENSIONS
+  # ===========================================================================
   dim_company:
     from: bronze.securities_reference
     filters:
@@ -23,20 +30,226 @@ nodes:
     tags: [dim, entity, corporate]
     unique_key: [cik]  # CIK is permanent, survives ticker changes
 
-  # Placeholder for future fact tables (will be populated from SEC EDGAR API)
-  # fact_company_financials:
-  #   from: bronze.company_financials
-  #   select: {...}
+  # Ticker-to-CIK lookup (used for joining financial statements)
+  _ticker_cik_lookup:
+    from: bronze.securities_reference
+    filters:
+      - "cik IS NOT NULL"
+    select:
+      ticker: ticker
+      cik: cik
+    unique_key: [ticker]
+    tags: [internal, lookup]
 
-  # fact_company_filings:
-  #   from: bronze.sec_filings
-  #   select: {...}
+  # ===========================================================================
+  # FACT TABLES - Financial Statements
+  # ===========================================================================
+
+  # Income Statement Facts
+  fact_income_statement:
+    from: bronze.income_statements
+    join:
+      - table: _ticker_cik_lookup
+        on: ["ticker=ticker"]
+        type: inner  # Only include tickers with CIK
+    select:
+      # Keys
+      cik: _ticker_cik_lookup.cik
+      ticker: ticker
+      fiscal_date_ending: fiscal_date_ending
+      report_type: report_type
+      # Revenue & Profit
+      total_revenue: total_revenue
+      cost_of_revenue: cost_of_revenue
+      gross_profit: gross_profit
+      operating_income: operating_income
+      net_income: net_income
+      ebit: ebit
+      ebitda: ebitda
+      # Expenses
+      operating_expenses: operating_expenses
+      sg_and_a: sg_and_a
+      research_and_development: research_and_development
+      depreciation_and_amortization: depreciation_and_amortization
+      interest_expense: interest_expense
+      income_tax_expense: income_tax_expense
+      # Metadata
+      reported_currency: reported_currency
+      snapshot_date: snapshot_date
+    derive:
+      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup.cik)"
+      report_date: "fiscal_date_ending"  # Alias for calendar joins
+    tags: [fact, financials, income_statement]
+    unique_key: [cik, fiscal_date_ending, report_type]
+
+  # Balance Sheet Facts
+  fact_balance_sheet:
+    from: bronze.balance_sheets
+    join:
+      - table: _ticker_cik_lookup
+        on: ["ticker=ticker"]
+        type: inner
+    select:
+      # Keys
+      cik: _ticker_cik_lookup.cik
+      ticker: ticker
+      fiscal_date_ending: fiscal_date_ending
+      report_type: report_type
+      # Assets
+      total_assets: total_assets
+      total_current_assets: total_current_assets
+      cash_and_equivalents: cash_and_equivalents
+      inventory: inventory
+      current_net_receivables: current_net_receivables
+      total_non_current_assets: total_non_current_assets
+      property_plant_equipment: property_plant_equipment
+      goodwill: goodwill
+      intangible_assets: intangible_assets
+      # Liabilities
+      total_liabilities: total_liabilities
+      total_current_liabilities: total_current_liabilities
+      current_accounts_payable: current_accounts_payable
+      total_non_current_liabilities: total_non_current_liabilities
+      long_term_debt: long_term_debt
+      total_debt: total_debt
+      # Equity
+      total_shareholder_equity: total_shareholder_equity
+      retained_earnings: retained_earnings
+      common_stock: common_stock
+      shares_outstanding: shares_outstanding
+      # Metadata
+      reported_currency: reported_currency
+      snapshot_date: snapshot_date
+    derive:
+      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup.cik)"
+      report_date: "fiscal_date_ending"
+    tags: [fact, financials, balance_sheet]
+    unique_key: [cik, fiscal_date_ending, report_type]
+
+  # Cash Flow Facts
+  fact_cash_flow:
+    from: bronze.cash_flows
+    join:
+      - table: _ticker_cik_lookup
+        on: ["ticker=ticker"]
+        type: inner
+    select:
+      # Keys
+      cik: _ticker_cik_lookup.cik
+      ticker: ticker
+      fiscal_date_ending: fiscal_date_ending
+      report_type: report_type
+      # Operating
+      operating_cashflow: operating_cashflow
+      depreciation_depletion_amortization: depreciation_depletion_amortization
+      change_in_receivables: change_in_receivables
+      change_in_inventory: change_in_inventory
+      profit_loss: profit_loss
+      net_income: net_income
+      # Investing
+      cashflow_from_investment: cashflow_from_investment
+      capital_expenditures: capital_expenditures
+      # Financing
+      cashflow_from_financing: cashflow_from_financing
+      dividend_payout: dividend_payout
+      dividend_payout_common_stock: dividend_payout_common_stock
+      payments_repurchase_common_stock: payments_repurchase_common_stock
+      proceeds_issuance_long_term_debt: proceeds_issuance_long_term_debt
+      # Summary
+      change_in_cash: change_in_cash
+      free_cash_flow: free_cash_flow
+      # Metadata
+      reported_currency: reported_currency
+      snapshot_date: snapshot_date
+    derive:
+      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup.cik)"
+      report_date: "fiscal_date_ending"
+    tags: [fact, financials, cash_flow]
+    unique_key: [cik, fiscal_date_ending, report_type]
+
+  # Earnings Facts (EPS actual vs estimate)
+  fact_earnings:
+    from: bronze.earnings
+    join:
+      - table: _ticker_cik_lookup
+        on: ["ticker=ticker"]
+        type: inner
+    select:
+      # Keys
+      cik: _ticker_cik_lookup.cik
+      ticker: ticker
+      fiscal_date_ending: fiscal_date_ending
+      report_type: report_type
+      # Earnings data
+      reported_date: reported_date
+      reported_eps: reported_eps
+      estimated_eps: estimated_eps
+      surprise: surprise
+      surprise_percentage: surprise_percentage
+      beat_estimate: beat_estimate
+      # Metadata
+      snapshot_date: snapshot_date
+    derive:
+      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup.cik)"
+      report_date: "fiscal_date_ending"
+    tags: [fact, financials, earnings]
+    unique_key: [cik, fiscal_date_ending, report_type]
 
 edges:
-  # Future edge: company to calendar for fiscal periods
-  # company_financials_to_calendar:
-  #   from: fact_company_financials
-  #   to: core.dim_calendar
-  #   on: ["report_date=date"]
-  #   type: left
-  #   description: "Link financials to calendar"
+  # Link financial statements to company dimension
+  income_statement_to_company:
+    from: fact_income_statement
+    to: dim_company
+    on: ["cik=cik"]
+    type: left
+    description: "Link income statements to company"
+
+  balance_sheet_to_company:
+    from: fact_balance_sheet
+    to: dim_company
+    on: ["cik=cik"]
+    type: left
+    description: "Link balance sheets to company"
+
+  cash_flow_to_company:
+    from: fact_cash_flow
+    to: dim_company
+    on: ["cik=cik"]
+    type: left
+    description: "Link cash flows to company"
+
+  earnings_to_company:
+    from: fact_earnings
+    to: dim_company
+    on: ["cik=cik"]
+    type: left
+    description: "Link earnings to company"
+
+  # Link to calendar for time-series analysis
+  income_statement_to_calendar:
+    from: fact_income_statement
+    to: core.dim_calendar
+    on: ["report_date=date"]
+    type: left
+    description: "Link income statements to calendar"
+
+  balance_sheet_to_calendar:
+    from: fact_balance_sheet
+    to: core.dim_calendar
+    on: ["report_date=date"]
+    type: left
+    description: "Link balance sheets to calendar"
+
+  cash_flow_to_calendar:
+    from: fact_cash_flow
+    to: core.dim_calendar
+    on: ["report_date=date"]
+    type: left
+    description: "Link cash flows to calendar"
+
+  earnings_to_calendar:
+    from: fact_earnings
+    to: core.dim_calendar
+    on: ["report_date=date"]
+    type: left
+    description: "Link earnings to calendar"
