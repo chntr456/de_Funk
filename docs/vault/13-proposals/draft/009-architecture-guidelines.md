@@ -120,8 +120,7 @@ DOES NOT:
 │  │   └── facet.py          Base transformation class           │
 │  ├── facets/               Schema transformations               │
 │  ├── ingestors/            Orchestration per provider          │
-│  │   ├── bronze_sink.py    Write to Bronze layer               │
-│  │   └── company_ingestor.py                                   │
+│  │   └── bronze_sink.py    Write to Bronze layer (Delta)       │
 │  └── providers/            Provider-specific code              │
 │      ├── alpha_vantage/                                        │
 │      ├── bls/                                                  │
@@ -131,7 +130,7 @@ DOES NOT:
 RESPONSIBILITIES:
 ✅ Fetch data from external APIs
 ✅ Transform raw data to normalized schemas (Facets)
-✅ Write to Bronze layer (Parquet)
+✅ Write to Bronze layer (Delta Lake - default format)
 ✅ Handle rate limiting, retries, errors
 
 DOES NOT:
