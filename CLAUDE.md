@@ -1,13 +1,23 @@
 # CLAUDE.md - AI Assistant Guide for de_Funk
 
-**Last Updated**: 2025-11-30
-**Version**: 2.2
+**Last Updated**: 2025-12-03
+**Version**: 2.3
 
 This document provides comprehensive guidance for AI assistants (like Claude) working with the de_Funk codebase. It covers project structure, architecture patterns, development workflows, and key conventions.
 
 **Architecture Diagram**: See `docs/architecture-diagram.drawio` for visual representation of the system architecture.
 
-**Recent Updates (v2.2)** - Large File Refactoring & Backend Abstraction:
+**Recent Updates (v2.3)** - Delta Lake Migration:
+- **✅ Delta Lake is now the default storage format** for all Bronze and Silver layers
+  - ACID transactions for data reliability
+  - Time travel / version history for debugging and auditing
+  - Schema evolution for seamless updates
+  - Efficient merge/upsert operations
+- **Migration script**: `python -m scripts.maintenance.migrate_parquet_to_delta` converts existing Parquet tables
+- **Auto-detection**: Readers auto-detect Delta vs Parquet format for backwards compatibility
+- **Updated components**: BronzeSink, ModelWriter, BronzeTable, SilverPath, GraphBuilder
+
+**Previous Updates (v2.2)** - Large File Refactoring & Backend Abstraction:
 - **✅ Large File Refactoring**: Proposal 008 implemented (see `docs/vault/13-proposals/accepted/`)
   - `models/base/model.py`: 1,312 → 397 lines (composition with graph_builder, table_accessor, etc.)
   - `models/api/session.py`: 1,122 → 410 lines (extracted auto_join, aggregation handlers)
@@ -229,8 +239,9 @@ de_Funk/
 - **Streamlit**: Web-based UI framework
 
 ### Data Processing
+- **Delta Lake**: Default storage format (ACID, time travel, schema evolution)
 - **Pandas**: Data manipulation and analysis
-- **PyArrow**: Parquet file support and columnar data
+- **PyArrow**: Columnar data and Delta Lake integration
 - **NetworkX**: Model dependency graph management
 
 ### Visualization
@@ -255,14 +266,14 @@ de_Funk/
 
 #### Bronze Layer (Raw Data)
 - **Purpose**: Store raw, unprocessed data from APIs
-- **Format**: Partitioned Parquet files
+- **Format**: Delta Lake tables (v2.3+) - provides ACID, time travel, schema evolution
 - **Path**: `storage/bronze/{provider}/{table}/`
 - **Organization**: By data provider (alpha_vantage, bls, chicago)
 - **Schema**: Facet-normalized schemas
 
 #### Silver Layer (Dimensional Models)
 - **Purpose**: Clean, transformed dimensional models ready for analytics
-- **Format**: Star/snowflake schemas with facts and dimensions
+- **Format**: Delta Lake tables with star/snowflake schemas
 - **Path**: `storage/silver/{model}/{table}/`
 - **Configuration**: YAML-driven graph transformations
 - **Models**: 8 domain models with cross-model relationships
@@ -1010,12 +1021,17 @@ Located in `/scripts/`:
 
 ### Storage Conventions
 
-- **Parquet format**: All persistent data storage (Bronze/Silver)
+- **Delta Lake format** (v2.3+): Default storage format for all Bronze/Silver layers
+  - ACID transactions for data reliability
+  - Time travel queries: `spark.read.format("delta").option("versionAsOf", 5).load(path)`
+  - Schema evolution: Automatic handling of new columns
+  - Migrate existing Parquet: `python -m scripts.maintenance.migrate_parquet_to_delta`
 - **Partitioned data**: Efficient querying and updates
-- **Bronze**: `storage/bronze/{provider}/{table}/` - Raw ingested data
-- **Silver**: `storage/silver/{model}/{table}/` - Dimensional models
-- **DuckDB**: `storage/duckdb/analytics.db` - Query catalog and metadata (does NOT duplicate data)
+- **Bronze**: `storage/bronze/{provider}/{table}/` - Raw ingested data (Delta Lake)
+- **Silver**: `storage/silver/{model}/{table}/` - Dimensional models (Delta Lake)
+- **DuckDB**: `storage/duckdb/analytics.db` - Query catalog and metadata (reads Delta tables directly)
 - **Versioning**: Track schema versions in YAML
+- **Auto-detection**: Readers auto-detect Delta vs Parquet for backwards compatibility
 
 ### API Conventions
 

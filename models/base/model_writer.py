@@ -5,6 +5,12 @@ Handles persistence of model tables to storage:
 - write_tables: Write all dimensions and facts to Silver layer
 
 This module is used by BaseModel via composition.
+
+Default storage format is Delta Lake (v2.0+) for:
+- ACID transactions
+- Time travel / version history
+- Schema evolution
+- Efficient upserts
 """
 
 from typing import Dict, Any, Optional, List
@@ -15,14 +21,17 @@ logger = logging.getLogger(__name__)
 # Type alias for DataFrame (can be Spark or DuckDB)
 DataFrame = Any
 
+# Default storage format
+DEFAULT_FORMAT = "delta"
+
 
 class ModelWriter:
     """
     Handles writing model tables to persistent storage.
 
     Supports:
-    - Optimized Parquet writing with ParquetLoader
-    - Standard Spark writer as fallback
+    - Delta Lake format (default - ACID transactions, time travel)
+    - Parquet format (legacy fallback)
     - Partitioning and sorting
     """
 
@@ -46,22 +55,22 @@ class ModelWriter:
     def write_tables(
         self,
         output_root: Optional[str] = None,
-        format: str = "parquet",
+        format: Optional[str] = None,
         mode: str = "overwrite",
-        use_optimized_writer: bool = True,
+        use_optimized_writer: bool = False,
         partition_by: Optional[Dict[str, List[str]]] = None
     ):
         """
         Write all model tables to storage.
 
         This is the standard way to persist a model's Silver layer.
-        Uses optimized ParquetLoader by default for better performance.
+        Default format is Delta Lake (v2.0+).
 
         Args:
             output_root: Root path for output (defaults to storage_cfg silver root for this model)
-            format: Output format (parquet, delta, etc.)
+            format: Output format (default: "delta" from storage_cfg or DEFAULT_FORMAT)
             mode: Write mode (overwrite, append, etc.)
-            use_optimized_writer: Use ParquetLoader for optimized writes (recommended)
+            use_optimized_writer: Use ParquetLoader for parquet format (legacy)
             partition_by: Optional dict of table_name -> partition_columns
 
         Returns:
@@ -74,6 +83,9 @@ class ModelWriter:
                 partition_by={"fact_prices": ["trade_date"]}
             )
         """
+        # Get format from storage config or use default
+        if format is None:
+            format = self.storage_cfg.get("defaults", {}).get("format", DEFAULT_FORMAT)
         # Ensure model is built
         self.model.ensure_built()
 

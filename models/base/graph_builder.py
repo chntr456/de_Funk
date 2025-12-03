@@ -183,6 +183,9 @@ class GraphBuilder:
         """
         Load a Bronze table using StorageRouter.
 
+        Supports both Delta Lake (default) and Parquet formats.
+        Auto-detects format based on presence of _delta_log directory.
+
         Args:
             table_name: Logical table name (from storage config)
 
@@ -193,12 +196,13 @@ class GraphBuilder:
         if self.backend == 'spark':
             from models.api.dal import BronzeTable
             # BronzeTable expects SparkSession, not SparkConnection
+            # BronzeTable auto-detects Delta/Parquet format
             bronze = BronzeTable(self.connection.spark, self.storage_router, table_name)
             return bronze.read(merge_schema=True)
         else:
-            # DuckDB or other connection types
+            # DuckDB - use read_table which auto-detects Delta/Parquet
             path = self.storage_router.bronze_path(table_name)
-            return self.connection.read_parquet(path)
+            return self.connection.read_table(path)
 
     def _apply_derive(self, df: DataFrame, col_name: str, expr: str, node_id: str) -> DataFrame:
         """

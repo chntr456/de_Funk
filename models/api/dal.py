@@ -29,6 +29,10 @@ class StorageRouter:
         return path
 
 class BronzeTable:
+    """
+    Reads Bronze layer tables (default: Delta Lake format).
+    """
+
     def __init__(self, spark: SparkSession, router: StorageRouter, logical_table: str):
         self.spark = spark
         self.router = router
@@ -38,9 +42,14 @@ class BronzeTable:
     def path(self) -> str:
         return self.router.bronze_path(self.logical_table)
 
+    def _is_delta_table(self, path: str) -> bool:
+        """Check if path contains a Delta table."""
+        delta_log = Path(path) / "_delta_log"
+        return delta_log.exists()
+
     def read(self, merge_schema: bool = True) -> DataFrame:
         """
-        Read bronze table from parquet.
+        Read bronze table (auto-detects Delta Lake or Parquet).
 
         Args:
             merge_schema: If True, merges schemas across partitions to handle schema evolution.
@@ -50,18 +59,32 @@ class BronzeTable:
         Returns:
             DataFrame with data from all partitions
         """
+        path = self.path
+
+        # Auto-detect Delta Lake tables
+        if self._is_delta_table(path):
+            return (
+                self.spark.read
+                .format("delta")
+                .option("mergeSchema", str(merge_schema).lower())
+                .load(path)
+            )
+
+        # Fallback to Parquet for legacy tables
         return (
             self.spark.read
             .option("mergeSchema", str(merge_schema).lower())
-            .parquet(self.path)
+            .parquet(path)
         )
 
 class SilverPath:
     """
     Represents a materialized silver 'path' (fact/view) built by the model builder.
-    If you write silver outputs to Parquet, this reads them by path; if you keep them in-memory,
-    you can inject a DataFrame via `override_df`.
+
+    Reads from Delta Lake format by default, with fallback to Parquet for legacy tables.
+    If you keep tables in-memory, you can inject a DataFrame via `override_df`.
     """
+
     def __init__(self, spark: SparkSession, router: StorageRouter, logical_rel: str):
         self.spark = spark
         self.router = router
@@ -72,10 +95,24 @@ class SilverPath:
     def path(self) -> str:
         return self.router.silver_path(self.logical_rel)
 
+    def _is_delta_table(self, path: str) -> bool:
+        """Check if path contains a Delta table."""
+        delta_log = Path(path) / "_delta_log"
+        return delta_log.exists()
+
     def read(self) -> DataFrame:
+        """Read silver table (auto-detects Delta Lake or Parquet)."""
         if self._override_df is not None:
             return self._override_df
-        return self.spark.read.parquet(self.path)
+
+        path = self.path
+
+        # Auto-detect Delta Lake tables
+        if self._is_delta_table(path):
+            return self.spark.read.format("delta").load(path)
+
+        # Fallback to Parquet for legacy tables
+        return self.spark.read.parquet(path)
 
     def set_df(self, df: DataFrame):
         self._override_df = df

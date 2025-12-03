@@ -3,6 +3,10 @@
     "type": "duckdb",
     "comment": "Default for UI only (10-100x faster). All data pipelines (ingestion + model builds) override to 'spark'. Set CONNECTION_TYPE env var to override."
   },
+  "defaults": {
+    "format": "delta",
+    "comment": "Delta Lake is the default storage format for all Bronze and Silver tables. Provides ACID transactions, time travel, and schema evolution."
+  },
   "roots": {
     "bronze": "storage/bronze",
     "silver": "storage/silver",
