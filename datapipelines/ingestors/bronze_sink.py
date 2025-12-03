@@ -101,13 +101,26 @@ class BronzeSink:
             mode: Write mode (overwrite, append, merge)
             partitions: Partition columns
         """
+        from pathlib import Path as PathLib
+
         writer = df.write.format("delta").mode(mode)
 
         if partitions:
             writer = writer.partitionBy(*partitions)
 
-        # Enable schema evolution for append mode
-        if mode == "append":
+        # Check if table exists and handle schema/partition evolution
+        is_existing_delta = (PathLib(path) / "_delta_log").exists()
+
+        if is_existing_delta:
+            # Enable schema evolution for all modes when table exists
             writer = writer.option("mergeSchema", "true")
+
+            # For overwrite mode, also allow schema replacement if merge fails
+            if mode == "overwrite":
+                writer = writer.option("overwriteSchema", "true")
+        else:
+            # New table - just enable merge schema for safety
+            if mode == "append":
+                writer = writer.option("mergeSchema", "true")
 
         writer.save(path)
