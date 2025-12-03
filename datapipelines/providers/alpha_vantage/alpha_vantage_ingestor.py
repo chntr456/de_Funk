@@ -424,6 +424,7 @@ class AlphaVantageIngestor(Ingestor):
                 continue
 
             # Normalize to DataFrame
+            df = None
             try:
                 df = facet.normalize(raw_batches)
                 df = facet.validate(df)
@@ -447,10 +448,33 @@ class AlphaVantageIngestor(Ingestor):
                 logger.warning(f"Failed to normalize/write batch {batch_num}: {e}")
                 print(f"  ✗ Batch {batch_num} failed: {e}")
 
-            # Clear memory after each batch
-            del raw_batches, facet
-            if 'df' in dir():
+            # Aggressive memory cleanup
+            # 1. Unpersist Spark DataFrame if it exists
+            if df is not None:
+                try:
+                    df.unpersist()
+                except Exception:
+                    pass
+
+            # 2. Clear references
+            del raw_batches
+            raw_batches = None
+            del facet
+            facet = None
+            if df is not None:
                 del df
+                df = None
+
+            # 3. Clear Spark's internal caches periodically
+            if batch_num % 5 == 0:
+                try:
+                    self.spark.catalog.clearCache()
+                    # Trigger JVM garbage collection (Python gc doesn't help JVM heap)
+                    self.spark.sparkContext._jvm.System.gc()
+                except Exception:
+                    pass
+
+            # 4. Force Python garbage collection
             gc.collect()
 
         # Summary
@@ -572,6 +596,7 @@ class AlphaVantageIngestor(Ingestor):
                 continue
 
             # Normalize to DataFrame
+            df = None
             try:
                 df = facet.normalize(raw_batches)
                 df = facet.validate(df)
@@ -595,10 +620,28 @@ class AlphaVantageIngestor(Ingestor):
                 logger.warning(f"Failed to normalize/write prices batch {batch_num}: {e}")
                 print(f"  ✗ Batch {batch_num} failed: {e}")
 
-            # Clear memory after each batch
-            del raw_batches, facet
-            if 'df' in dir():
+            # Aggressive memory cleanup
+            if df is not None:
+                try:
+                    df.unpersist()
+                except Exception:
+                    pass
+
+            del raw_batches
+            raw_batches = None
+            del facet
+            facet = None
+            if df is not None:
                 del df
+                df = None
+
+            if batch_num % 5 == 0:
+                try:
+                    self.spark.catalog.clearCache()
+                    self.spark.sparkContext._jvm.System.gc()
+                except Exception:
+                    pass
+
             gc.collect()
 
         # Summary
