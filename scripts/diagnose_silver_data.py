@@ -146,13 +146,19 @@ def main():
                 pattern = str(model_dir / table_name / "**" / "*.parquet")
                 df = conn.from_parquet(pattern, union_by_name=True, hive_partitioning=True)
 
-                # Get column info
+                # Get column info - show ALL columns in a nice format
                 columns = df.columns
                 print(f"\nColumns ({len(columns)}):")
-                for col in columns[:10]:  # Show first 10 columns
-                    print(f"  - {col}")
-                if len(columns) > 10:
-                    print(f"  ... and {len(columns) - 10} more")
+
+                # Calculate column width for nice alignment
+                max_col_width = max(len(col) for col in columns) if columns else 10
+                cols_per_row = max(1, 80 // (max_col_width + 4))
+
+                # Print columns in rows
+                for i in range(0, len(columns), cols_per_row):
+                    row_cols = columns[i:i + cols_per_row]
+                    formatted = "  " + "  ".join(f"{col:<{max_col_width}}" for col in row_cols)
+                    print(formatted)
 
                 # Get row count
                 count = df.count('*').fetchone()[0]
@@ -239,37 +245,50 @@ def main():
         print("\n[1] Testing stocks → company join (via CIK)...")
         logger.debug("Testing stocks → company join")
         try:
-            result = conn.execute("""
-                SELECT
-                    s.ticker,
-                    s.cik,
-                    s.company_id,
-                    c.company_name,
-                    c.sector
-                FROM stocks.dim_stock s
-                LEFT JOIN company.dim_company c ON s.company_id = c.company_id
-                LIMIT 3
-            """).fetchdf()
+            # Read from parquet directly since views may not exist
+            stocks_dim_path = silver_root / "stocks" / "dims" / "dim_stock"
+            company_dim_path = silver_root / "company" / "dims" / "dim_company"
 
-            print(f"✅ Join successful! Sample:")
-            print(result.to_string(index=False))
+            if stocks_dim_path.exists() and company_dim_path.exists():
+                result = conn.execute(f"""
+                    SELECT
+                        s.ticker,
+                        s.cik,
+                        s.company_id,
+                        c.company_name,
+                        c.sector
+                    FROM read_parquet('{stocks_dim_path}/**/*.parquet', hive_partitioning=true) s
+                    LEFT JOIN read_parquet('{company_dim_path}/**/*.parquet', hive_partitioning=true) c
+                        ON s.company_id = c.company_id
+                    LIMIT 3
+                """).fetchdf()
 
-            # Check join coverage
-            join_stats = conn.execute("""
-                SELECT
-                    COUNT(*) as total_stocks,
-                    COUNT(c.company_id) as with_company,
-                    COUNT(*) - COUNT(c.company_id) as without_company
-                FROM stocks.dim_stock s
-                LEFT JOIN company.dim_company c ON s.company_id = c.company_id
-            """).fetchone()
+                print(f"✅ Join successful! Sample:")
+                print(result.to_string(index=False))
 
-            total, with_co, without_co = join_stats
-            print(f"\nJoin coverage:")
-            print(f"  Total stocks: {total}")
-            print(f"  With company: {with_co} ({with_co/total*100:.1f}%)")
-            print(f"  Without company: {without_co} ({without_co/total*100:.1f}%)")
-            logger.info(f"stocks→company join: {with_co}/{total} ({with_co/total*100:.1f}%) matched")
+                # Check join coverage
+                join_stats = conn.execute(f"""
+                    SELECT
+                        COUNT(*) as total_stocks,
+                        COUNT(c.company_id) as with_company,
+                        COUNT(*) - COUNT(c.company_id) as without_company
+                    FROM read_parquet('{stocks_dim_path}/**/*.parquet', hive_partitioning=true) s
+                    LEFT JOIN read_parquet('{company_dim_path}/**/*.parquet', hive_partitioning=true) c
+                        ON s.company_id = c.company_id
+                """).fetchone()
+
+                total, with_co, without_co = join_stats
+                print(f"\nJoin coverage:")
+                print(f"  Total stocks: {total}")
+                print(f"  With company: {with_co} ({with_co/total*100:.1f}%)")
+                print(f"  Without company: {without_co} ({without_co/total*100:.1f}%)")
+                logger.info(f"stocks→company join: {with_co}/{total} ({with_co/total*100:.1f}%) matched")
+            else:
+                print(f"⚠️  Required tables not found:")
+                if not stocks_dim_path.exists():
+                    print(f"   Missing: {stocks_dim_path}")
+                if not company_dim_path.exists():
+                    print(f"   Missing: {company_dim_path}")
 
         except Exception as e:
             logger.error(f"stocks→company join failed: {e}", exc_info=True)
@@ -280,22 +299,27 @@ def main():
         print("\n[2] Testing stocks price aggregation...")
         logger.debug("Testing stocks price aggregation")
         try:
-            result = conn.execute("""
-                SELECT
-                    ticker,
-                    COUNT(*) as price_records,
-                    MIN(trade_date) as earliest_date,
-                    MAX(trade_date) as latest_date,
-                    AVG(close) as avg_close_price
-                FROM stocks.fact_stock_prices
-                GROUP BY ticker
-                ORDER BY price_records DESC
-                LIMIT 5
-            """).fetchdf()
+            # Read directly from parquet since views may not exist
+            prices_path = silver_root / "stocks" / "facts" / "fact_stock_prices"
+            if prices_path.exists():
+                result = conn.execute(f"""
+                    SELECT
+                        ticker,
+                        COUNT(*) as price_records,
+                        MIN(trade_date) as earliest_date,
+                        MAX(trade_date) as latest_date,
+                        ROUND(AVG(close), 2) as avg_close_price
+                    FROM read_parquet('{prices_path}/**/*.parquet', hive_partitioning=true)
+                    GROUP BY ticker
+                    ORDER BY price_records DESC
+                    LIMIT 5
+                """).fetchdf()
 
-            print(f"✅ Aggregation successful! Top 5 tickers by data:")
-            print(result.to_string(index=False))
-            logger.info("stocks price aggregation successful")
+                print(f"✅ Aggregation successful! Top 5 tickers by data:")
+                print(result.to_string(index=False))
+                logger.info("stocks price aggregation successful")
+            else:
+                print(f"⚠️  Prices table not found at {prices_path}")
 
         except Exception as e:
             logger.error(f"stocks price aggregation failed: {e}", exc_info=True)
