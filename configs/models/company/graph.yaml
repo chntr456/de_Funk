@@ -1,31 +1,34 @@
 # Company graph definition
 #
 # Financial statements (income_statements, balance_sheets, cash_flows) are linked
-# via ticker → securities_reference → cik. This allows company-level reporting
+# via ticker → company_reference → cik. This allows company-level reporting
 # even when tickers change (CIK is permanent).
+#
+# v2.1: Now reads from company_reference (separate from securities_reference)
+# This prevents bulk listing from overwriting company data
 
 nodes:
   # ===========================================================================
   # DIMENSIONS
   # ===========================================================================
   dim_company:
-    from: bronze.securities_reference
+    from: bronze.company_reference
     filters:
-      # Use 'type' column (raw Alpha Vantage value) instead of derived 'asset_type'
-      # 'type' contains raw values like 'Common Stock', 'ETF', etc.
-      - "type = 'Common Stock'"  # Only stock tickers have company data
-      - "cik IS NOT NULL"        # Must have CIK (Alpha Vantage provides this)
+      - "cik IS NOT NULL"  # Must have CIK (required for company identification)
     select:
       cik: cik  # SEC Central Index Key (10-digit, permanent identifier)
-      company_name: security_name
-      legal_name: security_name    # Will be updated when we get proper SEC data
+      company_name: company_name
+      legal_name: company_name    # Will be updated when we get proper SEC data
       ticker_primary: ticker
-      sic_code: sic_code
-      sic_description: sic_description
-      exchange_code: primary_exchange
+      exchange_code: exchange_code
       is_active: is_active
       sector: sector
       industry: industry
+      market_cap: market_cap
+      shares_outstanding: shares_outstanding
+      pe_ratio: pe_ratio
+      eps: eps
+      dividend_yield: dividend_yield
     derive:
       company_id: "CONCAT('COMPANY_', cik)"  # Use permanent CIK identifier
       incorporation_country: "'US'"  # Default, update from SEC data later
@@ -34,7 +37,7 @@ nodes:
 
   # Ticker-to-CIK lookup (used for joining financial statements)
   _ticker_cik_lookup:
-    from: bronze.securities_reference
+    from: bronze.company_reference
     filters:
       - "cik IS NOT NULL"
     select:

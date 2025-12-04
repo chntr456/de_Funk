@@ -345,6 +345,10 @@ class AlphaVantageIngestor(Ingestor):
         Uses Alpha Vantage OVERVIEW endpoint to get company fundamentals.
         Writes data in batches to minimize memory usage.
 
+        Writes to TWO tables:
+        1. securities_reference - ticker info for stocks model
+        2. company_reference - company data (CIK, sector, etc.) for company model
+
         Args:
             tickers: List of ticker symbols
             table_name: Bronze table name (default: securities_reference)
@@ -358,6 +362,7 @@ class AlphaVantageIngestor(Ingestor):
             Path to written bronze table
         """
         from datapipelines.providers.alpha_vantage.facets import SecuritiesReferenceFacetAV
+        from datapipelines.providers.alpha_vantage.facets.company_reference_facet import CompanyReferenceFacet
         import gc
 
         total_tickers = len(tickers)
@@ -423,8 +428,9 @@ class AlphaVantageIngestor(Ingestor):
                 gc.collect()
                 continue
 
-            # Normalize to DataFrame
+            # Normalize to DataFrame for securities_reference
             df = None
+            company_df = None
             try:
                 df = facet.normalize(raw_batches)
                 df = facet.validate(df)
@@ -441,7 +447,26 @@ class AlphaVantageIngestor(Ingestor):
                     )
 
                     total_rows_written += batch_count
-                    print(f"  ✓ Written {batch_count} rows (total: {total_rows_written})")
+                    print(f"  ✓ Written {batch_count} securities rows (total: {total_rows_written})")
+
+                    # ALSO write to company_reference table (separate from securities)
+                    # This prevents bulk listing from overwriting company data
+                    try:
+                        company_facet = CompanyReferenceFacet(self.spark, tickers=batch_tickers)
+                        company_df = company_facet.postprocess(df)  # Reuse the already-fetched data
+                        company_count = company_df.count()
+
+                        if company_count > 0:
+                            self.sink.upsert(
+                                company_df,
+                                "company_reference",
+                                key_columns=["ticker"],
+                                partitions=["snapshot_dt"]
+                            )
+                            print(f"  ✓ Written {company_count} company rows")
+                    except Exception as ce:
+                        logger.warning(f"Failed to write company data: {ce}")
+                        print(f"  ⚠ Company data write failed: {ce}")
                 else:
                     print(f"  ⚠ No valid data in batch")
 
@@ -450,10 +475,15 @@ class AlphaVantageIngestor(Ingestor):
                 print(f"  ✗ Batch {batch_num} failed: {e}")
 
             # Aggressive memory cleanup
-            # 1. Unpersist Spark DataFrame if it exists
+            # 1. Unpersist Spark DataFrames if they exist
             if df is not None:
                 try:
                     df.unpersist()
+                except Exception:
+                    pass
+            if company_df is not None:
+                try:
+                    company_df.unpersist()
                 except Exception:
                     pass
 
@@ -465,6 +495,9 @@ class AlphaVantageIngestor(Ingestor):
             if df is not None:
                 del df
                 df = None
+            if company_df is not None:
+                del company_df
+                company_df = None
 
             # 3. Clear Spark's internal caches periodically
             if batch_num % 5 == 0:
