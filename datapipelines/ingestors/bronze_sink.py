@@ -108,19 +108,13 @@ class BronzeSink:
         if partitions:
             writer = writer.partitionBy(*partitions)
 
-        # Check if table exists and handle schema/partition evolution
+        # Check if table exists and handle schema evolution
         is_existing_delta = (PathLib(path) / "_delta_log").exists()
 
-        if is_existing_delta:
-            # Enable schema evolution for all modes when table exists
+        # Enable schema evolution (mergeSchema) to allow adding new columns
+        # Note: overwriteSchema is NOT compatible with partitionOverwriteMode=dynamic
+        # so we only use mergeSchema which handles most schema evolution cases
+        if is_existing_delta or mode == "append":
             writer = writer.option("mergeSchema", "true")
-
-            # For overwrite mode, also allow schema replacement if merge fails
-            if mode == "overwrite":
-                writer = writer.option("overwriteSchema", "true")
-        else:
-            # New table - just enable merge schema for safety
-            if mode == "append":
-                writer = writer.option("mergeSchema", "true")
 
         writer.save(path)
