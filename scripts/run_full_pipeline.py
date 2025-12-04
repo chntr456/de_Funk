@@ -61,6 +61,7 @@ def run_full_pipeline(
     include_fundamentals: bool = True,
     sort_by_market_cap: bool = True,
     min_market_cap: float = None,
+    use_bulk_listing: bool = False,
     forecast_models: list = None
 ) -> dict:
     """
@@ -190,7 +191,8 @@ def run_full_pipeline(
                 include_fundamentals=include_fundamentals,
                 include_options=False,  # Options require premium tier
                 skip_reference_refresh=skip_reference_refresh,
-                use_concurrent=use_concurrent
+                use_concurrent=use_concurrent,
+                use_bulk_listing=use_bulk_listing
             )
 
             # Extract results
@@ -464,29 +466,29 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run full pipeline for top 2000 stocks by market cap
+  # First-time ingestion: discover all tickers and ingest top 2000 by market cap
+  python -m scripts.run_full_pipeline --days 30 --max-tickers 2000 --use-bulk-listing
+
+  # First-time ingestion: ingest ALL tickers (no limit)
+  python -m scripts.run_full_pipeline --from 2024-01-01 --use-bulk-listing
+
+  # Subsequent runs (uses existing reference data for ticker list)
   python -m scripts.run_full_pipeline --days 30 --max-tickers 2000
 
   # Run with minimum market cap filter ($1B+)
   python -m scripts.run_full_pipeline --days 30 --max-tickers 2000 --min-market-cap 1e9
 
-  # Run for all tickers (no market cap sorting)
-  python -m scripts.run_full_pipeline --from 2024-01-01 --to 2024-12-31
-
   # Quick test with 20 tickers
-  python -m scripts.run_full_pipeline --days 90 --max-tickers 20
+  python -m scripts.run_full_pipeline --days 90 --max-tickers 20 --use-bulk-listing
 
   # Skip data refresh, just run forecasts
   python -m scripts.run_full_pipeline --skip-data-refresh
-
-  # Run with specific forecast models
-  python -m scripts.run_full_pipeline --days 90 --models arima_30d,prophet_30d
 
   # Full production run (top 2000 by market cap, 90 days)
   python -m scripts.run_full_pipeline --days 90 --max-tickers 2000
 
 Note: --max-tickers automatically enables market cap sorting (top N by market cap).
-      Without --max-tickers, all tickers are processed in default order.
+      --use-bulk-listing fetches ticker list from Alpha Vantage (required for first-time setup).
         """
     )
 
@@ -518,6 +520,11 @@ Note: --max-tickers automatically enables market cap sorting (top N by market ca
         type=int,
         default=None,
         help='Maximum number of tickers to process (default: all)'
+    )
+    parser.add_argument(
+        '--use-bulk-listing',
+        action='store_true',
+        help='Discover all tickers from Alpha Vantage LISTING_STATUS endpoint (required for first-time ingestion)'
     )
 
     # Pipeline control
@@ -627,6 +634,7 @@ Note: --max-tickers automatically enables market cap sorting (top N by market ca
             include_fundamentals=include_fundamentals,
             sort_by_market_cap=sort_by_market_cap,
             min_market_cap=args.min_market_cap,
+            use_bulk_listing=args.use_bulk_listing,
             forecast_models=models
         )
 
