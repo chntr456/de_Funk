@@ -187,7 +187,7 @@ SELECT * FROM {read_sql};
         self.create_view(
             schema='core',
             table='dim_calendar',
-            parquet_path=silver_path / 'dims' / 'dim_calendar',
+            table_path=silver_path / 'dims' / 'dim_calendar',
             dry_run=dry_run
         )
 
@@ -209,7 +209,7 @@ SELECT * FROM {read_sql};
             self.create_view(
                 schema='company',
                 table=dim,
-                parquet_path=silver_path / 'dims' / dim,
+                table_path=silver_path / 'dims' / dim,
                 dry_run=dry_run
             )
 
@@ -223,7 +223,7 @@ SELECT * FROM {read_sql};
             self.create_view(
                 schema='company',
                 table=fact,
-                parquet_path=silver_path / 'facts' / fact,
+                table_path=silver_path / 'facts' / fact,
                 dry_run=dry_run
             )
 
@@ -244,7 +244,7 @@ SELECT * FROM {read_sql};
             self.create_view(
                 schema='stocks',
                 table=dim,
-                parquet_path=silver_path / 'dims' / dim,
+                table_path=silver_path / 'dims' / dim,
                 dry_run=dry_run
             )
 
@@ -259,7 +259,7 @@ SELECT * FROM {read_sql};
             self.create_view(
                 schema='stocks',
                 table=fact,
-                parquet_path=silver_path / 'facts' / fact,
+                table_path=silver_path / 'facts' / fact,
                 dry_run=dry_run
             )
 
@@ -303,7 +303,7 @@ CREATE OR REPLACE VIEW stocks.dim_security AS
             self.create_view(
                 schema='options',
                 table=dim,
-                parquet_path=silver_path / 'dims' / dim,
+                table_path=silver_path / 'dims' / dim,
                 dry_run=dry_run
             )
 
@@ -317,7 +317,7 @@ CREATE OR REPLACE VIEW stocks.dim_security AS
             self.create_view(
                 schema='options',
                 table=fact,
-                parquet_path=silver_path / 'facts' / fact,
+                table_path=silver_path / 'facts' / fact,
                 dry_run=dry_run
             )
 
@@ -359,7 +359,7 @@ CREATE OR REPLACE VIEW options.dim_security AS
             self.create_view(
                 schema='etfs',
                 table=dim,
-                parquet_path=silver_path / 'dims' / dim,
+                table_path=silver_path / 'dims' / dim,
                 dry_run=dry_run
             )
 
@@ -373,7 +373,7 @@ CREATE OR REPLACE VIEW options.dim_security AS
             self.create_view(
                 schema='etfs',
                 table=fact,
-                parquet_path=silver_path / 'facts' / fact,
+                table_path=silver_path / 'facts' / fact,
                 dry_run=dry_run
             )
 
@@ -415,7 +415,7 @@ CREATE OR REPLACE VIEW etfs.dim_security AS
             self.create_view(
                 schema='futures',
                 table=dim,
-                parquet_path=silver_path / 'dims' / dim,
+                table_path=silver_path / 'dims' / dim,
                 dry_run=dry_run
             )
 
@@ -429,7 +429,7 @@ CREATE OR REPLACE VIEW etfs.dim_security AS
             self.create_view(
                 schema='futures',
                 table=fact,
-                parquet_path=silver_path / 'facts' / fact,
+                table_path=silver_path / 'facts' / fact,
                 dry_run=dry_run
             )
 
