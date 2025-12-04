@@ -65,16 +65,18 @@ logger = logging.getLogger(__name__)
 class DuckDBViewSetup:
     """Setup DuckDB views for v2.0 models."""
 
-    def __init__(self, db_path: Path, config: ConfigLoader):
+    def __init__(self, db_path: Path, config: ConfigLoader, repo_root: Path):
         """
         Initialize DuckDB view setup.
 
         Args:
             db_path: Path to DuckDB database file
             config: Application configuration
+            repo_root: Repository root path for resolving relative paths
         """
         self.db_path = db_path
         self.config = config
+        self.repo_root = repo_root
         self.conn = None
         self.created_views = []
         self.skipped_views = []
@@ -106,8 +108,9 @@ class DuckDBViewSetup:
             self.conn = None
 
     def get_silver_path(self, model: str) -> Path:
-        """Get Silver layer path for model."""
-        return Path(self.config.storage.get(f'{model}_silver', f'storage/silver/{model}'))
+        """Get Silver layer path for model (absolute path)."""
+        relative_path = self.config.storage.get(f'{model}_silver', f'storage/silver/{model}')
+        return self.repo_root / relative_path
 
     def create_view(self, schema: str, table: str, table_path: Path, dry_run: bool = False) -> bool:
         """
@@ -625,7 +628,7 @@ def main():
             return
 
     # Setup views
-    setup = DuckDBViewSetup(db_path=db_path, config=config)
+    setup = DuckDBViewSetup(db_path=db_path, config=config, repo_root=repo_root)
     setup.setup_all(dry_run=args.dry_run)
 
 
