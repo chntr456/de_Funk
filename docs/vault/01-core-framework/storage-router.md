@@ -65,9 +65,9 @@ Resolve Bronze layer path for a logical table.
 ```python
 router = StorageRouter(storage_cfg)
 
-# Resolve path for "prices_daily" table
-path = router.bronze_path("prices_daily")
-# Returns: "storage/bronze/polygon/prices_daily"
+# Resolve path for securities prices table
+path = router.bronze_path("securities_prices_daily")
+# Returns: "storage/bronze/securities_prices_daily"
 ```
 
 **Configuration:**
@@ -76,9 +76,10 @@ path = router.bronze_path("prices_daily")
   "roots": {
     "bronze": "storage/bronze"
   },
+  "defaults": {"format": "delta"},
   "tables": {
-    "prices_daily": {
-      "rel": "polygon/prices_daily"
+    "securities_prices_daily": {
+      "rel": "securities_prices_daily"
     }
   }
 }
@@ -144,9 +145,9 @@ Get physical path to Bronze table.
 
 **Example:**
 ```python
-bronze = BronzeTable(spark, router, "prices_daily")
+bronze = BronzeTable(spark, router, "securities_prices_daily")
 print(bronze.path)
-# "storage/bronze/polygon/prices_daily"
+# "storage/bronze/securities_prices_daily"
 ```
 
 ---
@@ -155,7 +156,7 @@ print(bronze.path)
 
 #### `read(merge_schema: bool = True) -> DataFrame`
 
-Read Bronze table from Parquet.
+Read Bronze table from Delta Lake (auto-detects format for backwards compatibility).
 
 **Parameters:**
 - `merge_schema` - If True, merges schemas across partitions (default: True)
@@ -385,21 +386,18 @@ The storage configuration defines roots and table mappings.
   "roots": {
     "bronze": "storage/bronze",
     "silver": "storage/silver",
-    "equity_silver": "storage/silver/equity",
-    "corporate_silver": "storage/silver/corporate"
+    "stocks_silver": "storage/silver/stocks",
+    "company_silver": "storage/silver/company"
   },
+  "defaults": {"format": "delta"},
   "tables": {
-    "ref_all_tickers": {
-      "rel": "polygon/ref_all_tickers",
-      "partition": []
+    "securities_reference": {
+      "rel": "securities_reference",
+      "partition": ["snapshot_dt", "asset_type"]
     },
-    "prices_daily": {
-      "rel": "polygon/prices_daily",
-      "partition": ["ticker"]
-    },
-    "prices_daily_grouped": {
-      "rel": "polygon/prices_daily_grouped",
-      "partition": ["ticker"]
+    "securities_prices_daily": {
+      "rel": "securities_prices_daily",
+      "partition": ["asset_type", "year", "month"]
     }
   }
 }

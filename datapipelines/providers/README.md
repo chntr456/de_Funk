@@ -6,10 +6,12 @@ This directory contains provider-specific implementations for different data sou
 
 ```
 providers/
-├── polygon/          # Polygon.io financial market data
+├── alpha_vantage/    # Alpha Vantage financial market data (v2.0 - sole securities provider)
 ├── chicago/          # Chicago Data Portal (Socrata API)
-└── bls/             # Bureau of Labor Statistics
+└── bls/              # Bureau of Labor Statistics
 ```
+
+> **Note**: Polygon.io was removed in v2.0. Alpha Vantage is now the exclusive provider for securities data.
 
 ### Provider Structure
 
@@ -48,10 +50,10 @@ provider_name/
 - Initialize HTTP client with rate limiting
 - Implement provider-specific pagination
 - Fetch data through facets
-- Write to Bronze layer via BronzeSink
+- Write to Bronze layer via BronzeSink (Delta Lake format)
 
 **Pagination Strategies by Provider**:
-- **Polygon**: Cursor-based (uses `cursor` parameter from `next_url`)
+- **Alpha Vantage**: Single response per endpoint (no pagination needed)
 - **Chicago**: Offset-based (uses `$offset` and `$limit` parameters)
 - **BLS**: No pagination (returns full dataset in single response)
 
@@ -65,38 +67,46 @@ provider_name/
 - `normalize()`: Convert JSON to Spark DataFrame
 - `postprocess()`: Transform and clean data
 
-## Polygon Provider
+## Alpha Vantage Provider
 
 ### Configuration
-**File**: `configs/polygon_endpoints.json`
+**File**: `configs/alpha_vantage_endpoints.json`
 
 **Endpoints**:
-- `ref_all_tickers`: All active tickers (with pagination support)
-- `ref_ticker`: Per-ticker details
-- `exchanges`: Exchange reference data
-- `prices_daily_grouped`: Daily prices by date
-- `news_by_date`: News articles by date
+- `company_overview`: Company reference data with market cap, CIK
+- `time_series_daily_adjusted`: Historical OHLCV prices
+- `income_statement`: Income statement fundamentals
+- `balance_sheet`: Balance sheet fundamentals
+- `cash_flow`: Cash flow statements
+- `earnings`: Quarterly and annual earnings
 
-### Pagination Fix
-✅ **FIXED**: The Polygon ingestor now properly handles cursor-based pagination, allowing it to fetch ALL tickers (10,000+) instead of just the first 1,000.
-
-**Implementation**: `datapipelines/providers/polygon/polygon_ingestor.py:_fetch_calls()`
+### Rate Limits
+- **Free Tier**: 25 requests/day, 5 requests/minute
+- **Premium**: 75 requests/minute
 
 ### Usage Example
 ```python
-from core.context import RepoContext
-from datapipelines.providers.polygon.polygon_ingestor import PolygonIngestor
-from datapipelines.providers.polygon.facets.ref_all_tickers_facet import RefAllTickersFacet
+from datapipelines.providers.alpha_vantage.alpha_vantage_ingestor import AlphaVantageIngestor
 
-# Initialize
-ctx = RepoContext()
-ingestor = PolygonIngestor(ctx.polygon_cfg, ctx.storage_cfg, ctx.spark)
+# Initialize with Spark session and storage config
+ingestor = AlphaVantageIngestor(spark, storage_cfg)
 
-# Fetch all tickers (with pagination)
-facet = RefAllTickersFacet(ctx.spark)
-batches = ingestor._fetch_calls(facet.calls(), enable_pagination=True)
-df = facet.normalize(batches)
+# Run comprehensive ingestion
+results = ingestor.run_comprehensive(
+    tickers=['AAPL', 'MSFT', 'NVDA'],
+    from_date='2024-01-01',
+    max_tickers=100,
+    include_fundamentals=True
+)
 ```
+
+### Bronze Tables (Delta Lake)
+- `securities_reference` - Unified reference data with market cap, CIK
+- `securities_prices_daily` - Daily OHLCV prices
+- `income_statements` - Income statement data
+- `balance_sheets` - Balance sheet data
+- `cash_flows` - Cash flow data
+- `earnings` - Earnings data
 
 ## Chicago Provider
 
@@ -270,50 +280,41 @@ class DatasetFacet(NewProviderFacet):
         ).dropDuplicates()
 ```
 
-## Migration Guide
+## Bronze Layer Output
 
-### Old Import Paths → New Import Paths
+**Format**: Delta Lake tables (v2.3+) with schema evolution
 
-| Old | New |
-|-----|-----|
-| `datapipelines.ingestors.polygon_ingestor` | `datapipelines.providers.polygon.polygon_ingestor` |
-| `datapipelines.facets.polygon.ref_all_tickers_facet` | `datapipelines.providers.polygon.facets.ref_all_tickers_facet` |
-| `datapipelines.ingestors.polygon_registry` | `datapipelines.providers.polygon.polygon_registry` |
-
-### Backward Compatibility
-The old paths under `datapipelines/ingestors/` and `datapipelines/facets/polygon/` are still present for backward compatibility but should be considered deprecated.
+BronzeSink writes data as Delta Lake tables with:
+- `mergeSchema=true` for automatic schema evolution
+- `overwriteSchema=true` for partition changes on overwrite
 
 ## Testing
 
-### Test Pagination
-```python
-# Test that pagination fetches more than 1000 records
-facet = RefAllTickersFacet(spark)
-batches = ingestor._fetch_calls(facet.calls(), enable_pagination=True)
-df = facet.normalize(batches)
-count = df.count()
-assert count > 1000, f"Expected > 1000 tickers, got {count}"
-```
-
 ### Test Provider Integration
 ```bash
-# Run the full pipeline with new provider
-python scripts/run_full_pipeline.py --days 7 --max-tickers 100
+# Run the full pipeline with Alpha Vantage
+python -m scripts.ingest.run_full_pipeline --from 2024-01-01 --max-tickers 10
+```
+
+### Test Individual Provider
+```bash
+# Test Alpha Vantage ingestion
+python -m scripts.test_alpha_vantage_ingestion --tickers AAPL MSFT
 ```
 
 ## Common Issues
 
-### Issue: Import errors after migration
-**Solution**: Update imports to use new provider paths
-
-### Issue: Pagination not working
-**Solution**: Ensure `enable_pagination=True` is passed to `_fetch_calls()`
+### Issue: Import errors
+**Solution**: Update imports to use provider paths under `datapipelines/providers/`
 
 ### Issue: Rate limiting errors
 **Solution**: Adjust `rate_limit_per_sec` in endpoint config or add more API keys
 
+### Issue: Schema merge failures with Delta Lake
+**Solution**: BronzeSink automatically handles this with `mergeSchema=true`. If issues persist, delete the affected Delta table and re-ingest.
+
 ## Resources
 
-- **Polygon API**: https://polygon.io/docs
+- **Alpha Vantage API**: https://www.alphavantage.co/documentation/
 - **Chicago Data Portal**: https://dev.socrata.com/foundry/data.cityofchicago.org
 - **BLS API**: https://www.bls.gov/developers/api_signature_v2.htm

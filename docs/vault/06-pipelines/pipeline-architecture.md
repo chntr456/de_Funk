@@ -57,19 +57,22 @@ Provider → Ingestor → Facet → Bronze (Parquet)
 **Location**: `datapipelines/providers/{provider_name}/`
 
 **Examples**:
-- `polygon/` - Stock market data (Polygon.io)
+- `alpha_vantage/` - Stock market data (Alpha Vantage - sole securities provider v2.0+)
 - `bls/` - Economic data (Bureau of Labor Statistics)
 - `chicago/` - Municipal data (Chicago Data Portal)
 
+> **Note**: Polygon.io was removed in v2.0. Alpha Vantage is the exclusive securities provider.
+
 **Implementation**:
 ```python
-class PolygonProvider:
-    def __init__(self, api_keys):
-        self.client = HttpClient(api_keys)
+class AlphaVantageIngestor:
+    def __init__(self, spark, storage_cfg):
+        self.spark = spark
+        self.sink = BronzeSink(storage_cfg)
 
-    def fetch_prices(self, tickers, date_from, date_to):
-        # API-specific fetching logic
-        return raw_responses
+    def run_comprehensive(self, tickers, from_date, max_tickers):
+        # Comprehensive ingestion with prices & fundamentals
+        return results
 ```
 
 ---
@@ -99,7 +102,7 @@ class PolygonProvider:
 **Responsibilities**:
 - Call provider to fetch data
 - Pass data to facet for normalization
-- Write to Bronze layer (Parquet)
+- Write to Bronze layer (Delta Lake v2.3+)
 - Handle errors and retries
 
 **See**: [Ingestors](ingestors.md) for details
@@ -117,7 +120,7 @@ class PolygonProvider:
    ↓
 4. Ingestor calls facet.normalize() → Clean DataFrame
    ↓
-5. Write DataFrame to Bronze (Parquet)
+5. Write DataFrame to Bronze (Delta Lake)
    ↓
 6. Bronze → Silver (model build process)
 ```
@@ -130,15 +133,17 @@ class PolygonProvider:
 
 **Files**: `configs/*_endpoints.json`
 
-**Example** (`polygon_endpoints.json`):
+**Example** (`alpha_vantage_endpoints.json`):
 ```json
 {
-  "base_url": "https://api.polygon.io",
+  "base_urls": {"core": "https://www.alphavantage.co"},
   "endpoints": {
-    "prices_daily": {
-      "path": "/v2/aggs/ticker/{ticker}/range/{mult}/{timespan}/{from}/{to}",
+    "time_series_daily_adjusted": {
+      "base": "core",
+      "path_template": "/query",
       "method": "GET",
-      "rate_limit": {"calls": 5, "period": 60}
+      "required_params": ["symbol"],
+      "default_query": {"function": "TIME_SERIES_DAILY_ADJUSTED"}
     }
   }
 }
@@ -150,11 +155,12 @@ class PolygonProvider:
 
 ```json
 {
-  "bronze_root": "storage/bronze",
+  "roots": {"bronze": "storage/bronze"},
+  "defaults": {"format": "delta"},
   "tables": {
-    "polygon_daily_prices": {
-      "path": "polygon/daily_prices",
-      "partition_by": ["dt"]
+    "securities_prices_daily": {
+      "rel": "securities_prices_daily",
+      "partitions": ["asset_type", "year", "month"]
     }
   }
 }
@@ -174,30 +180,33 @@ python run_full_pipeline.py --top-n 100
 ### Single Provider
 
 ```python
-from datapipelines.ingestors.polygon_ingestor import PolygonIngestor
+from datapipelines.providers.alpha_vantage.alpha_vantage_ingestor import AlphaVantageIngestor
 
-ingestor = PolygonIngestor(spark, api_keys)
-ingestor.run(tickers=['AAPL', 'MSFT'], date_from='2024-01-01')
+ingestor = AlphaVantageIngestor(spark, storage_cfg)
+ingestor.run_comprehensive(tickers=['AAPL', 'MSFT'], from_date='2024-01-01')
 ```
 
 ---
 
 ## Bronze Layer Output
 
-**Format**: Partitioned Parquet files
+**Format**: Delta Lake tables (v2.3+) with schema evolution
 
 **Structure**:
 ```
 storage/bronze/
-├── polygon/
-│   ├── daily_prices/
-│   │   ├── dt=2024-01-01/*.parquet
-│   │   └── dt=2024-01-02/*.parquet
-│   └── ref_tickers/*.parquet
+├── securities_reference/      # Unified reference data (v2.0+)
+│   └── _delta_log/
+├── securities_prices_daily/   # Unified OHLCV prices (v2.0+)
+│   └── _delta_log/
+├── income_statements/         # Fundamentals
+├── balance_sheets/
+├── cash_flows/
+├── earnings/
 ├── bls/
-│   └── unemployment/*.parquet
+│   └── unemployment/
 └── chicago/
-    └── building_permits/*.parquet
+    └── building_permits/
 ```
 
 ---

@@ -13,9 +13,16 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
   - Time travel / version history for debugging and auditing
   - Schema evolution for seamless updates
   - Efficient merge/upsert operations
+- **Spark 4.x Compatibility**: Uses `delta-spark_2.13:4.0.0` (Scala 2.13 for Spark 4.x)
+- **Schema Evolution**: BronzeSink enables `mergeSchema` and `overwriteSchema` for automatic schema handling
 - **Migration script**: `python -m scripts.maintenance.migrate_parquet_to_delta` converts existing Parquet tables
 - **Auto-detection**: Readers auto-detect Delta vs Parquet format for backwards compatibility
 - **Updated components**: BronzeSink, ModelWriter, BronzeTable, SilverPath, GraphBuilder
+- **Legacy Cleanup**: Removed deprecated v1.x ingestors:
+  - `datapipelines/ingestors/company_ingestor.py` (used Polygon.io)
+  - `datapipelines/ingestors/polygon_ingestor.py` (Polygon.io removed in v2.0)
+  - `datapipelines/ingestors/polygon_registry.py` (Polygon.io removed in v2.0)
+  - `orchestration/orchestrator.py` (legacy v1.x patterns)
 
 **Previous Updates (v2.2)** - Large File Refactoring & Backend Abstraction:
 - **✅ Large File Refactoring**: Proposal 008 implemented (see `docs/vault/13-proposals/accepted/`)
@@ -1311,6 +1318,8 @@ If queries are slow:
 | `models/api/registry.py` | Model registry - discover and manage models |
 | `models/measures/framework.py` | Measure calculation framework |
 | `datapipelines/base/facet.py` | Base facet transformation class |
+| `datapipelines/ingestors/bronze_sink.py` | **BronzeSink** - Delta Lake writes with schema evolution (v2.3) |
+| `orchestration/common/spark_session.py` | **get_spark()** - Spark session with Delta Lake config (v2.3) |
 | `app/notebook/parsers/markdown_parser.py` | Markdown notebook parser |
 | `app/notebook/managers/notebook_manager.py` | Notebook management |
 | `app/ui/components/markdown/renderer.py` | Markdown rendering (v2.2: modular) |
@@ -1331,7 +1340,16 @@ If queries are slow:
 
 ## Current State & Known Issues
 
-### Recent Migrations (November 2025)
+### Recent Migrations (December 2025)
+
+**✅ Delta Lake Migration (v2.3) - COMPLETE**
+- Delta Lake is now the default storage format for Bronze and Silver layers
+- Spark 4.x compatibility with `delta-spark_2.13:4.0.0`
+- BronzeSink updated with schema evolution (`mergeSchema`, `overwriteSchema`)
+- Removed legacy v1.x ingestors: `company_ingestor.py`, `polygon_ingestor.py`, `polygon_registry.py`, `orchestrator.py`
+- All scripts using `get_spark()` now have Delta Lake configured automatically
+
+### Previous Migrations (November 2025)
 
 **✅ Configuration System Migration - COMPLETE**
 - New centralized `config/` module with ConfigLoader
@@ -1352,7 +1370,9 @@ If queries are slow:
 ### Backend Support
 
 - **DuckDB**: Primary backend for BI and realtime analytics
-- **Spark**: Optional backend, maintained for compatibility
+- **Spark 4.x**: ETL and batch processing with Delta Lake support
+  - Uses `delta-spark_2.13:4.0.0` for Scala 2.13 compatibility
+  - Configured via `orchestration/common/spark_session.py`
 - Most operations tested on both backends
 
 ### Data Sources Status
