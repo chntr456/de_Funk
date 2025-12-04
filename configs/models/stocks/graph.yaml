@@ -25,8 +25,11 @@ nodes:
 
   fact_stock_prices:
     extends: _base.securities._fact_prices_base
+    # NOTE: Do NOT filter by asset_type here - Bronze prices may have NULL asset_type
+    # Instead, the model filters prices to only tickers that exist in dim_stock
+    # This JOIN-based filtering is handled in StocksModel.after_build()
+    filter_by_dimension: dim_stock  # Filter to tickers in dim_stock (model-level)
     filters:
-      - "asset_type = 'stocks'"
       - "trade_date IS NOT NULL"
       - "ticker IS NOT NULL"
     # Inherits select from base (ticker, trade_date, open, high, low, close, volume, volume_weighted, transactions)

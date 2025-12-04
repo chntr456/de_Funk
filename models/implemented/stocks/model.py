@@ -8,10 +8,13 @@ Version: 2.0 - Redesigned with inheritance architecture
 """
 
 from models.base.model import BaseModel
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Type alias for DataFrame (can be Spark or DuckDB)
+DataFrame = Any
 
 
 class StocksModel(BaseModel):
@@ -20,10 +23,16 @@ class StocksModel(BaseModel):
 
     Key features:
     - Inherits base securities schema and measures
-    - Filters unified bronze prices table by asset_type='stocks'
+    - Uses JOIN-based filtering: prices filtered to tickers in dim_stock
     - Links to Company model via company_id
     - Includes technical indicators (RSI, MACD, Bollinger Bands, etc.)
     - Supports complex Python measures (Sharpe, correlation, momentum, etc.)
+
+    Architecture Note:
+        Bronze prices table may have NULL asset_type. Instead of filtering by
+        asset_type='stocks', we filter fact_stock_prices to only include tickers
+        that exist in dim_stock (which IS filtered by asset_type='stocks' from
+        the securities_reference table). This JOIN-based approach is more robust.
 
     Usage:
         from models.implemented.stocks.model import StocksModel
@@ -48,6 +57,93 @@ class StocksModel(BaseModel):
             'stocks' - filters for common stock equities
         """
         return 'stocks'
+
+    def after_build(
+        self,
+        dims: Dict[str, DataFrame],
+        facts: Dict[str, DataFrame]
+    ) -> Tuple[Dict[str, DataFrame], Dict[str, DataFrame]]:
+        """
+        Post-build hook: Filter fact_stock_prices to only tickers in dim_stock.
+
+        This implements JOIN-based filtering for the prices table. Since Bronze
+        prices may have NULL asset_type, we can't filter directly. Instead, we:
+        1. Build dim_stock (filtered by asset_type='stocks' from securities_reference)
+        2. Build fact_stock_prices (all prices, no asset_type filter)
+        3. Filter fact_stock_prices to only tickers that exist in dim_stock
+
+        This ensures we only have prices for actual stock tickers.
+        """
+        # Check if we have both tables
+        if 'dim_stock' not in dims or 'fact_stock_prices' not in facts:
+            logger.warning("Missing dim_stock or fact_stock_prices, skipping JOIN filter")
+            return dims, facts
+
+        dim_stock = dims['dim_stock']
+        fact_prices = facts['fact_stock_prices']
+
+        # Get stock tickers from dim_stock
+        if self._backend == 'spark':
+            # Spark: Use semi-join for efficiency
+            stock_tickers = dim_stock.select('ticker').distinct()
+
+            # Count before filtering
+            before_count = fact_prices.count()
+
+            # Semi-join to keep only prices for stock tickers
+            filtered_prices = fact_prices.join(
+                stock_tickers,
+                on='ticker',
+                how='left_semi'  # Keep rows from left where ticker exists in right
+            )
+
+            after_count = filtered_prices.count()
+            logger.info(
+                f"  JOIN filter: {before_count:,} → {after_count:,} prices "
+                f"(filtered to {stock_tickers.count()} stock tickers)"
+            )
+
+            facts['fact_stock_prices'] = filtered_prices
+
+        else:
+            # DuckDB/pandas: Use isin filter
+            import pandas as pd
+
+            # Convert to pandas if needed
+            if hasattr(dim_stock, 'df'):
+                dim_stock_pdf = dim_stock.df()
+            elif isinstance(dim_stock, pd.DataFrame):
+                dim_stock_pdf = dim_stock
+            else:
+                dim_stock_pdf = dim_stock
+
+            if hasattr(fact_prices, 'df'):
+                fact_prices_pdf = fact_prices.df()
+            elif isinstance(fact_prices, pd.DataFrame):
+                fact_prices_pdf = fact_prices
+            else:
+                fact_prices_pdf = fact_prices
+
+            stock_tickers = set(dim_stock_pdf['ticker'].unique())
+            before_count = len(fact_prices_pdf)
+
+            filtered_prices_pdf = fact_prices_pdf[
+                fact_prices_pdf['ticker'].isin(stock_tickers)
+            ]
+
+            after_count = len(filtered_prices_pdf)
+            logger.info(
+                f"  JOIN filter: {before_count:,} → {after_count:,} prices "
+                f"(filtered to {len(stock_tickers)} stock tickers)"
+            )
+
+            # Convert back to DuckDB relation if needed
+            if hasattr(self.connection, 'conn'):
+                facts['fact_stock_prices'] = self.connection.conn.from_df(filtered_prices_pdf)
+            else:
+                facts['fact_stock_prices'] = filtered_prices_pdf
+
+        return dims, facts
 
     def get_prices(self, ticker: Optional[str] = None,
                    start_date: Optional[str] = None,
