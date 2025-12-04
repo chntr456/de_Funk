@@ -252,15 +252,13 @@ def run_full_pipeline(
         try:
             from config.model_loader import ModelConfigLoader
             from models.implemented.stocks.model import StocksModel
+            from models.implemented.company.model import CompanyModel
             from orchestration.common.spark_session import get_spark
             from core.connection import ConnectionFactory
 
-            print("Building stocks model from bronze data...")
-
-            # Load stock model configuration
-            config_root = Path(repo_root) / "configs" / "models"
-            loader = ModelConfigLoader(config_root)
-            model_cfg = loader.load_model_config("stocks")
+            print("Building models from bronze data...")
+            print("  Note: StocksModel uses JOIN-based filtering (prices filtered to tickers in dim_stock)")
+            print()
 
             # Load storage configuration
             import json
@@ -268,23 +266,53 @@ def run_full_pipeline(
             with open(storage_path, 'r') as f:
                 storage_cfg = json.load(f)
 
+            # Load model configurations
+            config_root = Path(repo_root) / "configs" / "models"
+            loader = ModelConfigLoader(config_root)
+
             # Initialize Spark connection
-            spark_session = get_spark("StocksBuild")
+            spark_session = get_spark("SilverBuild")
             spark = ConnectionFactory.create("spark", spark_session=spark_session)
 
-            # Build stocks model
+            # Build Company model first (stocks depends on company)
+            print("  Building company model...")
+            company_cfg = loader.load_model_config("company")
+            company_model = CompanyModel(
+                connection=spark,
+                storage_cfg=storage_cfg,
+                model_cfg=company_cfg,
+                params={},
+                repo_root=repo_root
+            )
+            dims, facts = company_model.build()
+            company_model.write_tables()
+            print(f"    ✓ Company model: {len(dims)} dims, {len(facts)} facts")
+
+            # Build Stocks model (uses JOIN-based filtering via after_build hook)
+            print("  Building stocks model...")
+            stocks_cfg = loader.load_model_config("stocks")
             stocks_model = StocksModel(
                 connection=spark,
                 storage_cfg=storage_cfg,
-                model_cfg=model_cfg,
-                params={}
+                model_cfg=stocks_cfg,
+                params={},
+                repo_root=repo_root
             )
-            stocks_model.build()
+            dims, facts = stocks_model.build()
             stocks_model.write_tables()
-            print("  ✓ Stocks model built and saved successfully")
+
+            # Report counts
+            for name, df in {**dims, **facts}.items():
+                try:
+                    count = df.count() if hasattr(df, 'count') else len(df)
+                    print(f"    - {name}: {count:,} rows")
+                except Exception:
+                    print(f"    - {name}: (count unavailable)")
+
+            print("  ✓ All models built and saved successfully")
 
             # Clean up Spark session
-            spark.stop()
+            spark_session.stop()
 
             results['silver_build'] = {'status': 'success'}
 
