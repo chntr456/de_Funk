@@ -53,6 +53,9 @@ def get_spark(
         .config("spark.jars.packages", "io.delta:delta-spark_2.13:4.0.0")
         .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
         .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        # Dynamic partition overwrite: only replace partitions being written, not entire table
+        # This enables incremental ingestion without losing previously ingested data
+        .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
     )
 
     # Apply additional legacy config if provided (overrides SparkConfig)
