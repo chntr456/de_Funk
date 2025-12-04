@@ -1,31 +1,38 @@
 """
 Full Pipeline Orchestrator
 
-This script runs the complete end-to-end pipeline:
-1. Data Ingestion: Alpha Vantage API → Bronze → Silver layer
-2. Forecasting: Generate time series forecasts for all tickers
+This script orchestrates the complete end-to-end pipeline:
+1. Data Ingestion: Alpha Vantage API → Bronze layer (scripts/ingest/)
+2. Silver Build: Bronze → Silver dimensional models (scripts/build/)
+3. Forecasting: Generate time series forecasts (scripts/forecast/)
+
+Separation of Concerns:
+- scripts/ingest/      → Bronze layer filling (API calls)
+- scripts/build/       → Silver layer building from Bronze
+- scripts/forecast/    → Predictive model building
+- scripts/run_full_pipeline.py → Orchestrates all stages (this script)
 
 Usage:
-    python -m scripts.ingest.run_full_pipeline [options]
+    python -m scripts.run_full_pipeline [options]
 
 Examples:
     # Run full pipeline for top 2000 stocks by market cap
-    python -m scripts.ingest.run_full_pipeline --days 30 --max-tickers 2000
+    python -m scripts.run_full_pipeline --days 30 --max-tickers 2000
 
     # Run with minimum market cap filter ($1B+)
-    python -m scripts.ingest.run_full_pipeline --days 30 --max-tickers 2000 --min-market-cap 1e9
+    python -m scripts.run_full_pipeline --days 30 --max-tickers 2000 --min-market-cap 1e9
 
     # Run for specific date range with ticker limit (testing)
-    python -m scripts.ingest.run_full_pipeline --from 2024-01-01 --to 2024-12-31 --max-tickers 20
+    python -m scripts.run_full_pipeline --from 2024-01-01 --to 2024-12-31 --max-tickers 20
 
     # Run only forecasts (skip data refresh)
-    python -m scripts.ingest.run_full_pipeline --skip-data-refresh
+    python -m scripts.run_full_pipeline --skip-data-refresh
 
     # Include fundamentals (income statements, balance sheets, cash flows, earnings)
-    python -m scripts.ingest.run_full_pipeline --days 90 --include-fundamentals
+    python -m scripts.run_full_pipeline --days 90 --include-fundamentals
 
     # Run with specific models
-    python -m scripts.ingest.run_full_pipeline --days 90 --models arima_30d,prophet_30d
+    python -m scripts.run_full_pipeline --days 90 --models arima_30d,prophet_30d
 """
 
 from __future__ import annotations
@@ -458,31 +465,31 @@ def main():
         epilog="""
 Examples:
   # Run full pipeline for top 2000 stocks by market cap
-  python -m scripts.ingest.run_full_pipeline --days 30 --max-tickers 2000
+  python -m scripts.run_full_pipeline --days 30 --max-tickers 2000
 
   # Run with minimum market cap filter ($1B+)
-  python -m scripts.ingest.run_full_pipeline --days 30 --max-tickers 2000 --min-market-cap 1e9
+  python -m scripts.run_full_pipeline --days 30 --max-tickers 2000 --min-market-cap 1e9
 
   # Run with specific date range
-  python -m scripts.ingest.run_full_pipeline --from 2024-01-01 --to 2024-12-31
+  python -m scripts.run_full_pipeline --from 2024-01-01 --to 2024-12-31
 
   # Run with ticker limit (for testing)
-  python -m scripts.ingest.run_full_pipeline --days 90 --max-tickers 20
+  python -m scripts.run_full_pipeline --days 90 --max-tickers 20
 
   # Skip data refresh, just run forecasts
-  python -m scripts.ingest.run_full_pipeline --skip-data-refresh
+  python -m scripts.run_full_pipeline --skip-data-refresh
 
   # Include fundamentals (income statements, balance sheets, cash flows, earnings)
-  python -m scripts.ingest.run_full_pipeline --days 90 --include-fundamentals
+  python -m scripts.run_full_pipeline --days 90 --include-fundamentals
 
   # Run with specific forecast models
-  python -m scripts.ingest.run_full_pipeline --days 90 --models arima_30d,prophet_30d
+  python -m scripts.run_full_pipeline --days 90 --models arima_30d,prophet_30d
 
   # Full production run (top 2000 by market cap, all models, 90 days)
-  python -m scripts.ingest.run_full_pipeline --days 90 --max-tickers 2000
+  python -m scripts.run_full_pipeline --days 90 --max-tickers 2000
 
   # Disable market cap sorting (use alphabetical order)
-  python -m scripts.ingest.run_full_pipeline --days 30 --no-sort-by-market-cap
+  python -m scripts.run_full_pipeline --days 30 --no-sort-by-market-cap
         """
     )
 
