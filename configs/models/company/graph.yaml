@@ -11,7 +11,9 @@ nodes:
   dim_company:
     from: bronze.securities_reference
     filters:
-      - "asset_type = 'stocks'"  # Only stock tickers have company data
+      # Use 'type' column (raw Alpha Vantage value) instead of derived 'asset_type'
+      # 'type' contains raw values like 'Common Stock', 'ETF', etc.
+      - "type = 'Common Stock'"  # Only stock tickers have company data
       - "cik IS NOT NULL"        # Must have CIK (Alpha Vantage provides this)
     select:
       cik: cik  # SEC Central Index Key (10-digit, permanent identifier)
@@ -54,7 +56,7 @@ nodes:
         type: inner  # Only include tickers with CIK
     select:
       # Keys
-      cik: _ticker_cik_lookup.cik
+      cik: _ticker_cik_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
@@ -77,7 +79,7 @@ nodes:
       reported_currency: reported_currency
       snapshot_date: snapshot_date
     derive:
-      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup.cik)"
+      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup__cik)"
       report_date: "fiscal_date_ending"  # Alias for calendar joins
     tags: [fact, financials, income_statement]
     unique_key: [cik, fiscal_date_ending, report_type]
@@ -91,7 +93,7 @@ nodes:
         type: inner
     select:
       # Keys
-      cik: _ticker_cik_lookup.cik
+      cik: _ticker_cik_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
@@ -121,7 +123,7 @@ nodes:
       reported_currency: reported_currency
       snapshot_date: snapshot_date
     derive:
-      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup.cik)"
+      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup__cik)"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, balance_sheet]
     unique_key: [cik, fiscal_date_ending, report_type]
@@ -135,7 +137,7 @@ nodes:
         type: inner
     select:
       # Keys
-      cik: _ticker_cik_lookup.cik
+      cik: _ticker_cik_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
@@ -162,7 +164,7 @@ nodes:
       reported_currency: reported_currency
       snapshot_date: snapshot_date
     derive:
-      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup.cik)"
+      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup__cik)"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, cash_flow]
     unique_key: [cik, fiscal_date_ending, report_type]
@@ -176,7 +178,7 @@ nodes:
         type: inner
     select:
       # Keys
-      cik: _ticker_cik_lookup.cik
+      cik: _ticker_cik_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
@@ -190,7 +192,7 @@ nodes:
       # Metadata
       snapshot_date: snapshot_date
     derive:
-      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup.cik)"
+      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup__cik)"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, earnings]
     unique_key: [cik, fiscal_date_ending, report_type]

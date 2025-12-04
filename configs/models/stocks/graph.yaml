@@ -7,10 +7,15 @@ nodes:
   dim_stock:
     extends: _base.securities._dim_security_base
     filters:
-      - "asset_type = 'stocks'"
+      # Use 'type' column (raw Alpha Vantage value) instead of derived 'asset_type'
+      # 'type' is populated from securities_reference and is more reliable than
+      # the inferred asset_type in prices table (which may be NULL)
+      - "type = 'Common Stock'"
       - "is_active = true"
     select:
-      # Inherited from base: ticker, security_name, asset_type, exchange_code, currency, is_active
+      # Inherited from base: ticker, security_name, exchange_code, currency, is_active
+      # Add securities type for clarity
+      security_type: type  # Raw Alpha Vantage type (Common Stock, ETF, etc.)
       # Add stocks-specific fields from Alpha Vantage
       cik: cik
       shares_outstanding: shares_outstanding

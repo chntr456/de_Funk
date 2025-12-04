@@ -5,12 +5,14 @@ nodes:
   _dim_security_base:
     from: bronze.securities_reference
     filters:
-      # Override in child: - "asset_type = 'stocks'"
+      # Override in child: - "type = 'Common Stock'"
+      # Use 'type' column (raw Alpha Vantage value) rather than derived 'asset_type'
+      # 'type' values: 'Common Stock', 'ETF', 'Mutual Fund', etc.
       - "is_active = true"
     select:
       ticker: ticker
       security_name: security_name  # Bronze column name (Alpha Vantage)
-      asset_type: asset_type
+      security_type: type  # Raw Alpha Vantage type (Common Stock, ETF, etc.)
       exchange_code: primary_exchange  # Bronze column name
       currency: currency
       is_active: is_active  # Bronze column name (already boolean)

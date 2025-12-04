@@ -229,22 +229,23 @@ class GraphBuilder:
 
             if self.backend == 'spark':
                 # Spark join with aliased columns to avoid ambiguity
-                # Rename right table columns with prefix to avoid collisions
-                right_prefix = f"{join_table}__"
+                # Use double underscore (__) as separator to avoid Spark interpreting
+                # the dot as struct field access (e.g., _ticker_cik_lookup.cik would fail)
+                from pyspark.sql import functions as F
 
                 # Build join condition
-                from pyspark.sql import functions as F
                 join_cond = None
                 for left_col, right_col in join_pairs:
                     cond = df[left_col] == right_df[right_col]
                     join_cond = cond if join_cond is None else (join_cond & cond)
 
                 # Rename right columns to avoid duplicates (except join keys)
+                # Use double underscore separator: _ticker_cik_lookup__cik (not _ticker_cik_lookup.cik)
                 right_join_cols = {r for _, r in join_pairs}
                 for col in right_df.columns:
                     if col not in right_join_cols:
-                        # Prefix with table name for disambiguation
-                        right_df = right_df.withColumnRenamed(col, f"{join_table}.{col}")
+                        # Prefix with table name and double underscore for disambiguation
+                        right_df = right_df.withColumnRenamed(col, f"{join_table}__{col}")
 
                 # Perform join
                 df = df.join(right_df, join_cond, how=join_type)
@@ -275,10 +276,11 @@ class GraphBuilder:
                 else:
                     right_pdf = right_df
 
-                # Rename right columns with table prefix (except join keys)
+                # Rename right columns with table prefix using double underscore (except join keys)
+                # Use same convention as Spark: _ticker_cik_lookup__cik
                 right_join_cols = {r for _, r in join_pairs}
                 rename_map = {
-                    col: f"{join_table}.{col}"
+                    col: f"{join_table}__{col}"
                     for col in right_pdf.columns
                     if col not in right_join_cols
                 }
