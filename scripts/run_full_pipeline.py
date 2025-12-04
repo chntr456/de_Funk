@@ -470,26 +470,23 @@ Examples:
   # Run with minimum market cap filter ($1B+)
   python -m scripts.run_full_pipeline --days 30 --max-tickers 2000 --min-market-cap 1e9
 
-  # Run with specific date range
+  # Run for all tickers (no market cap sorting)
   python -m scripts.run_full_pipeline --from 2024-01-01 --to 2024-12-31
 
-  # Run with ticker limit (for testing)
+  # Quick test with 20 tickers
   python -m scripts.run_full_pipeline --days 90 --max-tickers 20
 
   # Skip data refresh, just run forecasts
   python -m scripts.run_full_pipeline --skip-data-refresh
 
-  # Include fundamentals (income statements, balance sheets, cash flows, earnings)
-  python -m scripts.run_full_pipeline --days 90 --include-fundamentals
-
   # Run with specific forecast models
   python -m scripts.run_full_pipeline --days 90 --models arima_30d,prophet_30d
 
-  # Full production run (top 2000 by market cap, all models, 90 days)
+  # Full production run (top 2000 by market cap, 90 days)
   python -m scripts.run_full_pipeline --days 90 --max-tickers 2000
 
-  # Disable market cap sorting (use alphabetical order)
-  python -m scripts.run_full_pipeline --days 30 --no-sort-by-market-cap
+Note: --max-tickers automatically enables market cap sorting (top N by market cap).
+      Without --max-tickers, all tickers are processed in default order.
         """
     )
 
@@ -571,13 +568,8 @@ Examples:
     parser.add_argument(
         '--sort-by-market-cap',
         action='store_true',
-        default=True,
-        help='Sort tickers by market cap descending (default: True)'
-    )
-    parser.add_argument(
-        '--no-sort-by-market-cap',
-        action='store_true',
-        help='Disable market cap sorting (use default ticker order)'
+        default=None,  # Will be auto-determined based on --max-tickers
+        help='Sort tickers by market cap descending (auto-enabled when --max-tickers is set)'
     )
     parser.add_argument(
         '--min-market-cap',
@@ -604,8 +596,14 @@ Examples:
     # Parse models
     models = args.models.split(',') if args.models else None
 
-    # Handle market cap sorting flag (--no-sort-by-market-cap overrides default)
-    sort_by_market_cap = not args.no_sort_by_market_cap
+    # Handle market cap sorting: auto-enable when --max-tickers is set
+    # This makes the common case simple: --max-tickers 2000 gets top 2000 by market cap
+    if args.sort_by_market_cap is not None:
+        # Explicit flag provided
+        sort_by_market_cap = args.sort_by_market_cap
+    else:
+        # Auto-determine: sort by market cap if max_tickers is specified
+        sort_by_market_cap = args.max_tickers is not None
 
     # Handle concurrent flag (--no-concurrent overrides default)
     use_concurrent = not args.no_concurrent
