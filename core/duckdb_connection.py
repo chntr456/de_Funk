@@ -265,8 +265,10 @@ class DuckDBConnection(DataConnection):
                 raise ImportError("Time travel requires 'deltalake' package: pip install deltalake")
 
         # For current version, use DuckDB's delta_scan (faster)
+        # Use conn.sql() instead of conn.execute() to get a DuckDB relation
+        # that supports .filter(), .df(), etc. methods
         query = f"SELECT * FROM delta_scan('{path}')"
-        return self.conn.execute(query)
+        return self.conn.sql(query)
 
     def write_delta_table(
         self,
