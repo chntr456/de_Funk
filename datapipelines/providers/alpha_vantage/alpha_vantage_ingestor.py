@@ -846,9 +846,18 @@ class AlphaVantageIngestor(Ingestor):
 
         # Option 2: Individual ticker mode (default)
         else:
-            # Default tickers if none provided
+            # Fail explicitly if no tickers provided - NEVER use hardcoded defaults
+            # See CLAUDE.md v2.4: "No Hardcoded Default Data" anti-pattern
             if not tickers:
-                tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
+                raise ValueError(
+                    "No tickers provided. You must either:\n"
+                    "  1. Pass a list of tickers explicitly\n"
+                    "  2. Use --use-bulk-listing to discover all tickers from LISTING_STATUS\n"
+                    "  3. Use market cap sorting (requires existing reference data)\n\n"
+                    "To ingest data for the first time, run:\n"
+                    "  python -m scripts.ingest.run_full_pipeline --max-tickers 100 --use-bulk-listing\n\n"
+                    "NEVER hardcode default ticker lists - this masks data pipeline issues."
+                )
 
             # Apply ticker limit
             if max_tickers:

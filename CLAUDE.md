@@ -1,13 +1,23 @@
 # CLAUDE.md - AI Assistant Guide for de_Funk
 
-**Last Updated**: 2025-12-03
-**Version**: 2.3
+**Last Updated**: 2025-12-04
+**Version**: 2.4
 
 This document provides comprehensive guidance for AI assistants (like Claude) working with the de_Funk codebase. It covers project structure, architecture patterns, development workflows, and key conventions.
 
 **Architecture Diagram**: See `docs/architecture-diagram.drawio` for visual representation of the system architecture.
 
-**Recent Updates (v2.3)** - Delta Lake Migration:
+**Recent Updates (v2.4)** - Hardcoded Defaults Prevention:
+- **⚠️ CRITICAL: No Hardcoded Default Data** - Major anti-pattern documentation added
+  - Never hardcode default ticker lists (e.g., `['AAPL', 'MSFT', ...]`)
+  - Never silently fallback to demo data
+  - All defaults must be verifiable - fail loudly if data layer is empty
+  - Demo mode must be explicit with `--demo` flag
+- **Pre-Commit Checklist Updated** - Added hardcoded data and verifiable defaults checks
+- **Anti-Pattern Table Updated** - Added "Hardcoded Default Data" and "Unverified Fallback Data"
+- **Root Cause**: Previous session introduced hardcoded defaults that masked empty Bronze layer
+
+**Previous Updates (v2.3)** - Delta Lake Migration:
 - **✅ Delta Lake is now the default storage format** for all Bronze and Silver layers
   - ACID transactions for data reliability
   - Time travel / version history for debugging and auditing
@@ -1622,6 +1632,54 @@ Q11: Operational script?             → scripts/{category}/
 | **Magic Numbers** | `cols = st.columns([0.88, 0.06, 0.06])` | Named constants |
 | **Silent Failure** | `except Exception: pass` | Log error, handle or reraise |
 | **Direct Backend Import** | `import duckdb` in services | Use `UniversalSession(backend=...)` |
+| **Hardcoded Default Data** | `tickers = ['AAPL', 'MSFT', ...]` | Read from config or data layer |
+| **Unverified Fallback Data** | Using demo data without checking | Fail loudly if data layer empty |
+
+### ⚠️ CRITICAL: No Hardcoded Default Data (ENFORCED)
+
+**This is a major anti-pattern that has caused production issues.**
+
+```python
+# ❌ NEVER DO THIS - Hardcoded default tickers/data
+if not tickers:
+    tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'META', 'TSLA', 'NVDA']
+
+# ❌ NEVER DO THIS - Silent fallback to demo data
+if df.count() == 0:
+    df = load_demo_data()  # Masks the real problem!
+
+# ✅ CORRECT - Fail explicitly when data is missing
+if not tickers:
+    raise ValueError(
+        "No tickers provided and no market cap data available. "
+        "Run: python -m scripts.ingest.run_full_pipeline --max-tickers 100"
+    )
+
+# ✅ CORRECT - Read from data layer, fail if empty
+tickers = get_tickers_from_bronze()
+if not tickers:
+    logger.error("Bronze layer is empty - run ingestion first")
+    raise DataNotAvailableError("No tickers in Bronze. Run ingestion pipeline.")
+
+# ✅ CORRECT - Explicit demo mode with user consent
+if args.demo_mode:
+    logger.warning("Running in DEMO MODE with sample data")
+    tickers = DEMO_TICKERS  # Constant defined in config
+else:
+    tickers = get_tickers_from_data_layer()  # Real data
+```
+
+**Why this matters:**
+1. **Masks data pipeline issues** - If Bronze is empty, user should know immediately
+2. **Creates confusing behavior** - "Why do I only see 2 stocks when I ingested 1000?"
+3. **Makes debugging harder** - Hard to trace where default data came from
+4. **Violates data layer boundaries** - Pipeline code shouldn't contain business data
+
+**Rules:**
+1. **NEVER hardcode default ticker lists** - Always read from config or data layer
+2. **NEVER silently fallback to demo data** - Fail explicitly with helpful error message
+3. **All defaults must be verifiable** - User should be able to trace where data came from
+4. **Demo mode must be explicit** - Require `--demo` flag, never automatic
 
 ### Pre-Commit Checklist
 
@@ -1634,6 +1692,8 @@ Before committing ANY code change:
 - [ ] Imports don't cross layer boundaries
 - [ ] No direct `import duckdb` or `import pyspark` (use session abstraction)
 - [ ] Correct backend selected (Spark for batch, DuckDB for interactive)
+- [ ] **No hardcoded default data** (tickers, IDs, etc.) - read from config/data layer
+- [ ] **Defaults are verifiable** - user can trace data source, fails loudly if missing
 - [ ] Added/updated tests if behavior changed
 - [ ] Updated CLAUDE.md if new patterns introduced
 
