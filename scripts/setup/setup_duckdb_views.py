@@ -125,11 +125,18 @@ class DuckDBViewSetup:
         Returns:
             True if view created, False if skipped
         """
-        # Check if path exists
+        # Check if path exists - try both nested (dims/facts) and flat structures
         if not table_path.exists():
-            logger.warning(f"⚠ Skipping {schema}.{table} - path not found: {table_path}")
-            self.skipped_views.append(f"{schema}.{table}")
-            return False
+            # Try flat structure (table directly under model folder)
+            # e.g., silver/stocks/dim_stock instead of silver/stocks/dims/dim_stock
+            flat_path = table_path.parent.parent / table
+            if flat_path.exists():
+                table_path = flat_path
+                logger.debug(f"Using flat path: {table_path}")
+            else:
+                logger.warning(f"⚠ Skipping {schema}.{table} - path not found: {table_path}")
+                self.skipped_views.append(f"{schema}.{table}")
+                return False
 
         # Check if this is a Delta table (has _delta_log directory)
         is_delta = (table_path / "_delta_log").exists() if table_path.is_dir() else False
