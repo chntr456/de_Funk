@@ -431,13 +431,14 @@ class AlphaVantageIngestor(Ingestor):
                 batch_count = df.count()
 
                 if batch_count > 0:
-                    # Write to bronze (append mode for subsequent batches)
-                    if batch_num == 1:
-                        # First batch: overwrite
-                        table_path = self.sink.write(df, table_name, partitions=["snapshot_dt", "asset_type"])
-                    else:
-                        # Subsequent batches: append
-                        table_path = self.sink.write(df, table_name, partitions=["snapshot_dt", "asset_type"], mode="append")
+                    # Use upsert (Delta MERGE) to accumulate data across runs
+                    # Key on ticker - updates existing, inserts new
+                    table_path = self.sink.upsert(
+                        df,
+                        table_name,
+                        key_columns=["ticker"],
+                        partitions=["snapshot_dt", "asset_type"]
+                    )
 
                     total_rows_written += batch_count
                     print(f"  ✓ Written {batch_count} rows (total: {total_rows_written})")
@@ -603,13 +604,14 @@ class AlphaVantageIngestor(Ingestor):
                 batch_count = df.count()
 
                 if batch_count > 0:
-                    # Write to bronze (append mode for subsequent batches)
-                    if batch_num == 1:
-                        # First batch: overwrite
-                        table_path = self.sink.write(df, table_name, partitions=["asset_type", "year", "month"])
-                    else:
-                        # Subsequent batches: append
-                        table_path = self.sink.write(df, table_name, partitions=["asset_type", "year", "month"], mode="append")
+                    # Use upsert (Delta MERGE) to accumulate data across runs
+                    # Key on ticker + trade_date - updates existing, inserts new
+                    table_path = self.sink.upsert(
+                        df,
+                        table_name,
+                        key_columns=["ticker", "trade_date"],
+                        partitions=["asset_type", "year", "month"]
+                    )
 
                     total_rows_written += batch_count
                     print(f"  ✓ Written {batch_count} rows (total: {total_rows_written})")
@@ -765,8 +767,14 @@ class AlphaVantageIngestor(Ingestor):
         # Filter out any invalid tickers
         df_normalized = df_normalized.filter(col("ticker").isNotNull())
 
-        # Write to bronze
-        table_path = self.sink.write(df_normalized, table_name, partitions=["snapshot_dt", "asset_type"])
+        # Use upsert (Delta MERGE) to accumulate data across runs
+        # Key on ticker - updates existing, inserts new
+        table_path = self.sink.upsert(
+            df_normalized,
+            table_name,
+            key_columns=["ticker"],
+            partitions=["snapshot_dt", "asset_type"]
+        )
 
         # Return both ticker list AND ticker->exchange mapping for filtering
         tickers = [row['symbol'] for row in rows if row.get('symbol')]  # CSV has 'symbol', not 'ticker'
@@ -1285,11 +1293,16 @@ class AlphaVantageIngestor(Ingestor):
         from functools import reduce
         final_df = reduce(lambda a, b: a.union(b), all_dfs)
 
-        # Write to bronze - partition by report_type and snapshot_date (NOT ticker)
-        # This reduces file count from 8000+ × 2 to just 2-4 files per ingestion
-        # Coalesce to reduce file count further
+        # Use upsert (Delta MERGE) to accumulate data across runs
+        # Key on ticker + fiscal_date_ending + report_type
+        # Coalesce to reduce file count
         final_df = final_df.coalesce(4)
-        table_path = self.sink.write(final_df, table_name, partitions=["report_type", "snapshot_date"])
+        table_path = self.sink.upsert(
+            final_df,
+            table_name,
+            key_columns=["ticker", "fiscal_date_ending", "report_type"],
+            partitions=["report_type", "snapshot_date"]
+        )
         print(f"Written {final_df.count()} income statement records to {table_path}")
 
         return table_path
@@ -1355,9 +1368,15 @@ class AlphaVantageIngestor(Ingestor):
         from functools import reduce
         final_df = reduce(lambda a, b: a.union(b), all_dfs)
 
-        # Partition by report_type and snapshot_date (NOT ticker) to reduce file count
+        # Use upsert (Delta MERGE) to accumulate data across runs
+        # Key on ticker + fiscal_date_ending + report_type
         final_df = final_df.coalesce(4)
-        table_path = self.sink.write(final_df, table_name, partitions=["report_type", "snapshot_date"])
+        table_path = self.sink.upsert(
+            final_df,
+            table_name,
+            key_columns=["ticker", "fiscal_date_ending", "report_type"],
+            partitions=["report_type", "snapshot_date"]
+        )
         print(f"Written {final_df.count()} balance sheet records to {table_path}")
 
         return table_path
@@ -1424,9 +1443,15 @@ class AlphaVantageIngestor(Ingestor):
         from functools import reduce
         final_df = reduce(lambda a, b: a.union(b), all_dfs)
 
-        # Partition by report_type and snapshot_date (NOT ticker) to reduce file count
+        # Use upsert (Delta MERGE) to accumulate data across runs
+        # Key on ticker + fiscal_date_ending + report_type
         final_df = final_df.coalesce(4)
-        table_path = self.sink.write(final_df, table_name, partitions=["report_type", "snapshot_date"])
+        table_path = self.sink.upsert(
+            final_df,
+            table_name,
+            key_columns=["ticker", "fiscal_date_ending", "report_type"],
+            partitions=["report_type", "snapshot_date"]
+        )
         print(f"Written {final_df.count()} cash flow records to {table_path}")
 
         return table_path

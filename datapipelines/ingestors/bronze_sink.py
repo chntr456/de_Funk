@@ -49,6 +49,70 @@ class BronzeSink:
         self._write_delta(df, str(path), mode="overwrite")
         return True
 
+    def upsert(
+        self,
+        df,
+        table: str,
+        key_columns: List[str],
+        partitions: Optional[List[str]] = None
+    ) -> str:
+        """
+        Upsert (merge) DataFrame into bronze table using Delta Lake MERGE.
+
+        This is the preferred method for incremental ingestion:
+        - Updates existing rows where key columns match
+        - Inserts new rows where key columns don't match
+        - Preserves data from previous runs
+
+        Args:
+            df: Spark DataFrame to upsert
+            table: Table name (must exist in storage config)
+            key_columns: Columns that uniquely identify a row (e.g., ["ticker"] or ["ticker", "trade_date"])
+            partitions: List of partition column names for new tables
+
+        Returns:
+            Path to table
+        """
+        from datetime import date
+        from delta.tables import DeltaTable
+        from pyspark.sql.functions import lit
+
+        # Get base path for table
+        table_cfg = self._table_cfg(table)
+        base_path = Path(self.cfg["roots"]["bronze"]) / table_cfg["rel"]
+
+        # Add snapshot_dt if specified in partitions but not in dataframe
+        if partitions and "snapshot_dt" in partitions:
+            if "snapshot_dt" not in df.columns:
+                df = df.withColumn("snapshot_dt", lit(date.today().isoformat()))
+
+        # Check if table exists
+        is_existing = self._is_delta_table(base_path)
+
+        if not is_existing:
+            # First write - create the table
+            base_path.parent.mkdir(parents=True, exist_ok=True)
+            writer = df.write.format("delta").mode("overwrite")
+            if partitions:
+                writer = writer.partitionBy(*partitions)
+            writer.save(str(base_path))
+        else:
+            # Table exists - perform MERGE
+            spark = df.sparkSession
+            delta_table = DeltaTable.forPath(spark, str(base_path))
+
+            # Build merge condition from key columns
+            merge_condition = " AND ".join([f"target.{col} = source.{col}" for col in key_columns])
+
+            # Perform merge: update all columns when matched, insert when not matched
+            (delta_table.alias("target")
+                .merge(df.alias("source"), merge_condition)
+                .whenMatchedUpdateAll()
+                .whenNotMatchedInsertAll()
+                .execute())
+
+        return str(base_path)
+
     def write(self, df, table: str, partitions: Optional[List[str]] = None, mode: str = "overwrite") -> str:
         """
         Write DataFrame to bronze table as Delta Lake format.
