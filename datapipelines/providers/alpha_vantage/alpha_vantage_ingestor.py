@@ -1517,9 +1517,15 @@ class AlphaVantageIngestor(Ingestor):
         from functools import reduce
         final_df = reduce(lambda a, b: a.union(b), all_dfs)
 
-        # Partition by report_type and snapshot_date (NOT ticker) to reduce file count
+        # Use upsert (Delta MERGE) to accumulate data across runs
+        # Key on ticker + fiscal_date_ending + report_type
         final_df = final_df.coalesce(4)
-        table_path = self.sink.write(final_df, table_name, partitions=["report_type", "snapshot_date"])
+        table_path = self.sink.upsert(
+            final_df,
+            table_name,
+            key_columns=["ticker", "fiscal_date_ending", "report_type"],
+            partitions=["report_type", "snapshot_date"]
+        )
         print(f"Written {final_df.count()} earnings records to {table_path}")
 
         return table_path
