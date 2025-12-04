@@ -1659,8 +1659,15 @@ class AlphaVantageIngestor(Ingestor):
         Returns:
             Dict with ingested tickers and paths
         """
-        # If sorting by market cap and no specific tickers provided
-        if sort_by_market_cap and tickers is None:
+        # If using bulk listing, skip market cap pre-filtering
+        # The bulk listing will provide tickers directly from Alpha Vantage
+        if use_bulk_listing:
+            # Let run_all() handle ticker discovery via LISTING_STATUS
+            tickers = None
+            print("Using BULK LISTING mode - will discover tickers from Alpha Vantage")
+            print()
+        # If sorting by market cap and no specific tickers provided (and not using bulk listing)
+        elif sort_by_market_cap and tickers is None:
             if not max_tickers:
                 raise ValueError("--max-tickers is required when using market cap sorting")
 
