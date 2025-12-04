@@ -59,13 +59,13 @@ python -m scripts.build.rebuild_model --model equity
 
 ## 📥 Ingest Scripts (3 scripts)
 
-**Purpose:** Data ingestion and Bronze layer operations
+**Purpose:** Data ingestion and Bronze layer operations (Delta Lake format v2.3+)
 
 | Script | Description | Usage |
 |--------|-------------|-------|
 | `Bronze_pull.py` | Bronze layer data ingestion | `python -m scripts.ingest.Bronze_pull` |
 | `run_full_pipeline.py` | Complete ETL pipeline orchestrator | `python -m scripts.ingest.run_full_pipeline [options]` |
-| `reingest_exchanges.py` | Re-ingest exchanges data from Polygon API | `python -m scripts.ingest.reingest_exchanges [--snapshot YYYY-MM-DD]` |
+| `refresh_market_cap_rankings.py` | Refresh market cap rankings from Alpha Vantage | `python -m scripts.ingest.refresh_market_cap_rankings` |
 
 ### Common Ingest Examples
 
@@ -73,11 +73,11 @@ python -m scripts.build.rebuild_model --model equity
 # Run full pipeline with default settings
 python -m scripts.ingest.run_full_pipeline
 
-# Run pipeline with date range
-python -m scripts.ingest.run_full_pipeline --date-from 2024-01-01 --date-to 2024-12-31
+# Run pipeline with date range and ticker limit
+python -m scripts.ingest.run_full_pipeline --from 2024-01-01 --max-tickers 100
 
-# Re-ingest exchanges data
-python -m scripts.ingest.reingest_exchanges
+# Refresh market cap rankings
+python -m scripts.ingest.refresh_market_cap_rankings
 ```
 
 ---

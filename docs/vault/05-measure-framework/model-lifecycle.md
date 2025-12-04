@@ -139,19 +139,18 @@ class EquityModel(BaseModel):
 
 ## Storage Layout
 
-**Before build**:
+**Before build** (Bronze - Delta Lake v2.3+):
 ```
-storage/bronze/polygon/daily_prices/*.parquet  # Raw data
+storage/bronze/securities_prices_daily/_delta_log/  # Delta Lake format
 ```
 
-**After build**:
+**After build** (Silver - Delta Lake v2.3+):
 ```
-storage/silver/equity/
+storage/silver/stocks/
 ├── dims/
-│   ├── dim_equity/*.parquet
-│   └── dim_exchange/*.parquet
+│   └── dim_stock/_delta_log/
 └── facts/
-    └── fact_equity_prices/*.parquet
+    └── fact_stock_prices/_delta_log/
 ```
 
 ---

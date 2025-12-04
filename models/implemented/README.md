@@ -21,10 +21,16 @@ models/implemented/
 **Dependencies:** None (foundation model)
 
 ### Company Model
-**Purpose:** Company financial and market data
-**Key Tables:** `dim_company`, `fact_prices`, `fact_news`
+**Purpose:** Corporate entities with SEC identifiers (CIK)
+**Key Tables:** `dim_company`
 **Dependencies:** `core`
-**Data Source:** Polygon.io API
+**Data Source:** Alpha Vantage API (v2.0+)
+
+### Stocks Model
+**Purpose:** Stock securities with prices and technicals
+**Key Tables:** `dim_stock`, `fact_stock_prices`
+**Dependencies:** `core`, `company`
+**Data Source:** Alpha Vantage API (v2.0+)
 
 ### Forecast Model
 **Purpose:** Time series forecasting
