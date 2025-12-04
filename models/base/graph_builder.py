@@ -139,6 +139,10 @@ class GraphBuilder:
             if 'filters' in node_config and node_config['filters']:
                 df = self.model._apply_filters(df, node_config['filters'])
 
+            # Apply joins (before select so joined columns are available)
+            if 'join' in node_config and node_config['join']:
+                df = self._apply_joins(df, node_config['join'], nodes, node_id)
+
             # Apply select (column selection/aliasing)
             if 'select' in node_config and node_config['select']:
                 df = self.model._select_columns(df, node_config['select'])
@@ -178,6 +182,126 @@ class GraphBuilder:
             nodes[node_id] = df
 
         return nodes
+
+    def _apply_joins(
+        self,
+        df: DataFrame,
+        join_specs: List[Dict],
+        nodes: Dict[str, DataFrame],
+        node_id: str
+    ) -> DataFrame:
+        """
+        Apply join operations to a DataFrame.
+
+        Args:
+            df: Main DataFrame to join onto
+            join_specs: List of join specifications from YAML
+            nodes: Already-built nodes dictionary
+            node_id: Current node ID (for error messages)
+
+        Returns:
+            Joined DataFrame with columns from all tables
+
+        Example YAML:
+            join:
+              - table: _ticker_cik_lookup
+                on: ["ticker=ticker"]
+                type: inner
+        """
+        for join_spec in join_specs:
+            join_table = join_spec['table']
+            join_on = join_spec.get('on', [])
+            join_type = join_spec.get('type', 'left')
+
+            # Get the table to join with
+            if join_table not in nodes:
+                raise ValueError(
+                    f"Node {node_id} tries to join with '{join_table}', but it hasn't been built yet. "
+                    f"Ensure '{join_table}' is defined before '{node_id}' in graph.nodes"
+                )
+            right_df = nodes[join_table]
+
+            # Parse join conditions: ["ticker=ticker", "date=date"] -> pairs
+            join_pairs = []
+            for condition in join_on:
+                left_col, right_col = condition.split('=')
+                join_pairs.append((left_col.strip(), right_col.strip()))
+
+            if self.backend == 'spark':
+                # Spark join with aliased columns to avoid ambiguity
+                # Rename right table columns with prefix to avoid collisions
+                right_prefix = f"{join_table}__"
+
+                # Build join condition
+                from pyspark.sql import functions as F
+                join_cond = None
+                for left_col, right_col in join_pairs:
+                    cond = df[left_col] == right_df[right_col]
+                    join_cond = cond if join_cond is None else (join_cond & cond)
+
+                # Rename right columns to avoid duplicates (except join keys)
+                right_join_cols = {r for _, r in join_pairs}
+                for col in right_df.columns:
+                    if col not in right_join_cols:
+                        # Prefix with table name for disambiguation
+                        right_df = right_df.withColumnRenamed(col, f"{join_table}.{col}")
+
+                # Perform join
+                df = df.join(right_df, join_cond, how=join_type)
+
+                # Drop duplicate join key columns from right side
+                for _, right_col in join_pairs:
+                    if right_col in df.columns:
+                        # The right side column is a duplicate, Spark keeps both
+                        # We need to drop the ambiguous one
+                        pass  # Spark handles this with the join condition
+
+            else:
+                # DuckDB/pandas join
+                import pandas as pd
+
+                # Convert to pandas if needed
+                if hasattr(df, 'df'):
+                    left_pdf = df.df()
+                elif isinstance(df, pd.DataFrame):
+                    left_pdf = df
+                else:
+                    left_pdf = df
+
+                if hasattr(right_df, 'df'):
+                    right_pdf = right_df.df()
+                elif isinstance(right_df, pd.DataFrame):
+                    right_pdf = right_df
+                else:
+                    right_pdf = right_df
+
+                # Rename right columns with table prefix (except join keys)
+                right_join_cols = {r for _, r in join_pairs}
+                rename_map = {
+                    col: f"{join_table}.{col}"
+                    for col in right_pdf.columns
+                    if col not in right_join_cols
+                }
+                right_pdf = right_pdf.rename(columns=rename_map)
+
+                # Build merge parameters
+                left_on = [l for l, _ in join_pairs]
+                right_on = [r for _, r in join_pairs]
+
+                # Map join type
+                how_map = {'inner': 'inner', 'left': 'left', 'right': 'right', 'outer': 'outer'}
+                how = how_map.get(join_type, 'left')
+
+                # Perform merge
+                df = left_pdf.merge(right_pdf, left_on=left_on, right_on=right_on, how=how)
+
+                # Convert back to DuckDB if needed
+                if hasattr(self.connection, 'conn'):
+                    df = self.connection.conn.from_df(df)
+
+            logger.debug(f"Applied {join_type} join: {node_id} ← {join_table} on {join_on}")
+
+        return df
 
     def _load_bronze_table(self, table_name: str) -> DataFrame:
         """
