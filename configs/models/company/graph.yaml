@@ -79,7 +79,8 @@ nodes:
       reported_currency: reported_currency
       snapshot_date: snapshot_date
     derive:
-      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup__cik)"
+      # Note: Use 'cik' here because derive runs AFTER select, which renamed the column
+      company_id: "CONCAT('COMPANY_', cik)"
       report_date: "fiscal_date_ending"  # Alias for calendar joins
     tags: [fact, financials, income_statement]
     unique_key: [cik, fiscal_date_ending, report_type]
@@ -123,7 +124,7 @@ nodes:
       reported_currency: reported_currency
       snapshot_date: snapshot_date
     derive:
-      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup__cik)"
+      company_id: "CONCAT('COMPANY_', cik)"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, balance_sheet]
     unique_key: [cik, fiscal_date_ending, report_type]
@@ -164,7 +165,7 @@ nodes:
       reported_currency: reported_currency
       snapshot_date: snapshot_date
     derive:
-      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup__cik)"
+      company_id: "CONCAT('COMPANY_', cik)"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, cash_flow]
     unique_key: [cik, fiscal_date_ending, report_type]
@@ -192,7 +193,7 @@ nodes:
       # Metadata
       snapshot_date: snapshot_date
     derive:
-      company_id: "CONCAT('COMPANY_', _ticker_cik_lookup__cik)"
+      company_id: "CONCAT('COMPANY_', cik)"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, earnings]
     unique_key: [cik, fiscal_date_ending, report_type]
