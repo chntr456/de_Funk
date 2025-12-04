@@ -321,10 +321,10 @@ LIMIT 10
             self.run_sample_query("Stock Prices with Company Info", sql)
 
         # Query 4: Helper view test (if available)
-        if self.check_view_exists('analytics.stock_prices_enriched'):
+        if self.check_view_exists('helpers.stock_prices_enriched'):
             sql = """
 SELECT *
-FROM analytics.stock_prices_enriched
+FROM helpers.stock_prices_enriched
 WHERE trade_date >= CURRENT_DATE - INTERVAL '7 days'
 ORDER BY trade_date DESC
 LIMIT 10

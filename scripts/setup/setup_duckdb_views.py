@@ -440,8 +440,10 @@ CREATE OR REPLACE VIEW futures.dim_security AS
         logger.info("="*80)
 
         # Helper: Stock prices with company info
+        # Note: Use 'helpers' schema instead of 'analytics' to avoid ambiguity
+        # with the 'analytics.db' database/catalog name
         helper_sql = """
-CREATE OR REPLACE VIEW analytics.stock_prices_enriched AS
+CREATE OR REPLACE VIEW helpers.stock_prices_enriched AS
 SELECT
     p.ticker,
     p.trade_date,
@@ -462,17 +464,17 @@ LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
 """
 
         if dry_run:
-            print(f"\n-- analytics.stock_prices_enriched")
+            print(f"\n-- helpers.stock_prices_enriched")
             print(helper_sql)
         else:
             try:
-                self.conn.execute("CREATE SCHEMA IF NOT EXISTS analytics;")
+                self.conn.execute("CREATE SCHEMA IF NOT EXISTS helpers;")
                 self.conn.execute(helper_sql)
-                logger.info("✓ Created helper view: analytics.stock_prices_enriched")
-                self.created_views.append("analytics.stock_prices_enriched")
+                logger.info("✓ Created helper view: helpers.stock_prices_enriched")
+                self.created_views.append("helpers.stock_prices_enriched")
             except Exception as e:
                 logger.warning(f"⚠ Could not create stock_prices_enriched view: {e}")
-                self.skipped_views.append("analytics.stock_prices_enriched")
+                self.skipped_views.append("helpers.stock_prices_enriched")
 
     def validate_views(self):
         """Validate created views."""
