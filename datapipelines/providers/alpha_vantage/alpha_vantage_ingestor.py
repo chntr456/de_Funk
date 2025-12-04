@@ -767,13 +767,15 @@ class AlphaVantageIngestor(Ingestor):
         # Filter out any invalid tickers
         df_normalized = df_normalized.filter(col("ticker").isNotNull())
 
-        # Use upsert (Delta MERGE) to accumulate data across runs
-        # Key on ticker - updates existing, inserts new
+        # Use upsert with update_existing=False for bulk listing
+        # This ONLY INSERTS new tickers, preserving existing detailed OVERVIEW data
+        # Without this, bulk listing would overwrite CIK/market_cap/sector with NULLs
         table_path = self.sink.upsert(
             df_normalized,
             table_name,
             key_columns=["ticker"],
-            partitions=["snapshot_dt", "asset_type"]
+            partitions=["snapshot_dt", "asset_type"],
+            update_existing=False  # Don't overwrite existing detailed data
         )
 
         # Return both ticker list AND ticker->exchange mapping for filtering

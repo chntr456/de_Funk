@@ -54,13 +54,14 @@ class BronzeSink:
         df,
         table: str,
         key_columns: List[str],
-        partitions: Optional[List[str]] = None
+        partitions: Optional[List[str]] = None,
+        update_existing: bool = True
     ) -> str:
         """
         Upsert (merge) DataFrame into bronze table using Delta Lake MERGE.
 
         This is the preferred method for incremental ingestion:
-        - Updates existing rows where key columns match
+        - Updates existing rows where key columns match (if update_existing=True)
         - Inserts new rows where key columns don't match
         - Preserves data from previous runs
 
@@ -69,6 +70,8 @@ class BronzeSink:
             table: Table name (must exist in storage config)
             key_columns: Columns that uniquely identify a row (e.g., ["ticker"] or ["ticker", "trade_date"])
             partitions: List of partition column names for new tables
+            update_existing: If True, update existing rows. If False, only insert new rows.
+                            Use False for bulk listing data that shouldn't overwrite detailed OVERVIEW data.
 
         Returns:
             Path to table
@@ -104,12 +107,20 @@ class BronzeSink:
             # Build merge condition from key columns
             merge_condition = " AND ".join([f"target.{col} = source.{col}" for col in key_columns])
 
-            # Perform merge: update all columns when matched, insert when not matched
-            (delta_table.alias("target")
-                .merge(df.alias("source"), merge_condition)
-                .whenMatchedUpdateAll()
-                .whenNotMatchedInsertAll()
-                .execute())
+            # Perform merge based on update_existing flag
+            if update_existing:
+                # Full upsert: update existing + insert new
+                (delta_table.alias("target")
+                    .merge(df.alias("source"), merge_condition)
+                    .whenMatchedUpdateAll()
+                    .whenNotMatchedInsertAll()
+                    .execute())
+            else:
+                # Insert-only: only add new rows, preserve existing data
+                (delta_table.alias("target")
+                    .merge(df.alias("source"), merge_condition)
+                    .whenNotMatchedInsertAll()
+                    .execute())
 
         return str(base_path)
 
