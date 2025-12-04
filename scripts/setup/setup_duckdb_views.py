@@ -2,7 +2,7 @@
 """
 Setup DuckDB Views for v2.0 Models
 
-Creates a persistent DuckDB database with views pointing to Silver layer Parquet files.
+Creates a persistent DuckDB database with views pointing to Silver layer Delta/Parquet tables.
 This is OPTIONAL for performance optimization - base measures work without it via schema aliases.
 
 Usage:
@@ -20,7 +20,8 @@ Usage:
 
 Features:
 - Creates views for ALL v2.0 models (core, company, stocks, options, etfs, futures)
-- Points views to Silver Parquet files (zero data duplication)
+- Auto-detects Delta Lake vs Parquet format (uses delta_scan or read_parquet)
+- Points views to Silver layer tables (zero data duplication)
 - Creates alias views (stocks.fact_prices → stocks.fact_stock_prices) for DuckDB caching
 - Backend-agnostic base measures work via schema aliases (ModelConfigLoader)
 - This script provides performance optimization by pre-creating database views
@@ -29,6 +30,7 @@ Features:
 - Shows table statistics
 
 Note:
+- Requires DuckDB delta extension for Delta Lake tables (auto-installed)
 - Alias views here are DuckDB-specific performance optimization
 - Functional aliasing (backend-agnostic) is handled by schema-level aliases
 - Both Spark and DuckDB backends work via schema aliases
@@ -86,6 +88,17 @@ class DuckDBViewSetup:
         self.conn = duckdb.connect(str(self.db_path), read_only=read_only)
         logger.info("✓ Connected")
 
+        # Install and load Delta extension for reading Delta Lake tables
+        try:
+            self.conn.execute("INSTALL delta;")
+            self.conn.execute("LOAD delta;")
+            logger.info("✓ Delta extension loaded")
+            self.delta_enabled = True
+        except Exception as e:
+            logger.warning(f"⚠ Delta extension not available: {e}")
+            logger.warning("  Will fall back to reading Parquet files directly")
+            self.delta_enabled = False
+
     def close(self):
         """Close DuckDB connection."""
         if self.conn:
@@ -96,36 +109,44 @@ class DuckDBViewSetup:
         """Get Silver layer path for model."""
         return Path(self.config.storage.get(f'{model}_silver', f'storage/silver/{model}'))
 
-    def create_view(self, schema: str, table: str, parquet_path: Path, dry_run: bool = False) -> bool:
+    def create_view(self, schema: str, table: str, table_path: Path, dry_run: bool = False) -> bool:
         """
-        Create a DuckDB view pointing to Parquet file(s).
+        Create a DuckDB view pointing to Delta Lake or Parquet files.
 
         Args:
             schema: Schema name (e.g., 'core', 'company', 'stocks')
             table: Table name (e.g., 'dim_calendar', 'dim_company')
-            parquet_path: Path to Parquet file or directory
+            table_path: Path to Delta table or Parquet file/directory
             dry_run: If True, show SQL without executing
 
         Returns:
             True if view created, False if skipped
         """
-        # Check if parquet path exists
-        if not parquet_path.exists():
-            logger.warning(f"⚠ Skipping {schema}.{table} - path not found: {parquet_path}")
+        # Check if path exists
+        if not table_path.exists():
+            logger.warning(f"⚠ Skipping {schema}.{table} - path not found: {table_path}")
             self.skipped_views.append(f"{schema}.{table}")
             return False
 
-        # Determine if reading directory or single file
-        if parquet_path.is_dir():
+        # Check if this is a Delta table (has _delta_log directory)
+        is_delta = (table_path / "_delta_log").exists() if table_path.is_dir() else False
+
+        if is_delta and self.delta_enabled:
+            # Use delta_scan for Delta tables
+            read_sql = f"delta_scan('{table_path}')"
+            format_used = "Delta"
+        elif table_path.is_dir():
             # Check if directory has any parquet files
-            parquet_files = list(parquet_path.glob("**/*.parquet"))
+            parquet_files = list(table_path.glob("**/*.parquet"))
             if not parquet_files:
-                logger.warning(f"⚠ Skipping {schema}.{table} - no parquet files in: {parquet_path}")
+                logger.warning(f"⚠ Skipping {schema}.{table} - no parquet files in: {table_path}")
                 self.skipped_views.append(f"{schema}.{table}")
                 return False
-            pattern = f"{parquet_path}/**/*.parquet"
+            read_sql = f"read_parquet('{table_path}/**/*.parquet')"
+            format_used = "Parquet"
         else:
-            pattern = str(parquet_path)
+            read_sql = f"read_parquet('{table_path}')"
+            format_used = "Parquet"
 
         # Create schema if needed
         schema_sql = f"CREATE SCHEMA IF NOT EXISTS {schema};"
@@ -133,20 +154,20 @@ class DuckDBViewSetup:
         # Create view SQL
         view_sql = f"""
 CREATE OR REPLACE VIEW {schema}.{table} AS
-SELECT * FROM read_parquet('{pattern}');
+SELECT * FROM {read_sql};
 """
 
         full_sql = schema_sql + view_sql
 
         if dry_run:
-            print(f"\n-- {schema}.{table}")
+            print(f"\n-- {schema}.{table} [{format_used}]")
             print(full_sql)
             return True
 
         try:
             self.conn.execute(schema_sql)
             self.conn.execute(view_sql)
-            logger.info(f"✓ Created view: {schema}.{table}")
+            logger.info(f"✓ Created view: {schema}.{table} [{format_used}]")
             self.created_views.append(f"{schema}.{table}")
             return True
         except Exception as e:
