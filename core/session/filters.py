@@ -176,9 +176,25 @@ class FilterEngine:
         # Check if df is a pandas DataFrame or DuckDB relation
         is_pandas = isinstance(df, pd.DataFrame)
 
+        # Get available columns to skip filters for non-existent columns
+        # This prevents errors when filters from one table are applied to another
+        try:
+            if is_pandas:
+                available_columns = set(df.columns)
+            else:
+                # DuckDB relation
+                available_columns = set(df.columns)
+        except Exception:
+            # If we can't get columns, apply all filters and let it fail naturally
+            available_columns = None
+
         conditions = []
 
         for col_name, value in filters.items():
+            # Skip filter if column doesn't exist in this table
+            if available_columns is not None and col_name not in available_columns:
+                continue
+
             if isinstance(value, dict):
                 # Range filter - support both min/max AND start/end formats
                 # Date ranges use start/end, numeric ranges use min/max
@@ -230,6 +246,10 @@ class FilterEngine:
         if is_pandas:
             # pandas DataFrame: apply filters manually
             for col_name, value in filters.items():
+                # Skip filter if column doesn't exist in this table
+                if available_columns is not None and col_name not in available_columns:
+                    continue
+
                 if isinstance(value, dict):
                     # Range filters
                     if 'start' in value:
