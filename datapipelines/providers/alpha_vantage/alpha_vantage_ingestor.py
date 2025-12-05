@@ -2087,7 +2087,8 @@ class AlphaVantageIngestor(Ingestor):
             total_tickers=total_tickers,
             batch_size=batch_write_size,
             data_types=data_types,
-            silent=False
+            silent=False,
+            minimal=True  # Single-line progress updates
         )
 
         # Accumulators for batch writing

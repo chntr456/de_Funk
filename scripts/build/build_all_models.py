@@ -1,52 +1,42 @@
 #!/usr/bin/env python3
 """
-Build All Models - Complete data ingestion and model building across all domains.
+Build All Models - Build Silver layer from Bronze data.
+
+This script builds Silver dimensional models from existing Bronze data.
+It does NOT handle data ingestion - use run_full_pipeline.py for ingestion.
+
+Separation of Concerns:
+- run_full_pipeline.py: Orchestrates ingestion + build + forecast (full pipeline)
+- build_all_models.py: Only builds Silver layer from Bronze data (this script)
+- run_forecasts.py: Only runs forecasts on Silver data
 
 This script:
 1. Discovers all models in configs/models/
-2. Runs appropriate paginated ingestion for each domain (Alpha Vantage, BLS, Chicago APIs)
-3. Builds Silver layer from Bronze data
-4. Reports progress and results
-
-This is NOT a testing script - it works with REAL data and REAL APIs.
+2. Builds Silver layer from existing Bronze data
+3. Reports progress with minimal single-line status updates
 
 Usage:
-    # Build all models with default settings
-    python -m scripts.build_all_models
+    # Build all models from existing Bronze data
+    python -m scripts.build.build_all_models
 
     # Build specific models
-    python -m scripts.build_all_models --models stocks company
+    python -m scripts.build.build_all_models --models stocks company
 
-    # With date range for market data
-    python -m scripts.build_all_models --date-from 2024-01-01 --date-to 2024-12-31
-
-    # With ticker limit (for testing/development)
-    python -m scripts.build_all_models --max-tickers 20
-
-    # Skip ingestion (just rebuild Silver from existing Bronze)
-    python -m scripts.build_all_models --skip-ingestion
-
-    # Parallel model building
-    python -m scripts.build_all_models --parallel
+    # With verbose logging (instead of progress bar)
+    python -m scripts.build.build_all_models --verbose
 
     # Dry run (show what would be done)
-    python -m scripts.build_all_models --dry-run
-
-    # Daily refresh (fast - skip fundamentals, use compact prices)
-    python -m scripts.build_all_models --date-from 2025-11-20 --skip-reference-refresh --outputsize compact
+    python -m scripts.build.build_all_models --dry-run
 
 Examples:
-    # Full production build (all domains, all data)
-    python -m scripts.build_all_models --date-from 2024-01-01
+    # Full production build from Bronze
+    python -m scripts.build.build_all_models
 
-    # Development build (limited data, specific models)
-    python -m scripts.build_all_models --models stocks --max-tickers 10 --date-from 2025-01-01
+    # Development build (specific models)
+    python -m scripts.build.build_all_models --models stocks company
 
-    # Quick rebuild from existing Bronze
-    python -m scripts.build_all_models --skip-ingestion
-
-    # Daily refresh (optimized - 50% faster)
-    python -m scripts.build_all_models --date-from 2025-11-20 --skip-reference-refresh --outputsize compact
+    # See detailed logging
+    python -m scripts.build.build_all_models --verbose
 """
 
 from __future__ import annotations
@@ -422,43 +412,30 @@ class AllModelBuilder:
         date_from: str,
         date_to: str,
         max_tickers: Optional[int],
-        skip_ingestion: bool,
+        skip_ingestion: bool = True,  # Ignored - ingestion handled separately
         minimal_progress: bool = True
     ) -> bool:
         """
-        Build a single model (ingestion + Silver layer).
+        Build a single model's Silver layer from Bronze data.
+
+        Note: Ingestion is handled separately by run_full_pipeline.py.
+        This script only builds Silver layer from existing Bronze data.
 
         Args:
             model_name: Model to build
             date_from: Start date
             date_to: End date
             max_tickers: Max tickers (for Alpha Vantage models)
-            skip_ingestion: Skip Bronze ingestion
+            skip_ingestion: Ignored (kept for API compatibility)
             minimal_progress: If True, suppress verbose logging (for clean progress display)
 
         Returns:
             True if build succeeds
         """
         try:
-            # Step 1: Ingestion (Bronze layer)
-            if not skip_ingestion:
-                if not minimal_progress:
-                    logger.info(f"Step 1/2: Running {model_name} ingestion...")
-                ingestion_success = self._run_ingestion(
-                    model_name,
-                    date_from,
-                    date_to,
-                    max_tickers
-                )
-                if not ingestion_success:
-                    logger.error(f"Ingestion failed for {model_name}")
-                    return False
-                if not minimal_progress:
-                    logger.info(f"  ✓ Ingestion completed for {model_name}")
-
-            # Step 2: Build Silver layer
+            # Build Silver layer from Bronze data
             if not minimal_progress:
-                logger.info(f"Step 2/2: Building {model_name} Silver layer...")
+                logger.info(f"Building {model_name} Silver layer...")
             build_success = self._build_silver_layer(
                 model_name,
                 date_from,
@@ -471,7 +448,6 @@ class AllModelBuilder:
                 return False
             if not minimal_progress:
                 logger.info(f"  ✓ Silver layer built for {model_name}")
-                logger.info(f"✓ All steps completed for {model_name}")
 
             return True
 
@@ -853,7 +829,8 @@ def main():
     parser.add_argument(
         '--skip-ingestion',
         action='store_true',
-        help='Skip Bronze ingestion (use existing Bronze data)'
+        default=True,  # Ingestion now handled separately by run_full_pipeline.py
+        help='(Deprecated) Ingestion is handled separately. This script only builds Silver layer.'
     )
 
     parser.add_argument(
