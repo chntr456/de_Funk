@@ -8,7 +8,59 @@ Alpha Vantage uses a different API structure than Polygon:
 - Rate limits are more restrictive (5 calls/min for free tier)
 """
 
+import pandas as pd
 from datapipelines.facets.base_facet import Facet
+
+
+def safe_long(series: pd.Series) -> list:
+    """
+    Convert pandas Series to list of Python int or None.
+
+    Avoids Spark CANNOT_DETERMINE_TYPE errors by using Python native types
+    instead of pandas Int64/float64 which fail when all values are NaN.
+
+    Args:
+        series: pandas Series to convert
+
+    Returns:
+        List of Python int or None values
+    """
+    if series is None:
+        return []
+    return [int(x) if pd.notna(x) else None for x in pd.to_numeric(series, errors='coerce')]
+
+
+def safe_double(series: pd.Series) -> list:
+    """
+    Convert pandas Series to list of Python float or None.
+
+    Avoids Spark CANNOT_DETERMINE_TYPE errors by using Python native types
+    instead of pandas Int64/float64 which fail when all values are NaN.
+
+    Args:
+        series: pandas Series to convert
+
+    Returns:
+        List of Python float or None values
+    """
+    if series is None:
+        return []
+    return [float(x) if pd.notna(x) else None for x in pd.to_numeric(series, errors='coerce')]
+
+
+def safe_string(series: pd.Series) -> list:
+    """
+    Convert pandas Series to list of Python str or None.
+
+    Args:
+        series: pandas Series to convert
+
+    Returns:
+        List of Python str or None values
+    """
+    if series is None:
+        return []
+    return [str(x) if pd.notna(x) and str(x) != 'None' else None for x in series]
 
 
 class AlphaVantageFacet(Facet):

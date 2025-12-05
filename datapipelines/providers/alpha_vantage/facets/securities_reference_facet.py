@@ -16,7 +16,9 @@ Partitions: snapshot_dt, asset_type
 from typing import Iterable, List
 from pyspark.sql import functions as F
 from pyspark.sql.types import StringType
-from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import AlphaVantageFacet
+from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import (
+    AlphaVantageFacet, safe_long, safe_double
+)
 from datapipelines.facets.base_facet import coalesce_existing, first_existing
 from datetime import datetime
 
@@ -290,16 +292,8 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             else:
                 return "stocks"
 
-        # Helper to safely convert to Python native types (avoids Spark CANNOT_DETERMINE_TYPE)
-        def safe_long(series):
-            """Convert series to list of Python int or None."""
-            return [int(x) if pd.notna(x) else None for x in pd.to_numeric(series, errors='coerce')]
-
-        def safe_double(series):
-            """Convert series to list of Python float or None."""
-            return [float(x) if pd.notna(x) else None for x in pd.to_numeric(series, errors='coerce')]
-
         # Build result DataFrame using Python native types
+        # Uses safe_long/safe_double from base facet for Spark type compatibility
         result = pd.DataFrame({
             # Core identifiers
             'ticker': pdf['Symbol'].tolist(),

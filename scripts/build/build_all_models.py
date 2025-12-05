@@ -65,6 +65,7 @@ repo_root = setup_repo_imports()
 
 from config.model_loader import ModelConfigLoader
 from core.context import RepoContext
+from datapipelines.base.progress_tracker import StepProgressTracker
 
 logging.basicConfig(
     level=logging.INFO,
@@ -193,7 +194,8 @@ class AllModelBuilder:
         use_bulk_discovery: bool = True,
         skip_reference_refresh: bool = False,
         outputsize: str = "full",
-        use_concurrent: bool = True
+        use_concurrent: bool = True,
+        minimal_progress: bool = True
     ) -> bool:
         """
         Build all models with ingestion and Silver layer creation.
@@ -213,6 +215,7 @@ class AllModelBuilder:
             skip_reference_refresh: Skip reference data refresh (saves ~50% time for daily updates)
             outputsize: 'compact' (100 days) or 'full' (20+ years) for price data
             use_concurrent: Use concurrent API requests (premium tier only, default: True)
+            minimal_progress: Use clean single-line progress bar (default: True). False for verbose logging.
 
         Returns:
             True if all builds succeed
@@ -271,6 +274,9 @@ class AllModelBuilder:
                 logger.info(f"  Silver build: Yes")
             return True
 
+        # Store minimal_progress preference
+        self.minimal_progress = minimal_progress
+
         # Build each model
         if parallel and len(models_to_build) > 1:
             success = self._build_models_parallel(
@@ -287,7 +293,8 @@ class AllModelBuilder:
                 date_from,
                 date_to,
                 max_tickers,
-                skip_ingestion
+                skip_ingestion,
+                minimal_progress=minimal_progress
             )
 
         self.results['end_time'] = datetime.now()
@@ -301,22 +308,30 @@ class AllModelBuilder:
         date_from: str,
         date_to: str,
         max_tickers: Optional[int],
-        skip_ingestion: bool
+        skip_ingestion: bool,
+        minimal_progress: bool = True
     ) -> bool:
-        """Build models sequentially."""
+        """Build models sequentially with progress tracking."""
         all_passed = True
 
+        # Initialize progress tracker
+        tracker = StepProgressTracker(
+            total_steps=len(models),
+            description="Building models",
+            silent=not minimal_progress
+        )
+
         for i, model_name in enumerate(models, 1):
-            logger.info(f"\n{'=' * 70}")
-            logger.info(f"MODEL {i}/{len(models)}: {model_name}")
-            logger.info(f"{'=' * 70}")
+            # Update progress tracker
+            tracker.update(i, f"Building {model_name}...")
 
             success = self._build_single_model(
                 model_name,
                 date_from,
                 date_to,
                 max_tickers,
-                skip_ingestion
+                skip_ingestion,
+                minimal_progress=minimal_progress
             )
 
             self.results['model_results'][model_name] = {
@@ -326,11 +341,16 @@ class AllModelBuilder:
 
             if success:
                 self.results['models_succeeded'] += 1
+                tracker.step_complete(f"{model_name} ✓")
             else:
                 self.results['models_failed'] += 1
+                tracker.step_complete(f"{model_name} ✗")
                 all_passed = False
 
             self.results['models_processed'] += 1
+
+        # Final summary
+        tracker.finish(success=all_passed)
 
         return all_passed
 
@@ -402,7 +422,8 @@ class AllModelBuilder:
         date_from: str,
         date_to: str,
         max_tickers: Optional[int],
-        skip_ingestion: bool
+        skip_ingestion: bool,
+        minimal_progress: bool = True
     ) -> bool:
         """
         Build a single model (ingestion + Silver layer).
@@ -413,6 +434,7 @@ class AllModelBuilder:
             date_to: End date
             max_tickers: Max tickers (for Alpha Vantage models)
             skip_ingestion: Skip Bronze ingestion
+            minimal_progress: If True, suppress verbose logging (for clean progress display)
 
         Returns:
             True if build succeeds
@@ -420,7 +442,8 @@ class AllModelBuilder:
         try:
             # Step 1: Ingestion (Bronze layer)
             if not skip_ingestion:
-                logger.info(f"Step 1/2: Running {model_name} ingestion...")
+                if not minimal_progress:
+                    logger.info(f"Step 1/2: Running {model_name} ingestion...")
                 ingestion_success = self._run_ingestion(
                     model_name,
                     date_from,
@@ -430,24 +453,26 @@ class AllModelBuilder:
                 if not ingestion_success:
                     logger.error(f"Ingestion failed for {model_name}")
                     return False
-                logger.info(f"  ✓ Ingestion completed for {model_name}")
-            else:
-                logger.info(f"Step 1/2: Ingestion skipped for {model_name}")
+                if not minimal_progress:
+                    logger.info(f"  ✓ Ingestion completed for {model_name}")
 
             # Step 2: Build Silver layer
-            logger.info(f"Step 2/2: Building {model_name} Silver layer...")
+            if not minimal_progress:
+                logger.info(f"Step 2/2: Building {model_name} Silver layer...")
             build_success = self._build_silver_layer(
                 model_name,
                 date_from,
                 date_to,
-                max_tickers
+                max_tickers,
+                minimal_progress=minimal_progress
             )
             if not build_success:
                 logger.error(f"Silver build failed for {model_name}")
                 return False
-            logger.info(f"  ✓ Silver layer built for {model_name}")
+            if not minimal_progress:
+                logger.info(f"  ✓ Silver layer built for {model_name}")
+                logger.info(f"✓ All steps completed for {model_name}")
 
-            logger.info(f"✓ All steps completed for {model_name}")
             return True
 
         except Exception as e:
@@ -628,10 +653,18 @@ class AllModelBuilder:
         model_name: str,
         date_from: str,
         date_to: str,
-        max_tickers: Optional[int]
+        max_tickers: Optional[int],
+        minimal_progress: bool = True
     ) -> bool:
         """
         Build Silver layer from Bronze data.
+
+        Args:
+            model_name: Model to build
+            date_from: Start date
+            date_to: End date
+            max_tickers: Max tickers limit
+            minimal_progress: If True, suppress verbose logging
 
         Returns:
             True if build succeeds
@@ -665,7 +698,8 @@ class AllModelBuilder:
                 model_class = CoreModel
             else:
                 # Fall back to BaseModel for other models
-                logger.warning(f"  No specific model class for {model_name}, using BaseModel")
+                if not minimal_progress:
+                    logger.warning(f"  No specific model class for {model_name}, using BaseModel")
                 from models.base.model import BaseModel
                 model_class = BaseModel
 
@@ -684,25 +718,30 @@ class AllModelBuilder:
             # Inject session for cross-model references
             if hasattr(model, 'set_session'):
                 model.set_session(self.session)
-                logger.info(f"  ✓ Session injected for cross-model references")
+                if not minimal_progress:
+                    logger.info(f"  ✓ Session injected for cross-model references")
 
             # Build Silver layer
-            logger.info(f"  Building {model_name} graph...")
+            if not minimal_progress:
+                logger.info(f"  Building {model_name} graph...")
             dims, facts = model.build()
 
-            # Report results
-            logger.info(f"  ✓ Built {len(dims)} dimensions, {len(facts)} facts")
-            for table_name, df in {**dims, **facts}.items():
-                try:
-                    count = df.count() if hasattr(df, 'count') else len(df)
-                    logger.info(f"    - {table_name}: {count:,} rows")
-                except Exception as e:
-                    logger.warning(f"    - {table_name}: Unable to get row count ({e})")
+            # Report results (only in verbose mode)
+            if not minimal_progress:
+                logger.info(f"  ✓ Built {len(dims)} dimensions, {len(facts)} facts")
+                for table_name, df in {**dims, **facts}.items():
+                    try:
+                        count = df.count() if hasattr(df, 'count') else len(df)
+                        logger.info(f"    - {table_name}: {count:,} rows")
+                    except Exception as e:
+                        logger.warning(f"    - {table_name}: Unable to get row count ({e})")
 
             # Write tables to Silver storage (persist parquet files)
-            logger.info(f"  Writing {model_name} tables to Silver storage...")
+            if not minimal_progress:
+                logger.info(f"  Writing {model_name} tables to Silver storage...")
             stats = model.write_tables(use_optimized_writer=True)
-            logger.info(f"  ✓ Tables written to Silver layer")
+            if not minimal_progress:
+                logger.info(f"  ✓ Tables written to Silver layer")
 
             return True
 
@@ -872,6 +911,12 @@ def main():
         help='Disable concurrent API requests (use for free tier to respect rate limits)'
     )
 
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Show verbose output (detailed logging instead of progress bar)'
+    )
+
     args = parser.parse_args()
 
     try:
@@ -893,7 +938,8 @@ def main():
             use_bulk_discovery=not args.no_bulk_discovery,  # Enabled by default
             skip_reference_refresh=args.skip_reference_refresh,  # Skip OVERVIEW for daily updates
             outputsize=args.outputsize,  # compact for daily updates, full for initial load
-            use_concurrent=not args.no_concurrent  # Enabled by default (premium tier)
+            use_concurrent=not args.no_concurrent,  # Enabled by default (premium tier)
+            minimal_progress=not args.verbose  # Use progress bar by default, --verbose for detailed logging
         )
 
         # Save results if requested

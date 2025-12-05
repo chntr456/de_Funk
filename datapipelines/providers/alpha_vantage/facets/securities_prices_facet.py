@@ -19,7 +19,9 @@ from __future__ import annotations
 from typing import Iterable, List
 from pyspark.sql import SparkSession, functions as F
 from pyspark.sql.functions import col, lit, when, coalesce, to_date
-from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import AlphaVantageFacet
+from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import (
+    AlphaVantageFacet, safe_double, safe_long
+)
 
 
 class SecuritiesPricesFacetAV(AlphaVantageFacet):

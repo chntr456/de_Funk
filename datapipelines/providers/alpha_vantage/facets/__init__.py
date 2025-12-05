@@ -13,9 +13,12 @@ Facets handle:
 from __future__ import annotations
 
 # Core securities facets (existing)
-from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import AlphaVantageFacet
+from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import (
+    AlphaVantageFacet, safe_long, safe_double, safe_string
+)
 from datapipelines.providers.alpha_vantage.facets.securities_reference_facet import SecuritiesReferenceFacetAV
 from datapipelines.providers.alpha_vantage.facets.securities_prices_facet import SecuritiesPricesFacetAV
+from datapipelines.providers.alpha_vantage.facets.company_reference_facet import CompanyReferenceFacet
 
 # Financial statement facets (new)
 from datapipelines.providers.alpha_vantage.facets.income_statement_facet import IncomeStatementFacet
@@ -29,6 +32,11 @@ __all__ = [
     'AlphaVantageFacet',
     'SecuritiesReferenceFacetAV',
     'SecuritiesPricesFacetAV',
+    'CompanyReferenceFacet',
+    # Type conversion helpers (for Spark compatibility)
+    'safe_long',
+    'safe_double',
+    'safe_string',
     # Financial statements
     'IncomeStatementFacet',
     'BalanceSheetFacet',

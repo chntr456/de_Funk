@@ -486,6 +486,117 @@ class TickerProgressCallback:
         )
 
 
+class StepProgressTracker:
+    """
+    Simple progress tracker for multi-step operations (build, forecast, etc).
+
+    Displays a single updating line showing:
+    - Visual progress bar
+    - Current step/total
+    - Current item being processed
+    - ETA
+
+    Example output:
+    [████████░░░░░░░]  53% | Step 2/5 | Building stocks... | ETA: 3.2m
+
+    Usage:
+        tracker = StepProgressTracker(total_steps=5, description="Building models")
+        for i, model in enumerate(models):
+            tracker.update(i + 1, f"Building {model}...")
+            build_model(model)
+        tracker.finish()
+    """
+
+    def __init__(self, total_steps: int, description: str = "Processing", silent: bool = False):
+        """
+        Initialize step progress tracker.
+
+        Args:
+            total_steps: Total number of steps
+            description: Description for the operation
+            silent: If True, suppress console output
+        """
+        self.total_steps = total_steps
+        self.description = description
+        self.silent = silent
+        self.current_step = 0
+        self.start_time = time.time()
+        self.current_item = ""
+
+    def update(self, step: int, item: str = ""):
+        """
+        Update progress.
+
+        Args:
+            step: Current step number (1-indexed)
+            item: Description of current item being processed
+        """
+        self.current_step = step
+        self.current_item = item
+
+        if not self.silent:
+            self._display()
+
+    def _display(self):
+        """Display single-line progress."""
+        pct = (self.current_step / self.total_steps * 100) if self.total_steps > 0 else 0
+        eta = self._calculate_eta()
+
+        # Build progress bar
+        bar_width = 15
+        filled = int(bar_width * pct / 100)
+        empty = bar_width - filled
+        progress_bar = "█" * filled + "░" * empty
+
+        # Build single line
+        item_display = self.current_item[:30] if self.current_item else "..."
+        line = (f"\r[{progress_bar}] {pct:4.0f}% | "
+                f"Step {self.current_step}/{self.total_steps} | "
+                f"{item_display:30} | "
+                f"ETA: {eta}")
+
+        sys.stdout.write(line.ljust(100))
+        sys.stdout.flush()
+
+    def _calculate_eta(self) -> str:
+        """Calculate ETA based on current pace."""
+        if self.current_step == 0:
+            return "calculating..."
+        elapsed = time.time() - self.start_time
+        rate = self.current_step / elapsed
+        remaining = self.total_steps - self.current_step
+        eta_seconds = remaining / rate if rate > 0 else 0
+        return format_duration(eta_seconds)
+
+    def step_complete(self, message: str = ""):
+        """
+        Mark current step as complete and print completion message.
+
+        Args:
+            message: Optional completion message
+        """
+        if not self.silent:
+            sys.stdout.write("\r" + " " * 100 + "\r")
+            if message:
+                print(f"✓ Step {self.current_step}/{self.total_steps}: {message}")
+            sys.stdout.flush()
+
+    def finish(self, success: bool = True):
+        """
+        Finish tracking and print summary.
+
+        Args:
+            success: Whether the operation completed successfully
+        """
+        elapsed = time.time() - self.start_time
+
+        if not self.silent:
+            sys.stdout.write("\r" + " " * 100 + "\r")
+            icon = "✓" if success else "✗"
+            print(f"{icon} {self.description} complete: {self.current_step}/{self.total_steps} steps | {format_duration(elapsed)}")
+            sys.stdout.flush()
+
+
 class BatchProgressTracker:
     """
     Progress tracker with batch-aware display for per-ticker ingestion.

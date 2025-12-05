@@ -20,7 +20,9 @@ from datetime import datetime
 from pyspark.sql.types import (
     StructType, StructField, StringType, LongType, DoubleType, TimestampType, BooleanType
 )
-from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import AlphaVantageFacet
+from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import (
+    AlphaVantageFacet, safe_long, safe_double
+)
 
 
 class CompanyReferenceFacet(AlphaVantageFacet):
@@ -134,16 +136,8 @@ class CompanyReferenceFacet(AlphaVantageFacet):
             except (ValueError, TypeError):
                 return None
 
-        # Helper to safely convert to numeric, returning None for invalid values
-        def safe_long(series):
-            """Convert series to list of Python int or None (for Spark LongType)."""
-            return [int(x) if pd.notna(x) else None for x in pd.to_numeric(series, errors='coerce')]
-
-        def safe_double(series):
-            """Convert series to list of Python float or None (for Spark DoubleType)."""
-            return [float(x) if pd.notna(x) else None for x in pd.to_numeric(series, errors='coerce')]
-
         # Build result DataFrame with company-specific fields
+        # Uses safe_long/safe_double from base facet for Spark type compatibility
         # Use Python native types to avoid Spark type inference issues
         result = pd.DataFrame({
             'ticker': pdf['Symbol'].tolist(),

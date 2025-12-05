@@ -27,6 +27,7 @@ repo_root = setup_repo_imports()
 from config.logging import get_logger, setup_logging
 from models.implemented.forecast import ForecastModel
 from models.api.session import UniversalSession
+from datapipelines.base.progress_tracker import StepProgressTracker
 
 logger = get_logger(__name__)
 
@@ -128,7 +129,8 @@ def run_forecast_pipeline(
     refresh_data: bool = True,
     refresh_days: int = 7,
     models: list = None,
-    max_tickers: int = None
+    max_tickers: int = None,
+    minimal_progress: bool = True
 ) -> dict:
     """
     Run the complete forecast pipeline.
@@ -139,14 +141,16 @@ def run_forecast_pipeline(
         refresh_days: Number of days to refresh
         models: List of model names to run (None = all configured)
         max_tickers: Maximum number of tickers to process
+        minimal_progress: Use clean single-line progress bar (default: True). False for verbose logging.
 
     Returns:
         Dictionary with pipeline results
     """
-    print_header("TIME SERIES FORECAST PIPELINE")
-    print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 80)
-    print()
+    if not minimal_progress:
+        print_header("TIME SERIES FORECAST PIPELINE")
+        print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print("=" * 80)
+        print()
     logger.info("Starting time series forecast pipeline")
 
     # Initialize Spark connection (required for ETL operations)
@@ -156,47 +160,55 @@ def run_forecast_pipeline(
     spark = ConnectionFactory.create("spark", spark_session=spark_session)
 
     # Load configurations
-    print("Loading configurations...")
+    if not minimal_progress:
+        print("Loading configurations...")
     config_root = get_repo_root() / "configs"
 
     storage_cfg = load_config(config_root / "storage.json")
     forecast_cfg = load_config(config_root / "models" / "forecast.yaml")
 
     logger.debug("Configurations loaded")
-    print(f"  Loaded storage config")
-    print(f"  Loaded forecast config")
-    print()
+    if not minimal_progress:
+        print(f"  Loaded storage config")
+        print(f"  Loaded forecast config")
+        print()
 
     # Step 1: Refresh data if requested
     if refresh_data:
-        print("Step 1: Refreshing recent data...")
-        print("-" * 80)
+        if not minimal_progress:
+            print("Step 1: Refreshing recent data...")
+            print("-" * 80)
         logger.info(f"Refreshing data for {refresh_days} days")
         try:
             from scripts.refresh_data import refresh_recent_data
             refresh_recent_data(days=refresh_days, max_tickers=max_tickers)
         except Exception as e:
             logger.warning(f"Data refresh failed: {e}")
-            print(f"Warning: Data refresh failed: {e}")
-            print("Continuing with existing data...")
-        print()
+            if not minimal_progress:
+                print(f"Warning: Data refresh failed: {e}")
+                print("Continuing with existing data...")
+        if not minimal_progress:
+            print()
 
     # Step 2: Get tickers to process
-    print("Step 2: Determining tickers to forecast...")
-    print("-" * 80)
+    if not minimal_progress:
+        print("Step 2: Determining tickers to forecast...")
+        print("-" * 80)
 
     if tickers is None:
         tickers = get_active_tickers(storage_cfg, limit=max_tickers)
 
     logger.info(f"Processing {len(tickers)} tickers")
-    print(f"  Processing {len(tickers)} tickers: {', '.join(tickers[:5])}")
-    if len(tickers) > 5:
-        print(f"    ... and {len(tickers) - 5} more")
-    print()
+    if not minimal_progress:
+        print(f"  Processing {len(tickers)} tickers: {', '.join(tickers[:5])}")
+        if len(tickers) > 5:
+            print(f"    ... and {len(tickers) - 5} more")
+        print()
 
     # Step 3: Initialize forecast model
-    print("Step 3: Initializing forecast model...")
-    print("-" * 80)
+    if not minimal_progress:
+        print("Step 3: Initializing forecast model...")
+        print("-" * 80)
 
     # Create universal session for cross-model access
     repo_root_path = get_repo_root()
@@ -220,14 +232,16 @@ def run_forecast_pipeline(
     forecast_root = storage_cfg['roots'].get('forecast_silver', 'storage/silver/forecast')
 
     logger.info(f"Forecast model initialized, output: {forecast_root}")
-    print(f"  Forecast model initialized")
-    print(f"  Session configured for cross-model access")
-    print(f"  Output directory: {forecast_root}")
-    print()
+    if not minimal_progress:
+        print(f"  Forecast model initialized")
+        print(f"  Session configured for cross-model access")
+        print(f"  Output directory: {forecast_root}")
+        print()
 
     # Step 4: Run forecasts for each ticker
-    print("Step 4: Running forecasts...")
-    print("-" * 80)
+    if not minimal_progress:
+        print("Step 4: Running forecasts...")
+        print("-" * 80)
 
     results = {
         'start_time': datetime.now(),
@@ -238,9 +252,20 @@ def run_forecast_pipeline(
         'errors': []
     }
 
+    # Initialize progress tracker
+    tracker = StepProgressTracker(
+        total_steps=len(tickers),
+        description="Forecasting",
+        silent=not minimal_progress
+    )
+
     for i, ticker in enumerate(tickers, 1):
-        print(f"\n[{i}/{len(tickers)}] Processing {ticker}...")
-        print("-" * 40)
+        # Update progress tracker
+        tracker.update(i, f"Forecasting {ticker}...")
+
+        if not minimal_progress:
+            print(f"\n[{i}/{len(tickers)}] Processing {ticker}...")
+            print("-" * 40)
         logger.debug(f"Processing ticker {i}/{len(tickers)}: {ticker}")
 
         try:
@@ -256,20 +281,29 @@ def run_forecast_pipeline(
             if ticker_results['errors']:
                 results['errors'].extend(ticker_results['errors'])
 
-            print(f"  {ticker}: {ticker_results['models_trained']} models, {ticker_results['forecasts_generated']} forecasts")
+            if minimal_progress:
+                tracker.step_complete(f"{ticker} ✓ ({ticker_results['models_trained']} models)")
+            else:
+                print(f"  {ticker}: {ticker_results['models_trained']} models, {ticker_results['forecasts_generated']} forecasts")
             logger.info(f"{ticker}: {ticker_results['models_trained']} models, {ticker_results['forecasts_generated']} forecasts")
 
         except Exception as e:
             error_msg = f"{ticker}: {str(e)}"
             logger.error(f"Forecast failed for {ticker}: {e}")
-            print(f"  Error: {error_msg}")
+            if minimal_progress:
+                tracker.step_complete(f"{ticker} ✗ (error)")
+            else:
+                print(f"  Error: {error_msg}")
             results['tickers_failed'] += 1
             results['errors'].append(error_msg)
+
+    # Finish progress tracking
+    tracker.finish(success=results['tickers_failed'] == 0)
 
     results['end_time'] = datetime.now()
     results['duration'] = (results['end_time'] - results['start_time']).total_seconds()
 
-    # Step 5: Print summary
+    # Step 5: Print summary (always show, even in minimal mode)
     print()
     print_header("FORECAST PIPELINE SUMMARY")
     print(f"Duration: {results['duration']:.1f} seconds")
@@ -334,6 +368,11 @@ def main():
         default=None,
         help='Maximum number of tickers to process (default: all)'
     )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Show verbose output (detailed logging instead of progress bar)'
+    )
 
     args = parser.parse_args()
     logger.info(f"Starting forecast script with args: {args}")
@@ -349,7 +388,8 @@ def main():
             refresh_data=not args.no_refresh,
             refresh_days=args.refresh_days,
             models=models,
-            max_tickers=args.max_tickers
+            max_tickers=args.max_tickers,
+            minimal_progress=not args.verbose
         )
 
         # Exit with error code if there were failures
