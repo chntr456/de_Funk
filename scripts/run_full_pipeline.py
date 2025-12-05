@@ -321,7 +321,7 @@ def run_full_pipeline(
                 repo_root=repo_root
             )
             dims, facts = company_model.build()
-            company_model.write_tables()
+            company_model.write_tables(quiet=True)
             print(f"    ✓ Company model: {len(dims)} dims, {len(facts)} facts")
 
             # Build Stocks model (uses JOIN-based filtering via after_build hook)
@@ -335,7 +335,7 @@ def run_full_pipeline(
                 repo_root=repo_root
             )
             dims, facts = stocks_model.build()
-            stocks_model.write_tables()
+            stocks_model.write_tables(quiet=True)
 
             # Report counts
             for name, df in {**dims, **facts}.items():

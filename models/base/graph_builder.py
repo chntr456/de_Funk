@@ -164,7 +164,7 @@ class GraphBuilder:
             # Enforce unique_key constraint (deduplication)
             if 'unique_key' in node_config and node_config['unique_key']:
                 unique_cols = node_config['unique_key']
-                print(f"⚙️  Applying unique_key constraint on {node_id}: deduplicating by {unique_cols}")
+                logger.debug(f"Applying unique_key constraint on {node_id}: deduplicating by {unique_cols}")
                 if self.backend == 'spark':
                     df = df.dropDuplicates(unique_cols)
                 else:

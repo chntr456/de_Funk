@@ -121,7 +121,7 @@ def main():
     # Write to Silver layer
     print(f"\nWriting to Silver layer...")
     try:
-        stats = model.write_tables(use_optimized_writer=True)
+        stats = model.write_tables(use_optimized_writer=True, quiet=True)
         print(f"  ✓ Tables written successfully")
         if stats:
             for name, stat in stats.items():

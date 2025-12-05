@@ -64,6 +64,10 @@ def get_spark(
             builder = builder.config(key, value)
 
     spark = builder.getOrCreate()
+
+    # Suppress noisy Spark warnings (only show ERROR level)
+    spark.sparkContext.setLogLevel("ERROR")
+
     return spark
 
 

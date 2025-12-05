@@ -29,15 +29,22 @@ class ParquetLoader:
     - No unnecessary partitioning
     """
 
-    def __init__(self, root="storage"):
+    def __init__(self, root="storage", quiet: bool = False):
         """
         Initialize loader.
 
         Args:
             root: Storage root directory (full path to model's silver directory)
+            quiet: Suppress verbose output (for clean progress display)
         """
         self.root = Path(root)
+        self._quiet = quiet
         (self.root / "_meta" / "manifests").mkdir(parents=True, exist_ok=True)
+
+    def _print(self, msg: str):
+        """Print message if not in quiet mode."""
+        if not self._quiet:
+            print(msg)
 
     def _manifest(self, name: str, out_path: Path, rows: int):
         """Write manifest file with metadata."""
@@ -74,18 +81,18 @@ class ParquetLoader:
 
         # Cache row count if not provided (do this BEFORE expensive operations)
         if row_count is None:
-            print(f"  Counting rows...")
+            self._print(f"  Counting rows...")
             row_count = df.count()
 
         # Sort by query columns for zone maps and predicate pushdown
         if sort_by:
-            print(f"  Sorting by: {', '.join(sort_by)}")
+            self._print(f"  Sorting by: {', '.join(sort_by)}")
             df = df.sortWithinPartitions(*sort_by)
 
         # Coalesce to minimize file count while avoiding shuffle bottlenecks
-        print(f"  Coalescing to {num_files} file(s)")
+        self._print(f"  Coalescing to {num_files} file(s)")
         if row_count > 5_000_000:
-            print(f"  (Large dataset - this may take a few minutes)")
+            self._print(f"  (Large dataset - this may take a few minutes)")
         df = df.coalesce(num_files)
 
         # Write with snappy compression
@@ -97,7 +104,7 @@ class ParquetLoader:
         # Write manifest
         self._manifest(rel_path, out, row_count)
 
-        print(f"  ✓ Written to: {out}")
+        self._print(f"  ✓ Written to: {out}")
 
     def write_dim(self, rel_path: str, df: Any, row_count: Optional[int] = None):
         """
@@ -126,7 +133,7 @@ class ParquetLoader:
         """
         # Count rows if not provided (do this BEFORE transformations)
         if row_count is None:
-            print(f"  Counting rows...")
+            self._print(f"  Counting rows...")
             row_count = df.count()
 
         # Determine optimal file count based on size

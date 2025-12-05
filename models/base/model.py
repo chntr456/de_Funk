@@ -366,14 +366,15 @@ class BaseModel:
         format: str = "parquet",
         mode: str = "overwrite",
         use_optimized_writer: bool = True,
-        partition_by: Optional[Dict[str, List[str]]] = None
+        partition_by: Optional[Dict[str, List[str]]] = None,
+        quiet: bool = False
     ):
         """Write all model tables to storage."""
         if self._model_writer is None:
             from models.base.model_writer import ModelWriter
             self._model_writer = ModelWriter(self)
         return self._model_writer.write_tables(
-            output_root, format, mode, use_optimized_writer, partition_by
+            output_root, format, mode, use_optimized_writer, partition_by, quiet=quiet
         )
 
     # ============================================================

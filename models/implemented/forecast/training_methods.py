@@ -26,6 +26,9 @@ except ImportError:
 try:
     from prophet import Prophet
     HAS_PROPHET = True
+    # Suppress cmdstanpy INFO logging (Prophet's MCMC backend)
+    import logging
+    logging.getLogger('cmdstanpy').setLevel(logging.WARNING)
 except ImportError:
     HAS_PROPHET = False
 

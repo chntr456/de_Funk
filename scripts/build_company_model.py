@@ -116,7 +116,7 @@ def main():
         silver_root = storage_cfg.get("roots", {}).get("company_silver", "storage/silver/company")
         output_path = repo_root / silver_root
 
-        model.write_tables(output_root=str(output_path))
+        model.write_tables(output_root=str(output_path), quiet=True)
         print(f"✓ Written to silver layer: {output_path}")
 
     except Exception as e:

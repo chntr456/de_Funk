@@ -43,6 +43,12 @@ class ModelWriter:
             model: BaseModel instance
         """
         self.model = model
+        self._quiet = False
+
+    def _print(self, msg: str):
+        """Print message if not in quiet mode."""
+        if not self._quiet:
+            print(msg)
 
     @property
     def model_name(self) -> str:
@@ -58,7 +64,8 @@ class ModelWriter:
         format: Optional[str] = None,
         mode: str = "overwrite",
         use_optimized_writer: bool = False,
-        partition_by: Optional[Dict[str, List[str]]] = None
+        partition_by: Optional[Dict[str, List[str]]] = None,
+        quiet: bool = False
     ):
         """
         Write all model tables to storage.
@@ -72,6 +79,7 @@ class ModelWriter:
             mode: Write mode (overwrite, append, etc.)
             use_optimized_writer: Use ParquetLoader for parquet format (legacy)
             partition_by: Optional dict of table_name -> partition_columns
+            quiet: Suppress verbose output (for clean progress display)
 
         Returns:
             Dictionary with write statistics
@@ -83,6 +91,7 @@ class ModelWriter:
                 partition_by={"fact_prices": ["trade_date"]}
             )
         """
+        self._quiet = quiet
         # Get format from storage config or use default
         if format is None:
             format = self.storage_cfg.get("defaults", {}).get("format", DEFAULT_FORMAT)
@@ -99,13 +108,13 @@ class ModelWriter:
                 # Fallback to generic silver root
                 output_root = f"{self.storage_cfg.get('roots', {}).get('silver', 'storage/silver')}/{self.model_name}"
 
-        print(f"\n{'=' * 70}")
-        print(f"Writing {self.model_name.upper()} Model to Silver Layer")
-        print(f"{'=' * 70}")
-        print(f"Output root: {output_root}")
-        print(f"Format: {format}")
-        print(f"Mode: {mode}")
-        print(f"Optimized writer: {use_optimized_writer}")
+        self._print(f"\n{'=' * 70}")
+        self._print(f"Writing {self.model_name.upper()} Model to Silver Layer")
+        self._print(f"{'=' * 70}")
+        self._print(f"Output root: {output_root}")
+        self._print(f"Format: {format}")
+        self._print(f"Mode: {mode}")
+        self._print(f"Optimized writer: {use_optimized_writer}")
 
         stats = {
             'dimensions': {},
@@ -141,12 +150,12 @@ class ModelWriter:
             Updated statistics
         """
         from models.base.parquet_loader import ParquetLoader
-        loader = ParquetLoader(root=output_root)
+        loader = ParquetLoader(root=output_root, quiet=self._quiet)
 
         # Write dimensions
-        print(f"\nWriting Dimensions:")
+        self._print(f"\nWriting Dimensions:")
         for name, df in self.model._dims.items():
-            print(f"  Writing {name}...")
+            self._print(f"  Writing {name}...")
             row_count = df.count()
 
             # ParquetLoader expects relative path from output_root
@@ -156,15 +165,15 @@ class ModelWriter:
             stats['dimensions'][name] = row_count
             stats['total_rows'] += row_count
             stats['total_tables'] += 1
-            print(f"    ✓ {row_count:,} rows")
+            self._print(f"    ✓ {row_count:,} rows")
 
         # Write facts
-        print(f"\nWriting Facts:")
+        self._print(f"\nWriting Facts:")
         for name, df in self.model._facts.items():
-            print(f"  Writing {name}...")
+            self._print(f"  Writing {name}...")
             # Count rows BEFORE optimizations (more memory-efficient)
             row_count = df.count()
-            print(f"    Rows: {row_count:,}")
+            self._print(f"    Rows: {row_count:,}")
 
             # Determine sort columns for optimal query performance
             sort_by = partition_by.get(name, []) if partition_by else []
@@ -203,13 +212,13 @@ class ModelWriter:
         Returns:
             Updated statistics
         """
-        print("\nUsing standard Spark writer...")
+        self._print("\nUsing standard Spark writer...")
 
         # Write dimensions
-        print(f"\nWriting Dimensions:")
+        self._print(f"\nWriting Dimensions:")
         for name, df in self.model._dims.items():
             path = f"{output_root}/dims/{name}"
-            print(f"  Writing {name} to {path}...")
+            self._print(f"  Writing {name} to {path}...")
 
             writer = df.write.mode(mode).format(format)
             if partition_by and name in partition_by:
@@ -220,35 +229,35 @@ class ModelWriter:
             stats['dimensions'][name] = row_count
             stats['total_rows'] += row_count
             stats['total_tables'] += 1
-            print(f"    ✓ {row_count:,} rows")
+            self._print(f"    ✓ {row_count:,} rows")
 
         # Write facts
-        print(f"\nWriting Facts:")
+        self._print(f"\nWriting Facts:")
         for name, df in self.model._facts.items():
             path = f"{output_root}/facts/{name}"
-            print(f"  Writing {name} to {path}...")
+            self._print(f"  Writing {name} to {path}...")
 
             # Count rows first for progress tracking
             row_count = df.count()
-            print(f"    Rows: {row_count:,}")
+            self._print(f"    Rows: {row_count:,}")
 
             # For large datasets, provide guidance on expected time
             if row_count > 1_000_000:
                 est_minutes = row_count / 2_000_000  # ~2M rows/min estimate
-                print(f"    Estimated time: {est_minutes:.1f} min (large dataset)")
+                self._print(f"    Estimated time: {est_minutes:.1f} min (large dataset)")
 
             writer = df.write.mode(mode).format(format)
             if partition_by and name in partition_by:
                 writer = writer.partitionBy(partition_by[name])
-                print(f"    Partitioning by: {partition_by[name]}")
+                self._print(f"    Partitioning by: {partition_by[name]}")
 
-            print(f"    Writing... (this may take a moment for large datasets)")
+            self._print(f"    Writing... (this may take a moment for large datasets)")
             writer.save(path)
 
             stats['facts'][name] = row_count
             stats['total_rows'] += row_count
             stats['total_tables'] += 1
-            print(f"    ✓ Complete")
+            self._print(f"    ✓ Complete")
 
         return stats
 
@@ -275,10 +284,10 @@ class ModelWriter:
 
     def _print_summary(self, stats: Dict):
         """Print write summary."""
-        print(f"\n{'=' * 70}")
-        print(f"✓ Silver Layer Write Complete")
-        print(f"{'=' * 70}")
-        print(f"Total tables written: {stats['total_tables']}")
-        print(f"Total rows written: {stats['total_rows']:,}")
-        print(f"  - Dimensions: {len(stats['dimensions'])} tables, {sum(stats['dimensions'].values()):,} rows")
-        print(f"  - Facts: {len(stats['facts'])} tables, {sum(stats['facts'].values()):,} rows")
+        self._print(f"\n{'=' * 70}")
+        self._print(f"✓ Silver Layer Write Complete")
+        self._print(f"{'=' * 70}")
+        self._print(f"Total tables written: {stats['total_tables']}")
+        self._print(f"Total rows written: {stats['total_rows']:,}")
+        self._print(f"  - Dimensions: {len(stats['dimensions'])} tables, {sum(stats['dimensions'].values()):,} rows")
+        self._print(f"  - Facts: {len(stats['facts'])} tables, {sum(stats['facts'].values()):,} rows")
