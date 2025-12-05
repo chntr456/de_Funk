@@ -64,7 +64,7 @@ def run_full_pipeline(
     use_bulk_listing: bool = False,
     forecast_models: list = None,
     per_ticker: bool = True,  # v2.4: Default to per-ticker strategy
-    batch_write_size: int = 10
+    batch_write_size: int = 20
 ) -> dict:
     """
     Run the complete pipeline: data ingestion + forecasting.
@@ -640,8 +640,8 @@ Note: --max-tickers automatically enables market cap sorting (top N by market ca
     parser.add_argument(
         '--batch-write-size',
         type=int,
-        default=10,
-        help='Number of tickers to accumulate before writing to disk (default: 10)'
+        default=20,
+        help='Number of tickers to accumulate before writing to disk (default: 20)'
     )
 
     args = parser.parse_args()

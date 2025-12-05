@@ -1,0 +1,261 @@
+# Alpha Vantage Pipeline Configuration
+# Combines endpoint definitions with pipeline-specific settings
+#
+# Author: de_Funk Team
+# Date: December 2025
+
+provider: alpha_vantage
+description: "Securities data ingestion from Alpha Vantage API"
+version: "2.0"
+
+# =============================================================================
+# API CONFIGURATION
+# =============================================================================
+
+api:
+  base_url: "https://www.alphavantage.co/query"
+  credentials:
+    env_var: "ALPHA_VANTAGE_API_KEYS"
+    comment: "Set ALPHA_VANTAGE_API_KEYS environment variable with your API key(s)"
+  rate_limit:
+    calls_per_second: 1.0
+    comment: "Conservative rate: 60 calls/minute (1.0/sec) - provides headroom below premium tier limit (75/min). Free tier: 5 calls/minute (0.08333/sec)."
+  us_exchanges: ["NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"]
+
+# =============================================================================
+# PIPELINE SETTINGS
+# =============================================================================
+
+pipeline:
+  batch_size: 20
+  batch_write_size: 20
+  max_retries: 3
+  retry_delay_seconds: 2.0
+  strategy: "per_ticker"  # 'per_ticker' (vertical) or 'horizontal' (by data type)
+
+# =============================================================================
+# DATA TYPES - What data to ingest and how
+# =============================================================================
+
+data_types:
+  reference:
+    description: "Company overview and reference data"
+    endpoint: "company_overview"
+    facet: "SecuritiesReferenceFacet"
+    bronze_table: "securities_reference"
+    enabled: true
+
+  company:
+    description: "Company-specific data (CIK, fundamentals)"
+    endpoint: "company_overview"
+    facet: "CompanyReferenceFacet"
+    bronze_table: "company_reference"
+    enabled: true
+
+  prices:
+    description: "Daily OHLCV price data"
+    endpoint: "time_series_daily_adjusted"
+    facet: "SecuritiesPricesFacet"
+    bronze_table: "securities_prices_daily"
+    enabled: true
+
+  income:
+    description: "Income statement data"
+    endpoint: "income_statement"
+    facet: "IncomeStatementFacet"
+    bronze_table: "income_statements"
+    enabled: true
+
+  balance:
+    description: "Balance sheet data"
+    endpoint: "balance_sheet"
+    facet: "BalanceSheetFacet"
+    bronze_table: "balance_sheets"
+    enabled: true
+
+  cashflow:
+    description: "Cash flow statement data"
+    endpoint: "cash_flow"
+    facet: "CashFlowFacet"
+    bronze_table: "cash_flows"
+    enabled: true
+
+  earnings:
+    description: "Earnings reports"
+    endpoint: "earnings"
+    facet: "EarningsFacet"
+    bronze_table: "earnings"
+    enabled: true
+
+# =============================================================================
+# ENDPOINTS - Full API endpoint definitions
+# =============================================================================
+
+endpoints:
+  # Reference Data
+  company_overview:
+    method: "GET"
+    function: "OVERVIEW"
+    required_params: ["symbol"]
+    response_key: null
+    comment: "Company fundamentals including sector, industry, market cap, PE ratio, etc."
+
+  listing_status:
+    method: "GET"
+    function: "LISTING_STATUS"
+    required_params: []
+    default_params:
+      state: "active"
+    response_key: null
+    format: "csv"
+    comment: "Get list of active or delisted stocks. Returns CSV format."
+
+  # Price Data
+  time_series_daily:
+    method: "GET"
+    function: "TIME_SERIES_DAILY"
+    required_params: ["symbol"]
+    default_params:
+      outputsize: "full"
+      datatype: "json"
+    response_key: "Time Series (Daily)"
+    comment: "Daily OHLCV data. outputsize: 'compact' (100 days) or 'full' (20+ years)"
+
+  time_series_daily_adjusted:
+    method: "GET"
+    function: "TIME_SERIES_DAILY_ADJUSTED"
+    required_params: ["symbol"]
+    default_params:
+      outputsize: "full"
+      datatype: "json"
+    response_key: "Time Series (Daily)"
+    comment: "Daily OHLCV with dividend/split adjustments. Recommended for historical analysis."
+
+  global_quote:
+    method: "GET"
+    function: "GLOBAL_QUOTE"
+    required_params: ["symbol"]
+    response_key: "Global Quote"
+    comment: "Real-time quote with latest price, volume, change"
+
+  # Fundamentals
+  income_statement:
+    method: "GET"
+    function: "INCOME_STATEMENT"
+    required_params: ["symbol"]
+    response_key: null
+    comment: "Annual and quarterly income statements with revenue, expenses, net income."
+
+  balance_sheet:
+    method: "GET"
+    function: "BALANCE_SHEET"
+    required_params: ["symbol"]
+    response_key: null
+    comment: "Annual and quarterly balance sheets with assets, liabilities, equity."
+
+  cash_flow:
+    method: "GET"
+    function: "CASH_FLOW"
+    required_params: ["symbol"]
+    response_key: null
+    comment: "Annual and quarterly cash flow statements."
+
+  earnings:
+    method: "GET"
+    function: "EARNINGS"
+    required_params: ["symbol"]
+    response_key: null
+    comment: "Annual and quarterly earnings (EPS actual vs estimate)."
+
+  earnings_calendar:
+    method: "GET"
+    function: "EARNINGS_CALENDAR"
+    required_params: []
+    default_params:
+      horizon: "3month"
+    response_key: null
+    format: "csv"
+    comment: "Upcoming earnings announcements."
+
+  # Technical Indicators
+  technical_sma:
+    method: "GET"
+    function: "SMA"
+    required_params: ["symbol", "interval", "time_period", "series_type"]
+    response_key: "Technical Analysis: SMA"
+    comment: "Simple Moving Average"
+
+  technical_rsi:
+    method: "GET"
+    function: "RSI"
+    required_params: ["symbol", "interval", "time_period", "series_type"]
+    response_key: "Technical Analysis: RSI"
+    comment: "Relative Strength Index"
+
+  technical_macd:
+    method: "GET"
+    function: "MACD"
+    required_params: ["symbol", "interval", "series_type"]
+    response_key: "Technical Analysis: MACD"
+    comment: "Moving Average Convergence Divergence"
+
+  # Options & ETFs
+  historical_options:
+    method: "GET"
+    function: "HISTORICAL_OPTIONS"
+    required_params: ["symbol"]
+    response_key: "data"
+    comment: "Historical options chain data. Premium endpoint."
+
+  realtime_options:
+    method: "GET"
+    function: "REALTIME_OPTIONS"
+    required_params: ["symbol"]
+    response_key: "data"
+    comment: "Real-time options chain data. Premium endpoint."
+
+  etf_profile:
+    method: "GET"
+    function: "ETF_PROFILE"
+    required_params: ["symbol"]
+    response_key: null
+    comment: "ETF profile including holdings, sector weights, expense ratio."
+
+  # Market Data
+  top_gainers_losers:
+    method: "GET"
+    function: "TOP_GAINERS_LOSERS"
+    required_params: []
+    response_key: null
+    comment: "Top 20 gainers, losers, and most actively traded tickers."
+
+  realtime_bulk_quotes:
+    method: "GET"
+    function: "REALTIME_BULK_QUOTES"
+    required_params: ["symbol"]
+    response_key: "data"
+    comment: "Bulk quotes for up to 100 symbols per call."
+
+  symbol_search:
+    method: "GET"
+    function: "SYMBOL_SEARCH"
+    required_params: ["keywords"]
+    response_key: "bestMatches"
+    comment: "Search for ticker symbols by company name or ticker"
+
+# =============================================================================
+# PROGRESS DISPLAY SETTINGS
+# =============================================================================
+
+progress:
+  show_batch_header: true
+  show_ticker_status: true
+  show_eta: true
+  data_type_short_names:
+    reference: "ref"
+    company: "cmp"
+    prices: "prc"
+    income: "inc"
+    balance: "bal"
+    cashflow: "csh"
+    earnings: "ern"

@@ -1979,7 +1979,7 @@ class AlphaVantageIngestor(Ingestor):
         use_bulk_listing: bool = False,
         sort_by_market_cap: bool = True,
         min_market_cap: float = None,
-        batch_write_size: int = 10,
+        batch_write_size: int = 20,
         **kwargs
     ) -> dict:
         """
@@ -2005,12 +2005,13 @@ class AlphaVantageIngestor(Ingestor):
             use_bulk_listing: Discover tickers from LISTING_STATUS
             sort_by_market_cap: Sort tickers by market cap (default: True)
             min_market_cap: Minimum market cap filter
-            batch_write_size: Write to disk every N tickers (default: 10)
+            batch_write_size: Write to disk every N tickers (default: 20)
 
         Returns:
             Dict with tickers processed and paths written
         """
-        from datapipelines.base.progress_tracker import PipelineProgressTracker
+        from datapipelines.base.progress_tracker import BatchProgressTracker
+        from datapipelines.base.metrics import MetricsCollector
         from datapipelines.providers.alpha_vantage.facets import (
             SecuritiesReferenceFacetAV,
             SecuritiesPricesFacetAV,
@@ -2023,13 +2024,13 @@ class AlphaVantageIngestor(Ingestor):
         from functools import reduce
         import gc
 
-        # Determine phases based on configuration
-        phases = []
+        # Determine data types based on configuration
+        data_types = []
         if not skip_reference_refresh:
-            phases.append('reference')
-        phases.append('prices')
+            data_types.append('reference')
+        data_types.append('prices')
         if include_fundamentals:
-            phases.extend(['income', 'balance', 'cashflow', 'earnings'])
+            data_types.extend(['income', 'balance', 'cashflow', 'earnings'])
 
         # Step 1: Determine tickers to process
         if use_bulk_listing:
@@ -2071,17 +2072,22 @@ class AlphaVantageIngestor(Ingestor):
             tickers = tickers[:max_tickers]
 
         total_tickers = len(tickers)
+        num_batches = (total_tickers + batch_write_size - 1) // batch_write_size
+
         print(f"\nProcessing {total_tickers} tickers with PER-TICKER strategy")
-        print(f"Phases: {', '.join(phases)}")
-        print(f"Batch write size: {batch_write_size} tickers")
+        print(f"Data types: {', '.join(data_types)}")
+        print(f"Batch size: {batch_write_size} tickers ({num_batches} batches)")
         print()
 
-        # Initialize progress tracker
-        tracker = PipelineProgressTracker(
+        # Initialize metrics collector for timing
+        metrics = MetricsCollector(name="alpha_vantage_ingestion")
+
+        # Initialize batch progress tracker
+        tracker = BatchProgressTracker(
             total_tickers=total_tickers,
-            phases=phases,
-            show_phase_bars=True,
-            update_interval=0.3
+            batch_size=batch_write_size,
+            data_types=data_types,
+            silent=False
         )
 
         # Accumulators for batch writing
@@ -2104,102 +2110,119 @@ class AlphaVantageIngestor(Ingestor):
             'earnings': None
         }
 
-        # Process each ticker
-        for i, ticker in enumerate(tickers):
-            # Fetch all data for this ticker
-            ticker_data = self.ingest_ticker_data(
-                ticker=ticker,
-                include_reference=not skip_reference_refresh,
-                include_prices=True,
-                include_fundamentals=include_fundamentals,
-                date_from=date_from,
-                date_to=date_to,
-                outputsize=outputsize,
-                progress_tracker=tracker
-            )
+        # Process tickers in batches
+        for batch_idx in range(0, total_tickers, batch_write_size):
+            batch_num = batch_idx // batch_write_size + 1
+            batch_tickers = tickers[batch_idx:batch_idx + batch_write_size]
 
-            # Normalize and accumulate data
-            try:
-                # Reference data - wrap single response in batch format [[response]]
-                if ticker_data['reference']:
-                    ref_facet = SecuritiesReferenceFacetAV(self.spark, tickers=[ticker])
-                    ref_df = ref_facet.normalize([[ticker_data['reference']]])
-                    if ref_df.count() > 0:
-                        reference_dfs.append(ref_df)
+            # Start this batch in the tracker
+            tracker.start_batch(batch_num, num_batches, batch_tickers)
 
-                    # Company reference (separate table) - use tickers (plural)
-                    comp_facet = CompanyReferenceFacet(self.spark, tickers=[ticker])
-                    comp_df = comp_facet.normalize([[ticker_data['reference']]])
-                    if comp_df.count() > 0:
-                        company_dfs.append(comp_df)
-
-                # Prices
-                if ticker_data['prices']:
-                    price_facet = SecuritiesPricesFacetAV(
-                        self.spark,
-                        tickers=[ticker],
+            for ticker in batch_tickers:
+                # Fetch all data for this ticker
+                with metrics.time(f"fetch_{ticker}"):
+                    ticker_data = self._fetch_ticker_data_with_tracking(
+                        ticker=ticker,
+                        include_reference=not skip_reference_refresh,
+                        include_prices=True,
+                        include_fundamentals=include_fundamentals,
                         date_from=date_from,
                         date_to=date_to,
-                        outputsize=outputsize
+                        outputsize=outputsize,
+                        tracker=tracker,
+                        data_types=data_types
                     )
-                    # Wrap the prices data properly
-                    full_response = {"Time Series (Daily)": ticker_data['prices']}
-                    price_df = price_facet.normalize([[full_response]])
-                    if price_df.count() > 0:
-                        prices_dfs.append(price_df)
 
-                # Fundamentals - only if enabled
-                if include_fundamentals:
-                    if ticker_data['income_statement']:
-                        inc_facet = IncomeStatementFacet(self.spark, ticker=ticker)
-                        inc_df = inc_facet.normalize(ticker_data['income_statement'])
-                        if inc_df.count() > 0:
-                            income_dfs.append(inc_df)
+                # Normalize and accumulate data
+                with metrics.time(f"normalize_{ticker}"):
+                    try:
+                        # Reference data - wrap single response in batch format [[response]]
+                        if ticker_data['reference']:
+                            ref_facet = SecuritiesReferenceFacetAV(self.spark, tickers=[ticker])
+                            ref_df = ref_facet.normalize([[ticker_data['reference']]])
+                            if ref_df.count() > 0:
+                                reference_dfs.append(ref_df)
 
-                    if ticker_data['balance_sheet']:
-                        bal_facet = BalanceSheetFacet(self.spark, ticker=ticker)
-                        bal_df = bal_facet.normalize(ticker_data['balance_sheet'])
-                        if bal_df.count() > 0:
-                            balance_dfs.append(bal_df)
+                            # Company reference (separate table) - use tickers (plural)
+                            comp_facet = CompanyReferenceFacet(self.spark, tickers=[ticker])
+                            comp_df = comp_facet.normalize([[ticker_data['reference']]])
+                            if comp_df.count() > 0:
+                                company_dfs.append(comp_df)
 
-                    if ticker_data['cash_flow']:
-                        cf_facet = CashFlowFacet(self.spark, ticker=ticker)
-                        cf_df = cf_facet.normalize(ticker_data['cash_flow'])
-                        if cf_df.count() > 0:
-                            cashflow_dfs.append(cf_df)
+                        # Prices
+                        if ticker_data['prices']:
+                            price_facet = SecuritiesPricesFacetAV(
+                                self.spark,
+                                tickers=[ticker],
+                                date_from=date_from,
+                                date_to=date_to,
+                                outputsize=outputsize
+                            )
+                            # Wrap the prices data properly
+                            full_response = {"Time Series (Daily)": ticker_data['prices']}
+                            price_df = price_facet.normalize([[full_response]])
+                            if price_df.count() > 0:
+                                prices_dfs.append(price_df)
 
-                    if ticker_data['earnings']:
-                        earn_facet = EarningsFacet(self.spark, ticker=ticker)
-                        earn_df = earn_facet.normalize(ticker_data['earnings'])
-                        if earn_df.count() > 0:
-                            earnings_dfs.append(earn_df)
+                        # Fundamentals - only if enabled
+                        if include_fundamentals:
+                            if ticker_data['income_statement']:
+                                inc_facet = IncomeStatementFacet(self.spark, ticker=ticker)
+                                inc_df = inc_facet.normalize(ticker_data['income_statement'])
+                                if inc_df.count() > 0:
+                                    income_dfs.append(inc_df)
 
-                results['tickers'].append(ticker)
-                tracker.complete_ticker(ticker)
+                            if ticker_data['balance_sheet']:
+                                bal_facet = BalanceSheetFacet(self.spark, ticker=ticker)
+                                bal_df = bal_facet.normalize(ticker_data['balance_sheet'])
+                                if bal_df.count() > 0:
+                                    balance_dfs.append(bal_df)
 
-            except Exception as e:
-                logger.warning(f"Failed to process {ticker}: {e}")
+                            if ticker_data['cash_flow']:
+                                cf_facet = CashFlowFacet(self.spark, ticker=ticker)
+                                cf_df = cf_facet.normalize(ticker_data['cash_flow'])
+                                if cf_df.count() > 0:
+                                    cashflow_dfs.append(cf_df)
 
-            # Batch write every N tickers
-            if (i + 1) % batch_write_size == 0 or (i + 1) == total_tickers:
+                            if ticker_data['earnings']:
+                                earn_facet = EarningsFacet(self.spark, ticker=ticker)
+                                earn_df = earn_facet.normalize(ticker_data['earnings'])
+                                if earn_df.count() > 0:
+                                    earnings_dfs.append(earn_df)
+
+                        results['tickers'].append(ticker)
+                        tracker.complete_ticker(ticker)
+
+                    except Exception as e:
+                        logger.warning(f"Failed to process {ticker}: {e}")
+
+            # Write accumulated data at end of batch
+            with metrics.time("write_batch"):
+                write_start = time.time()
                 self._write_accumulated_data(
                     reference_dfs, company_dfs, prices_dfs,
                     income_dfs, balance_dfs, cashflow_dfs, earnings_dfs,
                     results
                 )
-                # Clear accumulators
-                reference_dfs.clear()
-                company_dfs.clear()
-                prices_dfs.clear()
-                income_dfs.clear()
-                balance_dfs.clear()
-                cashflow_dfs.clear()
-                earnings_dfs.clear()
-                gc.collect()
+                write_time_ms = (time.time() - write_start) * 1000
+                tracker.complete_batch(write_time_ms=write_time_ms)
 
-        # Finalize and print summary
+            # Clear accumulators
+            reference_dfs.clear()
+            company_dfs.clear()
+            prices_dfs.clear()
+            income_dfs.clear()
+            balance_dfs.clear()
+            cashflow_dfs.clear()
+            earnings_dfs.clear()
+            gc.collect()
+
+        # Finalize and print summaries
         final_stats = tracker.finish()
         results['stats'] = final_stats
+
+        # Print performance metrics
+        metrics.print_report()
 
         return results
 
@@ -2298,3 +2321,130 @@ class AlphaVantageIngestor(Ingestor):
             )
             if path:
                 results['earnings'] = path
+
+    def _fetch_ticker_data_with_tracking(
+        self,
+        ticker: str,
+        include_reference: bool,
+        include_prices: bool,
+        include_fundamentals: bool,
+        date_from: str,
+        date_to: str,
+        outputsize: str,
+        tracker,
+        data_types: list
+    ) -> dict:
+        """
+        Fetch all data types for a single ticker with BatchProgressTracker updates.
+
+        Args:
+            ticker: Ticker symbol to fetch
+            include_reference: Whether to fetch OVERVIEW data
+            include_prices: Whether to fetch price data
+            include_fundamentals: Whether to fetch fundamentals
+            date_from: Start date for prices
+            date_to: End date for prices
+            outputsize: 'compact' or 'full' for prices
+            tracker: BatchProgressTracker instance
+            data_types: List of data type names for tracking
+
+        Returns:
+            Dict with raw data for each data type
+        """
+        result = {
+            'ticker': ticker,
+            'reference': None,
+            'prices': None,
+            'income_statement': None,
+            'balance_sheet': None,
+            'cash_flow': None,
+            'earnings': None,
+            'errors': []
+        }
+
+        def fetch_single(endpoint_name: str, params: dict, response_key=None, data_type=None):
+            """Make a single API call with error handling and progress tracking."""
+            try:
+                ep, path, query = self.registry.render(endpoint_name, **params)
+                with self._http_lock:
+                    payload = self.http.request(ep.base, path, query, ep.method)
+
+                # Check for API errors
+                if isinstance(payload, dict):
+                    if "Error Message" in payload:
+                        error = payload["Error Message"][:60]
+                        result['errors'].append(f"{data_type}: {error}")
+                        if tracker and data_type in data_types:
+                            tracker.update(ticker, data_type, success=False, error=error)
+                        return None
+                    if "Information" in payload and len(payload) == 1:
+                        result['errors'].append(f"{data_type}: API limit")
+                        if tracker and data_type in data_types:
+                            tracker.update(ticker, data_type, success=False, error="API limit")
+                        return None
+
+                # Success - update tracker
+                if tracker and data_type in data_types:
+                    tracker.update(ticker, data_type, success=True)
+
+                # Extract data if response_key provided
+                if response_key:
+                    return payload.get(response_key, payload)
+                return payload
+
+            except Exception as e:
+                error = str(e)[:40]
+                result['errors'].append(f"{data_type}: {error}")
+                if tracker and data_type in data_types:
+                    tracker.update(ticker, data_type, success=False, error=error)
+                return None
+
+        # 1. Reference data (OVERVIEW)
+        if include_reference:
+            result['reference'] = fetch_single(
+                "company_overview",
+                {"symbol": ticker},
+                response_key=None,
+                data_type="reference"
+            )
+
+        # 2. Prices (TIME_SERIES_DAILY_ADJUSTED)
+        if include_prices:
+            result['prices'] = fetch_single(
+                "time_series_daily_adjusted",
+                {"symbol": ticker, "outputsize": outputsize},
+                response_key="Time Series (Daily)",
+                data_type="prices"
+            )
+
+        # 3. Fundamentals
+        if include_fundamentals:
+            result['income_statement'] = fetch_single(
+                "income_statement",
+                {"symbol": ticker},
+                response_key=None,
+                data_type="income"
+            )
+
+            result['balance_sheet'] = fetch_single(
+                "balance_sheet",
+                {"symbol": ticker},
+                response_key=None,
+                data_type="balance"
+            )
+
+            result['cash_flow'] = fetch_single(
+                "cash_flow",
+                {"symbol": ticker},
+                response_key=None,
+                data_type="cashflow"
+            )
+
+            result['earnings'] = fetch_single(
+                "earnings",
+                {"symbol": ticker},
+                response_key=None,
+                data_type="earnings"
+            )
+
+        return result

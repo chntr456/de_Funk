@@ -484,3 +484,242 @@ class TickerProgressCallback:
             success=info.success,
             error=info.error
         )
+
+
+class BatchProgressTracker:
+    """
+    Progress tracker with batch-aware display for per-ticker ingestion.
+
+    Displays progress in a clean format showing:
+    - Overall progress across all tickers
+    - Current batch info (batch X of Y)
+    - Per-ticker progress within the batch
+    - Data type status for current ticker
+
+    Display format:
+    ══════════════════════════════════════════════════════════════════════════════
+    📦 Batch 2/5 | Overall: [████████░░░░░░░░░░░░] 40% (40/100) | ETA: 12m 30s
+    ──────────────────────────────────────────────────────────────────────────────
+      AAPL [12/20] ref:✓ prc:✓ inc:✓ bal:◯ csh:◯ ern:◯
+    ══════════════════════════════════════════════════════════════════════════════
+
+    Usage:
+        tracker = BatchProgressTracker(
+            total_tickers=100,
+            batch_size=20,
+            data_types=['reference', 'prices', 'income', 'balance', 'cashflow', 'earnings']
+        )
+
+        tracker.start_batch(1, 5, batch_tickers)
+        for ticker in batch_tickers:
+            tracker.update(ticker, 'reference', success=True)
+            tracker.update(ticker, 'prices', success=True)
+            tracker.complete_ticker(ticker)
+        tracker.complete_batch()
+
+        tracker.finish()
+    """
+
+    # Short names for data types (max 3 chars for compact display)
+    DATA_TYPE_SHORT_NAMES = {
+        'reference': 'ref',
+        'prices': 'prc',
+        'income': 'inc',
+        'income_statement': 'inc',
+        'balance': 'bal',
+        'balance_sheet': 'bal',
+        'cashflow': 'csh',
+        'cash_flow': 'csh',
+        'earnings': 'ern',
+    }
+
+    def __init__(
+        self,
+        total_tickers: int,
+        batch_size: int,
+        data_types: List[str],
+        silent: bool = False
+    ):
+        """
+        Initialize batch progress tracker.
+
+        Args:
+            total_tickers: Total number of tickers to process
+            batch_size: Number of tickers per batch
+            data_types: List of data type names to track
+            silent: If True, suppress console output
+        """
+        self.total_tickers = total_tickers
+        self.batch_size = batch_size
+        self.data_types = data_types
+        self.silent = silent
+        self.num_batches = (total_tickers + batch_size - 1) // batch_size if batch_size > 0 else 1
+
+        # State
+        self.current_batch = 0
+        self.current_batch_tickers: List[str] = []
+        self.completed_tickers = 0
+        self.total_errors = 0
+        self.ticker_status: Dict[str, Dict[str, Optional[bool]]] = {}
+        self.start_time = time.time()
+
+        # For ETA calculation
+        self._progress_bar = ProgressBar(width=20)
+
+    def start_batch(self, batch_num: int, total_batches: int, tickers: List[str]):
+        """
+        Start a new batch.
+
+        Args:
+            batch_num: Current batch number (1-indexed)
+            total_batches: Total number of batches
+            tickers: List of tickers in this batch
+        """
+        self.current_batch = batch_num
+        self.current_batch_tickers = tickers
+        self.ticker_status = {
+            t: {dt: None for dt in self.data_types}
+            for t in tickers
+        }
+
+        if not self.silent:
+            self._print_batch_header()
+
+    def _print_batch_header(self):
+        """Print batch header with overall progress bar."""
+        overall_pct = (self.completed_tickers / self.total_tickers * 100) if self.total_tickers > 0 else 0
+        bar = self._progress_bar.render(overall_pct, self.completed_tickers, self.total_tickers)
+        eta = self._calculate_eta()
+
+        print()
+        print("═" * 80)
+        print(f"📦 Batch {self.current_batch}/{self.num_batches} | Overall: {bar} | ETA: {eta}")
+        print("─" * 80)
+        sys.stdout.flush()
+
+    def update(
+        self,
+        ticker: str,
+        data_type: str,
+        success: bool,
+        error: Optional[str] = None
+    ):
+        """
+        Update progress for a ticker's data type.
+
+        Args:
+            ticker: Ticker symbol
+            data_type: Data type name (e.g., 'reference', 'prices')
+            success: Whether the operation succeeded
+            error: Error message if failed
+        """
+        if ticker in self.ticker_status:
+            self.ticker_status[ticker][data_type] = success
+            if not success:
+                self.total_errors += 1
+
+        if not self.silent:
+            self._update_display(ticker, error)
+
+    def _update_display(self, ticker: str, error: Optional[str] = None):
+        """Update the current line with ticker progress."""
+        if ticker not in self.ticker_status:
+            return
+
+        # Build status icons for each data type
+        status_parts = []
+        for dt in self.data_types:
+            status = self.ticker_status[ticker].get(dt)
+            if status is None:
+                icon = "◯"  # Not started
+            elif status:
+                icon = "✓"  # Success
+            else:
+                icon = "✗"  # Failed
+
+            # Get short name
+            short_name = self.DATA_TYPE_SHORT_NAMES.get(dt, dt[:3])
+            status_parts.append(f"{short_name}:{icon}")
+
+        # Position in batch
+        try:
+            batch_pos = self.current_batch_tickers.index(ticker) + 1
+        except ValueError:
+            batch_pos = 0
+
+        status_str = " ".join(status_parts)
+        line = f"\r  {ticker:8} [{batch_pos:2}/{len(self.current_batch_tickers)}] {status_str}"
+
+        if error:
+            line += f" | {error[:25]}"
+
+        # Pad and write
+        sys.stdout.write(line.ljust(95))
+        sys.stdout.flush()
+
+    def complete_ticker(self, ticker: str):
+        """
+        Mark a ticker as complete.
+
+        Args:
+            ticker: Ticker symbol that completed
+        """
+        self.completed_tickers += 1
+        if not self.silent:
+            print()  # Move to next line after ticker completes
+            sys.stdout.flush()
+
+    def complete_batch(self, write_time_ms: float = 0):
+        """
+        Mark current batch as complete.
+
+        Args:
+            write_time_ms: Time spent writing to Delta Lake (for metrics display)
+        """
+        if not self.silent:
+            batch_tickers_count = len(self.current_batch_tickers)
+            write_info = f" | Write: {write_time_ms/1000:.1f}s" if write_time_ms > 0 else ""
+            print("─" * 80)
+            print(f"  ✓ Batch {self.current_batch} complete: "
+                  f"{batch_tickers_count} tickers written to Delta Lake{write_info}")
+            sys.stdout.flush()
+
+    def _calculate_eta(self) -> str:
+        """Calculate ETA based on current pace."""
+        if self.completed_tickers == 0:
+            return "calculating..."
+        elapsed = time.time() - self.start_time
+        rate = self.completed_tickers / elapsed
+        remaining = self.total_tickers - self.completed_tickers
+        eta_seconds = remaining / rate if rate > 0 else 0
+        return format_duration(eta_seconds)
+
+    def finish(self) -> Dict:
+        """
+        Print final summary and return statistics.
+
+        Returns:
+            Dictionary with final statistics
+        """
+        elapsed = time.time() - self.start_time
+
+        if not self.silent:
+            print()
+            print("═" * 80)
+            print(f"✓ INGESTION COMPLETE")
+            print("═" * 80)
+            print(f"  Tickers: {self.completed_tickers}/{self.total_tickers}")
+            print(f"  Batches: {self.current_batch}/{self.num_batches}")
+            print(f"  Errors: {self.total_errors}")
+            print(f"  Elapsed: {format_duration(elapsed)}")
+            print("═" * 80)
+            print()
+            sys.stdout.flush()
+
+        return {
+            'total_tickers': self.total_tickers,
+            'completed_tickers': self.completed_tickers,
+            'num_batches': self.num_batches,
+            'total_errors': self.total_errors,
+            'elapsed_seconds': elapsed
+        }

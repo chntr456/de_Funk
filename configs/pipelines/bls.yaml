@@ -1,0 +1,148 @@
+# BLS (Bureau of Labor Statistics) Pipeline Configuration
+# Combines endpoint definitions with pipeline-specific settings
+#
+# Author: de_Funk Team
+# Date: December 2025
+
+provider: bls
+description: "Economic indicators from Bureau of Labor Statistics"
+version: "2.0"
+
+# =============================================================================
+# API CONFIGURATION
+# =============================================================================
+
+api:
+  base_url: "https://api.bls.gov/publicAPI/v2"
+  credentials:
+    env_var: "BLS_API_KEYS"
+    comment: "Register at https://data.bls.gov/registrationEngine/ for API key"
+  rate_limit:
+    calls_per_second: 0.42
+    comment: "Registered: 500 queries/day, 20 years data per query"
+  headers:
+    Content-Type: "application/json"
+
+# =============================================================================
+# PIPELINE SETTINGS
+# =============================================================================
+
+pipeline:
+  batch_size: 10
+  batch_write_size: 10
+  max_retries: 3
+  retry_delay_seconds: 2.0
+  strategy: "horizontal"  # BLS is by series, not per-ticker
+
+# =============================================================================
+# DATA TYPES - Economic series to ingest
+# =============================================================================
+
+data_types:
+  unemployment:
+    description: "Unemployment rate data"
+    series_id: "LNS14000000"
+    facet: "UnemploymentFacet"
+    bronze_table: "unemployment"
+    enabled: true
+
+  employment:
+    description: "Total nonfarm employment"
+    series_id: "CES0000000001"
+    facet: "EmploymentFacet"
+    bronze_table: "employment"
+    enabled: true
+
+  cpi:
+    description: "Consumer Price Index - All Urban Consumers"
+    series_id: "CUUR0000SA0"
+    facet: "CPIFacet"
+    bronze_table: "cpi"
+    enabled: true
+
+  ppi:
+    description: "Producer Price Index - Final Demand"
+    series_id: "WPUFD4"
+    facet: "PPIFacet"
+    bronze_table: "ppi"
+    enabled: true
+
+  wages:
+    description: "Average Hourly Earnings - Total Private"
+    series_id: "CES0500000003"
+    facet: "WagesFacet"
+    bronze_table: "wages"
+    enabled: true
+
+  productivity:
+    description: "Labor Productivity - Business Sector"
+    series_id: "PRS85006092"
+    facet: "ProductivityFacet"
+    bronze_table: "productivity"
+    enabled: true
+
+  job_openings:
+    description: "Job Openings - Total Nonfarm"
+    series_id: "JTS00000000JOL"
+    facet: "JobOpeningsFacet"
+    bronze_table: "job_openings"
+    enabled: true
+
+  quits:
+    description: "Quits Rate - Total Nonfarm"
+    series_id: "JTS00000000QUR"
+    facet: "QuitsFacet"
+    bronze_table: "quits"
+    enabled: true
+
+# =============================================================================
+# ENDPOINTS
+# =============================================================================
+
+endpoints:
+  timeseries:
+    method: "POST"
+    path: "/timeseries/data/"
+    required_params: ["seriesid", "startyear", "endyear"]
+    response_key: "Results.series"
+    pagination: "none"
+    comment: "Get time series data for specified BLS series IDs"
+
+  series_info:
+    method: "GET"
+    path: "/timeseries/data/{seriesid}"
+    required_params: ["seriesid"]
+    response_key: "Results.series"
+    pagination: "none"
+    comment: "Get information about a specific series"
+
+# =============================================================================
+# PROGRESS DISPLAY SETTINGS
+# =============================================================================
+
+progress:
+  show_batch_header: true
+  show_series_status: true
+  show_eta: true
+  data_type_short_names:
+    unemployment: "uem"
+    employment: "emp"
+    cpi: "cpi"
+    ppi: "ppi"
+    wages: "wge"
+    productivity: "prd"
+    job_openings: "job"
+    quits: "qut"
+
+# =============================================================================
+# NOTES
+# =============================================================================
+
+notes:
+  api_documentation: "https://www.bls.gov/developers/api_signature_v2.htm"
+  rate_limits:
+    unregistered: "25 queries per day, 10 years of data per query"
+    registered_v1: "500 queries per day, 10 years of data per query"
+    registered_v2: "500 queries per day, 20 years of data per query"
+  pagination: "BLS API returns all data for the requested time period in a single response"
+  data_frequency: "Most series are monthly, some are quarterly or annual"
