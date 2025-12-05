@@ -55,7 +55,7 @@ nodes:
     from: bronze.income_statements
     join:
       - table: _ticker_cik_lookup
-        on: ["ticker=ticker"]
+        "on": ["ticker=ticker"]
         type: inner  # Only include tickers with CIK
     select:
       # Keys
@@ -93,7 +93,7 @@ nodes:
     from: bronze.balance_sheets
     join:
       - table: _ticker_cik_lookup
-        on: ["ticker=ticker"]
+        "on": ["ticker=ticker"]
         type: inner
     select:
       # Keys
@@ -137,7 +137,7 @@ nodes:
     from: bronze.cash_flows
     join:
       - table: _ticker_cik_lookup
-        on: ["ticker=ticker"]
+        "on": ["ticker=ticker"]
         type: inner
     select:
       # Keys
@@ -178,7 +178,7 @@ nodes:
     from: bronze.earnings
     join:
       - table: _ticker_cik_lookup
-        on: ["ticker=ticker"]
+        "on": ["ticker=ticker"]
         type: inner
     select:
       # Keys
@@ -206,28 +206,28 @@ edges:
   income_statement_to_company:
     from: fact_income_statement
     to: dim_company
-    on: ["cik=cik"]
+    "on": ["cik=cik"]
     type: left
     description: "Link income statements to company"
 
   balance_sheet_to_company:
     from: fact_balance_sheet
     to: dim_company
-    on: ["cik=cik"]
+    "on": ["cik=cik"]
     type: left
     description: "Link balance sheets to company"
 
   cash_flow_to_company:
     from: fact_cash_flow
     to: dim_company
-    on: ["cik=cik"]
+    "on": ["cik=cik"]
     type: left
     description: "Link cash flows to company"
 
   earnings_to_company:
     from: fact_earnings
     to: dim_company
-    on: ["cik=cik"]
+    "on": ["cik=cik"]
     type: left
     description: "Link earnings to company"
 
@@ -235,27 +235,27 @@ edges:
   income_statement_to_calendar:
     from: fact_income_statement
     to: core.dim_calendar
-    on: ["report_date=date"]
+    "on": ["report_date=date"]
     type: left
     description: "Link income statements to calendar"
 
   balance_sheet_to_calendar:
     from: fact_balance_sheet
     to: core.dim_calendar
-    on: ["report_date=date"]
+    "on": ["report_date=date"]
     type: left
     description: "Link balance sheets to calendar"
 
   cash_flow_to_calendar:
     from: fact_cash_flow
     to: core.dim_calendar
-    on: ["report_date=date"]
+    "on": ["report_date=date"]
     type: left
     description: "Link cash flows to calendar"
 
   earnings_to_calendar:
     from: fact_earnings
     to: core.dim_calendar
-    on: ["report_date=date"]
+    "on": ["report_date=date"]
     type: left
     description: "Link earnings to calendar"

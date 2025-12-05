@@ -42,13 +42,13 @@ edges:
   _prices_to_security:
     from: _fact_prices
     to: _dim_security
-    on: ["ticker=ticker"]
+    "on": ["ticker=ticker"]
     type: many_to_one
     description: "Prices belong to a security"
 
   _prices_to_calendar:
     from: _fact_prices
     to: core.dim_calendar
-    on: ["trade_date=date"]
+    "on": ["trade_date=date"]
     type: left
     description: "Join prices to calendar for date filtering"

@@ -191,25 +191,25 @@ graph:
   edges:
     - from: fact_unemployment
       to: dim_economic_series
-      on: ["series_id=series_id"]
+      "on": ["series_id=series_id"]
       type: many_to_one
       description: "Unemployment data belongs to a series"
 
     - from: fact_cpi
       to: dim_economic_series
-      on: ["series_id=series_id"]
+      "on": ["series_id=series_id"]
       type: many_to_one
       description: "CPI data belongs to a series"
 
     - from: fact_employment
       to: dim_economic_series
-      on: ["series_id=series_id"]
+      "on": ["series_id=series_id"]
       type: many_to_one
       description: "Employment data belongs to a series"
 
     - from: fact_wages
       to: dim_economic_series
-      on: ["series_id=series_id"]
+      "on": ["series_id=series_id"]
       type: many_to_one
       description: "Wage data belongs to a series"
 

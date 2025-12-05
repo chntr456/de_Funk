@@ -77,20 +77,20 @@ edges:
   stock_to_company:
     from: dim_stock
     to: company.dim_company
-    on: ["company_id=company_id"]
+    "on": ["company_id=company_id"]
     type: many_to_one
     description: "Stock belongs to a company (corporate entity)"
 
   prices_to_stock:
     from: fact_stock_prices
     to: dim_stock
-    on: ["ticker=ticker"]
+    "on": ["ticker=ticker"]
     type: many_to_one
     description: "Prices belong to a stock"
 
   prices_to_calendar:
     from: fact_stock_prices
     to: core.dim_calendar
-    on: ["trade_date=date"]
+    "on": ["trade_date=date"]
     type: left
     description: "Join prices to calendar for date filtering"

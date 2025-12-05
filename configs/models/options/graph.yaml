@@ -47,6 +47,6 @@ edges:
   option_to_underlying:
     from: dim_option
     to: stocks.dim_stock
-    on: ["underlying_ticker=ticker"]
+    "on": ["underlying_ticker=ticker"]
     type: many_to_one
     description: "Option derives from underlying stock"
