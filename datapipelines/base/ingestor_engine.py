@@ -88,6 +88,7 @@ class IngestorEngine:
         data_types: List[DataType] = None,
         batch_size: int = 20,
         silent: bool = False,
+        auto_compact: bool = True,
         **kwargs
     ) -> IngestionResults:
         """
@@ -98,6 +99,7 @@ class IngestorEngine:
             data_types: Data types to fetch (default: all supported by provider)
             batch_size: Number of tickers per batch (default: 20)
             silent: Suppress progress output
+            auto_compact: Run Delta OPTIMIZE after ingestion (default: True for prototyping)
             **kwargs: Provider-specific options (date_from, date_to, outputsize, etc)
 
         Returns:
@@ -193,7 +195,57 @@ class IngestorEngine:
 
         results.metrics = metrics.get_summary()
 
+        # Auto-compact Delta tables to prevent file fragmentation
+        if auto_compact and results.tables_written:
+            self._compact_tables(results.tables_written, silent)
+
         return results
+
+    def _compact_tables(self, tables_written: Dict[str, str], silent: bool = False) -> None:
+        """
+        Compact Delta tables after ingestion to prevent file fragmentation.
+
+        Runs Delta OPTIMIZE on each written table to merge small files.
+
+        Args:
+            tables_written: Dict of table_name -> path
+            silent: Suppress output
+        """
+        from delta.tables import DeltaTable
+
+        if not silent:
+            print(f"\n{'=' * 60}")
+            print("COMPACTING DELTA TABLES")
+            print(f"{'=' * 60}")
+
+        spark = self.provider.spark
+
+        for table_name, path in tables_written.items():
+            try:
+                if not silent:
+                    print(f"  Compacting {table_name}...")
+
+                # Check if it's a Delta table
+                delta_log = Path(path) / "_delta_log"
+                if not delta_log.exists():
+                    if not silent:
+                        print(f"    Skipped (not Delta)")
+                    continue
+
+                # Run OPTIMIZE (compaction)
+                dt = DeltaTable.forPath(spark, path)
+                dt.optimize().executeCompaction()
+
+                if not silent:
+                    print(f"    ✓ Compacted")
+
+            except Exception as e:
+                logger.warning(f"Failed to compact {table_name}: {e}")
+                if not silent:
+                    print(f"    ✗ Failed: {e}")
+
+        if not silent:
+            print(f"{'=' * 60}\n")
 
     def _normalize_and_accumulate(
         self,
@@ -315,6 +367,7 @@ class IngestorEngine:
         data_types: List[DataType] = None,
         batch_size: int = 20,
         silent: bool = False,
+        auto_compact: bool = True,
         **kwargs
     ) -> IngestionResults:
         """
@@ -327,6 +380,7 @@ class IngestorEngine:
             data_types: Data types to fetch
             batch_size: Tickers per batch
             silent: Suppress output
+            auto_compact: Run Delta OPTIMIZE after ingestion (default: True)
             **kwargs: Provider-specific options
 
         Returns:
@@ -371,6 +425,7 @@ class IngestorEngine:
             data_types=data_types,
             batch_size=batch_size,
             silent=silent,
+            auto_compact=auto_compact,
             **kwargs
         )
 
