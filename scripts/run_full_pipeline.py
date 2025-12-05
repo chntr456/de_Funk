@@ -62,7 +62,9 @@ def run_full_pipeline(
     sort_by_market_cap: bool = True,
     min_market_cap: float = None,
     use_bulk_listing: bool = False,
-    forecast_models: list = None
+    forecast_models: list = None,
+    per_ticker: bool = True,  # v2.4: Default to per-ticker strategy
+    batch_write_size: int = 10
 ) -> dict:
     """
     Run the complete pipeline: data ingestion + forecasting.
@@ -83,6 +85,10 @@ def run_full_pipeline(
         sort_by_market_cap: Sort tickers by market cap descending (default: True)
         min_market_cap: Minimum market cap filter (e.g., 1e9 for $1B+)
         forecast_models: List of model names to run
+        per_ticker: Use per-ticker ingestion strategy (v2.4). Completes all data
+                   for each ticker before moving to next. Enables parallel
+                   downstream processing. (default: True)
+        batch_write_size: How many tickers to accumulate before writing to disk (default: 10)
 
     Returns:
         Dictionary with pipeline results
@@ -144,6 +150,9 @@ def run_full_pipeline(
     print(f"  Skip forecasts: {skip_forecasts}")
     print(f"  Include news: {include_news}")
     print(f"  Include fundamentals: {include_fundamentals}")
+    print(f"  Per-ticker strategy: {per_ticker} {'(v2.4 - clean progress, enables parallel downstream)' if per_ticker else ''}")
+    if per_ticker:
+        print(f"  Batch write size: {batch_write_size} tickers")
     if forecast_models:
         print(f"  Forecast models: {', '.join(forecast_models)}")
     else:
@@ -181,19 +190,37 @@ def run_full_pipeline(
             if sort_by_market_cap:
                 print("  (Sorting tickers by market cap descending)")
 
-            ingestion_results = ingestor.run_comprehensive(
-                tickers=None,  # Will use default or market-cap sorted list
-                date_from=date_from,
-                date_to=date_to,
-                max_tickers=max_tickers,
-                sort_by_market_cap=sort_by_market_cap,
-                min_market_cap=min_market_cap,
-                include_fundamentals=include_fundamentals,
-                include_options=False,  # Options require premium tier
-                skip_reference_refresh=skip_reference_refresh,
-                use_concurrent=use_concurrent,
-                use_bulk_listing=use_bulk_listing
-            )
+            # Choose ingestion strategy
+            if per_ticker:
+                # v2.4: Per-ticker strategy with clean progress bars
+                print("  (Using per-ticker strategy with clean progress tracking)")
+                ingestion_results = ingestor.run_comprehensive_per_ticker(
+                    tickers=None,  # Will use default or market-cap sorted list
+                    date_from=date_from,
+                    date_to=date_to,
+                    max_tickers=max_tickers,
+                    sort_by_market_cap=sort_by_market_cap,
+                    min_market_cap=min_market_cap,
+                    include_fundamentals=include_fundamentals,
+                    skip_reference_refresh=skip_reference_refresh,
+                    use_bulk_listing=use_bulk_listing,
+                    batch_write_size=batch_write_size
+                )
+            else:
+                # Legacy: Horizontal batching (all prices, then all cashflows, etc.)
+                ingestion_results = ingestor.run_comprehensive(
+                    tickers=None,  # Will use default or market-cap sorted list
+                    date_from=date_from,
+                    date_to=date_to,
+                    max_tickers=max_tickers,
+                    sort_by_market_cap=sort_by_market_cap,
+                    min_market_cap=min_market_cap,
+                    include_fundamentals=include_fundamentals,
+                    include_options=False,  # Options require premium tier
+                    skip_reference_refresh=skip_reference_refresh,
+                    use_concurrent=use_concurrent,
+                    use_bulk_listing=use_bulk_listing
+                )
 
             # Extract results
             ingested_tickers = ingestion_results.get('tickers', [])
@@ -598,6 +625,25 @@ Note: --max-tickers automatically enables market cap sorting (top N by market ca
         help='Comma-separated list of models to run (e.g., arima_30d,prophet_30d)'
     )
 
+    # Ingestion strategy options (v2.4)
+    parser.add_argument(
+        '--per-ticker',
+        action='store_true',
+        default=True,
+        help='Use per-ticker ingestion strategy (default: True). Completes all data for each ticker before moving to next.'
+    )
+    parser.add_argument(
+        '--no-per-ticker',
+        action='store_true',
+        help='Use legacy horizontal batching (all prices, then all cashflows, etc.)'
+    )
+    parser.add_argument(
+        '--batch-write-size',
+        type=int,
+        default=10,
+        help='Number of tickers to accumulate before writing to disk (default: 10)'
+    )
+
     args = parser.parse_args()
 
     # Parse models
@@ -618,6 +664,9 @@ Note: --max-tickers automatically enables market cap sorting (top N by market ca
     # Handle fundamentals flag (--no-fundamentals overrides default)
     include_fundamentals = not args.no_fundamentals
 
+    # Handle per-ticker flag (--no-per-ticker overrides default)
+    per_ticker = not args.no_per_ticker
+
     # Run pipeline
     try:
         results = run_full_pipeline(
@@ -635,7 +684,9 @@ Note: --max-tickers automatically enables market cap sorting (top N by market ca
             sort_by_market_cap=sort_by_market_cap,
             min_market_cap=args.min_market_cap,
             use_bulk_listing=args.use_bulk_listing,
-            forecast_models=models
+            forecast_models=models,
+            per_ticker=per_ticker,
+            batch_write_size=args.batch_write_size
         )
 
         # Exit with error code if there were critical failures
