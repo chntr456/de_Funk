@@ -228,16 +228,27 @@ class ModelWriter:
             path = f"{output_root}/facts/{name}"
             print(f"  Writing {name} to {path}...")
 
+            # Count rows first for progress tracking
+            row_count = df.count()
+            print(f"    Rows: {row_count:,}")
+
+            # For large datasets, provide guidance on expected time
+            if row_count > 1_000_000:
+                est_minutes = row_count / 2_000_000  # ~2M rows/min estimate
+                print(f"    Estimated time: {est_minutes:.1f} min (large dataset)")
+
             writer = df.write.mode(mode).format(format)
             if partition_by and name in partition_by:
                 writer = writer.partitionBy(partition_by[name])
+                print(f"    Partitioning by: {partition_by[name]}")
 
+            print(f"    Writing... (this may take a moment for large datasets)")
             writer.save(path)
-            row_count = df.count()
+
             stats['facts'][name] = row_count
             stats['total_rows'] += row_count
             stats['total_tables'] += 1
-            print(f"    ✓ {row_count:,} rows")
+            print(f"    ✓ Complete")
 
         return stats
 

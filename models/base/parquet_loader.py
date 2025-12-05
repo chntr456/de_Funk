@@ -82,10 +82,10 @@ class ParquetLoader:
             print(f"  Sorting by: {', '.join(sort_by)}")
             df = df.sortWithinPartitions(*sort_by)
 
-        # Coalesce to minimize file count
-        # For datasets <10M rows, use single file
-        # For larger datasets, use 2-5 files
+        # Coalesce to minimize file count while avoiding shuffle bottlenecks
         print(f"  Coalescing to {num_files} file(s)")
+        if row_count > 5_000_000:
+            print(f"  (Large dataset - this may take a few minutes)")
         df = df.coalesce(num_files)
 
         # Write with snappy compression
@@ -130,13 +130,14 @@ class ParquetLoader:
             row_count = df.count()
 
         # Determine optimal file count based on size
-        # For typical datasets (<10M rows), use single file
-        # For very large datasets (>10M rows), use 2-5 files
-        if row_count < 10_000_000:
+        # Target ~2M rows per file (roughly 100-200MB compressed)
+        # This avoids massive shuffle bottlenecks while keeping files consolidated
+        ROWS_PER_FILE = 2_000_000
+
+        if row_count < ROWS_PER_FILE:
             num_files = 1
-        elif row_count < 50_000_000:
-            num_files = 2
         else:
-            num_files = 5
+            # Scale files based on row count, capped at 20
+            num_files = min(20, max(2, (row_count + ROWS_PER_FILE - 1) // ROWS_PER_FILE))
 
         self._write(rel_path, df, sort_by=sort_by, num_files=num_files, row_count=row_count)
