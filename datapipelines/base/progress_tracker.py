@@ -490,24 +490,19 @@ class BatchProgressTracker:
     """
     Progress tracker with batch-aware display for per-ticker ingestion.
 
-    Displays progress in a clean format showing:
-    - Overall progress across all tickers
-    - Current batch info (batch X of Y)
-    - Per-ticker progress within the batch
-    - Data type status for current ticker
+    Supports two display modes:
+    - minimal=True: Single updating line (recommended for cleaner output)
+    - minimal=False: Multi-line display with per-ticker rows (legacy)
 
-    Display format:
-    ══════════════════════════════════════════════════════════════════════════════
-    📦 Batch 2/5 | Overall: [████████░░░░░░░░░░░░] 40% (40/100) | ETA: 12m 30s
-    ──────────────────────────────────────────────────────────────────────────────
-      AAPL [12/20] ref:✓ prc:✓ inc:✓ bal:◯ csh:◯ ern:◯
-    ══════════════════════════════════════════════════════════════════════════════
+    Minimal mode display:
+    📦 Batch 1/3 | MSFT [5/20] ref:✓ prc:✓ | 25% (12/50) | ETA: 3.2m
 
     Usage:
         tracker = BatchProgressTracker(
             total_tickers=100,
             batch_size=20,
-            data_types=['reference', 'prices', 'income', 'balance', 'cashflow', 'earnings']
+            data_types=['reference', 'prices'],
+            minimal=True  # Single-line mode
         )
 
         tracker.start_batch(1, 5, batch_tickers)
@@ -538,7 +533,8 @@ class BatchProgressTracker:
         total_tickers: int,
         batch_size: int,
         data_types: List[str],
-        silent: bool = False
+        silent: bool = False,
+        minimal: bool = True  # New: single-line mode by default
     ):
         """
         Initialize batch progress tracker.
@@ -548,11 +544,13 @@ class BatchProgressTracker:
             batch_size: Number of tickers per batch
             data_types: List of data type names to track
             silent: If True, suppress console output
+            minimal: If True, use single updating line (cleaner output)
         """
         self.total_tickers = total_tickers
         self.batch_size = batch_size
         self.data_types = data_types
         self.silent = silent
+        self.minimal = minimal
         self.num_batches = (total_tickers + batch_size - 1) // batch_size if batch_size > 0 else 1
 
         # State
@@ -562,6 +560,8 @@ class BatchProgressTracker:
         self.total_errors = 0
         self.ticker_status: Dict[str, Dict[str, Optional[bool]]] = {}
         self.start_time = time.time()
+        self._current_ticker = ""
+        self._batch_start_time = time.time()
 
         # For ETA calculation
         self._progress_bar = ProgressBar(width=20)
@@ -577,16 +577,17 @@ class BatchProgressTracker:
         """
         self.current_batch = batch_num
         self.current_batch_tickers = tickers
+        self._batch_start_time = time.time()
         self.ticker_status = {
             t: {dt: None for dt in self.data_types}
             for t in tickers
         }
 
-        if not self.silent:
+        if not self.silent and not self.minimal:
             self._print_batch_header()
 
     def _print_batch_header(self):
-        """Print batch header with overall progress bar."""
+        """Print batch header with overall progress bar (non-minimal mode)."""
         overall_pct = (self.completed_tickers / self.total_tickers * 100) if self.total_tickers > 0 else 0
         bar = self._progress_bar.render(overall_pct, self.completed_tickers, self.total_tickers)
         eta = self._calculate_eta()
@@ -618,11 +619,55 @@ class BatchProgressTracker:
             if not success:
                 self.total_errors += 1
 
+        self._current_ticker = ticker
+
         if not self.silent:
-            self._update_display(ticker, error)
+            if self.minimal:
+                self._update_display_minimal(ticker, error)
+            else:
+                self._update_display(ticker, error)
+
+    def _update_display_minimal(self, ticker: str, error: Optional[str] = None):
+        """Update single-line display with current progress."""
+        if ticker not in self.ticker_status:
+            return
+
+        # Build status icons for each data type
+        status_parts = []
+        for dt in self.data_types:
+            status = self.ticker_status[ticker].get(dt)
+            if status is None:
+                icon = "◯"
+            elif status:
+                icon = "✓"
+            else:
+                icon = "✗"
+            short_name = self.DATA_TYPE_SHORT_NAMES.get(dt, dt[:3])
+            status_parts.append(f"{short_name}:{icon}")
+
+        # Position in batch
+        try:
+            batch_pos = self.current_batch_tickers.index(ticker) + 1
+        except ValueError:
+            batch_pos = 0
+
+        # Overall progress
+        overall_pct = (self.completed_tickers / self.total_tickers * 100) if self.total_tickers > 0 else 0
+        eta = self._calculate_eta()
+
+        # Build single line
+        status_str = " ".join(status_parts)
+        line = (f"\r📦 Batch {self.current_batch}/{self.num_batches} | "
+                f"{ticker:6} [{batch_pos:2}/{len(self.current_batch_tickers)}] {status_str} | "
+                f"{overall_pct:5.1f}% ({self.completed_tickers}/{self.total_tickers}) | "
+                f"ETA: {eta}")
+
+        # Pad and write
+        sys.stdout.write(line.ljust(120))
+        sys.stdout.flush()
 
     def _update_display(self, ticker: str, error: Optional[str] = None):
-        """Update the current line with ticker progress."""
+        """Update the current line with ticker progress (non-minimal mode)."""
         if ticker not in self.ticker_status:
             return
 
@@ -665,8 +710,8 @@ class BatchProgressTracker:
             ticker: Ticker symbol that completed
         """
         self.completed_tickers += 1
-        if not self.silent:
-            print()  # Move to next line after ticker completes
+        if not self.silent and not self.minimal:
+            print()  # Move to next line after ticker completes (non-minimal mode)
             sys.stdout.flush()
 
     def complete_batch(self, write_time_ms: float = 0):
@@ -679,9 +724,17 @@ class BatchProgressTracker:
         if not self.silent:
             batch_tickers_count = len(self.current_batch_tickers)
             write_info = f" | Write: {write_time_ms/1000:.1f}s" if write_time_ms > 0 else ""
-            print("─" * 80)
-            print(f"  ✓ Batch {self.current_batch} complete: "
-                  f"{batch_tickers_count} tickers written to Delta Lake{write_info}")
+            batch_time = time.time() - self._batch_start_time
+
+            if self.minimal:
+                # Clear line and print batch completion on new line
+                sys.stdout.write("\r" + " " * 120 + "\r")
+                print(f"✓ Batch {self.current_batch}: {batch_tickers_count} tickers | "
+                      f"{format_duration(batch_time)}{write_info}")
+            else:
+                print("─" * 80)
+                print(f"  ✓ Batch {self.current_batch} complete: "
+                      f"{batch_tickers_count} tickers written to Delta Lake{write_info}")
             sys.stdout.flush()
 
     def _calculate_eta(self) -> str:
@@ -704,15 +757,19 @@ class BatchProgressTracker:
         elapsed = time.time() - self.start_time
 
         if not self.silent:
+            if self.minimal:
+                # Clear any remaining progress line
+                sys.stdout.write("\r" + " " * 120 + "\r")
+
             print()
-            print("═" * 80)
+            print("═" * 60)
             print(f"✓ INGESTION COMPLETE")
-            print("═" * 80)
+            print("═" * 60)
             print(f"  Tickers: {self.completed_tickers}/{self.total_tickers}")
             print(f"  Batches: {self.current_batch}/{self.num_batches}")
             print(f"  Errors: {self.total_errors}")
             print(f"  Elapsed: {format_duration(elapsed)}")
-            print("═" * 80)
+            print("═" * 60)
             print()
             sys.stdout.flush()
 
