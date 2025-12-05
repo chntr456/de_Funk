@@ -150,27 +150,35 @@ class ModelWriter:
             Updated statistics
         """
         from models.base.parquet_loader import ParquetLoader
+        import time
         loader = ParquetLoader(root=output_root, quiet=self._quiet)
 
         # Write dimensions
         self._print(f"\nWriting Dimensions:")
         for name, df in self.model._dims.items():
             self._print(f"  Writing {name}...")
+            start_time = time.time()
             row_count = df.count()
 
             # ParquetLoader expects relative path from output_root
             rel_path = f"dims/{name}"
             loader.write_dim(rel_path, df, row_count=row_count)
 
-            stats['dimensions'][name] = row_count
+            elapsed = time.time() - start_time
+            stats['dimensions'][name] = {
+                'rows': row_count,
+                'files': 1,
+                'time': elapsed
+            }
             stats['total_rows'] += row_count
             stats['total_tables'] += 1
-            self._print(f"    ✓ {row_count:,} rows")
+            self._print(f"    ✓ {row_count:,} rows ({elapsed:.1f}s)")
 
         # Write facts
         self._print(f"\nWriting Facts:")
         for name, df in self.model._facts.items():
             self._print(f"  Writing {name}...")
+            start_time = time.time()
             # Count rows BEFORE optimizations (more memory-efficient)
             row_count = df.count()
             self._print(f"    Rows: {row_count:,}")
@@ -185,7 +193,19 @@ class ModelWriter:
             # Pass pre-computed row_count to avoid re-counting after sort/coalesce
             loader.write_fact(rel_path, df, sort_by=sort_by, row_count=row_count)
 
-            stats['facts'][name] = row_count
+            elapsed = time.time() - start_time
+            # Calculate file count (same logic as ParquetLoader)
+            ROWS_PER_FILE = 2_000_000
+            if row_count < ROWS_PER_FILE:
+                num_files = 1
+            else:
+                num_files = min(20, max(2, (row_count + ROWS_PER_FILE - 1) // ROWS_PER_FILE))
+
+            stats['facts'][name] = {
+                'rows': row_count,
+                'files': num_files,
+                'time': elapsed
+            }
             stats['total_rows'] += row_count
             stats['total_tables'] += 1
 
@@ -212,6 +232,7 @@ class ModelWriter:
         Returns:
             Updated statistics
         """
+        import time
         self._print("\nUsing standard Spark writer...")
 
         # Write dimensions
@@ -219,23 +240,30 @@ class ModelWriter:
         for name, df in self.model._dims.items():
             path = f"{output_root}/dims/{name}"
             self._print(f"  Writing {name} to {path}...")
+            start_time = time.time()
 
+            row_count = df.count()
             writer = df.write.mode(mode).format(format)
             if partition_by and name in partition_by:
                 writer = writer.partitionBy(partition_by[name])
 
             writer.save(path)
-            row_count = df.count()
-            stats['dimensions'][name] = row_count
+            elapsed = time.time() - start_time
+            stats['dimensions'][name] = {
+                'rows': row_count,
+                'files': 1,
+                'time': elapsed
+            }
             stats['total_rows'] += row_count
             stats['total_tables'] += 1
-            self._print(f"    ✓ {row_count:,} rows")
+            self._print(f"    ✓ {row_count:,} rows ({elapsed:.1f}s)")
 
         # Write facts
         self._print(f"\nWriting Facts:")
         for name, df in self.model._facts.items():
             path = f"{output_root}/facts/{name}"
             self._print(f"  Writing {name} to {path}...")
+            start_time = time.time()
 
             # Count rows first for progress tracking
             row_count = df.count()
@@ -254,10 +282,17 @@ class ModelWriter:
             self._print(f"    Writing... (this may take a moment for large datasets)")
             writer.save(path)
 
-            stats['facts'][name] = row_count
+            elapsed = time.time() - start_time
+            # Estimate file count for Delta/Parquet
+            num_files = max(1, row_count // 2_000_000 + 1)
+            stats['facts'][name] = {
+                'rows': row_count,
+                'files': num_files,
+                'time': elapsed
+            }
             stats['total_rows'] += row_count
             stats['total_tables'] += 1
-            self._print(f"    ✓ Complete")
+            self._print(f"    ✓ Complete ({elapsed:.1f}s)")
 
         return stats
 

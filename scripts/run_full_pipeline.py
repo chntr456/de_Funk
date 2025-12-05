@@ -313,11 +313,10 @@ def run_full_pipeline(
 
             # Track build metrics
             build_start = time.time()
-            build_metrics = {}
+            all_table_stats = []
 
             # Build Company model first (stocks depends on company)
             print("  Building company model...")
-            company_start = time.time()
             company_cfg = loader.load_model_config("company")
             company_model = CompanyModel(
                 connection=spark,
@@ -327,18 +326,17 @@ def run_full_pipeline(
                 repo_root=repo_root
             )
             company_dims, company_facts = company_model.build()
-            company_model.write_tables(quiet=True)
-            company_elapsed = time.time() - company_start
-            build_metrics['company'] = {
-                'dims': len(company_dims),
-                'facts': len(company_facts),
-                'elapsed': company_elapsed
-            }
-            print(f"    ✓ Company model: {len(company_dims)} dims, {len(company_facts)} facts ({company_elapsed:.1f}s)")
+            company_stats = company_model.write_tables(quiet=True)
+
+            # Collect company table stats
+            for name, info in company_stats.get('dimensions', {}).items():
+                all_table_stats.append(('company', 'dim', name, info))
+            for name, info in company_stats.get('facts', {}).items():
+                all_table_stats.append(('company', 'fact', name, info))
+            print(f"    ✓ Company model built")
 
             # Build Stocks model (uses JOIN-based filtering via after_build hook)
             print("  Building stocks model...")
-            stocks_start = time.time()
             stocks_cfg = loader.load_model_config("stocks")
             stocks_model = StocksModel(
                 connection=spark,
@@ -348,44 +346,58 @@ def run_full_pipeline(
                 repo_root=repo_root
             )
             stocks_dims, stocks_facts = stocks_model.build()
-            stocks_model.write_tables(quiet=True)
-            stocks_elapsed = time.time() - stocks_start
+            stocks_stats = stocks_model.write_tables(quiet=True)
 
-            # Collect row counts
-            stocks_rows = {}
-            for name, df in {**stocks_dims, **stocks_facts}.items():
-                try:
-                    count = df.count() if hasattr(df, 'count') else len(df)
-                    stocks_rows[name] = count
-                except Exception:
-                    stocks_rows[name] = 0
-
-            build_metrics['stocks'] = {
-                'dims': len(stocks_dims),
-                'facts': len(stocks_facts),
-                'rows': stocks_rows,
-                'elapsed': stocks_elapsed
-            }
-            print(f"    ✓ Stocks model: {len(stocks_dims)} dims, {len(stocks_facts)} facts ({stocks_elapsed:.1f}s)")
+            # Collect stocks table stats
+            for name, info in stocks_stats.get('dimensions', {}).items():
+                all_table_stats.append(('stocks', 'dim', name, info))
+            for name, info in stocks_stats.get('facts', {}).items():
+                all_table_stats.append(('stocks', 'fact', name, info))
+            print(f"    ✓ Stocks model built")
 
             total_build_elapsed = time.time() - build_start
 
-            # Print summary
+            # Print detailed summary
             print()
             print("=" * 60)
             print("✓ SILVER BUILD COMPLETE")
             print("=" * 60)
-            print(f"  Company: {build_metrics['company']['dims']} dims, {build_metrics['company']['facts']} facts | {build_metrics['company']['elapsed']:.1f}s")
-            print(f"  Stocks:  {build_metrics['stocks']['dims']} dims, {build_metrics['stocks']['facts']} facts | {build_metrics['stocks']['elapsed']:.1f}s")
-            total_rows = sum(build_metrics['stocks']['rows'].values())
-            print(f"  Total rows: {total_rows:,}")
-            print(f"  Elapsed: {total_build_elapsed:.0f}s")
+
+            # Print table header
+            print(f"  {'Table':<35} {'Rows':>12} {'Files':>6} {'Time':>8}")
+            print(f"  {'-'*35} {'-'*12} {'-'*6} {'-'*8}")
+
+            total_rows = 0
+            total_files = 0
+            for model, ttype, name, info in all_table_stats:
+                # Handle both old format (int) and new format (dict)
+                if isinstance(info, dict):
+                    rows = info.get('rows', 0)
+                    files = info.get('files', 1)
+                    ttime = info.get('time', 0)
+                else:
+                    rows = info
+                    files = 1
+                    ttime = 0
+
+                total_rows += rows
+                total_files += files
+                table_name = f"{model}.{name}"
+                print(f"  {table_name:<35} {rows:>12,} {files:>6} {ttime:>7.1f}s")
+
+            print(f"  {'-'*35} {'-'*12} {'-'*6} {'-'*8}")
+            print(f"  {'TOTAL':<35} {total_rows:>12,} {total_files:>6} {total_build_elapsed:>7.0f}s")
             print("=" * 60)
 
             # Clean up Spark session
             spark_session.stop()
 
-            results['silver_build'] = {'status': 'success', 'metrics': build_metrics}
+            results['silver_build'] = {
+                'status': 'success',
+                'tables': all_table_stats,
+                'total_rows': total_rows,
+                'elapsed': total_build_elapsed
+            }
 
         except Exception as e:
             error_msg = f"Silver layer build failed: {str(e)}"
