@@ -2120,16 +2120,16 @@ class AlphaVantageIngestor(Ingestor):
 
             # Normalize and accumulate data
             try:
-                # Reference data
+                # Reference data - wrap single response in batch format [[response]]
                 if ticker_data['reference']:
                     ref_facet = SecuritiesReferenceFacetAV(self.spark, tickers=[ticker])
                     ref_df = ref_facet.normalize([[ticker_data['reference']]])
                     if ref_df.count() > 0:
                         reference_dfs.append(ref_df)
 
-                    # Company reference (separate table)
-                    comp_facet = CompanyReferenceFacet(self.spark, ticker=ticker)
-                    comp_df = comp_facet.normalize(ticker_data['reference'])
+                    # Company reference (separate table) - use tickers (plural)
+                    comp_facet = CompanyReferenceFacet(self.spark, tickers=[ticker])
+                    comp_df = comp_facet.normalize([[ticker_data['reference']]])
                     if comp_df.count() > 0:
                         company_dfs.append(comp_df)
 
@@ -2148,7 +2148,7 @@ class AlphaVantageIngestor(Ingestor):
                     if price_df.count() > 0:
                         prices_dfs.append(price_df)
 
-                # Fundamentals
+                # Fundamentals - only if enabled
                 if include_fundamentals:
                     if ticker_data['income_statement']:
                         inc_facet = IncomeStatementFacet(self.spark, ticker=ticker)
