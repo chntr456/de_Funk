@@ -47,20 +47,8 @@ schema:
       tags: [dim, ref, exchange]
 
   facts:
-    fact_prices:
-      path: facts/fact_prices
-      description: "Daily stock prices"
-      columns:
-        trade_date: date
-        ticker: string
-        open: double
-        high: double
-        low: double
-        close: double
-        volume_weighted: double
-        volume: long
-      partitions: [trade_date]
-      tags: [fact, prices, timeseries]
+    # NOTE: fact_prices removed in v2.0 - prices are now in stocks.fact_stock_prices
+    # See stocks/schema.yaml for price data
 
     fact_news:
       path: facts/fact_news
@@ -75,22 +63,7 @@ schema:
       partitions: [publish_date]
       tags: [fact, news]
 
-    prices_with_company:
-      path: facts/prices_with_company
-      description: "Prices joined with company and exchange info"
-      columns:
-        trade_date: date
-        ticker: string
-        company_name: string
-        exchange_name: string
-        open: double
-        high: double
-        low: double
-        close: double
-        volume_weighted: double
-        volume: long
-      partitions: [trade_date]
-      tags: [canonical, analytics, materialized]
+    # NOTE: prices_with_company removed in v2.0 - use stocks model for price data
 
     news_with_company:
       path: facts/news_with_company
@@ -107,213 +80,120 @@ schema:
       tags: [news, analytics, materialized]
 
 # Available measures - pre-defined aggregations
+# NOTE: Price-related measures moved to stocks model in v2.0
+# See configs/models/stocks/measures.yaml for price measures
 measures:
-  market_cap:
-    description: "Market capitalization proxy (close * volume)"
-    type: computed
-    source: fact_prices.close
-    expression: "close * volume"
-    aggregation: avg
-    data_type: double
-    format: "$#,##0.00"
-    tags: [market, valuation, aggregate]
-
-  avg_close_price:
-    description: "Average closing price"
-    source: fact_prices.close
-    aggregation: avg
-    data_type: double
-    format: "$#,##0.00"
-    tags: [price, average]
-
-  total_volume:
-    description: "Total trading volume"
-    source: fact_prices.volume
-    aggregation: sum
+  company_count:
+    description: "Count of companies"
+    source: dim_company.ticker
+    aggregation: count
     data_type: long
     format: "#,##0"
-    tags: [volume, total]
+    tags: [company, count]
 
-  max_high:
-    description: "Highest price in period"
-    source: fact_prices.high
-    aggregation: max
-    data_type: double
-    format: "$#,##0.00"
-    tags: [price, max]
-
-  min_low:
-    description: "Lowest price in period"
-    source: fact_prices.low
-    aggregation: min
-    data_type: double
-    format: "$#,##0.00"
-    tags: [price, min]
-
-  avg_vwap:
-    description: "Average volume weighted average price"
-    source: fact_prices.volume_weighted
-    aggregation: avg
-    data_type: double
-    format: "$#,##0.00"
-    tags: [price, vwap]
-
-  # Weighted aggregate measures (multi-stock indices)
-  equal_weighted_index:
-    description: "Equal weighted price index across stocks"
-    type: weighted_aggregate
-    source: fact_prices.close
-    weighting_method: equal
-    group_by: [trade_date]
-    data_type: double
-    format: "$#,##0.00"
-    tags: [index, aggregate, equal_weighted]
-
-  volume_weighted_index:
-    description: "Volume weighted price index across stocks"
-    type: weighted_aggregate
-    source: fact_prices.close
-    weighting_method: volume
-    group_by: [trade_date]
-    data_type: double
-    format: "$#,##0.00"
-    tags: [index, aggregate, volume_weighted]
-
-  market_cap_weighted_index:
-    description: "Market cap weighted price index across stocks"
-    type: weighted_aggregate
-    source: fact_prices.close
-    weighting_method: market_cap
-    group_by: [trade_date]
-    data_type: double
-    format: "$#,##0.00"
-    tags: [index, aggregate, market_cap_weighted]
-
-  price_weighted_index:
-    description: "Price weighted index across stocks"
-    type: weighted_aggregate
-    source: fact_prices.close
-    weighting_method: price
-    group_by: [trade_date]
-    data_type: double
-    format: "$#,##0.00"
-    tags: [index, aggregate, price_weighted]
-
-  volume_deviation_weighted_index:
-    description: "Volume deviation weighted index (unusual activity)"
-    type: weighted_aggregate
-    source: fact_prices.close
-    weighting_method: volume_deviation
-    group_by: [trade_date]
-    data_type: double
-    format: "$#,##0.00"
-    tags: [index, aggregate, volume_deviation]
-
-  volatility_weighted_index:
-    description: "Inverse volatility weighted index (risk-adjusted)"
-    type: weighted_aggregate
-    source: fact_prices.close
-    weighting_method: volatility
-    group_by: [trade_date]
-    data_type: double
-    format: "$#,##0.00"
-    tags: [index, aggregate, volatility_weighted]
-
-# Graph structure for visualization and future graph database
+# Graph structure - Company model v2.0
+# NOTE: fact_prices removed - prices are now in stocks model
 graph:
   nodes:
     - id: dim_company
-      from: bronze.ref_all_tickers
+      from: bronze.securities_reference
+      filters:
+        - "asset_type = 'stocks'"
       select:
         ticker: ticker
         company_name: name
-        exchange_code: exchange_code
+        exchange_code: exchange
+        cik: cik
+        sector: sector
+        industry: industry
+        market_cap: market_cap
       derive:
-        company_id: "sha1(ticker)"
+        company_id: "CONCAT('COMPANY_', LPAD(cik, 10, '0'))"
       tags: [dim, entity, company]
       unique_key: [ticker]
 
-    - id: dim_exchange
-      from: bronze.exchanges
+    - id: fact_income_statements
+      from: bronze.fundamentals_income
       select:
-        exchange_code: code
-        exchange_name: name
-      tags: [dim, ref, exchange]
-      unique_key: [exchange_code]
-
-    - id: fact_prices
-      from: bronze.prices_daily
-      select:
-        trade_date: trade_date
         ticker: ticker
-        open: open
-        high: high
-        low: low
-        close: close
-        volume_weighted: volume_weighted
-        volume: volume
-      tags: [fact, prices]
+        fiscal_date: fiscal_date_ending
+        report_type: report_type
+        total_revenue: total_revenue
+        gross_profit: gross_profit
+        operating_income: operating_income
+        net_income: net_income
+        ebitda: ebitda
+      tags: [fact, fundamentals, income]
 
-    - id: fact_news
-      from: bronze.news
+    - id: fact_balance_sheets
+      from: bronze.fundamentals_balance
       select:
-        publish_date: publish_date
         ticker: ticker
-        article_id: article_id
-        title: title
-        source: source
-        sentiment: sentiment
-      tags: [fact, news]
+        fiscal_date: fiscal_date_ending
+        report_type: report_type
+        total_assets: total_assets
+        total_liabilities: total_liabilities
+        total_equity: total_shareholder_equity
+        cash: cash_and_cash_equivalents
+        debt: total_debt
+      tags: [fact, fundamentals, balance]
+
+    - id: fact_cash_flows
+      from: bronze.fundamentals_cashflow
+      select:
+        ticker: ticker
+        fiscal_date: fiscal_date_ending
+        report_type: report_type
+        operating_cashflow: operating_cashflow
+        investing_cashflow: cashflow_from_investment
+        financing_cashflow: cashflow_from_financing
+        free_cashflow: free_cashflow
+      tags: [fact, fundamentals, cashflow]
+
+    - id: fact_earnings
+      from: bronze.fundamentals_earnings
+      select:
+        ticker: ticker
+        fiscal_date: fiscal_date_ending
+        report_type: report_type
+        reported_eps: reported_eps
+        estimated_eps: estimated_eps
+        surprise: surprise
+        surprise_percentage: surprise_percentage
+      tags: [fact, fundamentals, earnings]
 
   edges:
-    # Cross-model edge: company data uses core calendar for time-based filtering
-    - from: fact_prices
-      to: core.dim_calendar
-      "on": ["trade_date=date"]
-      type: left
-      description: "Join prices to calendar for date-based filtering and attributes"
-
-    - from: fact_news
-      to: core.dim_calendar
-      "on": ["publish_date=date"]
-      type: left
-      description: "Join news to calendar for date-based filtering"
-
-    - from: fact_prices
+    - from: fact_income_statements
       to: dim_company
       "on": ["ticker=ticker"]
       type: many_to_one
-      description: "Prices belong to a company"
+      description: "Income statements belong to a company"
 
-    - from: dim_company
-      to: dim_exchange
-      "on": ["exchange_code=exchange_code"]
-      type: many_to_one
-      description: "Company lists on an exchange"
-
-    - from: fact_news
+    - from: fact_balance_sheets
       to: dim_company
       "on": ["ticker=ticker"]
       type: many_to_one
-      description: "News articles about a company"
+      description: "Balance sheets belong to a company"
+
+    - from: fact_cash_flows
+      to: dim_company
+      "on": ["ticker=ticker"]
+      type: many_to_one
+      description: "Cash flows belong to a company"
+
+    - from: fact_earnings
+      to: dim_company
+      "on": ["ticker=ticker"]
+      type: many_to_one
+      description: "Earnings belong to a company"
 
   paths:
-    - id: prices_with_company
-      hops: "fact_prices -> dim_company -> dim_exchange"
-      description: "Prices with full company and exchange context"
-      tags: [canonical, analytics]
+    - id: income_with_company
+      hops: "fact_income_statements -> dim_company"
+      description: "Income statements with company context"
+      tags: [fundamentals, analytics]
 
-    - id: prices_with_calendar
-      hops: "fact_prices -> core.dim_calendar"
-      description: "Prices with calendar attributes for time-based analysis"
-      tags: [time, analytics]
-
-    - id: news_with_company
-      hops: "fact_news -> dim_company"
-      description: "News with company context"
-      tags: [news, analytics]
-
-    - id: news_with_calendar
-      hops: "fact_news -> core.dim_calendar"
-      description: "News with calendar attributes for time-based analysis"
-      tags: [time, analytics]
+    - id: balance_with_company
+      hops: "fact_balance_sheets -> dim_company"
+      description: "Balance sheets with company context"
+      tags: [fundamentals, analytics]

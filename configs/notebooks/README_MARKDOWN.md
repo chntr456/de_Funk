@@ -44,7 +44,7 @@ Your analysis narrative here...
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: trade_date
   y: close
 }
@@ -168,7 +168,7 @@ Use `$exhibits${...}` syntax with YAML config:
 ```markdown
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: trade_date
   y: close
   color: ticker
@@ -185,7 +185,7 @@ Display aggregated KPIs:
 ```markdown
 $exhibits${
   type: metric_cards
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   metrics: [
     { measure: close, label: "Avg Close", aggregation: avg },
     { measure: volume, label: "Total Volume", aggregation: sum },
@@ -204,7 +204,7 @@ Time series or continuous data:
 ```markdown
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: trade_date
   y: close
   color: ticker
@@ -225,7 +225,7 @@ Categorical comparisons:
 ```markdown
 $exhibits${
   type: bar_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: ticker
   y: volume
   color: ticker
@@ -247,7 +247,7 @@ Correlation analysis:
 ```markdown
 $exhibits${
   type: scatter_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: volume
   y: close
   color: ticker
@@ -269,7 +269,7 @@ Raw data display:
 ```markdown
 $exhibits${
   type: data_table
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   columns: [trade_date, ticker, close, volume]
   download: true
   sortable: true
@@ -364,7 +364,7 @@ The price trend shows a clear upward trajectory:
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: trade_date
   y: close
 }
@@ -377,7 +377,7 @@ As we can see from the chart above...
 ```markdown
 $exhibits${
   type: bar_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: ticker
   y: volume
   title: "Trading Volume by Stock (Last 30 Days)"
@@ -418,7 +418,7 @@ variables:
 exhibits:
   - id: price_chart
     type: line_chart
-    source: "company.fact_prices"
+    source: "stocks.fact_stock_prices"
     x_axis:
       dimension: trade_date
     y_axis:
@@ -449,7 +449,7 @@ models: [company]
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: trade_date
   y: close
   color: ticker
@@ -509,7 +509,7 @@ For more information, see:
 
 **Solutions**:
 1. Check YAML syntax in exhibit block (indentation, colons, brackets)
-2. Verify source format: `model.table` (e.g., `company.fact_prices`)
+2. Verify source format: `model.table` (e.g., `stocks.fact_stock_prices`)
 3. Ensure model is listed in front matter `models:` section
 4. Check that columns referenced exist in the source table
 

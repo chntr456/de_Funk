@@ -3,7 +3,7 @@ id: stock_analysis_interactive
 title: Interactive Stock Analysis with Dynamic Measures
 description: Analyzing stock prices with dynamic measure selection and click events
 tags: [stocks, prices, analysis, interactive]
-models: [company]
+models: [stocks]
 author: analyst@company.com
 created: 2024-01-01
 updated: 2024-01-15
@@ -23,7 +23,7 @@ $filter${
   label: Stock Tickers
   type: select
   multi: true
-  source: {model: company, table: fact_prices, column: ticker}
+  source: {model: stocks, table: fact_stock_prices, column: ticker}
   help_text: Select stocks to analyze (loaded from database)
 }
 
@@ -37,7 +37,7 @@ Select which metrics you want to see displayed as cards. The metrics will automa
 
 $exhibits${
   type: metric_cards
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   title: Key Performance Metrics
   measure_selector: {
     available_measures: [close, open, high, low, volume],
@@ -57,7 +57,7 @@ Select multiple measures to compare them over time. Click and drag to select dat
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: trade_date
   y: close
   title: Stock Price Trends (Multi-Measure)
@@ -78,7 +78,7 @@ Compare multiple measures across different stocks using grouped bars. Select whi
 
 $exhibits${
   type: bar_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: ticker
   y: volume
   title: Stock Comparison (Grouped Bars)
@@ -99,7 +99,7 @@ Sometimes you only want to view one measure at a time. Use the radio button sele
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: trade_date
   y: close
   title: Single Measure View
@@ -121,7 +121,7 @@ For exhibits with many measures, a dropdown selector might be more space-efficie
 
 $exhibits${
   type: bar_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: ticker
   y: volume
   title: Compact Measure Selection
@@ -157,7 +157,7 @@ You can still use the traditional static exhibit configuration if you don't need
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: trade_date
   y: close
   color: ticker

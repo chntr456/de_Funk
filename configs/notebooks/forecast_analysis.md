@@ -27,7 +27,7 @@ $filter${
   default: {start: "2024-10-01", end: "2025-12-31"}
   help_text: Filter by date (unified across actuals and predictions via calendar)
   source: {model: core, table: dim_calendar, column: trade_date}
-  applies_to: [forecast.vw_price_predictions.date, company.fact_prices.trade_date]
+  applies_to: [forecast.vw_price_predictions.date, stocks.fact_stock_prices.trade_date]
 }
 
 # Time Series Forecast Analysis

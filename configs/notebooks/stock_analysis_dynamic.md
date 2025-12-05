@@ -3,7 +3,7 @@ id: stock_analysis_dynamic
 title: Stock Performance Analysis (Dynamic Filters)
 description: Analyzing stock prices with dynamic database-driven filters
 tags: [stocks, prices, analysis, dynamic]
-models: [company]
+models: [stocks]
 author: analyst@company.com
 created: 2024-01-01
 updated: 2024-01-15
@@ -49,7 +49,7 @@ Key performance indicators for the selected period:
 
 $exhibits${
   type: metric_cards
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   metrics: [
     { measure: close, label: "Avg Close", aggregation: avg },
     { measure: volume, label: "Total Volume", aggregation: sum },
@@ -64,7 +64,7 @@ The following chart shows daily closing prices for each stock. Each line represe
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: trade_date
   y: close
   color: ticker
@@ -82,7 +82,7 @@ Total trading volume by stock for the selected period. This chart is sorted by v
 
 $exhibits${
   type: bar_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: ticker
   y: volume
   color: ticker
@@ -121,7 +121,7 @@ The table below contains all available data points for the selected filters. You
 
 $exhibits${
   type: data_table
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   download: true
   sortable: true
   pagination: true

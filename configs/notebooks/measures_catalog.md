@@ -191,7 +191,7 @@ Exchange-Traded Fund analytics and fund performance.
 SELECT
     ticker,
     AVG(close) as avg_close_price
-FROM company.fact_prices
+FROM stocks.fact_stock_prices
 GROUP BY ticker
 ORDER BY avg_close_price DESC
 LIMIT 10;

@@ -260,7 +260,7 @@ $exhibits${
 This notebook has been updated from the deprecated `company` model to the new `equity` model:
 
 **Old (Deprecated):**
-- `company.fact_prices` → **NEW:** `equity.fact_equity_prices`
+- `stocks.fact_stock_prices` → **NEW:** `equity.fact_equity_prices`
 - `company.dim_company` → **NEW:** `equity.dim_equity` + `corporate.dim_corporate`
 
 **New Features in Equity Model:**

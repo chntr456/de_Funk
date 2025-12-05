@@ -3,7 +3,7 @@ id: aggregate_stock_analysis
 title: Aggregate Stock Index Analysis
 description: Analyzing aggregated stock performance using various weighting methods
 tags: [stocks, aggregate, index, weighted]
-models: [company]
+models: [stocks]
 author: analyst@company.com
 created: 2024-01-15
 updated: 2024-01-15
@@ -23,7 +23,7 @@ $filter${
   label: Stock Tickers
   type: select
   multi: true
-  source: {model: company, table: fact_prices, column: ticker}
+  source: {model: stocks, table: fact_stock_prices, column: ticker}
   default: ["AAPL"]
   help_text: Select stocks to analyze (loaded from database)
 }
@@ -50,7 +50,7 @@ Summary metrics for selected stocks:
 
 $exhibits${
   type: metric_cards
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   metrics: [
     { measure: close, label: "Avg Close", aggregation: avg },
     { measure: volume, label: "Total Volume", aggregation: sum },
@@ -122,7 +122,7 @@ For reference, view individual stock prices to compare with the aggregate indice
 
 $exhibits${
   type: line_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: trade_date
   y: close
   color: ticker
@@ -138,7 +138,7 @@ Total trading volume by stock - this affects market cap weighting calculations.
 
 $exhibits${
   type: bar_chart
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   x: ticker
   y: volume
   color: ticker
@@ -158,7 +158,7 @@ Raw price data used for all aggregate calculations. Export for further analysis.
 
 $exhibits${
   type: data_table
-  source: company.fact_prices
+  source: stocks.fact_stock_prices
   download: true
 }
 
