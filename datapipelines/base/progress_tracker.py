@@ -651,15 +651,21 @@ class BatchProgressTracker:
         except ValueError:
             batch_pos = 0
 
-        # Overall progress
+        # Overall progress with visual bar
         overall_pct = (self.completed_tickers / self.total_tickers * 100) if self.total_tickers > 0 else 0
         eta = self._calculate_eta()
 
-        # Build single line
+        # Build progress bar (15 chars wide)
+        bar_width = 15
+        filled = int(bar_width * overall_pct / 100)
+        empty = bar_width - filled
+        progress_bar = "█" * filled + "░" * empty
+
+        # Build single line with progress bar
         status_str = " ".join(status_parts)
-        line = (f"\r📦 Batch {self.current_batch}/{self.num_batches} | "
+        line = (f"\r[{progress_bar}] {overall_pct:4.0f}% | "
+                f"Batch {self.current_batch}/{self.num_batches} | "
                 f"{ticker:6} [{batch_pos:2}/{len(self.current_batch_tickers)}] {status_str} | "
-                f"{overall_pct:5.1f}% ({self.completed_tickers}/{self.total_tickers}) | "
                 f"ETA: {eta}")
 
         # Pad and write
