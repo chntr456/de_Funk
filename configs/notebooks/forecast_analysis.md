@@ -13,7 +13,7 @@ $filter${
   label: Stock Ticker
   type: select
   multi: true
-  source: {model: stocks, table: dim_stock, column: ticker}
+  source: {model: forecast, table: fact_forecasts, column: ticker}
   default: ["AAPL", "MSFT"]
   help_text: Select stocks to view forecasts
 }
@@ -25,6 +25,15 @@ $filter${
   multi: true
   source: {model: forecast, table: fact_forecasts, column: model_name}
   help_text: Filter by forecast model type (ARIMA, Prophet, etc.)
+}
+
+$filter${
+  id: sector
+  label: Sector
+  type: select
+  multi: true
+  source: {model: stocks, table: dim_stock, column: sector}
+  help_text: Filter forecasts by sector
 }
 
 $filter${

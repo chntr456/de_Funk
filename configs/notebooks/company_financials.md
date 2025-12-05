@@ -19,11 +19,29 @@ $filter${
 }
 
 $filter${
+  id: sector
+  label: Sector
+  type: select
+  multi: true
+  source: {model: company, table: dim_company, column: sector}
+  help_text: Filter companies by sector
+}
+
+$filter${
+  id: industry
+  label: Industry
+  type: select
+  multi: true
+  source: {model: company, table: dim_company, column: industry}
+  help_text: Filter companies by industry
+}
+
+$filter${
   id: report_type
   label: Report Type
   type: select
   multi: false
-  options: ["annual", "quarterly"]
+  source: {model: company, table: fact_income_statements, column: report_type}
   default: "annual"
   help_text: Annual or quarterly reports
 }

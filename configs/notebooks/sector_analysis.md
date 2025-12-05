@@ -18,6 +18,24 @@ $filter${
 }
 
 $filter${
+  id: industry
+  label: Industry
+  type: select
+  multi: true
+  source: {model: stocks, table: dim_stock, column: industry}
+  help_text: Filter by specific industries
+}
+
+$filter${
+  id: exchange_code
+  label: Exchange
+  type: select
+  multi: true
+  source: {model: stocks, table: dim_stock, column: exchange_code}
+  help_text: Filter by stock exchange
+}
+
+$filter${
   id: trade_date
   type: date_range
   label: Date Range
