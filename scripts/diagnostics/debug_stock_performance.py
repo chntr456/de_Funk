@@ -516,9 +516,10 @@ class BottleneckAnalyzer:
 
         return issues
 
-    def check_file_count(self) -> List[str]:
+    def check_file_count(self) -> Tuple[List[str], Dict[str, Any]]:
         """Check for too many small files (small file problem)."""
         issues = []
+        stats = {}
 
         for layer in ['bronze', 'silver']:
             layer_path = self.repo_root / "storage" / layer
@@ -526,20 +527,26 @@ class BottleneckAnalyzer:
                 continue
 
             parquet_files = list(layer_path.rglob('*.parquet'))
+            total_size = sum(f.stat().st_size for f in parquet_files if f.exists())
+            avg_size = total_size / len(parquet_files) / (1024 * 1024) if parquet_files else 0
+
+            stats[layer] = {
+                'file_count': len(parquet_files),
+                'total_size_mb': total_size / (1024 * 1024),
+                'avg_size_mb': avg_size,
+            }
+
             if len(parquet_files) > 1000:
                 issues.append(f"{layer.title()}: {len(parquet_files)} parquet files - consider compaction")
 
             # Check average file size
-            if parquet_files:
-                total_size = sum(f.stat().st_size for f in parquet_files if f.exists())
-                avg_size = total_size / len(parquet_files) / (1024 * 1024)  # MB
-                if avg_size < 1:  # Less than 1MB average
-                    issues.append(f"{layer.title()}: Average file size {avg_size:.2f}MB - too small, consider compaction")
+            if parquet_files and avg_size < 1:  # Less than 1MB average
+                issues.append(f"{layer.title()}: Average file size {avg_size:.2f}MB - too small, consider compaction")
 
-        return issues
+        return issues, stats
 
-    def print_report(self) -> None:
-        """Print bottleneck analysis."""
+    def print_report(self) -> Dict[str, Any]:
+        """Print bottleneck analysis. Returns stats for use in recommendations."""
         print_section("Bottleneck Analysis")
 
         all_issues = []
@@ -547,15 +554,32 @@ class BottleneckAnalyzer:
         partition_issues = self.check_partitioning()
         all_issues.extend(partition_issues)
 
-        file_issues = self.check_file_count()
+        file_issues, file_stats = self.check_file_count()
         all_issues.extend(file_issues)
 
         if all_issues:
             print("\n  Potential issues found:")
             for i, issue in enumerate(all_issues, 1):
                 print(f"    {i}. {issue}")
+
+            # Add specific compaction recommendation
+            if any('compaction' in issue for issue in all_issues):
+                print("\n  🔧 RECOMMENDED FIX: Run Delta OPTIMIZE")
+                print("    This will compact small files into larger ones for better performance.")
+                print()
+                print("    Commands:")
+                print("      # Dry run (see what would be done):")
+                print("      python -m scripts.maintenance.delta_maintenance --all --dry-run")
+                print()
+                print("      # Run compaction (optimize all bronze tables):")
+                print("      python -m scripts.maintenance.delta_maintenance --optimize")
+                print()
+                print("      # Full maintenance (optimize + vacuum old files):")
+                print("      python -m scripts.maintenance.delta_maintenance --all")
         else:
             print("\n  ✅ No obvious bottlenecks detected")
+
+        return file_stats
 
 
 def main():
@@ -591,7 +615,7 @@ Examples:
 
     # 4. Analyze bottlenecks
     analyzer = BottleneckAnalyzer(repo_root)
-    analyzer.print_report()
+    file_stats = analyzer.print_report()
 
     # Summary
     print_header("SUMMARY")
@@ -603,6 +627,14 @@ Examples:
         issues.append("Bronze layer empty - run ingestion pipeline")
     if not silver_ok:
         issues.append("Silver layer empty - run model build")
+
+    # Check for small file problem
+    has_small_file_problem = False
+    if file_stats:
+        bronze_stats = file_stats.get('bronze', {})
+        if bronze_stats.get('file_count', 0) > 1000 or bronze_stats.get('avg_size_mb', 999) < 1:
+            has_small_file_problem = True
+            issues.append("Small file problem in Bronze - run Delta OPTIMIZE")
 
     if issues:
         print("\n  Issues to resolve:")
@@ -616,6 +648,8 @@ Examples:
             print("    python -m scripts.ingest.run_full_pipeline --max-tickers 100")
         if not silver_ok:
             print("    python -m scripts.build.build_all_models")
+        if has_small_file_problem:
+            print("    python -m scripts.maintenance.delta_maintenance --optimize")
     else:
         print("\n  ✅ All checks passed!")
         print("\n  If queries are still slow, consider:")
