@@ -49,6 +49,116 @@ class BronzeSink:
         self._write_delta(df, str(path), mode="overwrite")
         return True
 
+    def append_immutable(
+        self,
+        df,
+        table: str,
+        key_columns: List[str],
+        partitions: Optional[List[str]] = None,
+        date_column: str = "trade_date"
+    ) -> str:
+        """
+        Append immutable time-series data efficiently using INSERT-only semantics.
+
+        RECOMMENDED for historical data that doesn't change (e.g., stock prices).
+        Much faster than upsert() because it avoids expensive MERGE operations.
+
+        Strategy:
+        - First write: Create table with partitions
+        - Subsequent writes: APPEND new data, skip existing date ranges
+        - Uses Delta Lake's partition pruning for efficiency
+
+        Args:
+            df: Spark DataFrame to append
+            table: Table name (must exist in storage config)
+            key_columns: Columns that uniquely identify a row (for dedup within batch)
+            partitions: List of partition column names (should include date-based partition)
+            date_column: Column containing the date (for checking existing data)
+
+        Returns:
+            Path to table
+
+        Example:
+            # Daily price updates - only inserts new dates
+            sink.append_immutable(
+                df, "securities_prices_daily",
+                key_columns=["ticker", "trade_date"],
+                partitions=["asset_type", "year", "month"],
+                date_column="trade_date"
+            )
+        """
+        from datetime import date
+        from delta.tables import DeltaTable
+        from pyspark.sql.functions import lit, row_number, col, max as spark_max, min as spark_min
+        from pyspark.sql.window import Window
+
+        # Get base path for table
+        table_cfg = self._table_cfg(table)
+        base_path = Path(self.cfg["roots"]["bronze"]) / table_cfg["rel"]
+
+        # Deduplicate source DataFrame by key columns
+        if key_columns:
+            window = Window.partitionBy(*key_columns).orderBy(lit(1))
+            df = (df
+                  .withColumn("_row_num", row_number().over(window))
+                  .filter("_row_num = 1")
+                  .drop("_row_num"))
+
+        # Check if table exists
+        is_existing = self._is_delta_table(base_path)
+
+        if not is_existing:
+            # First write - create the table
+            base_path.parent.mkdir(parents=True, exist_ok=True)
+            writer = df.write.format("delta").mode("overwrite")
+            if partitions:
+                writer = writer.partitionBy(*partitions)
+            writer.save(str(base_path))
+        else:
+            # Table exists - filter out dates that already exist
+            spark = df.sparkSession
+
+            # Get date range of incoming data
+            date_stats = df.agg(
+                spark_min(col(date_column)).alias("min_date"),
+                spark_max(col(date_column)).alias("max_date")
+            ).collect()[0]
+
+            if date_stats["min_date"] is None:
+                # Empty DataFrame, nothing to append
+                return str(base_path)
+
+            # Read existing data for this date range to find what's new
+            existing_df = (spark.read.format("delta")
+                          .load(str(base_path))
+                          .filter(
+                              (col(date_column) >= date_stats["min_date"]) &
+                              (col(date_column) <= date_stats["max_date"])
+                          )
+                          .select(*key_columns)
+                          .distinct())
+
+            # Anti-join to find only new records
+            new_records = df.join(existing_df, on=key_columns, how="left_anti")
+
+            new_count = new_records.count()
+            if new_count == 0:
+                # All data already exists
+                return str(base_path)
+
+            # Append only new records
+            writer = (new_records.write
+                     .format("delta")
+                     .mode("append")
+                     .option("mergeSchema", "true"))
+
+            if partitions:
+                writer = writer.partitionBy(*partitions)
+
+            writer.save(str(base_path))
+
+        return str(base_path)
+
     def upsert(
         self,
         df,
@@ -60,10 +170,11 @@ class BronzeSink:
         """
         Upsert (merge) DataFrame into bronze table using Delta Lake MERGE.
 
-        This is the preferred method for incremental ingestion:
-        - Updates existing rows where key columns match (if update_existing=True)
-        - Inserts new rows where key columns don't match
-        - Preserves data from previous runs
+        NOTE: For immutable time-series data (prices), prefer append_immutable() instead.
+        Use upsert() for:
+        - Reference data that can change (company info, metadata)
+        - Backfilling historical data for specific tickers
+        - Data corrections
 
         Args:
             df: Spark DataFrame to upsert

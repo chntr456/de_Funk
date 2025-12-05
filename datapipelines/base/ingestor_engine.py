@@ -227,6 +227,10 @@ class IngestorEngine:
         except Exception as e:
             logger.warning(f"Failed to normalize data for {ticker_data.ticker}: {e}")
 
+    # Data types that are immutable (historical data that doesn't change)
+    # These use append_immutable() for better performance
+    IMMUTABLE_DATA_TYPES = {DataType.PRICES}
+
     def _write_batch(
         self,
         accumulators: Dict[DataType, List],
@@ -235,6 +239,10 @@ class IngestorEngine:
     ) -> None:
         """
         Write accumulated DataFrames to storage.
+
+        Uses appropriate write strategy based on data type:
+        - Immutable data (prices): append_immutable() - faster, avoids MERGE
+        - Mutable data (reference, fundamentals): upsert() - handles updates
 
         Args:
             accumulators: Dict of DataFrames by data type
@@ -255,13 +263,24 @@ class IngestorEngine:
                 key_columns = self.provider.get_key_columns(data_type)
                 partitions = self.provider.get_partition_columns(data_type)
 
-                # Write using upsert
-                path = self.sink.upsert(
-                    combined,
-                    table_name,
-                    key_columns=key_columns,
-                    partitions=partitions
-                )
+                # Choose write strategy based on data type
+                if data_type in self.IMMUTABLE_DATA_TYPES:
+                    # Immutable time-series data - use efficient append
+                    path = self.sink.append_immutable(
+                        combined,
+                        table_name,
+                        key_columns=key_columns,
+                        partitions=partitions,
+                        date_column="trade_date"
+                    )
+                else:
+                    # Mutable data - use upsert for updates
+                    path = self.sink.upsert(
+                        combined,
+                        table_name,
+                        key_columns=key_columns,
+                        partitions=partitions
+                    )
 
                 if path:
                     results.tables_written[table_name] = path
