@@ -146,6 +146,12 @@ def run_forecast_pipeline(
     Returns:
         Dictionary with pipeline results
     """
+    # Suppress cmdstanpy INFO logging early (Prophet's MCMC backend)
+    # This must be done before any Prophet imports
+    import logging
+    logging.getLogger('cmdstanpy').setLevel(logging.ERROR)
+    logging.getLogger('prophet').setLevel(logging.WARNING)
+
     if not minimal_progress:
         print_header("TIME SERIES FORECAST PIPELINE")
         print(f"Start time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")

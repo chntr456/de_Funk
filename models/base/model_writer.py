@@ -324,5 +324,18 @@ class ModelWriter:
         self._print(f"{'=' * 70}")
         self._print(f"Total tables written: {stats['total_tables']}")
         self._print(f"Total rows written: {stats['total_rows']:,}")
-        self._print(f"  - Dimensions: {len(stats['dimensions'])} tables, {sum(stats['dimensions'].values()):,} rows")
-        self._print(f"  - Facts: {len(stats['facts'])} tables, {sum(stats['facts'].values()):,} rows")
+
+        # Handle both old format (int) and new format (dict with rows/files/time)
+        def sum_rows(table_stats):
+            total = 0
+            for v in table_stats.values():
+                if isinstance(v, dict):
+                    total += v.get('rows', 0)
+                else:
+                    total += v
+            return total
+
+        dim_rows = sum_rows(stats['dimensions'])
+        fact_rows = sum_rows(stats['facts'])
+        self._print(f"  - Dimensions: {len(stats['dimensions'])} tables, {dim_rows:,} rows")
+        self._print(f"  - Facts: {len(stats['facts'])} tables, {fact_rows:,} rows")
