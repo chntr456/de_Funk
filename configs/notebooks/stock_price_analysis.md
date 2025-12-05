@@ -46,19 +46,6 @@ $filter${
   help_text: Filter by trading date range
 }
 
-$filter${
-  id: min_volume
-  label: Minimum Volume
-  type: slider
-  column: volume
-  min_value: 0
-  max_value: 500000000
-  step: 10000000
-  default: 0
-  operator: gte
-  help_text: Filter by minimum daily trading volume
-}
-
 # Stock Price Analysis
 
 Analyze stock price movements, trading volume, and key metrics for selected equities.
@@ -69,11 +56,11 @@ $exhibits${
   type: metric_cards
   source: stocks.fact_stock_prices
   metrics: [
-    { column: close, label: "Latest Close", aggregation: last },
-    { column: close, label: "Avg Price", aggregation: avg },
-    { column: volume, label: "Total Volume", aggregation: sum },
-    { column: high, label: "52W High", aggregation: max },
-    { column: low, label: "52W Low", aggregation: min }
+    { column: close, label: "Latest Close", aggregation: last, format: "$,.2f" },
+    { column: close, label: "Avg Price", aggregation: avg, format: "$,.2f" },
+    { column: volume, label: "Total Volume", aggregation: sum, format: ",.0f" },
+    { column: high, label: "52W High", aggregation: max, format: "$,.2f" },
+    { column: low, label: "52W Low", aggregation: min, format: "$,.2f" }
   ]
 }
 
@@ -90,6 +77,37 @@ $exhibits${
   title: Daily Closing Prices
   height: 400
 }
+
+## Technical Indicators
+
+<details>
+<summary>Moving Averages & RSI</summary>
+
+### Moving Average Crossovers
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: trade_date
+  y: [close, sma_20, sma_50, sma_200]
+  color: ticker
+  title: Price with Moving Averages (20, 50, 200 day)
+  height: 400
+}
+
+### RSI (14-day)
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: trade_date
+  y: rsi_14
+  color: ticker
+  title: Relative Strength Index (14-day)
+  height: 300
+}
+
+</details>
 
 ## Volume Analysis
 
@@ -108,16 +126,15 @@ $exhibits${
   height: 300
 }
 
-### Volume by Ticker
+### Volume Ratio (vs 20-day avg)
 
 $exhibits${
-  type: bar_chart
+  type: line_chart
   source: stocks.fact_stock_prices
-  x: ticker
-  y: volume
-  aggregation: sum
+  x: trade_date
+  y: volume_ratio
   color: ticker
-  title: Total Volume by Stock
+  title: Volume Ratio (Current / 20-day Average)
   height: 300
 }
 
@@ -140,12 +157,60 @@ $exhibits${
   height: 350
 }
 
-### OHLC Summary
+### Bollinger Bands
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: trade_date
+  y: [close, bollinger_upper, bollinger_middle, bollinger_lower]
+  color: ticker
+  title: Bollinger Bands (20-day, 2 std dev)
+  height: 400
+}
+
+</details>
+
+## Volatility
+
+<details>
+<summary>Volatility Analysis</summary>
+
+### Rolling Volatility (Annualized)
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: trade_date
+  y: [volatility_20d, volatility_60d]
+  color: ticker
+  title: Rolling Volatility (20-day and 60-day)
+  height: 350
+}
+
+### Daily Returns Distribution
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: trade_date
+  y: daily_return
+  color: ticker
+  title: Daily Returns (%)
+  height: 300
+}
+
+</details>
+
+## Data Tables
+
+<details>
+<summary>OHLC Summary</summary>
 
 $exhibits${
   type: data_table
   source: stocks.fact_stock_prices
-  columns: [ticker, trade_date, open, high, low, close, volume]
+  columns: [ticker, trade_date, open, high, low, close, volume, daily_return]
   sort_by: trade_date
   sort_order: desc
   page_size: 20
@@ -154,17 +219,15 @@ $exhibits${
 
 </details>
 
-## Stock Information
-
 <details>
-<summary>Stock Details</summary>
+<summary>Stock Information</summary>
 
 Reference information for selected stocks:
 
 $exhibits${
   type: data_table
   source: stocks.dim_stock
-  columns: [ticker, company_name, exchange_code, sector, industry, market_cap]
+  columns: [ticker, security_name, exchange_code, sector, industry, market_cap, shares_outstanding]
   download: true
 }
 

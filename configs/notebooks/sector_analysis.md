@@ -45,19 +45,6 @@ $filter${
   help_text: Filter by trading date range
 }
 
-$filter${
-  id: min_market_cap
-  label: Min Market Cap ($B)
-  type: slider
-  column: market_cap
-  min_value: 0
-  max_value: 1000000000000
-  step: 10000000000
-  default: 0
-  operator: gte
-  help_text: Filter by minimum market capitalization
-}
-
 # Sector Analysis
 
 Aggregate analysis across sectors and industries. Compare performance, volume, and composition.
@@ -93,14 +80,14 @@ $exhibits${
 ### Average Price by Sector
 
 $exhibits${
-  type: bar_chart
-  source: stocks.fact_stock_prices
-  x: sector
-  y: close
-  aggregation: avg
-  title: Average Closing Price by Sector
-  height: 350
-  join: stocks.dim_stock on ticker
+  type: metric_cards
+  source: stocks.dim_stock
+  metrics: [
+    { column: ticker, label: "Total Stocks", aggregation: count },
+    { column: market_cap, label: "Total Market Cap", aggregation: sum, format: "$,.0f" },
+    { column: market_cap, label: "Avg Market Cap", aggregation: avg, format: "$,.0f" },
+    { column: shares_outstanding, label: "Total Shares", aggregation: sum, format: ",.0f" }
+  ]
 }
 
 ### Trading Volume by Sector
@@ -108,12 +95,11 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: stocks.fact_stock_prices
-  x: sector
+  x: ticker
   y: volume
   aggregation: sum
-  title: Total Trading Volume by Sector
+  title: Total Trading Volume by Stock
   height: 350
-  join: stocks.dim_stock on ticker
 }
 
 ## Industry Breakdown
@@ -159,7 +145,7 @@ $exhibits${
 $exhibits${
   type: data_table
   source: stocks.dim_stock
-  columns: [ticker, company_name, sector, industry, market_cap, exchange_code]
+  columns: [ticker, security_name, sector, industry, market_cap, exchange_code, shares_outstanding]
   sort_by: market_cap
   sort_order: desc
   page_size: 25
@@ -172,17 +158,6 @@ $exhibits${
 
 <details>
 <summary>Sector & Industry Distribution</summary>
-
-### Sector Distribution
-
-$exhibits${
-  type: pie_chart
-  source: stocks.dim_stock
-  labels: sector
-  values: market_cap
-  aggregation: sum
-  title: Market Cap Distribution by Sector
-}
 
 ### Sector Summary Table
 
@@ -199,6 +174,53 @@ $exhibits${
   sort_by: market_cap_sum
   sort_order: desc
   download: true
+}
+
+### Industry Summary Table
+
+$exhibits${
+  type: data_table
+  source: stocks.dim_stock
+  columns: [industry, sector, ticker, market_cap]
+  aggregations: [
+    { column: ticker, aggregation: count, label: "Companies" },
+    { column: market_cap, aggregation: sum, label: "Total Market Cap" }
+  ]
+  group_by: [sector, industry]
+  sort_by: market_cap_sum
+  sort_order: desc
+  download: true
+}
+
+</details>
+
+## Price Performance
+
+<details>
+<summary>Price Analysis by Sector</summary>
+
+### Daily Returns by Stock
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: trade_date
+  y: daily_return
+  color: ticker
+  title: Daily Returns by Stock
+  height: 400
+}
+
+### Volatility Comparison
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: trade_date
+  y: volatility_20d
+  color: ticker
+  title: 20-Day Volatility by Stock
+  height: 350
 }
 
 </details>

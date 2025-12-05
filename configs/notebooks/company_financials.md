@@ -13,7 +13,7 @@ $filter${
   label: Company Ticker
   type: select
   multi: false
-  source: {model: company, table: dim_company, column: ticker}
+  source: {model: company, table: dim_company, column: ticker_primary}
   default: "AAPL"
   help_text: Select a company to analyze
 }
@@ -41,16 +41,16 @@ $filter${
   label: Report Type
   type: select
   multi: false
-  source: {model: company, table: fact_income_statements, column: report_type}
+  source: {model: company, table: fact_income_statement, column: report_type}
   default: "annual"
   help_text: Annual or quarterly reports
 }
 
 $filter${
-  id: fiscal_date
+  id: fiscal_date_ending
   type: date_range
   label: Fiscal Period
-  column: fiscal_date
+  column: fiscal_date_ending
   operator: between
   default: {start: "2020-01-01", end: "2025-12-31"}
   help_text: Filter by fiscal date range
@@ -81,8 +81,8 @@ Revenue, profitability, and operational efficiency metrics.
 
 $exhibits${
   type: line_chart
-  source: company.fact_income_statements
-  x: fiscal_date
+  source: company.fact_income_statement
+  x: fiscal_date_ending
   y: [total_revenue, gross_profit, operating_income, net_income]
   title: Revenue & Profitability Trend
   height: 400
@@ -92,7 +92,7 @@ $exhibits${
 
 $exhibits${
   type: metric_cards
-  source: company.fact_income_statements
+  source: company.fact_income_statement
   metrics: [
     { column: total_revenue, label: "Total Revenue", aggregation: last, format: "$,.0f" },
     { column: gross_profit, label: "Gross Profit", aggregation: last, format: "$,.0f" },
@@ -107,9 +107,9 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: company.fact_income_statements
-  columns: [fiscal_date, report_type, total_revenue, gross_profit, operating_income, net_income, ebitda]
-  sort_by: fiscal_date
+  source: company.fact_income_statement
+  columns: [ticker, fiscal_date_ending, report_type, total_revenue, gross_profit, operating_income, net_income, ebitda]
+  sort_by: fiscal_date_ending
   sort_order: desc
   download: true
 }
@@ -124,9 +124,9 @@ Assets, liabilities, and shareholder equity position.
 
 $exhibits${
   type: bar_chart
-  source: company.fact_balance_sheets
-  x: fiscal_date
-  y: [total_assets, total_liabilities, total_equity]
+  source: company.fact_balance_sheet
+  x: fiscal_date_ending
+  y: [total_assets, total_liabilities, total_shareholder_equity]
   title: Balance Sheet Composition
   height: 350
 }
@@ -135,13 +135,13 @@ $exhibits${
 
 $exhibits${
   type: metric_cards
-  source: company.fact_balance_sheets
+  source: company.fact_balance_sheet
   metrics: [
     { column: total_assets, label: "Total Assets", aggregation: last, format: "$,.0f" },
     { column: total_liabilities, label: "Total Liabilities", aggregation: last, format: "$,.0f" },
-    { column: total_equity, label: "Shareholder Equity", aggregation: last, format: "$,.0f" },
-    { column: cash, label: "Cash & Equivalents", aggregation: last, format: "$,.0f" },
-    { column: debt, label: "Total Debt", aggregation: last, format: "$,.0f" }
+    { column: total_shareholder_equity, label: "Shareholder Equity", aggregation: last, format: "$,.0f" },
+    { column: cash_and_equivalents, label: "Cash & Equivalents", aggregation: last, format: "$,.0f" },
+    { column: total_debt, label: "Total Debt", aggregation: last, format: "$,.0f" }
   ]
 }
 
@@ -150,9 +150,9 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: company.fact_balance_sheets
-  columns: [fiscal_date, report_type, total_assets, total_liabilities, total_equity, cash, debt]
-  sort_by: fiscal_date
+  source: company.fact_balance_sheet
+  columns: [ticker, fiscal_date_ending, report_type, total_assets, total_liabilities, total_shareholder_equity, cash_and_equivalents, long_term_debt]
+  sort_by: fiscal_date_ending
   sort_order: desc
   download: true
 }
@@ -167,9 +167,9 @@ Operating, investing, and financing cash flows.
 
 $exhibits${
   type: line_chart
-  source: company.fact_cash_flows
-  x: fiscal_date
-  y: [operating_cashflow, investing_cashflow, financing_cashflow, free_cashflow]
+  source: company.fact_cash_flow
+  x: fiscal_date_ending
+  y: [operating_cashflow, cashflow_from_investment, cashflow_from_financing, free_cash_flow]
   title: Cash Flow Components
   height: 400
 }
@@ -178,12 +178,12 @@ $exhibits${
 
 $exhibits${
   type: metric_cards
-  source: company.fact_cash_flows
+  source: company.fact_cash_flow
   metrics: [
     { column: operating_cashflow, label: "Operating Cash Flow", aggregation: last, format: "$,.0f" },
-    { column: free_cashflow, label: "Free Cash Flow", aggregation: last, format: "$,.0f" },
-    { column: investing_cashflow, label: "Investing Cash Flow", aggregation: last, format: "$,.0f" },
-    { column: financing_cashflow, label: "Financing Cash Flow", aggregation: last, format: "$,.0f" }
+    { column: free_cash_flow, label: "Free Cash Flow", aggregation: last, format: "$,.0f" },
+    { column: cashflow_from_investment, label: "Investing Cash Flow", aggregation: last, format: "$,.0f" },
+    { column: cashflow_from_financing, label: "Financing Cash Flow", aggregation: last, format: "$,.0f" }
   ]
 }
 
@@ -192,9 +192,9 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: company.fact_cash_flows
-  columns: [fiscal_date, report_type, operating_cashflow, investing_cashflow, financing_cashflow, free_cashflow]
-  sort_by: fiscal_date
+  source: company.fact_cash_flow
+  columns: [ticker, fiscal_date_ending, report_type, operating_cashflow, cashflow_from_investment, cashflow_from_financing, free_cash_flow, capital_expenditures]
+  sort_by: fiscal_date_ending
   sort_order: desc
   download: true
 }
@@ -210,7 +210,7 @@ EPS performance and earnings surprises.
 $exhibits${
   type: line_chart
   source: company.fact_earnings
-  x: fiscal_date
+  x: fiscal_date_ending
   y: [reported_eps, estimated_eps]
   title: Earnings Per Share - Reported vs Estimated
   height: 350
@@ -221,7 +221,7 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: company.fact_earnings
-  x: fiscal_date
+  x: fiscal_date_ending
   y: surprise_percentage
   title: Earnings Surprise %
   height: 300
@@ -233,8 +233,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.fact_earnings
-  columns: [fiscal_date, report_type, reported_eps, estimated_eps, surprise, surprise_percentage]
-  sort_by: fiscal_date
+  columns: [ticker, fiscal_date_ending, report_type, reported_eps, estimated_eps, surprise, surprise_percentage, beat_estimate]
+  sort_by: fiscal_date_ending
   sort_order: desc
   download: true
 }

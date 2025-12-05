@@ -28,15 +28,6 @@ $filter${
 }
 
 $filter${
-  id: sector
-  label: Sector
-  type: select
-  multi: true
-  source: {model: stocks, table: dim_stock, column: sector}
-  help_text: Filter forecasts by sector
-}
-
-$filter${
   id: forecast_date
   type: date_range
   label: Forecast Date
@@ -179,22 +170,17 @@ $exhibits${
 </details>
 
 <details>
-<summary>Model Comparison</summary>
+<summary>Model Registry</summary>
 
-### Best Performing Models by MAE
+### Trained Models
 
 $exhibits${
   type: data_table
-  source: forecast.fact_forecast_metrics
-  columns: [model_name, ticker, mae, rmse, mape, r2_score]
-  aggregations: [
-    { column: mae, aggregation: avg, label: "Avg MAE" },
-    { column: rmse, aggregation: avg, label: "Avg RMSE" },
-    { column: r2_score, aggregation: avg, label: "Avg R2" }
-  ]
-  group_by: model_name
-  sort_by: mae_avg
-  sort_order: asc
+  source: forecast.fact_model_registry
+  columns: [model_name, model_type, ticker, target_variable, lookback_days, forecast_horizon, trained_date, status]
+  sort_by: trained_date
+  sort_order: desc
+  page_size: 20
   download: true
 }
 
