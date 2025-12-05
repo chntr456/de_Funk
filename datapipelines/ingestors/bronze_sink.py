@@ -78,7 +78,8 @@ class BronzeSink:
         """
         from datetime import date
         from delta.tables import DeltaTable
-        from pyspark.sql.functions import lit
+        from pyspark.sql.functions import lit, row_number
+        from pyspark.sql.window import Window
 
         # Get base path for table
         table_cfg = self._table_cfg(table)
@@ -88,6 +89,17 @@ class BronzeSink:
         if partitions and "snapshot_dt" in partitions:
             if "snapshot_dt" not in df.columns:
                 df = df.withColumn("snapshot_dt", lit(date.today().isoformat()))
+
+        # CRITICAL: Deduplicate source DataFrame by key columns before merge
+        # This prevents "multiple source rows matching target row" errors
+        # (e.g., GOOGL and GOOG both have the same CIK)
+        if key_columns:
+            # Use row_number to keep only first occurrence per key
+            window = Window.partitionBy(*key_columns).orderBy(lit(1))
+            df = (df
+                  .withColumn("_row_num", row_number().over(window))
+                  .filter("_row_num = 1")
+                  .drop("_row_num"))
 
         # Check if table exists
         is_existing = self._is_delta_table(base_path)
