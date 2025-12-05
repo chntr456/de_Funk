@@ -290,59 +290,67 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
             else:
                 return "stocks"
 
-        # Build result DataFrame
+        # Helper to safely convert to Python native types (avoids Spark CANNOT_DETERMINE_TYPE)
+        def safe_long(series):
+            """Convert series to list of Python int or None."""
+            return [int(x) if pd.notna(x) else None for x in pd.to_numeric(series, errors='coerce')]
+
+        def safe_double(series):
+            """Convert series to list of Python float or None."""
+            return [float(x) if pd.notna(x) else None for x in pd.to_numeric(series, errors='coerce')]
+
+        # Build result DataFrame using Python native types
         result = pd.DataFrame({
             # Core identifiers
-            'ticker': pdf['Symbol'],
-            'security_name': pdf['Name'],
-            'asset_type': pdf['AssetType'].apply(map_asset_type),
+            'ticker': pdf['Symbol'].tolist(),
+            'security_name': pdf['Name'].tolist(),
+            'asset_type': pdf['AssetType'].apply(map_asset_type).tolist(),
 
             # CIK from Alpha Vantage (pad to 10 digits per SEC standard)
-            'cik': pdf.get('CIK').apply(lambda x: str(x).zfill(10) if pd.notna(x) and str(x) != 'None' else None),
+            'cik': pdf.get('CIK').apply(lambda x: str(x).zfill(10) if pd.notna(x) and str(x) != 'None' else None).tolist(),
             # FIGI not available in Alpha Vantage
-            'composite_figi': None,
+            'composite_figi': [None] * len(pdf),
 
             # Exchange information
-            'exchange_code': pdf['Exchange'],
-            'currency': pdf.get('Currency', 'USD').fillna('USD'),
-            'market': 'stocks',
-            'locale': pdf.get('Country', 'US').fillna('US'),
-            'type': pdf['AssetType'],
-            'primary_exchange': pdf['Exchange'],
+            'exchange_code': pdf['Exchange'].tolist(),
+            'currency': pdf.get('Currency', pd.Series(['USD'] * len(pdf))).fillna('USD').tolist(),
+            'market': ['stocks'] * len(pdf),
+            'locale': pdf.get('Country', pd.Series(['US'] * len(pdf))).fillna('US').tolist(),
+            'type': pdf['AssetType'].tolist(),
+            'primary_exchange': pdf['Exchange'].tolist(),
 
-            # Market data - use pd.to_numeric for safe conversion
-            # Cast to proper dtypes: Int64 for LongType, float64 for DoubleType
-            'shares_outstanding': pd.to_numeric(pdf.get('SharesOutstanding'), errors='coerce').astype('Int64'),
-            'market_cap': pd.to_numeric(pdf.get('MarketCapitalization'), errors='coerce').astype('float64'),
+            # Market data - use safe conversion to Python native types
+            'shares_outstanding': safe_long(pdf.get('SharesOutstanding')),
+            'market_cap': safe_double(pdf.get('MarketCapitalization')),
 
             # SIC codes (not available)
-            'sic_code': None,
-            'sic_description': pdf.get('Sector'),
+            'sic_code': [None] * len(pdf),
+            'sic_description': pdf.get('Sector').tolist(),
 
             # Additional metadata
-            'ticker_root': pdf['Symbol'],
-            'base_currency_symbol': pdf.get('Currency'),
-            'currency_symbol': pdf.get('Currency'),
+            'ticker_root': pdf['Symbol'].tolist(),
+            'base_currency_symbol': pdf.get('Currency').tolist(),
+            'currency_symbol': pdf.get('Currency').tolist(),
 
             # Timestamps
-            'delisted_utc': None,
-            'last_updated_utc': datetime.now(),
-            'is_active': True,
+            'delisted_utc': [None] * len(pdf),
+            'last_updated_utc': [datetime.now()] * len(pdf),
+            'is_active': [True] * len(pdf),
 
             # Alpha Vantage specific fields
-            'sector': pdf.get('Sector'),
-            'industry': pdf.get('Industry'),
-            'description': pdf.get('Description'),
+            'sector': pdf.get('Sector').tolist(),
+            'industry': pdf.get('Industry').tolist(),
+            'description': pdf.get('Description').tolist(),
 
-            # Numeric fields - pd.to_numeric handles "None" gracefully, cast to float64 for Spark DoubleType
-            'pe_ratio': pd.to_numeric(pdf.get('PERatio'), errors='coerce').astype('float64'),
-            'peg_ratio': pd.to_numeric(pdf.get('PEGRatio'), errors='coerce').astype('float64'),
-            'book_value': pd.to_numeric(pdf.get('BookValue'), errors='coerce').astype('float64'),
-            'dividend_per_share': pd.to_numeric(pdf.get('DividendPerShare'), errors='coerce').astype('float64'),
-            'dividend_yield': pd.to_numeric(pdf.get('DividendYield'), errors='coerce').astype('float64'),
-            'eps': pd.to_numeric(pdf.get('EPS'), errors='coerce').astype('float64'),
-            'week_52_high': pd.to_numeric(pdf.get('52WeekHigh'), errors='coerce').astype('float64'),
-            'week_52_low': pd.to_numeric(pdf.get('52WeekLow'), errors='coerce').astype('float64')
+            # Numeric fields - use safe conversion to Python native types
+            'pe_ratio': safe_double(pdf.get('PERatio')),
+            'peg_ratio': safe_double(pdf.get('PEGRatio')),
+            'book_value': safe_double(pdf.get('BookValue')),
+            'dividend_per_share': safe_double(pdf.get('DividendPerShare')),
+            'dividend_yield': safe_double(pdf.get('DividendYield')),
+            'eps': safe_double(pdf.get('EPS')),
+            'week_52_high': safe_double(pdf.get('52WeekHigh')),
+            'week_52_low': safe_double(pdf.get('52WeekLow'))
         })
 
         # Deduplicate
