@@ -134,31 +134,41 @@ class CompanyReferenceFacet(AlphaVantageFacet):
             except (ValueError, TypeError):
                 return None
 
+        # Helper to safely convert to numeric, returning None for invalid values
+        def safe_long(series):
+            """Convert series to list of Python int or None (for Spark LongType)."""
+            return [int(x) if pd.notna(x) else None for x in pd.to_numeric(series, errors='coerce')]
+
+        def safe_double(series):
+            """Convert series to list of Python float or None (for Spark DoubleType)."""
+            return [float(x) if pd.notna(x) else None for x in pd.to_numeric(series, errors='coerce')]
+
         # Build result DataFrame with company-specific fields
+        # Use Python native types to avoid Spark type inference issues
         result = pd.DataFrame({
-            'ticker': pdf['Symbol'],
-            'cik': pdf.get('CIK').apply(extract_cik),
-            'company_name': pdf.get('Name'),
-            'sector': pdf.get('Sector'),
-            'industry': pdf.get('Industry'),
-            'description': pdf.get('Description'),
-            'exchange_code': pdf.get('Exchange'),
-            'country': pdf.get('Country', 'US').fillna('US'),
-            'currency': pdf.get('Currency', 'USD').fillna('USD'),
-            'fiscal_year_end': pdf.get('FiscalYearEnd'),
-            'shares_outstanding': pd.to_numeric(pdf.get('SharesOutstanding'), errors='coerce').astype('Int64'),
-            'market_cap': pd.to_numeric(pdf.get('MarketCapitalization'), errors='coerce').astype('float64'),
-            'pe_ratio': pd.to_numeric(pdf.get('PERatio'), errors='coerce').astype('float64'),
-            'peg_ratio': pd.to_numeric(pdf.get('PEGRatio'), errors='coerce').astype('float64'),
-            'book_value': pd.to_numeric(pdf.get('BookValue'), errors='coerce').astype('float64'),
-            'dividend_per_share': pd.to_numeric(pdf.get('DividendPerShare'), errors='coerce').astype('float64'),
-            'dividend_yield': pd.to_numeric(pdf.get('DividendYield'), errors='coerce').astype('float64'),
-            'eps': pd.to_numeric(pdf.get('EPS'), errors='coerce').astype('float64'),
-            'ebitda': pd.to_numeric(pdf.get('EBITDA'), errors='coerce').astype('float64'),
-            'revenue_ttm': pd.to_numeric(pdf.get('RevenueTTM'), errors='coerce').astype('float64'),
-            'profit_margin': pd.to_numeric(pdf.get('ProfitMargin'), errors='coerce').astype('float64'),
-            'is_active': True,
-            'snapshot_dt': datetime.now().strftime('%Y-%m-%d'),
+            'ticker': pdf['Symbol'].tolist(),
+            'cik': pdf.get('CIK').apply(extract_cik).tolist(),
+            'company_name': pdf.get('Name').tolist(),
+            'sector': pdf.get('Sector').tolist(),
+            'industry': pdf.get('Industry').tolist(),
+            'description': pdf.get('Description').tolist(),
+            'exchange_code': pdf.get('Exchange').tolist(),
+            'country': pdf.get('Country', pd.Series(['US'] * len(pdf))).fillna('US').tolist(),
+            'currency': pdf.get('Currency', pd.Series(['USD'] * len(pdf))).fillna('USD').tolist(),
+            'fiscal_year_end': pdf.get('FiscalYearEnd').tolist(),
+            'shares_outstanding': safe_long(pdf.get('SharesOutstanding')),
+            'market_cap': safe_double(pdf.get('MarketCapitalization')),
+            'pe_ratio': safe_double(pdf.get('PERatio')),
+            'peg_ratio': safe_double(pdf.get('PEGRatio')),
+            'book_value': safe_double(pdf.get('BookValue')),
+            'dividend_per_share': safe_double(pdf.get('DividendPerShare')),
+            'dividend_yield': safe_double(pdf.get('DividendYield')),
+            'eps': safe_double(pdf.get('EPS')),
+            'ebitda': safe_double(pdf.get('EBITDA')),
+            'revenue_ttm': safe_double(pdf.get('RevenueTTM')),
+            'profit_margin': safe_double(pdf.get('ProfitMargin')),
+            'is_active': [True] * len(pdf),
+            'snapshot_dt': [datetime.now().strftime('%Y-%m-%d')] * len(pdf),
         })
 
         # Only keep rows with CIK (companies we can actually track)
