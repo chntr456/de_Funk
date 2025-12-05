@@ -43,7 +43,7 @@ class TimeSeriesForecastModel(BaseModel):
     - get_forecast_columns() - Define which columns to forecast
     """
 
-    def __init__(self, connection, storage_cfg: Dict, model_cfg: Dict, params: Dict = None):
+    def __init__(self, connection, storage_cfg: Dict, model_cfg: Dict, params: Dict = None, quiet: bool = False):
         """
         Initialize Time Series Forecast Model.
 
@@ -52,10 +52,17 @@ class TimeSeriesForecastModel(BaseModel):
             storage_cfg: Storage configuration
             model_cfg: Model configuration from YAML
             params: Runtime parameters
+            quiet: Suppress verbose output (for clean progress display)
         """
         super().__init__(connection, storage_cfg, model_cfg, params)
         # Note: self.session is already initialized in BaseModel.__init__
         # No need to re-initialize it here
+        self._quiet = quiet
+
+    def _print(self, msg: str):
+        """Print message if not in quiet mode."""
+        if not self._quiet:
+            print(msg)
 
     # ============================================================
     # ABSTRACT METHODS (must be implemented by subclasses)
@@ -808,7 +815,7 @@ class TimeSeriesForecastModel(BaseModel):
         # Convert to absolute path if relative
         forecast_root = Path(forecast_root).resolve()
 
-        print(f"    Saving forecasts to: {forecast_root}")
+        self._print(f"    Saving forecasts to: {forecast_root}")
 
         # Separate by target
         for target in forecasts_df['target'].unique():
@@ -824,7 +831,7 @@ class TimeSeriesForecastModel(BaseModel):
                 # Rename predicted_value to predicted_volume
                 target_df = target_df.rename(columns={'predicted_value': 'predicted_volume'})
             else:
-                print(f"    Warning: Unknown target '{target}', skipping")
+                self._print(f"    Warning: Unknown target '{target}', skipping")
                 continue
 
             # Drop the target column as it's implicit in the table name
@@ -846,13 +853,13 @@ class TimeSeriesForecastModel(BaseModel):
                 existing_df = pd.read_parquet(file_path)
                 combined_df = pd.concat([existing_df, target_df], ignore_index=True)
                 combined_df.to_parquet(file_path, index=False, compression='snappy')
-                print(f"    → Appended {len(target_df)} {table_name} records (total: {len(combined_df)})")
+                self._print(f"    → Appended {len(target_df)} {table_name} records (total: {len(combined_df)})")
             else:
                 # Create new file
                 target_df.to_parquet(file_path, index=False, compression='snappy')
-                print(f"    → Saved {len(target_df)} {table_name} records")
+                self._print(f"    → Saved {len(target_df)} {table_name} records")
 
-            print(f"      File: {file_path}")
+            self._print(f"      File: {file_path}")
 
     def save_metrics(self, metrics_df):
         """
@@ -898,8 +905,8 @@ class TimeSeriesForecastModel(BaseModel):
 
             combined_df = pd.concat([existing_df, metrics_df], ignore_index=True)
             combined_df.to_parquet(file_path, index=False, compression='snappy')
-            print(f"    Appended {len(metrics_df)} metric records (total: {len(combined_df)}) to {file_path}")
+            self._print(f"    Appended {len(metrics_df)} metric records (total: {len(combined_df)}) to {file_path}")
         else:
             # Create new file
             metrics_df.to_parquet(file_path, index=False, compression='snappy')
-            print(f"    Saved {len(metrics_df)} metric records to {file_path}")
+            self._print(f"    Saved {len(metrics_df)} metric records to {file_path}")

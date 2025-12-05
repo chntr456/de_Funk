@@ -212,6 +212,10 @@ def train_prophet_model(
         yearly_seasonality=False
     )
 
+    # Suppress cmdstanpy logging during fit (Prophet's MCMC backend)
+    import logging
+    logging.getLogger('cmdstanpy').setLevel(logging.ERROR)
+
     # Train model
     model.fit(prophet_df)
 

@@ -222,7 +222,8 @@ def run_forecast_pipeline(
         connection=spark,
         storage_cfg=storage_cfg,
         model_cfg=forecast_cfg,
-        params={}
+        params={},
+        quiet=minimal_progress  # Suppress verbose output in minimal mode
     )
 
     # Set session for cross-model data access
@@ -305,12 +306,15 @@ def run_forecast_pipeline(
 
     # Step 5: Print summary (always show, even in minimal mode)
     print()
-    print_header("FORECAST PIPELINE SUMMARY")
-    print(f"Duration: {results['duration']:.1f} seconds")
-    print(f"Tickers processed: {results['tickers_processed']}/{len(tickers)}")
-    print(f"Tickers failed: {results['tickers_failed']}")
-    print(f"Total models trained: {results['total_models']}")
-    print(f"Total forecasts generated: {results['total_forecasts']}")
+    print("=" * 60)
+    print("✓ FORECAST COMPLETE")
+    print("=" * 60)
+    print(f"  Tickers: {results['tickers_processed']}/{len(tickers)}")
+    print(f"  Models: {results['total_models']}")
+    print(f"  Forecasts: {results['total_forecasts']}")
+    print(f"  Errors: {results['tickers_failed']}")
+    print(f"  Elapsed: {results['duration']:.0f}s")
+    print("=" * 60)
 
     logger.info(f"Pipeline complete: {results['tickers_processed']}/{len(tickers)} tickers, "
                f"{results['total_forecasts']} forecasts in {results['duration']:.1f}s")
@@ -321,10 +325,6 @@ def run_forecast_pipeline(
             print(f"  - {error}")
         if len(results['errors']) > 10:
             print(f"  ... and {len(results['errors']) - 10} more")
-
-    print("=" * 80)
-    print(f"End time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 80)
 
     # Clean up
     spark.stop()

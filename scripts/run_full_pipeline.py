@@ -298,6 +298,7 @@ def run_full_pipeline(
 
             # Load storage configuration
             import json
+            import time
             storage_path = Path(repo_root) / "configs" / "storage.json"
             with open(storage_path, 'r') as f:
                 storage_cfg = json.load(f)
@@ -310,8 +311,13 @@ def run_full_pipeline(
             spark_session = get_spark("SilverBuild")
             spark = ConnectionFactory.create("spark", spark_session=spark_session)
 
+            # Track build metrics
+            build_start = time.time()
+            build_metrics = {}
+
             # Build Company model first (stocks depends on company)
             print("  Building company model...")
+            company_start = time.time()
             company_cfg = loader.load_model_config("company")
             company_model = CompanyModel(
                 connection=spark,
@@ -320,12 +326,19 @@ def run_full_pipeline(
                 params={},
                 repo_root=repo_root
             )
-            dims, facts = company_model.build()
+            company_dims, company_facts = company_model.build()
             company_model.write_tables(quiet=True)
-            print(f"    ✓ Company model: {len(dims)} dims, {len(facts)} facts")
+            company_elapsed = time.time() - company_start
+            build_metrics['company'] = {
+                'dims': len(company_dims),
+                'facts': len(company_facts),
+                'elapsed': company_elapsed
+            }
+            print(f"    ✓ Company model: {len(company_dims)} dims, {len(company_facts)} facts ({company_elapsed:.1f}s)")
 
             # Build Stocks model (uses JOIN-based filtering via after_build hook)
             print("  Building stocks model...")
+            stocks_start = time.time()
             stocks_cfg = loader.load_model_config("stocks")
             stocks_model = StocksModel(
                 connection=spark,
@@ -334,23 +347,45 @@ def run_full_pipeline(
                 params={},
                 repo_root=repo_root
             )
-            dims, facts = stocks_model.build()
+            stocks_dims, stocks_facts = stocks_model.build()
             stocks_model.write_tables(quiet=True)
+            stocks_elapsed = time.time() - stocks_start
 
-            # Report counts
-            for name, df in {**dims, **facts}.items():
+            # Collect row counts
+            stocks_rows = {}
+            for name, df in {**stocks_dims, **stocks_facts}.items():
                 try:
                     count = df.count() if hasattr(df, 'count') else len(df)
-                    print(f"    - {name}: {count:,} rows")
+                    stocks_rows[name] = count
                 except Exception:
-                    print(f"    - {name}: (count unavailable)")
+                    stocks_rows[name] = 0
 
-            print("  ✓ All models built and saved successfully")
+            build_metrics['stocks'] = {
+                'dims': len(stocks_dims),
+                'facts': len(stocks_facts),
+                'rows': stocks_rows,
+                'elapsed': stocks_elapsed
+            }
+            print(f"    ✓ Stocks model: {len(stocks_dims)} dims, {len(stocks_facts)} facts ({stocks_elapsed:.1f}s)")
+
+            total_build_elapsed = time.time() - build_start
+
+            # Print summary
+            print()
+            print("=" * 60)
+            print("✓ SILVER BUILD COMPLETE")
+            print("=" * 60)
+            print(f"  Company: {build_metrics['company']['dims']} dims, {build_metrics['company']['facts']} facts | {build_metrics['company']['elapsed']:.1f}s")
+            print(f"  Stocks:  {build_metrics['stocks']['dims']} dims, {build_metrics['stocks']['facts']} facts | {build_metrics['stocks']['elapsed']:.1f}s")
+            total_rows = sum(build_metrics['stocks']['rows'].values())
+            print(f"  Total rows: {total_rows:,}")
+            print(f"  Elapsed: {total_build_elapsed:.0f}s")
+            print("=" * 60)
 
             # Clean up Spark session
             spark_session.stop()
 
-            results['silver_build'] = {'status': 'success'}
+            results['silver_build'] = {'status': 'success', 'metrics': build_metrics}
 
         except Exception as e:
             error_msg = f"Silver layer build failed: {str(e)}"
