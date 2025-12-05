@@ -13,7 +13,8 @@ $filter${
   label: Ticker
   type: select
   multi: true
-  source: {model: company, table: dim_company, column: ticker_primary}
+  column: ticker
+  source: {model: company, table: dim_company, column: ticker}
   default: ["AAPL", "MSFT", "GOOGL"]
   help_text: Select one or more companies to analyze
 }

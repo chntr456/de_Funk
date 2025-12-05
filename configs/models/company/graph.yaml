@@ -20,6 +20,7 @@ nodes:
       company_name: company_name
       legal_name: company_name    # Will be updated when we get proper SEC data
       ticker_primary: ticker
+      ticker: ticker  # Alias for filter compatibility with fact tables
       exchange_code: exchange_code
       is_active: is_active
       sector: sector

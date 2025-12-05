@@ -29,6 +29,10 @@ dimensions:
         type: string
         description: "Primary trading symbol (most liquid)"
 
+      ticker:
+        type: string
+        description: "Ticker symbol alias for filter compatibility"
+
       exchange_code:
         type: string
         description: "Primary exchange code"
