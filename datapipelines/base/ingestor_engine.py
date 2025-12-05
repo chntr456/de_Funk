@@ -193,7 +193,7 @@ class IngestorEngine:
             print()
             metrics.print_report()
 
-        results.metrics = metrics.get_summary()
+        results.metrics = metrics.summary()
 
         # Auto-compact Delta tables to prevent file fragmentation
         if auto_compact and results.tables_written:
