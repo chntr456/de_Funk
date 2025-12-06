@@ -36,8 +36,7 @@ def main():
     )
     args = parser.parse_args()
 
-    # Initialize
-    repo_root = Path(__file__).parent.parent
+    # Initialize - use repo_root from setup_repo_imports() (already set at module level)
     spark = get_spark("SilverLayerBuilder")
 
     # Load storage config
