@@ -1,0 +1,241 @@
+# Alpha Vantage API Response Schemas
+# These define the RAW API response fields (before transformation)
+# All fields are strings because Alpha Vantage returns everything as strings
+#
+# Usage in facets:
+#   class MyFacet(AlphaVantageFacet):
+#       INPUT_SCHEMA_KEY = "overview"  # References this config
+
+# OVERVIEW endpoint - Company fundamentals
+# Used by: SecuritiesReferenceFacet, CompanyReferenceFacet
+overview:
+  - { name: Symbol, type: string }
+  - { name: AssetType, type: string }
+  - { name: Name, type: string }
+  - { name: Description, type: string }
+  - { name: CIK, type: string }
+  - { name: Exchange, type: string }
+  - { name: Currency, type: string }
+  - { name: Country, type: string }
+  - { name: Sector, type: string }
+  - { name: Industry, type: string }
+  - { name: Address, type: string }
+  - { name: FiscalYearEnd, type: string }
+  - { name: LatestQuarter, type: string }
+  - { name: MarketCapitalization, type: string }
+  - { name: EBITDA, type: string }
+  - { name: PERatio, type: string }
+  - { name: PEGRatio, type: string }
+  - { name: BookValue, type: string }
+  - { name: DividendPerShare, type: string }
+  - { name: DividendYield, type: string }
+  - { name: EPS, type: string }
+  - { name: RevenuePerShareTTM, type: string }
+  - { name: ProfitMargin, type: string }
+  - { name: OperatingMarginTTM, type: string }
+  - { name: ReturnOnAssetsTTM, type: string }
+  - { name: ReturnOnEquityTTM, type: string }
+  - { name: RevenueTTM, type: string }
+  - { name: GrossProfitTTM, type: string }
+  - { name: DilutedEPSTTM, type: string }
+  - { name: QuarterlyEarningsGrowthYOY, type: string }
+  - { name: QuarterlyRevenueGrowthYOY, type: string }
+  - { name: AnalystTargetPrice, type: string }
+  - { name: AnalystRatingStrongBuy, type: string }
+  - { name: AnalystRatingBuy, type: string }
+  - { name: AnalystRatingHold, type: string }
+  - { name: AnalystRatingSell, type: string }
+  - { name: AnalystRatingStrongSell, type: string }
+  - { name: TrailingPE, type: string }
+  - { name: ForwardPE, type: string }
+  - { name: PriceToSalesRatioTTM, type: string }
+  - { name: PriceToBookRatio, type: string }
+  - { name: EVToRevenue, type: string }
+  - { name: EVToEBITDA, type: string }
+  - { name: Beta, type: string }
+  - { name: 52WeekHigh, type: string }
+  - { name: 52WeekLow, type: string }
+  - { name: 50DayMovingAverage, type: string }
+  - { name: 200DayMovingAverage, type: string }
+  - { name: SharesOutstanding, type: string }
+  - { name: DividendDate, type: string }
+  - { name: ExDividendDate, type: string }
+
+# LISTING_STATUS endpoint - Bulk ticker listing
+# Used by: AlphaVantageIngestor.fetch_listing_status
+listing_status:
+  - { name: symbol, type: string }
+  - { name: name, type: string }
+  - { name: exchange, type: string }
+  - { name: assetType, type: string }
+  - { name: ipoDate, type: string }
+  - { name: delistingDate, type: string }
+  - { name: status, type: string }
+
+# TIME_SERIES_DAILY endpoint - Daily OHLCV prices
+# Used by: SecuritiesPricesFacet
+time_series_daily:
+  - { name: date, type: string }
+  - { name: open, type: string }
+  - { name: high, type: string }
+  - { name: low, type: string }
+  - { name: close, type: string }
+  - { name: volume, type: string }
+
+# HISTORICAL_OPTIONS endpoint - Options chain data
+# Note: This is the TRANSFORMED schema (after _transform_option)
+# because this facet transforms data before creating DataFrame
+historical_options:
+  - { name: contract_id, type: string }
+  - { name: underlying_ticker, type: string }
+  - { name: trade_date, type: string }
+  - { name: expiration_date, type: string }
+  - { name: strike_price, type: double }
+  - { name: option_type, type: string }
+  - { name: last_price, type: double }
+  - { name: mark_price, type: double }
+  - { name: bid_price, type: double }
+  - { name: ask_price, type: double }
+  - { name: bid_size, type: long }
+  - { name: ask_size, type: long }
+  - { name: bid_ask_spread, type: double }
+  - { name: volume, type: long }
+  - { name: open_interest, type: long }
+  - { name: implied_volatility, type: double }
+  - { name: delta, type: double }
+  - { name: gamma, type: double }
+  - { name: theta, type: double }
+  - { name: vega, type: double }
+  - { name: rho, type: double }
+  - { name: days_to_expiration, type: int }
+  - { name: moneyness, type: double }
+  - { name: in_the_money, type: boolean }
+  - { name: ingestion_timestamp, type: timestamp }
+  - { name: snapshot_date, type: date }
+
+# INCOME_STATEMENT endpoint - Transformed schema
+income_statement:
+  - { name: ticker, type: string }
+  - { name: fiscal_date_ending, type: string }
+  - { name: report_type, type: string }
+  - { name: reported_currency, type: string }
+  - { name: gross_profit, type: long }
+  - { name: total_revenue, type: long }
+  - { name: cost_of_revenue, type: long }
+  - { name: cost_of_goods_sold, type: long }
+  - { name: operating_income, type: long }
+  - { name: sg_and_a, type: long }
+  - { name: research_and_development, type: long }
+  - { name: operating_expenses, type: long }
+  - { name: investment_income_net, type: long }
+  - { name: net_interest_income, type: long }
+  - { name: interest_income, type: long }
+  - { name: interest_expense, type: long }
+  - { name: non_interest_income, type: long }
+  - { name: other_non_operating_income, type: long }
+  - { name: depreciation, type: long }
+  - { name: depreciation_and_amortization, type: long }
+  - { name: income_before_tax, type: long }
+  - { name: income_tax_expense, type: long }
+  - { name: interest_and_debt_expense, type: long }
+  - { name: net_income_from_continuing_ops, type: long }
+  - { name: comprehensive_income_net_of_tax, type: long }
+  - { name: ebit, type: long }
+  - { name: ebitda, type: long }
+  - { name: net_income, type: long }
+  - { name: ingestion_timestamp, type: timestamp }
+  - { name: snapshot_date, type: date }
+
+# BALANCE_SHEET endpoint - Transformed schema
+balance_sheet:
+  - { name: ticker, type: string }
+  - { name: fiscal_date_ending, type: string }
+  - { name: report_type, type: string }
+  - { name: reported_currency, type: string }
+  - { name: total_assets, type: long }
+  - { name: total_current_assets, type: long }
+  - { name: cash_and_equivalents, type: long }
+  - { name: cash_and_short_term_investments, type: long }
+  - { name: inventory, type: long }
+  - { name: current_net_receivables, type: long }
+  - { name: total_non_current_assets, type: long }
+  - { name: property_plant_equipment, type: long }
+  - { name: accumulated_depreciation, type: long }
+  - { name: intangible_assets, type: long }
+  - { name: intangible_assets_excluding_goodwill, type: long }
+  - { name: goodwill, type: long }
+  - { name: investments, type: long }
+  - { name: long_term_investments, type: long }
+  - { name: short_term_investments, type: long }
+  - { name: other_current_assets, type: long }
+  - { name: other_non_current_assets, type: long }
+  - { name: total_liabilities, type: long }
+  - { name: total_current_liabilities, type: long }
+  - { name: current_accounts_payable, type: long }
+  - { name: deferred_revenue, type: long }
+  - { name: current_debt, type: long }
+  - { name: short_term_debt, type: long }
+  - { name: total_non_current_liabilities, type: long }
+  - { name: capital_lease_obligations, type: long }
+  - { name: long_term_debt, type: long }
+  - { name: current_long_term_debt, type: long }
+  - { name: long_term_debt_noncurrent, type: long }
+  - { name: short_long_term_debt_total, type: long }
+  - { name: other_current_liabilities, type: long }
+  - { name: other_non_current_liabilities, type: long }
+  - { name: total_shareholder_equity, type: long }
+  - { name: treasury_stock, type: long }
+  - { name: retained_earnings, type: long }
+  - { name: common_stock, type: long }
+  - { name: common_stock_shares_outstanding, type: long }
+  - { name: ingestion_timestamp, type: timestamp }
+  - { name: snapshot_date, type: date }
+
+# CASH_FLOW endpoint - Transformed schema
+cash_flow:
+  - { name: ticker, type: string }
+  - { name: fiscal_date_ending, type: string }
+  - { name: report_type, type: string }
+  - { name: reported_currency, type: string }
+  - { name: operating_cashflow, type: long }
+  - { name: payments_for_operating_activities, type: long }
+  - { name: proceeds_from_operating_activities, type: long }
+  - { name: change_in_operating_liabilities, type: long }
+  - { name: change_in_operating_assets, type: long }
+  - { name: depreciation_depletion_amortization, type: long }
+  - { name: capital_expenditures, type: long }
+  - { name: change_in_receivables, type: long }
+  - { name: change_in_inventory, type: long }
+  - { name: profit_loss, type: long }
+  - { name: cashflow_from_investment, type: long }
+  - { name: cashflow_from_financing, type: long }
+  - { name: proceeds_from_repayments_short_term_debt, type: long }
+  - { name: payments_for_repurchase_of_common_stock, type: long }
+  - { name: payments_for_repurchase_of_equity, type: long }
+  - { name: payments_for_repurchase_of_preferred_stock, type: long }
+  - { name: dividend_payout, type: long }
+  - { name: dividend_payout_common_stock, type: long }
+  - { name: dividend_payout_preferred_stock, type: long }
+  - { name: proceeds_from_issuance_of_common_stock, type: long }
+  - { name: proceeds_from_issuance_long_term_debt, type: long }
+  - { name: proceeds_from_issuance_preferred_stock, type: long }
+  - { name: proceeds_from_repurchase_of_equity, type: long }
+  - { name: proceeds_from_sale_of_treasury_stock, type: long }
+  - { name: change_in_cash_and_equivalents, type: long }
+  - { name: change_in_exchange_rate, type: long }
+  - { name: net_income, type: long }
+  - { name: ingestion_timestamp, type: timestamp }
+  - { name: snapshot_date, type: date }
+
+# EARNINGS endpoint - Transformed schema
+earnings:
+  - { name: ticker, type: string }
+  - { name: fiscal_date_ending, type: string }
+  - { name: report_type, type: string }
+  - { name: reported_date, type: string }
+  - { name: reported_eps, type: double }
+  - { name: estimated_eps, type: double }
+  - { name: surprise, type: double }
+  - { name: surprise_percentage, type: double }
+  - { name: ingestion_timestamp, type: timestamp }
+  - { name: snapshot_date, type: date }

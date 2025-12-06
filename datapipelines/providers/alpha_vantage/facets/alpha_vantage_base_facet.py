@@ -6,10 +6,24 @@ Alpha Vantage uses a different API structure than Polygon:
 - API key passed as query parameter
 - Response format varies by endpoint (some nested, some flat)
 - Rate limits are more restrictive (5 calls/min for free tier)
-"""
 
+Schema Loading:
+    Facets can use centralized schema definitions from configs/schemas/alpha_vantage.yaml
+    by setting the INPUT_SCHEMA_KEY class attribute:
+
+        class MyFacet(AlphaVantageFacet):
+            INPUT_SCHEMA_KEY = "overview"  # References alpha_vantage.yaml key
+
+    The base class get_input_schema() will automatically load the schema.
+"""
+from __future__ import annotations
+
+from typing import Optional
 import pandas as pd
+from pyspark.sql.types import StructType
+
 from datapipelines.facets.base_facet import Facet
+from config.schema_loader import SchemaLoader
 
 
 def safe_long(series: pd.Series) -> list:
@@ -74,11 +88,15 @@ class AlphaVantageFacet(Facet):
     - Lower rate limits
 
     Attributes:
+        INPUT_SCHEMA_KEY: Schema key in configs/schemas/alpha_vantage.yaml
         tickers: List of ticker symbols to fetch
         date_from: Start date for time series data
         date_to: End date for time series data
         extra: Additional parameters (interval, outputsize, etc.)
     """
+
+    # Set in subclass to auto-load schema from configs/schemas/alpha_vantage.yaml
+    INPUT_SCHEMA_KEY: Optional[str] = None
 
     def __init__(self, spark, tickers=None, date_from=None, date_to=None, **extra):
         """
@@ -109,16 +127,20 @@ class AlphaVantageFacet(Facet):
         """
         raise NotImplementedError
 
-    def get_input_schema(self):
+    def get_input_schema(self) -> Optional[StructType]:
         """
         Get the input schema for this facet's API response.
 
-        Override in subclass to provide explicit schema for Spark DataFrame creation.
+        If INPUT_SCHEMA_KEY is set, loads schema from configs/schemas/alpha_vantage.yaml.
+        Otherwise, subclasses can override to provide custom schema.
+
         This prevents CANNOT_DETERMINE_TYPE errors when columns have all NULL values.
 
         Returns:
             pyspark.sql.types.StructType or None
         """
+        if self.INPUT_SCHEMA_KEY:
+            return SchemaLoader.load("alpha_vantage", self.INPUT_SCHEMA_KEY)
         return None
 
     def normalize(self, raw_batches):

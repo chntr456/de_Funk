@@ -16,9 +16,8 @@ Partitions: none (single Delta table)
 
 from typing import List
 import pandas as pd
-from datetime import datetime
 from pyspark.sql.types import (
-    StructType, StructField, StringType, LongType, DoubleType, TimestampType, BooleanType
+    StructType, StructField, StringType, LongType, DoubleType, BooleanType
 )
 from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import (
     AlphaVantageFacet, safe_long, safe_double
@@ -41,6 +40,9 @@ class CompanyReferenceFacet(AlphaVantageFacet):
     """
 
     name = "company_reference"
+
+    # Load schema from configs/schemas/alpha_vantage.yaml
+    INPUT_SCHEMA_KEY = "overview"
 
     # Company-specific fields from OVERVIEW
     FINAL_COLUMNS = [
@@ -77,67 +79,6 @@ class CompanyReferenceFacet(AlphaVantageFacet):
             tickers: List of ticker symbols to process
         """
         super().__init__(spark, tickers=tickers)
-
-    def get_input_schema(self):
-        """
-        Get explicit schema for Alpha Vantage OVERVIEW API response.
-
-        This prevents CANNOT_DETERMINE_TYPE errors when some fields are null.
-        Uses Alpha Vantage field names (Symbol, CIK, Name, etc.).
-        """
-        return StructType([
-            StructField("Symbol", StringType(), True),
-            StructField("AssetType", StringType(), True),
-            StructField("Name", StringType(), True),
-            StructField("Description", StringType(), True),
-            StructField("CIK", StringType(), True),
-            StructField("Exchange", StringType(), True),
-            StructField("Currency", StringType(), True),
-            StructField("Country", StringType(), True),
-            StructField("Sector", StringType(), True),
-            StructField("Industry", StringType(), True),
-            StructField("Address", StringType(), True),
-            StructField("FiscalYearEnd", StringType(), True),
-            StructField("LatestQuarter", StringType(), True),
-            StructField("MarketCapitalization", StringType(), True),
-            StructField("EBITDA", StringType(), True),
-            StructField("PERatio", StringType(), True),
-            StructField("PEGRatio", StringType(), True),
-            StructField("BookValue", StringType(), True),
-            StructField("DividendPerShare", StringType(), True),
-            StructField("DividendYield", StringType(), True),
-            StructField("EPS", StringType(), True),
-            StructField("RevenuePerShareTTM", StringType(), True),
-            StructField("ProfitMargin", StringType(), True),
-            StructField("OperatingMarginTTM", StringType(), True),
-            StructField("ReturnOnAssetsTTM", StringType(), True),
-            StructField("ReturnOnEquityTTM", StringType(), True),
-            StructField("RevenueTTM", StringType(), True),
-            StructField("GrossProfitTTM", StringType(), True),
-            StructField("DilutedEPSTTM", StringType(), True),
-            StructField("QuarterlyEarningsGrowthYOY", StringType(), True),
-            StructField("QuarterlyRevenueGrowthYOY", StringType(), True),
-            StructField("AnalystTargetPrice", StringType(), True),
-            StructField("AnalystRatingStrongBuy", StringType(), True),
-            StructField("AnalystRatingBuy", StringType(), True),
-            StructField("AnalystRatingHold", StringType(), True),
-            StructField("AnalystRatingSell", StringType(), True),
-            StructField("AnalystRatingStrongSell", StringType(), True),
-            StructField("TrailingPE", StringType(), True),
-            StructField("ForwardPE", StringType(), True),
-            StructField("PriceToSalesRatioTTM", StringType(), True),
-            StructField("PriceToBookRatio", StringType(), True),
-            StructField("EVToRevenue", StringType(), True),
-            StructField("EVToEBITDA", StringType(), True),
-            StructField("Beta", StringType(), True),
-            StructField("52WeekHigh", StringType(), True),
-            StructField("52WeekLow", StringType(), True),
-            StructField("50DayMovingAverage", StringType(), True),
-            StructField("200DayMovingAverage", StringType(), True),
-            StructField("SharesOutstanding", StringType(), True),
-            StructField("DividendDate", StringType(), True),
-            StructField("ExDividendDate", StringType(), True),
-        ])
 
     def _get_output_schema(self):
         """Get the output schema for company reference data."""
