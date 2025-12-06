@@ -2313,8 +2313,7 @@ class AlphaVantageIngestor(Ingestor):
             path = union_and_write(
                 income_dfs,
                 "income_statements",
-                ["ticker", "fiscal_date_ending", "report_type"],
-                ["report_type", "snapshot_date"]
+                ["ticker", "fiscal_date_ending", "report_type"]
             )
             if path:
                 results['income_statements'] = path
@@ -2323,8 +2322,7 @@ class AlphaVantageIngestor(Ingestor):
             path = union_and_write(
                 balance_dfs,
                 "balance_sheets",
-                ["ticker", "fiscal_date_ending", "report_type"],
-                ["report_type", "snapshot_date"]
+                ["ticker", "fiscal_date_ending", "report_type"]
             )
             if path:
                 results['balance_sheets'] = path
@@ -2333,8 +2331,7 @@ class AlphaVantageIngestor(Ingestor):
             path = union_and_write(
                 cashflow_dfs,
                 "cash_flows",
-                ["ticker", "fiscal_date_ending", "report_type"],
-                ["report_type", "snapshot_date"]
+                ["ticker", "fiscal_date_ending", "report_type"]
             )
             if path:
                 results['cash_flows'] = path
@@ -2343,8 +2340,7 @@ class AlphaVantageIngestor(Ingestor):
             path = union_and_write(
                 earnings_dfs,
                 "earnings",
-                ["ticker", "fiscal_date_ending", "report_type"],
-                ["report_type", "snapshot_date"]
+                ["ticker", "fiscal_date_ending", "report_type"]
             )
             if path:
                 results['earnings'] = path
