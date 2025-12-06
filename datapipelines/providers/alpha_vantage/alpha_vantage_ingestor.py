@@ -2416,20 +2416,28 @@ class AlphaVantageIngestor(Ingestor):
             if path:
                 results['company_reference'] = path
 
-        # Prices - partition config comes from storage.json
+        # Prices - use append_immutable for time-series data (NOT upsert!)
+        # Upsert reads entire table on every batch causing O(N²) memory growth
+        # Append only reads the date range being written, much more efficient
         if prices_dfs:
             logger.info(f"Writing {len(prices_dfs)} price DataFrames to securities_prices_daily")
             try:
-                path = union_and_write(
-                    prices_dfs,
+                combined = reduce(lambda a, b: a.union(b), prices_dfs)
+                combined = combined.coalesce(4)
+                table_cfg = self.sink._table_cfg("securities_prices_daily")
+                partitions = table_cfg.get("partitions", []) or None
+                path = self.sink.append_immutable(
+                    combined,
                     "securities_prices_daily",
-                    ["ticker", "trade_date"]
+                    key_columns=["ticker", "trade_date"],
+                    partitions=partitions,
+                    date_column="trade_date"
                 )
                 if path:
                     results['securities_prices_daily'] = path
                     logger.info(f"Prices written to {path}")
                 else:
-                    logger.warning("union_and_write returned None for prices")
+                    logger.warning("append_immutable returned None for prices")
             except Exception as e:
                 logger.error(f"Failed to write prices: {e}", exc_info=True)
         else:
