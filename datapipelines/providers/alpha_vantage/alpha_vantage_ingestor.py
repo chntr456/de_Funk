@@ -1128,24 +1128,21 @@ class AlphaVantageIngestor(Ingestor):
 
     def get_stock_tickers_from_db(self, tickers: list) -> list:
         """
-        Filter tickers to only include stocks using database asset_type field.
+        Filter tickers to only include actual stocks for fundamentals.
 
-        Uses the normalized asset_type from securities_reference table,
-        NOT the raw assetType from Alpha Vantage API.
-
-        Also excludes warrants, units, rights, and preferred shares by ticker
-        pattern (e.g., -WS, -U, -R, -P-) since Alpha Vantage classifies some
-        of these as "Stock" incorrectly.
+        Uses multiple filters from securities_reference:
+        1. asset_type == 'stocks' (from Alpha Vantage assetType)
+        2. security_name NOT containing 'Warrant', 'Unit', 'Rights', etc.
+        3. Ticker pattern exclusions as fallback
 
         Args:
             tickers: List of ticker symbols to filter
 
         Returns:
-            List of tickers that are stocks (asset_type='stocks')
+            List of tickers that are actual stocks (not warrants/units/rights)
         """
-        from pyspark.sql.functions import col, upper
+        from pyspark.sql.functions import col, upper, lower
         from pathlib import Path
-        import re
 
         if not tickers:
             return []
@@ -1165,42 +1162,40 @@ class AlphaVantageIngestor(Ingestor):
                 df = self.spark.read.parquet(str(ref_path))
 
             # Filter to stocks only by asset_type
-            if "asset_type" in df.columns:
-                # Get stock tickers from database
-                stock_df = df.filter(col("asset_type") == "stocks").select("ticker")
-                db_stock_tickers = {row.ticker for row in stock_df.collect()}
-
-                # Filter input tickers by asset_type
-                stock_tickers = [t for t in tickers if t in db_stock_tickers]
-
-                # Exclude warrants, units, rights, preferred shares by ticker pattern
-                # Same patterns as get_tickers_by_market_cap()
-                exclude_patterns = [
-                    r'.*[-]?W[S]?$',        # Warrants (-WS, -W, WS)
-                    r'.*-P-.*|.*-P[A-Z]$',  # Preferred shares (-P-, -PA, -PB, etc.)
-                    r'.*-U[N]?$',           # Units (-U, -UN)
-                    r'.*-R[T]?$',           # Rights (-R, -RT)
-                    r'.*[-][A-Z]{2,}$',     # Other special suffixes
-                    r'^-.*',                # Tickers starting with dash (malformed)
-                    # SPAC patterns without dashes (4-5 char tickers ending in type indicator)
-                    r'^[A-Z]{3,4}[A-Z][WUR]$',  # SPACs: base(3-4) + class(1) + type(W/U/R)
-                    r'^[A-Z]{4,5}[WUR]$',       # SPACs: 4-5 char base + type (W/U/R)
-                ]
-                combined_pattern = re.compile('|'.join(exclude_patterns), re.IGNORECASE)
-
-                filtered_tickers = [t for t in stock_tickers if not combined_pattern.match(t)]
-
-                excluded_count = len(stock_tickers) - len(filtered_tickers)
-                if excluded_count > 0:
-                    print(f"  Excluding {excluded_count} warrants/units/rights by ticker pattern")
-
-                return filtered_tickers
-            else:
+            if "asset_type" not in df.columns:
                 logger.warning("asset_type column not found in securities_reference")
                 return tickers
 
+            # Start with asset_type filter
+            stock_df = df.filter(col("asset_type") == "stocks")
+
+            # Filter out warrants/units/rights by security_name
+            # This is more reliable than ticker patterns
+            if "security_name" in df.columns:
+                stock_df = stock_df.filter(
+                    ~lower(col("security_name")).contains("warrant") &
+                    ~lower(col("security_name")).contains(" unit") &
+                    ~lower(col("security_name")).contains(" units") &
+                    ~lower(col("security_name")).contains("rights") &
+                    ~lower(col("security_name")).contains("preferred") &
+                    ~lower(col("security_name")).rlike(r"\brt\b") &  # Rights abbreviation
+                    ~lower(col("security_name")).rlike(r"\bwt\b")    # Warrant abbreviation
+                )
+
+            # Get filtered stock tickers
+            db_stock_tickers = {row.ticker for row in stock_df.select("ticker").collect()}
+
+            # Filter input tickers
+            filtered_tickers = [t for t in tickers if t in db_stock_tickers]
+
+            excluded_count = len(tickers) - len(filtered_tickers)
+            if excluded_count > 0:
+                print(f"  Excluding {excluded_count} warrants/units/rights (by name)")
+
+            return filtered_tickers
+
         except Exception as e:
-            logger.warning(f"Could not filter by asset_type: {e}")
+            logger.warning(f"Could not filter stocks: {e}")
             return tickers
 
     def fetch_bulk_quotes(self, tickers: list, show_progress: bool = True) -> list:
