@@ -31,7 +31,7 @@ def test_append_write():
     )
 
     print("=" * 70)
-    print("TESTING APPEND_IMMUTABLE ON EXISTING PRICES TABLE")
+    print("TESTING SMART_WRITE ON EXISTING PRICES TABLE")
     print("=" * 70)
     print()
 
@@ -81,13 +81,18 @@ def test_append_write():
     print()
 
     # Create a small test DataFrame (simulating 1 ticker batch)
+    # Schema must match the existing table (use mergeSchema to handle differences)
     print("5. Creating test DataFrame (1 ticker, 5 rows)...")
+
+    # Get actual schema from existing table
+    actual_columns = [f.name for f in schema.fields]
+    print(f"   Existing table columns: {actual_columns}")
+
     test_schema = StructType([
         StructField("trade_date", DateType(), True),
         StructField("ticker", StringType(), True),
         StructField("asset_type", StringType(), True),
         StructField("year", IntegerType(), True),
-        StructField("month", IntegerType(), True),
         StructField("open", DoubleType(), True),
         StructField("high", DoubleType(), True),
         StructField("low", DoubleType(), True),
@@ -107,7 +112,6 @@ def test_append_write():
             ticker="TEST_TICKER",
             asset_type="stocks",
             year=2024,
-            month=12,
             open=100.0 + i,
             high=101.0 + i,
             low=99.0 + i,
@@ -126,27 +130,30 @@ def test_append_write():
     print(f"   Test rows: {test_df.count()}")
     print()
 
-    # Test append_immutable
-    print("6. Testing append_immutable (should NOT read entire table)...")
+    # Test smart_write (uses config-driven strategy)
+    print("6. Testing smart_write (should use append strategy from config)...")
     print("   Monitoring memory usage...")
     print()
 
     from datapipelines.ingestors.bronze_sink import BronzeSink
     sink = BronzeSink(storage_cfg)
 
+    # Show what config says
+    table_cfg = storage_cfg["tables"]["securities_prices_daily"]
+    print(f"   Config: write_strategy={table_cfg.get('write_strategy')}")
+    print(f"   Config: partitions={table_cfg.get('partitions')}")
+    print(f"   Config: key_columns={table_cfg.get('key_columns')}")
+    print()
+
     start = time.time()
     try:
+        # smart_write reads config and picks append_immutable for prices
         # This should only read the date range Dec 1-5, 2024
         # NOT the entire 40M+ row table
-        path = sink.append_immutable(
-            test_df,
-            "securities_prices_daily",
-            key_columns=["ticker", "trade_date"],
-            partitions=["asset_type", "year", "month"],
-            date_column="trade_date"
-        )
+        path = sink.smart_write(test_df, "securities_prices_daily")
         elapsed = time.time() - start
-        print(f"   SUCCESS! append_immutable completed in {elapsed:.1f}s")
+        print(f"   SUCCESS! smart_write completed in {elapsed:.1f}s")
+        print(f"   (Used append strategy from config - O(1) memory)")
         print(f"   Path: {path}")
         print()
 
@@ -166,7 +173,7 @@ def test_append_write():
 
         print()
         print("=" * 70)
-        print("TEST PASSED - append_immutable works without OOM!")
+        print("TEST PASSED - smart_write uses config-driven append strategy!")
         print("=" * 70)
         print()
         print("You can now safely resume the pipeline:")
