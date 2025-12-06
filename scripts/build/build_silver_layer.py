@@ -5,11 +5,11 @@ Build Silver Layer Script.
 Uses BaseModel.write_tables() to materialize the Silver layer from Bronze data.
 
 Usage:
-    python -m scripts.build_silver_layer [--model MODEL_NAME]
+    python -m scripts.build.build_silver_layer [--model MODEL_NAME]
 
 Examples:
-    python -m scripts.build_silver_layer              # Build all models
-    python -m scripts.build_silver_layer --model stocks  # Build specific model
+    python -m scripts.build.build_silver_layer              # Build all models
+    python -m scripts.build.build_silver_layer --model stocks  # Build specific model
 """
 
 import sys
@@ -37,13 +37,53 @@ BUILDABLE_MODELS = [
 ]
 
 
-def build_model(session, model_name: str) -> dict:
+def ensure_calendar_seed(spark) -> bool:
+    """
+    Ensure calendar_seed exists in Bronze layer.
+
+    The core model reads from bronze.calendar_seed, which is generated data
+    (not ingested from an API). This function creates it if missing.
+
+    Args:
+        spark: SparkSession
+
+    Returns:
+        True if calendar seed exists or was created
+    """
+    calendar_seed_path = repo_root / "storage" / "bronze" / "calendar_seed"
+
+    if calendar_seed_path.exists():
+        print("  Calendar seed already exists in Bronze")
+        return True
+
+    print("  Calendar seed not found - generating...")
+
+    from models.implemented.core.builders.calendar_builder import CalendarBuilder
+
+    # Generate calendar data (2000-2050)
+    builder = CalendarBuilder(
+        start_date="2000-01-01",
+        end_date="2050-12-31",
+        fiscal_year_start_month=1
+    )
+    calendar_df = builder.build_spark_dataframe(spark)
+
+    # Write to Bronze
+    calendar_df.write.format("delta").mode("overwrite").save(str(calendar_seed_path))
+    row_count = calendar_df.count()
+    print(f"  Generated {row_count:,} calendar rows to Bronze")
+
+    return True
+
+
+def build_model(session, model_name: str, spark=None) -> dict:
     """
     Build a single model and return stats.
 
     Args:
         session: UniversalSession instance
         model_name: Name of model to build
+        spark: SparkSession (needed for core model calendar seed)
 
     Returns:
         Dict with build stats or error info
@@ -53,6 +93,10 @@ def build_model(session, model_name: str) -> dict:
     print(f"{'=' * 70}")
 
     try:
+        # Core model needs calendar seed in Bronze
+        if model_name == "core" and spark is not None:
+            ensure_calendar_seed(spark)
+
         # Load and build model
         model = session.load_model(model_name)
         print(f"Building {model_name} model graph...")
@@ -121,7 +165,7 @@ def main():
     # Build each model
     results = []
     for model_name in models_to_build:
-        result = build_model(session, model_name)
+        result = build_model(session, model_name, spark=spark)
         results.append(result)
 
     # Print summary
