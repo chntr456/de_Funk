@@ -121,6 +121,47 @@ class HistoricalOptionsFacet(Facet):
         self.ticker = underlying_ticker or ticker
         self.underlying_price = underlying_price
 
+    def get_input_schema(self):
+        """
+        Get explicit schema for normalized options data.
+
+        This prevents CANNOT_DETERMINE_TYPE errors when some fields are null.
+        Uses the transformed schema (not raw API response).
+        """
+        from pyspark.sql.types import (
+            StructType, StructField, StringType, DoubleType, LongType,
+            DateType, TimestampType, IntegerType, BooleanType
+        )
+
+        return StructType([
+            StructField("contract_id", StringType(), True),
+            StructField("underlying_ticker", StringType(), True),
+            StructField("trade_date", StringType(), True),  # Will convert in postprocess
+            StructField("expiration_date", StringType(), True),  # Will convert in postprocess
+            StructField("strike_price", DoubleType(), True),
+            StructField("option_type", StringType(), True),
+            StructField("last_price", DoubleType(), True),
+            StructField("mark_price", DoubleType(), True),
+            StructField("bid_price", DoubleType(), True),
+            StructField("ask_price", DoubleType(), True),
+            StructField("bid_size", LongType(), True),
+            StructField("ask_size", LongType(), True),
+            StructField("bid_ask_spread", DoubleType(), True),
+            StructField("volume", LongType(), True),
+            StructField("open_interest", LongType(), True),
+            StructField("implied_volatility", DoubleType(), True),
+            StructField("delta", DoubleType(), True),
+            StructField("gamma", DoubleType(), True),
+            StructField("theta", DoubleType(), True),
+            StructField("vega", DoubleType(), True),
+            StructField("rho", DoubleType(), True),
+            StructField("days_to_expiration", IntegerType(), True),
+            StructField("moneyness", DoubleType(), True),
+            StructField("in_the_money", BooleanType(), True),
+            StructField("ingestion_timestamp", TimestampType(), True),
+            StructField("snapshot_date", DateType(), True),
+        ])
+
     def normalize(self, raw_response: dict) -> DataFrame:
         """
         Normalize historical options response.
@@ -153,8 +194,9 @@ class HistoricalOptionsFacet(Facet):
         # Coerce numeric types
         all_options = self._coerce_rows(all_options)
 
-        # Create DataFrame
-        df = self.spark.createDataFrame(all_options, samplingRatio=1.0)
+        # Create DataFrame with explicit schema to avoid CANNOT_DETERMINE_TYPE
+        schema = self.get_input_schema()
+        df = self.spark.createDataFrame(all_options, schema=schema)
         df = self.postprocess(df)
         df = self._apply_final_casts(df)
         df = self._apply_final_columns(df)

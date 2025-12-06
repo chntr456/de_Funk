@@ -740,8 +740,18 @@ class AlphaVantageIngestor(Ingestor):
             print("Warning: No tickers returned from LISTING_STATUS")
             return None, []
 
-        # Convert to Spark DataFrame
-        df = self.spark.createDataFrame(rows, samplingRatio=1.0)
+        # Convert to Spark DataFrame with explicit schema to avoid CANNOT_DETERMINE_TYPE
+        from pyspark.sql.types import StructType, StructField, StringType
+        listing_schema = StructType([
+            StructField("symbol", StringType(), True),
+            StructField("name", StringType(), True),
+            StructField("exchange", StringType(), True),
+            StructField("assetType", StringType(), True),
+            StructField("ipoDate", StringType(), True),
+            StructField("delistingDate", StringType(), True),
+            StructField("status", StringType(), True),
+        ])
+        df = self.spark.createDataFrame(rows, schema=listing_schema)
 
         # Normalize to securities_reference schema
         # LISTING_STATUS fields: symbol, name, exchange, assetType, ipoDate, delistingDate, status
