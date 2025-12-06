@@ -2419,19 +2419,31 @@ class AlphaVantageIngestor(Ingestor):
                         if tracker and data_type in data_types:
                             tracker.update(ticker, data_type, success=False, error=error)
                         return None
-                    if "Information" in payload and len(payload) == 1:
-                        result['errors'].append(f"{data_type}: API limit")
+                    # Check for rate limit / info messages (may have multiple keys)
+                    if "Information" in payload or "Note" in payload:
+                        info = payload.get("Information", payload.get("Note", "Rate limit"))[:60]
+                        result['errors'].append(f"{data_type}: {info}")
                         if tracker and data_type in data_types:
                             tracker.update(ticker, data_type, success=False, error="API limit")
                         return None
 
-                # Success - update tracker
-                if tracker and data_type in data_types:
-                    tracker.update(ticker, data_type, success=True)
-
                 # Extract data if response_key provided
                 if response_key:
-                    return payload.get(response_key, payload)
+                    extracted = payload.get(response_key)
+                    if extracted is None:
+                        # response_key not found - this shouldn't happen for valid responses
+                        logger.warning(f"{data_type} for {ticker}: response_key '{response_key}' not found in payload keys: {list(payload.keys()) if isinstance(payload, dict) else type(payload)}")
+                        if tracker and data_type in data_types:
+                            tracker.update(ticker, data_type, success=False, error="No data")
+                        return None
+                    # Success - update tracker
+                    if tracker and data_type in data_types:
+                        tracker.update(ticker, data_type, success=True)
+                    return extracted
+
+                # No response_key, return full payload
+                if tracker and data_type in data_types:
+                    tracker.update(ticker, data_type, success=True)
                 return payload
 
             except Exception as e:
