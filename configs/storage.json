@@ -29,14 +29,14 @@
   "tables": {
     "calendar_seed":   { "root": "bronze", "rel": "calendar_seed", "partitions": [] },
 
-    "securities_reference": { "root": "bronze", "rel": "securities_reference", "partitions": ["asset_type"], "comment": "v2.0 unified reference data - basic ticker info from LISTING_STATUS" },
-    "company_reference": { "root": "bronze", "rel": "company_reference", "partitions": [], "comment": "v2.0 company data from OVERVIEW - CIK, sector, industry, market_cap (separate from securities to avoid overwrite issues)" },
-    "securities_prices_daily": { "root": "bronze", "rel": "securities_prices_daily", "partitions": ["year"], "comment": "v2.0 unified daily OHLCV - simplified partitioning (year only) avoids small file proliferation. Previous: [asset_type, year, month] caused 19K+ small files" },
+    "securities_reference": { "root": "bronze", "rel": "securities_reference", "partitions": ["asset_type"], "write_strategy": "upsert", "key_columns": ["ticker"], "comment": "v2.0 unified reference data - basic ticker info from LISTING_STATUS" },
+    "company_reference": { "root": "bronze", "rel": "company_reference", "partitions": [], "write_strategy": "upsert", "key_columns": ["cik"], "comment": "v2.0 company data from OVERVIEW - CIK, sector, industry, market_cap (separate from securities to avoid overwrite issues)" },
+    "securities_prices_daily": { "root": "bronze", "rel": "securities_prices_daily", "partitions": ["year"], "write_strategy": "append", "key_columns": ["ticker", "trade_date"], "date_column": "trade_date", "comment": "v2.0 unified daily OHLCV - append strategy for immutable time-series (prevents O(N²) memory growth)" },
 
-    "income_statements": { "root": "bronze", "rel": "income_statements", "partitions": ["report_type", "snapshot_date"], "comment": "Alpha Vantage INCOME_STATEMENT - partitioned by report_type + snapshot_date (not ticker to avoid file sprawl)" },
-    "balance_sheets": { "root": "bronze", "rel": "balance_sheets", "partitions": ["report_type", "snapshot_date"], "comment": "Alpha Vantage BALANCE_SHEET - partitioned by report_type + snapshot_date" },
-    "cash_flows": { "root": "bronze", "rel": "cash_flows", "partitions": ["report_type", "snapshot_date"], "comment": "Alpha Vantage CASH_FLOW - partitioned by report_type + snapshot_date" },
-    "earnings": { "root": "bronze", "rel": "earnings", "partitions": ["report_type", "snapshot_date"], "comment": "Alpha Vantage EARNINGS - partitioned by report_type + snapshot_date" },
+    "income_statements": { "root": "bronze", "rel": "income_statements", "partitions": ["report_type", "snapshot_date"], "write_strategy": "append", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage INCOME_STATEMENT - append for immutable financial data" },
+    "balance_sheets": { "root": "bronze", "rel": "balance_sheets", "partitions": ["report_type", "snapshot_date"], "write_strategy": "append", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage BALANCE_SHEET - append for immutable financial data" },
+    "cash_flows": { "root": "bronze", "rel": "cash_flows", "partitions": ["report_type", "snapshot_date"], "write_strategy": "append", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage CASH_FLOW - append for immutable financial data" },
+    "earnings": { "root": "bronze", "rel": "earnings", "partitions": ["report_type", "snapshot_date"], "write_strategy": "append", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage EARNINGS - append for immutable financial data" },
     "historical_options": { "root": "bronze", "rel": "historical_options", "partitions": ["underlying_ticker", "expiration_date"], "comment": "Alpha Vantage HISTORICAL_OPTIONS" },
 
     "ref_all_tickers": { "root": "bronze", "rel": "ref_all_tickers", "partitions": [], "comment": "v1.x legacy - use securities_reference" },

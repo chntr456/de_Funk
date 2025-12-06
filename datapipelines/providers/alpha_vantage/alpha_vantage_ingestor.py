@@ -2381,102 +2381,66 @@ class AlphaVantageIngestor(Ingestor):
         earnings_dfs: list,
         results: dict
     ) -> None:
-        """Write accumulated DataFrames to storage."""
+        """
+        Write accumulated DataFrames to storage using config-driven strategy.
+
+        Uses BronzeSink.smart_write() which reads write_strategy from storage.json
+        to pick the correct method (upsert vs append_immutable).
+        """
         from functools import reduce
 
-        def union_and_write(dfs: list, table: str, key_cols: list):
-            """Write DataFrames using partition config from storage.json."""
+        def union_and_smart_write(dfs: list, table: str) -> str:
+            """Union DataFrames and write using config-driven strategy."""
             if not dfs:
                 return None
             combined = reduce(lambda a, b: a.union(b), dfs)
             combined = combined.coalesce(4)
-            # Get partition config from storage.json (not hardcoded!)
-            table_cfg = self.sink._table_cfg(table)
-            partitions = table_cfg.get("partitions", []) or None
-            path = self.sink.upsert(combined, table, key_columns=key_cols, partitions=partitions)
-            return path
+            # smart_write reads strategy from storage.json config
+            return self.sink.smart_write(combined, table)
 
-        # Securities reference
+        # Securities reference (strategy from config: upsert)
         if reference_dfs:
-            path = union_and_write(
-                reference_dfs,
-                "securities_reference",
-                ["ticker"]
-            )
+            path = union_and_smart_write(reference_dfs, "securities_reference")
             if path:
                 results['securities_reference'] = path
 
-        # Company reference
+        # Company reference (strategy from config: upsert)
         if company_dfs:
-            path = union_and_write(
-                company_dfs,
-                "company_reference",
-                ["cik"]
-            )
+            path = union_and_smart_write(company_dfs, "company_reference")
             if path:
                 results['company_reference'] = path
 
-        # Prices - use append_immutable for time-series data (NOT upsert!)
-        # Upsert reads entire table on every batch causing O(N²) memory growth
-        # Append only reads the date range being written, much more efficient
+        # Prices (strategy from config: append)
         if prices_dfs:
             logger.info(f"Writing {len(prices_dfs)} price DataFrames to securities_prices_daily")
             try:
-                combined = reduce(lambda a, b: a.union(b), prices_dfs)
-                combined = combined.coalesce(4)
-                table_cfg = self.sink._table_cfg("securities_prices_daily")
-                partitions = table_cfg.get("partitions", []) or None
-                path = self.sink.append_immutable(
-                    combined,
-                    "securities_prices_daily",
-                    key_columns=["ticker", "trade_date"],
-                    partitions=partitions,
-                    date_column="trade_date"
-                )
+                path = union_and_smart_write(prices_dfs, "securities_prices_daily")
                 if path:
                     results['securities_prices_daily'] = path
                     logger.info(f"Prices written to {path}")
-                else:
-                    logger.warning("append_immutable returned None for prices")
             except Exception as e:
                 logger.error(f"Failed to write prices: {e}", exc_info=True)
         else:
             logger.warning("prices_dfs is empty - no prices to write")
 
-        # Fundamentals
+        # Fundamentals (strategy from config: append)
         if income_dfs:
-            path = union_and_write(
-                income_dfs,
-                "income_statements",
-                ["ticker", "fiscal_date_ending", "report_type"]
-            )
+            path = union_and_smart_write(income_dfs, "income_statements")
             if path:
                 results['income_statements'] = path
 
         if balance_dfs:
-            path = union_and_write(
-                balance_dfs,
-                "balance_sheets",
-                ["ticker", "fiscal_date_ending", "report_type"]
-            )
+            path = union_and_smart_write(balance_dfs, "balance_sheets")
             if path:
                 results['balance_sheets'] = path
 
         if cashflow_dfs:
-            path = union_and_write(
-                cashflow_dfs,
-                "cash_flows",
-                ["ticker", "fiscal_date_ending", "report_type"]
-            )
+            path = union_and_smart_write(cashflow_dfs, "cash_flows")
             if path:
                 results['cash_flows'] = path
 
         if earnings_dfs:
-            path = union_and_write(
-                earnings_dfs,
-                "earnings",
-                ["ticker", "fiscal_date_ending", "report_type"]
-            )
+            path = union_and_smart_write(earnings_dfs, "earnings")
             if path:
                 results['earnings'] = path
 

@@ -288,6 +288,66 @@ class BronzeSink:
         except Exception as e:
             logger.debug(f"Cleanup skipped: {e}")
 
+    def smart_write(self, df, table: str) -> str:
+        """
+        Universal write method that picks strategy based on storage.json config.
+
+        Reads write_strategy, key_columns, partitions, and date_column from config
+        and calls the appropriate method (upsert or append_immutable).
+
+        This is the RECOMMENDED method for all writes - it ensures the correct
+        strategy is used based on data characteristics defined in config.
+
+        Config fields in storage.json tables:
+            write_strategy: "upsert" | "append"
+                - "upsert": For reference data that changes (uses read-merge-overwrite)
+                - "append": For immutable time-series (uses append_immutable, O(1) memory)
+            key_columns: List of columns that uniquely identify a row
+            partitions: List of partition columns
+            date_column: Column containing date (required for append strategy)
+
+        Args:
+            df: Spark DataFrame to write
+            table: Table name (must exist in storage config with write config)
+
+        Returns:
+            Path to written table
+
+        Example:
+            # Config in storage.json:
+            # "securities_prices_daily": {
+            #     "write_strategy": "append",
+            #     "key_columns": ["ticker", "trade_date"],
+            #     "date_column": "trade_date",
+            #     "partitions": ["year"]
+            # }
+
+            sink.smart_write(prices_df, "securities_prices_daily")
+        """
+        table_cfg = self._table_cfg(table)
+
+        # Get write configuration
+        strategy = table_cfg.get("write_strategy", "upsert")  # Default to upsert for safety
+        key_columns = table_cfg.get("key_columns", [])
+        partitions = table_cfg.get("partitions", []) or None
+        date_column = table_cfg.get("date_column")
+
+        if strategy == "append":
+            if not date_column:
+                logger.warning(f"Table {table} has append strategy but no date_column - falling back to upsert")
+                return self.upsert(df, table, key_columns=key_columns, partitions=partitions)
+
+            return self.append_immutable(
+                df,
+                table,
+                key_columns=key_columns,
+                partitions=partitions,
+                date_column=date_column
+            )
+        else:
+            # Default: upsert
+            return self.upsert(df, table, key_columns=key_columns, partitions=partitions)
+
     def write(self, df, table: str, partitions: Optional[List[str]] = None, mode: str = "overwrite") -> str:
         """
         Write DataFrame to bronze table as Delta Lake format.
