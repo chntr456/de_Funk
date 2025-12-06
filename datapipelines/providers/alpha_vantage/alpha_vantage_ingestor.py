@@ -824,11 +824,12 @@ class AlphaVantageIngestor(Ingestor):
         # Return both ticker list AND ticker->exchange mapping for filtering
         tickers = [row['symbol'] for row in rows if row.get('symbol')]  # CSV has 'symbol', not 'ticker'
         ticker_exchanges = {row['symbol']: row.get('exchange', 'UNKNOWN') for row in rows if row.get('symbol')}
+        ticker_asset_types = {row['symbol']: row.get('assetType', 'Unknown') for row in rows if row.get('symbol')}
 
         print(f"Written {df_normalized.count()} tickers to {table_path}")
         print(f"Note: For fundamentals (PE, market cap, etc.), call ingest_reference_data() for specific tickers")
 
-        return table_path, tickers, ticker_exchanges
+        return table_path, tickers, ticker_exchanges, ticker_asset_types
 
     def run_all(self, tickers=None, date_from=None, date_to=None,
                 max_tickers=None, use_concurrent=False, use_bulk_listing=False,
@@ -2062,13 +2063,21 @@ class AlphaVantageIngestor(Ingestor):
             print("=" * 60)
             print("STEP 1: TICKER DISCOVERY (LISTING_STATUS)")
             print("=" * 60)
-            _, all_tickers, ticker_exchanges = self.ingest_bulk_listing()
+            _, all_tickers, ticker_exchanges, ticker_asset_types = self.ingest_bulk_listing()
 
             us_exchanges = self.alpha_vantage_cfg.get("us_exchanges", [
                 "NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"
             ])
             tickers = [t for t in all_tickers if ticker_exchanges.get(t) in us_exchanges]
             print(f"  US exchange tickers: {len(tickers)}")
+
+            # Filter to stocks only (exclude ETFs, warrants, etc.) for fundamentals
+            if include_fundamentals:
+                stock_tickers = [t for t in tickers if ticker_asset_types.get(t) == "Stock"]
+                non_stock_count = len(tickers) - len(stock_tickers)
+                if non_stock_count > 0:
+                    print(f"  Filtering to stocks only: {len(stock_tickers)} (excluding {non_stock_count} ETFs/warrants)")
+                tickers = stock_tickers
 
         elif sort_by_market_cap and tickers is None:
             if not max_tickers:
