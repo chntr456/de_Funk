@@ -1123,6 +1123,56 @@ class AlphaVantageIngestor(Ingestor):
             print(f"Warning: Could not load market cap data: {e}")
             return []
 
+    def get_stock_tickers_from_db(self, tickers: list) -> list:
+        """
+        Filter tickers to only include stocks using database asset_type field.
+
+        Uses the normalized asset_type from securities_reference table,
+        NOT the raw assetType from Alpha Vantage API.
+
+        Args:
+            tickers: List of ticker symbols to filter
+
+        Returns:
+            List of tickers that are stocks (asset_type='stocks')
+        """
+        from pyspark.sql.functions import col, upper
+        from pathlib import Path
+
+        if not tickers:
+            return []
+
+        bronze_path = Path(self.sink.cfg["roots"]["bronze"])
+        ref_path = bronze_path / "securities_reference"
+
+        if not ref_path.exists():
+            logger.warning("securities_reference not found, cannot filter by asset_type")
+            return tickers
+
+        try:
+            # Read securities_reference
+            if (ref_path / "_delta_log").exists():
+                df = self.spark.read.format("delta").load(str(ref_path))
+            else:
+                df = self.spark.read.parquet(str(ref_path))
+
+            # Filter to stocks only
+            if "asset_type" in df.columns:
+                # Get stock tickers from database
+                stock_df = df.filter(col("asset_type") == "stocks").select("ticker")
+                db_stock_tickers = {row.ticker for row in stock_df.collect()}
+
+                # Filter input tickers
+                stock_tickers = [t for t in tickers if t in db_stock_tickers]
+                return stock_tickers
+            else:
+                logger.warning("asset_type column not found in securities_reference")
+                return tickers
+
+        except Exception as e:
+            logger.warning(f"Could not filter by asset_type: {e}")
+            return tickers
+
     def fetch_bulk_quotes(self, tickers: list, show_progress: bool = True) -> list:
         """
         Fetch quotes for tickers using REALTIME_BULK_QUOTES (100 per call).
@@ -2063,7 +2113,7 @@ class AlphaVantageIngestor(Ingestor):
             print("=" * 60)
             print("STEP 1: TICKER DISCOVERY (LISTING_STATUS)")
             print("=" * 60)
-            _, all_tickers, ticker_exchanges, ticker_asset_types = self.ingest_bulk_listing()
+            _, all_tickers, ticker_exchanges, _ = self.ingest_bulk_listing()
 
             us_exchanges = self.alpha_vantage_cfg.get("us_exchanges", [
                 "NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"
@@ -2072,8 +2122,9 @@ class AlphaVantageIngestor(Ingestor):
             print(f"  US exchange tickers: {len(tickers)}")
 
             # Filter to stocks only (exclude ETFs, warrants, etc.) for fundamentals
+            # Uses database asset_type field, not raw API assetType
             if include_fundamentals:
-                stock_tickers = [t for t in tickers if ticker_asset_types.get(t) == "Stock"]
+                stock_tickers = self.get_stock_tickers_from_db(tickers)
                 non_stock_count = len(tickers) - len(stock_tickers)
                 if non_stock_count > 0:
                     print(f"  Filtering to stocks only: {len(stock_tickers)} (excluding {non_stock_count} ETFs/warrants)")

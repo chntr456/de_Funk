@@ -45,37 +45,39 @@ def load_config(config_path: str) -> dict:
 
 def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
     """
-    Get list of active tickers from the stocks Silver layer.
+    Get list of tickers that have price data for forecasting.
 
-    Falls back to bronze layer if silver not available.
+    Only returns tickers that have actual price data in fact_stock_prices,
+    NOT just reference data. This prevents forecast errors for tickers
+    without price history.
 
     Args:
         storage_cfg: Storage configuration
         limit: Optional limit on number of tickers
 
     Returns:
-        List of ticker symbols
+        List of ticker symbols with price data
     """
     from pathlib import Path
     import pyarrow.dataset as ds
 
-    # Try stocks Silver layer first
+    # Try stocks Silver fact_stock_prices first (tickers with actual price data)
     stocks_root = storage_cfg["roots"].get("stocks_silver", "storage/silver/stocks")
-    dim_stock_path = Path(stocks_root) / "dims" / "dim_stock"
+    fact_prices_path = Path(stocks_root) / "facts" / "fact_stock_prices"
 
-    if dim_stock_path.exists():
+    if fact_prices_path.exists():
         try:
-            dataset = ds.dataset(dim_stock_path, format='parquet')
+            dataset = ds.dataset(fact_prices_path, format='parquet')
             table = dataset.to_table(columns=['ticker'])
             tickers = table.column('ticker').unique().to_pylist()
 
             if limit:
                 tickers = tickers[:limit]
 
-            logger.info(f"Loaded {len(tickers)} tickers from stocks Silver layer")
+            logger.info(f"Loaded {len(tickers)} tickers with price data from stocks Silver")
             return tickers
         except Exception as e:
-            logger.warning(f"Could not load tickers from stocks Silver: {e}")
+            logger.warning(f"Could not load tickers from stocks Silver fact_stock_prices: {e}")
 
     # Fallback: v2.0 Bronze securities_prices_daily
     bronze_root = storage_cfg["roots"].get("bronze", "storage/bronze")
