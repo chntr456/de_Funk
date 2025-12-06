@@ -232,13 +232,20 @@ class UniversalSession:
 
     def _get_table_from_view_or_build(self, model, model_name: str, table_name: str) -> Any:
         """Try to get table from existing silver view, fall back to building."""
+        import logging
+        logger = logging.getLogger(__name__)
+
         if hasattr(self.connection, 'table'):
             view_name = f"{model_name}.{table_name}"
             try:
-                return self.connection.table(view_name)
-            except Exception:
-                pass
+                result = self.connection.table(view_name)
+                logger.debug(f"Using DuckDB view: {view_name}")
+                return result
+            except Exception as e:
+                logger.debug(f"View {view_name} not available ({e}), building from source")
 
+        # This triggers a build from Bronze - can be slow for large tables
+        logger.info(f"Building {model_name}.{table_name} from source (may be slow)")
         return model.get_table(table_name)
 
     def get_table(

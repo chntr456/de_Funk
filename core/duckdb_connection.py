@@ -146,7 +146,7 @@ class DuckDBConnection(DataConnection):
             sys.stdout = StringIO()
 
             try:
-                setup = DuckDBViewSetup(db_path=Path(self.db_path), config=config)
+                setup = DuckDBViewSetup(db_path=Path(self.db_path), config=config, repo_root=repo_root)
                 setup.setup_all(dry_run=False)
                 logger.info("✓ Model views initialized successfully")
             finally:
