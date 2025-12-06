@@ -234,12 +234,28 @@ class SecuritiesPricesFacetAV(AlphaVantageFacet):
         # Alpha Vantage returns nested dict, need to flatten
         flattened_batches: List[List[dict]] = []
 
+        # If _call_contexts is empty (direct normalize() call without calls()),
+        # create contexts from self.tickers
+        if not self._call_contexts and self.tickers:
+            self._call_contexts = [
+                {"ticker": t, "asset_type": self._infer_asset_type(t)}
+                for t in self.tickers
+            ]
+
         for i, batch in enumerate(raw_batches):
             ctx = None
             if i < len(self._call_contexts):
                 ctx = self._call_contexts[i]
 
-            if not ctx or not batch:
+            if not ctx:
+                # Still no context - use first ticker as fallback
+                if self.tickers:
+                    ctx = {"ticker": self.tickers[0], "asset_type": self._infer_asset_type(self.tickers[0])}
+                else:
+                    flattened_batches.append([])
+                    continue
+
+            if not batch:
                 flattened_batches.append([])
                 continue
 
