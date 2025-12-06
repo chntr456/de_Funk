@@ -263,8 +263,8 @@ class BronzeSink:
             if partitions:
                 writer = writer.partitionBy(*partitions)
 
-            # Enable schema evolution
-            writer = writer.option("overwriteSchema", "true")
+            # Enable schema evolution (mergeSchema is compatible with dynamic partition mode)
+            writer = writer.option("mergeSchema", "true")
             writer.save(str(base_path))
 
             logger.info(f"Upsert complete for {table}: read-merge-overwrite strategy")
