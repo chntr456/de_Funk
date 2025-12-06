@@ -49,7 +49,7 @@ SAMPLE_STOCKS = [
 ]
 
 
-def create_securities_reference(output_path: Path, stocks: list, snapshot_dt: str):
+def create_securities_reference(output_path: Path, stocks: list):
     """Create securities_reference Bronze table."""
 
     records = []
@@ -91,8 +91,8 @@ def create_securities_reference(output_path: Path, stocks: list, snapshot_dt: st
 
     df = pd.DataFrame(records)
 
-    # Write to partitioned path
-    partition_path = output_path / f"snapshot_dt={snapshot_dt}" / "asset_type=stocks"
+    # Write to partitioned path (partition by asset_type only)
+    partition_path = output_path / "asset_type=stocks"
     partition_path.mkdir(parents=True, exist_ok=True)
 
     table = pa.Table.from_pandas(df)
@@ -192,11 +192,10 @@ def main():
     # Date range
     date_to = datetime.now().date()
     date_from = date_to - timedelta(days=args.days)
-    snapshot_dt = date_to.isoformat()
 
     print("Creating securities_reference...")
     ref_path = bronze_root / "securities_reference"
-    ref_df = create_securities_reference(ref_path, stocks, snapshot_dt)
+    ref_df = create_securities_reference(ref_path, stocks)
 
     print("\nCreating securities_prices_daily...")
     prices_path = bronze_root / "securities_prices_daily"

@@ -10,7 +10,7 @@ Key Differences from Polygon:
 - One API call per ticker (no bulk endpoint)
 
 Bronze table: bronze/securities_reference/
-Partitions: snapshot_dt, asset_type
+Partitions: asset_type
 """
 
 from typing import Iterable, List

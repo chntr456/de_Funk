@@ -98,8 +98,8 @@ class AlphaVantageProvider(BaseProvider):
     # This dict is kept for backwards compatibility but should not be used
     # TODO: Remove in v3.0
     PARTITION_COLUMNS = {
-        DataType.REFERENCE: ["snapshot_dt", "asset_type"],
-        DataType.PRICES: ["asset_type", "year", "month"],
+        DataType.REFERENCE: ["asset_type"],
+        DataType.PRICES: ["year"],
         DataType.INCOME_STATEMENT: ["report_type", "snapshot_date"],
         DataType.BALANCE_SHEET: ["report_type", "snapshot_date"],
         DataType.CASH_FLOW: ["report_type", "snapshot_date"],

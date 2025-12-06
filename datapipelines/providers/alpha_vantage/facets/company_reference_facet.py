@@ -11,7 +11,7 @@ Key Fields:
 - PE ratio, EPS, dividend info
 
 Bronze table: bronze/company_reference/
-Partitions: snapshot_dt
+Partitions: none (single Delta table)
 """
 
 from typing import List
@@ -66,7 +66,6 @@ class CompanyReferenceFacet(AlphaVantageFacet):
         ("revenue_ttm", "double"),      # Trailing 12 month revenue
         ("profit_margin", "double"),    # Profit margin
         ("is_active", "boolean"),       # Currently active
-        ("snapshot_dt", "string"),      # Ingestion date
     ]
 
     def __init__(self, spark, *, tickers: List[str]):
@@ -104,7 +103,6 @@ class CompanyReferenceFacet(AlphaVantageFacet):
             StructField("revenue_ttm", DoubleType(), True),
             StructField("profit_margin", DoubleType(), True),
             StructField("is_active", BooleanType(), True),
-            StructField("snapshot_dt", StringType(), True),
         ])
 
     def postprocess(self, df):
@@ -162,7 +160,6 @@ class CompanyReferenceFacet(AlphaVantageFacet):
             'revenue_ttm': safe_double(pdf.get('RevenueTTM')),
             'profit_margin': safe_double(pdf.get('ProfitMargin')),
             'is_active': [True] * len(pdf),
-            'snapshot_dt': [datetime.now().strftime('%Y-%m-%d')] * len(pdf),
         })
 
         # Only keep rows with CIK (companies we can actually track)

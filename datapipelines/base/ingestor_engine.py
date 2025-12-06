@@ -353,7 +353,7 @@ class IngestorEngine:
                     combined,
                     "company_reference",
                     key_columns=["cik"],
-                    partitions=["snapshot_dt"]
+                    partitions=[]
                 )
 
                 if path:
