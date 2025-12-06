@@ -2300,13 +2300,22 @@ class AlphaVantageIngestor(Ingestor):
 
         # Prices - partition config comes from storage.json
         if prices_dfs:
-            path = union_and_write(
-                prices_dfs,
-                "securities_prices_daily",
-                ["ticker", "trade_date"]
-            )
-            if path:
-                results['securities_prices_daily'] = path
+            logger.info(f"Writing {len(prices_dfs)} price DataFrames to securities_prices_daily")
+            try:
+                path = union_and_write(
+                    prices_dfs,
+                    "securities_prices_daily",
+                    ["ticker", "trade_date"]
+                )
+                if path:
+                    results['securities_prices_daily'] = path
+                    logger.info(f"Prices written to {path}")
+                else:
+                    logger.warning("union_and_write returned None for prices")
+            except Exception as e:
+                logger.error(f"Failed to write prices: {e}", exc_info=True)
+        else:
+            logger.warning("prices_dfs is empty - no prices to write")
 
         # Fundamentals
         if income_dfs:

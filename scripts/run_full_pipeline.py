@@ -229,6 +229,9 @@ def run_full_pipeline(
             print()
             print(f"✓ Data ingestion completed!")
             print(f"  Tickers processed: {tickers_count}")
+            print(f"  Securities reference: {'✓' if ingestion_results.get('securities_reference') else '✗'}")
+            print(f"  Company reference: {'✓' if ingestion_results.get('company_reference') else '✗'}")
+            print(f"  Prices (securities_prices_daily): {'✓' if ingestion_results.get('securities_prices_daily') else '✗'}")
             if include_fundamentals:
                 print(f"  Income statements: {'✓' if ingestion_results.get('income_statements') else '✗'}")
                 print(f"  Balance sheets: {'✓' if ingestion_results.get('balance_sheets') else '✗'}")
