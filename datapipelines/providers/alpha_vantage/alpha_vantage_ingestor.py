@@ -1073,7 +1073,10 @@ class AlphaVantageIngestor(Ingestor):
                 (~upper(col("ticker")).rlike(r".*-P-.*|.*-P[A-Z]$")) &
                 (~upper(col("ticker")).rlike(r".*-U[N]?$")) &
                 (~upper(col("ticker")).rlike(r".*-R[T]?$")) &
-                (~upper(col("ticker")).rlike(r".*[-][A-Z]{2,}$"))
+                (~upper(col("ticker")).rlike(r".*[-][A-Z]{2,}$")) &
+                # SPAC patterns without dashes
+                (~upper(col("ticker")).rlike(r"^[A-Z]{3,4}[A-Z][WUR]$")) &
+                (~upper(col("ticker")).rlike(r"^[A-Z]{4,5}[WUR]$"))
             )
 
             # Apply minimum market cap filter if specified
@@ -1179,6 +1182,9 @@ class AlphaVantageIngestor(Ingestor):
                     r'.*-R[T]?$',           # Rights (-R, -RT)
                     r'.*[-][A-Z]{2,}$',     # Other special suffixes
                     r'^-.*',                # Tickers starting with dash (malformed)
+                    # SPAC patterns without dashes (4-5 char tickers ending in type indicator)
+                    r'^[A-Z]{3,4}[A-Z][WUR]$',  # SPACs: base(3-4) + class(1) + type(W/U/R)
+                    r'^[A-Z]{4,5}[WUR]$',       # SPACs: 4-5 char base + type (W/U/R)
                 ]
                 combined_pattern = re.compile('|'.join(exclude_patterns), re.IGNORECASE)
 
