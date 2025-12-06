@@ -321,9 +321,11 @@ class GraphBuilder:
         # Use backend type to determine how to load
         if self.backend == 'spark':
             from models.api.dal import BronzeTable
-            # BronzeTable expects SparkSession, not SparkConnection
-            # BronzeTable auto-detects Delta/Parquet format
-            bronze = BronzeTable(self.connection.spark, self.storage_router, table_name)
+            # BronzeTable expects SparkSession
+            # When using Spark directly, self.connection IS the SparkSession
+            # When using a wrapper, it may have a .spark attribute
+            spark = getattr(self.connection, 'spark', self.connection)
+            bronze = BronzeTable(spark, self.storage_router, table_name)
             return bronze.read(merge_schema=True)
         else:
             # DuckDB - use read_table which auto-detects Delta/Parquet
