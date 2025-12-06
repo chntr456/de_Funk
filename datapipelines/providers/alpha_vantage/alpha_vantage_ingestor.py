@@ -2186,6 +2186,16 @@ class AlphaVantageIngestor(Ingestor):
                     "No market cap data available. Run with --use-bulk-listing first."
                 )
 
+            # Identify which tickers are stocks (for fundamentals)
+            # Market cap sorted tickers come from securities_reference, check asset_type
+            if include_fundamentals:
+                stock_tickers_list = self.get_stock_tickers_from_db(tickers)
+                stock_tickers_set = set(stock_tickers_list)
+                non_stock_count = len(tickers) - len(stock_tickers_set)
+                print(f"  Stocks (will get fundamentals): {len(stock_tickers_set)}")
+                if non_stock_count > 0:
+                    print(f"  Non-stocks (prices only): {non_stock_count}")
+
         elif tickers is None:
             raise ValueError(
                 "No tickers provided. Use --use-bulk-listing or provide tickers."
@@ -2235,6 +2245,9 @@ class AlphaVantageIngestor(Ingestor):
             'earnings': None
         }
 
+        # Error collection for end-of-run summary
+        all_errors: list = []  # List of (ticker, error_type, error_msg)
+
         # Process tickers in batches
         for batch_idx in range(0, total_tickers, batch_write_size):
             batch_num = batch_idx // batch_write_size + 1
@@ -2262,6 +2275,16 @@ class AlphaVantageIngestor(Ingestor):
                         tracker=tracker,
                         data_types=data_types if ticker_is_stock else ['reference', 'prices']
                     )
+
+                # Collect any errors for end-of-run summary
+                if ticker_data.get('errors'):
+                    for err in ticker_data['errors']:
+                        # Parse "data_type: error_message" format
+                        if ': ' in err:
+                            err_type, err_msg = err.split(': ', 1)
+                        else:
+                            err_type, err_msg = 'unknown', err
+                        all_errors.append((ticker, err_type, err_msg))
 
                 # Normalize and accumulate data
                 with metrics.time(f"normalize_{ticker}"):
@@ -2368,7 +2391,57 @@ class AlphaVantageIngestor(Ingestor):
         # Print performance metrics
         metrics.print_report()
 
+        # Print error summary if there were any errors
+        if all_errors:
+            self._print_error_summary(all_errors)
+            results['errors'] = all_errors
+
         return results
+
+    def _print_error_summary(self, errors: list) -> None:
+        """
+        Print a summary of all errors grouped by error type.
+
+        Args:
+            errors: List of (ticker, error_type, error_msg) tuples
+        """
+        from collections import Counter, defaultdict
+
+        print()
+        print("=" * 70)
+        print("⚠️  ERROR SUMMARY")
+        print("=" * 70)
+        print(f"\nTotal errors: {len(errors)}")
+
+        # Group by error type
+        by_type = defaultdict(list)
+        for ticker, err_type, err_msg in errors:
+            by_type[err_type].append((ticker, err_msg))
+
+        # Count by error message (to find common patterns)
+        msg_counts = Counter(err_msg for _, _, err_msg in errors)
+
+        print("\nErrors by data type:")
+        print("-" * 50)
+        for err_type, items in sorted(by_type.items(), key=lambda x: -len(x[1])):
+            print(f"\n  {err_type}: {len(items)} errors")
+            # Show sample tickers (first 5)
+            sample_tickers = [t for t, _ in items[:5]]
+            if len(items) > 5:
+                print(f"    Sample tickers: {', '.join(sample_tickers)}... (+{len(items)-5} more)")
+            else:
+                print(f"    Tickers: {', '.join(sample_tickers)}")
+
+        # Show most common error messages
+        print("\nMost common error messages:")
+        print("-" * 50)
+        for msg, count in msg_counts.most_common(5):
+            truncated = msg[:60] + "..." if len(msg) > 60 else msg
+            print(f"  ({count}x) {truncated}")
+
+        print()
+        print("=" * 70)
+        print()
 
     def _write_accumulated_data(
         self,
