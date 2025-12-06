@@ -2364,38 +2364,6 @@ class AlphaVantageIngestor(Ingestor):
             if path:
                 results['earnings'] = path
 
-        # Compact all written tables to reduce file count
-        self._compact_bronze_tables(results)
-
-    def _compact_bronze_tables(self, results: dict) -> None:
-        """
-        Compact all Bronze tables that were written to.
-
-        Uses delta-rs OPTIMIZE + VACUUM to merge small files and remove old versions.
-        This prevents file accumulation over multiple pipeline runs.
-        """
-        tables_to_compact = [
-            table for table in [
-                'securities_reference', 'company_reference', 'securities_prices_daily',
-                'income_statements', 'balance_sheets', 'cash_flows', 'earnings'
-            ]
-            if results.get(table) is not None
-        ]
-
-        if not tables_to_compact:
-            return
-
-        logger.info(f"Compacting {len(tables_to_compact)} Bronze tables...")
-
-        for table in tables_to_compact:
-            result = self.sink.compact(table, vacuum=True)
-            if result.get('status') == 'success':
-                logger.info(f"  ✓ {table}: {result['files_before']} → {result['files_after']} files")
-            elif result.get('status') == 'skipped':
-                logger.debug(f"  - {table}: skipped ({result.get('reason', 'unknown')})")
-            else:
-                logger.warning(f"  ✗ {table}: {result.get('error', 'unknown error')}")
-
     def _fetch_ticker_data_with_tracking(
         self,
         ticker: str,

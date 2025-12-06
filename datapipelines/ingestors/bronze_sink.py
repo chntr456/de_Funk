@@ -172,28 +172,30 @@ class BronzeSink:
         update_existing: bool = True
     ) -> str:
         """
-        Upsert (merge) DataFrame into bronze table using Delta Lake MERGE.
+        Upsert DataFrame into bronze table using Read-Merge-Overwrite strategy.
 
-        NOTE: For immutable time-series data (prices), prefer append_immutable() instead.
-        Use upsert() for:
-        - Reference data that can change (company info, metadata)
-        - Backfilling historical data for specific tickers
-        - Data corrections
+        This approach reads existing data, merges with new data, deduplicates,
+        and overwrites the table. This prevents file accumulation that occurs
+        with Delta MERGE operations.
+
+        Strategy:
+        - First write: Simple overwrite
+        - Subsequent writes: Read existing → Union → Deduplicate → Overwrite
+        - Result: Consistent file count (controlled by coalesce)
 
         Args:
             df: Spark DataFrame to upsert
             table: Table name (must exist in storage config)
-            key_columns: Columns that uniquely identify a row (e.g., ["ticker"] or ["ticker", "trade_date"])
+            key_columns: Columns that uniquely identify a row
             partitions: List of partition column names for new tables
-            update_existing: If True, update existing rows. If False, only insert new rows.
-                            Use False for bulk listing data that shouldn't overwrite detailed OVERVIEW data.
+            update_existing: If True, new data overwrites existing for same key.
+                            If False, existing data is preserved.
 
         Returns:
             Path to table
         """
         from datetime import date
-        from delta.tables import DeltaTable
-        from pyspark.sql.functions import lit, row_number
+        from pyspark.sql.functions import lit, row_number, col
         from pyspark.sql.window import Window
 
         # Get base path for table
@@ -205,16 +207,7 @@ class BronzeSink:
             if "snapshot_dt" not in df.columns:
                 df = df.withColumn("snapshot_dt", lit(date.today().isoformat()))
 
-        # CRITICAL: Deduplicate source DataFrame by key columns before merge
-        # This prevents "multiple source rows matching target row" errors
-        # (e.g., GOOGL and GOOG both have the same CIK)
-        if key_columns:
-            # Use row_number to keep only first occurrence per key
-            window = Window.partitionBy(*key_columns).orderBy(lit(1))
-            df = (df
-                  .withColumn("_row_num", row_number().over(window))
-                  .filter("_row_num = 1")
-                  .drop("_row_num"))
+        spark = df.sparkSession
 
         # Check if table exists
         is_existing = self._is_delta_table(base_path)
@@ -222,32 +215,59 @@ class BronzeSink:
         if not is_existing:
             # First write - create the table
             base_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Deduplicate new data
+            if key_columns:
+                window = Window.partitionBy(*key_columns).orderBy(lit(1))
+                df = (df
+                      .withColumn("_row_num", row_number().over(window))
+                      .filter("_row_num = 1")
+                      .drop("_row_num"))
+
+            # Coalesce to minimize file count
+            df = df.coalesce(4)
+
             writer = df.write.format("delta").mode("overwrite")
             if partitions:
                 writer = writer.partitionBy(*partitions)
             writer.save(str(base_path))
         else:
-            # Table exists - perform MERGE
-            spark = df.sparkSession
-            delta_table = DeltaTable.forPath(spark, str(base_path))
+            # Read-Merge-Overwrite: Read existing, union with new, deduplicate, overwrite
+            existing_df = spark.read.format("delta").load(str(base_path))
 
-            # Build merge condition from key columns
-            merge_condition = " AND ".join([f"target.{col} = source.{col}" for col in key_columns])
+            # Add a source marker to handle update_existing logic
+            existing_df = existing_df.withColumn("_source", lit(0))  # 0 = existing
+            new_df = df.withColumn("_source", lit(1))  # 1 = new
 
-            # Perform merge based on update_existing flag
-            if update_existing:
-                # Full upsert: update existing + insert new
-                (delta_table.alias("target")
-                    .merge(df.alias("source"), merge_condition)
-                    .whenMatchedUpdateAll()
-                    .whenNotMatchedInsertAll()
-                    .execute())
+            # Union all data
+            combined = existing_df.unionByName(new_df, allowMissingColumns=True)
+
+            # Deduplicate by key columns
+            # If update_existing=True, prefer new data (source=1)
+            # If update_existing=False, prefer existing data (source=0)
+            if key_columns:
+                order_col = col("_source").desc() if update_existing else col("_source").asc()
+                window = Window.partitionBy(*key_columns).orderBy(order_col)
+                combined = (combined
+                           .withColumn("_row_num", row_number().over(window))
+                           .filter("_row_num = 1")
+                           .drop("_row_num", "_source"))
             else:
-                # Insert-only: only add new rows, preserve existing data
-                (delta_table.alias("target")
-                    .merge(df.alias("source"), merge_condition)
-                    .whenNotMatchedInsertAll()
-                    .execute())
+                combined = combined.drop("_source")
+
+            # Coalesce to minimize file count
+            combined = combined.coalesce(4)
+
+            # Overwrite the entire table
+            writer = combined.write.format("delta").mode("overwrite")
+            if partitions:
+                writer = writer.partitionBy(*partitions)
+
+            # Enable schema evolution
+            writer = writer.option("overwriteSchema", "true")
+            writer.save(str(base_path))
+
+            logger.info(f"Upsert complete for {table}: read-merge-overwrite strategy")
 
         return str(base_path)
 
@@ -321,111 +341,3 @@ class BronzeSink:
 
         writer.save(path)
 
-    def compact(
-        self,
-        table: str,
-        vacuum: bool = True,
-        target_file_size_mb: int = 128,
-        retention_hours: int = 168
-    ) -> dict:
-        """
-        Compact a Delta table using OPTIMIZE and optionally VACUUM.
-
-        This reduces the number of small files by merging them into larger ones,
-        improving read performance. Should be called after batch writes.
-
-        Args:
-            table: Table name (must exist in storage config)
-            vacuum: If True, also remove old files (default: True)
-            target_file_size_mb: Target size for compacted files (default: 128 MB)
-            retention_hours: Hours to retain old files before vacuum (default: 168 = 7 days)
-
-        Returns:
-            Dictionary with compaction results:
-            {
-                'status': 'success' | 'skipped' | 'error',
-                'files_before': int,
-                'files_after': int,
-                'files_removed': int,
-                'error': str (if status == 'error')
-            }
-        """
-        try:
-            from deltalake import DeltaTable
-        except ImportError:
-            logger.warning("deltalake package not installed - skipping compaction")
-            return {'status': 'skipped', 'reason': 'deltalake not installed'}
-
-        # Get table path
-        table_cfg = self._table_cfg(table)
-        base_path = Path(self.cfg["roots"]["bronze"]) / table_cfg["rel"]
-
-        if not self._is_delta_table(base_path):
-            return {'status': 'skipped', 'reason': 'not a delta table'}
-
-        try:
-            dt = DeltaTable(str(base_path))
-
-            # Count files before
-            parquet_files_before = list(base_path.rglob('*.parquet'))
-            files_before = len([f for f in parquet_files_before if '_delta_log' not in str(f)])
-
-            # Skip if already well compacted (< 5 files or avg size > 50 MB)
-            if files_before > 0:
-                total_size = sum(f.stat().st_size for f in parquet_files_before if f.exists() and '_delta_log' not in str(f))
-                avg_size_mb = total_size / files_before / (1024 * 1024)
-                if files_before <= 4 and avg_size_mb >= 50:
-                    logger.debug(f"Table {table} already well compacted ({files_before} files, {avg_size_mb:.1f} MB avg)")
-                    return {'status': 'skipped', 'reason': 'already compacted', 'files': files_before}
-
-            # Run OPTIMIZE (compact small files)
-            logger.info(f"Compacting {table}: {files_before} files...")
-            dt.optimize.compact()
-
-            # Run VACUUM if requested (remove old files)
-            if vacuum:
-                logger.debug(f"Vacuuming {table} (retention: {retention_hours}h)...")
-                dt.vacuum(
-                    retention_hours=retention_hours,
-                    enforce_retention_duration=True,
-                    dry_run=False
-                )
-
-            # Count files after
-            parquet_files_after = list(base_path.rglob('*.parquet'))
-            files_after = len([f for f in parquet_files_after if '_delta_log' not in str(f)])
-
-            logger.info(f"Compacted {table}: {files_before} → {files_after} files")
-
-            return {
-                'status': 'success',
-                'files_before': files_before,
-                'files_after': files_after,
-                'files_removed': files_before - files_after
-            }
-
-        except Exception as e:
-            logger.error(f"Compaction failed for {table}: {e}")
-            return {'status': 'error', 'error': str(e)}
-
-    def compact_all(self, vacuum: bool = True) -> dict:
-        """
-        Compact all Delta tables in the bronze layer.
-
-        Args:
-            vacuum: If True, also vacuum old files
-
-        Returns:
-            Dictionary with results for each table
-        """
-        bronze_root = Path(self.cfg["roots"]["bronze"])
-        results = {}
-
-        for table_name in self.cfg.get("tables", {}):
-            table_cfg = self.cfg["tables"][table_name]
-            table_path = bronze_root / table_cfg["rel"]
-
-            if self._is_delta_table(table_path):
-                results[table_name] = self.compact(table_name, vacuum=vacuum)
-
-        return results
