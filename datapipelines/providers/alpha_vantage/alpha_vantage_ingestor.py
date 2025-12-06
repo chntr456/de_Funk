@@ -439,11 +439,14 @@ class AlphaVantageIngestor(Ingestor):
                 if batch_count > 0:
                     # Use upsert (Delta MERGE) to accumulate data across runs
                     # Key on ticker - updates existing, inserts new
+                    # Get partitions from storage.json config (not hardcoded!)
+                    table_cfg = self.sink._table_cfg(table_name)
+                    table_partitions = table_cfg.get("partitions", []) or None
                     table_path = self.sink.upsert(
                         df,
                         table_name,
                         key_columns=["ticker"],
-                        partitions=["snapshot_dt", "asset_type"]
+                        partitions=table_partitions
                     )
 
                     total_rows_written += batch_count
@@ -457,11 +460,14 @@ class AlphaVantageIngestor(Ingestor):
                         company_count = company_df.count()
 
                         if company_count > 0:
+                            # Get partitions from storage.json config
+                            company_cfg = self.sink._table_cfg("company_reference")
+                            company_partitions = company_cfg.get("partitions", []) or None
                             self.sink.upsert(
                                 company_df,
                                 "company_reference",
                                 key_columns=["ticker"],
-                                partitions=["snapshot_dt"]
+                                partitions=company_partitions
                             )
                             print(f"  ✓ Written {company_count} company rows")
                     except Exception as ce:
@@ -639,11 +645,12 @@ class AlphaVantageIngestor(Ingestor):
                 if batch_count > 0:
                     # Use upsert (Delta MERGE) to accumulate data across runs
                     # Key on ticker + trade_date - updates existing, inserts new
+                    # NOTE: No partitioning to avoid small file problem
                     table_path = self.sink.upsert(
                         df,
                         table_name,
                         key_columns=["ticker", "trade_date"],
-                        partitions=["asset_type", "year", "month"]
+                        partitions=None  # No partitioning - Delta handles data skipping
                     )
 
                     total_rows_written += batch_count
@@ -803,11 +810,14 @@ class AlphaVantageIngestor(Ingestor):
         # Use upsert with update_existing=False for bulk listing
         # This ONLY INSERTS new tickers, preserving existing detailed OVERVIEW data
         # Without this, bulk listing would overwrite CIK/market_cap/sector with NULLs
+        # Get partitions from storage.json config (not hardcoded!)
+        listing_cfg = self.sink._table_cfg(table_name)
+        listing_partitions = listing_cfg.get("partitions", []) or None
         table_path = self.sink.upsert(
             df_normalized,
             table_name,
             key_columns=["ticker"],
-            partitions=["snapshot_dt", "asset_type"],
+            partitions=listing_partitions,
             update_existing=False  # Don't overwrite existing detailed data
         )
 
@@ -1331,12 +1341,15 @@ class AlphaVantageIngestor(Ingestor):
         # Use upsert (Delta MERGE) to accumulate data across runs
         # Key on ticker + fiscal_date_ending + report_type
         # Coalesce to reduce file count
+        # Get partitions from storage.json config (not hardcoded!)
+        income_cfg = self.sink._table_cfg(table_name)
+        income_partitions = income_cfg.get("partitions", []) or None
         final_df = final_df.coalesce(4)
         table_path = self.sink.upsert(
             final_df,
             table_name,
             key_columns=["ticker", "fiscal_date_ending", "report_type"],
-            partitions=["report_type", "snapshot_date"]
+            partitions=income_partitions
         )
         print(f"Written {final_df.count()} income statement records to {table_path}")
 
@@ -1405,12 +1418,15 @@ class AlphaVantageIngestor(Ingestor):
 
         # Use upsert (Delta MERGE) to accumulate data across runs
         # Key on ticker + fiscal_date_ending + report_type
+        # Get partitions from storage.json config (not hardcoded!)
+        balance_cfg = self.sink._table_cfg(table_name)
+        balance_partitions = balance_cfg.get("partitions", []) or None
         final_df = final_df.coalesce(4)
         table_path = self.sink.upsert(
             final_df,
             table_name,
             key_columns=["ticker", "fiscal_date_ending", "report_type"],
-            partitions=["report_type", "snapshot_date"]
+            partitions=balance_partitions
         )
         print(f"Written {final_df.count()} balance sheet records to {table_path}")
 
@@ -1480,12 +1496,15 @@ class AlphaVantageIngestor(Ingestor):
 
         # Use upsert (Delta MERGE) to accumulate data across runs
         # Key on ticker + fiscal_date_ending + report_type
+        # Get partitions from storage.json config (not hardcoded!)
+        cashflow_cfg = self.sink._table_cfg(table_name)
+        cashflow_partitions = cashflow_cfg.get("partitions", []) or None
         final_df = final_df.coalesce(4)
         table_path = self.sink.upsert(
             final_df,
             table_name,
             key_columns=["ticker", "fiscal_date_ending", "report_type"],
-            partitions=["report_type", "snapshot_date"]
+            partitions=cashflow_partitions
         )
         print(f"Written {final_df.count()} cash flow records to {table_path}")
 
@@ -1554,12 +1573,15 @@ class AlphaVantageIngestor(Ingestor):
 
         # Use upsert (Delta MERGE) to accumulate data across runs
         # Key on ticker + fiscal_date_ending + report_type
+        # Get partitions from storage.json config (not hardcoded!)
+        earnings_cfg = self.sink._table_cfg(table_name)
+        earnings_partitions = earnings_cfg.get("partitions", []) or None
         final_df = final_df.coalesce(4)
         table_path = self.sink.upsert(
             final_df,
             table_name,
             key_columns=["ticker", "fiscal_date_ending", "report_type"],
-            partitions=["report_type", "snapshot_date"]
+            partitions=earnings_partitions
         )
         print(f"Written {final_df.count()} earnings records to {table_path}")
 
@@ -1629,7 +1651,10 @@ class AlphaVantageIngestor(Ingestor):
         from functools import reduce
         final_df = reduce(lambda a, b: a.union(b), all_dfs)
 
-        table_path = self.sink.write(final_df, table_name, partitions=["underlying_ticker", "option_type"])
+        # Get partitions from storage.json config (not hardcoded!)
+        options_cfg = self.sink._table_cfg(table_name)
+        options_partitions = options_cfg.get("partitions", []) or None
+        table_path = self.sink.write(final_df, table_name, partitions=options_partitions)
         print(f"Written {final_df.count()} options records to {table_path}")
 
         return table_path
@@ -2241,11 +2266,15 @@ class AlphaVantageIngestor(Ingestor):
         """Write accumulated DataFrames to storage."""
         from functools import reduce
 
-        def union_and_write(dfs: list, table: str, key_cols: list, partitions: list):
+        def union_and_write(dfs: list, table: str, key_cols: list):
+            """Write DataFrames using partition config from storage.json."""
             if not dfs:
                 return None
             combined = reduce(lambda a, b: a.union(b), dfs)
             combined = combined.coalesce(4)
+            # Get partition config from storage.json (not hardcoded!)
+            table_cfg = self.sink._table_cfg(table)
+            partitions = table_cfg.get("partitions", []) or None
             path = self.sink.upsert(combined, table, key_columns=key_cols, partitions=partitions)
             return path
 
@@ -2254,8 +2283,7 @@ class AlphaVantageIngestor(Ingestor):
             path = union_and_write(
                 reference_dfs,
                 "securities_reference",
-                ["ticker"],
-                ["snapshot_dt", "asset_type"]
+                ["ticker"]
             )
             if path:
                 results['securities_reference'] = path
@@ -2265,19 +2293,17 @@ class AlphaVantageIngestor(Ingestor):
             path = union_and_write(
                 company_dfs,
                 "company_reference",
-                ["cik"],
-                ["snapshot_dt"]
+                ["cik"]
             )
             if path:
                 results['company_reference'] = path
 
-        # Prices
+        # Prices - partition config comes from storage.json
         if prices_dfs:
             path = union_and_write(
                 prices_dfs,
                 "securities_prices_daily",
-                ["ticker", "trade_date"],
-                ["asset_type", "year", "month"]
+                ["ticker", "trade_date"]
             )
             if path:
                 results['securities_prices_daily'] = path

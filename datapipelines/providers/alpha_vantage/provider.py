@@ -93,7 +93,10 @@ class AlphaVantageProvider(BaseProvider):
         DataType.OPTIONS: ["contract_id", "trade_date"],
     }
 
-    # Partition columns
+    # DEPRECATED: Partition columns are now defined in configs/storage.json
+    # Use BronzeSink._table_cfg(table_name).get("partitions", []) instead
+    # This dict is kept for backwards compatibility but should not be used
+    # TODO: Remove in v3.0
     PARTITION_COLUMNS = {
         DataType.REFERENCE: ["snapshot_dt", "asset_type"],
         DataType.PRICES: ["asset_type", "year", "month"],
@@ -357,7 +360,16 @@ class AlphaVantageProvider(BaseProvider):
         return self.KEY_COLUMNS.get(data_type, ["ticker"])
 
     def get_partition_columns(self, data_type: DataType) -> List[str]:
-        """Get partition columns."""
+        """
+        DEPRECATED: Get partition columns.
+
+        Partition config should be read from configs/storage.json instead.
+        Use: BronzeSink._table_cfg(table_name).get("partitions", [])
+        """
+        logger.warning(
+            f"get_partition_columns() is deprecated. "
+            f"Read partitions from storage.json via BronzeSink._table_cfg() instead."
+        )
         return self.PARTITION_COLUMNS.get(data_type, [])
 
     def discover_tickers(self, state: str = "active", **kwargs) -> tuple:

@@ -310,10 +310,13 @@ class IngestorEngine:
                 combined = reduce(lambda a, b: a.union(b), dfs)
                 combined = combined.coalesce(4)
 
-                # Get table config from provider
+                # Get table config from provider and storage.json
                 table_name = self.provider.get_bronze_table_name(data_type)
                 key_columns = self.provider.get_key_columns(data_type)
-                partitions = self.provider.get_partition_columns(data_type)
+                # IMPORTANT: Get partitions from storage.json config (not provider)
+                # This ensures single source of truth for partition strategy
+                table_cfg = self.sink._table_cfg(table_name)
+                partitions = table_cfg.get("partitions", []) or None
 
                 # Choose write strategy based on data type
                 if data_type in self.IMMUTABLE_DATA_TYPES:

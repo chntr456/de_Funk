@@ -31,7 +31,7 @@
 
     "securities_reference": { "root": "bronze", "rel": "securities_reference", "partitions": ["snapshot_dt", "asset_type"], "comment": "v2.0 unified reference data - basic ticker info from LISTING_STATUS" },
     "company_reference": { "root": "bronze", "rel": "company_reference", "partitions": ["snapshot_dt"], "comment": "v2.0 company data from OVERVIEW - CIK, sector, industry, market_cap (separate from securities to avoid overwrite issues)" },
-    "securities_prices_daily": { "root": "bronze", "rel": "securities_prices_daily", "partitions": ["asset_type", "year", "month"], "comment": "v2.0 unified daily OHLCV for all asset types (year/month partitioning avoids partition sprawl)" },
+    "securities_prices_daily": { "root": "bronze", "rel": "securities_prices_daily", "partitions": ["year"], "comment": "v2.0 unified daily OHLCV - simplified partitioning (year only) avoids small file proliferation. Previous: [asset_type, year, month] caused 19K+ small files" },
 
     "income_statements": { "root": "bronze", "rel": "income_statements", "partitions": ["report_type", "snapshot_date"], "comment": "Alpha Vantage INCOME_STATEMENT - partitioned by report_type + snapshot_date (not ticker to avoid file sprawl)" },
     "balance_sheets": { "root": "bronze", "rel": "balance_sheets", "partitions": ["report_type", "snapshot_date"], "comment": "Alpha Vantage BALANCE_SHEET - partitioned by report_type + snapshot_date" },
