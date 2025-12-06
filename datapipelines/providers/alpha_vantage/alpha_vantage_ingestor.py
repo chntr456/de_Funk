@@ -2347,7 +2347,7 @@ class AlphaVantageIngestor(Ingestor):
                 write_time_ms = (time.time() - write_start) * 1000
                 tracker.complete_batch(write_time_ms=write_time_ms)
 
-            # Clear accumulators
+            # Clear accumulators and release Spark memory
             reference_dfs.clear()
             company_dfs.clear()
             prices_dfs.clear()
@@ -2355,6 +2355,10 @@ class AlphaVantageIngestor(Ingestor):
             balance_dfs.clear()
             cashflow_dfs.clear()
             earnings_dfs.clear()
+
+            # Clear Spark caches to prevent OOM on long runs
+            # This is critical for runs with 300+ batches
+            self.spark.catalog.clearCache()
             gc.collect()
 
         # Finalize and print summaries

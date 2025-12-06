@@ -12,8 +12,8 @@ from typing import Optional, Dict, Any, List
 @dataclass
 class SparkConfig:
     """Spark connection configuration."""
-    driver_memory: str = "4g"
-    executor_memory: str = "4g"
+    driver_memory: str = "8g"  # Increased for long-running batch jobs
+    executor_memory: str = "8g"  # Increased for long-running batch jobs
     shuffle_partitions: int = 200
     timezone: str = "UTC"
     legacy_time_parser: bool = True

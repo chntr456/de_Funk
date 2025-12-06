@@ -28,11 +28,12 @@ def get_spark(
         base_config = spark_config.to_spark_conf_dict()
     else:
         # Legacy default configuration
+        # Increased memory for long-running batch jobs (e.g., 400+ ticker ingestion)
         base_config = {
             "spark.sql.session.timeZone": "UTC",
             "spark.sql.shuffle.partitions": "200",
-            "spark.driver.memory": "4g",
-            "spark.executor.memory": "4g",
+            "spark.driver.memory": "8g",  # Increased from 4g for batch jobs
+            "spark.executor.memory": "8g",  # Increased from 4g for batch jobs
         }
 
     # Build Spark session with config
