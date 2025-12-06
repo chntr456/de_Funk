@@ -2263,7 +2263,7 @@ class AlphaVantageIngestor(Ingestor):
                 fetch_fundamentals = include_fundamentals and ticker_is_stock
 
                 # Fetch all data for this ticker
-                with metrics.time(f"fetch_{ticker}"):
+                with metrics.time("alpha_vantage_fetch"):
                     ticker_data = self._fetch_ticker_data_with_tracking(
                         ticker=ticker,
                         include_reference=not skip_reference_refresh,
@@ -2287,7 +2287,7 @@ class AlphaVantageIngestor(Ingestor):
                         all_errors.append((ticker, err_type, err_msg))
 
                 # Normalize and accumulate data
-                with metrics.time(f"normalize_{ticker}"):
+                with metrics.time("alpha_vantage_normalize"):
                     try:
                         # Reference data - wrap single response in batch format [[response]]
                         if ticker_data['reference']:
@@ -2360,7 +2360,7 @@ class AlphaVantageIngestor(Ingestor):
                         logger.warning(f"Failed to process {ticker}: {e}")
 
             # Write accumulated data at end of batch
-            with metrics.time("write_batch"):
+            with metrics.time("alpha_vantage_write"):
                 write_start = time.time()
                 self._write_accumulated_data(
                     reference_dfs, company_dfs, prices_dfs,
