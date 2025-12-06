@@ -269,7 +269,29 @@ class BronzeSink:
 
             logger.info(f"Upsert complete for {table}: read-merge-overwrite strategy")
 
+        # Clean up old files immediately
+        self._cleanup_old_files(base_path)
+
         return str(base_path)
+
+    def _cleanup_old_files(self, table_path: Path) -> None:
+        """Delete old parquet files not in current Delta version."""
+        try:
+            from deltalake import DeltaTable
+            dt = DeltaTable(str(table_path))
+            current_files = set(dt.files())
+
+            # Delete any parquet file not in current version
+            for f in table_path.rglob('*.parquet'):
+                if '_delta_log' in str(f):
+                    continue
+                rel_path = str(f.relative_to(table_path))
+                if rel_path not in current_files:
+                    f.unlink()
+        except ImportError:
+            pass  # No deltalake package, skip cleanup
+        except Exception as e:
+            logger.debug(f"Cleanup skipped: {e}")
 
     def write(self, df, table: str, partitions: Optional[List[str]] = None, mode: str = "overwrite") -> str:
         """
