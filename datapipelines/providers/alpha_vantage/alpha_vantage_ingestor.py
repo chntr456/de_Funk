@@ -2177,18 +2177,28 @@ class AlphaVantageIngestor(Ingestor):
 
                         # Prices
                         if ticker_data['prices']:
-                            price_facet = SecuritiesPricesFacetAV(
-                                self.spark,
-                                tickers=[ticker],
-                                date_from=date_from,
-                                date_to=date_to,
-                                outputsize=outputsize
-                            )
-                            # Wrap the prices data properly
-                            full_response = {"Time Series (Daily)": ticker_data['prices']}
-                            price_df = price_facet.normalize([[full_response]])
-                            if price_df.count() > 0:
-                                prices_dfs.append(price_df)
+                            logger.debug(f"Processing prices for {ticker}, data keys: {len(ticker_data['prices'])} dates")
+                            try:
+                                price_facet = SecuritiesPricesFacetAV(
+                                    self.spark,
+                                    tickers=[ticker],
+                                    date_from=date_from,
+                                    date_to=date_to,
+                                    outputsize=outputsize
+                                )
+                                # Wrap the prices data properly
+                                full_response = {"Time Series (Daily)": ticker_data['prices']}
+                                price_df = price_facet.normalize([[full_response]])
+                                row_count = price_df.count()
+                                logger.debug(f"Price normalization for {ticker}: {row_count} rows")
+                                if row_count > 0:
+                                    prices_dfs.append(price_df)
+                                else:
+                                    logger.warning(f"Price normalization returned 0 rows for {ticker}")
+                            except Exception as price_error:
+                                logger.error(f"Price normalization failed for {ticker}: {price_error}")
+                        else:
+                            logger.debug(f"No prices data for {ticker}")
 
                         # Fundamentals - only if enabled
                         if include_fundamentals:
