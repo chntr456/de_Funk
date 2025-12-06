@@ -233,29 +233,29 @@ class GraphBuilder:
                 # the dot as struct field access (e.g., _ticker_cik_lookup.cik would fail)
                 from pyspark.sql import functions as F
 
-                # Build join condition
+                # Rename ALL right columns with table prefix (including join keys)
+                # This avoids ambiguity after join when both tables have same column names
+                renamed_right_cols = {}
+                for col in right_df.columns:
+                    new_name = f"{join_table}__{col}"
+                    renamed_right_cols[col] = new_name
+                    right_df = right_df.withColumnRenamed(col, new_name)
+
+                # Build join condition using renamed right column names
                 join_cond = None
                 for left_col, right_col in join_pairs:
-                    cond = df[left_col] == right_df[right_col]
+                    renamed_right_col = renamed_right_cols[right_col]
+                    cond = df[left_col] == right_df[renamed_right_col]
                     join_cond = cond if join_cond is None else (join_cond & cond)
-
-                # Rename right columns to avoid duplicates (except join keys)
-                # Use double underscore separator: _ticker_cik_lookup__cik (not _ticker_cik_lookup.cik)
-                right_join_cols = {r for _, r in join_pairs}
-                for col in right_df.columns:
-                    if col not in right_join_cols:
-                        # Prefix with table name and double underscore for disambiguation
-                        right_df = right_df.withColumnRenamed(col, f"{join_table}__{col}")
 
                 # Perform join
                 df = df.join(right_df, join_cond, how=join_type)
 
-                # Drop duplicate join key columns from right side
+                # Drop the renamed join key columns from right side (they're duplicates)
                 for _, right_col in join_pairs:
-                    if right_col in df.columns:
-                        # The right side column is a duplicate, Spark keeps both
-                        # We need to drop the ambiguous one
-                        pass  # Spark handles this with the join condition
+                    renamed_col = renamed_right_cols[right_col]
+                    if renamed_col in df.columns:
+                        df = df.drop(renamed_col)
 
             else:
                 # DuckDB/pandas join
