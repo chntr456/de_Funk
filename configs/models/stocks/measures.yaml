@@ -44,11 +44,11 @@ simple_measures:
     format: "#,##0.00M"
     tags: [shares]
 
-  # Technical indicator measures
+  # Technical indicator measures (derived in fact_stock_prices)
   avg_rsi:
     description: "Average RSI across period"
     type: simple
-    source: fact_stock_technicals.rsi_14
+    source: fact_stock_prices.rsi_14
     aggregation: avg
     data_type: double
     format: "#,##0.00"
@@ -57,7 +57,7 @@ simple_measures:
   avg_volatility_20d:
     description: "Average 20-day annualized volatility"
     type: simple
-    source: fact_stock_technicals.volatility_20d
+    source: fact_stock_prices.volatility_20d
     aggregation: avg
     data_type: double
     format: "#,##0.00%"
@@ -66,7 +66,7 @@ simple_measures:
   avg_volatility_60d:
     description: "Average 60-day annualized volatility"
     type: simple
-    source: fact_stock_technicals.volatility_60d
+    source: fact_stock_prices.volatility_60d
     aggregation: avg
     data_type: double
     format: "#,##0.00%"
@@ -75,7 +75,7 @@ simple_measures:
   avg_volume_ratio:
     description: "Average volume ratio (current/20-day avg)"
     type: simple
-    source: fact_stock_technicals.volume_ratio
+    source: fact_stock_prices.volume_ratio
     aggregation: avg
     data_type: double
     format: "#,##0.00"

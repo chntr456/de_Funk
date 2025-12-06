@@ -62,8 +62,11 @@ facts:
 
     # No additional columns needed for basic stock prices
 
+  # NOTE: fact_stock_technicals columns are CONSOLIDATED into fact_stock_prices
+  # as derived window functions (see graph.yaml lines 42-70). This schema
+  # definition is kept for documentation but does not create a separate table.
   fact_stock_technicals:
-    description: "Technical indicators derived from prices"
+    description: "[DEPRECATED - use fact_stock_prices] Technical indicators derived from prices"
     columns:
       ticker:
         type: string
