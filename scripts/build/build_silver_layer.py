@@ -8,8 +8,8 @@ Usage:
     python -m scripts.build_silver_layer [--model MODEL_NAME]
 
 Examples:
-    python -m scripts.build_silver_layer --model company
-    python -m scripts.build_silver_layer --model macro
+    python -m scripts.build_silver_layer              # Build all models
+    python -m scripts.build_silver_layer --model stocks  # Build specific model
 """
 
 import sys
@@ -25,14 +25,71 @@ repo_root = setup_repo_imports()
 from orchestration.common.spark_session import get_spark
 from models.api.session import UniversalSession
 
+# Models in dependency order (core first, then models that depend on it)
+# Note: Only include models that have complete implementations
+BUILDABLE_MODELS = [
+    "core",      # Calendar dimension - foundation for all models
+    "company",   # Corporate entities (standalone)
+    "stocks",    # Stock securities (depends on core, company)
+    # "options", # Partial implementation - uncomment when ready
+    # "etfs",    # Skeleton - uncomment when ready
+    # "futures", # Skeleton - uncomment when ready
+]
+
+
+def build_model(session, model_name: str) -> dict:
+    """
+    Build a single model and return stats.
+
+    Args:
+        session: UniversalSession instance
+        model_name: Name of model to build
+
+    Returns:
+        Dict with build stats or error info
+    """
+    print(f"\n{'=' * 70}")
+    print(f"Building {model_name.upper()} Model Silver Layer")
+    print(f"{'=' * 70}")
+
+    try:
+        # Load and build model
+        model = session.load_model(model_name)
+        print(f"Building {model_name} model graph...")
+        model.ensure_built()
+
+        # List tables
+        tables = model.list_tables()
+        print(f"✓ Model built:")
+        print(f"  - Dimensions: {tables['dimensions']}")
+        print(f"  - Facts: {tables['facts']}")
+
+        # Write to Silver layer using BaseModel.write_tables()
+        stats = model.write_tables(use_optimized_writer=True)
+
+        return {
+            "status": "success",
+            "model": model_name,
+            "tables": tables,
+            "stats": stats
+        }
+
+    except Exception as e:
+        print(f"✗ Failed to build {model_name}: {e}")
+        return {
+            "status": "error",
+            "model": model_name,
+            "error": str(e)
+        }
+
 
 def main():
     parser = argparse.ArgumentParser(description="Build Silver layer from Bronze using BaseModel")
     parser.add_argument(
         '--model',
         type=str,
-        default='company',
-        help='Model name to build (default: company)'
+        default=None,
+        help='Model name to build (default: build ALL models)'
     )
     args = parser.parse_args()
 
@@ -44,10 +101,6 @@ def main():
     with open(storage_cfg_path) as f:
         storage_cfg = json.load(f)
 
-    print(f"\n{'=' * 70}")
-    print(f"Building {args.model.upper()} Model Silver Layer")
-    print(f"{'=' * 70}")
-
     # Create UniversalSession
     session = UniversalSession(
         connection=spark,
@@ -55,19 +108,41 @@ def main():
         repo_root=repo_root
     )
 
-    # Load and build model
-    model = session.load_model(args.model)
-    print(f"Building {args.model} model graph...")
-    model.ensure_built()
+    # Determine which models to build
+    if args.model:
+        models_to_build = [args.model]
+    else:
+        models_to_build = BUILDABLE_MODELS
+        print(f"\n{'=' * 70}")
+        print(f"Building ALL Silver Layer Models")
+        print(f"Models: {', '.join(models_to_build)}")
+        print(f"{'=' * 70}")
 
-    # List tables
-    tables = model.list_tables()
-    print(f"✓ Model built:")
-    print(f"  - Dimensions: {tables['dimensions']}")
-    print(f"  - Facts: {tables['facts']}")
+    # Build each model
+    results = []
+    for model_name in models_to_build:
+        result = build_model(session, model_name)
+        results.append(result)
 
-    # Write to Silver layer using BaseModel.write_tables()
-    stats = model.write_tables(use_optimized_writer=True)
+    # Print summary
+    print(f"\n{'=' * 70}")
+    print(f"Silver Layer Build Summary")
+    print(f"{'=' * 70}")
+
+    successful = [r for r in results if r["status"] == "success"]
+    failed = [r for r in results if r["status"] == "error"]
+
+    print(f"\n✓ Successful: {len(successful)}")
+    for r in successful:
+        tables = r.get("tables", {})
+        dim_count = len(tables.get("dimensions", []))
+        fact_count = len(tables.get("facts", []))
+        print(f"  - {r['model']}: {dim_count} dimensions, {fact_count} facts")
+
+    if failed:
+        print(f"\n✗ Failed: {len(failed)}")
+        for r in failed:
+            print(f"  - {r['model']}: {r['error']}")
 
     print(f"\n{'=' * 70}")
     print(f"✓ Silver layer build complete!")
