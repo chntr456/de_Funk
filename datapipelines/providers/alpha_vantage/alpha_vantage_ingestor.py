@@ -2133,6 +2133,9 @@ class AlphaVantageIngestor(Ingestor):
             data_types.extend(['income', 'balance', 'cashflow', 'earnings'])
 
         # Step 1: Determine tickers to process
+        # Note: We process ALL tickers for prices, but only stocks for fundamentals
+        stock_tickers_set = set()  # Track which tickers are stocks (for fundamentals)
+
         if use_bulk_listing:
             print("=" * 60)
             print("STEP 1: TICKER DISCOVERY (LISTING_STATUS)")
@@ -2145,14 +2148,15 @@ class AlphaVantageIngestor(Ingestor):
             tickers = [t for t in all_tickers if ticker_exchanges.get(t) in us_exchanges]
             print(f"  US exchange tickers: {len(tickers)}")
 
-            # Filter to stocks only (exclude ETFs, warrants, etc.) for fundamentals
-            # Uses database asset_type field, not raw API assetType
+            # Identify which tickers are stocks (for fundamentals only)
+            # All tickers will get prices, only stocks get fundamentals
             if include_fundamentals:
-                stock_tickers = self.get_stock_tickers_from_db(tickers)
-                non_stock_count = len(tickers) - len(stock_tickers)
+                stock_tickers_list = self.get_stock_tickers_from_db(tickers)
+                stock_tickers_set = set(stock_tickers_list)
+                non_stock_count = len(tickers) - len(stock_tickers_set)
                 if non_stock_count > 0:
-                    print(f"  Filtering to stocks only: {len(stock_tickers)} (excluding {non_stock_count} ETFs/warrants)")
-                tickers = stock_tickers
+                    print(f"  Stocks (will get fundamentals): {len(stock_tickers_set)}")
+                    print(f"  Non-stocks (prices only): {non_stock_count}")
 
         elif sort_by_market_cap and tickers is None:
             if not max_tickers:
@@ -2229,18 +2233,23 @@ class AlphaVantageIngestor(Ingestor):
             tracker.start_batch(batch_num, num_batches, batch_tickers)
 
             for ticker in batch_tickers:
+                # Determine if this ticker should get fundamentals
+                # (only stocks get fundamentals, all get prices)
+                ticker_is_stock = ticker in stock_tickers_set
+                fetch_fundamentals = include_fundamentals and ticker_is_stock
+
                 # Fetch all data for this ticker
                 with metrics.time(f"fetch_{ticker}"):
                     ticker_data = self._fetch_ticker_data_with_tracking(
                         ticker=ticker,
                         include_reference=not skip_reference_refresh,
                         include_prices=True,
-                        include_fundamentals=include_fundamentals,
+                        include_fundamentals=fetch_fundamentals,
                         date_from=date_from,
                         date_to=date_to,
                         outputsize=outputsize,
                         tracker=tracker,
-                        data_types=data_types
+                        data_types=data_types if ticker_is_stock else ['reference', 'prices']
                     )
 
                 # Normalize and accumulate data
@@ -2284,8 +2293,8 @@ class AlphaVantageIngestor(Ingestor):
                         else:
                             logger.debug(f"No prices data for {ticker}")
 
-                        # Fundamentals - only if enabled
-                        if include_fundamentals:
+                        # Fundamentals - only if enabled AND ticker is a stock
+                        if fetch_fundamentals:
                             if ticker_data['income_statement']:
                                 inc_facet = IncomeStatementFacet(self.spark, ticker=ticker)
                                 inc_df = inc_facet.normalize(ticker_data['income_statement'])
