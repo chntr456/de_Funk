@@ -1130,6 +1130,10 @@ class AlphaVantageIngestor(Ingestor):
         Uses the normalized asset_type from securities_reference table,
         NOT the raw assetType from Alpha Vantage API.
 
+        Also excludes warrants, units, rights, and preferred shares by ticker
+        pattern (e.g., -WS, -U, -R, -P-) since Alpha Vantage classifies some
+        of these as "Stock" incorrectly.
+
         Args:
             tickers: List of ticker symbols to filter
 
@@ -1138,6 +1142,7 @@ class AlphaVantageIngestor(Ingestor):
         """
         from pyspark.sql.functions import col, upper
         from pathlib import Path
+        import re
 
         if not tickers:
             return []
@@ -1156,15 +1161,34 @@ class AlphaVantageIngestor(Ingestor):
             else:
                 df = self.spark.read.parquet(str(ref_path))
 
-            # Filter to stocks only
+            # Filter to stocks only by asset_type
             if "asset_type" in df.columns:
                 # Get stock tickers from database
                 stock_df = df.filter(col("asset_type") == "stocks").select("ticker")
                 db_stock_tickers = {row.ticker for row in stock_df.collect()}
 
-                # Filter input tickers
+                # Filter input tickers by asset_type
                 stock_tickers = [t for t in tickers if t in db_stock_tickers]
-                return stock_tickers
+
+                # Exclude warrants, units, rights, preferred shares by ticker pattern
+                # Same patterns as get_tickers_by_market_cap()
+                exclude_patterns = [
+                    r'.*[-]?W[S]?$',        # Warrants (-WS, -W, WS)
+                    r'.*-P-.*|.*-P[A-Z]$',  # Preferred shares (-P-, -PA, -PB, etc.)
+                    r'.*-U[N]?$',           # Units (-U, -UN)
+                    r'.*-R[T]?$',           # Rights (-R, -RT)
+                    r'.*[-][A-Z]{2,}$',     # Other special suffixes
+                    r'^-.*',                # Tickers starting with dash (malformed)
+                ]
+                combined_pattern = re.compile('|'.join(exclude_patterns), re.IGNORECASE)
+
+                filtered_tickers = [t for t in stock_tickers if not combined_pattern.match(t)]
+
+                excluded_count = len(stock_tickers) - len(filtered_tickers)
+                if excluded_count > 0:
+                    print(f"  Excluding {excluded_count} warrants/units/rights by ticker pattern")
+
+                return filtered_tickers
             else:
                 logger.warning("asset_type column not found in securities_reference")
                 return tickers
