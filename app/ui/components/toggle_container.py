@@ -503,6 +503,18 @@ def apply_toggle_styles():
     .toggle-nested {
         margin-top: 0.5rem;
     }
+
+    /* Depth-based indentation for nested containers */
+    .toggle-depth-1 { margin-left: 16px; }
+    .toggle-depth-2 { margin-left: 32px; }
+    .toggle-depth-3 { margin-left: 48px; }
+    .toggle-depth-4 { margin-left: 64px; }
+
+    /* Subtle border for visual hierarchy */
+    .toggle-depth-border {
+        border-left: 2px solid rgba(28, 131, 225, 0.15);
+        padding-left: 8px;
+    }
     </style>
     """, unsafe_allow_html=True)
 

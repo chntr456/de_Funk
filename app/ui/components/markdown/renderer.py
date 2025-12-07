@@ -176,6 +176,11 @@ def _render_nested_toggles(
                 context=context
             ) as tc:
                 if tc.is_open:
+                    # Apply depth-based indentation for nested content
+                    if depth > 0:
+                        indent_class = f"toggle-depth-{min(depth, 4)} toggle-depth-border"
+                        st.markdown(f'<div class="{indent_class}">', unsafe_allow_html=True)
+
                     # Render any non-header content from this block
                     if block_type == 'markdown':
                         content = block.get('content', '')
@@ -213,6 +218,10 @@ def _render_nested_toggles(
                     if editable:
                         render_insert_block_button(block_index, on_block_insert)
 
+                    # Close depth indentation wrapper
+                    if depth > 0:
+                        st.markdown('</div>', unsafe_allow_html=True)
+
         elif block_type == 'exhibit':
             # Render exhibit directly (it handles its own collapsibility)
             if editable:
@@ -248,6 +257,11 @@ def _render_nested_toggles(
                     context=context
                 ) as tc:
                     if tc.is_open:
+                        # Apply depth-based indentation for nested content
+                        if depth > 0:
+                            indent_class = f"toggle-depth-{min(depth, 4)} toggle-depth-border"
+                            st.markdown(f'<div class="{indent_class}">', unsafe_allow_html=True)
+
                         content = block.get('content', '')
                         lines = content.strip().split('\n')
                         body_lines = lines[1:] if lines and lines[0].startswith('#') else lines
@@ -262,6 +276,10 @@ def _render_nested_toggles(
                                 )
                             else:
                                 render_markdown_content(body_content)
+
+                        # Close depth indentation wrapper
+                        if depth > 0:
+                            st.markdown('</div>', unsafe_allow_html=True)
             else:
                 # Regular markdown content
                 if editable:
