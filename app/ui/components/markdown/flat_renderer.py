@@ -367,23 +367,67 @@ def _format_content_for_display(content: str) -> str:
     import re
     import json
 
-    def format_json_block(match):
-        """Format embedded JSON blocks with pretty indentation."""
-        prefix = match.group(1)  # e.g., $exhibit$, $filter$
-        json_content = match.group(2)
+    def find_matching_brace(text: str, start: int) -> int:
+        """Find the matching closing brace, handling nested braces."""
+        depth = 0
+        i = start
+        while i < len(text):
+            if text[i] == '{':
+                depth += 1
+            elif text[i] == '}':
+                depth -= 1
+                if depth == 0:
+                    return i
+            i += 1
+        return -1
 
-        try:
-            # Parse and re-format the JSON
-            parsed = json.loads(json_content)
-            formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
-            return f"{prefix}{{\n{formatted}\n}}"
-        except json.JSONDecodeError:
-            # If not valid JSON, return as-is
-            return match.group(0)
+    def format_json_blocks(text: str) -> str:
+        """Find and format all $exhibit$ and $filter$ JSON blocks."""
+        result = []
+        i = 0
+        pattern = re.compile(r'\$(exhibit|filter|exhibits|filters)\$\{')
 
-    # Format $exhibit${...} and $filter${...} blocks
-    pattern = r'(\$(?:exhibit|filter|exhibits|filters)\$)\{([^}]+)\}'
-    formatted = re.sub(pattern, format_json_block, content, flags=re.DOTALL)
+        while i < len(text):
+            match = pattern.search(text, i)
+            if not match:
+                result.append(text[i:])
+                break
+
+            # Add text before the match
+            result.append(text[i:match.start()])
+
+            # Find the matching closing brace
+            brace_start = match.end() - 1  # Position of opening {
+            brace_end = find_matching_brace(text, brace_start)
+
+            if brace_end == -1:
+                # No matching brace, keep as-is
+                result.append(text[match.start():match.end()])
+                i = match.end()
+                continue
+
+            # Extract JSON content (without outer braces)
+            json_content = text[brace_start + 1:brace_end]
+            prefix = f"${match.group(1)}$"
+
+            try:
+                # Parse and re-format the JSON
+                parsed = json.loads('{' + json_content + '}')
+                formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+                # Remove outer braces from formatted JSON since we add them
+                formatted_inner = formatted.strip()
+                if formatted_inner.startswith('{') and formatted_inner.endswith('}'):
+                    formatted_inner = formatted_inner[1:-1].strip()
+                result.append(f"{prefix}{{\n  {formatted_inner}\n}}")
+            except json.JSONDecodeError:
+                # If not valid JSON, return as-is
+                result.append(text[match.start():brace_end + 1])
+
+            i = brace_end + 1
+
+        return ''.join(result)
+
+    formatted = format_json_blocks(content)
 
     # Normalize multiple blank lines to max 2
     formatted = re.sub(r'\n{3,}', '\n\n', formatted)
