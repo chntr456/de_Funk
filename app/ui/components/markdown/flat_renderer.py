@@ -306,6 +306,11 @@ def render_flat_row(
             if not is_editing:
                 if st.button("🗑️", key=f"delete_{block_id}", help="Delete"):
                     if on_block_delete:
+                        # Set session state for backend to find content to delete
+                        if block_type == 'markdown':
+                            st.session_state['_content_to_delete'] = block.get('content', '')
+                        else:
+                            st.session_state['_content_to_delete'] = str(block)
                         on_block_delete(block_index)
                     st.rerun()
 
@@ -364,8 +369,14 @@ def _render_inline_editor(
         original_content = str(block)
 
     content_key = f"edit_content_{block_id}"
+    original_key = f"edit_original_{block_id}"
+
     if content_key not in st.session_state:
         st.session_state[content_key] = original_content
+
+    # Store original content for find/replace in backend
+    if original_key not in st.session_state:
+        st.session_state[original_key] = original_content
 
     # Calculate height based on content - pretty print with extra space
     line_count = original_content.count('\n') + 1
@@ -388,16 +399,22 @@ def _render_inline_editor(
 
     if save_clicked:
         if on_edit:
+            # Set session state for backend to find/replace content
+            st.session_state['_content_to_replace'] = st.session_state.get(original_key, original_content)
+            st.session_state['_new_content'] = edited_content
             on_edit(block_index, edited_content)
         set_edit_state(block_id, False)
-        if content_key in st.session_state:
-            del st.session_state[content_key]
+        # Clean up session state
+        for key in [content_key, original_key]:
+            if key in st.session_state:
+                del st.session_state[key]
         st.rerun()
 
     if cancel_clicked:
         set_edit_state(block_id, False)
-        if content_key in st.session_state:
-            del st.session_state[content_key]
+        for key in [content_key, original_key]:
+            if key in st.session_state:
+                del st.session_state[key]
         st.rerun()
 
 
