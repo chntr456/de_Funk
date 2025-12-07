@@ -40,6 +40,37 @@ class FilterEngine:
     """
 
     @staticmethod
+    def _format_sql_value(value: Any) -> str:
+        """
+        Format a value for SQL, quoting strings but NOT numbers.
+
+        Args:
+            value: Value to format
+
+        Returns:
+            SQL-safe string representation
+
+        Examples:
+            >>> FilterEngine._format_sql_value(1000000)
+            '1000000'
+            >>> FilterEngine._format_sql_value('AAPL')
+            "'AAPL'"
+            >>> FilterEngine._format_sql_value('2024-01-01')
+            "'2024-01-01'"
+        """
+        if value is None:
+            return 'NULL'
+        elif isinstance(value, bool):
+            return 'TRUE' if value else 'FALSE'
+        elif isinstance(value, (int, float)):
+            return str(value)
+        else:
+            # Strings, dates, and everything else gets quoted
+            # Escape single quotes in the value
+            escaped = str(value).replace("'", "''")
+            return f"'{escaped}'"
+
+    @staticmethod
     def apply_filters(
         df: Any,
         filters: Dict[str, Any],
@@ -199,48 +230,37 @@ class FilterEngine:
                 # Range filter - support both min/max AND start/end formats
                 # Date ranges use start/end, numeric ranges use min/max
                 if 'start' in value and 'end' in value:
-                    # Date range format
-                    if is_pandas:
-                        conditions.append(f"{col_name} >= '{value['start']}'")
-                        conditions.append(f"{col_name} <= '{value['end']}'")
-                    else:
-                        conditions.append(f"{col_name} >= '{value['start']}'")
-                        conditions.append(f"{col_name} <= '{value['end']}'")
+                    # Date range format - always quote dates
+                    conditions.append(f"{col_name} >= '{value['start']}'")
+                    conditions.append(f"{col_name} <= '{value['end']}'")
                 elif 'min' in value:
-                    conditions.append(f"{col_name} >= '{value['min']}'")
+                    # Use _format_sql_value to handle numeric vs string values
+                    conditions.append(f"{col_name} >= {FilterEngine._format_sql_value(value['min'])}")
                 if 'max' in value:
-                    conditions.append(f"{col_name} <= '{value['max']}'")
+                    conditions.append(f"{col_name} <= {FilterEngine._format_sql_value(value['max'])}")
                 if 'gt' in value:
-                    conditions.append(f"{col_name} > '{value['gt']}'")
+                    conditions.append(f"{col_name} > {FilterEngine._format_sql_value(value['gt'])}")
                 if 'lt' in value:
-                    conditions.append(f"{col_name} < '{value['lt']}'")
+                    conditions.append(f"{col_name} < {FilterEngine._format_sql_value(value['lt'])}")
                 if 'gte' in value:
-                    conditions.append(f"{col_name} >= '{value['gte']}'")
+                    conditions.append(f"{col_name} >= {FilterEngine._format_sql_value(value['gte'])}")
                 if 'lte' in value:
-                    conditions.append(f"{col_name} <= '{value['lte']}'")
+                    conditions.append(f"{col_name} <= {FilterEngine._format_sql_value(value['lte'])}")
 
             elif isinstance(value, list):
                 # IN filter
                 if value:  # Only apply if list is not empty
                     if is_pandas:
-                        # pandas: use .isin() method
-                        # For query(), we need to use Python list syntax
-                        if len(value) == 1:
-                            # Single value: use equality
-                            conditions.append(f"{col_name} == '{value[0]}'")
-                        else:
-                            # Multiple values: use in with list
-                            # Note: query() requires the list to be in the local namespace
-                            # So we'll apply this filter separately after building the WHERE clause
-                            pass  # Will handle separately below
+                        # pandas: use .isin() method - handled separately below
+                        pass
                     else:
-                        # DuckDB: use SQL IN clause
-                        formatted_values = "', '".join(str(v) for v in value)
-                        conditions.append(f"{col_name} IN ('{formatted_values}')")
+                        # DuckDB: use SQL IN clause with proper value formatting
+                        formatted_values = ", ".join(FilterEngine._format_sql_value(v) for v in value)
+                        conditions.append(f"{col_name} IN ({formatted_values})")
 
             elif value is not None:
                 # Exact match (ignore None values)
-                conditions.append(f"{col_name} = '{value}'")
+                conditions.append(f"{col_name} = {FilterEngine._format_sql_value(value)}")
 
         # Apply all conditions
         if is_pandas:
@@ -306,30 +326,31 @@ class FilterEngine:
                 # Range filter - support both min/max AND start/end formats
                 # Date ranges use start/end, numeric ranges use min/max
                 if 'start' in value and 'end' in value:
-                    # Date range format
+                    # Date range format - always quote dates
                     conditions.append(f"{col_name} >= '{value['start']}'")
                     conditions.append(f"{col_name} <= '{value['end']}'")
                 elif 'min' in value:
-                    conditions.append(f"{col_name} >= '{value['min']}'")
+                    # Use _format_sql_value to handle numeric vs string values
+                    conditions.append(f"{col_name} >= {FilterEngine._format_sql_value(value['min'])}")
                 if 'max' in value:
-                    conditions.append(f"{col_name} <= '{value['max']}'")
+                    conditions.append(f"{col_name} <= {FilterEngine._format_sql_value(value['max'])}")
                 if 'gt' in value:
-                    conditions.append(f"{col_name} > '{value['gt']}'")
+                    conditions.append(f"{col_name} > {FilterEngine._format_sql_value(value['gt'])}")
                 if 'lt' in value:
-                    conditions.append(f"{col_name} < '{value['lt']}'")
+                    conditions.append(f"{col_name} < {FilterEngine._format_sql_value(value['lt'])}")
                 if 'gte' in value:
-                    conditions.append(f"{col_name} >= '{value['gte']}'")
+                    conditions.append(f"{col_name} >= {FilterEngine._format_sql_value(value['gte'])}")
                 if 'lte' in value:
-                    conditions.append(f"{col_name} <= '{value['lte']}'")
+                    conditions.append(f"{col_name} <= {FilterEngine._format_sql_value(value['lte'])}")
 
             elif isinstance(value, list):
-                # IN filter
+                # IN filter with proper value formatting
                 if value:
-                    formatted_values = "', '".join(str(v) for v in value)
-                    conditions.append(f"{col_name} IN ('{formatted_values}')")
+                    formatted_values = ", ".join(FilterEngine._format_sql_value(v) for v in value)
+                    conditions.append(f"{col_name} IN ({formatted_values})")
 
             elif value is not None:
                 # Exact match
-                conditions.append(f"{col_name} = '{value}'")
+                conditions.append(f"{col_name} = {FilterEngine._format_sql_value(value)}")
 
         return " AND ".join(conditions) if conditions else "1=1"
