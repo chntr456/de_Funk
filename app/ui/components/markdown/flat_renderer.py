@@ -454,6 +454,39 @@ def _format_content_for_display(content: str) -> str:
     return formatted
 
 
+def _exhibit_to_dict(exhibit) -> dict:
+    """Convert an Exhibit object to a dictionary for YAML serialization."""
+    result = {}
+
+    # Get type
+    if hasattr(exhibit, 'type'):
+        result['type'] = exhibit.type.value if hasattr(exhibit.type, 'value') else str(exhibit.type)
+
+    # Get common attributes
+    for attr in ['title', 'source', 'x', 'y', 'color', 'height', 'width']:
+        if hasattr(exhibit, attr):
+            val = getattr(exhibit, attr)
+            if val is not None:
+                result[attr] = val
+
+    # Get metrics for metric_cards
+    if hasattr(exhibit, 'metrics') and exhibit.metrics:
+        result['metrics'] = []
+        for m in exhibit.metrics:
+            if hasattr(m, '__dict__'):
+                result['metrics'].append({k: v for k, v in m.__dict__.items() if v is not None and not k.startswith('_')})
+            else:
+                result['metrics'].append(m)
+
+    # Get other attributes
+    if hasattr(exhibit, '__dict__'):
+        for k, v in exhibit.__dict__.items():
+            if k not in result and v is not None and not k.startswith('_'):
+                result[k] = v
+
+    return result
+
+
 def _render_inline_editor(
     block: Dict[str, Any],
     block_id: str,
@@ -461,13 +494,23 @@ def _render_inline_editor(
     on_edit: Optional[Callable[[int, str], None]] = None
 ):
     """Render inline editor for a block."""
+    import yaml
+
     block_type = block.get('type', 'markdown')
 
-    # Get content to edit
+    # Get content to edit based on block type
     if block_type == 'markdown':
         original_content = block.get('content', '')
+    elif block_type == 'exhibit':
+        # Convert exhibit object back to YAML for editing
+        exhibit = block.get('exhibit')
+        if exhibit:
+            exhibit_dict = _exhibit_to_dict(exhibit)
+            original_content = f"$exhibits${{\n{yaml.dump(exhibit_dict, default_flow_style=False, sort_keys=False, allow_unicode=True)}}}"
+        else:
+            original_content = str(block)
     else:
-        original_content = str(block)
+        original_content = block.get('content', str(block))
 
     content_key = f"edit_content_{block_id}"
     original_key = f"edit_original_{block_id}"
@@ -500,6 +543,7 @@ def _render_inline_editor(
         label_visibility="collapsed"
     )
     st.session_state[content_key] = edited_content
+
 
     # Save/Cancel buttons (inline, no columns)
     save_clicked = st.button("💾 Save", key=f"save_{block_id}", type="primary")
