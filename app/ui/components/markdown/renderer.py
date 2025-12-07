@@ -3,6 +3,10 @@ Main markdown notebook renderer.
 
 This is the orchestrator that coordinates rendering of markdown notebooks
 using the modular block renderers, editors, and parser utilities.
+
+Note: The default renderer is now the flat row-based renderer which avoids
+Streamlit's nested column limitations. The legacy nested renderer is still
+available via use_flat_renderer=False.
 """
 
 import streamlit as st
@@ -39,7 +43,8 @@ def render_markdown_notebook(
     on_block_edit: Optional[Callable[[int, str], None]] = None,
     on_block_insert: Optional[Callable[[int, str, str], None]] = None,
     on_block_delete: Optional[Callable[[int], None]] = None,
-    on_header_edit: Optional[Callable[[int, str], None]] = None
+    on_header_edit: Optional[Callable[[int, str], None]] = None,
+    use_flat_renderer: bool = True
 ):
     """
     Render a markdown-based notebook.
@@ -54,7 +59,24 @@ def render_markdown_notebook(
         on_block_insert: Callback when a block is inserted (after_index, block_type, content)
         on_block_delete: Callback when a block is deleted (block_index)
         on_header_edit: Callback when a header is renamed (block_index, new_header)
+        use_flat_renderer: Use flat row-based renderer (default True, avoids column nesting issues)
     """
+    # Use flat renderer by default to avoid Streamlit's nested column limitations
+    if use_flat_renderer:
+        from .flat_renderer import render_flat_notebook
+        render_flat_notebook(
+            notebook_config=notebook_config,
+            notebook_session=notebook_session,
+            connection=connection,
+            notebook_id=notebook_id,
+            editable=editable,
+            on_block_edit=on_block_edit,
+            on_block_insert=on_block_insert,
+            on_block_delete=on_block_delete
+        )
+        return
+
+    # Legacy nested renderer (kept for backwards compatibility)
     if not hasattr(notebook_config, '_content_blocks') or not notebook_config._content_blocks:
         st.error("This notebook has no markdown content blocks")
         return

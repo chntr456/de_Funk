@@ -26,6 +26,13 @@ Usage:
 # Main renderer
 from .renderer import render_markdown_notebook
 
+# Flat renderer (avoids Streamlit column nesting issues)
+from .flat_renderer import (
+    render_flat_notebook,
+    flatten_blocks,
+    compute_visibility,
+)
+
 # Block renderers
 from .blocks import (
     render_markdown_block,
@@ -79,6 +86,11 @@ from .toggle_container import (
 __all__ = [
     # Main entry point
     'render_markdown_notebook',
+
+    # Flat renderer
+    'render_flat_notebook',
+    'flatten_blocks',
+    'compute_visibility',
 
     # Block renderers
     'render_markdown_block',
