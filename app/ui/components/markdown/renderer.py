@@ -165,9 +165,10 @@ def _render_nested_toggles(
             label = f"Block {block_index + 1}"
             toggle_icon = "📄"
 
-        # Apply depth-based indentation using columns (only at depth 1 to avoid nesting columns)
-        # Streamlit only allows one level of nested columns
-        if depth == 1:
+        # Apply depth-based indentation using columns (only at depth 1 and when NOT editable)
+        # Streamlit only allows one level of nested columns, and render_editable_block uses columns
+        # So we can only indent when not in edit mode
+        if depth == 1 and not editable:
             indent_ratio = 0.03  # 3% indent for nested content
             _, content_col = st.columns([indent_ratio, 1 - indent_ratio])
             block_container = content_col
