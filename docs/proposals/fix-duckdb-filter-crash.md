@@ -7,10 +7,20 @@
 
 ## Executive Summary
 
-Two distinct but related issues are causing crashes when the UI tries to load filter options from DuckDB:
+Three distinct issues are causing crashes when the UI tries to load filter options from DuckDB:
 
-1. **Missing DuckDB Views** → Falls back to building from Bronze Delta tables → Hangs/crashes
-2. **Numeric Quoting Bug** → FilterEngine incorrectly quotes numbers → DuckDB type mismatch errors
+1. **Missing Silver Layer** → Falls back to building ALL model tables from Bronze → **HANGS**
+2. **Heavy Window Functions** → `fact_stock_prices` computes 15+ window functions over 10M rows → **HANGS**
+3. **Numeric Quoting Bug** → FilterEngine incorrectly quotes numbers → DuckDB type mismatch errors
+
+## ⚠️ ROOT CAUSE IDENTIFIED
+
+When `session.get_table('stocks', 'dim_stock')` is called:
+1. `ensure_built()` is triggered (line 263-270 in `models/base/model.py`)
+2. This builds **ALL** tables in the model, not just `dim_stock`
+3. `fact_stock_prices` has 15+ complex window functions (RSI, SMAs, Bollinger Bands, volatility)
+4. These window functions must process the **ENTIRE** 10M row prices table
+5. **Result**: Hangs for minutes or crashes due to memory/timeout
 
 ## Issue 1: Ticker List Not Loading (Primary Crash)
 
@@ -155,15 +165,29 @@ if 'min' in value and value['min'] is not None and value['min'] > 0:
 
 ## Recommended Fix Order
 
-1. **First**: Run the prerequisite setup scripts (no code changes needed)
+### Quick Workaround (Immediate)
+
+If you just need filter options working NOW:
+```bash
+python -m scripts.setup.quick_dim_stock_view
+```
+This creates a lightweight `stocks.dim_stock` view directly from Bronze, bypassing the heavy model build.
+
+### Full Fix (Recommended for Production)
+
+1. **First**: Build Silver layer using Spark (handles window functions efficiently)
    ```bash
    python -m scripts.build_silver_layer
+   ```
+
+2. **Second**: Setup DuckDB views pointing to pre-built Silver tables
+   ```bash
    python -m scripts.setup.setup_duckdb_views --update
    ```
 
-2. **Second**: Verify ticker list loads after views are created
+3. **Third**: Verify ticker list loads after views are created
 
-3. **Third**: If numeric filter issues persist, fix the FilterEngine quoting bug
+4. **Fourth**: If numeric filter issues persist, fix the FilterEngine quoting bug
 
 ## Validation Scripts
 
@@ -181,9 +205,17 @@ python -m scripts.test.diagnose_ticker_load
 
 | Issue | Root Cause | Fix |
 |-------|------------|-----|
-| Ticker list not loading | Missing DuckDB views → Bronze fallback | Run setup_duckdb_views.py |
-| PyCharm crashing | Memory exhaustion from large Delta reads | Run setup scripts first |
+| Ticker list not loading | `ensure_built()` computes ALL tables including heavy window functions | Use quick_dim_stock_view.py or build Silver layer first |
+| PyCharm crashing | 15+ window functions over 10M rows in DuckDB | Build Silver layer with Spark instead |
 | Numeric filter errors | FilterEngine quotes numbers | Fix _format_value_for_sql() |
+
+## Key Code Locations
+
+| File | Line | Issue |
+|------|------|-------|
+| `models/base/model.py` | 263-270 | `ensure_built()` builds ALL tables |
+| `configs/models/stocks/graph.yaml` | 42-70 | 15+ window functions in fact_stock_prices |
+| `core/session/filters.py` | 209-220 | Numeric quoting bug |
 
 ## Files to Review
 
