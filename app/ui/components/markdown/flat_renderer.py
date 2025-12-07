@@ -353,6 +353,44 @@ def _render_block_content(block: Dict[str, Any], notebook_session, connection):
         st.warning(f"Unknown block type: {block_type}")
 
 
+def _format_content_for_display(content: str) -> str:
+    """
+    Format markdown content for pretty display in the editor.
+
+    Handles:
+    - Embedded JSON blocks ($exhibit$, $filter$) with proper indentation
+    - Consistent line spacing
+    - YAML-like structure formatting
+
+    This is display-only formatting - doesn't affect saved content.
+    """
+    import re
+    import json
+
+    def format_json_block(match):
+        """Format embedded JSON blocks with pretty indentation."""
+        prefix = match.group(1)  # e.g., $exhibit$, $filter$
+        json_content = match.group(2)
+
+        try:
+            # Parse and re-format the JSON
+            parsed = json.loads(json_content)
+            formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
+            return f"{prefix}{{\n{formatted}\n}}"
+        except json.JSONDecodeError:
+            # If not valid JSON, return as-is
+            return match.group(0)
+
+    # Format $exhibit${...} and $filter${...} blocks
+    pattern = r'(\$(?:exhibit|filter|exhibits|filters)\$)\{([^}]+)\}'
+    formatted = re.sub(pattern, format_json_block, content, flags=re.DOTALL)
+
+    # Normalize multiple blank lines to max 2
+    formatted = re.sub(r'\n{3,}', '\n\n', formatted)
+
+    return formatted
+
+
 def _render_inline_editor(
     block: Dict[str, Any],
     block_id: str,
@@ -370,16 +408,21 @@ def _render_inline_editor(
 
     content_key = f"edit_content_{block_id}"
     original_key = f"edit_original_{block_id}"
-
-    if content_key not in st.session_state:
-        st.session_state[content_key] = original_content
+    formatted_key = f"edit_formatted_{block_id}"
 
     # Store original content for find/replace in backend
     if original_key not in st.session_state:
         st.session_state[original_key] = original_content
 
+    # Format content for display (only on first load)
+    if content_key not in st.session_state:
+        formatted_content = _format_content_for_display(original_content)
+        st.session_state[content_key] = formatted_content
+        st.session_state[formatted_key] = True  # Mark as formatted
+
     # Calculate height based on content - pretty print with extra space
-    line_count = original_content.count('\n') + 1
+    display_content = st.session_state[content_key]
+    line_count = display_content.count('\n') + 1
     # Minimum 300px, add 25px per line, max 600px
     calculated_height = max(300, min(600, line_count * 25 + 100))
 
@@ -405,14 +448,14 @@ def _render_inline_editor(
             on_edit(block_index, edited_content)
         set_edit_state(block_id, False)
         # Clean up session state
-        for key in [content_key, original_key]:
+        for key in [content_key, original_key, formatted_key]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
 
     if cancel_clicked:
         set_edit_state(block_id, False)
-        for key in [content_key, original_key]:
+        for key in [content_key, original_key, formatted_key]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
