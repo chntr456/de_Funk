@@ -428,25 +428,16 @@ class ToggleContainer:
                         st.rerun()
 
             else:
-                # Non-editable section style
-                col1, col2 = st.columns([0.05, 0.95])
-                with col1:
-                    if st.button(
-                        icon,
-                        key=f"toggle_icon_{self.container_id}",
-                        type="secondary"
-                    ):
-                        st.session_state[self.toggle_key] = not self.is_open
-                        st.rerun()
-                with col2:
-                    if st.button(
-                        self.label,
-                        key=f"toggle_btn_{self.container_id}",
-                        type="secondary",
-                        use_container_width=True
-                    ):
-                        st.session_state[self.toggle_key] = not self.is_open
-                        st.rerun()
+                # Non-editable section style - use single button to avoid column nesting issues
+                # (render_editable_block uses columns, so we can't use columns here)
+                if st.button(
+                    f"{icon} {self.label}",
+                    key=f"toggle_btn_{self.container_id}",
+                    type="secondary",
+                    use_container_width=True
+                ):
+                    st.session_state[self.toggle_key] = not self.is_open
+                    st.rerun()
 
         else:
             # Default style
