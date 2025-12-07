@@ -1385,19 +1385,20 @@ help_text: Filter by trading volume"""
         Args:
             block_index: Index of the block (unused, kept for interface compatibility)
             new_content: New content for the block
+
+        Raises:
+            Exception: If save fails, to allow caller to handle
         """
         active_notebook = self._get_active_notebook()
         if not active_notebook:
-            st.error("No active notebook")
-            return
+            raise Exception("No active notebook")
 
         notebook_id, notebook_path, notebook_config = active_notebook
 
         # Get original content and new content from session state
         original_content = st.session_state.get('_content_to_replace', '')
         if not original_content:
-            st.error("No original content found for replacement")
-            return
+            raise Exception("No original content found for replacement")
 
         try:
             from pathlib import Path
@@ -1450,8 +1451,7 @@ help_text: Filter by trading volume"""
                             break
 
             if updated_content is None:
-                st.error("Could not find content to replace in file")
-                return
+                raise Exception("Could not find content to replace in file. Check debug info above.")
 
             # Write back
             with open(path, 'w') as f:
@@ -1475,9 +1475,8 @@ help_text: Filter by trading volume"""
             st.success("Section saved!")
 
         except Exception as e:
-            st.error(f"Error saving block: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
+            # Re-raise to let the caller handle it
+            raise
 
     def _replace_exhibit_block(self, file_content: str, original_content: str, new_content: str) -> str:
         """

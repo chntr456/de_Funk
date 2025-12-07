@@ -563,23 +563,46 @@ def _render_inline_editor(
     cancel_clicked = st.button("Cancel", key=f"cancel_edit_{block_id}")
 
     stored_orig_key = f"stored_orig_{block_id}"
+    save_error_key = f"save_error_{block_id}"
+
+    # Display any previous save error
+    if save_error_key in st.session_state:
+        st.error(st.session_state[save_error_key])
 
     if save_clicked:
         if on_edit:
             # Set session state for backend to find/replace content
             st.session_state['_content_to_replace'] = st.session_state.get(original_key, original_content)
             st.session_state['_new_content'] = edited_content
-            on_edit(block_index, edited_content)
-        set_edit_state(block_id, False)
-        # Clean up session state
-        for key in [content_key, original_key, formatted_key, stored_orig_key]:
-            if key in st.session_state:
-                del st.session_state[key]
-        st.rerun()
+
+            # Debug: Show what we're trying to save
+            with st.expander("Debug: Save Info", expanded=True):
+                st.write("**Original content (first 500 chars):**")
+                st.code(st.session_state['_content_to_replace'][:500])
+                st.write("**New content (first 500 chars):**")
+                st.code(edited_content[:500])
+
+            try:
+                on_edit(block_index, edited_content)
+                # If we get here without exception, clear error and close editor
+                if save_error_key in st.session_state:
+                    del st.session_state[save_error_key]
+                set_edit_state(block_id, False)
+                for key in [content_key, original_key, formatted_key, stored_orig_key]:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
+            except Exception as e:
+                st.session_state[save_error_key] = f"Save failed: {str(e)}"
+                import traceback
+                st.error(f"Save failed: {str(e)}")
+                st.code(traceback.format_exc())
+        else:
+            st.session_state[save_error_key] = "No save handler configured"
 
     if cancel_clicked:
         set_edit_state(block_id, False)
-        for key in [content_key, original_key, formatted_key, stored_orig_key]:
+        for key in [content_key, original_key, formatted_key, stored_orig_key, save_error_key]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
