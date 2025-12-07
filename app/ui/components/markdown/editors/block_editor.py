@@ -130,7 +130,7 @@ def render_editable_block(
     on_edit: Optional[Callable[[int, str], None]] = None,
     on_delete: Optional[Callable[[int], None]] = None
 ):
-    """Render a block with edit/delete controls on the right."""
+    """Render a block with edit/delete controls (no columns to avoid nesting issues)."""
     block_type = block['type']
     edit_key = f"block_edit_mode_{block_index}"
 
@@ -139,34 +139,34 @@ def render_editable_block(
 
     is_editing = st.session_state[edit_key]
 
-    col_content, col_edit, col_delete = st.columns([0.90, 0.05, 0.05])
+    # Render edit/delete buttons inline (no columns)
+    if is_editing:
+        if st.button("✕ Cancel", key=f"cancel_edit_{block_index}"):
+            st.session_state[edit_key] = False
+            st.rerun()
+    else:
+        # Use a container for inline buttons
+        edit_clicked = st.button("✏️ Edit", key=f"start_edit_{block_index}")
+        delete_clicked = st.button("🗑️ Delete", key=f"delete_block_{block_index}")
 
-    with col_edit:
-        if is_editing:
-            if st.button("✕", key=f"cancel_edit_{block_index}", help="Cancel"):
-                st.session_state[edit_key] = False
-                st.rerun()
-        else:
-            if st.button("✏️", key=f"start_edit_{block_index}", help="Edit"):
-                st.session_state[edit_key] = True
-                st.rerun()
+        if edit_clicked:
+            st.session_state[edit_key] = True
+            st.rerun()
 
-    with col_delete:
-        if not is_editing:
-            if st.button("🗑️", key=f"delete_block_{block_index}", help="Delete"):
-                if on_delete:
-                    on_delete(block_index)
-                st.rerun()
+        if delete_clicked:
+            if on_delete:
+                on_delete(block_index)
+            st.rerun()
 
-    with col_content:
-        if is_editing:
-            render_block_editor(block_index, block, on_edit, block_type)
-        else:
-            if block_type == 'markdown':
-                render_markdown_content(block.get('content', ''))
-            elif block_type == 'exhibit':
-                from ..blocks.exhibit import render_exhibit_block
-                render_exhibit_block(block, notebook_session, connection)
+    # Render content
+    if is_editing:
+        render_block_editor(block_index, block, on_edit, block_type)
+    else:
+        if block_type == 'markdown':
+            render_markdown_content(block.get('content', ''))
+        elif block_type == 'exhibit':
+            from ..blocks.exhibit import render_exhibit_block
+            render_exhibit_block(block, notebook_session, connection)
 
 
 def render_editable_block_wrapper(
@@ -178,7 +178,7 @@ def render_editable_block_wrapper(
     on_delete: Optional[Callable[[int], None]] = None
 ):
     """
-    Wrap a content block with editing controls.
+    Wrap a content block with editing controls (no columns to avoid nesting issues).
 
     Provides inline editing capability for all block types.
 
@@ -204,42 +204,38 @@ def render_editable_block_wrapper(
     # Editable block types
     editable_types = ['markdown', 'exhibit', 'collapsible', 'error']
 
-    # Create container for the block with edit controls
-    col_content, col_edit, col_delete = st.columns([0.90, 0.05, 0.05])
+    # Render edit/delete buttons inline (no columns to avoid nesting issues)
+    if block_type in editable_types:
+        if is_editing:
+            if st.button("✕ Cancel", key=f"cancel_edit_wrap_{block_index}"):
+                st.session_state[edit_key] = False
+                st.rerun()
+        else:
+            edit_clicked = st.button("✏️ Edit", key=f"start_edit_wrap_{block_index}")
+            delete_clicked = st.button("🗑️ Delete", key=f"delete_block_wrap_{block_index}")
 
-    with col_edit:
-        # Edit button (for all editable block types)
-        if block_type in editable_types:
-            if is_editing:
-                if st.button("✕", key=f"cancel_edit_{block_index}", help="Cancel editing"):
-                    st.session_state[edit_key] = False
-                    st.rerun()
-            else:
-                if st.button("✏️", key=f"start_edit_{block_index}", help="Edit this block"):
-                    st.session_state[edit_key] = True
-                    st.rerun()
+            if edit_clicked:
+                st.session_state[edit_key] = True
+                st.rerun()
 
-    with col_delete:
-        # Delete button
-        if not is_editing:
-            if st.button("🗑️", key=f"delete_block_{block_index}", help="Delete this block"):
+            if delete_clicked:
                 if on_delete:
                     on_delete(block_index)
                 st.rerun()
 
-    with col_content:
-        if is_editing:
-            render_block_editor(block_index, block, on_edit, block_type)
-        else:
-            # Render based on block type
-            if block_type == 'markdown':
-                render_markdown_content(block.get('content', ''))
-            elif block_type == 'exhibit':
-                from ..blocks.exhibit import render_exhibit_block
-                render_exhibit_block(block, notebook_session, connection)
-            elif block_type == 'collapsible':
-                from ..blocks.collapsible import render_collapsible_section
-                render_collapsible_section(block, notebook_session, connection, block_index)
-            elif block_type == 'error':
-                from ..blocks.error import render_error_block
-                render_error_block(block, block_index)
+    # Render content
+    if is_editing:
+        render_block_editor(block_index, block, on_edit, block_type)
+    else:
+        # Render based on block type
+        if block_type == 'markdown':
+            render_markdown_content(block.get('content', ''))
+        elif block_type == 'exhibit':
+            from ..blocks.exhibit import render_exhibit_block
+            render_exhibit_block(block, notebook_session, connection)
+        elif block_type == 'collapsible':
+            from ..blocks.collapsible import render_collapsible_section
+            render_collapsible_section(block, notebook_session, connection, block_index)
+        elif block_type == 'error':
+            from ..blocks.error import render_error_block
+            render_error_block(block, block_index)
