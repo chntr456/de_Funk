@@ -1536,11 +1536,13 @@ help_text: Filter by trading volume"""
 
         pattern = re.compile(r'\$(exhibits?)\$\{')
         candidates = []
+        debug_info = []
 
         for match in pattern.finditer(file_content):
             brace_start = match.end() - 1
             brace_end = find_matching_brace(file_content, brace_start)
             if brace_end == -1:
+                debug_info.append(f"No closing brace found at pos {match.start()}")
                 continue
 
             # Extract this exhibit's YAML
@@ -1548,26 +1550,41 @@ help_text: Filter by trading volume"""
             try:
                 exhibit_data = yaml.safe_load(exhibit_yaml)
                 if not exhibit_data:
+                    debug_info.append(f"YAML parsed to None/empty")
                     continue
+
+                file_type = exhibit_data.get('type', '')
+                file_source = exhibit_data.get('source', '')
+                file_title = exhibit_data.get('title', '')
 
                 # Score how well this matches
                 score = 0
-                if exhibit_data.get('type', '') == match_type:
+                if file_type == match_type:
                     score += 10
-                if match_source and exhibit_data.get('source', '') == match_source:
+                if match_source and file_source == match_source:
                     score += 5
-                if match_title and exhibit_data.get('title', '') == match_title:
+                if match_title and file_title == match_title:
                     score += 5
                 if match_x and exhibit_data.get('x', '') == match_x:
                     score += 2
                 if match_y and exhibit_data.get('y', '') == match_y:
                     score += 2
 
+                debug_info.append(f"Found: type='{file_type}', source='{file_source}', title='{file_title}' -> score={score}")
+
                 if score > 0:
                     candidates.append((score, match.start(), brace_end + 1, exhibit_data))
 
-            except Exception:
+            except Exception as e:
+                debug_info.append(f"YAML parse error: {e}")
                 continue
+
+        # Show debug info
+        if debug_info:
+            st.info(f"Exhibits found in file: {len(debug_info)} blocks processed")
+            with st.expander("File parsing debug", expanded=True):
+                for info in debug_info:
+                    st.write(info)
 
         if not candidates:
             st.warning(f"No matching exhibit found for type={match_type}, source={match_source}")
