@@ -154,6 +154,10 @@ class TableAccessor:
         """
         Get schema (column definitions) for a table.
 
+        For DuckDB backend, queries the actual view to get accurate schema
+        including derived columns. This is critical because derived columns
+        (volume_ratio, sma_20, etc.) are defined in graph.yaml, not schema.yaml.
+
         Args:
             table_name: Name of the table
 
@@ -163,6 +167,20 @@ class TableAccessor:
         Raises:
             KeyError: If table not found
         """
+        # For DuckDB, query the actual view to get real schema (including derived columns)
+        if self.model.backend == 'duckdb' and hasattr(self.model.connection, 'conn'):
+            try:
+                result = self.model.connection.conn.execute(
+                    f"SELECT column_name, data_type FROM information_schema.columns "
+                    f"WHERE table_schema = '{self.model_name}' AND table_name = '{table_name}'"
+                ).fetchall()
+                if result:
+                    logger.debug(f"Got schema from DuckDB view: {self.model_name}.{table_name} ({len(result)} columns)")
+                    return {row[0]: row[1] for row in result}
+            except Exception as e:
+                logger.debug(f"Could not get DuckDB schema for {self.model_name}.{table_name}: {e}")
+
+        # Fall back to YAML config (may miss derived columns defined in graph.yaml)
         schema_config = self.model_cfg.get('schema', {})
 
         # Check dimensions
