@@ -358,14 +358,13 @@ def _format_content_for_display(content: str) -> str:
     Format markdown content for pretty display in the editor.
 
     Handles:
-    - Embedded JSON blocks ($exhibit$, $filter$) with proper indentation
+    - Embedded YAML/JSON blocks ($exhibit$, $filter$) with proper indentation
     - Consistent line spacing
-    - YAML-like structure formatting
+    - Markdown structure formatting
 
     This is display-only formatting - doesn't affect saved content.
     """
     import re
-    import json
 
     def find_matching_brace(text: str, start: int) -> int:
         """Find the matching closing brace, handling nested braces."""
@@ -381,8 +380,35 @@ def _format_content_for_display(content: str) -> str:
             i += 1
         return -1
 
-    def format_json_blocks(text: str) -> str:
-        """Find and format all $exhibit$ and $filter$ JSON blocks."""
+    def format_yaml_block(yaml_content: str) -> str:
+        """Format YAML-like content with consistent indentation."""
+        lines = yaml_content.strip().split('\n')
+        formatted_lines = []
+
+        for line in lines:
+            stripped = line.strip()
+            if not stripped:
+                formatted_lines.append('')
+                continue
+
+            # Determine indentation based on content
+            if stripped.startswith('-'):
+                # List item - indent by 2
+                formatted_lines.append(f"    {stripped}")
+            elif ':' in stripped and not stripped.startswith('{'):
+                # Key-value pair
+                if stripped.startswith('{') or '[' in stripped:
+                    # Inline object/array
+                    formatted_lines.append(f"  {stripped}")
+                else:
+                    formatted_lines.append(f"  {stripped}")
+            else:
+                formatted_lines.append(f"  {stripped}")
+
+        return '\n'.join(formatted_lines)
+
+    def format_blocks(text: str) -> str:
+        """Find and format all $exhibit$ and $filter$ blocks."""
         result = []
         i = 0
         pattern = re.compile(r'\$(exhibit|filter|exhibits|filters)\$\{')
@@ -397,40 +423,33 @@ def _format_content_for_display(content: str) -> str:
             result.append(text[i:match.start()])
 
             # Find the matching closing brace
-            brace_start = match.end() - 1  # Position of opening {
+            brace_start = match.end() - 1
             brace_end = find_matching_brace(text, brace_start)
 
             if brace_end == -1:
-                # No matching brace, keep as-is
                 result.append(text[match.start():match.end()])
                 i = match.end()
                 continue
 
-            # Extract JSON content (without outer braces)
-            json_content = text[brace_start + 1:brace_end]
+            # Extract and format the block content
+            block_content = text[brace_start + 1:brace_end]
             prefix = f"${match.group(1)}$"
 
-            try:
-                # Parse and re-format the JSON
-                parsed = json.loads('{' + json_content + '}')
-                formatted = json.dumps(parsed, indent=2, ensure_ascii=False)
-                # Remove outer braces from formatted JSON since we add them
-                formatted_inner = formatted.strip()
-                if formatted_inner.startswith('{') and formatted_inner.endswith('}'):
-                    formatted_inner = formatted_inner[1:-1].strip()
-                result.append(f"{prefix}{{\n  {formatted_inner}\n}}")
-            except json.JSONDecodeError:
-                # If not valid JSON, return as-is
-                result.append(text[match.start():brace_end + 1])
+            # Format the YAML/JSON content
+            formatted_content = format_yaml_block(block_content)
+            result.append(f"{prefix}{{\n{formatted_content}\n}}")
 
             i = brace_end + 1
 
         return ''.join(result)
 
-    formatted = format_json_blocks(content)
+    formatted = format_blocks(content)
 
     # Normalize multiple blank lines to max 2
     formatted = re.sub(r'\n{3,}', '\n\n', formatted)
+
+    # Ensure blank line before headers
+    formatted = re.sub(r'([^\n])\n(#{1,6} )', r'\1\n\n\2', formatted)
 
     return formatted
 
@@ -454,15 +473,17 @@ def _render_inline_editor(
     original_key = f"edit_original_{block_id}"
     formatted_key = f"edit_formatted_{block_id}"
 
-    # Store original content for find/replace in backend
+    # Store original content for find/replace in backend (always use unformatted)
     if original_key not in st.session_state:
         st.session_state[original_key] = original_content
 
-    # Format content for display (only on first load)
-    if content_key not in st.session_state:
+    # Format content for display - force reformat if original changed or first time
+    stored_original = st.session_state.get(f"stored_orig_{block_id}", "")
+    if content_key not in st.session_state or stored_original != original_content:
         formatted_content = _format_content_for_display(original_content)
         st.session_state[content_key] = formatted_content
-        st.session_state[formatted_key] = True  # Mark as formatted
+        st.session_state[f"stored_orig_{block_id}"] = original_content
+        st.session_state[formatted_key] = True
 
     # Calculate height based on content - pretty print with extra space
     display_content = st.session_state[content_key]
@@ -470,7 +491,7 @@ def _render_inline_editor(
     # Minimum 300px, add 25px per line, max 600px
     calculated_height = max(300, min(600, line_count * 25 + 100))
 
-    # Text area for editing
+    # Use st.code for display preview, text_area for editing
     edited_content = st.text_area(
         "Edit content",
         value=st.session_state[content_key],
@@ -484,6 +505,8 @@ def _render_inline_editor(
     save_clicked = st.button("💾 Save", key=f"save_{block_id}", type="primary")
     cancel_clicked = st.button("Cancel", key=f"cancel_edit_{block_id}")
 
+    stored_orig_key = f"stored_orig_{block_id}"
+
     if save_clicked:
         if on_edit:
             # Set session state for backend to find/replace content
@@ -492,14 +515,14 @@ def _render_inline_editor(
             on_edit(block_index, edited_content)
         set_edit_state(block_id, False)
         # Clean up session state
-        for key in [content_key, original_key, formatted_key]:
+        for key in [content_key, original_key, formatted_key, stored_orig_key]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
 
     if cancel_clicked:
         set_edit_state(block_id, False)
-        for key in [content_key, original_key, formatted_key]:
+        for key in [content_key, original_key, formatted_key, stored_orig_key]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
