@@ -165,32 +165,26 @@ def _render_nested_toggles(
             label = f"Block {block_index + 1}"
             toggle_icon = "📄"
 
-        # Header blocks with children get a toggle container
-        if header_level > 0 and children:
-            # Render header with nested content in toggle
-            with ToggleContainer(
-                f"{toggle_icon} {label}",
-                expanded=True,
-                container_id=f"section_{block_index}",
-                style="section",
-                context=context
-            ) as tc:
-                if tc.is_open:
-                    # Apply depth-based indentation using columns
-                    if depth > 0:
-                        indent_ratio = min(depth * 0.03, 0.12)  # 3% per level, max 12%
-                        indent_col, content_col = st.columns([indent_ratio, 1 - indent_ratio])
-                        # Add visual border in indent column
-                        with indent_col:
-                            st.markdown(
-                                '<div style="border-left: 2px solid rgba(28, 131, 225, 0.15); height: 100%; min-height: 20px;"></div>',
-                                unsafe_allow_html=True
-                            )
-                        container = content_col
-                    else:
-                        container = st.container()
+        # Apply depth-based indentation using columns (wraps entire block including header)
+        if depth > 0:
+            indent_ratio = min(depth * 0.03, 0.12)  # 3% per level, max 12%
+            _, content_col = st.columns([indent_ratio, 1 - indent_ratio])
+            block_container = content_col
+        else:
+            block_container = st.container()
 
-                    with container:
+        with block_container:
+            # Header blocks with children get a toggle container
+            if header_level > 0 and children:
+                # Render header with nested content in toggle
+                with ToggleContainer(
+                    f"{toggle_icon} {label}",
+                    expanded=True,
+                    container_id=f"section_{block_index}",
+                    style="section",
+                    context=context
+                ) as tc:
+                    if tc.is_open:
                         # Render any non-header content from this block
                         if block_type == 'markdown':
                             content = block.get('content', '')
@@ -228,56 +222,41 @@ def _render_nested_toggles(
                         if editable:
                             render_insert_block_button(block_index, on_block_insert)
 
-        elif block_type == 'exhibit':
-            # Render exhibit directly (it handles its own collapsibility)
-            if editable:
-                render_editable_block(
-                    block_index, block, notebook_session, connection,
-                    on_block_edit, on_block_delete
-                )
-            else:
-                render_exhibit_block(block, notebook_session, connection)
+            elif block_type == 'exhibit':
+                # Render exhibit directly (it handles its own collapsibility)
+                if editable:
+                    render_editable_block(
+                        block_index, block, notebook_session, connection,
+                        on_block_edit, on_block_delete
+                    )
+                else:
+                    render_exhibit_block(block, notebook_session, connection)
 
-            if editable:
-                render_insert_block_button(block_index, on_block_insert)
+                if editable:
+                    render_insert_block_button(block_index, on_block_insert)
 
-        elif block_type == 'collapsible':
-            render_collapsible_section(block, notebook_session, connection, block_index)
-            if editable:
-                render_insert_block_button(block_index, on_block_insert)
+            elif block_type == 'collapsible':
+                render_collapsible_section(block, notebook_session, connection, block_index)
+                if editable:
+                    render_insert_block_button(block_index, on_block_insert)
 
-        elif block_type == 'error':
-            render_error_block(block, block_index)
-            if editable:
-                render_insert_block_button(block_index, on_block_insert)
+            elif block_type == 'error':
+                render_error_block(block, block_index)
+                if editable:
+                    render_insert_block_button(block_index, on_block_insert)
 
-        elif block_type == 'markdown':
-            # Non-header markdown or header without children
-            if header_level > 0:
-                # Header without children - render as toggle
-                with ToggleContainer(
-                    f"{toggle_icon} {label}",
-                    expanded=True,
-                    container_id=f"header_{block_index}",
-                    style="section",
-                    context=context
-                ) as tc:
-                    if tc.is_open:
-                        # Apply depth-based indentation using columns
-                        if depth > 0:
-                            indent_ratio = min(depth * 0.03, 0.12)  # 3% per level, max 12%
-                            indent_col, content_col = st.columns([indent_ratio, 1 - indent_ratio])
-                            # Add visual border in indent column
-                            with indent_col:
-                                st.markdown(
-                                    '<div style="border-left: 2px solid rgba(28, 131, 225, 0.15); height: 100%; min-height: 20px;"></div>',
-                                    unsafe_allow_html=True
-                                )
-                            container = content_col
-                        else:
-                            container = st.container()
-
-                        with container:
+            elif block_type == 'markdown':
+                # Non-header markdown or header without children
+                if header_level > 0:
+                    # Header without children - render as toggle
+                    with ToggleContainer(
+                        f"{toggle_icon} {label}",
+                        expanded=True,
+                        container_id=f"header_{block_index}",
+                        style="section",
+                        context=context
+                    ) as tc:
+                        if tc.is_open:
                             content = block.get('content', '')
                             lines = content.strip().split('\n')
                             body_lines = lines[1:] if lines and lines[0].startswith('#') else lines
@@ -292,25 +271,25 @@ def _render_nested_toggles(
                                     )
                                 else:
                                     render_markdown_content(body_content)
-            else:
-                # Regular markdown content
-                if editable:
-                    render_editable_block(
-                        block_index, block, notebook_session, connection,
-                        on_block_edit, on_block_delete
-                    )
                 else:
-                    render_markdown_block(
-                        block.get('content', ''),
-                        in_collapsible=False,
-                        block_index=block_index
-                    )
+                    # Regular markdown content
+                    if editable:
+                        render_editable_block(
+                            block_index, block, notebook_session, connection,
+                            on_block_edit, on_block_delete
+                        )
+                    else:
+                        render_markdown_block(
+                            block.get('content', ''),
+                            in_collapsible=False,
+                            block_index=block_index
+                        )
 
-            if editable:
-                render_insert_block_button(block_index, on_block_insert)
+                if editable:
+                    render_insert_block_button(block_index, on_block_insert)
 
-        else:
-            # Unknown block type - render as error
-            st.warning(f"Unknown block type: {block_type}")
-            if editable:
-                render_insert_block_button(block_index, on_block_insert)
+            else:
+                # Unknown block type - render as error
+                st.warning(f"Unknown block type: {block_type}")
+                if editable:
+                    render_insert_block_button(block_index, on_block_insert)
