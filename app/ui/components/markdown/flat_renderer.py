@@ -206,6 +206,7 @@ def render_flat_row(
     connection,
     editable: bool = False,
     on_block_edit: Optional[Callable[[int, str], None]] = None,
+    on_block_insert: Optional[Callable[[int, str, str], None]] = None,
     on_block_delete: Optional[Callable[[int], None]] = None
 ):
     """
@@ -366,11 +367,16 @@ def _render_inline_editor(
     if content_key not in st.session_state:
         st.session_state[content_key] = original_content
 
+    # Calculate height based on content - pretty print with extra space
+    line_count = original_content.count('\n') + 1
+    # Minimum 300px, add 25px per line, max 600px
+    calculated_height = max(300, min(600, line_count * 25 + 100))
+
     # Text area for editing
     edited_content = st.text_area(
         "Edit content",
         value=st.session_state[content_key],
-        height=150,
+        height=calculated_height,
         key=f"textarea_{block_id}",
         label_visibility="collapsed"
     )
@@ -386,7 +392,6 @@ def _render_inline_editor(
         set_edit_state(block_id, False)
         if content_key in st.session_state:
             del st.session_state[content_key]
-        st.success("Saved!")
         st.rerun()
 
     if cancel_clicked:
@@ -394,6 +399,32 @@ def _render_inline_editor(
         if content_key in st.session_state:
             del st.session_state[content_key]
         st.rerun()
+
+
+def render_insert_button(
+    block_index: int,
+    depth: int,
+    on_block_insert: Optional[Callable[[int, str, str], None]] = None
+):
+    """Render an insert button to add a new block above this position."""
+    if not on_block_insert:
+        return
+
+    # Calculate indent to match the block depth
+    indent_width = min(depth * 0.02, 0.10) if depth > 0 else 0
+
+    if indent_width > 0:
+        cols = st.columns([indent_width, 1 - indent_width])
+        container = cols[1]
+    else:
+        container = st.container()
+
+    with container:
+        insert_key = f"insert_above_{block_index}"
+        if st.button("➕ Add block above", key=insert_key, help="Insert new block"):
+            # Default to markdown block with placeholder content
+            on_block_insert(block_index, 'markdown', '# New Section\n\nAdd your content here.')
+            st.rerun()
 
 
 def render_flat_notebook(
@@ -455,13 +486,28 @@ def render_flat_notebook(
     # Compute visible blocks
     visible_blocks = compute_visibility(flat_blocks)
 
+    # Insert button at the very top if editable
+    if editable and on_block_insert:
+        if st.button("➕ Add block at start", key=f"insert_start_{notebook_id}", help="Insert new block at beginning"):
+            on_block_insert(-1, 'markdown', '# New Section\n\nAdd your content here.')
+            st.rerun()
+
     # Render each visible block as a flat row
     for block in visible_blocks:
+        # Render insert button above each block when editable
+        if editable:
+            render_insert_button(
+                block.get('_index', 0),
+                block['_depth'],
+                on_block_insert
+            )
+
         render_flat_row(
             block,
             notebook_session,
             connection,
             editable=editable,
             on_block_edit=on_block_edit,
+            on_block_insert=on_block_insert,
             on_block_delete=on_block_delete
         )
