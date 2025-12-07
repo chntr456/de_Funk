@@ -738,17 +738,8 @@ class DuckDBConnection(DataConnection):
         """
         return self.execute_sql(query)
 
-    def table(self, table_name: str) -> Any:
-        """
-        Get a table/view by name.
-
-        Args:
-            table_name: Name of table or view (can include schema: schema.table)
-
-        Returns:
-            DuckDB relation
-        """
-        return self.conn.table(table_name)
+    # NOTE: table() method is defined earlier in this file (around line 180)
+    # It uses SQL query to properly support schema.table format like 'stocks.dim_stock'
 
     def __del__(self):
         """Cleanup on deletion."""
