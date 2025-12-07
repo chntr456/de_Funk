@@ -176,51 +176,57 @@ def _render_nested_toggles(
                 context=context
             ) as tc:
                 if tc.is_open:
-                    # Apply depth-based indentation for nested content
+                    # Apply depth-based indentation using columns
                     if depth > 0:
-                        indent_class = f"toggle-depth-{min(depth, 4)} toggle-depth-border"
-                        st.markdown(f'<div class="{indent_class}">', unsafe_allow_html=True)
+                        indent_ratio = min(depth * 0.03, 0.12)  # 3% per level, max 12%
+                        indent_col, content_col = st.columns([indent_ratio, 1 - indent_ratio])
+                        # Add visual border in indent column
+                        with indent_col:
+                            st.markdown(
+                                '<div style="border-left: 2px solid rgba(28, 131, 225, 0.15); height: 100%; min-height: 20px;"></div>',
+                                unsafe_allow_html=True
+                            )
+                        container = content_col
+                    else:
+                        container = st.container()
 
-                    # Render any non-header content from this block
-                    if block_type == 'markdown':
-                        content = block.get('content', '')
-                        # Skip the header line, render the rest
-                        lines = content.strip().split('\n')
-                        body_lines = lines[1:] if lines and lines[0].startswith('#') else lines
-                        body_content = '\n'.join(body_lines).strip()
-                        if body_content:
-                            if editable:
-                                render_editable_block(
-                                    block_index,
-                                    {'type': 'markdown', 'content': body_content},
-                                    notebook_session,
-                                    connection,
-                                    on_block_edit,
-                                    on_block_delete
-                                )
-                            else:
-                                render_markdown_content(body_content)
+                    with container:
+                        # Render any non-header content from this block
+                        if block_type == 'markdown':
+                            content = block.get('content', '')
+                            # Skip the header line, render the rest
+                            lines = content.strip().split('\n')
+                            body_lines = lines[1:] if lines and lines[0].startswith('#') else lines
+                            body_content = '\n'.join(body_lines).strip()
+                            if body_content:
+                                if editable:
+                                    render_editable_block(
+                                        block_index,
+                                        {'type': 'markdown', 'content': body_content},
+                                        notebook_session,
+                                        connection,
+                                        on_block_edit,
+                                        on_block_delete
+                                    )
+                                else:
+                                    render_markdown_content(body_content)
 
-                    # Render children
-                    _render_nested_toggles(
-                        blocks=children,
-                        notebook_session=notebook_session,
-                        connection=connection,
-                        context=context,
-                        depth=depth + 1,
-                        editable=editable,
-                        on_block_edit=on_block_edit,
-                        on_block_insert=on_block_insert,
-                        on_block_delete=on_block_delete
-                    )
+                        # Render children
+                        _render_nested_toggles(
+                            blocks=children,
+                            notebook_session=notebook_session,
+                            connection=connection,
+                            context=context,
+                            depth=depth + 1,
+                            editable=editable,
+                            on_block_edit=on_block_edit,
+                            on_block_insert=on_block_insert,
+                            on_block_delete=on_block_delete
+                        )
 
-                    # Insert button after section if editable
-                    if editable:
-                        render_insert_block_button(block_index, on_block_insert)
-
-                    # Close depth indentation wrapper
-                    if depth > 0:
-                        st.markdown('</div>', unsafe_allow_html=True)
+                        # Insert button after section if editable
+                        if editable:
+                            render_insert_block_button(block_index, on_block_insert)
 
         elif block_type == 'exhibit':
             # Render exhibit directly (it handles its own collapsibility)
@@ -257,29 +263,35 @@ def _render_nested_toggles(
                     context=context
                 ) as tc:
                     if tc.is_open:
-                        # Apply depth-based indentation for nested content
+                        # Apply depth-based indentation using columns
                         if depth > 0:
-                            indent_class = f"toggle-depth-{min(depth, 4)} toggle-depth-border"
-                            st.markdown(f'<div class="{indent_class}">', unsafe_allow_html=True)
-
-                        content = block.get('content', '')
-                        lines = content.strip().split('\n')
-                        body_lines = lines[1:] if lines and lines[0].startswith('#') else lines
-                        body_content = '\n'.join(body_lines).strip()
-                        if body_content:
-                            if editable:
-                                render_editable_block(
-                                    block_index,
-                                    {'type': 'markdown', 'content': body_content},
-                                    notebook_session, connection,
-                                    on_block_edit, on_block_delete
+                            indent_ratio = min(depth * 0.03, 0.12)  # 3% per level, max 12%
+                            indent_col, content_col = st.columns([indent_ratio, 1 - indent_ratio])
+                            # Add visual border in indent column
+                            with indent_col:
+                                st.markdown(
+                                    '<div style="border-left: 2px solid rgba(28, 131, 225, 0.15); height: 100%; min-height: 20px;"></div>',
+                                    unsafe_allow_html=True
                                 )
-                            else:
-                                render_markdown_content(body_content)
+                            container = content_col
+                        else:
+                            container = st.container()
 
-                        # Close depth indentation wrapper
-                        if depth > 0:
-                            st.markdown('</div>', unsafe_allow_html=True)
+                        with container:
+                            content = block.get('content', '')
+                            lines = content.strip().split('\n')
+                            body_lines = lines[1:] if lines and lines[0].startswith('#') else lines
+                            body_content = '\n'.join(body_lines).strip()
+                            if body_content:
+                                if editable:
+                                    render_editable_block(
+                                        block_index,
+                                        {'type': 'markdown', 'content': body_content},
+                                        notebook_session, connection,
+                                        on_block_edit, on_block_delete
+                                    )
+                                else:
+                                    render_markdown_content(body_content)
             else:
                 # Regular markdown content
                 if editable:
