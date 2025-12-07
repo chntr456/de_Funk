@@ -1401,6 +1401,7 @@ help_text: Filter by trading volume"""
 
         try:
             from pathlib import Path
+            import re
             path = Path(notebook_path)
             if not path.is_absolute():
                 path = self.ctx.repo / path
@@ -1409,15 +1410,18 @@ help_text: Filter by trading volume"""
             with open(path, 'r') as f:
                 file_content = f.read()
 
-            # Try exact match first
-            if original_content in file_content:
+            updated_content = None
+
+            # Check if this is an exhibit block
+            if original_content.strip().startswith('$exhibits$') or original_content.strip().startswith('$exhibit$'):
+                # Handle exhibit block replacement
+                updated_content = self._replace_exhibit_block(file_content, original_content, new_content)
+            elif original_content in file_content:
+                # Try exact match first
                 updated_content = file_content.replace(original_content, new_content, 1)
             else:
                 # Try normalized matching (handle whitespace differences)
                 # The content might have been stripped during parsing
-                found = False
-
-                # Try to find the content by matching the first header line
                 original_lines = original_content.strip().split('\n')
                 if original_lines and original_lines[0].strip().startswith('#'):
                     header_line = original_lines[0].strip()
@@ -1443,15 +1447,11 @@ help_text: Filter by trading volume"""
                             # Replace this section with new content
                             new_lines = file_lines[:section_start] + new_content.split('\n') + file_lines[section_end:]
                             updated_content = '\n'.join(new_lines)
-                            found = True
                             break
 
-                    if not found:
-                        st.error(f"Could not find section '{header_line}' in file")
-                        return
-                else:
-                    st.error("Could not find original content in file (no header match)")
-                    return
+            if updated_content is None:
+                st.error("Could not find content to replace in file")
+                return
 
             # Write back
             with open(path, 'w') as f:
@@ -1478,6 +1478,91 @@ help_text: Filter by trading volume"""
             st.error(f"Error saving block: {str(e)}")
             import traceback
             st.code(traceback.format_exc())
+
+    def _replace_exhibit_block(self, file_content: str, original_content: str, new_content: str) -> str:
+        """
+        Replace an exhibit block in the file content.
+
+        Finds the exhibit block by matching key properties (type, source) and replaces it.
+
+        Args:
+            file_content: Full file content
+            original_content: Original exhibit content (generated YAML)
+            new_content: New exhibit content to replace with
+
+        Returns:
+            Updated file content, or None if not found
+        """
+        import re
+        import yaml
+
+        # Parse the original content to extract key properties for matching
+        # Original content looks like: $exhibits${\ntype: ...\nsource: ...\n}
+        try:
+            # Extract YAML from original content
+            orig_match = re.search(r'\$exhibits?\$\{(.*)\}', original_content, re.DOTALL)
+            if not orig_match:
+                return None
+            orig_yaml = orig_match.group(1).strip()
+            orig_data = yaml.safe_load(orig_yaml)
+            if not orig_data:
+                return None
+
+            # Key properties to match
+            match_type = orig_data.get('type', '')
+            match_source = orig_data.get('source', '')
+
+        except Exception:
+            return None
+
+        # Find all exhibit blocks in file
+        def find_matching_brace(text: str, start: int) -> int:
+            depth = 0
+            i = start
+            while i < len(text):
+                if text[i] == '{':
+                    depth += 1
+                elif text[i] == '}':
+                    depth -= 1
+                    if depth == 0:
+                        return i
+                i += 1
+            return -1
+
+        pattern = re.compile(r'\$(exhibits?)\$\{')
+        for match in pattern.finditer(file_content):
+            brace_start = match.end() - 1
+            brace_end = find_matching_brace(file_content, brace_start)
+            if brace_end == -1:
+                continue
+
+            # Extract this exhibit's YAML
+            exhibit_yaml = file_content[brace_start + 1:brace_end].strip()
+            try:
+                exhibit_data = yaml.safe_load(exhibit_yaml)
+                if not exhibit_data:
+                    continue
+
+                # Check if this matches our target
+                if (exhibit_data.get('type', '') == match_type and
+                    exhibit_data.get('source', '') == match_source):
+                    # Found it! Replace this block
+                    block_start = match.start()
+                    block_end = brace_end + 1
+
+                    # Use the new content directly (it should already have $exhibits${...} wrapper)
+                    if new_content.strip().startswith('$exhibits$') or new_content.strip().startswith('$exhibit$'):
+                        replacement = new_content.strip()
+                    else:
+                        # Wrap it
+                        replacement = f"$exhibits${{\n{new_content.strip()}\n}}"
+
+                    return file_content[:block_start] + replacement + file_content[block_end:]
+
+            except Exception:
+                continue
+
+        return None
 
     def _handle_block_insert(self, after_index: int, block_type: str, content: str):
         """
