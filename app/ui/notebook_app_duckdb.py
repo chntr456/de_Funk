@@ -1483,7 +1483,7 @@ help_text: Filter by trading volume"""
         """
         Replace an exhibit block in the file content.
 
-        Finds the exhibit block by matching key properties (type, source) and replaces it.
+        Finds the exhibit block by matching key properties (type, source, title) and replaces it.
 
         Args:
             file_content: Full file content
@@ -1502,17 +1502,23 @@ help_text: Filter by trading volume"""
             # Extract YAML from original content
             orig_match = re.search(r'\$exhibits?\$\{(.*)\}', original_content, re.DOTALL)
             if not orig_match:
+                st.warning("Could not parse original exhibit content")
                 return None
             orig_yaml = orig_match.group(1).strip()
             orig_data = yaml.safe_load(orig_yaml)
             if not orig_data:
+                st.warning("Could not load original YAML")
                 return None
 
-            # Key properties to match
+            # Key properties to match (use multiple for better matching)
             match_type = orig_data.get('type', '')
             match_source = orig_data.get('source', '')
+            match_title = orig_data.get('title', '')
+            match_x = orig_data.get('x', '')
+            match_y = orig_data.get('y', '')
 
-        except Exception:
+        except Exception as e:
+            st.warning(f"Error parsing original: {e}")
             return None
 
         # Find all exhibit blocks in file
@@ -1530,6 +1536,8 @@ help_text: Filter by trading volume"""
             return -1
 
         pattern = re.compile(r'\$(exhibits?)\$\{')
+        candidates = []
+
         for match in pattern.finditer(file_content):
             brace_start = match.end() - 1
             brace_end = find_matching_brace(file_content, brace_start)
@@ -1543,26 +1551,41 @@ help_text: Filter by trading volume"""
                 if not exhibit_data:
                     continue
 
-                # Check if this matches our target
-                if (exhibit_data.get('type', '') == match_type and
-                    exhibit_data.get('source', '') == match_source):
-                    # Found it! Replace this block
-                    block_start = match.start()
-                    block_end = brace_end + 1
+                # Score how well this matches
+                score = 0
+                if exhibit_data.get('type', '') == match_type:
+                    score += 10
+                if match_source and exhibit_data.get('source', '') == match_source:
+                    score += 5
+                if match_title and exhibit_data.get('title', '') == match_title:
+                    score += 5
+                if match_x and exhibit_data.get('x', '') == match_x:
+                    score += 2
+                if match_y and exhibit_data.get('y', '') == match_y:
+                    score += 2
 
-                    # Use the new content directly (it should already have $exhibits${...} wrapper)
-                    if new_content.strip().startswith('$exhibits$') or new_content.strip().startswith('$exhibit$'):
-                        replacement = new_content.strip()
-                    else:
-                        # Wrap it
-                        replacement = f"$exhibits${{\n{new_content.strip()}\n}}"
-
-                    return file_content[:block_start] + replacement + file_content[block_end:]
+                if score > 0:
+                    candidates.append((score, match.start(), brace_end + 1, exhibit_data))
 
             except Exception:
                 continue
 
-        return None
+        if not candidates:
+            st.warning(f"No matching exhibit found for type={match_type}, source={match_source}")
+            return None
+
+        # Use the best match
+        candidates.sort(key=lambda x: -x[0])  # Sort by score descending
+        best_score, block_start, block_end, _ = candidates[0]
+
+        # Use the new content directly (it should already have $exhibits${...} wrapper)
+        if new_content.strip().startswith('$exhibits$') or new_content.strip().startswith('$exhibit$'):
+            replacement = new_content.strip()
+        else:
+            # Wrap it
+            replacement = f"$exhibits${{\n{new_content.strip()}\n}}"
+
+        return file_content[:block_start] + replacement + file_content[block_end:]
 
     def _handle_block_insert(self, after_index: int, block_type: str, content: str):
         """
