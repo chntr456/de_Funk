@@ -230,8 +230,23 @@ class UniversalSession:
     # TABLE ACCESS
     # ============================================================
 
-    def _get_table_from_view_or_build(self, model, model_name: str, table_name: str) -> Any:
-        """Try to get table from existing silver view, fall back to building."""
+    def _get_table_from_view_or_build(self, model, model_name: str, table_name: str, allow_build: bool = True) -> Any:
+        """
+        Try to get table from existing silver view, fall back to building.
+
+        Args:
+            model: Model instance
+            model_name: Name of the model
+            table_name: Name of the table
+            allow_build: If False, raise error instead of building from Bronze.
+                         Use this to prevent expensive builds when using DuckDB views.
+
+        Returns:
+            DataFrame (DuckDB relation or Spark DataFrame)
+
+        Raises:
+            ValueError: If view not found and allow_build=False
+        """
         import logging
         logger = logging.getLogger(__name__)
 
@@ -242,7 +257,17 @@ class UniversalSession:
                 logger.debug(f"Using DuckDB view: {view_name}")
                 return result
             except Exception as e:
+                if not allow_build:
+                    raise ValueError(
+                        f"View '{view_name}' not available and building is disabled. "
+                        f"Run: python -m scripts.setup.setup_duckdb_views --update"
+                    )
                 logger.debug(f"View {view_name} not available ({e}), building from source")
+
+        if not allow_build:
+            raise ValueError(
+                f"Table '{model_name}.{table_name}' not available as view and building is disabled."
+            )
 
         # This triggers a build from Bronze - can be slow for large tables
         logger.info(f"Building {model_name}.{table_name} from source (may be slow)")
@@ -314,7 +339,50 @@ class UniversalSession:
 
             return df
 
-        # Missing columns - try auto-join strategies
+        # Missing columns - handle based on backend
+        # For DuckDB (interactive): Don't trigger expensive builds, return available data
+        # For Spark (batch): Allow auto-join strategies that may build
+        is_duckdb = self.backend == 'duckdb'
+
+        if is_duckdb:
+            # DuckDB: Return available columns only, skip expensive builds
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                f"Columns {missing} not available in {model_name}.{table_name}. "
+                f"Returning available columns only. "
+                f"To add these columns, rebuild Silver layer with Spark."
+            )
+            print(f"⚠️  Columns {missing} not in view - returning available columns only")
+
+            try:
+                # Get base table from view (no building)
+                df = self._get_table_from_view_or_build(model, model_name, table_name, allow_build=False)
+            except ValueError as e:
+                # View doesn't exist - provide helpful error
+                logger.error(f"View not available: {e}")
+                raise ValueError(
+                    f"Cannot load {model_name}.{table_name}: view not found. "
+                    f"Run: python -m scripts.setup.setup_duckdb_views --update"
+                ) from e
+
+            if filters:
+                df = FilterEngine.apply_from_session(df, filters, self)
+
+            # Select only available columns from required_columns
+            available_required = [col for col in required_columns if col in base_columns]
+            if available_required:
+                df = auto_join.select_columns(df, available_required)
+
+            if group_by:
+                # Filter group_by to available columns too
+                available_group_by = [col for col in group_by if col in base_columns]
+                if available_group_by:
+                    df = aggregation.aggregate_data(model_name, df, available_required, available_group_by, aggregations)
+
+            return df
+
+        # Spark backend: Try auto-join strategies (may trigger builds)
         print(f"🔗 Auto-join: {missing} not in {table_name}, searching for join path...")
 
         # Strategy 1: Check for materialized view
