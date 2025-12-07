@@ -177,6 +177,55 @@ class DuckDBConnection(DataConnection):
         delta_log = path_obj / "_delta_log"
         return delta_log.exists() and delta_log.is_dir()
 
+    def table(self, view_name: str) -> Any:
+        """
+        Get a table or view by name from the DuckDB catalog.
+
+        This method allows UniversalSession to use pre-created views
+        instead of building tables from Bronze on every request.
+
+        Args:
+            view_name: Fully qualified view name (e.g., 'stocks.dim_stock')
+
+        Returns:
+            DuckDB relation for the view
+
+        Raises:
+            Exception: If view doesn't exist
+
+        Example:
+            df = conn.table('stocks.dim_stock')
+            df = conn.table('stocks.fact_stock_prices')
+        """
+        # Use sql() to get a relation object with .filter(), .df() methods
+        return self.conn.sql(f"SELECT * FROM {view_name}")
+
+    def has_view(self, view_name: str) -> bool:
+        """
+        Check if a view exists in the database.
+
+        Args:
+            view_name: Fully qualified view name (e.g., 'stocks.dim_stock')
+
+        Returns:
+            True if view exists, False otherwise
+        """
+        try:
+            # Parse schema.table format
+            if '.' in view_name:
+                schema, table = view_name.split('.', 1)
+            else:
+                schema = 'main'
+                table = view_name
+
+            result = self.conn.execute(f"""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_schema = '{schema}' AND table_name = '{table}'
+            """).fetchone()
+            return result[0] > 0
+        except Exception:
+            return False
+
     def read_table(self, path: str, format: str = "parquet", version: Optional[int] = None, timestamp: Optional[str] = None) -> Any:
         """
         Read a table from storage (Parquet or Delta Lake).
