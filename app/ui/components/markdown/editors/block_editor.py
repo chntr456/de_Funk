@@ -11,7 +11,6 @@ import streamlit as st
 import markdown
 from typing import Dict, Any, Optional, Callable
 
-from ..toggle_container import ToggleContainer
 from ..blocks.text import render_markdown_content
 from ..utils import exhibit_to_yaml, collapsible_to_editable
 
@@ -96,55 +95,31 @@ def render_block_editor(
     elif block_type == 'collapsible':
         st.caption("First line is the summary (clickable header). Rest is the inner content.")
 
-    # Action buttons
-    col1, col2, col3 = st.columns([0.2, 0.2, 0.6])
+    # Action buttons (inline to avoid nested columns)
+    button_container = st.container()
+    with button_container:
+        save_clicked = st.button("💾 Save", key=f"save_block_{block_index}", type="primary")
+        cancel_clicked = st.button("Cancel", key=f"cancel_block_{block_index}")
 
-    with col1:
-        if st.button("💾 Save", key=f"save_block_{block_index}", type="primary"):
-            # Call the on_edit callback if provided
-            if on_edit:
-                on_edit(block_index, edited_content)
+    if save_clicked:
+        # Call the on_edit callback if provided
+        if on_edit:
+            on_edit(block_index, edited_content)
 
-            # Exit edit mode
-            st.session_state[edit_key] = False
-            # Clear stored content so it reloads next time
-            if content_key in st.session_state:
-                del st.session_state[content_key]
-            st.success("Block saved!")
-            st.rerun()
+        # Exit edit mode
+        st.session_state[edit_key] = False
+        # Clear stored content so it reloads next time
+        if content_key in st.session_state:
+            del st.session_state[content_key]
+        st.success("Block saved!")
+        st.rerun()
 
-    with col2:
-        if st.button("Cancel", key=f"cancel_block_{block_index}"):
-            # Reset content and exit edit mode
-            if content_key in st.session_state:
-                del st.session_state[content_key]
-            st.session_state[edit_key] = False
-            st.rerun()
-
-    # Show preview based on block type
-    with ToggleContainer(
-        "Preview",
-        expanded=True,
-        container_id=f"preview_{block_index}",
-        style="minimal"
-    ) as tc:
-        if tc.is_open:
-            if block_type == 'markdown':
-                md = markdown.Markdown(
-                    extensions=['extra', 'codehilite', 'nl2br', 'sane_lists', 'toc']
-                )
-                html = md.convert(edited_content)
-                st.markdown(html, unsafe_allow_html=True)
-            elif block_type == 'exhibit':
-                st.code(edited_content, language='yaml')
-                st.caption("Exhibit will be rendered after save")
-            elif block_type == 'collapsible':
-                lines = edited_content.split('\n', 1)
-                summary = lines[0] if lines else "Details"
-                content = lines[1] if len(lines) > 1 else ""
-                st.markdown(f"**Summary:** {summary}")
-                st.markdown("**Content:**")
-                st.markdown(content)
+    if cancel_clicked:
+        # Reset content and exit edit mode
+        if content_key in st.session_state:
+            del st.session_state[content_key]
+        st.session_state[edit_key] = False
+        st.rerun()
 
 
 def render_editable_block(
