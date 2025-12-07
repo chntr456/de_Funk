@@ -454,35 +454,48 @@ def _format_content_for_display(content: str) -> str:
     return formatted
 
 
+def _to_simple_value(val):
+    """Recursively convert a value to simple JSON-serializable types."""
+    if val is None:
+        return None
+    if isinstance(val, (str, int, float, bool)):
+        return val
+    if isinstance(val, (list, tuple)):
+        return [_to_simple_value(v) for v in val]
+    if isinstance(val, dict):
+        return {k: _to_simple_value(v) for k, v in val.items() if not k.startswith('_')}
+    if hasattr(val, 'value'):  # Enum
+        return val.value
+    if hasattr(val, '__dict__'):
+        # Convert object to dict, filtering private attrs and None values
+        return {k: _to_simple_value(v) for k, v in val.__dict__.items()
+                if not k.startswith('_') and v is not None}
+    # Fallback to string representation
+    return str(val)
+
+
 def _exhibit_to_dict(exhibit) -> dict:
-    """Convert an Exhibit object to a dictionary for YAML serialization."""
+    """Convert an Exhibit object to a simple dictionary for YAML serialization."""
+    if exhibit is None:
+        return {}
+
     result = {}
 
-    # Get type
+    # Get type (handle enum)
     if hasattr(exhibit, 'type'):
-        result['type'] = exhibit.type.value if hasattr(exhibit.type, 'value') else str(exhibit.type)
+        val = exhibit.type
+        result['type'] = val.value if hasattr(val, 'value') else str(val)
 
-    # Get common attributes
-    for attr in ['title', 'source', 'x', 'y', 'color', 'height', 'width']:
-        if hasattr(exhibit, attr):
-            val = getattr(exhibit, attr)
-            if val is not None:
-                result[attr] = val
-
-    # Get metrics for metric_cards
-    if hasattr(exhibit, 'metrics') and exhibit.metrics:
-        result['metrics'] = []
-        for m in exhibit.metrics:
-            if hasattr(m, '__dict__'):
-                result['metrics'].append({k: v for k, v in m.__dict__.items() if v is not None and not k.startswith('_')})
-            else:
-                result['metrics'].append(m)
-
-    # Get other attributes
+    # Get all attributes and convert to simple values
     if hasattr(exhibit, '__dict__'):
         for k, v in exhibit.__dict__.items():
-            if k not in result and v is not None and not k.startswith('_'):
-                result[k] = v
+            if k.startswith('_') or v is None:
+                continue
+            if k == 'type':
+                continue  # Already handled
+            if k == 'id':
+                continue  # Skip internal IDs
+            result[k] = _to_simple_value(v)
 
     return result
 
