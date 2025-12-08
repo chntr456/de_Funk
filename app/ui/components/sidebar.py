@@ -152,6 +152,8 @@ class SidebarNavigator:
                     if tab_id == notebook_id:
                         st.session_state.open_tabs[i] = (tab_id, tab_path, notebook_config)
                         break
+                # Clear any cached editor state for this notebook to force fresh content
+                _clear_editor_state(notebook_id)
                 st.session_state.active_tab = notebook_id
                 st.rerun()
             except Exception as e:
@@ -167,6 +169,54 @@ class SidebarNavigator:
 
             except Exception as e:
                 st.error(f"Error loading notebook: {str(e)}")
+
+
+def _clear_editor_state(notebook_id: str):
+    """
+    Clear all cached editor state for a notebook.
+
+    This is necessary when reloading a notebook from disk to ensure fresh content
+    is used instead of stale session state. The flat_renderer caches editor content
+    in session state with keys like 'edit_content_{block_id}', and this can persist
+    even across app restarts if the browser tab remains open.
+
+    Args:
+        notebook_id: ID of the notebook to clear state for
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Keys to clear: patterns used by flat_renderer.py for editor caching
+    patterns_to_clear = [
+        'edit_content_',
+        'edit_original_',
+        'edit_formatted_',
+        'stored_orig_',
+        'save_error_',
+        'textarea_',
+    ]
+
+    keys_to_delete = []
+    for key in list(st.session_state.keys()):
+        # Check if key matches any of our patterns
+        for pattern in patterns_to_clear:
+            if key.startswith(pattern):
+                keys_to_delete.append(key)
+                break
+
+    # Also clear the edit states dict entries for this notebook's blocks
+    if 'flat_renderer_edit_states' in st.session_state:
+        edit_states = st.session_state['flat_renderer_edit_states']
+        blocks_to_clear = [k for k in edit_states.keys() if 'block_' in k]
+        for block_key in blocks_to_clear:
+            del edit_states[block_key]
+
+    # Delete the collected keys
+    for key in keys_to_delete:
+        del st.session_state[key]
+
+    if keys_to_delete:
+        logger.debug(f"Cleared {len(keys_to_delete)} editor state keys for notebook reload")
 
 
 def close_tab(notebook_id: str):
