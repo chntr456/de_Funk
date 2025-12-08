@@ -5,11 +5,14 @@ Parses markdown-based notebooks with YAML front matter, filters section,
 and embedded exhibits using the $exhibits${...} syntax.
 """
 
+import logging
 import re
 import yaml
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 from ..schema import (
     NotebookConfig,
@@ -393,6 +396,72 @@ class MarkdownNotebookParser:
 
         return len(exhibits)  # Return updated counter
 
+    def _validate_exhibit_params(self, data: Dict[str, Any], exhibit_id: str) -> None:
+        """
+        Validate exhibit parameters and raise clear errors for invalid configs.
+
+        Valid parameters by exhibit type:
+        - All types: type, source, title, height, options
+        - Charts (line_chart, bar_chart, scatter_chart): x, y, color
+        - metric_cards: metrics
+        - table: columns
+        """
+        exhibit_type = data.get('type')
+        if not exhibit_type:
+            raise ValueError(f"Exhibit '{exhibit_id}': Missing required 'type' field")
+
+        # Define valid parameters for clean exhibit definitions
+        # These are the USER-FACING params, not internal field names
+        valid_common = {'type', 'source', 'title', 'height', 'options', 'description'}
+        valid_chart = {'x', 'y', 'color', 'size', 'legend', 'interactive'}
+        valid_metric = {'metrics'}
+        valid_table = {'columns', 'pagination', 'page_size', 'download', 'sortable', 'searchable'}
+        valid_advanced = {
+            'collapsible', 'collapsible_title', 'collapsible_expanded', 'nest_in_expander',
+            'measure_selector', 'dimension_selector', 'weighting', 'aggregate_by',
+            'value_measures', 'group_by', 'aggregations', 'sort', 'layout',
+            'component', 'params', 'filters', 'x_label', 'y_label', 'y2', 'y2_label',
+            'actual_column', 'predicted_column', 'confidence_bounds'
+        }
+
+        # Deprecated/internal params that should NOT be used at root level
+        internal_params = {'dimension', 'measure', 'measures', 'label', 'scale',
+                          'color_by', 'size_by', 'x_axis', 'y_axis', 'y_axis_left', 'y_axis_right'}
+
+        all_valid = valid_common | valid_chart | valid_metric | valid_table | valid_advanced
+
+        # Check for internal params being used (common mistake after bad save)
+        used_internal = set(data.keys()) & internal_params
+        if used_internal:
+            raise ValueError(
+                f"Exhibit '{exhibit_id}': Invalid parameters: {used_internal}\n"
+                f"These are internal field names. Use the correct format:\n"
+                f"  - Instead of 'dimension', use 'x: column_name'\n"
+                f"  - Instead of 'measure', use 'y: column_name'\n"
+                f"  - Instead of 'color_by', use 'color: column_name'\n"
+                f"Example:\n"
+                f"  type: {exhibit_type}\n"
+                f"  source: model.table\n"
+                f"  x: date_column\n"
+                f"  y: value_column\n"
+                f"  color: group_column"
+            )
+
+        # Check for unknown params
+        unknown = set(data.keys()) - all_valid
+        if unknown:
+            logger.warning(f"Exhibit '{exhibit_id}': Unknown parameters ignored: {unknown}")
+
+        # Validate required fields by type
+        chart_types = {'line_chart', 'bar_chart', 'scatter_chart', 'area_chart'}
+        if exhibit_type in chart_types:
+            if 'y' not in data and 'y_axis' not in data:
+                raise ValueError(
+                    f"Exhibit '{exhibit_id}' (type: {exhibit_type}): Missing 'y' parameter.\n"
+                    f"Charts require at least: type, source, y\n"
+                    f"Example: y: close  OR  y: [close, open, high]"
+                )
+
     def _parse_exhibit(self, exhibit_yaml: str, exhibit_id: str) -> Exhibit:
         """
         Parse exhibit YAML into Exhibit object.
@@ -402,6 +471,9 @@ class MarkdownNotebookParser:
         - Simplified metric definitions
         """
         data = yaml.safe_load(exhibit_yaml)
+
+        # Validate exhibit parameters
+        self._validate_exhibit_params(data, exhibit_id)
 
         exhibit_type = ExhibitType(data['type'])
 
