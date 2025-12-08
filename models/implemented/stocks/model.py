@@ -64,19 +64,18 @@ class StocksModel(BaseModel):
         facts: Dict[str, DataFrame]
     ) -> Tuple[Dict[str, DataFrame], Dict[str, DataFrame]]:
         """
-        Post-build hook: Filter fact_stock_prices to only tickers in dim_stock
-        and denormalize key dimension columns (sector, exchange_code).
+        Post-build hook: Filter fact_stock_prices to only tickers in dim_stock.
 
         This implements JOIN-based filtering for the prices table. Since Bronze
         prices may have NULL asset_type, we can't filter directly. Instead, we:
         1. Build dim_stock (filtered by asset_type='stocks' from securities_reference)
         2. Build fact_stock_prices (all prices, no asset_type filter)
-        3. Join fact_stock_prices with dim_stock to:
-           - Filter to only tickers that exist in dim_stock
-           - Denormalize sector and exchange_code for interactive analytics
+        3. Filter fact_stock_prices to only tickers that exist in dim_stock
 
-        This ensures we only have prices for actual stock tickers and enables
-        dimension-based filtering/grouping in notebooks without auto-join.
+        This ensures we only have prices for actual stock tickers.
+
+        Note: Dimension columns (sector, exchange_code) are accessed via auto-join
+        at query time using the model graph edges, not denormalized here.
         """
         # Check if we have both tables
         if 'dim_stock' not in dims or 'fact_stock_prices' not in facts:
@@ -86,36 +85,31 @@ class StocksModel(BaseModel):
         dim_stock = dims['dim_stock']
         fact_prices = facts['fact_stock_prices']
 
-        # Columns to denormalize from dim_stock
-        denorm_columns = ['sector', 'exchange_code']
-
         # Get stock tickers from dim_stock
         if self._backend == 'spark':
-            from pyspark.sql.functions import col
-
-            # Select only needed columns from dim_stock for the join
-            dim_for_join = dim_stock.select('ticker', *denorm_columns).distinct()
+            # Spark: Use semi-join for efficiency
+            stock_tickers = dim_stock.select('ticker').distinct()
 
             # Count before filtering
             before_count = fact_prices.count()
 
-            # Inner join to filter AND denormalize
+            # Semi-join to keep only prices for stock tickers
             filtered_prices = fact_prices.join(
-                dim_for_join,
+                stock_tickers,
                 on='ticker',
-                how='inner'  # Filter to matching tickers AND bring in dim columns
+                how='left_semi'  # Keep rows from left where ticker exists in right
             )
 
             after_count = filtered_prices.count()
             logger.info(
-                f"  JOIN filter + denormalize: {before_count:,} → {after_count:,} prices "
-                f"(filtered to {dim_for_join.count()} stock tickers, added {denorm_columns})"
+                f"  JOIN filter: {before_count:,} → {after_count:,} prices "
+                f"(filtered to {stock_tickers.count()} stock tickers)"
             )
 
             facts['fact_stock_prices'] = filtered_prices
 
         else:
-            # DuckDB/pandas: Use merge
+            # DuckDB/pandas: Use isin filter
             import pandas as pd
 
             # Convert to pandas if needed
@@ -133,22 +127,17 @@ class StocksModel(BaseModel):
             else:
                 fact_prices_pdf = fact_prices
 
-            # Select only needed columns for join
-            dim_for_join = dim_stock_pdf[['ticker'] + denorm_columns].drop_duplicates()
-
+            stock_tickers = set(dim_stock_pdf['ticker'].unique())
             before_count = len(fact_prices_pdf)
 
-            # Inner merge to filter AND denormalize
-            filtered_prices_pdf = fact_prices_pdf.merge(
-                dim_for_join,
-                on='ticker',
-                how='inner'
-            )
+            filtered_prices_pdf = fact_prices_pdf[
+                fact_prices_pdf['ticker'].isin(stock_tickers)
+            ]
 
             after_count = len(filtered_prices_pdf)
             logger.info(
-                f"  JOIN filter + denormalize: {before_count:,} → {after_count:,} prices "
-                f"(filtered to {len(dim_for_join)} stock tickers, added {denorm_columns})"
+                f"  JOIN filter: {before_count:,} → {after_count:,} prices "
+                f"(filtered to {len(stock_tickers)} stock tickers)"
             )
 
             # Convert back to DuckDB relation if needed

@@ -339,50 +339,12 @@ class UniversalSession:
 
             return df
 
-        # Missing columns - handle based on backend
-        # For DuckDB (interactive): Don't trigger expensive builds, return available data
-        # For Spark (batch): Allow auto-join strategies that may build
-        is_duckdb = self.backend == 'duckdb'
+        # Missing columns - use auto-join to get them from related tables
+        # Auto-join uses the model graph to find join paths
+        import logging
+        logger = logging.getLogger(__name__)
 
-        if is_duckdb:
-            # DuckDB: Return available columns only, skip expensive builds
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.warning(
-                f"Columns {missing} not available in {model_name}.{table_name}. "
-                f"Returning available columns only. "
-                f"To add these columns, rebuild Silver layer with Spark."
-            )
-            print(f"⚠️  Columns {missing} not in view - returning available columns only")
-
-            try:
-                # Get base table from view (no building)
-                df = self._get_table_from_view_or_build(model, model_name, table_name, allow_build=False)
-            except ValueError as e:
-                # View doesn't exist - provide helpful error
-                logger.error(f"View not available: {e}")
-                raise ValueError(
-                    f"Cannot load {model_name}.{table_name}: view not found. "
-                    f"Run: python -m scripts.setup.setup_duckdb_views --update"
-                ) from e
-
-            if filters:
-                df = FilterEngine.apply_from_session(df, filters, self)
-
-            # Select only available columns from required_columns
-            available_required = [col for col in required_columns if col in base_columns]
-            if available_required:
-                df = auto_join.select_columns(df, available_required)
-
-            if group_by:
-                # Filter group_by to available columns too
-                available_group_by = [col for col in group_by if col in base_columns]
-                if available_group_by:
-                    df = aggregation.aggregate_data(model_name, df, available_required, available_group_by, aggregations)
-
-            return df
-
-        # Spark backend: Try auto-join strategies (may trigger builds)
+        logger.info(f"Auto-join: {missing} not in {table_name}, searching for join path...")
         print(f"🔗 Auto-join: {missing} not in {table_name}, searching for join path...")
 
         # Strategy 1: Check for materialized view
