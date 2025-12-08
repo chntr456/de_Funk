@@ -233,12 +233,17 @@ def render_flat_row(
     is_editing = get_edit_state(block_id)
     is_open = get_toggle_state(block_id, default=True)
 
+    # Collapsible blocks can't be edited directly - their inner content is editable separately
+    # This prevents issues with reconstructing the <details> HTML during save
+    is_collapsible = block_type == 'collapsible'
+    block_editable = editable and not is_collapsible
+
     # Calculate column widths based on depth
     # Indent: 2% per depth level (max 10%)
     indent_width = min(depth * 0.02, 0.10)
     toggle_width = 0.04 if (has_children or is_header) else 0.0
-    edit_width = 0.04 if editable else 0.0
-    delete_width = 0.04 if editable else 0.0
+    edit_width = 0.04 if block_editable else 0.0
+    delete_width = 0.04 if block_editable else 0.0
     content_width = 1.0 - indent_width - toggle_width - edit_width - delete_width
 
     # Build column spec (filter out zero-width columns)
@@ -734,6 +739,7 @@ def _render_inline_editor(
 def render_insert_button(
     block_index: int,
     depth: int,
+    flat_id: str,
     on_block_insert: Optional[Callable[[int, str, str], None]] = None
 ):
     """Render an insert button to add a new block above this position."""
@@ -750,7 +756,8 @@ def render_insert_button(
         container = st.container()
 
     with container:
-        insert_key = f"insert_above_{block_index}"
+        # Use flat_id for unique key since block_index may be duplicated for inner blocks
+        insert_key = f"insert_above_{flat_id}"
         if st.button("➕ Add block above", key=insert_key, help="Insert new block"):
             # Default to markdown block with placeholder content
             on_block_insert(block_index, 'markdown', '# New Section\n\nAdd your content here.')
@@ -829,6 +836,7 @@ def render_flat_notebook(
             render_insert_button(
                 block.get('_index', 0),
                 block['_depth'],
+                block['_flat_id'],
                 on_block_insert
             )
 
