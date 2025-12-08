@@ -1546,7 +1546,10 @@ help_text: Filter by trading volume"""
                 continue
 
             # Extract this exhibit's YAML
-            exhibit_yaml = file_content[brace_start + 1:brace_end].strip()
+            exhibit_yaml = file_content[brace_start + 1:brace_end]
+            # Dedent the YAML - remove common leading whitespace from all lines
+            import textwrap
+            exhibit_yaml = textwrap.dedent(exhibit_yaml).strip()
             try:
                 exhibit_data = yaml.safe_load(exhibit_yaml)
                 if not exhibit_data:
