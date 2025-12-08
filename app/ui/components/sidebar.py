@@ -143,9 +143,19 @@ class SidebarNavigator:
         existing_tab = next((tab for tab in st.session_state.open_tabs if tab[0] == notebook_id), None)
 
         if existing_tab:
-            # Just switch to it (no need to reload)
-            st.session_state.active_tab = notebook_id
-            st.rerun()
+            # ALWAYS reload from disk to get fresh content
+            # This ensures any file changes are picked up
+            try:
+                notebook_config = self.notebook_session.load_notebook(str(notebook_path))
+                # Update the existing tab with fresh config
+                for i, (tab_id, tab_path, _) in enumerate(st.session_state.open_tabs):
+                    if tab_id == notebook_id:
+                        st.session_state.open_tabs[i] = (tab_id, tab_path, notebook_config)
+                        break
+                st.session_state.active_tab = notebook_id
+                st.rerun()
+            except Exception as e:
+                st.error(f"Error reloading notebook: {str(e)}")
         else:
             # Load the notebook (first time opening)
             try:
