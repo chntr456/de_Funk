@@ -436,6 +436,9 @@ class MarkdownNotebookParser:
         # Check for internal params being used at root (common mistake after bad save)
         used_internal = set(data.keys()) & internal_axis_params
         if used_internal:
+            # Debug: Print the actual data that's being validated
+            print(f"[DEBUG ERROR] exhibit_id={exhibit_id}, all_keys={list(data.keys())}")
+            print(f"[DEBUG ERROR] data={data}")
             raise ValueError(
                 f"Exhibit '{exhibit_id}': Invalid root-level parameters: {used_internal}\n"
                 f"These belong inside axis configs. Use one of these formats:\n\n"
@@ -487,6 +490,10 @@ class MarkdownNotebookParser:
         - Simplified metric definitions
         """
         data = yaml.safe_load(exhibit_yaml)
+
+        # Debug: Log what's being parsed (visible in console)
+        print(f"[DEBUG] Parsing exhibit '{exhibit_id}': keys={list(data.keys())}")
+        logger.debug(f"Parsing exhibit '{exhibit_id}': keys={list(data.keys())}")
 
         # Validate exhibit parameters
         self._validate_exhibit_params(data, exhibit_id)
