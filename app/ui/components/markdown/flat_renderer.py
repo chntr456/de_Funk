@@ -475,7 +475,11 @@ def _to_simple_value(val):
 
 
 def _exhibit_to_dict(exhibit) -> dict:
-    """Convert an Exhibit object to a simple dictionary for YAML serialization."""
+    """Convert an Exhibit object to a simple dictionary for YAML serialization.
+
+    Uses shorthand format where possible (y: instead of y_axis:, x: instead of x_axis:)
+    to match the typical input format.
+    """
     if exhibit is None:
         return {}
 
@@ -495,9 +499,101 @@ def _exhibit_to_dict(exhibit) -> dict:
                 continue  # Already handled
             if k == 'id':
                 continue  # Skip internal IDs
+
+            # Convert y_axis back to shorthand 'y' format
+            if k == 'y_axis' and hasattr(v, 'measure'):
+                # Use shorthand if it's a simple measure (or list of measures)
+                measure = v.measure
+                if measure is not None:
+                    # Handle both single measure and list
+                    if isinstance(measure, list):
+                        result['y'] = measure
+                    else:
+                        result['y'] = measure
+                else:
+                    result[k] = _to_simple_value(v)
+                continue
+
+            # Convert x_axis back to shorthand 'x' format
+            if k == 'x_axis' and hasattr(v, 'dimension'):
+                dim = v.dimension
+                if dim is not None:
+                    result['x'] = dim
+                else:
+                    result[k] = _to_simple_value(v)
+                continue
+
+            # Convert color_by to 'color' shorthand
+            if k == 'color_by':
+                result['color'] = v
+                continue
+
             result[k] = _to_simple_value(v)
 
     return result
+
+
+def _normalize_content_for_save(content: str) -> str:
+    """
+    Normalize content before saving by removing display-only formatting.
+
+    The _format_content_for_display function adds extra indentation for readability,
+    but this shouldn't be saved to the file. This function removes that extra
+    indentation while preserving the structural YAML indentation.
+    """
+    import textwrap
+    import re
+
+    # Handle $exhibits$ and $filter$ blocks
+    pattern = re.compile(r'(\$(?:exhibit|filter|exhibits|filters)\$)\{')
+
+    def normalize_block(text: str) -> str:
+        """Normalize a single block by dedenting the YAML content."""
+        result = []
+        i = 0
+
+        while i < len(text):
+            match = pattern.search(text, i)
+            if not match:
+                result.append(text[i:])
+                break
+
+            # Add text before the match
+            result.append(text[i:match.start()])
+
+            # Find the matching closing brace
+            prefix = match.group(1)
+            brace_start = match.end()
+            depth = 1
+            j = brace_start
+            while j < len(text) and depth > 0:
+                if text[j] == '{':
+                    depth += 1
+                elif text[j] == '}':
+                    depth -= 1
+                j += 1
+
+            if depth == 0:
+                # Extract and dedent the YAML content
+                yaml_content = text[brace_start:j-1]
+                dedented = textwrap.dedent(yaml_content).strip()
+                # Rebuild with standard 2-space indent for file format
+                indented_lines = []
+                for line in dedented.split('\n'):
+                    if line.strip():
+                        indented_lines.append('  ' + line)
+                    else:
+                        indented_lines.append('')
+                result.append(f"{prefix}{{\n" + '\n'.join(indented_lines) + "\n}")
+                i = j
+            else:
+                # Unmatched braces - keep as is
+                result.append(text[i:match.end()])
+                i = match.end()
+
+        return ''.join(result)
+
+    return normalize_block(content)
 
 
 def _render_inline_editor(
@@ -571,19 +667,23 @@ def _render_inline_editor(
 
     if save_clicked:
         if on_edit:
+            # Normalize the edited content - remove display-only formatting
+            # The _format_content_for_display adds extra indentation that shouldn't be saved
+            normalized_content = _normalize_content_for_save(edited_content)
+
             # Set session state for backend to find/replace content
             st.session_state['_content_to_replace'] = st.session_state.get(original_key, original_content)
-            st.session_state['_new_content'] = edited_content
+            st.session_state['_new_content'] = normalized_content
 
             # Debug: Show what we're trying to save
             with st.expander("Debug: Save Info", expanded=True):
                 st.write("**Original content (first 500 chars):**")
                 st.code(st.session_state['_content_to_replace'][:500])
-                st.write("**New content (first 500 chars):**")
-                st.code(edited_content[:500])
+                st.write("**Normalized content (first 500 chars):**")
+                st.code(normalized_content[:500])
 
             try:
-                on_edit(block_index, edited_content)
+                on_edit(block_index, normalized_content)
                 # If we get here without exception, clear error and close editor
                 if save_error_key in st.session_state:
                     del st.session_state[save_error_key]
