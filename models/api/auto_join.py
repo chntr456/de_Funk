@@ -323,17 +323,22 @@ class AutoJoinHandler:
     ) -> Any:
         """Execute joins using DuckDB SQL."""
         from core.session.filters import FilterEngine
+        import time
 
         base_table = table_sequence[0]
         temp_tables = {}
 
         try:
             # Register tables as temp views
+            print(f"    📊 Loading {len(table_sequence)} tables for auto-join...")
             for table_name in table_sequence:
+                t0 = time.time()
                 df_temp = model.get_table(table_name)
+                t1 = time.time()
                 temp_name = f"_autojoin_{table_name}"
                 temp_df = df_temp.df()  # Convert to pandas
-                print(f"DEBUG: Registering {temp_name}: shape={temp_df.shape}, columns={list(temp_df.columns)}")
+                t2 = time.time()
+                print(f"    ⏱️  {table_name}: get_table={t1-t0:.2f}s, to_pandas={t2-t1:.2f}s, shape={temp_df.shape}")
                 self.connection.conn.register(temp_name, temp_df)
                 temp_tables[table_name] = temp_name
 
@@ -358,12 +363,13 @@ class AutoJoinHandler:
                 if where_clause:
                     sql += f" WHERE {where_clause}"
 
-            print(f"DEBUG: Auto-join SQL: {sql}")
+            print(f"    🔍 SQL: {sql[:200]}{'...' if len(sql) > 200 else ''}")
 
             # Execute the join query
+            t0 = time.time()
             result = self.connection.conn.execute(sql)
             result_df = result.fetchdf()
-            print(f"DEBUG: Query result: shape={result_df.shape}, columns={list(result_df.columns)}")
+            print(f"    ⏱️  SQL execution: {time.time() - t0:.2f}s, result shape={result_df.shape}")
 
             # Cleanup temp tables
             for temp_name in temp_tables.values():
