@@ -55,8 +55,15 @@ def flatten_blocks(
     for block in blocks:
         block_index = block.get('_index', len(flat_list))
         header_level = block.get('_header_level', 0)
-        children = block.get('children', [])
         block_type = block.get('type', 'unknown')
+
+        # Get children - check both 'children' (from header tree) and 'content' (for collapsible blocks)
+        children = block.get('children', [])
+        if not children and block_type == 'collapsible':
+            # Collapsible blocks have inner blocks in 'content', not 'children'
+            inner_content = block.get('content', [])
+            if isinstance(inner_content, list):
+                children = inner_content
 
         # Generate unique ID
         flat_id = f"block_{block_index}_{depth}"
@@ -365,6 +372,18 @@ def _format_content_for_display(content: str) -> str:
     This is display-only formatting - doesn't affect saved content.
     """
     import re
+    import logging
+
+    logger = logging.getLogger(__name__)
+
+    # Safeguard: ensure content is a string
+    if not isinstance(content, str):
+        logger.warning(f"_format_content_for_display received non-string: {type(content)}")
+        if isinstance(content, list):
+            # Try to convert list to string representation
+            import yaml
+            return yaml.dump(content, default_flow_style=False)
+        return str(content)
 
     def find_matching_brace(text: str, start: int) -> int:
         """Find the matching closing brace, handling nested braces."""
@@ -542,6 +561,43 @@ def _normalize_content_for_save(content: str) -> str:
     return normalize_block(content)
 
 
+def _reconstruct_collapsible_inner_content(inner_blocks: List[Dict[str, Any]]) -> str:
+    """
+    Reconstruct the inner content of a collapsible block for editing.
+
+    Args:
+        inner_blocks: List of inner block dictionaries
+
+    Returns:
+        Reconstructed markdown/exhibit content as a string
+    """
+    import yaml
+
+    parts = []
+    for inner_block in inner_blocks:
+        inner_type = inner_block.get('type', 'unknown')
+        if inner_type == 'markdown':
+            parts.append(inner_block.get('content', ''))
+        elif inner_type == 'exhibit':
+            exhibit = inner_block.get('exhibit')
+            if exhibit:
+                exhibit_dict = _exhibit_to_dict(exhibit)
+                yaml_content = yaml.dump(exhibit_dict, default_flow_style=False, sort_keys=False, allow_unicode=True)
+                parts.append(f"$exhibits${{\n{yaml_content}}}")
+            else:
+                parts.append("$exhibits${\n  type: line_chart\n}")
+        elif inner_type == 'error':
+            parts.append(f"$exhibits${{\n{inner_block.get('content', '')}\n}}")
+        else:
+            content = inner_block.get('content')
+            if isinstance(content, str):
+                parts.append(content)
+            else:
+                parts.append(str(inner_block))
+
+    return '\n\n'.join(parts)
+
+
 def _render_inline_editor(
     block: Dict[str, Any],
     block_id: str,
@@ -550,8 +606,13 @@ def _render_inline_editor(
 ):
     """Render inline editor for a block."""
     import yaml
+    import logging
 
+    logger = logging.getLogger(__name__)
     block_type = block.get('type', 'markdown')
+
+    # Log block details for debugging
+    logger.debug(f"Rendering editor for block {block_id}: type={block_type}, keys={list(block.keys())}")
 
     # Get content to edit based on block type
     if block_type == 'markdown':
@@ -563,9 +624,25 @@ def _render_inline_editor(
             exhibit_dict = _exhibit_to_dict(exhibit)
             original_content = f"$exhibits${{\n{yaml.dump(exhibit_dict, default_flow_style=False, sort_keys=False, allow_unicode=True)}}}"
         else:
-            original_content = str(block)
+            original_content = f"$exhibits${{\n  type: line_chart\n  source: \n  x: \n  y: \n}}"
+    elif block_type == 'collapsible':
+        # Reconstruct collapsible as HTML for editing
+        summary = block.get('summary', 'Details')
+        inner_blocks = block.get('content', [])
+        inner_content = _reconstruct_collapsible_inner_content(inner_blocks)
+        original_content = f"<details>\n<summary>{summary}</summary>\n\n{inner_content}\n\n</details>"
+    elif block_type == 'error':
+        # Show the original YAML content that caused the error
+        original_content = f"$exhibits${{\n{block.get('content', '')}\n}}"
     else:
-        original_content = block.get('content', str(block))
+        # Unknown block type - show as string representation
+        content = block.get('content')
+        if isinstance(content, str):
+            original_content = content
+        elif content is not None:
+            original_content = yaml.dump(content, default_flow_style=False)
+        else:
+            original_content = str(block)
 
     content_key = f"edit_content_{block_id}"
     original_key = f"edit_original_{block_id}"

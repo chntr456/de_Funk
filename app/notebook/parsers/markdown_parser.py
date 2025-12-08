@@ -416,7 +416,7 @@ class MarkdownNotebookParser:
         valid_chart_shorthand = {'x', 'y', 'color', 'size', 'legend', 'interactive'}
         valid_chart_full = {'x_axis', 'y_axis', 'y_axis_left', 'y_axis_right', 'color_by', 'size_by'}
         valid_metric = {'metrics'}
-        valid_table = {'columns', 'pagination', 'page_size', 'download', 'sortable', 'searchable'}
+        valid_table = {'columns', 'pagination', 'page_size', 'download', 'sortable', 'searchable', 'sort_by', 'sort_order'}
         valid_selectors = {'measure_selector', 'dimension_selector'}
         valid_advanced = {
             'collapsible', 'collapsible_title', 'collapsible_expanded', 'nest_in_expander',
