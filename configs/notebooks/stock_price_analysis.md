@@ -66,16 +66,28 @@ $exhibits${
 
 ## Price Trend
 
-Daily closing prices over the selected period. Each line represents a different stock.
+Explore stock price data interactively. Select which metrics to display and how to group them.
 
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
   x: trade_date
-  y: close
-  color: ticker
-  title: Daily Closing Prices
-  height: 400
+  title: Stock Price Explorer
+  height: 450
+  measure_selector:
+    available_measures: [close, open, high, low, volume]
+    default_measures: [close]
+    label: Price Metrics
+    allow_multiple: true
+    selector_type: checkbox
+    help_text: Select one or more price metrics to display
+  dimension_selector:
+    available_dimensions: [ticker, sector, exchange_code]
+    default_dimension: ticker
+    label: Group By
+    selector_type: radio
+    applies_to: color
+    help_text: Choose how to group/color the lines
 }
 
 ## Technical Indicators

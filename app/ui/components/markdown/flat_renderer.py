@@ -557,6 +557,39 @@ def _exhibit_to_dict(exhibit) -> dict:
     if hasattr(exhibit, 'columns') and exhibit.columns:
         result['columns'] = exhibit.columns
 
+    # Dynamic selectors
+    if hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
+        ms = exhibit.measure_selector
+        result['measure_selector'] = {
+            'available_measures': ms.available_measures,
+        }
+        if ms.default_measures:
+            result['measure_selector']['default_measures'] = ms.default_measures
+        if ms.label:
+            result['measure_selector']['label'] = ms.label
+        if ms.allow_multiple is not None:
+            result['measure_selector']['allow_multiple'] = ms.allow_multiple
+        if ms.selector_type:
+            result['measure_selector']['selector_type'] = ms.selector_type
+        if ms.help_text:
+            result['measure_selector']['help_text'] = ms.help_text
+
+    if hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
+        ds = exhibit.dimension_selector
+        result['dimension_selector'] = {
+            'available_dimensions': ds.available_dimensions,
+        }
+        if ds.default_dimension:
+            result['dimension_selector']['default_dimension'] = ds.default_dimension
+        if ds.label:
+            result['dimension_selector']['label'] = ds.label
+        if ds.selector_type:
+            result['dimension_selector']['selector_type'] = ds.selector_type
+        if ds.applies_to:
+            result['dimension_selector']['applies_to'] = ds.applies_to
+        if ds.help_text:
+            result['dimension_selector']['help_text'] = ds.help_text
+
     logger.debug(f"_exhibit_to_dict({exhibit_id}): Rebuilt dict with keys: {list(result.keys())}")
     return result
 
