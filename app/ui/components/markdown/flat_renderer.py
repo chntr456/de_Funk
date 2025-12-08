@@ -454,83 +454,29 @@ def _format_content_for_display(content: str) -> str:
     return formatted
 
 
-def _to_simple_value(val):
-    """Recursively convert a value to simple JSON-serializable types."""
-    if val is None:
-        return None
-    if isinstance(val, (str, int, float, bool)):
-        return val
-    if isinstance(val, (list, tuple)):
-        return [_to_simple_value(v) for v in val]
-    if isinstance(val, dict):
-        return {k: _to_simple_value(v) for k, v in val.items() if not k.startswith('_')}
-    if hasattr(val, 'value'):  # Enum
-        return val.value
-    if hasattr(val, '__dict__'):
-        # Convert object to dict, filtering private attrs and None values
-        return {k: _to_simple_value(v) for k, v in val.__dict__.items()
-                if not k.startswith('_') and v is not None}
-    # Fallback to string representation
-    return str(val)
-
-
 def _exhibit_to_dict(exhibit) -> dict:
-    """Convert an Exhibit object to a simple dictionary for YAML serialization.
+    """Convert an Exhibit object to a dictionary for YAML serialization.
 
-    Uses shorthand format where possible (y: instead of y_axis:, x: instead of x_axis:)
-    to match the typical input format.
+    Uses the original raw data for true 1:1 round-trip serialization.
+    No conversion, no transformation - what goes in comes out exactly the same.
+
+    If raw data is not available, raises a clear error describing the issue.
     """
     if exhibit is None:
         return {}
 
-    result = {}
+    # Use raw data for 1:1 serialization - no conversion, no transformation
+    if hasattr(exhibit, '_raw_data') and exhibit._raw_data:
+        return exhibit._raw_data.copy()
 
-    # Get type (handle enum)
-    if hasattr(exhibit, 'type'):
-        val = exhibit.type
-        result['type'] = val.value if hasattr(val, 'value') else str(val)
-
-    # Get all attributes and convert to simple values
-    if hasattr(exhibit, '__dict__'):
-        for k, v in exhibit.__dict__.items():
-            if k.startswith('_') or v is None:
-                continue
-            if k == 'type':
-                continue  # Already handled
-            if k == 'id':
-                continue  # Skip internal IDs
-
-            # Convert y_axis back to shorthand 'y' format
-            if k == 'y_axis' and hasattr(v, 'measure'):
-                # Use shorthand if it's a simple measure (or list of measures)
-                measure = v.measure
-                if measure is not None:
-                    # Handle both single measure and list
-                    if isinstance(measure, list):
-                        result['y'] = measure
-                    else:
-                        result['y'] = measure
-                else:
-                    result[k] = _to_simple_value(v)
-                continue
-
-            # Convert x_axis back to shorthand 'x' format
-            if k == 'x_axis' and hasattr(v, 'dimension'):
-                dim = v.dimension
-                if dim is not None:
-                    result['x'] = dim
-                else:
-                    result[k] = _to_simple_value(v)
-                continue
-
-            # Convert color_by to 'color' shorthand
-            if k == 'color_by':
-                result['color'] = v
-                continue
-
-            result[k] = _to_simple_value(v)
-
-    return result
+    # Fallback: If no raw data, raise clear error
+    exhibit_id = getattr(exhibit, 'id', 'unknown')
+    exhibit_type = getattr(exhibit, 'type', 'unknown')
+    raise ValueError(
+        f"Exhibit '{exhibit_id}' (type: {exhibit_type}) has no _raw_data for serialization. "
+        f"This exhibit was not parsed from YAML or the parser needs to store raw data. "
+        f"Expected fields in raw data: type, source, x, y, color, title, height, etc."
+    )
 
 
 def _normalize_content_for_save(content: str) -> str:

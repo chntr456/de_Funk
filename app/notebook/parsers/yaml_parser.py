@@ -369,6 +369,8 @@ class NotebookParser:
                 component=e.get('component'),
                 params=e.get('params'),
                 options=e.get('options'),
+                # Store raw data for 1:1 round-trip serialization
+                _raw_data=e,
             ))
 
         return exhibits

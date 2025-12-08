@@ -309,6 +309,9 @@ class Exhibit:
     predicted_column: Optional[str] = None  # Column name for predicted values
     confidence_bounds: Optional[List[str]] = None  # [lower_bound_col, upper_bound_col]
 
+    # Raw data for 1:1 serialization - stores original YAML dict for round-trip editing
+    _raw_data: Optional[Dict[str, Any]] = None
+
 
 @dataclass
 class Section:

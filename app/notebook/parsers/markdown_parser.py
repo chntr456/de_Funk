@@ -565,6 +565,8 @@ class MarkdownNotebookParser:
             actual_column=data.get('actual_column'),
             predicted_column=data.get('predicted_column'),
             confidence_bounds=data.get('confidence_bounds'),
+            # Store raw data for 1:1 round-trip serialization
+            _raw_data=data,
         )
 
     def _build_config(
