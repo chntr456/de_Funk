@@ -482,9 +482,8 @@ def _exhibit_to_dict(exhibit) -> dict:
     """Convert an Exhibit object to a dictionary for YAML serialization.
 
     Uses the original raw data for true 1:1 round-trip serialization.
-    No conversion, no transformation - what goes in comes out exactly the same.
-
-    If raw data is not available, raises a clear error describing the issue.
+    If raw data is not available (old cached exhibits), falls back to rebuilding
+    from exhibit attributes using the shorthand format.
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -498,21 +497,58 @@ def _exhibit_to_dict(exhibit) -> dict:
     # Debug: Log what we're working with
     has_raw_data = hasattr(exhibit, '_raw_data')
     raw_data_value = getattr(exhibit, '_raw_data', None)
-    logger.debug(f"_exhibit_to_dict({exhibit_id}): has_raw_data={has_raw_data}, _raw_data={raw_data_value}")
+    logger.debug(f"_exhibit_to_dict({exhibit_id}): has_raw_data={has_raw_data}, _raw_data type={type(raw_data_value)}")
 
     # Use raw data for 1:1 serialization - no conversion, no transformation
-    if has_raw_data and raw_data_value:
+    if has_raw_data and raw_data_value and isinstance(raw_data_value, dict):
         logger.debug(f"_exhibit_to_dict({exhibit_id}): Using _raw_data with keys: {list(raw_data_value.keys())}")
         return raw_data_value.copy()
 
-    # Fallback: If no raw data, raise clear error with details about what's available
-    logger.error(f"_exhibit_to_dict({exhibit_id}): No _raw_data! has_attr={has_raw_data}, value={raw_data_value}")
-    raise ValueError(
-        f"Exhibit '{exhibit_id}' (type: {exhibit_type}) has no _raw_data for serialization. "
-        f"This exhibit was not parsed from YAML or the parser needs to store raw data. "
-        f"Expected fields in raw data: type, source, x, y, color, title, height, etc. "
-        f"has_raw_data_attr={has_raw_data}, raw_data_value={raw_data_value}"
-    )
+    # Fallback: Build dict from exhibit attributes using shorthand format
+    # This handles old cached exhibits that don't have _raw_data
+    logger.warning(f"_exhibit_to_dict({exhibit_id}): No _raw_data, rebuilding from attributes")
+
+    result = {}
+
+    # Type is required
+    if hasattr(exhibit, 'type') and exhibit.type:
+        result['type'] = exhibit.type.value if hasattr(exhibit.type, 'value') else str(exhibit.type)
+
+    # Common fields
+    if hasattr(exhibit, 'title') and exhibit.title:
+        result['title'] = exhibit.title
+    if hasattr(exhibit, 'source') and exhibit.source:
+        result['source'] = exhibit.source
+
+    # Chart fields - use shorthand format (x, y, color) not internal (dimension, measure)
+    if hasattr(exhibit, 'x_axis') and exhibit.x_axis:
+        if exhibit.x_axis.dimension:
+            result['x'] = exhibit.x_axis.dimension
+    if hasattr(exhibit, 'y_axis') and exhibit.y_axis:
+        if exhibit.y_axis.measure:
+            result['y'] = exhibit.y_axis.measure
+        elif exhibit.y_axis.measures:
+            result['y'] = exhibit.y_axis.measures
+    if hasattr(exhibit, 'color_by') and exhibit.color_by:
+        result['color'] = exhibit.color_by
+
+    # Height
+    if hasattr(exhibit, 'options') and exhibit.options and 'height' in exhibit.options:
+        result['height'] = exhibit.options['height']
+
+    # Metric cards
+    if hasattr(exhibit, 'metrics') and exhibit.metrics:
+        result['metrics'] = [
+            {'measure': m.measure, 'label': m.label, 'aggregation': m.aggregation.value if m.aggregation else None}
+            for m in exhibit.metrics
+        ]
+
+    # Table fields
+    if hasattr(exhibit, 'columns') and exhibit.columns:
+        result['columns'] = exhibit.columns
+
+    logger.debug(f"_exhibit_to_dict({exhibit_id}): Rebuilt dict with keys: {list(result.keys())}")
+    return result
 
 
 def _normalize_content_for_save(content: str) -> str:
