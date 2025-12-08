@@ -482,8 +482,8 @@ def _exhibit_to_dict(exhibit) -> dict:
     """Convert an Exhibit object to a dictionary for YAML serialization.
 
     Uses the original raw data for true 1:1 round-trip serialization.
-    If raw data is not available (old cached exhibits), falls back to rebuilding
-    from exhibit attributes using the shorthand format.
+    If raw data is not available, corrupted, or uses internal format keys,
+    falls back to rebuilding from exhibit attributes using the shorthand format.
     """
     import logging
     logger = logging.getLogger(__name__)
@@ -499,10 +499,20 @@ def _exhibit_to_dict(exhibit) -> dict:
     raw_data_value = getattr(exhibit, '_raw_data', None)
     logger.debug(f"_exhibit_to_dict({exhibit_id}): has_raw_data={has_raw_data}, _raw_data type={type(raw_data_value)}")
 
-    # Use raw data for 1:1 serialization - no conversion, no transformation
+    # Internal format keys that should NOT be at root level
+    # These indicate corrupted _raw_data that needs to be rebuilt
+    internal_format_keys = {'dimension', 'measure', 'label', 'measures', 'x_axis', 'y_axis', 'color_by', 'size_by'}
+
+    # Use raw data for 1:1 serialization - but only if it uses shorthand format
     if has_raw_data and raw_data_value and isinstance(raw_data_value, dict):
-        logger.debug(f"_exhibit_to_dict({exhibit_id}): Using _raw_data with keys: {list(raw_data_value.keys())}")
-        return raw_data_value.copy()
+        # Check for internal format keys at root level (indicates corruption)
+        root_keys = set(raw_data_value.keys())
+        invalid_keys = root_keys & internal_format_keys
+        if invalid_keys:
+            logger.warning(f"_exhibit_to_dict({exhibit_id}): _raw_data has internal format keys {invalid_keys}, rebuilding")
+        else:
+            logger.debug(f"_exhibit_to_dict({exhibit_id}): Using _raw_data with keys: {list(raw_data_value.keys())}")
+            return raw_data_value.copy()
 
     # Fallback: Build dict from exhibit attributes using shorthand format
     # This handles old cached exhibits that don't have _raw_data
