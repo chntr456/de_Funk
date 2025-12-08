@@ -400,51 +400,62 @@ class MarkdownNotebookParser:
         """
         Validate exhibit parameters and raise clear errors for invalid configs.
 
-        Valid parameters by exhibit type:
-        - All types: type, source, title, height, options
-        - Charts (line_chart, bar_chart, scatter_chart): x, y, color
+        Valid parameters:
+        - Common: type, source, title, height, options, description
+        - Charts: x, y, color, size (shorthand) OR x_axis, y_axis (full dict format)
+        - Selectors: measure_selector, dimension_selector (for dynamic selection)
         - metric_cards: metrics
-        - table: columns
+        - table: columns, pagination, etc.
         """
         exhibit_type = data.get('type')
         if not exhibit_type:
             raise ValueError(f"Exhibit '{exhibit_id}': Missing required 'type' field")
 
         # Define valid parameters for clean exhibit definitions
-        # These are the USER-FACING params, not internal field names
         valid_common = {'type', 'source', 'title', 'height', 'options', 'description'}
-        valid_chart = {'x', 'y', 'color', 'size', 'legend', 'interactive'}
+        valid_chart_shorthand = {'x', 'y', 'color', 'size', 'legend', 'interactive'}
+        valid_chart_full = {'x_axis', 'y_axis', 'y_axis_left', 'y_axis_right', 'color_by', 'size_by'}
         valid_metric = {'metrics'}
         valid_table = {'columns', 'pagination', 'page_size', 'download', 'sortable', 'searchable'}
+        valid_selectors = {'measure_selector', 'dimension_selector'}
         valid_advanced = {
             'collapsible', 'collapsible_title', 'collapsible_expanded', 'nest_in_expander',
-            'measure_selector', 'dimension_selector', 'weighting', 'aggregate_by',
-            'value_measures', 'group_by', 'aggregations', 'sort', 'layout',
-            'component', 'params', 'filters', 'x_label', 'y_label', 'y2', 'y2_label',
+            'weighting', 'aggregate_by', 'value_measures', 'group_by', 'aggregations',
+            'sort', 'layout', 'component', 'params', 'filters',
+            'x_label', 'y_label', 'y2', 'y2_label',
             'actual_column', 'predicted_column', 'confidence_bounds'
         }
 
-        # Deprecated/internal params that should NOT be used at root level
-        internal_params = {'dimension', 'measure', 'measures', 'label', 'scale',
-                          'color_by', 'size_by', 'x_axis', 'y_axis', 'y_axis_left', 'y_axis_right'}
+        all_valid = (valid_common | valid_chart_shorthand | valid_chart_full |
+                     valid_metric | valid_table | valid_selectors | valid_advanced)
 
-        all_valid = valid_common | valid_chart | valid_metric | valid_table | valid_advanced
+        # Internal AxisConfig params that should NOT be at root level
+        # These belong inside x_axis/y_axis dicts, not at root
+        internal_axis_params = {'dimension', 'measure', 'measures', 'label', 'scale'}
 
-        # Check for internal params being used (common mistake after bad save)
-        used_internal = set(data.keys()) & internal_params
+        # Check for internal params being used at root (common mistake after bad save)
+        used_internal = set(data.keys()) & internal_axis_params
         if used_internal:
             raise ValueError(
-                f"Exhibit '{exhibit_id}': Invalid parameters: {used_internal}\n"
-                f"These are internal field names. Use the correct format:\n"
-                f"  - Instead of 'dimension', use 'x: column_name'\n"
-                f"  - Instead of 'measure', use 'y: column_name'\n"
-                f"  - Instead of 'color_by', use 'color: column_name'\n"
-                f"Example:\n"
-                f"  type: {exhibit_type}\n"
-                f"  source: model.table\n"
-                f"  x: date_column\n"
-                f"  y: value_column\n"
-                f"  color: group_column"
+                f"Exhibit '{exhibit_id}': Invalid root-level parameters: {used_internal}\n"
+                f"These belong inside axis configs. Use one of these formats:\n\n"
+                f"SHORTHAND (recommended):\n"
+                f"  x: trade_date\n"
+                f"  y: close          # single measure\n"
+                f"  y: [close, open]  # multiple measures\n"
+                f"  color: ticker\n\n"
+                f"FULL FORMAT (for advanced options):\n"
+                f"  y_axis:\n"
+                f"    measures: [close, open, high]\n"
+                f"    label: Price\n"
+                f"    scale: log\n\n"
+                f"DYNAMIC SELECTORS:\n"
+                f"  measure_selector:\n"
+                f"    available_measures: [close, open, high, low, volume]\n"
+                f"    default_measures: [close]\n"
+                f"  dimension_selector:\n"
+                f"    available_dimensions: [ticker, sector]\n"
+                f"    default_dimension: ticker"
             )
 
         # Check for unknown params
@@ -455,11 +466,16 @@ class MarkdownNotebookParser:
         # Validate required fields by type
         chart_types = {'line_chart', 'bar_chart', 'scatter_chart', 'area_chart'}
         if exhibit_type in chart_types:
-            if 'y' not in data and 'y_axis' not in data:
+            has_y = 'y' in data or 'y_axis' in data
+            has_selector = 'measure_selector' in data
+            if not has_y and not has_selector:
                 raise ValueError(
-                    f"Exhibit '{exhibit_id}' (type: {exhibit_type}): Missing 'y' parameter.\n"
-                    f"Charts require at least: type, source, y\n"
-                    f"Example: y: close  OR  y: [close, open, high]"
+                    f"Exhibit '{exhibit_id}' (type: {exhibit_type}): Missing measure specification.\n"
+                    f"Charts require one of:\n"
+                    f"  - y: column_name           # static measure\n"
+                    f"  - y: [col1, col2]          # multiple measures\n"
+                    f"  - y_axis: {{measures: [...]}}  # full format\n"
+                    f"  - measure_selector: {{...}}    # dynamic selection"
                 )
 
     def _parse_exhibit(self, exhibit_yaml: str, exhibit_id: str) -> Exhibit:
