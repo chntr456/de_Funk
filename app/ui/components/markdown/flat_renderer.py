@@ -486,20 +486,32 @@ def _exhibit_to_dict(exhibit) -> dict:
 
     If raw data is not available, raises a clear error describing the issue.
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     if exhibit is None:
         return {}
 
-    # Use raw data for 1:1 serialization - no conversion, no transformation
-    if hasattr(exhibit, '_raw_data') and exhibit._raw_data:
-        return exhibit._raw_data.copy()
-
-    # Fallback: If no raw data, raise clear error
     exhibit_id = getattr(exhibit, 'id', 'unknown')
     exhibit_type = getattr(exhibit, 'type', 'unknown')
+
+    # Debug: Log what we're working with
+    has_raw_data = hasattr(exhibit, '_raw_data')
+    raw_data_value = getattr(exhibit, '_raw_data', None)
+    logger.debug(f"_exhibit_to_dict({exhibit_id}): has_raw_data={has_raw_data}, _raw_data={raw_data_value}")
+
+    # Use raw data for 1:1 serialization - no conversion, no transformation
+    if has_raw_data and raw_data_value:
+        logger.debug(f"_exhibit_to_dict({exhibit_id}): Using _raw_data with keys: {list(raw_data_value.keys())}")
+        return raw_data_value.copy()
+
+    # Fallback: If no raw data, raise clear error with details about what's available
+    logger.error(f"_exhibit_to_dict({exhibit_id}): No _raw_data! has_attr={has_raw_data}, value={raw_data_value}")
     raise ValueError(
         f"Exhibit '{exhibit_id}' (type: {exhibit_type}) has no _raw_data for serialization. "
         f"This exhibit was not parsed from YAML or the parser needs to store raw data. "
-        f"Expected fields in raw data: type, source, x, y, color, title, height, etc."
+        f"Expected fields in raw data: type, source, x, y, color, title, height, etc. "
+        f"has_raw_data_attr={has_raw_data}, raw_data_value={raw_data_value}"
     )
 
 
@@ -652,17 +664,26 @@ def _render_inline_editor(
     content_key = f"edit_content_{block_id}"
     original_key = f"edit_original_{block_id}"
     formatted_key = f"edit_formatted_{block_id}"
+    stored_orig_key = f"stored_orig_{block_id}"
 
-    # Store original content for find/replace in backend (always use unformatted)
-    if original_key not in st.session_state:
-        st.session_state[original_key] = original_content
+    # ALWAYS update original content from current block - don't use stale cache
+    # This ensures we use the latest _raw_data after fixes
+    cached_original = st.session_state.get(original_key, "")
+    if cached_original != original_content:
+        # Content changed - clear all cached state for this block
+        logger.debug(f"Block {block_id}: content changed, clearing cache")
+        for key in [content_key, original_key, formatted_key, stored_orig_key]:
+            if key in st.session_state:
+                del st.session_state[key]
+
+    st.session_state[original_key] = original_content
 
     # Format content for display - force reformat if original changed or first time
-    stored_original = st.session_state.get(f"stored_orig_{block_id}", "")
+    stored_original = st.session_state.get(stored_orig_key, "")
     if content_key not in st.session_state or stored_original != original_content:
         formatted_content = _format_content_for_display(original_content)
         st.session_state[content_key] = formatted_content
-        st.session_state[f"stored_orig_{block_id}"] = original_content
+        st.session_state[stored_orig_key] = original_content
         st.session_state[formatted_key] = True
 
     # Calculate height based on content - pretty print with extra space
