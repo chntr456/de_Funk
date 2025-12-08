@@ -491,13 +491,23 @@ class MarkdownNotebookParser:
         """
         data = yaml.safe_load(exhibit_yaml)
 
-        # Debug logging (visible when LOG_LEVEL=DEBUG)
-        logger.debug(f"Parsing exhibit '{exhibit_id}': keys={list(data.keys())}")
+        # Debug logging - also print to stderr so it shows in Streamlit console
+        import sys
+        print(f"[EXHIBIT DEBUG] {exhibit_id}: keys={list(data.keys())}, type={data.get('type', 'MISSING')}", file=sys.stderr)
 
         # Validate exhibit parameters
         self._validate_exhibit_params(data, exhibit_id)
 
-        exhibit_type = ExhibitType(data['type'])
+        # Parse exhibit type with helpful error
+        try:
+            exhibit_type = ExhibitType(data['type'])
+        except (KeyError, ValueError) as e:
+            print(f"[EXHIBIT ERROR] {exhibit_id}: Invalid type. data={data}", file=sys.stderr)
+            raise ValueError(
+                f"Exhibit '{exhibit_id}': Invalid or missing 'type'. Got: {data.get('type', 'MISSING')}\n"
+                f"Valid types: line_chart, bar_chart, metric_cards, data_table, etc.\n"
+                f"Full data: {data}"
+            ) from e
 
         # Parse streamlined axis parameters
         x_axis = None
