@@ -174,19 +174,7 @@ $exhibits${
 
 ### Trained Models
 
-<!-- Model registry data not yet generated
-$exhibits${
-  type: data_table
-  source: forecast.fact_model_registry
-  columns: [model_name, model_type, ticker, target_variable, lookback_days, forecast_horizon, trained_date, status]
-  sort_by: trained_date
-  sort_order: desc
-  page_size: 20
-  download: true
-}
--->
-
-*Model registry tracking coming soon. Run forecast training to populate.*
+*Model registry tracking coming soon. Run forecast training to populate this section.*
 
 </details>
 
