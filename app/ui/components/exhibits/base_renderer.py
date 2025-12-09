@@ -257,8 +257,9 @@ class BaseExhibitRenderer(ABC):
         }
         pandas_agg = agg_map.get(agg_method, 'mean')
 
-        # Determine columns to aggregate (numeric measures)
-        agg_columns = [m for m in self.selected_measures if m in self.pdf.columns]
+        # Determine columns to aggregate (numeric measures only)
+        numeric_cols = self.pdf.select_dtypes(include=['number']).columns.tolist()
+        agg_columns = [m for m in self.selected_measures if m in self.pdf.columns and m in numeric_cols]
         if not agg_columns:
             return
 
