@@ -139,22 +139,32 @@ class AutoJoinHandler:
         Raises:
             ValueError: If no join path found
         """
+        import time
+        logger.info(f"AUTO-JOIN PLAN: Starting for {model_name}.{base_table}, missing={missing_columns}")
+        t_start = time.time()
+
         model_config = self.registry.get_model_config(model_name)
         graph_config = model_config.get('graph', {})
+        logger.debug(f"AUTO-JOIN PLAN: Got model config in {time.time() - t_start:.2f}s")
 
         if not graph_config or 'edges' not in graph_config:
             raise ValueError(f"No graph edges defined for model {model_name}")
 
         # Build column-to-table index
+        t0 = time.time()
         column_index = self.build_column_index(model_name)
+        logger.info(f"AUTO-JOIN PLAN: build_column_index took {time.time() - t0:.2f}s, indexed {len(column_index)} columns")
 
         # Find which tables have the missing columns
         target_tables = {}
         for col in missing_columns:
             if col in column_index:
                 target_tables[col] = column_index[col][0]  # Use first table that has it
+                logger.debug(f"AUTO-JOIN PLAN: Column '{col}' found in table '{target_tables[col]}'")
             else:
                 raise ValueError(f"Column '{col}' not found in any table in model {model_name}")
+
+        logger.info(f"AUTO-JOIN PLAN: Target tables: {target_tables}")
 
         # Find join path from base_table to target tables
         table_sequence = [base_table]
@@ -221,21 +231,37 @@ class AutoJoinHandler:
         Returns:
             Dict mapping column names to list of tables that have that column
         """
+        import time
+        logger.debug(f"AUTO-JOIN INDEX: Building column index for {model_name}")
+        t_start = time.time()
+
         index = {}
+        t0 = time.time()
         model = self.session.load_model(model_name)
+        logger.debug(f"AUTO-JOIN INDEX: load_model took {time.time() - t0:.2f}s")
+
+        t0 = time.time()
         tables = model.list_tables()
+        all_tables = tables.get('dimensions', []) + tables.get('facts', [])
+        logger.debug(f"AUTO-JOIN INDEX: list_tables took {time.time() - t0:.2f}s, found {len(all_tables)} tables")
 
         # Index all tables (dims and facts)
-        for table_name in tables.get('dimensions', []) + tables.get('facts', []):
+        for table_name in all_tables:
             try:
+                t0 = time.time()
                 schema = model.get_table_schema(table_name)
+                elapsed = time.time() - t0
+                if elapsed > 0.1:  # Only log if slow
+                    logger.warning(f"AUTO-JOIN INDEX: get_table_schema({table_name}) took {elapsed:.2f}s")
                 for column_name in schema.keys():
                     if column_name not in index:
                         index[column_name] = []
                     index[column_name].append(table_name)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"AUTO-JOIN INDEX: Failed to get schema for {table_name}: {e}")
                 continue
 
+        logger.debug(f"AUTO-JOIN INDEX: Total build time {time.time() - t_start:.2f}s")
         return index
 
     def _parse_join_condition(self, condition: str) -> Tuple[str, str]:
