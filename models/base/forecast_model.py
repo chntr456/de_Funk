@@ -233,9 +233,10 @@ class TimeSeriesForecastModel(BaseModel):
         if model_configs is None:
             model_configs = list(all_configs.keys())
 
-        # Collect forecasts and metrics for batch saving
+        # Collect forecasts, metrics, and registry entries for batch saving
         all_forecasts = []
         all_metrics = []
+        all_registry = []
 
         # Run each model
         for config_name in model_configs:
@@ -245,10 +246,13 @@ class TimeSeriesForecastModel(BaseModel):
                 # Determine model type from config name
                 if 'arima' in config_name.lower():
                     model, metadata = self.train_arima(entity_id, config_name)
+                    model_type = 'ARIMA'
                 elif 'prophet' in config_name.lower():
                     model, metadata = self.train_prophet(entity_id, config_name)
+                    model_type = 'Prophet'
                 elif 'random_forest' in config_name.lower() or 'rf' in config_name.lower():
                     model, metadata = self.train_random_forest(entity_id, config_name)
+                    model_type = 'RandomForest'
                 else:
                     raise ValueError(f"Unknown model type for config: {config_name}")
 
@@ -275,11 +279,29 @@ class TimeSeriesForecastModel(BaseModel):
                 }])
                 all_metrics.append(metrics_df)
 
+                # Build model registry entry
+                import json
+                registry_df = pd.DataFrame([{
+                    'model_id': f"{entity_id}_{config_name}_{datetime.now().strftime('%Y%m%d')}",
+                    'model_name': metadata.get('model_name', config_name),
+                    'model_type': model_type,
+                    self.get_entity_column(): entity_id,
+                    'target_variable': config.get('target', ['close'])[0] if isinstance(config.get('target'), list) else config.get('target', 'close'),
+                    'lookback_days': config.get('lookback_days', 7),
+                    'forecast_horizon': config.get('forecast_horizon', 7),
+                    'day_of_week_adj': config.get('day_of_week_adj', False),
+                    'parameters': json.dumps({k: v for k, v in config.items() if k not in ['type', 'target']}),
+                    'trained_date': datetime.now().date(),
+                    'training_samples': metadata.get('training_samples', 0),
+                    'status': 'active'
+                }])
+                all_registry.append(registry_df)
+
             except Exception as e:
                 error_msg = f"{config_name}: {str(e)}"
                 results['errors'].append(error_msg)
 
-        # Save all forecasts and metrics
+        # Save all forecasts, metrics, and registry entries
         if all_forecasts:
             combined_forecasts = pd.concat(all_forecasts, ignore_index=True)
             self.save_forecasts(combined_forecasts)
@@ -287,6 +309,10 @@ class TimeSeriesForecastModel(BaseModel):
         if all_metrics:
             combined_metrics = pd.concat(all_metrics, ignore_index=True)
             self.save_metrics(combined_metrics)
+
+        if all_registry:
+            combined_registry = pd.concat(all_registry, ignore_index=True)
+            self.save_model_registry(combined_registry)
 
         return results
 
@@ -920,3 +946,49 @@ class TimeSeriesForecastModel(BaseModel):
             # Create new file
             metrics_df.to_parquet(file_path, index=False, compression='snappy')
             self._print(f"    Saved {len(metrics_df)} metric records to {file_path}")
+
+    def save_model_registry(self, registry_df):
+        """
+        Save model registry to Silver layer.
+
+        Tracks trained models with their parameters and status.
+
+        Args:
+            registry_df: pandas DataFrame with model registry records
+        """
+        from pathlib import Path
+        import pandas as pd
+
+        # Get forecast Silver root
+        forecast_root = self.storage_cfg['roots'].get(
+            'forecast_silver',
+            'storage/silver/forecast'
+        )
+
+        # Normalize date columns
+        if 'trained_date' in registry_df.columns:
+            registry_df['trained_date'] = pd.to_datetime(registry_df['trained_date']).dt.date
+
+        # Determine output path according to schema
+        output_path = Path(forecast_root) / 'facts' / 'model_registry'
+
+        # Partition by trained_date
+        trained_date = registry_df['trained_date'].iloc[0]
+        partition_path = output_path / f"trained_date={trained_date}"
+        partition_path.mkdir(parents=True, exist_ok=True)
+
+        # Append to existing data or create new file
+        file_path = partition_path / "data.parquet"
+
+        if file_path.exists():
+            existing_df = pd.read_parquet(file_path)
+            if 'trained_date' in existing_df.columns:
+                existing_df['trained_date'] = pd.to_datetime(existing_df['trained_date']).dt.date
+            combined_df = pd.concat([existing_df, registry_df], ignore_index=True)
+            # Deduplicate by model_id
+            combined_df = combined_df.drop_duplicates(subset=['model_id'], keep='last')
+            combined_df.to_parquet(file_path, index=False, compression='snappy')
+            self._print(f"    Updated model registry: {len(combined_df)} models in {file_path}")
+        else:
+            registry_df.to_parquet(file_path, index=False, compression='snappy')
+            self._print(f"    Saved {len(registry_df)} model registry records to {file_path}")
