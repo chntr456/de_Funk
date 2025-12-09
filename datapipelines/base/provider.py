@@ -211,19 +211,6 @@ class BaseProvider(ABC):
         """
         pass
 
-    @abstractmethod
-    def get_partition_columns(self, data_type: DataType) -> List[str]:
-        """
-        Get the partition columns for a data type.
-
-        Args:
-            data_type: The data type
-
-        Returns:
-            List of partition column names
-        """
-        pass
-
     def get_supported_data_types(self) -> List[DataType]:
         """Get list of data types this provider supports."""
         return self.config.supported_data_types

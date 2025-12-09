@@ -416,9 +416,9 @@ class UIIntegrationTester:
         logger.info("Testing measure calculations...")
 
         try:
-            from models.implemented.equity.model import EquityModel
+            from models.implemented.stocks.model import StocksModel
 
-            model = EquityModel(
+            model = StocksModel(
                 connection=self.conn,
                 storage=None,
                 repo=self.registry

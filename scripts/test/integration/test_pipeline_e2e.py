@@ -412,9 +412,9 @@ class PipelineE2ETester:
 
         try:
             # Load model instance
-            from models.implemented.equity.model import EquityModel
+            from models.implemented.stocks.model import StocksModel
 
-            model = EquityModel(
+            model = StocksModel(
                 connection=self.conn,
                 storage=None,  # Not needed for read-only
                 repo=self.registry

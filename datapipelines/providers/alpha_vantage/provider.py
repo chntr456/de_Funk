@@ -93,20 +93,6 @@ class AlphaVantageProvider(BaseProvider):
         DataType.OPTIONS: ["contract_id", "trade_date"],
     }
 
-    # DEPRECATED: Partition columns are now defined in configs/storage.json
-    # Use BronzeSink._table_cfg(table_name).get("partitions", []) instead
-    # This dict is kept for backwards compatibility but should not be used
-    # TODO: Remove in v3.0
-    PARTITION_COLUMNS = {
-        DataType.REFERENCE: ["asset_type"],
-        DataType.PRICES: ["year"],
-        DataType.INCOME_STATEMENT: ["report_type", "snapshot_date"],
-        DataType.BALANCE_SHEET: ["report_type", "snapshot_date"],
-        DataType.CASH_FLOW: ["report_type", "snapshot_date"],
-        DataType.EARNINGS: ["report_type", "snapshot_date"],
-        DataType.OPTIONS: ["underlying_ticker", "option_type"],
-    }
-
     def __init__(
         self,
         config: ProviderConfig,
@@ -358,19 +344,6 @@ class AlphaVantageProvider(BaseProvider):
     def get_key_columns(self, data_type: DataType) -> List[str]:
         """Get key columns for upsert."""
         return self.KEY_COLUMNS.get(data_type, ["ticker"])
-
-    def get_partition_columns(self, data_type: DataType) -> List[str]:
-        """
-        DEPRECATED: Get partition columns.
-
-        Partition config should be read from configs/storage.json instead.
-        Use: BronzeSink._table_cfg(table_name).get("partitions", [])
-        """
-        logger.warning(
-            f"get_partition_columns() is deprecated. "
-            f"Read partitions from storage.json via BronzeSink._table_cfg() instead."
-        )
-        return self.PARTITION_COLUMNS.get(data_type, [])
 
     def discover_tickers(self, state: str = "active", **kwargs) -> tuple:
         """

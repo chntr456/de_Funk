@@ -4,7 +4,7 @@ Domain Model Integration Test - SPARK BACKEND
 
 Tests the complete domain model architecture with SPARK for ETL operations:
 1. Session initialization (Spark)
-2. Model loading (EquityModel, CorporateModel)
+2. Model loading (StocksModel, CompanyModel)
 3. Measure registry bootstrap
 4. Domain features loading
 5. Graph building and data access
@@ -12,8 +12,8 @@ Tests the complete domain model architecture with SPARK for ETL operations:
 7. Cross-model references
 
 This test validates:
-- Model-specific domain bootstrap (equity, corporate, etf)
-- Measure registry with all types (simple, computed, weighted)
+- Model-specific domain bootstrap (stocks, company, etf)
+- Measure registry with all types (simple, computed)
 - Cross-model fact table references
 - Spark backend operations
 
