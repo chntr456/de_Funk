@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional, Tuple, List, TYPE_CHECKING
 from abc import abstractmethod
+from pathlib import Path
 import pandas as pd
 
 # Optional PySpark import - allows DuckDB-only usage
@@ -43,7 +44,15 @@ class TimeSeriesForecastModel(BaseModel):
     - get_forecast_columns() - Define which columns to forecast
     """
 
-    def __init__(self, connection, storage_cfg: Dict, model_cfg: Dict, params: Dict = None, quiet: bool = False):
+    def __init__(
+        self,
+        connection,
+        storage_cfg: Dict,
+        model_cfg: Dict,
+        params: Dict = None,
+        repo_root: Optional[Path] = None,
+        quiet: bool = False
+    ):
         """
         Initialize Time Series Forecast Model.
 
@@ -52,9 +61,10 @@ class TimeSeriesForecastModel(BaseModel):
             storage_cfg: Storage configuration
             model_cfg: Model configuration from YAML
             params: Runtime parameters
+            repo_root: Repository root path
             quiet: Suppress verbose output (for clean progress display)
         """
-        super().__init__(connection, storage_cfg, model_cfg, params)
+        super().__init__(connection, storage_cfg, model_cfg, params, repo_root=repo_root)
         # Note: self.session is already initialized in BaseModel.__init__
         # No need to re-initialize it here
         self._quiet = quiet
