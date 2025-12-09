@@ -5,6 +5,7 @@ Provides common functionality for all exhibit types including:
 - Measure selector rendering and logic
 - Dimension selector rendering and logic
 - Auto-detection of grouping dimensions
+- Aggregation when switching to non-primary dimensions (e.g., sector index)
 - Session state management
 """
 
@@ -27,8 +28,10 @@ class BaseExhibitRenderer(ABC):
         """
         self.exhibit = exhibit
         self.pdf = pdf
+        self.pdf_original = pdf.copy()  # Keep original for reference
         self.selected_measures: List[str] = []
         self.selected_dimension: Optional[str] = None
+        self.is_aggregated: bool = False  # Track if data has been aggregated
 
     def render(self):
         """
@@ -100,6 +103,9 @@ class BaseExhibitRenderer(ABC):
                     st.warning("No valid measures configured")
                     return
 
+                # Apply aggregation if needed (when grouping by non-primary dimension)
+                self._apply_aggregation()
+
                 # Render chart inside or outside expander based on nest_in_expander parameter
                 if nest_in_expander:
                     # Render chart inside the expander
@@ -117,6 +123,9 @@ class BaseExhibitRenderer(ABC):
             if not self.selected_measures:
                 st.warning("No valid measures configured")
                 return
+
+            # Apply aggregation if needed
+            self._apply_aggregation()
 
             # Call child class's chart rendering method
             self.render_chart()
@@ -186,6 +195,90 @@ class BaseExhibitRenderer(ABC):
                     break
 
         return dimension
+
+    def _apply_aggregation(self):
+        """
+        Apply aggregation when switching to non-primary dimension.
+
+        When user switches from ticker (primary) to sector (secondary),
+        aggregate all stocks within each sector to form a sector index.
+
+        Example:
+            - ticker view: AAPL=$150, MSFT=$350, JPM=$170
+            - sector view: Technology=avg($150,$350)=$250, Financials=$170
+        """
+        # Only apply if dimension selector is configured
+        if not hasattr(self.exhibit, 'dimension_selector') or not self.exhibit.dimension_selector:
+            return
+
+        dim_config = self.exhibit.dimension_selector
+
+        # Check if aggregation is enabled
+        if not getattr(dim_config, 'aggregate_on_change', True):
+            return
+
+        # Get primary dimension (defaults to first in available_dimensions or 'ticker')
+        primary_dim = getattr(dim_config, 'primary_dimension', None)
+        if not primary_dim:
+            available_dims = getattr(dim_config, 'available_dimensions', [])
+            primary_dim = available_dims[0] if available_dims else 'ticker'
+
+        # If selected dimension is the primary, no aggregation needed
+        if self.selected_dimension == primary_dim:
+            self.is_aggregated = False
+            return
+
+        # If selected dimension isn't in the data, skip aggregation
+        if self.selected_dimension not in self.pdf.columns:
+            return
+
+        # Get x-axis column for grouping (typically trade_date)
+        x_col = None
+        if hasattr(self.exhibit, 'x_axis') and self.exhibit.x_axis:
+            x_col = self.exhibit.x_axis.dimension
+
+        if not x_col or x_col not in self.pdf.columns:
+            return
+
+        # Get aggregation method
+        agg_method = getattr(dim_config, 'aggregation', 'avg')
+
+        # Map aggregation method to pandas function
+        agg_map = {
+            'avg': 'mean',
+            'mean': 'mean',
+            'sum': 'sum',
+            'min': 'min',
+            'max': 'max',
+            'first': 'first',
+            'last': 'last',
+            'count': 'count',
+            'median': 'median'
+        }
+        pandas_agg = agg_map.get(agg_method, 'mean')
+
+        # Determine columns to aggregate (numeric measures)
+        agg_columns = [m for m in self.selected_measures if m in self.pdf.columns]
+        if not agg_columns:
+            return
+
+        # Build aggregation dict
+        agg_dict = {col: pandas_agg for col in agg_columns}
+
+        # Group by x-axis and selected dimension, then aggregate
+        try:
+            group_cols = [x_col, self.selected_dimension]
+            aggregated = self.pdf.groupby(group_cols, as_index=False).agg(agg_dict)
+
+            # Update the dataframe used for rendering
+            self.pdf = aggregated
+            self.is_aggregated = True
+
+        except Exception as e:
+            # If aggregation fails, log and continue with original data
+            import logging
+            logging.warning(f"Aggregation failed: {e}")
+            self.is_aggregated = False
 
     @abstractmethod
     def render_chart(self):

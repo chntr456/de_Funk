@@ -241,6 +241,10 @@ class DimensionSelectorConfig:
     selector_type: str = "radio"  # Type: radio, selectbox
     help_text: Optional[str] = None  # Help text for the selector
     applies_to: str = "color"  # What the dimension applies to: "color", "x", "group_by"
+    # Aggregation settings for when grouping by non-primary dimensions
+    aggregation: str = "avg"  # Aggregation method: avg, sum, min, max, first, last
+    primary_dimension: Optional[str] = None  # Primary dimension (no aggregation), defaults to first in list
+    aggregate_on_change: bool = True  # Whether to aggregate when dimension changes from primary
 
 
 @dataclass

@@ -27,8 +27,38 @@ class BarChartRenderer(BaseExhibitRenderer):
 
         x_col = self.exhibit.x_axis.dimension
 
+        # Check for static aggregation (e.g., aggregation: sum in exhibit options)
+        pdf_to_use = self.pdf
+        agg_method = None
+
+        # Check exhibit options for aggregation
+        if hasattr(self.exhibit, 'options') and self.exhibit.options:
+            agg_method = self.exhibit.options.get('aggregation')
+
+        # If aggregation is specified, group by x-axis and aggregate
+        if agg_method and x_col in pdf_to_use.columns:
+            agg_map = {
+                'avg': 'mean', 'mean': 'mean',
+                'sum': 'sum', 'min': 'min', 'max': 'max',
+                'count': 'count', 'first': 'first', 'last': 'last'
+            }
+            pandas_agg = agg_map.get(agg_method, 'sum')
+
+            # Build aggregation dict for numeric columns
+            agg_dict = {}
+            for col in self.selected_measures:
+                if col in pdf_to_use.columns:
+                    agg_dict[col] = pandas_agg
+
+            if agg_dict:
+                try:
+                    pdf_to_use = pdf_to_use.groupby(x_col, as_index=False).agg(agg_dict)
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Bar chart aggregation failed: {e}")
+
         # Sort by first y-measure for better visualization (descending)
-        pdf_sorted = self.pdf.sort_values(by=self.selected_measures[0], ascending=False)
+        pdf_sorted = pdf_to_use.sort_values(by=self.selected_measures[0], ascending=False)
 
         # Create figure based on number of measures
         if len(self.selected_measures) == 1:

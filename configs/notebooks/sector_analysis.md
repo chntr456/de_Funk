@@ -95,10 +95,10 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: stocks.fact_stock_prices
-  x: ticker
+  x: sector
   y: volume
   aggregation: sum
-  title: Total Trading Volume by Stock
+  title: Total Trading Volume by Sector
   height: 350
 }
 
@@ -199,28 +199,42 @@ $exhibits${
 <details>
 <summary>Price Analysis by Sector</summary>
 
-### Daily Returns by Stock
+### Sector Returns Index
 
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
   x: trade_date
   y: daily_return
-  color: ticker
-  title: Daily Returns by Stock
+  title: Average Daily Returns by Sector
   height: 400
+  dimension_selector:
+    available_dimensions: [sector, ticker, industry]
+    default_dimension: sector
+    primary_dimension: ticker
+    aggregation: avg
+    label: Group By
+    selector_type: radio
+    help_text: Aggregate returns by sector/industry or view individual stocks
 }
 
-### Volatility Comparison
+### Sector Volatility Index
 
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
   x: trade_date
   y: volatility_20d
-  color: ticker
-  title: 20-Day Volatility by Stock
+  title: Average 20-Day Volatility by Sector
   height: 350
+  dimension_selector:
+    available_dimensions: [sector, ticker, industry]
+    default_dimension: sector
+    primary_dimension: ticker
+    aggregation: avg
+    label: Group By
+    selector_type: radio
+    help_text: Aggregate volatility by sector/industry or view individual stocks
 }
 
 </details>
