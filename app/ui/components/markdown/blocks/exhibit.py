@@ -58,6 +58,8 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
         try:
             with st.spinner(f"Loading {exhibit.title or 'exhibit'}..."):
                 # Get data for exhibit
+                # NOTE: NotebookManager.get_exhibit_data already handles aggregation
+                # via _determine_aggregation() which checks dimension_selector state
                 df = notebook_session.get_exhibit_data(exhibit_id)
                 pdf = connection.to_pandas(df)
 
