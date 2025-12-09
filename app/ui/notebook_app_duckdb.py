@@ -34,6 +34,12 @@ if _repo_root and str(_repo_root) not in sys.path:
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
+# Initialize logging FIRST - before any other imports that might log
+from config.logging import setup_logging, get_logger
+setup_logging(repo_root=repo_root)
+logger = get_logger(__name__)
+logger.info("Streamlit app starting...")
+
 from core.context import RepoContext
 from models.registry import ModelRegistry
 from models.api.session import UniversalSession
