@@ -183,7 +183,8 @@ class ConfigLoader:
         Load JSON configuration file.
 
         Args:
-            filename: Name of JSON file in configs/ directory
+            filename: Path to JSON file relative to configs/ directory
+                     (e.g., "storage.json" or "pipelines/alpha_vantage_endpoints.json")
 
         Returns:
             Parsed JSON dictionary
@@ -327,15 +328,15 @@ class ConfigLoader:
         # Keep storage as raw JSON dict (no transformation needed)
         storage = storage_json
 
-        # Auto-discover API configs (any *_endpoints.json file)
+        # Auto-discover API configs (any *_endpoints.json file in pipelines/)
         apis = {}
-        configs_dir = self._repo_root / "configs"
+        pipelines_dir = self._repo_root / "configs" / "pipelines"
 
-        if configs_dir.exists():
-            for endpoint_file in configs_dir.glob("*_endpoints.json"):
+        if pipelines_dir.exists():
+            for endpoint_file in pipelines_dir.glob("*_endpoints.json"):
                 provider_name = endpoint_file.stem.replace("_endpoints", "")
                 try:
-                    endpoint_json = self._load_json_config(endpoint_file.name)
+                    endpoint_json = self._load_json_config(f"pipelines/{endpoint_file.name}")
                     # Just inject API keys, don't transform structure
                     apis[provider_name] = self._inject_api_keys(provider_name, endpoint_json)
                     logger.debug(f"Loaded API config for {provider_name}")

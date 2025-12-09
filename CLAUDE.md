@@ -162,10 +162,11 @@ de_Funk/
 │   │   ├── futures/         # Futures model (skeleton)
 │   │   └── [legacy models]  # equity.yaml, corporate.yaml (deprecated)
 │   ├── notebooks/           # Markdown notebook definitions
-│   ├── storage.json         # Storage paths and table mappings (v2.0 updated)
-│   ├── alpha_vantage_endpoints.json  # Alpha Vantage API configuration (v2.0)
-│   ├── bls_endpoints.json   # BLS API configuration
-│   └── chicago_endpoints.json  # Chicago API configuration
+│   ├── pipelines/           # API endpoint configurations (consolidated)
+│   │   ├── alpha_vantage_endpoints.json  # Alpha Vantage API configuration
+│   │   ├── bls_endpoints.json   # BLS API configuration
+│   │   └── chicago_endpoints.json  # Chicago API configuration
+│   └── storage.json         # Storage paths and table mappings (v2.0 updated)
 ├── core/
 │   ├── context.py           # RepoContext (now uses ConfigLoader)
 │   └── session/             # Core session & connection management
@@ -854,7 +855,7 @@ When adding a new data source:
    - Implement data fetching logic
 
 3. **Configure API Endpoints**
-   - Update configuration files (e.g., `alpha_vantage_endpoints.json`, `bls_endpoints.json`)
+   - Update configuration files in `configs/pipelines/` (e.g., `alpha_vantage_endpoints.json`)
    - Add API keys to `.env`
 
 4. **Run Ingestion**
@@ -1280,13 +1281,11 @@ If queries are slow:
 |------|---------|
 | `.env` | API keys and environment configuration |
 | `configs/storage.json` | Storage paths and table mappings |
-| `configs/alpha_vantage_endpoints.json` | Alpha Vantage API endpoint configuration (v2.0) |
-| `configs/bls_endpoints.json` | BLS API endpoint configuration (auto-discovered) |
-| `configs/chicago_endpoints.json` | Chicago API endpoint configuration (auto-discovered) |
+| `configs/pipelines/*.json` | API endpoint configurations (auto-discovered) |
 | `configs/models/*.yaml` | Model definitions (v2.0 modular architecture) |
 | `configs/notebooks/*.md` | Notebook definitions |
 
-**Note**: With the new ConfigLoader system, API configs are auto-discovered from `configs/*_endpoints.json` files. No manual registration needed!
+**Note**: With the new ConfigLoader system, API configs are auto-discovered from `configs/pipelines/*_endpoints.json` files. No manual registration needed!
 
 ### Critical Documentation Files
 
