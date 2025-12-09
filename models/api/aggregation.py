@@ -231,6 +231,32 @@ class AggregationHandler:
         Returns:
             Aggregated DuckDB relation
         """
+        import pandas as pd
+
+        # Filter aggregations to only include numeric columns
+        # DuckDB can't AVG/SUM on VARCHAR columns
+        numeric_aggs = {}
+        if isinstance(df, pd.DataFrame):
+            numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
+            for col, agg_func in aggregations.items():
+                if col in numeric_cols:
+                    numeric_aggs[col] = agg_func
+                # Skip non-numeric columns entirely - they shouldn't be measures
+        else:
+            # For DuckDB relations, just pass through and let errors be caught
+            numeric_aggs = aggregations
+
+        if not numeric_aggs:
+            # No numeric measures to aggregate, just return distinct dimensions
+            group_clause = ", ".join(group_by)
+            sql = f"SELECT DISTINCT {group_clause} FROM df"
+            try:
+                result = self.connection.conn.execute(sql)
+                return result.df()
+            except Exception as e:
+                print(f"   Error in DuckDB distinct: {e}")
+                return df
+
         # Build aggregation SQL
         select_parts = []
 
@@ -238,8 +264,8 @@ class AggregationHandler:
         for col in group_by:
             select_parts.append(col)
 
-        # Add aggregated measures
-        for col, agg_func in aggregations.items():
+        # Add aggregated measures (only numeric)
+        for col, agg_func in numeric_aggs.items():
             if agg_func == 'avg':
                 select_parts.append(f"AVG({col}) as {col}")
             elif agg_func == 'sum':
