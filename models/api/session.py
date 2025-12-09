@@ -248,6 +248,7 @@ class UniversalSession:
             ValueError: If view not found and allow_build=False
         """
         import logging
+        from pathlib import Path
         logger = logging.getLogger(__name__)
 
         if hasattr(self.connection, 'table'):
@@ -268,6 +269,19 @@ class UniversalSession:
             raise ValueError(
                 f"Table '{model_name}.{table_name}' not available as view and building is disabled."
             )
+
+        # Check if Silver storage exists before attempting expensive build
+        model_cfg = model.model_cfg if hasattr(model, 'model_cfg') else {}
+        storage_cfg = model_cfg.get('storage', {})
+        silver_root = storage_cfg.get('root', f'storage/silver/{model_name}')
+        silver_path = self.repo_root / silver_root if self.repo_root else Path(silver_root)
+
+        if not silver_path.exists():
+            logger.warning(f"Silver storage not found at {silver_path}. "
+                          f"Run forecast generation first: python -m scripts.forecast.run_forecasts")
+            # Return empty DataFrame instead of triggering expensive build
+            import pandas as pd
+            return self.connection.conn.from_df(pd.DataFrame()) if hasattr(self.connection, 'conn') else pd.DataFrame()
 
         # This triggers a build from Bronze - can be slow for large tables
         logger.info(f"Building {model_name}.{table_name} from source (may be slow)")
