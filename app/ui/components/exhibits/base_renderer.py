@@ -263,22 +263,31 @@ class BaseExhibitRenderer(ABC):
         if not agg_columns:
             return
 
-        # Build aggregation dict
-        agg_dict = {col: pandas_agg for col in agg_columns}
-
-        # Group by x-axis and selected dimension, then aggregate
+        # Use DuckDB for aggregation (much faster than pandas)
         try:
-            group_cols = [x_col, self.selected_dimension]
-            aggregated = self.pdf.groupby(group_cols, as_index=False).agg(agg_dict)
+            import duckdb
+
+            # Build aggregation SQL - DuckDB can query pandas DataFrames directly
+            df = self.pdf  # DuckDB references local variable 'df'
+            agg_exprs = [f"{agg_method.upper()}({col}) as {col}" for col in agg_columns]
+            agg_sql = f"""
+                SELECT {x_col}, {self.selected_dimension}, {', '.join(agg_exprs)}
+                FROM df
+                GROUP BY {x_col}, {self.selected_dimension}
+                ORDER BY {x_col}
+            """
+
+            # Execute aggregation in DuckDB (queries pandas df directly)
+            aggregated = duckdb.query(agg_sql).df()
 
             # Update the dataframe used for rendering
             self.pdf = aggregated
             self.is_aggregated = True
 
         except Exception as e:
-            # If aggregation fails, log and continue with original data
+            # If DuckDB aggregation fails, log and continue with original data
             import logging
-            logging.warning(f"Aggregation failed: {e}")
+            logging.warning(f"DuckDB aggregation failed: {e}")
             self.is_aggregated = False
 
     @abstractmethod
