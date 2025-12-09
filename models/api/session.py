@@ -232,7 +232,8 @@ class UniversalSession:
 
     def _get_table_from_view_or_build(self, model, model_name: str, table_name: str, allow_build: bool = True) -> Any:
         """
-        Try to get table from existing silver view, fall back to building.
+        Try to get table from existing silver view, fall back to reading Silver parquet directly,
+        then finally fall back to building from Bronze.
 
         Args:
             model: Model instance
@@ -249,8 +250,10 @@ class UniversalSession:
         """
         import logging
         from pathlib import Path
+        import glob
         logger = logging.getLogger(__name__)
 
+        # Strategy 1: Try DuckDB view
         if hasattr(self.connection, 'table'):
             view_name = f"{model_name}.{table_name}"
             try:
@@ -258,33 +261,66 @@ class UniversalSession:
                 logger.debug(f"Using DuckDB view: {view_name}")
                 return result
             except Exception as e:
-                if not allow_build:
-                    raise ValueError(
-                        f"View '{view_name}' not available and building is disabled. "
-                        f"Run: python -m scripts.setup.setup_duckdb_views --update"
-                    )
-                logger.debug(f"View {view_name} not available ({e}), building from source")
+                logger.debug(f"View {view_name} not available ({e})")
 
+        # Strategy 2: Try reading Silver parquet files directly
+        model_cfg = model.model_cfg if hasattr(model, 'model_cfg') else {}
+        storage_cfg = model_cfg.get('storage', {})
+        silver_root = storage_cfg.get('root', f'storage/silver/{model_name}')
+        base_silver_path = self.repo_root / silver_root if self.repo_root else Path(silver_root)
+
+        # Get the table path from schema config
+        schema_cfg = model_cfg.get('schema', {})
+        table_path = None
+
+        # Check facts and dimensions for path
+        for table_type in ['facts', 'dimensions']:
+            tables = schema_cfg.get(table_type, {})
+            if table_name in tables:
+                table_path = tables[table_name].get('path', table_name)
+                break
+
+        # If not in schema, try the table name directly
+        if not table_path:
+            table_path = table_name
+
+        # Try multiple possible paths
+        possible_paths = [
+            base_silver_path / table_path,
+            base_silver_path / f"facts/{table_name.replace('fact_', '')}",
+            base_silver_path / f"dims/{table_name.replace('dim_', '')}",
+        ]
+
+        for silver_table_path in possible_paths:
+            parquet_pattern = str(silver_table_path / "**/*.parquet")
+            parquet_files = glob.glob(parquet_pattern, recursive=True)
+
+            if parquet_files and hasattr(self.connection, 'conn'):
+                logger.info(f"Reading Silver parquet directly from {silver_table_path}")
+                try:
+                    # Read parquet files directly with DuckDB
+                    sql = f"SELECT * FROM read_parquet('{parquet_pattern}', hive_partitioning=true)"
+                    result = self.connection.conn.execute(sql)
+                    return self.connection.conn.from_df(result.fetchdf())
+                except Exception as e:
+                    logger.debug(f"Failed to read parquet from {silver_table_path}: {e}")
+                    continue
+
+        # Strategy 3: Check if Silver root exists before expensive build
         if not allow_build:
             raise ValueError(
                 f"Table '{model_name}.{table_name}' not available as view and building is disabled."
             )
 
-        # Check if Silver storage exists before attempting expensive build
-        model_cfg = model.model_cfg if hasattr(model, 'model_cfg') else {}
-        storage_cfg = model_cfg.get('storage', {})
-        silver_root = storage_cfg.get('root', f'storage/silver/{model_name}')
-        silver_path = self.repo_root / silver_root if self.repo_root else Path(silver_root)
-
-        if not silver_path.exists():
-            logger.warning(f"Silver storage not found at {silver_path}. "
-                          f"Run forecast generation first: python -m scripts.forecast.run_forecasts")
+        if not base_silver_path.exists():
+            logger.warning(f"Silver storage not found at {base_silver_path}. "
+                          f"Run data generation first.")
             # Return empty DataFrame instead of triggering expensive build
             import pandas as pd
             return self.connection.conn.from_df(pd.DataFrame()) if hasattr(self.connection, 'conn') else pd.DataFrame()
 
-        # This triggers a build from Bronze - can be slow for large tables
-        logger.info(f"Building {model_name}.{table_name} from source (may be slow)")
+        # Strategy 4: Fall back to building from Bronze (SLOW - avoid if possible)
+        logger.warning(f"Building {model_name}.{table_name} from Bronze (this is slow, consider creating Silver views)")
         return model.get_table(table_name)
 
     def get_table(
