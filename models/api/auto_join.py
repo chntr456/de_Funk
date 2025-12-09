@@ -85,8 +85,7 @@ class AutoJoinHandler:
         """
         Find a materialized view that contains all required columns.
 
-        This allows the system to use pre-computed joins when available,
-        making materialized views a performance optimization.
+        Uses DuckDB catalog for fast lookup instead of building models.
 
         Args:
             model_name: Model to search in
@@ -95,25 +94,65 @@ class AutoJoinHandler:
         Returns:
             Table name of materialized view, or None if not found
         """
+        import time
+        t_start = time.time()
+        logger.debug(f"AUTO-JOIN MATERIALIZED: Looking for view with columns {required_columns}")
+
+        # Strategy 1: Use DuckDB information_schema (fast)
+        if self.backend == 'duckdb' and hasattr(self.connection, 'conn'):
+            try:
+                # Get all fact tables in this schema
+                tables_result = self.connection.conn.execute(f"""
+                    SELECT DISTINCT table_name
+                    FROM information_schema.columns
+                    WHERE table_schema = '{model_name}'
+                      AND table_name LIKE 'fact_%'
+                """).fetchall()
+
+                fact_tables = [r[0] for r in tables_result]
+                logger.debug(f"AUTO-JOIN MATERIALIZED: Found {len(fact_tables)} fact tables in DuckDB catalog")
+
+                for table_name in fact_tables:
+                    # Get columns for this table
+                    cols_result = self.connection.conn.execute(f"""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_schema = '{model_name}'
+                          AND table_name = '{table_name}'
+                    """).fetchall()
+
+                    table_columns = {r[0] for r in cols_result}
+
+                    if all(col in table_columns for col in required_columns):
+                        logger.info(f"AUTO-JOIN MATERIALIZED: Found view '{table_name}' with all columns in {time.time() - t_start:.2f}s")
+                        return table_name
+
+                logger.debug(f"AUTO-JOIN MATERIALIZED: No matching view found in {time.time() - t_start:.2f}s")
+                return None
+
+            except Exception as e:
+                logger.debug(f"AUTO-JOIN MATERIALIZED: DuckDB catalog lookup failed: {e}")
+
+        # Strategy 2: Fall back to model-based search (slower)
         try:
+            logger.debug(f"AUTO-JOIN MATERIALIZED: Falling back to model-based search")
             model = self.session.load_model(model_name)
             tables = model.list_tables()
 
-            # Search in facts (where materialized paths are stored)
             for table_name in tables.get('facts', []):
                 try:
                     schema = model.get_table_schema(table_name)
                     table_columns = set(schema.keys())
 
-                    # Check if this table has all required columns
                     if all(col in table_columns for col in required_columns):
+                        logger.info(f"AUTO-JOIN MATERIALIZED: Found '{table_name}' via model in {time.time() - t_start:.2f}s")
                         return table_name
                 except Exception:
                     continue
 
             return None
         except Exception as e:
-            print(f"Warning: Error finding materialized view: {e}")
+            logger.warning(f"AUTO-JOIN MATERIALIZED: Error: {e}")
             return None
 
     def plan_auto_joins(

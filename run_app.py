@@ -16,11 +16,16 @@ import sys
 import subprocess
 from pathlib import Path
 
+# Clear log file at startup for fresh debugging
+repo_root = Path(__file__).parent
+log_file = repo_root / "logs" / "de_funk.log"
+if log_file.exists():
+    log_file.write_text("")  # Clear the file
+
 # Initialize logging early
 from config.logging import setup_logging, get_logger
 
 # Setup logging before anything else
-repo_root = Path(__file__).parent
 setup_logging(repo_root=repo_root)
 logger = get_logger(__name__)
 
