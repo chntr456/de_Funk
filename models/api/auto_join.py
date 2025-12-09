@@ -5,14 +5,28 @@ Provides transparent graph traversal and automatic join operations:
 - Find materialized views containing required columns
 - Plan join sequences using model graph
 - Execute joins (Spark and DuckDB backends)
+- Universal date filtering via dim_calendar
 
 This module is used by UniversalSession via composition.
 """
 
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Tuple, Set
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Universal date columns - all represent "a point in time" and map to dim_calendar.date
+# When a filter uses one of these columns but the table has a different one,
+# the system will translate via the table's calendar edge mapping.
+UNIVERSAL_DATE_COLUMNS: Set[str] = {
+    'date',           # dim_calendar's primary date column
+    'trade_date',     # stocks, securities prices
+    'forecast_date',  # forecasts
+    'fiscal_date',    # company financials
+    'report_date',    # reports, filings
+    'effective_date', # effective dates
+    'as_of_date',     # point-in-time snapshots
+}
 
 
 class AutoJoinHandler:
@@ -371,6 +385,105 @@ class AutoJoinHandler:
             return (parts[0].strip(), parts[1].strip())
         raise ValueError(f"Invalid join condition: {condition}")
 
+    def get_calendar_date_column(self, model_name: str, table_name: str) -> Optional[str]:
+        """
+        Find the local date column for a table based on its edge to dim_calendar.
+
+        This enables universal date filtering - any date column (trade_date, forecast_date,
+        fiscal_date) can be used interchangeably because they all represent "a point in time"
+        that maps to dim_calendar.date.
+
+        Args:
+            model_name: Model to search in
+            table_name: Table to find date column for
+
+        Returns:
+            Local date column name (e.g., 'trade_date') or None if no calendar edge
+        """
+        try:
+            model_config = self.registry.get_model_config(model_name)
+        except Exception:
+            return None
+
+        if 'graph' not in model_config or 'edges' not in model_config['graph']:
+            return None
+
+        # Handle both v1.x (list) and v2.0 (dict) edge formats
+        edges_config = model_config['graph']['edges']
+        if isinstance(edges_config, dict):
+            edges_list = list(edges_config.values())
+        else:
+            edges_list = edges_config
+
+        for edge in edges_list:
+            edge_from = edge.get('from', '')
+            edge_to = edge.get('to', '')
+
+            # Check if this edge goes from our table to dim_calendar
+            if edge_from == table_name and 'dim_calendar' in edge_to:
+                on_conditions = edge.get('on', edge.get(True, []))
+
+                for condition in on_conditions:
+                    if isinstance(condition, str):
+                        parts = condition.split('=')
+                        if len(parts) == 2:
+                            local_col = parts[0].strip()  # e.g., 'trade_date'
+                            calendar_col = parts[1].strip()  # e.g., 'date'
+                            if calendar_col == 'date':
+                                logger.debug(f"CALENDAR MAPPING: {model_name}.{table_name}.{local_col} -> dim_calendar.date")
+                                return local_col
+
+        return None
+
+    def translate_date_filters(
+        self,
+        model_name: str,
+        base_table: str,
+        filters: Dict[str, Any],
+        available_cols: Set[str]
+    ) -> Dict[str, Any]:
+        """
+        Translate universal date filters to the table's local date column.
+
+        If a filter uses 'forecast_date' but the table has 'trade_date',
+        translate it using the calendar edge mapping.
+
+        Args:
+            model_name: Model being queried
+            base_table: Base table for the query
+            filters: Original filter dict
+            available_cols: Columns available in the joined tables
+
+        Returns:
+            Translated filter dict with date columns mapped appropriately
+        """
+        if not filters:
+            return filters
+
+        # Get the local date column for this table
+        local_date_col = self.get_calendar_date_column(model_name, base_table)
+
+        if not local_date_col:
+            logger.debug(f"DATE TRANSLATE: No calendar edge for {model_name}.{base_table}")
+            return filters
+
+        translated = {}
+        for col, val in filters.items():
+            # Check if this is a universal date column that needs translation
+            if col in UNIVERSAL_DATE_COLUMNS and col not in available_cols:
+                if local_date_col in available_cols:
+                    # Translate the filter to use the local date column
+                    logger.info(f"DATE TRANSLATE: {col} -> {local_date_col} (via dim_calendar)")
+                    translated[local_date_col] = val
+                else:
+                    logger.debug(f"DATE TRANSLATE: Can't translate {col}, local column {local_date_col} not available")
+                    # Skip this filter - neither column exists
+            else:
+                # Keep the filter as-is
+                translated[col] = val
+
+        return translated
+
     def execute_auto_joins(
         self,
         model_name: str,
@@ -477,7 +590,7 @@ class AutoJoinHandler:
         # Strategy 2: Fall back to loading tables (slower but always works)
         logger.info(f"AUTO-JOIN DUCKDB: Falling back to table loading for {len(table_sequence)} tables")
         return self._execute_duckdb_joins_via_tables(
-            model, table_sequence, join_keys, required_columns, filters
+            model_name, model, table_sequence, join_keys, required_columns, filters
         )
 
     def _execute_duckdb_joins_via_views(
@@ -540,7 +653,12 @@ class AutoJoinHandler:
                 except Exception:
                     pass
 
-            where_clause = self._build_where_clause_for_views(filters, base_view, available_cols)
+            # Translate universal date filters via dim_calendar mapping
+            translated_filters = self.translate_date_filters(
+                model_name, base_table, filters, available_cols
+            )
+
+            where_clause = self._build_where_clause_for_views(translated_filters, base_view, available_cols)
             if where_clause:
                 sql += f" WHERE {where_clause}"
 
@@ -555,6 +673,7 @@ class AutoJoinHandler:
 
     def _execute_duckdb_joins_via_tables(
         self,
+        model_name: str,
         model,
         table_sequence: List[str],
         join_keys: List[Tuple[str, str]],
@@ -605,7 +724,12 @@ class AutoJoinHandler:
                     except Exception:
                         pass
 
-                where_clause = self._build_where_clause(filters, base_temp, available_cols)
+                # Translate universal date filters via dim_calendar mapping
+                translated_filters = self.translate_date_filters(
+                    model_name, base_table, filters, available_cols
+                )
+
+                where_clause = self._build_where_clause(translated_filters, base_temp, available_cols)
                 if where_clause:
                     sql += f" WHERE {where_clause}"
 

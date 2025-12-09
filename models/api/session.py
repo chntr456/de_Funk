@@ -311,7 +311,11 @@ class UniversalSession:
         if not required_columns:
             df = self._get_table_from_view_or_build(model, model_name, table_name)
             if filters:
-                df = FilterEngine.apply_from_session(df, filters, self)
+                # Translate universal date filters before applying
+                translated_filters = self._translate_date_filters_for_table(
+                    model_name, table_name, filters, df
+                )
+                df = FilterEngine.apply_from_session(df, translated_filters, self)
             return df
 
         # Check which columns exist in base table
@@ -330,7 +334,11 @@ class UniversalSession:
             df = self._get_table_from_view_or_build(model, model_name, table_name)
 
             if filters:
-                df = FilterEngine.apply_from_session(df, filters, self)
+                # Translate universal date filters before applying
+                translated_filters = self._translate_date_filters_for_table(
+                    model_name, table_name, filters, df
+                )
+                df = FilterEngine.apply_from_session(df, translated_filters, self)
 
             df = auto_join.select_columns(df, required_columns)
 
@@ -434,6 +442,46 @@ class UniversalSession:
                             mappings[calendar_col] = table_col
 
         return mappings
+
+    def _translate_date_filters_for_table(
+        self,
+        model_name: str,
+        table_name: str,
+        filters: Dict[str, Any],
+        df: Any
+    ) -> Dict[str, Any]:
+        """
+        Translate universal date filters for a table using its calendar edge mapping.
+
+        If a filter uses 'forecast_date' but the table has 'trade_date',
+        this method translates it via the dim_calendar relationship.
+
+        Args:
+            model_name: Model being queried
+            table_name: Table being queried
+            filters: Original filter dict
+            df: DataFrame to get available columns from
+
+        Returns:
+            Translated filter dict
+        """
+        if not filters:
+            return filters
+
+        # Get available columns from the dataframe
+        try:
+            import pandas as pd
+            if isinstance(df, pd.DataFrame):
+                available_cols = set(df.columns)
+            else:
+                # DuckDB relation
+                available_cols = set(df.columns)
+        except Exception:
+            return filters
+
+        # Use auto-join handler's translation logic
+        auto_join = self._get_auto_join_handler()
+        return auto_join.translate_date_filters(model_name, table_name, filters, available_cols)
 
     def get_dimension_df(self, model_name: str, dim_id: str) -> Any:
         """Get a dimension table from a model."""
