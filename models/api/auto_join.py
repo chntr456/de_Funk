@@ -310,7 +310,7 @@ class AutoJoinHandler:
             )
         else:
             return self._execute_duckdb_joins(
-                model, table_sequence, join_keys, required_columns, filters
+                model_name, model, table_sequence, join_keys, required_columns, filters
             )
 
     def _execute_spark_joins(
@@ -341,13 +341,119 @@ class AutoJoinHandler:
 
     def _execute_duckdb_joins(
         self,
+        model_name: str,
         model,
         table_sequence: List[str],
         join_keys: List[Tuple[str, str]],
         required_columns: List[str],
         filters: Optional[Dict[str, Any]]
     ) -> Any:
-        """Execute joins using DuckDB SQL."""
+        """Execute joins using DuckDB SQL against views."""
+        from core.session.filters import FilterEngine
+        import time
+
+        base_table = table_sequence[0]
+
+        # Strategy 1: Try using DuckDB views directly (most efficient)
+        try:
+            view_names = {}
+            views_available = True
+
+            # Check if all required tables exist as views
+            for table_name in table_sequence:
+                view_name = f'"{model_name}"."{table_name}"'
+                try:
+                    # Quick check if view exists
+                    self.connection.conn.execute(f"SELECT 1 FROM {view_name} LIMIT 1")
+                    view_names[table_name] = view_name
+                    logger.debug(f"AUTO-JOIN DUCKDB: View available: {view_name}")
+                except Exception:
+                    views_available = False
+                    logger.debug(f"AUTO-JOIN DUCKDB: View not available: {view_name}")
+                    break
+
+            if views_available:
+                logger.info(f"AUTO-JOIN DUCKDB: Using views for {len(table_sequence)} tables")
+                return self._execute_duckdb_joins_via_views(
+                    model_name, view_names, table_sequence, join_keys,
+                    required_columns, filters
+                )
+
+        except Exception as e:
+            logger.debug(f"AUTO-JOIN DUCKDB: View-based join failed: {e}")
+
+        # Strategy 2: Fall back to loading tables (slower but always works)
+        logger.info(f"AUTO-JOIN DUCKDB: Falling back to table loading for {len(table_sequence)} tables")
+        return self._execute_duckdb_joins_via_tables(
+            model, table_sequence, join_keys, required_columns, filters
+        )
+
+    def _execute_duckdb_joins_via_views(
+        self,
+        model_name: str,
+        view_names: Dict[str, str],
+        table_sequence: List[str],
+        join_keys: List[Tuple[str, str]],
+        required_columns: List[str],
+        filters: Optional[Dict[str, Any]]
+    ) -> Any:
+        """Execute joins using DuckDB SQL against pre-registered views."""
+        import time
+
+        base_table = table_sequence[0]
+        base_view = view_names[base_table]
+
+        # Build SELECT clause - qualify columns to avoid ambiguity
+        select_cols = []
+        for col in required_columns:
+            # For each column, find which table has it
+            found = False
+            for table_name in table_sequence:
+                view = view_names[table_name]
+                try:
+                    # Check if column exists in this view
+                    self.connection.conn.execute(f"SELECT {col} FROM {view} LIMIT 0")
+                    select_cols.append(f"{view}.{col}")
+                    found = True
+                    break
+                except Exception:
+                    continue
+            if not found:
+                select_cols.append(col)
+
+        sql = f"SELECT {', '.join(select_cols)} FROM {base_view}"
+
+        # Add joins
+        for i in range(1, len(table_sequence)):
+            left_view = view_names[table_sequence[i - 1]]
+            right_view = view_names[table_sequence[i]]
+            left_col, right_col = join_keys[i - 1]
+            sql += f" LEFT JOIN {right_view} ON {left_view}.{left_col} = {right_view}.{right_col}"
+
+        # Add WHERE clause
+        if filters:
+            where_clause = self._build_where_clause_for_views(filters, base_view)
+            if where_clause:
+                sql += f" WHERE {where_clause}"
+
+        logger.debug(f"AUTO-JOIN DUCKDB SQL: {sql[:500]}{'...' if len(sql) > 500 else ''}")
+
+        t0 = time.time()
+        result = self.connection.conn.execute(sql)
+        result_df = result.fetchdf()
+        logger.info(f"AUTO-JOIN DUCKDB: View query took {time.time() - t0:.2f}s, shape={result_df.shape}")
+
+        return self.connection.conn.from_df(result_df)
+
+    def _execute_duckdb_joins_via_tables(
+        self,
+        model,
+        table_sequence: List[str],
+        join_keys: List[Tuple[str, str]],
+        required_columns: List[str],
+        filters: Optional[Dict[str, Any]]
+    ) -> Any:
+        """Execute joins by loading tables into temp tables (fallback method)."""
         from core.session.filters import FilterEngine
         import time
 
@@ -356,7 +462,6 @@ class AutoJoinHandler:
 
         try:
             # Register tables as temp views
-            logger.info(f"AUTO-JOIN DUCKDB: Loading {len(table_sequence)} tables...")
             for table_name in table_sequence:
                 t0 = time.time()
                 df_temp = model.get_table(table_name)
@@ -376,10 +481,8 @@ class AutoJoinHandler:
 
             # Add each join
             for i in range(1, len(table_sequence)):
-                left_table = table_sequence[i - 1]
-                right_table = table_sequence[i]
-                left_temp = temp_tables[left_table]
-                right_temp = temp_tables[right_table]
+                left_temp = temp_tables[table_sequence[i - 1]]
+                right_temp = temp_tables[table_sequence[i]]
                 left_col, right_col = join_keys[i - 1]
                 sql += f" LEFT JOIN {right_temp} ON {left_temp}.{left_col} = {right_temp}.{right_col}"
 
@@ -401,7 +504,7 @@ class AutoJoinHandler:
             for temp_name in temp_tables.values():
                 try:
                     self.connection.conn.unregister(temp_name)
-                except:
+                except Exception:
                     pass
 
             # Convert to DuckDB relation
@@ -414,7 +517,7 @@ class AutoJoinHandler:
             for temp_name in temp_tables.values():
                 try:
                     self.connection.conn.unregister(temp_name)
-                except:
+                except Exception:
                     pass
 
             # Fall back to base table
@@ -422,6 +525,35 @@ class AutoJoinHandler:
             if filters:
                 df = FilterEngine.apply_from_session(df, filters, self.session)
             return df
+
+    def _build_where_clause_for_views(self, filters: Dict[str, Any], base_view: str) -> str:
+        """Build WHERE clause from filters for view-based queries."""
+        where_clauses = []
+
+        for col, filter_val in filters.items():
+            if isinstance(filter_val, dict):
+                if 'start' in filter_val and 'end' in filter_val:
+                    where_clauses.append(f"{base_view}.{col} BETWEEN '{filter_val['start']}' AND '{filter_val['end']}'")
+                elif 'min' in filter_val and 'max' in filter_val:
+                    where_clauses.append(f"{base_view}.{col} BETWEEN {filter_val['min']} AND {filter_val['max']}")
+                elif 'min' in filter_val:
+                    where_clauses.append(f"{base_view}.{col} >= {filter_val['min']}")
+                elif 'max' in filter_val:
+                    where_clauses.append(f"{base_view}.{col} <= {filter_val['max']}")
+            elif isinstance(filter_val, list):
+                if all(isinstance(v, str) for v in filter_val):
+                    vals = "', '".join(filter_val)
+                    where_clauses.append(f"{base_view}.{col} IN ('{vals}')")
+                else:
+                    vals = ", ".join(str(v) for v in filter_val)
+                    where_clauses.append(f"{base_view}.{col} IN ({vals})")
+            else:
+                if isinstance(filter_val, str):
+                    where_clauses.append(f"{base_view}.{col} = '{filter_val}'")
+                else:
+                    where_clauses.append(f"{base_view}.{col} = {filter_val}")
+
+        return " AND ".join(where_clauses) if where_clauses else ""
 
     def _build_select_cols(
         self,
