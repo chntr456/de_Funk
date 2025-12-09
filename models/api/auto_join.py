@@ -225,6 +225,9 @@ class AutoJoinHandler:
         """
         Build reverse index: column_name -> [table_names].
 
+        Uses DuckDB schema introspection on views (fast) instead of
+        building models from Bronze (slow).
+
         Args:
             model_name: Model to index
 
@@ -236,6 +239,33 @@ class AutoJoinHandler:
         t_start = time.time()
 
         index = {}
+
+        # Strategy 1: Use DuckDB information_schema (fast - no model building)
+        if self.backend == 'duckdb' and hasattr(self.connection, 'conn'):
+            try:
+                # Get all tables/views in this schema from DuckDB catalog
+                result = self.connection.conn.execute(f"""
+                    SELECT table_name, column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = '{model_name}'
+                    ORDER BY table_name, ordinal_position
+                """).fetchall()
+
+                if result:
+                    for table_name, column_name in result:
+                        if column_name not in index:
+                            index[column_name] = []
+                        if table_name not in index[column_name]:
+                            index[column_name].append(table_name)
+
+                    logger.debug(f"AUTO-JOIN INDEX: Built from DuckDB catalog in {time.time() - t_start:.2f}s, "
+                                f"indexed {len(index)} columns from {len(set(r[0] for r in result))} tables")
+                    return index
+
+            except Exception as e:
+                logger.debug(f"AUTO-JOIN INDEX: DuckDB catalog lookup failed: {e}, falling back to model schema")
+
+        # Strategy 2: Fall back to model schema (slower - may trigger build)
         t0 = time.time()
         model = self.session.load_model(model_name)
         logger.debug(f"AUTO-JOIN INDEX: load_model took {time.time() - t0:.2f}s")
