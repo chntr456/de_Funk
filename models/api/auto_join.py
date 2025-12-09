@@ -330,7 +330,7 @@ class AutoJoinHandler:
 
         try:
             # Register tables as temp views
-            print(f"    📊 Loading {len(table_sequence)} tables for auto-join...")
+            logger.info(f"AUTO-JOIN DUCKDB: Loading {len(table_sequence)} tables...")
             for table_name in table_sequence:
                 t0 = time.time()
                 df_temp = model.get_table(table_name)
@@ -338,7 +338,7 @@ class AutoJoinHandler:
                 temp_name = f"_autojoin_{table_name}"
                 temp_df = df_temp.df()  # Convert to pandas
                 t2 = time.time()
-                print(f"    ⏱️  {table_name}: get_table={t1-t0:.2f}s, to_pandas={t2-t1:.2f}s, shape={temp_df.shape}")
+                logger.info(f"AUTO-JOIN DUCKDB: {table_name}: get_table={t1-t0:.2f}s, to_pandas={t2-t1:.2f}s, shape={temp_df.shape}")
                 self.connection.conn.register(temp_name, temp_df)
                 temp_tables[table_name] = temp_name
 
@@ -363,13 +363,13 @@ class AutoJoinHandler:
                 if where_clause:
                     sql += f" WHERE {where_clause}"
 
-            print(f"    🔍 SQL: {sql[:200]}{'...' if len(sql) > 200 else ''}")
+            logger.debug(f"AUTO-JOIN DUCKDB SQL: {sql[:500]}{'...' if len(sql) > 500 else ''}")
 
             # Execute the join query
             t0 = time.time()
             result = self.connection.conn.execute(sql)
             result_df = result.fetchdf()
-            print(f"    ⏱️  SQL execution: {time.time() - t0:.2f}s, result shape={result_df.shape}")
+            logger.info(f"AUTO-JOIN DUCKDB: SQL execution took {time.time() - t0:.2f}s, result shape={result_df.shape}")
 
             # Cleanup temp tables
             for temp_name in temp_tables.values():
@@ -382,9 +382,7 @@ class AutoJoinHandler:
             return self.connection.conn.from_df(result_df)
 
         except Exception as e:
-            print(f"ERROR: Auto-join SQL failed: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"AUTO-JOIN DUCKDB FAILED: {e}", exc_info=True)
 
             # Cleanup temp tables
             for temp_name in temp_tables.values():

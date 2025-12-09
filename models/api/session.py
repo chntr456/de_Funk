@@ -345,17 +345,16 @@ class UniversalSession:
         import time
         logger = logging.getLogger(__name__)
 
-        logger.info(f"Auto-join: {missing} not in {table_name}, searching for join path...")
-        print(f"🔗 Auto-join: {missing} not in {table_name}, searching for join path...")
+        logger.info(f"AUTO-JOIN START: {missing} not in {table_name}, searching for join path...")
         start_time = time.time()
 
         # Strategy 1: Check for materialized view
         t0 = time.time()
         materialized_table = auto_join.find_materialized_view(model_name, required_columns)
-        print(f"  ⏱️  find_materialized_view: {time.time() - t0:.2f}s")
+        logger.debug(f"AUTO-JOIN: find_materialized_view took {time.time() - t0:.2f}s")
 
         if materialized_table:
-            print(f"✓ Using materialized view: {materialized_table}")
+            logger.info(f"AUTO-JOIN: Using materialized view: {materialized_table}")
             df = model.get_table(materialized_table)
 
             if filters:
@@ -366,24 +365,22 @@ class UniversalSession:
             if group_by:
                 df = aggregation.aggregate_data(model_name, df, required_columns, group_by, aggregations)
 
-            print(f"  ⏱️  Total auto-join time: {time.time() - start_time:.2f}s")
+            logger.info(f"AUTO-JOIN COMPLETE: Total time {time.time() - start_time:.2f}s (materialized view)")
             return df
 
         # Strategy 2: Build joins from graph
         try:
             t0 = time.time()
             join_plan = auto_join.plan_auto_joins(model_name, table_name, missing)
-            print(f"  ⏱️  plan_auto_joins: {time.time() - t0:.2f}s")
-            print(f"✓ Join plan: {' -> '.join(join_plan['table_sequence'])}")
+            logger.debug(f"AUTO-JOIN: plan_auto_joins took {time.time() - t0:.2f}s")
+            logger.info(f"AUTO-JOIN: Join plan: {' -> '.join(join_plan['table_sequence'])}")
 
             t0 = time.time()
             df = auto_join.execute_auto_joins(model_name, join_plan, required_columns, filters)
-            print(f"  ⏱️  execute_auto_joins: {time.time() - t0:.2f}s")
+            logger.debug(f"AUTO-JOIN: execute_auto_joins took {time.time() - t0:.2f}s")
         except Exception as e:
-            print(f"❌ Auto-join failed: {e}")
-            import traceback
-            traceback.print_exc()
-            print(f"   Falling back to base table {table_name}")
+            logger.error(f"AUTO-JOIN FAILED: {e}", exc_info=True)
+            logger.warning(f"AUTO-JOIN: Falling back to base table {table_name}")
             df = model.get_table(table_name)
 
             if filters:
@@ -392,9 +389,9 @@ class UniversalSession:
         if group_by:
             t0 = time.time()
             df = aggregation.aggregate_data(model_name, df, required_columns, group_by, aggregations)
-            print(f"  ⏱️  aggregate_data: {time.time() - t0:.2f}s")
+            logger.debug(f"AUTO-JOIN: aggregate_data took {time.time() - t0:.2f}s")
 
-        print(f"  ⏱️  Total auto-join time: {time.time() - start_time:.2f}s")
+        logger.info(f"AUTO-JOIN COMPLETE: Total time {time.time() - start_time:.2f}s")
         return df
 
     def get_filter_column_mappings(self, model_name: str, table_name: str) -> Dict[str, str]:
