@@ -522,9 +522,25 @@ class AutoJoinHandler:
             left_col, right_col = join_keys[i - 1]
             sql += f" LEFT JOIN {right_view} ON {left_view}.{left_col} = {right_view}.{right_col}"
 
-        # Add WHERE clause
+        # Add WHERE clause - only include filters for columns that exist
         if filters:
-            where_clause = self._build_where_clause_for_views(filters, base_view)
+            # Collect all available columns from all views
+            available_cols = set()
+            for view in view_names.values():
+                try:
+                    # Extract clean view name for query
+                    clean_view = view.strip('"')
+                    table_only = view.split('.')[-1].strip('"')
+                    cols_result = self.connection.conn.execute(
+                        f"SELECT column_name FROM information_schema.columns "
+                        f"WHERE table_schema || '.' || table_name = '{clean_view}' "
+                        f"OR table_name = '{table_only}'"
+                    ).fetchall()
+                    available_cols.update(r[0] for r in cols_result)
+                except Exception:
+                    pass
+
+            where_clause = self._build_where_clause_for_views(filters, base_view, available_cols)
             if where_clause:
                 sql += f" WHERE {where_clause}"
 
@@ -578,9 +594,18 @@ class AutoJoinHandler:
                 left_col, right_col = join_keys[i - 1]
                 sql += f" LEFT JOIN {right_temp} ON {left_temp}.{left_col} = {right_temp}.{right_col}"
 
-            # Add WHERE clause for filters
+            # Add WHERE clause for filters - only include columns that exist
             if filters:
-                where_clause = self._build_where_clause(filters, base_temp)
+                # Collect available columns from loaded tables
+                available_cols = set()
+                for temp_name in temp_tables.values():
+                    try:
+                        cols = self.connection.conn.execute(f"DESCRIBE {temp_name}").fetchall()
+                        available_cols.update(c[0] for c in cols)
+                    except Exception:
+                        pass
+
+                where_clause = self._build_where_clause(filters, base_temp, available_cols)
                 if where_clause:
                     sql += f" WHERE {where_clause}"
 
@@ -618,11 +643,24 @@ class AutoJoinHandler:
                 df = FilterEngine.apply_from_session(df, filters, self.session)
             return df
 
-    def _build_where_clause_for_views(self, filters: Dict[str, Any], base_view: str) -> str:
-        """Build WHERE clause from filters for view-based queries."""
+    def _build_where_clause_for_views(
+        self,
+        filters: Dict[str, Any],
+        base_view: str,
+        available_cols: Optional[set] = None
+    ) -> str:
+        """Build WHERE clause from filters for view-based queries.
+
+        Only includes filters for columns that exist in the joined tables.
+        """
         where_clauses = []
 
         for col, filter_val in filters.items():
+            # Skip filters for columns that don't exist in the tables
+            if available_cols is not None and col not in available_cols:
+                logger.debug(f"AUTO-JOIN WHERE: Skipping filter on '{col}' - column not in joined tables")
+                continue
+
             if isinstance(filter_val, dict):
                 if 'start' in filter_val and 'end' in filter_val:
                     where_clauses.append(f"{base_view}.{col} BETWEEN '{filter_val['start']}' AND '{filter_val['end']}'")
@@ -671,11 +709,24 @@ class AutoJoinHandler:
                 select_cols.append(col)
         return select_cols
 
-    def _build_where_clause(self, filters: Dict[str, Any], base_temp: str) -> str:
-        """Build WHERE clause from filters."""
+    def _build_where_clause(
+        self,
+        filters: Dict[str, Any],
+        base_temp: str,
+        available_cols: Optional[set] = None
+    ) -> str:
+        """Build WHERE clause from filters.
+
+        Only includes filters for columns that exist in the joined tables.
+        """
         where_clauses = []
 
         for col, filter_val in filters.items():
+            # Skip filters for columns that don't exist in the tables
+            if available_cols is not None and col not in available_cols:
+                logger.debug(f"AUTO-JOIN WHERE: Skipping filter on '{col}' - column not in joined tables")
+                continue
+
             if isinstance(filter_val, dict):
                 # Range filter
                 if 'start' in filter_val and 'end' in filter_val:
