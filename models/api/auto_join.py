@@ -267,6 +267,8 @@ class AutoJoinHandler:
         Uses DuckDB schema introspection on views (fast) instead of
         building models from Bronze (slow).
 
+        Prefers model-specific tables (dim_stock) over base templates (dim_security).
+
         Args:
             model_name: Model to index
 
@@ -291,14 +293,35 @@ class AutoJoinHandler:
                 """).fetchall()
 
                 if result:
+                    # Group columns by table
+                    table_columns = {}
                     for table_name, column_name in result:
-                        if column_name not in index:
-                            index[column_name] = []
-                        if table_name not in index[column_name]:
-                            index[column_name].append(table_name)
+                        if table_name not in table_columns:
+                            table_columns[table_name] = []
+                        table_columns[table_name].append(column_name)
+
+                    # Sort tables: prefer model-specific (dim_stock) over base (dim_security)
+                    # Heuristic: tables with model name fragment or without "security" come first
+                    def table_priority(table_name: str) -> int:
+                        # Base templates get lower priority
+                        if table_name in ('dim_security', 'fact_prices'):
+                            return 2
+                        # Model-specific tables get highest priority
+                        return 0
+
+                    sorted_tables = sorted(table_columns.keys(), key=table_priority)
+                    logger.debug(f"AUTO-JOIN INDEX: Table priority order: {sorted_tables}")
+
+                    # Build index with priority ordering
+                    for table_name in sorted_tables:
+                        for column_name in table_columns[table_name]:
+                            if column_name not in index:
+                                index[column_name] = []
+                            if table_name not in index[column_name]:
+                                index[column_name].append(table_name)
 
                     logger.debug(f"AUTO-JOIN INDEX: Built from DuckDB catalog in {time.time() - t_start:.2f}s, "
-                                f"indexed {len(index)} columns from {len(set(r[0] for r in result))} tables")
+                                f"indexed {len(index)} columns from {len(table_columns)} tables")
                     return index
 
             except Exception as e:
