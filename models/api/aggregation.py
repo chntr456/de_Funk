@@ -145,9 +145,16 @@ class AggregationHandler:
             column_name: Name of the measure column
 
         Returns:
-            Aggregation function: avg, sum, max, min, or first
+            Aggregation function: avg, sum, max, min, count_distinct, or first
         """
         col_lower = column_name.lower()
+
+        # String identifier columns - use first or count_distinct, not avg
+        if any(term in col_lower for term in [
+            'ticker', 'symbol', 'name', 'industry', 'sector', 'exchange',
+            'type', 'category', 'id', 'code', 'key', 'description', 'status'
+        ]):
+            return 'first'
 
         # Sum aggregations
         if any(term in col_lower for term in ['volume', 'count', 'total', 'quantity', 'qty']):
@@ -233,29 +240,31 @@ class AggregationHandler:
         """
         import pandas as pd
 
-        # Filter aggregations to only include numeric columns
-        # DuckDB can't AVG/SUM on VARCHAR columns
-        numeric_aggs = {}
-        if isinstance(df, pd.DataFrame):
-            numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-            for col, agg_func in aggregations.items():
-                if col in numeric_cols:
-                    numeric_aggs[col] = agg_func
-                # Skip non-numeric columns entirely - they shouldn't be measures
-        else:
-            # For DuckDB relations, just pass through and let errors be caught
-            numeric_aggs = aggregations
+        # Get numeric columns to filter aggregations appropriately
+        numeric_cols = set()
+        string_cols = set()
 
-        if not numeric_aggs:
-            # No numeric measures to aggregate, just return distinct dimensions
-            group_clause = ", ".join(group_by)
-            sql = f"SELECT DISTINCT {group_clause} FROM df"
+        if isinstance(df, pd.DataFrame):
+            numeric_cols = set(df.select_dtypes(include=['number']).columns.tolist())
+            string_cols = set(df.select_dtypes(include=['object', 'string']).columns.tolist())
+        else:
+            # For DuckDB relations, try to get schema
             try:
-                result = self.connection.conn.execute(sql)
-                return result.df()
-            except Exception as e:
-                print(f"   Error in DuckDB distinct: {e}")
-                return df
+                # Convert to pandas to inspect types, then work with original
+                sample_df = df.limit(1).df()
+                numeric_cols = set(sample_df.select_dtypes(include=['number']).columns.tolist())
+                string_cols = set(sample_df.select_dtypes(include=['object', 'string']).columns.tolist())
+            except Exception:
+                # If we can't determine types, use column name heuristics
+                for col in aggregations.keys():
+                    col_lower = col.lower()
+                    if any(term in col_lower for term in [
+                        'ticker', 'symbol', 'name', 'industry', 'sector', 'exchange',
+                        'type', 'category', 'id', 'code', 'key', 'description', 'status'
+                    ]):
+                        string_cols.add(col)
+                    else:
+                        numeric_cols.add(col)
 
         # Build aggregation SQL
         select_parts = []
@@ -264,8 +273,14 @@ class AggregationHandler:
         for col in group_by:
             select_parts.append(col)
 
-        # Add aggregated measures (only numeric)
-        for col, agg_func in numeric_aggs.items():
+        # Add aggregated measures with appropriate functions
+        for col, agg_func in aggregations.items():
+            # For string columns, only allow first/count_distinct, not avg/sum
+            if col in string_cols and agg_func in ('avg', 'sum'):
+                # Skip string columns with numeric aggregations
+                print(f"   Skipping {agg_func}({col}) - column is not numeric")
+                continue
+
             if agg_func == 'avg':
                 select_parts.append(f"AVG({col}) as {col}")
             elif agg_func == 'sum':
@@ -276,11 +291,30 @@ class AggregationHandler:
                 select_parts.append(f"MIN({col}) as {col}")
             elif agg_func == 'count':
                 select_parts.append(f"COUNT({col}) as {col}")
+            elif agg_func == 'count_distinct':
+                select_parts.append(f"COUNT(DISTINCT {col}) as {col}")
             elif agg_func == 'first':
+                # DuckDB uses FIRST() or ANY_VALUE() for this
                 select_parts.append(f"FIRST({col}) as {col}")
             else:
-                print(f"   Warning: Unknown aggregation '{agg_func}' for {col}, using AVG")
-                select_parts.append(f"AVG({col}) as {col}")
+                # Unknown aggregation - check if column is numeric before using avg
+                if col in numeric_cols:
+                    print(f"   Warning: Unknown aggregation '{agg_func}' for {col}, using AVG")
+                    select_parts.append(f"AVG({col}) as {col}")
+                else:
+                    print(f"   Warning: Unknown aggregation '{agg_func}' for non-numeric {col}, using FIRST")
+                    select_parts.append(f"FIRST({col}) as {col}")
+
+        # If no measures to aggregate, just return distinct dimensions
+        if len(select_parts) == len(group_by):
+            group_clause = ", ".join(group_by)
+            sql = f"SELECT DISTINCT {group_clause} FROM df"
+            try:
+                result = self.connection.conn.execute(sql)
+                return result.df()
+            except Exception as e:
+                print(f"   Error in DuckDB distinct: {e}")
+                return df
 
         # Build complete SQL
         select_clause = ", ".join(select_parts)
