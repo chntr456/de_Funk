@@ -174,6 +174,7 @@ $exhibits${
 
 ### Trained Models
 
+<!-- Model registry data not yet generated
 $exhibits${
   type: data_table
   source: forecast.fact_model_registry
@@ -183,6 +184,9 @@ $exhibits${
   page_size: 20
   download: true
 }
+-->
+
+*Model registry tracking coming soon. Run forecast training to populate.*
 
 </details>
 
