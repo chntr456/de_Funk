@@ -1075,7 +1075,7 @@ help_text: Filter by trading volume"""
         self._reload_active_notebook()
 
     def _delete_filter(self, notebook_path, filter_id: str):
-        """Delete a filter from the notebook file."""
+        """Delete a filter from the notebook file and folder context."""
         import yaml
         import re
         from pathlib import Path
@@ -1087,6 +1087,8 @@ help_text: Filter by trading volume"""
         # Read current file
         with open(path, 'r') as f:
             content = f.read()
+
+        original_content = content
 
         # Find and remove the filter block
         pattern = re.compile(
@@ -1109,9 +1111,33 @@ help_text: Filter by trading volume"""
         # Clean up extra blank lines
         updated_content = re.sub(r'\n{3,}', '\n\n', updated_content)
 
-        # Write back
-        with open(path, 'w') as f:
-            f.write(updated_content)
+        # Write back if changed
+        if updated_content != original_content:
+            with open(path, 'w') as f:
+                f.write(updated_content)
+
+        # Also remove from folder context if present
+        folder_path = path.parent
+        context_file = folder_path / '.filter_context.yaml'
+        if context_file.exists():
+            try:
+                with open(context_file, 'r') as f:
+                    folder_context = yaml.safe_load(f) or {}
+
+                if 'filters' in folder_context and filter_id in folder_context['filters']:
+                    del folder_context['filters'][filter_id]
+
+                    # Write back
+                    with open(context_file, 'w') as f:
+                        yaml.dump(folder_context, f, default_flow_style=False, sort_keys=False)
+
+                    # Clear cached folder context
+                    if hasattr(self.notebook_manager, 'folder_context_manager'):
+                        folder_key = str(folder_path)
+                        if folder_key in self.notebook_manager.folder_context_manager._contexts:
+                            del self.notebook_manager.folder_context_manager._contexts[folder_key]
+            except Exception:
+                pass  # Folder context update is best-effort
 
         # Reload notebook
         self._reload_active_notebook()
