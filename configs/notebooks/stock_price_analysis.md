@@ -42,7 +42,7 @@ $filter${
   label: Date Range
   column: trade_date
   operator: between
-  default: {start: "2024-01-01", end: "2025-12-05"}
+  default: {start: current_date() - 365, end: current_date()}
   help_text: Filter by trading date range
 }
 
@@ -86,7 +86,7 @@ $exhibits${
     default_dimension: ticker
     label: Group By
     selector_type: radio
-    applies_to: color
+    applies_to: group_by
     help_text: Choose how to group/color the lines
 }
 

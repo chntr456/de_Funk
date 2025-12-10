@@ -416,6 +416,7 @@ class DateResolver:
         - ISO dates: "2024-01-01"
         - "today"
         - Relative: "-30d", "-1w", "-6m", "-1y"
+        - Function calls: "current_date()", "current_date() - 365", "start_of_month()"
 
         Args:
             date_expr: Date expression
@@ -424,8 +425,24 @@ class DateResolver:
         Returns:
             Resolved datetime
         """
+        from datetime import date as date_type
+        from ..expressions.resolver import ExpressionResolver, ExpressionContext
+
         if reference_date is None:
             reference_date = datetime.now()
+
+        # Try ExpressionResolver first for function-based expressions
+        if '(' in date_expr and ')' in date_expr:
+            ctx = ExpressionContext(current_date=reference_date.date() if hasattr(reference_date, 'date') else reference_date)
+            resolver = ExpressionResolver(ctx)
+            result = resolver.resolve(date_expr)
+
+            # If resolution returned a date, convert to datetime
+            if isinstance(result, date_type) and not isinstance(result, datetime):
+                return datetime.combine(result, datetime.min.time())
+            elif isinstance(result, datetime):
+                return result
+            # If not resolved, fall through to legacy handling
 
         # Handle "today"
         if date_expr.lower() == "today":

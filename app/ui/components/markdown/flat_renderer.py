@@ -405,29 +405,51 @@ def _format_content_for_display(content: str) -> str:
         return -1
 
     def format_yaml_block(yaml_content: str) -> str:
-        """Format YAML-like content with consistent indentation."""
+        """Format YAML-like content with consistent indentation and visual structure."""
         lines = yaml_content.strip().split('\n')
         formatted_lines = []
 
-        for line in lines:
+        # Major section keys that should have blank line before them
+        section_keys = {
+            'columns', 'rows', 'spanners', 'filters', 'metrics',
+            'measure_selector', 'dimension_selector', 'conditional',
+            'source_note', 'footnotes', 'theme', 'calculated_columns'
+        }
+
+        for i, line in enumerate(lines):
             stripped = line.strip()
             if not stripped:
                 formatted_lines.append('')
                 continue
 
-            # Determine indentation based on content
-            if stripped.startswith('-'):
-                # List item - indent by 2
-                formatted_lines.append(f"    {stripped}")
-            elif ':' in stripped and not stripped.startswith('{'):
-                # Key-value pair
-                if stripped.startswith('{') or '[' in stripped:
-                    # Inline object/array
-                    formatted_lines.append(f"  {stripped}")
-                else:
-                    formatted_lines.append(f"  {stripped}")
+            # Calculate original indentation level
+            original_indent = len(line) - len(line.lstrip())
+
+            # Determine indent string (4 spaces per level for better readability)
+            if original_indent == 0:
+                # Top-level key
+                indent = '  '
+
+                # Add blank line before major sections for visual separation
+                if ':' in stripped:
+                    key = stripped.split(':')[0].strip()
+                    if key in section_keys and formatted_lines and formatted_lines[-1].strip():
+                        formatted_lines.append('')
             else:
-                formatted_lines.append(f"  {stripped}")
+                # Nested content - use 4 spaces per level for better visibility
+                level = original_indent // 2
+                indent = '  ' + ('    ' * level)
+
+            # Format list items with extra indent
+            if stripped.startswith('-'):
+                # List items get additional visual indent
+                if original_indent > 0:
+                    level = original_indent // 2
+                    indent = '  ' + ('    ' * level)
+                else:
+                    indent = '      '  # 6 spaces for top-level list items
+
+            formatted_lines.append(f"{indent}{stripped}")
 
         return '\n'.join(formatted_lines)
 

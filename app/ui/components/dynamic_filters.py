@@ -390,37 +390,59 @@ def get_filter_options_from_db(
 
 
 def parse_date(date_str: Any) -> date:
-    """Parse date string into date object."""
-    if isinstance(date_str, date):
+    """Parse date string into date object.
+
+    Supports:
+    - date objects (passthrough)
+    - datetime objects (extract date)
+    - ISO format strings: "2024-01-01"
+    - "today"
+    - Relative: "-30d", "-1w", "-6m", "-1y"
+    - Function calls: "current_date()", "current_date() - 365", "start_of_month()"
+    """
+    if isinstance(date_str, date) and not isinstance(date_str, datetime):
         return date_str
     elif isinstance(date_str, datetime):
         return date_str.date()
     elif isinstance(date_str, str):
+        # Try ExpressionResolver first for function-based expressions
+        if '(' in date_str and ')' in date_str:
+            try:
+                from app.notebook.expressions.resolver import ExpressionResolver
+                resolver = ExpressionResolver()
+                result = resolver.resolve(date_str)
+                if isinstance(result, date):
+                    return result
+                elif isinstance(result, datetime):
+                    return result.date()
+            except Exception:
+                pass  # Fall through to other methods
+
         # Try parsing ISO format
         try:
             return datetime.fromisoformat(date_str).date()
-        except:
+        except Exception:
             pass
 
         # Try relative dates
         if date_str.lower() == 'today':
             return date.today()
-        elif date_str.startswith('-'):
-            # Relative date (e.g., "-30d")
+        elif date_str.startswith('-') or date_str.startswith('+'):
+            # Relative date (e.g., "-30d", "+7d")
             import re
-            match = re.match(r'-(\d+)([dwmy])', date_str)
+            match = re.match(r'([+-]?\d+)([dwmy])', date_str)
             if match:
                 amount = int(match.group(1))
                 unit = match.group(2)
 
                 if unit == 'd':
-                    return date.today() - timedelta(days=amount)
+                    return date.today() + timedelta(days=amount)
                 elif unit == 'w':
-                    return date.today() - timedelta(weeks=amount)
+                    return date.today() + timedelta(weeks=amount)
                 elif unit == 'm':
-                    return date.today() - timedelta(days=amount * 30)
+                    return date.today() + timedelta(days=amount * 30)
                 elif unit == 'y':
-                    return date.today() - timedelta(days=amount * 365)
+                    return date.today() + timedelta(days=amount * 365)
 
     # Default to today
     return date.today()
