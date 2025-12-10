@@ -9,6 +9,7 @@ duckdb>=0.9.0  # Fast analytics engine (10-100x faster than Spark for UI)
 
 # Visualization
 plotly>=5.17.0
+great_tables>=0.12.0  # Publication-quality tables
 
 # Configuration
 pyyaml>=6.0

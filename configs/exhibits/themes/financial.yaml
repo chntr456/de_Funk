@@ -1,0 +1,87 @@
+# Financial Statement Theme for Great Tables
+# Publication-quality financial statement styling
+
+name: financial
+description: Publication-quality financial statement styling
+
+# Typography
+typography:
+  font_family: "Georgia, serif"
+  header_font_family: "Arial, sans-serif"
+  font_size: "14px"
+  header_font_size: "12px"
+
+# Colors
+colors:
+  header_background: "#1a365d"
+  header_text: "#ffffff"
+  row_stripe: "#f7fafc"
+  subtotal_background: "#edf2f7"
+  total_background: "#e2e8f0"
+  positive: "#22c55e"
+  negative: "#ef4444"
+  neutral: "#64748b"
+
+# Borders
+borders:
+  header_bottom: "2px solid #1a365d"
+  subtotal_top: "1px solid #cbd5e0"
+  total_top: "2px solid #1a365d"
+  cell: "1px solid #e2e8f0"
+
+# Number formats for financial statements
+formats:
+  currency: "${:,.0f}"
+  currency_millions: "${:,.0f}M"
+  currency_billions: "${:,.1f}B"
+  percent: "{:.1%}"
+  ratio: "{:.2f}x"
+  eps: "${:.2f}"
+  shares: "{:,.0f}"
+  shares_millions: "{:,.1f}M"
+
+# Row styling rules
+row_styles:
+  header:
+    bold: true
+    background: "#1a365d"
+    color: "#ffffff"
+
+  subtotal:
+    bold: true
+    background: "#edf2f7"
+    border_top: "1px solid #cbd5e0"
+
+  total:
+    bold: true
+    background: "#e2e8f0"
+    border_top: "2px solid #1a365d"
+
+  section_header:
+    bold: true
+    background: "#f1f5f9"
+    font_size: "13px"
+
+# Column alignment
+column_alignment:
+  text: left
+  numbers: right
+  dates: center
+  percentages: right
+
+# Conditional formatting presets
+conditional_formats:
+  profit_loss:
+    type: color_scale
+    palette: ["#ef4444", "#ffffff", "#22c55e"]
+    domain: [-1, 0, 1]
+
+  growth_rate:
+    type: color_scale
+    palette: ["#ef4444", "#fbbf24", "#22c55e"]
+    domain: [-0.1, 0, 0.1]
+
+  margin:
+    type: color_scale
+    palette: ["#fef3c7", "#d1fae5"]
+    domain: [0, 0.3]

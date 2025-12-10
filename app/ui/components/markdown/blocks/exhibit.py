@@ -8,6 +8,7 @@ Handles rendering of data visualization exhibits including:
 - Data tables
 - Weighted aggregate charts
 - Forecast charts
+- Great Tables (publication-quality tables)
 """
 
 import streamlit as st
@@ -41,6 +42,7 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
     )
     from app.ui.components.exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_chart
     from app.ui.components.exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
+    from app.ui.components.exhibits.great_table import render_great_table
 
     # Check if exhibit has selectors
     has_measure_selector = hasattr(exhibit, 'measure_selector') and exhibit.measure_selector
@@ -79,6 +81,8 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
                 render_forecast_chart(exhibit, pdf, in_collapsible=in_collapsible)
             elif exhibit.type == ExhibitType.FORECAST_METRICS_TABLE:
                 render_forecast_metrics_table(exhibit, pdf)
+            elif exhibit.type == ExhibitType.GREAT_TABLE:
+                render_great_table(exhibit, pdf)
             else:
                 st.warning(f"Exhibit type not yet implemented: {exhibit.type}")
 

@@ -68,6 +68,8 @@ class ExhibitType(Enum):
     WEIGHTED_AGGREGATE_CHART = "weighted_aggregate_chart"
     FORECAST_CHART = "forecast_chart"
     FORECAST_METRICS_TABLE = "forecast_metrics_table"
+    # Great Tables (publication-quality tables)
+    GREAT_TABLE = "great_table"
 
 
 @dataclass
@@ -247,6 +249,78 @@ class DimensionSelectorConfig:
     aggregate_on_change: bool = True  # Whether to aggregate when dimension changes from primary
 
 
+# =============================================================================
+# Great Tables Configuration Classes
+# =============================================================================
+
+@dataclass
+class GTColumnConfig:
+    """Configuration for a Great Table column."""
+    id: str  # Column identifier
+    label: Optional[str] = None  # Display label
+    format: Optional[str] = None  # currency, currency_millions, percent, number, integer, date
+    width: Optional[str] = None  # CSS width (e.g., "150px")
+    align: Optional[str] = None  # left, center, right
+    style: Optional[Dict[str, Any]] = None  # Inline styles (bold, background, border_top)
+    conditional: Optional[Dict[str, Any]] = None  # Conditional formatting rules
+
+
+@dataclass
+class GTSpannerConfig:
+    """Configuration for Great Table column spanners (grouped headers)."""
+    label: str  # Spanner label text
+    columns: List[str] = field(default_factory=list)  # Columns under this spanner
+    from_model: Optional[str] = None  # Reference to model schema column_group
+
+
+@dataclass
+class GTRowConfig:
+    """Configuration for Great Table rows."""
+    dimension: Optional[str] = None  # Column that defines each row
+    group_by: Optional[str] = None  # Row grouping column
+    sort_by: Optional[str] = None  # Sort column
+    sort_order: str = "asc"  # asc or desc
+    limit: Optional[int] = None  # Row limit
+    subtotals: bool = False  # Show subtotals for groups
+    hierarchy: Optional[List[Dict[str, Any]]] = None  # Hierarchical row structure
+
+
+@dataclass
+class GTDateDimensionConfig:
+    """Configuration for date dimension as columns (pivot-style)."""
+    source_column: str  # Date column name
+    granularity: str = "annually"  # monthly, quarterly, annually
+    periods: Optional[int] = None  # Number of periods to show
+    format: Optional[str] = None  # Date format string
+    granularity_selector: Optional[Dict[str, Any]] = None  # Interactive granularity selection
+    subtotals: Optional[Dict[str, Any]] = None  # Subtotal configuration
+
+
+@dataclass
+class GTFootnoteConfig:
+    """Configuration for Great Table footnotes."""
+    text: str  # Footnote text
+    column: Optional[str] = None  # Column to attach footnote to
+    row: Optional[int] = None  # Row index to attach footnote to
+
+
+@dataclass
+class GreatTableConfig:
+    """Configuration specific to Great Tables exhibits."""
+    theme: str = "default"  # default, financial, dark, striped, minimal
+    row_striping: bool = True
+    row_dividers: bool = False
+    columns: Optional[List[Union[str, GTColumnConfig]]] = None
+    spanners: Optional[Union[str, List[GTSpannerConfig]]] = None  # "auto" or list
+    rows: Optional[GTRowConfig] = None
+    date_dimension: Optional[GTDateDimensionConfig] = None
+    source_note: Optional[str] = None
+    footnotes: Optional[List[GTFootnoteConfig]] = None
+    export_html: bool = False
+    export_png: bool = False
+    calculated_columns: Optional[Dict[str, Dict[str, Any]]] = None  # Derived measures
+
+
 @dataclass
 class Exhibit:
     """Exhibit definition (visualization)."""
@@ -312,6 +386,18 @@ class Exhibit:
     actual_column: Optional[str] = None  # Column name for actual values
     predicted_column: Optional[str] = None  # Column name for predicted values
     confidence_bounds: Optional[List[str]] = None  # [lower_bound_col, upper_bound_col]
+
+    # Great Tables specific options
+    theme: Optional[str] = None  # default, financial, dark, striped, minimal
+    spanners: Optional[Any] = None  # "auto" or list of spanner configs
+    rows: Optional[Any] = None  # GTRowConfig or dict
+    row_striping: bool = True
+    source_note: Optional[str] = None
+    footnotes: Optional[List[Dict[str, Any]]] = None
+    export_html: bool = False
+    export_png: bool = False
+    subtitle: Optional[str] = None  # Subtitle for Great Tables
+    calculated_columns: Optional[Dict[str, Any]] = None  # Derived/computed columns
 
     # Raw data for 1:1 serialization - stores original YAML dict for round-trip editing
     _raw_data: Optional[Dict[str, Any]] = None

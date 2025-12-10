@@ -1,0 +1,62 @@
+# Exhibit Type Registry
+# Maps exhibit types to their renderers and preset configurations
+
+exhibit_types:
+  # Great Tables - Publication-quality tables
+  great_table:
+    renderer: app.ui.components.exhibits.great_table.render_great_table
+    preset: presets/great_table.yaml
+    requires: [great_tables]
+    description: Publication-quality tables using Great Tables library
+
+  # Plotly Charts
+  line_chart:
+    renderer: app.ui.components.exhibits.line_chart.render_line_chart
+    preset: presets/line_chart.yaml
+    requires: [plotly]
+    description: Interactive line charts
+
+  bar_chart:
+    renderer: app.ui.components.exhibits.bar_chart.render_bar_chart
+    preset: presets/bar_chart.yaml
+    requires: [plotly]
+    description: Interactive bar charts
+
+  scatter_chart:
+    renderer: app.ui.components.exhibits.scatter_chart.render_scatter_chart
+    requires: [plotly]
+    description: Scatter plot charts
+
+  # Basic Tables
+  data_table:
+    renderer: app.ui.components.exhibits.data_table.render_data_table
+    requires: []
+    description: Basic interactive data table
+
+  # Metric Cards
+  metric_cards:
+    renderer: app.ui.components.exhibits.metric_cards.render_metric_cards
+    requires: []
+    description: Summary metric cards with aggregations
+
+  # Weighted Charts
+  weighted_aggregate_chart:
+    renderer: app.ui.components.exhibits.weighted_aggregate_chart.render_weighted_aggregate_chart
+    requires: [plotly]
+    description: Weighted index charts (market cap, volume weighted)
+
+  # Forecast Charts
+  forecast_chart:
+    renderer: app.ui.components.exhibits.forecast_chart.render_forecast_chart
+    requires: [plotly]
+    description: Forecast with confidence bands
+
+# Aliases for convenience
+aliases:
+  gt: great_table
+  table: great_table
+  chart: line_chart
+  line: line_chart
+  bar: bar_chart
+  scatter: scatter_chart
+  metrics: metric_cards

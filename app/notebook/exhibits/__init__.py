@@ -1,7 +1,7 @@
 """
 Exhibit system for notebook visualizations.
 
-Provides dynamic, interactive visualizations.
+Provides dynamic, interactive visualizations and the exhibit type registry.
 """
 
 from .base import BaseExhibit
@@ -15,6 +15,11 @@ from .charts import (
 )
 from .tables import DataTableExhibit
 from .layout import LayoutManager
+from .registry import (
+    ExhibitTypeRegistry,
+    ExhibitTypeConfig,
+    get_exhibit_registry,
+)
 
 __all__ = [
     "BaseExhibit",
@@ -26,4 +31,8 @@ __all__ = [
     "DualAxisChartExhibit",
     "DataTableExhibit",
     "LayoutManager",
+    # Registry
+    "ExhibitTypeRegistry",
+    "ExhibitTypeConfig",
+    "get_exhibit_registry",
 ]
