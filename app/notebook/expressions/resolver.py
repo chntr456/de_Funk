@@ -5,7 +5,6 @@ Supports:
 - Date functions: current_date(), start_of_month(), end_of_month(), etc.
 - Arithmetic: current_date() + 30, current_date() - 7
 - Data functions: max(column), min(column), top_n(column, n) [requires session]
-- Legacy: "-30d", "today" (backwards compatible with DateResolver)
 """
 from __future__ import annotations
 
@@ -38,7 +37,6 @@ class ExpressionResolver:
       start_of_quarter(), start_of_year(), trading_day(-1)
     - Arithmetic: current_date() + 30, current_date() - 7
     - Data functions: max(column), min(column), top_n(column, n) [requires session]
-    - Legacy: "-30d", "today", "-1w", "-6m", "-1y" (backwards compatible)
 
     Usage:
         resolver = ExpressionResolver()
@@ -66,9 +64,6 @@ class ExpressionResolver:
         r'(max|min|avg|first|last|distinct|top_n)\(\s*(\w+)(?:\s*,\s*(\d+))?\s*\)'
     )
 
-    # Pattern for legacy date expressions (-30d, -1w, etc.)
-    LEGACY_DATE_PATTERN = re.compile(r'^(-?\d+)([dwmy])$')
-
     def __init__(self, context: Optional[ExpressionContext] = None):
         """
         Initialize the resolver with optional context.
@@ -92,11 +87,6 @@ class ExpressionResolver:
             return expression
 
         expression = expression.strip()
-
-        # Try legacy format first (-30d, today, etc.) for backwards compatibility
-        legacy_result = self._resolve_legacy(expression)
-        if legacy_result is not None:
-            return legacy_result
 
         # Try date functions
         date_result = self._resolve_date_expression(expression)
@@ -131,41 +121,6 @@ class ExpressionResolver:
             else:
                 result[key] = self.resolve(value)
         return result
-
-    def _resolve_legacy(self, expr: str) -> Optional[date]:
-        """
-        Resolve legacy date expressions for backwards compatibility.
-
-        Supports:
-        - "today" → current date
-        - "-30d" → 30 days ago
-        - "+7d" → 7 days from now
-        - "-1w" → 1 week ago
-        - "-6m" → ~6 months ago (180 days)
-        - "-1y" → ~1 year ago (365 days)
-        """
-        expr_lower = expr.lower()
-
-        if expr_lower == 'today':
-            return self.context.current_date
-
-        match = self.LEGACY_DATE_PATTERN.match(expr_lower)
-        if match:
-            value = int(match.group(1))
-            unit = match.group(2)
-
-            if unit == 'd':
-                return self.context.current_date + timedelta(days=value)
-            elif unit == 'w':
-                return self.context.current_date + timedelta(weeks=value)
-            elif unit == 'm':
-                # Approximate month as 30 days
-                return self.context.current_date + timedelta(days=value * 30)
-            elif unit == 'y':
-                # Approximate year as 365 days
-                return self.context.current_date + timedelta(days=value * 365)
-
-        return None
 
     def _resolve_date_expression(self, expr: str) -> Optional[date]:
         """

@@ -814,7 +814,8 @@ metadata:
         selected_filter = st.selectbox(
             "Select filter to edit",
             options=filter_ids,
-            format_func=lambda x: f"{filter_collection.filters[x].label} ({x})"
+            format_func=lambda x: f"{filter_collection.filters[x].label} ({x})",
+            key="filter_edit_select"
         )
 
         if selected_filter:
@@ -885,17 +886,30 @@ metadata:
                     st.rerun()
 
             with col3:
-                if st.button("🗑️ Delete Filter", key=f"delete_filter_{selected_filter}", type="secondary"):
-                    if st.session_state.get(f"confirm_delete_{selected_filter}", False):
-                        try:
-                            self._delete_filter(notebook_path, selected_filter)
-                            st.success(f"Filter '{selected_filter}' deleted!")
+                confirm_key = f"confirm_delete_{selected_filter}"
+                if st.session_state.get(confirm_key, False):
+                    # Show confirmation buttons
+                    st.warning(f"Delete '{selected_filter}'?")
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        if st.button("✓ Yes", key=f"confirm_yes_{selected_filter}", type="primary"):
+                            try:
+                                self._delete_filter(notebook_path, selected_filter)
+                                del st.session_state[confirm_key]
+                                # Clear selectbox selection since filter no longer exists
+                                if "filter_edit_select" in st.session_state:
+                                    del st.session_state["filter_edit_select"]
+                                st.success(f"Filter '{selected_filter}' deleted!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Error deleting filter: {str(e)}")
+                    with c2:
+                        if st.button("✗ No", key=f"confirm_no_{selected_filter}"):
+                            del st.session_state[confirm_key]
                             st.rerun()
-                        except Exception as e:
-                            st.error(f"Error deleting filter: {str(e)}")
-                    else:
-                        st.session_state[f"confirm_delete_{selected_filter}"] = True
-                        st.warning("Click Delete again to confirm")
+                else:
+                    if st.button("🗑️ Delete Filter", key=f"delete_filter_{selected_filter}", type="secondary"):
+                        st.session_state[confirm_key] = True
                         st.rerun()
 
     def _render_filter_add_tab(self, notebook_path):

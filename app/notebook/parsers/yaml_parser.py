@@ -405,7 +405,7 @@ class NotebookParser:
 
 
 class DateResolver:
-    """Resolves relative date expressions."""
+    """Resolves date expressions using ExpressionResolver."""
 
     @staticmethod
     def resolve(date_expr: str, reference_date: Optional[datetime] = None) -> datetime:
@@ -414,8 +414,6 @@ class DateResolver:
 
         Supports:
         - ISO dates: "2024-01-01"
-        - "today"
-        - Relative: "-30d", "-1w", "-6m", "-1y"
         - Function calls: "current_date()", "current_date() - 365", "start_of_month()"
 
         Args:
@@ -431,43 +429,20 @@ class DateResolver:
         if reference_date is None:
             reference_date = datetime.now()
 
-        # Try ExpressionResolver first for function-based expressions
-        if '(' in date_expr and ')' in date_expr:
-            ctx = ExpressionContext(current_date=reference_date.date() if hasattr(reference_date, 'date') else reference_date)
-            resolver = ExpressionResolver(ctx)
-            result = resolver.resolve(date_expr)
-
-            # If resolution returned a date, convert to datetime
-            if isinstance(result, date_type) and not isinstance(result, datetime):
-                return datetime.combine(result, datetime.min.time())
-            elif isinstance(result, datetime):
-                return result
-            # If not resolved, fall through to legacy handling
-
-        # Handle "today"
-        if date_expr.lower() == "today":
-            return reference_date
-
-        # Handle ISO date
+        # Handle ISO date format directly
         if re.match(r'^\d{4}-\d{2}-\d{2}$', date_expr):
             return datetime.fromisoformat(date_expr)
 
-        # Handle relative dates
-        match = re.match(r'^([+-]?\d+)([dwmy])$', date_expr)
-        if match:
-            amount = int(match.group(1))
-            unit = match.group(2)
+        # Use ExpressionResolver for function-based expressions
+        ctx = ExpressionContext(current_date=reference_date.date() if hasattr(reference_date, 'date') else reference_date)
+        resolver = ExpressionResolver(ctx)
+        result = resolver.resolve(date_expr)
 
-            if unit == 'd':
-                return reference_date + timedelta(days=amount)
-            elif unit == 'w':
-                return reference_date + timedelta(weeks=amount)
-            elif unit == 'm':
-                # Approximate month as 30 days
-                return reference_date + timedelta(days=amount * 30)
-            elif unit == 'y':
-                # Approximate year as 365 days
-                return reference_date + timedelta(days=amount * 365)
+        # If resolution returned a date, convert to datetime
+        if isinstance(result, date_type) and not isinstance(result, datetime):
+            return datetime.combine(result, datetime.min.time())
+        elif isinstance(result, datetime):
+            return result
 
         raise ValueError(f"Invalid date expression: {date_expr}")
 
