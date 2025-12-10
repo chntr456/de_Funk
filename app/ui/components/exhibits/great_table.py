@@ -94,8 +94,17 @@ class GreatTableRenderer:
             return
 
         try:
-            # Build GT object
-            self.gt = GT(self.pdf)
+            # Filter to only declared columns (if specified)
+            filtered_df = self._filter_columns()
+
+            # Apply sorting before creating GT
+            sorted_df = self._sort_dataframe(filtered_df)
+
+            # Update internal reference to filtered data for column validation
+            self._working_df = sorted_df
+
+            # Build GT object with filtered/sorted data
+            self.gt = GT(sorted_df)
 
             # Apply configuration in order
             self._apply_header()
@@ -115,6 +124,122 @@ class GreatTableRenderer:
             st.error(f"Error rendering table: {str(e)}")
             # Fallback to basic dataframe display
             st.dataframe(self.pdf)
+
+    def _filter_columns(self) -> pd.DataFrame:
+        """Filter DataFrame to only include declared columns."""
+        columns_config = getattr(self.exhibit, 'columns', None)
+        rows_config = getattr(self.exhibit, 'rows', None)
+        spanners_config = getattr(self.exhibit, 'spanners', None)
+
+        if not columns_config:
+            return self.pdf
+
+        # Collect all declared columns
+        declared_columns = []
+
+        # Get columns from columns config
+        if isinstance(columns_config, list):
+            for col_config in columns_config:
+                if isinstance(col_config, dict):
+                    col_id = col_config.get('id')
+                    if col_id:
+                        declared_columns.append(col_id)
+                elif isinstance(col_config, str):
+                    declared_columns.append(col_config)
+
+        elif isinstance(columns_config, dict):
+            # Check for dimensions and measures sub-configs
+            dimensions = columns_config.get('dimensions', [])
+            measures = columns_config.get('measures', [])
+
+            for dim_config in dimensions:
+                if isinstance(dim_config, dict):
+                    col_id = dim_config.get('id')
+                    if col_id:
+                        declared_columns.append(col_id)
+                elif isinstance(dim_config, str):
+                    declared_columns.append(dim_config)
+
+            for measure_config in measures:
+                if isinstance(measure_config, dict):
+                    col_id = measure_config.get('id')
+                    if col_id:
+                        declared_columns.append(col_id)
+                elif isinstance(measure_config, str):
+                    declared_columns.append(measure_config)
+
+        # Add row grouping column if specified
+        if rows_config and isinstance(rows_config, dict):
+            group_by = rows_config.get('group_by')
+            if group_by and group_by not in declared_columns:
+                declared_columns.insert(0, group_by)
+
+        # Add columns from spanners (ensure spanner columns are included)
+        if spanners_config and isinstance(spanners_config, list):
+            for spanner in spanners_config:
+                if isinstance(spanner, dict):
+                    spanner_cols = spanner.get('columns', [])
+                    for col in spanner_cols:
+                        if col not in declared_columns:
+                            declared_columns.append(col)
+
+        # Filter to only columns that exist in the DataFrame
+        valid_columns = [c for c in declared_columns if c in self.pdf.columns]
+
+        if valid_columns:
+            return self.pdf[valid_columns]
+
+        return self.pdf
+
+    def _sort_dataframe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Sort DataFrame based on sort configuration."""
+        sort_config = getattr(self.exhibit, 'sort', None)
+
+        if not sort_config:
+            return df
+
+        try:
+            # Handle single sort
+            if isinstance(sort_config, dict):
+                sort_by = sort_config.get('by')
+                ascending = sort_config.get('order', 'asc') == 'asc'
+
+                if isinstance(sort_by, str) and sort_by in df.columns:
+                    return df.sort_values(by=sort_by, ascending=ascending)
+                elif isinstance(sort_by, list):
+                    # Multi-column sort
+                    valid_cols = [c for c in sort_by if c in df.columns]
+                    if valid_cols:
+                        # Handle mixed ascending/descending
+                        order = sort_config.get('order', 'asc')
+                        if isinstance(order, list):
+                            ascending = [o == 'asc' for o in order[:len(valid_cols)]]
+                        else:
+                            ascending = order == 'asc'
+                        return df.sort_values(by=valid_cols, ascending=ascending)
+
+            # Handle list of sorts (multi-level)
+            elif isinstance(sort_config, list):
+                sort_columns = []
+                ascending_list = []
+
+                for sort_item in sort_config:
+                    if isinstance(sort_item, dict):
+                        sort_by = sort_item.get('by')
+                        if sort_by and sort_by in df.columns:
+                            sort_columns.append(sort_by)
+                            ascending_list.append(sort_item.get('order', 'asc') == 'asc')
+                    elif isinstance(sort_item, str) and sort_item in df.columns:
+                        sort_columns.append(sort_item)
+                        ascending_list.append(True)  # Default ascending
+
+                if sort_columns:
+                    return df.sort_values(by=sort_columns, ascending=ascending_list)
+
+        except Exception as e:
+            logger.warning(f"Failed to sort DataFrame: {e}")
+
+        return df
 
     def _apply_header(self) -> None:
         """Apply title and subtitle."""
@@ -169,9 +294,12 @@ class GreatTableRenderer:
         if not spanners_config:
             return
 
+        # Get working dataframe columns
+        working_cols = list(self._working_df.columns) if hasattr(self, '_working_df') else list(self.pdf.columns)
+
         # Handle "auto" - get from model schema
         if spanners_config == 'auto' and self.model_schema:
-            spanners_config = self._get_spanners_from_schema()
+            spanners_config = self._get_spanners_from_schema(working_cols)
 
         if not isinstance(spanners_config, list):
             return
@@ -180,13 +308,13 @@ class GreatTableRenderer:
             if isinstance(spanner, dict):
                 # Check for from_model reference
                 if 'from_model' in spanner and self.model_schema:
-                    model_spanner = self._get_spanner_from_model(spanner['from_model'])
+                    model_spanner = self._get_spanner_from_model(spanner['from_model'], working_cols)
                     if model_spanner:
-                        self._add_spanner(model_spanner)
+                        self._add_spanner(model_spanner, working_cols)
                 else:
-                    self._add_spanner(spanner)
+                    self._add_spanner(spanner, working_cols)
 
-    def _get_spanners_from_schema(self) -> List[Dict]:
+    def _get_spanners_from_schema(self, working_cols: List[str]) -> List[Dict]:
         """Extract spanners from model schema column_groups."""
         spanners = []
 
@@ -201,8 +329,8 @@ class GreatTableRenderer:
                 label = group_config.get('label', group_name)
                 columns = group_config.get('columns', [])
 
-                # Only include columns that exist in the dataframe
-                valid_columns = [c for c in columns if c in self.pdf.columns]
+                # Only include columns that exist in the working dataframe
+                valid_columns = [c for c in columns if c in working_cols]
 
                 if valid_columns:
                     spanners.append({
@@ -212,7 +340,7 @@ class GreatTableRenderer:
 
         return spanners
 
-    def _get_spanner_from_model(self, group_name: str) -> Optional[Dict]:
+    def _get_spanner_from_model(self, group_name: str, working_cols: List[str]) -> Optional[Dict]:
         """Get a single spanner from model schema by group name."""
         if not self.model_schema:
             return None
@@ -226,8 +354,8 @@ class GreatTableRenderer:
         label = group_config.get('label', group_name)
         columns = group_config.get('columns', [])
 
-        # Only include columns that exist in the dataframe
-        valid_columns = [c for c in columns if c in self.pdf.columns]
+        # Only include columns that exist in the working dataframe
+        valid_columns = [c for c in columns if c in working_cols]
 
         if not valid_columns:
             return None
@@ -237,13 +365,13 @@ class GreatTableRenderer:
             'columns': valid_columns
         }
 
-    def _add_spanner(self, spanner: Dict) -> None:
+    def _add_spanner(self, spanner: Dict, working_cols: List[str]) -> None:
         """Add a single spanner to the table."""
         label = spanner.get('label', '')
         columns = spanner.get('columns', [])
 
-        # Filter to columns that exist
-        valid_columns = [c for c in columns if c in self.pdf.columns]
+        # Filter to columns that exist in working data
+        valid_columns = [c for c in columns if c in working_cols]
 
         if valid_columns and label:
             try:
@@ -251,6 +379,7 @@ class GreatTableRenderer:
                     label=label,
                     columns=valid_columns
                 )
+                logger.debug(f"Added spanner '{label}' with columns: {valid_columns}")
             except Exception as e:
                 logger.warning(f"Failed to add spanner '{label}': {e}")
 
@@ -260,6 +389,9 @@ class GreatTableRenderer:
 
         if not columns_config:
             return
+
+        # Get working columns
+        working_cols = list(self._working_df.columns) if hasattr(self, '_working_df') else list(self.pdf.columns)
 
         # Collect columns by format type
         format_groups: Dict[str, List[str]] = {}
@@ -279,7 +411,7 @@ class GreatTableRenderer:
 
         # Apply formats
         for format_type, cols in format_groups.items():
-            valid_cols = [c for c in cols if c in self.pdf.columns]
+            valid_cols = [c for c in cols if c in working_cols]
             if valid_cols:
                 self._apply_format(format_type, valid_cols)
 
@@ -340,7 +472,8 @@ class GreatTableRenderer:
         col_id = col_config.get('id')
         conditional = col_config.get('conditional')
 
-        if not col_id or not conditional or col_id not in self.pdf.columns:
+        working_cols = list(self._working_df.columns) if hasattr(self, '_working_df') else list(self.pdf.columns)
+        if not col_id or not conditional or col_id not in working_cols:
             return
 
         cond_type = conditional.get('type')
@@ -363,10 +496,12 @@ class GreatTableRenderer:
         row_config = getattr(self.exhibit, 'rows', None)
         row_striping = getattr(self.exhibit, 'row_striping', True)
 
+        working_cols = list(self._working_df.columns) if hasattr(self, '_working_df') else list(self.pdf.columns)
+
         # Handle row grouping
         if row_config and isinstance(row_config, dict):
             group_by = row_config.get('group_by')
-            if group_by and group_by in self.pdf.columns:
+            if group_by and group_by in working_cols:
                 try:
                     self.gt = self.gt.tab_stub(rowname_col=group_by)
                 except Exception as e:

@@ -616,7 +616,10 @@ class MarkdownNotebookParser:
             'weighting', 'aggregate_by', 'value_measures', 'group_by', 'aggregations',
             'columns', 'pagination', 'page_size', 'download', 'sortable', 'searchable',
             'sort', 'layout', 'component', 'params', 'options',
-            'actual_column', 'predicted_column', 'confidence_bounds'
+            'actual_column', 'predicted_column', 'confidence_bounds',
+            # Great Tables specific fields
+            'theme', 'spanners', 'rows', 'row_striping', 'source_note',
+            'footnotes', 'export_html', 'export_png', 'subtitle', 'calculated_columns'
         }
         extra_options = {k: v for k, v in data.items() if k not in known_keys}
         options = data.get('options', {}) or {}
@@ -668,6 +671,17 @@ class MarkdownNotebookParser:
             actual_column=data.get('actual_column'),
             predicted_column=data.get('predicted_column'),
             confidence_bounds=data.get('confidence_bounds'),
+            # Great Tables specific fields
+            theme=data.get('theme'),
+            spanners=data.get('spanners'),
+            rows=data.get('rows'),
+            row_striping=data.get('row_striping', True),
+            source_note=data.get('source_note'),
+            footnotes=data.get('footnotes'),
+            export_html=data.get('export_html', False),
+            export_png=data.get('export_png', False),
+            subtitle=data.get('subtitle'),
+            calculated_columns=data.get('calculated_columns'),
             # Store raw data for 1:1 round-trip serialization
             _raw_data=data,
         )

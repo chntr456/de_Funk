@@ -899,7 +899,10 @@ metadata:
                                 # Clear selectbox selection since filter no longer exists
                                 if "filter_edit_select" in st.session_state:
                                     del st.session_state["filter_edit_select"]
-                                st.success(f"Filter '{selected_filter}' deleted!")
+                                # Use toast for persistent feedback
+                                st.toast(f"✅ Filter '{selected_filter}' deleted!", icon="🗑️")
+                                # Keep filter editor open for multiple deletions
+                                st.session_state.filter_editor_open = True
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Error deleting filter: {str(e)}")
