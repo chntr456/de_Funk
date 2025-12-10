@@ -1074,6 +1074,697 @@ webdriver-manager>=4.0.0
 
 ---
 
+## Schema-Driven Column Groups (Spanners from Model Metadata)
+
+### Problem
+
+Currently, spanners are defined ad-hoc in each exhibit:
+```yaml
+spanners:
+  - label: Price Data
+    columns: [open, high, low, close]
+```
+
+This leads to:
+- Repeated spanner definitions across notebooks
+- Inconsistent column categorization
+- No single source of truth for column semantics
+
+### Solution: Column Groups in Model Schema
+
+Define column groups **once** in the model schema, then exhibits can inherit them:
+
+**configs/models/company/schema.yaml**:
+```yaml
+facts:
+  fact_income_statement:
+    description: "Income statement data from SEC filings"
+
+    # NEW: Column groups for spanners/categorization
+    column_groups:
+      revenue_profit:
+        label: "Revenue & Profitability"
+        columns: [total_revenue, gross_profit, operating_income, net_income, ebit, ebitda]
+        description: "Top-line and profit metrics"
+
+      expenses:
+        label: "Operating Expenses"
+        columns: [cost_of_revenue, operating_expenses, sg_and_a, research_and_development, depreciation_and_amortization]
+        description: "Cost structure breakdown"
+
+      taxes_interest:
+        label: "Taxes & Interest"
+        columns: [interest_expense, income_tax_expense]
+        description: "Non-operating expenses"
+
+    columns:
+      total_revenue:
+        type: double
+        description: "Total revenue"
+        group: revenue_profit    # Column references its group
+
+      cost_of_revenue:
+        type: double
+        description: "Cost of goods/services sold"
+        group: expenses
+      # ... etc
+
+  fact_balance_sheet:
+    column_groups:
+      current_assets:
+        label: "Current Assets"
+        columns: [cash_and_equivalents, inventory, current_net_receivables, total_current_assets]
+
+      non_current_assets:
+        label: "Non-Current Assets"
+        columns: [property_plant_equipment, goodwill, intangible_assets, total_non_current_assets]
+
+      liabilities:
+        label: "Liabilities"
+        columns: [total_current_liabilities, current_accounts_payable, long_term_debt, total_debt, total_liabilities]
+
+      equity:
+        label: "Shareholders' Equity"
+        columns: [common_stock, retained_earnings, total_shareholder_equity]
+
+  fact_cash_flow:
+    column_groups:
+      operating:
+        label: "Operating Activities"
+        columns: [operating_cashflow, depreciation_depletion_amortization, change_in_receivables, change_in_inventory, profit_loss]
+
+      investing:
+        label: "Investing Activities"
+        columns: [cashflow_from_investment, capital_expenditures]
+
+      financing:
+        label: "Financing Activities"
+        columns: [cashflow_from_financing, dividend_payout, payments_repurchase_common_stock, proceeds_issuance_long_term_debt]
+
+      summary:
+        label: "Cash Summary"
+        columns: [change_in_cash, free_cash_flow]
+```
+
+### Exhibit Usage - Auto-Spanners
+
+Exhibits can now use `spanners: auto` to inherit from model:
+
+```yaml
+$exhibits${
+  type: great_table
+  source: company.fact_income_statement
+  title: Income Statement
+
+  # Auto-generate spanners from model schema
+  spanners: auto
+
+  columns: [total_revenue, cost_of_revenue, gross_profit, operating_expenses,
+            sg_and_a, operating_income, interest_expense, income_tax_expense, net_income]
+}
+```
+
+Or selectively use specific groups:
+```yaml
+$exhibits${
+  type: great_table
+  source: company.fact_income_statement
+
+  # Only use these column groups as spanners
+  spanners:
+    - from_model: revenue_profit
+    - from_model: expenses
+    - label: "Custom Group"      # Can still add custom spanners
+      columns: [ebit, ebitda]
+}
+```
+
+### Benefits
+
+1. **Single source of truth** - Column categorization defined once in schema
+2. **Consistency** - All exhibits use same groupings
+3. **Self-documenting** - Schema describes data semantics
+4. **Flexible** - Exhibits can override or extend model groups
+5. **Ledger/Budget ready** - Chart of accounts categories live in schema
+
+---
+
+## Pivot-Table Dimensional Design
+
+### Problem
+
+The current row/column model is static - just a list of columns. For financial analysis, users need:
+- **Period flexibility**: View by month, quarter, or year
+- **Subtotals**: Annual subtotals when viewing monthly
+- **Row hierarchies**: Group rows by category with subtotals
+
+### Solution: Dimensional Rows and Columns
+
+#### Date Dimension with Period Selector
+
+```yaml
+$exhibits${
+  type: great_table
+  source: company.fact_income_statement
+  title: Revenue by Period
+
+  # Dimensional column configuration
+  columns:
+    # Date dimension as columns (pivot-style)
+    date_dimension:
+      source_column: fiscal_date_ending
+      granularity_selector:
+        available: [monthly, quarterly, annually]
+        default: quarterly
+        label: "View By"
+
+      # Subtotals configuration
+      subtotals:
+        when: [monthly, quarterly]    # Show annual subtotals at these granularities
+        level: annually
+        label: "FY Total"
+        style: bold
+
+    # Measure columns
+    measures:
+      - total_revenue
+      - net_income
+
+  # Row dimension
+  rows:
+    dimension: ticker    # One row per company
+    group_by: sector    # Group rows by sector
+    subtotals: true     # Show sector subtotals
+}
+```
+
+**Renders as** (when quarterly selected):
+
+| Company | Sector | Q1 2024 | Q2 2024 | Q3 2024 | Q4 2024 | **FY 2024** |
+|---------|--------|---------|---------|---------|---------|-------------|
+| Apple   | Tech   | $90.8B  | $85.8B  | $94.9B  | $119.6B | **$391.0B** |
+| Microsoft | Tech | $61.9B  | $64.7B  | $65.6B  | $62.0B  | **$254.2B** |
+| **Tech Total** | | $152.7B | $150.5B | $160.5B | $181.6B | **$645.2B** |
+
+#### Row Hierarchy Configuration
+
+```yaml
+$exhibits${
+  type: great_table
+  source: company.fact_income_statement
+  title: Income Statement (Hierarchical)
+
+  rows:
+    # Hierarchical row structure
+    hierarchy:
+      - level: 0
+        label: "Revenue"
+        columns: [total_revenue]
+        style: {bold: true, background: "#e8f4e8"}
+
+      - level: 1
+        label: "Cost of Revenue"
+        columns: [cost_of_revenue]
+        indent: 1
+
+      - level: 0
+        label: "Gross Profit"
+        columns: [gross_profit]
+        computed: "total_revenue - cost_of_revenue"
+        style: {bold: true, border_top: true}
+
+      - level: 0
+        label: "Operating Expenses"
+        style: {bold: true}
+        children:
+          - {label: "SG&A", column: sg_and_a}
+          - {label: "R&D", column: research_and_development}
+          - {label: "D&A", column: depreciation_and_amortization}
+
+      - level: 0
+        label: "Operating Income"
+        columns: [operating_income]
+        computed: "gross_profit - operating_expenses"
+        style: {bold: true, border_top: true}
+
+  # Columns are periods
+  columns:
+    date_dimension:
+      source_column: fiscal_date_ending
+      granularity: annually
+      periods: 5    # Last 5 years
+}
+```
+
+**Renders as**:
+
+| Line Item | FY 2020 | FY 2021 | FY 2022 | FY 2023 | FY 2024 |
+|-----------|---------|---------|---------|---------|---------|
+| **Revenue** | $274.5B | $365.8B | $394.3B | $383.3B | $391.0B |
+| &nbsp;&nbsp;Cost of Revenue | $169.6B | $212.9B | $223.5B | $214.1B | $210.4B |
+| **Gross Profit** | $104.9B | $152.8B | $170.8B | $169.1B | $180.6B |
+| **Operating Expenses** | | | | | |
+| &nbsp;&nbsp;SG&A | $19.9B | $21.9B | $25.1B | $24.9B | $26.1B |
+| &nbsp;&nbsp;R&D | $18.7B | $21.9B | $26.3B | $29.9B | $31.0B |
+| **Operating Income** | $66.3B | $108.9B | $119.4B | $114.3B | $123.5B |
+
+#### Interactive Period Selector
+
+The `granularity_selector` creates a UI control:
+
+```yaml
+granularity_selector:
+  available: [monthly, quarterly, annually]
+  default: quarterly
+  label: "Period"
+  position: above_table    # or "sidebar"
+
+  # Format options per granularity
+  formats:
+    monthly: "%b %Y"       # Jan 2024
+    quarterly: "Q%q %Y"    # Q1 2024
+    annually: "FY%Y"       # FY2024
+```
+
+### Implementation: PeriodAggregator
+
+```python
+class PeriodAggregator:
+    """Aggregates fact data by time period with subtotals."""
+
+    PERIOD_CONFIGS = {
+        'monthly': {'column': 'month', 'parent': 'annually'},
+        'quarterly': {'column': 'quarter', 'parent': 'annually'},
+        'annually': {'column': 'year', 'parent': None}
+    }
+
+    def aggregate(
+        self,
+        df: pd.DataFrame,
+        date_column: str,
+        measures: List[str],
+        granularity: str,
+        include_subtotals: bool = True
+    ) -> pd.DataFrame:
+        """
+        Aggregate data by period with optional subtotals.
+
+        Args:
+            df: Source DataFrame
+            date_column: Date column to aggregate by
+            measures: Measure columns to sum
+            granularity: 'monthly', 'quarterly', 'annually'
+            include_subtotals: Add parent-level subtotals
+
+        Returns:
+            Pivoted DataFrame with periods as columns
+        """
+        # Add period columns
+        df = self._add_period_columns(df, date_column)
+
+        # Aggregate by period
+        period_col = self.PERIOD_CONFIGS[granularity]['column']
+        aggregated = df.groupby(period_col)[measures].sum()
+
+        # Add subtotals if requested
+        if include_subtotals:
+            parent = self.PERIOD_CONFIGS[granularity]['parent']
+            if parent:
+                subtotals = df.groupby(parent)[measures].sum()
+                aggregated = self._merge_subtotals(aggregated, subtotals)
+
+        return aggregated
+```
+
+---
+
+## Bug Fix: DimensionSelector applies_to Default
+
+### Issue
+
+The `applies_to` field in `DimensionSelectorConfig` defaults to `"color"`, causing confusion when dimension selectors are used for grouping operations.
+
+**Location**: `app/notebook/schema.py:243`
+
+```python
+# Current (problematic)
+applies_to: str = "color"  # What the dimension applies to: "color", "x", "group_by"
+```
+
+### Fix
+
+Change default to `"group_by"` which is the more common use case:
+
+```python
+# Fixed
+applies_to: str = "group_by"  # What the dimension applies to: "group_by", "color", "x"
+```
+
+**Also update** `app/notebook/parsers/markdown_parser.py:605`:
+```python
+# Current
+applies_to=ds_data.get('applies_to', 'color')
+
+# Fixed
+applies_to=ds_data.get('applies_to', 'group_by')
+```
+
+### Migration
+
+Existing notebooks that explicitly set `applies_to: color` will continue to work. Only notebooks that omitted `applies_to` will see changed behavior (from defaulting to color to defaulting to group_by).
+
+---
+
+## Example: Company Financials Exhibit
+
+### Complete Financial Statement Notebook
+
+**configs/notebooks/examples/financial_statements_gt.md**:
+
+```markdown
+---
+id: financial_statements_gt
+title: Company Financial Statements
+description: Publication-quality financial tables using Great Tables
+author: de_Funk
+version: 1.0
+models: [company, core]
+tags: [financials, great_tables, example]
+---
+
+$filter${
+  id: ticker
+  type: select
+  multi: false
+  label: Company
+  source: {model: company, table: dim_company, column: ticker}
+  default: AAPL
+}
+
+$filter${
+  id: report_type
+  type: select
+  label: Report Type
+  options: [annual, quarterly]
+  default: annual
+}
+
+$filter${
+  id: fiscal_period
+  type: date_range
+  label: Fiscal Period
+  default:
+    start: start_of_year() - 1825   # 5 years back
+    end: current_date()
+}
+
+## Income Statement
+
+$exhibits${
+  type: great_table
+  source: company.fact_income_statement
+  title: Consolidated Statement of Operations
+  subtitle: "{{ ticker }} | {{ report_type | title }} Reports"
+  theme: financial
+
+  # Use model-defined column groups as spanners
+  spanners: auto
+
+  # Date as columns
+  columns:
+    date_dimension:
+      source_column: fiscal_date_ending
+      granularity_selector:
+        available: [quarterly, annually]
+        default: annually
+      format: "FY%Y"
+
+    measures:
+      - id: total_revenue
+        label: Total Revenue
+        format: currency_millions
+
+      - id: cost_of_revenue
+        label: Cost of Revenue
+        format: currency_millions
+
+      - id: gross_profit
+        label: Gross Profit
+        format: currency_millions
+        style: {bold: true, border_top: true}
+
+      - id: operating_expenses
+        label: Operating Expenses
+        format: currency_millions
+
+      - id: operating_income
+        label: Operating Income
+        format: currency_millions
+        style: {bold: true}
+
+      - id: net_income
+        label: Net Income
+        format: currency_millions
+        style: {bold: true, background: "#e8f4e8"}
+        conditional:
+          type: color_scale
+          palette: ["#ffcccc", "#ffffff", "#ccffcc"]
+          domain: [-1000000000, 0, 10000000000]
+
+  source_note: "Source: SEC Filings via Alpha Vantage | Amounts in millions USD"
+  footnotes:
+    - column: gross_profit
+      text: "Gross Profit = Total Revenue - Cost of Revenue"
+}
+
+---
+
+## Balance Sheet
+
+$exhibits${
+  type: great_table
+  source: company.fact_balance_sheet
+  title: Consolidated Balance Sheet
+  theme: financial
+
+  spanners:
+    - from_model: current_assets
+    - from_model: non_current_assets
+    - from_model: liabilities
+    - from_model: equity
+
+  columns:
+    date_dimension:
+      source_column: fiscal_date_ending
+      granularity: annually
+      periods: 3
+
+    measures:
+      # Assets
+      - id: cash_and_equivalents
+        label: Cash & Equivalents
+        format: currency_millions
+
+      - id: total_current_assets
+        label: Total Current Assets
+        format: currency_millions
+        style: {bold: true}
+
+      - id: property_plant_equipment
+        label: PP&E
+        format: currency_millions
+
+      - id: total_assets
+        label: Total Assets
+        format: currency_millions
+        style: {bold: true, border_top: true, background: "#e8e8f4"}
+
+      # Liabilities
+      - id: total_current_liabilities
+        label: Current Liabilities
+        format: currency_millions
+
+      - id: long_term_debt
+        label: Long-Term Debt
+        format: currency_millions
+
+      - id: total_liabilities
+        label: Total Liabilities
+        format: currency_millions
+        style: {bold: true}
+
+      # Equity
+      - id: total_shareholder_equity
+        label: Shareholders' Equity
+        format: currency_millions
+        style: {bold: true, border_top: true, background: "#f4e8e8"}
+
+  source_note: "Source: SEC Filings | Amounts in millions USD"
+}
+
+---
+
+## Cash Flow Statement
+
+$exhibits${
+  type: great_table
+  source: company.fact_cash_flow
+  title: Consolidated Statement of Cash Flows
+  theme: financial
+
+  spanners: auto   # Uses operating, investing, financing, summary groups
+
+  columns:
+    date_dimension:
+      source_column: fiscal_date_ending
+      granularity: annually
+      periods: 3
+
+    measures:
+      # Operating
+      - id: operating_cashflow
+        label: Cash from Operations
+        format: currency_millions
+        style: {bold: true}
+
+      # Investing
+      - id: capital_expenditures
+        label: Capital Expenditures
+        format: currency_millions
+
+      - id: cashflow_from_investment
+        label: Cash from Investing
+        format: currency_millions
+        style: {bold: true}
+
+      # Financing
+      - id: dividend_payout
+        label: Dividends Paid
+        format: currency_millions
+
+      - id: cashflow_from_financing
+        label: Cash from Financing
+        format: currency_millions
+        style: {bold: true}
+
+      # Summary
+      - id: free_cash_flow
+        label: Free Cash Flow
+        format: currency_millions
+        style: {bold: true, background: "#e8f4e8"}
+        conditional:
+          type: color_scale
+          palette: ["#ef4444", "#ffffff", "#22c55e"]
+          domain: [-5000000000, 0, 20000000000]
+
+      - id: change_in_cash
+        label: Net Change in Cash
+        format: currency_millions
+        style: {bold: true, border_top: true}
+
+  source_note: "Source: SEC Filings | Amounts in millions USD"
+  footnotes:
+    - column: free_cash_flow
+      text: "Free Cash Flow = Operating Cash Flow - Capital Expenditures"
+}
+
+---
+
+## Financial Ratios
+
+$exhibits${
+  type: great_table
+  source: company.fact_income_statement
+  title: Key Financial Metrics
+  theme: financial
+
+  # Calculated columns (derived measures)
+  calculated_columns:
+    gross_margin:
+      formula: "gross_profit / total_revenue"
+      label: Gross Margin
+      format: percent
+
+    operating_margin:
+      formula: "operating_income / total_revenue"
+      label: Operating Margin
+      format: percent
+
+    net_margin:
+      formula: "net_income / total_revenue"
+      label: Net Margin
+      format: percent
+      conditional:
+        type: color_scale
+        palette: ["#ef4444", "#fbbf24", "#22c55e"]
+        domain: [0, 0.15, 0.30]
+
+  columns:
+    date_dimension:
+      source_column: fiscal_date_ending
+      granularity: annually
+      periods: 5
+
+    measures:
+      - gross_margin
+      - operating_margin
+      - net_margin
+
+  source_note: "Calculated from SEC filings"
+}
+```
+
+### Financial Theme Definition
+
+**configs/exhibits/themes/financial.yaml**:
+
+```yaml
+# Financial statement theme for Great Tables
+name: financial
+description: Publication-quality financial statement styling
+
+# Typography
+font_family: "Georgia, serif"
+header_font_family: "Arial, sans-serif"
+
+# Colors
+colors:
+  header_background: "#1a365d"
+  header_text: "#ffffff"
+  row_stripe: "#f7fafc"
+  subtotal_background: "#edf2f7"
+  total_background: "#e2e8f0"
+  positive: "#22c55e"
+  negative: "#ef4444"
+
+# Borders
+borders:
+  header_bottom: "2px solid #1a365d"
+  subtotal_top: "1px solid #cbd5e0"
+  total_top: "2px solid #1a365d"
+
+# Number formats
+formats:
+  currency_millions: "${:,.0f}M"
+  currency_billions: "${:,.1f}B"
+  percent: "{:.1%}"
+  ratio: "{:.2f}x"
+
+# Row styling
+row_styles:
+  header: {bold: true, background: header_background, color: header_text}
+  subtotal: {bold: true, background: subtotal_background}
+  total: {bold: true, background: total_background, border_top: total_top}
+
+# Column alignment
+column_alignment:
+  text: left
+  numbers: right
+  dates: center
+```
+
+---
+
 ## Open Questions
 
 1. **PNG Export**: Should we include browser-based PNG export, or defer to HTML-only?

@@ -240,7 +240,7 @@ class DimensionSelectorConfig:
     label: Optional[str] = None  # Label for the selector UI
     selector_type: str = "radio"  # Type: radio, selectbox
     help_text: Optional[str] = None  # Help text for the selector
-    applies_to: str = "color"  # What the dimension applies to: "color", "x", "group_by"
+    applies_to: str = "group_by"  # What the dimension applies to: "group_by", "color", "x"
     # Aggregation settings for when grouping by non-primary dimensions
     aggregation: str = "avg"  # Aggregation method: avg, sum, min, max, first, last
     primary_dimension: Optional[str] = None  # Primary dimension (no aggregation), defaults to first in list

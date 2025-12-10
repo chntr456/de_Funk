@@ -602,7 +602,7 @@ class MarkdownNotebookParser:
                 label=ds_data.get('label'),
                 selector_type=ds_data.get('selector_type', 'radio'),
                 help_text=ds_data.get('help_text'),
-                applies_to=ds_data.get('applies_to', 'color')
+                applies_to=ds_data.get('applies_to', 'group_by')
             )
 
         # Collect any unknown/extra properties into options dict
