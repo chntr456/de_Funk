@@ -199,12 +199,26 @@ class GreatTableRenderer:
             return df
 
         try:
-            # Handle single sort
-            if isinstance(sort_config, dict):
+            # Handle SortConfig dataclass (from markdown parser)
+            if hasattr(sort_config, 'by') and hasattr(sort_config, 'order'):
+                sort_by = sort_config.by
+                ascending = sort_config.order == 'asc'
+
+                if isinstance(sort_by, str) and sort_by in df.columns:
+                    logger.debug(f"Sorting by {sort_by} {'asc' if ascending else 'desc'}")
+                    return df.sort_values(by=sort_by, ascending=ascending)
+                elif isinstance(sort_by, list):
+                    valid_cols = [c for c in sort_by if c in df.columns]
+                    if valid_cols:
+                        return df.sort_values(by=valid_cols, ascending=ascending)
+
+            # Handle dict config
+            elif isinstance(sort_config, dict):
                 sort_by = sort_config.get('by')
                 ascending = sort_config.get('order', 'asc') == 'asc'
 
                 if isinstance(sort_by, str) and sort_by in df.columns:
+                    logger.debug(f"Sorting by {sort_by} {'asc' if ascending else 'desc'}")
                     return df.sort_values(by=sort_by, ascending=ascending)
                 elif isinstance(sort_by, list):
                     # Multi-column sort
