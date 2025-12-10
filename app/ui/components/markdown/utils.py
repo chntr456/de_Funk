@@ -11,6 +11,103 @@ from typing import Dict, Any
 import yaml
 
 
+class IndentedDumper(yaml.SafeDumper):
+    """Custom YAML dumper that properly indents list items."""
+    pass
+
+
+def _represent_list(dumper, data):
+    """Represent lists with proper indentation for nested dicts."""
+    return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=False)
+
+
+def _represent_dict(dumper, data):
+    """Represent dicts with proper indentation."""
+    return dumper.represent_mapping('tag:yaml.org,2002:map', data, flow_style=False)
+
+
+# Register custom representers
+IndentedDumper.add_representer(list, _represent_list)
+IndentedDumper.add_representer(dict, _represent_dict)
+
+
+def dump_yaml_indented(data: Dict, indent: int = 2) -> str:
+    """
+    Dump YAML with proper indentation for nested structures.
+
+    This ensures list items have their properties properly indented:
+
+    columns:
+      - id: value
+        label: value    # Properly indented under the list item
+
+    Args:
+        data: Dictionary to dump
+        indent: Indentation level (default 2)
+
+    Returns:
+        Properly formatted YAML string
+    """
+    # Use custom dumper with proper settings
+    output = yaml.dump(
+        data,
+        Dumper=IndentedDumper,
+        default_flow_style=False,
+        sort_keys=False,
+        allow_unicode=True,
+        indent=indent,
+        width=120
+    )
+
+    # Post-process to fix list item indentation
+    # PyYAML produces:
+    #   key:
+    #   - id: value
+    #     label: value
+    #
+    # We need:
+    #   key:
+    #     - id: value
+    #       label: value
+    #
+    # This adds indent spaces after each "- " sequence item marker
+
+    lines = output.split('\n')
+    result = []
+    in_list_context = False
+    list_indent = 0
+
+    for i, line in enumerate(lines):
+        stripped = line.lstrip()
+
+        # Check if this line starts a list item
+        if stripped.startswith('- '):
+            # Find current indentation
+            current_indent = len(line) - len(stripped)
+            # Add extra indent to list marker
+            result.append(' ' * indent + line)
+            in_list_context = True
+            list_indent = current_indent
+        elif in_list_context and stripped and not stripped.startswith('-'):
+            # This is a continuation of a list item (properties after the first)
+            current_indent = len(line) - len(stripped)
+            if current_indent > 0:
+                # Add extra indent to align with the indented list
+                result.append(' ' * indent + line)
+            else:
+                # Back to root level, exit list context
+                in_list_context = False
+                result.append(line)
+        else:
+            if stripped == '' or (stripped and not stripped.startswith(' ') and ':' in stripped):
+                # Empty line or new top-level key - might exit list context
+                if stripped and ':' in stripped and not stripped.startswith('-'):
+                    in_list_context = False
+            result.append(line)
+
+    return '\n'.join(result)
+
+
 def exhibit_to_syntax(exhibit) -> str:
     """
     Convert an Exhibit object to $exhibits${} syntax.
@@ -205,9 +302,9 @@ def exhibit_to_syntax(exhibit) -> str:
     if exhibit.export_png:
         data['export_png'] = True
 
-    # Convert to YAML string
-    yaml_content = yaml.dump(data, default_flow_style=None, sort_keys=False, allow_unicode=True, indent=2)
-    # Indent each line
+    # Convert to YAML string with proper indentation
+    yaml_content = dump_yaml_indented(data)
+    # Indent each line for the $exhibits${} wrapper
     indented = '\n'.join('  ' + line for line in yaml_content.strip().split('\n'))
     return f"$exhibits${{\n{indented}\n}}"
 
@@ -230,14 +327,7 @@ def exhibit_to_yaml(exhibit) -> str:
 
     # Use raw data if available for perfect round-trip
     if hasattr(exhibit, '_raw_data') and exhibit._raw_data:
-        return yaml.dump(
-            exhibit._raw_data,
-            default_flow_style=None,  # Use flow style for simple values, block for complex
-            sort_keys=False,
-            allow_unicode=True,
-            width=120,
-            indent=2
-        )
+        return dump_yaml_indented(exhibit._raw_data)
 
     # Otherwise, rebuild from parsed fields
     data = {
@@ -365,14 +455,7 @@ def exhibit_to_yaml(exhibit) -> str:
     if exhibit.options:
         data.update(exhibit.options)
 
-    return yaml.dump(
-        data,
-        default_flow_style=None,
-        sort_keys=False,
-        allow_unicode=True,
-        width=120,
-        indent=2
-    )
+    return dump_yaml_indented(data)
 
 
 def collapsible_to_editable(block: Dict[str, Any]) -> str:
