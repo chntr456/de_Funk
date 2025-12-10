@@ -183,8 +183,30 @@ def exhibit_to_syntax(exhibit) -> str:
     if exhibit.confidence_bounds:
         data['confidence_bounds'] = exhibit.confidence_bounds
 
+    # Great Tables specific fields
+    if exhibit.theme:
+        data['theme'] = exhibit.theme
+    if exhibit.spanners:
+        data['spanners'] = exhibit.spanners
+    if exhibit.rows:
+        data['rows'] = exhibit.rows
+    if hasattr(exhibit, 'row_striping') and not exhibit.row_striping:
+        data['row_striping'] = False
+    if exhibit.source_note:
+        data['source_note'] = exhibit.source_note
+    if exhibit.footnotes:
+        data['footnotes'] = exhibit.footnotes
+    if exhibit.subtitle:
+        data['subtitle'] = exhibit.subtitle
+    if exhibit.calculated_columns:
+        data['calculated_columns'] = exhibit.calculated_columns
+    if exhibit.export_html:
+        data['export_html'] = True
+    if exhibit.export_png:
+        data['export_png'] = True
+
     # Convert to YAML string
-    yaml_content = yaml.dump(data, default_flow_style=False, sort_keys=False, allow_unicode=True)
+    yaml_content = yaml.dump(data, default_flow_style=None, sort_keys=False, allow_unicode=True, indent=2)
     # Indent each line
     indented = '\n'.join('  ' + line for line in yaml_content.strip().split('\n'))
     return f"$exhibits${{\n{indented}\n}}"
@@ -194,7 +216,8 @@ def exhibit_to_yaml(exhibit) -> str:
     """
     Convert exhibit to YAML format for editing.
 
-    Similar to exhibit_to_syntax but returns pure YAML without wrapper.
+    Uses _raw_data if available for perfect round-trip serialization,
+    otherwise rebuilds from parsed fields.
 
     Args:
         exhibit: Exhibit object
@@ -205,15 +228,30 @@ def exhibit_to_yaml(exhibit) -> str:
     if not exhibit:
         return ''
 
+    # Use raw data if available for perfect round-trip
+    if hasattr(exhibit, '_raw_data') and exhibit._raw_data:
+        return yaml.dump(
+            exhibit._raw_data,
+            default_flow_style=None,  # Use flow style for simple values, block for complex
+            sort_keys=False,
+            allow_unicode=True,
+            width=120,
+            indent=2
+        )
+
+    # Otherwise, rebuild from parsed fields
     data = {
-        'id': exhibit.id,
         'type': exhibit.type.value,
-        'title': exhibit.title,
     }
 
+    if exhibit.title:
+        data['title'] = exhibit.title
+    if exhibit.description:
+        data['description'] = exhibit.description
     if exhibit.source:
         data['source'] = exhibit.source
 
+    # Axis configurations (shorthand)
     if exhibit.x_axis:
         data['x'] = exhibit.x_axis.dimension or exhibit.x_axis.measure
     if exhibit.y_axis:
@@ -222,7 +260,119 @@ def exhibit_to_yaml(exhibit) -> str:
     if exhibit.color_by:
         data['color'] = exhibit.color_by
 
-    return yaml.dump(data, default_flow_style=False, sort_keys=False)
+    # Great Tables specific fields
+    if exhibit.theme:
+        data['theme'] = exhibit.theme
+    if exhibit.sort:
+        if hasattr(exhibit.sort, 'by'):
+            data['sort'] = {'by': exhibit.sort.by, 'order': exhibit.sort.order}
+        else:
+            data['sort'] = exhibit.sort
+
+    # Columns - preserve structure for Great Tables
+    if exhibit.columns:
+        data['columns'] = exhibit.columns
+
+    # Spanners
+    if exhibit.spanners:
+        data['spanners'] = exhibit.spanners
+
+    # Rows configuration
+    if exhibit.rows:
+        data['rows'] = exhibit.rows
+
+    # Row striping (only if False, True is default)
+    if hasattr(exhibit, 'row_striping') and not exhibit.row_striping:
+        data['row_striping'] = False
+
+    # Source note and footnotes
+    if exhibit.source_note:
+        data['source_note'] = exhibit.source_note
+    if exhibit.footnotes:
+        data['footnotes'] = exhibit.footnotes
+
+    # Subtitle
+    if exhibit.subtitle:
+        data['subtitle'] = exhibit.subtitle
+
+    # Calculated columns
+    if exhibit.calculated_columns:
+        data['calculated_columns'] = exhibit.calculated_columns
+
+    # Export options
+    if exhibit.export_html:
+        data['export_html'] = True
+    if exhibit.export_png:
+        data['export_png'] = True
+
+    # Metrics for metric_cards
+    if exhibit.metrics:
+        metrics_list = []
+        for m in exhibit.metrics:
+            metric_dict = {'measure': m.measure}
+            if m.label:
+                metric_dict['label'] = m.label
+            if m.aggregation:
+                metric_dict['aggregation'] = m.aggregation.value
+            metrics_list.append(metric_dict)
+        data['metrics'] = metrics_list
+
+    # Measure selector
+    if exhibit.measure_selector:
+        ms = exhibit.measure_selector
+        ms_dict = {'available_measures': ms.available_measures}
+        if ms.default_measures:
+            ms_dict['default_measures'] = ms.default_measures
+        if ms.label:
+            ms_dict['label'] = ms.label
+        data['measure_selector'] = ms_dict
+
+    # Dimension selector
+    if exhibit.dimension_selector:
+        ds = exhibit.dimension_selector
+        ds_dict = {'available_dimensions': ds.available_dimensions}
+        if ds.default_dimension:
+            ds_dict['default_dimension'] = ds.default_dimension
+        if ds.label:
+            ds_dict['label'] = ds.label
+        data['dimension_selector'] = ds_dict
+
+    # Weighted aggregate configurations
+    if exhibit.weighting:
+        data['weighting'] = exhibit.weighting
+    if exhibit.aggregate_by:
+        data['aggregate_by'] = exhibit.aggregate_by
+    if exhibit.value_measures:
+        data['value_measures'] = exhibit.value_measures
+    if exhibit.group_by:
+        data['group_by'] = exhibit.group_by
+
+    # Forecast chart specific
+    if exhibit.actual_column:
+        data['actual_column'] = exhibit.actual_column
+    if exhibit.predicted_column:
+        data['predicted_column'] = exhibit.predicted_column
+    if exhibit.confidence_bounds:
+        data['confidence_bounds'] = exhibit.confidence_bounds
+
+    # Collapsible settings
+    if exhibit.collapsible:
+        data['collapsible'] = True
+        if exhibit.collapsible_title:
+            data['collapsible_title'] = exhibit.collapsible_title
+
+    # Additional options
+    if exhibit.options:
+        data.update(exhibit.options)
+
+    return yaml.dump(
+        data,
+        default_flow_style=None,
+        sort_keys=False,
+        allow_unicode=True,
+        width=120,
+        indent=2
+    )
 
 
 def collapsible_to_editable(block: Dict[str, Any]) -> str:
