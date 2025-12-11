@@ -212,6 +212,140 @@ class LayoutConfig:
     """Layout configuration for exhibits."""
     columns: Optional[int] = None
     rows: Optional[int] = None
+    # Grid membership (when exhibit is part of a grid)
+    grid_id: Optional[str] = None
+    grid_position: Optional[int] = None
+
+
+class GridGap(Enum):
+    """Grid gap size options."""
+    NONE = "none"
+    SM = "sm"      # 0.5rem / ~8px
+    MD = "md"      # 1rem / ~16px (default)
+    LG = "lg"      # 1.5rem / ~24px
+    XL = "xl"      # 2rem / ~32px
+
+
+class GridTemplate(Enum):
+    """Pre-defined grid layout templates."""
+    TWO_BY_TWO = "2x2"          # 4 exhibits in 2x2 grid
+    ONE_TWO = "1-2"             # 1 on top, 2 below
+    TWO_ONE = "2-1"             # 2 on top, 1 below
+    TWO_ONE_TWO = "2-1-2"       # 2 top, 1 middle, 2 bottom
+    THREE_COL = "3col"          # 3 equal columns
+    FOUR_COL = "4col"           # 4 equal columns
+    SIDEBAR = "sidebar"         # 2:1 ratio (main + sidebar)
+    SIDEBAR_LEFT = "sidebar-left"  # 1:2 ratio (sidebar + main)
+    CUSTOM = "custom"           # Custom configuration
+
+
+@dataclass
+class GridConfig:
+    """
+    Configuration for exhibit grid layout.
+
+    Supports multiple specification modes:
+    1. Simple columns: columns=2 (equal width)
+    2. Column ratios: columns=[2, 1] (2:1 ratio)
+    3. Row definitions: rows=[[1,1], [2]] (custom spans per row)
+    4. Templates: template="2x2" (pre-defined patterns)
+
+    Example usage in markdown:
+        $grid${
+          template: 2x2
+          gap: lg
+        }
+        $exhibits${ ... }
+        $exhibits${ ... }
+        $/grid$
+    """
+    # Column specification - int for equal columns, list for ratios
+    columns: Union[int, List[int]] = 2
+
+    # Row definitions (optional, for complex layouts)
+    # Each row is a list of column spans, e.g., [[1,1], [2]] = 2 cols then 1 spanning
+    rows: Optional[List[List[int]]] = None
+
+    # Pre-defined template (overrides columns/rows if set)
+    template: Optional[GridTemplate] = None
+
+    # Styling
+    gap: GridGap = GridGap.MD
+    align_items: str = "stretch"  # stretch, start, center, end
+    min_height: Optional[int] = None  # Minimum row height in pixels
+
+    # Identification
+    id: Optional[str] = None
+
+    def get_column_spec(self) -> List[float]:
+        """
+        Convert columns config to Streamlit column ratios.
+
+        Returns:
+            List of floats for st.columns()
+        """
+        if self.template and self.template != GridTemplate.CUSTOM:
+            # Get first row from template
+            rows = self._template_to_rows()
+            return rows[0] if rows else [0.5, 0.5]
+
+        if isinstance(self.columns, int):
+            return [1.0 / self.columns] * self.columns
+
+        # Normalize ratios to sum to 1.0
+        total = sum(self.columns)
+        return [c / total for c in self.columns]
+
+    def get_row_specs(self) -> List[List[float]]:
+        """
+        Get row specifications for multi-row layouts.
+
+        Returns:
+            List of row specs, each row is a list of column ratios
+        """
+        if self.template and self.template != GridTemplate.CUSTOM:
+            return self._template_to_rows()
+
+        if self.rows:
+            return [
+                [c / sum(row) for c in row] if sum(row) > 0 else [1.0]
+                for row in self.rows
+            ]
+
+        # Single row with column spec
+        return [self.get_column_spec()]
+
+    def get_total_cells(self) -> int:
+        """Get total number of cells across all rows."""
+        row_specs = self.get_row_specs()
+        return sum(len(row) for row in row_specs)
+
+    def _template_to_rows(self) -> List[List[float]]:
+        """Convert template to row specifications."""
+        templates = {
+            GridTemplate.TWO_BY_TWO: [[0.5, 0.5], [0.5, 0.5]],
+            GridTemplate.ONE_TWO: [[1.0], [0.5, 0.5]],
+            GridTemplate.TWO_ONE: [[0.5, 0.5], [1.0]],
+            GridTemplate.TWO_ONE_TWO: [[0.5, 0.5], [1.0], [0.5, 0.5]],
+            GridTemplate.THREE_COL: [[1/3, 1/3, 1/3]],
+            GridTemplate.FOUR_COL: [[0.25, 0.25, 0.25, 0.25]],
+            GridTemplate.SIDEBAR: [[2/3, 1/3]],
+            GridTemplate.SIDEBAR_LEFT: [[1/3, 2/3]],
+        }
+        return templates.get(self.template, [[0.5, 0.5]])
+
+
+@dataclass
+class GridBlock:
+    """
+    A grid block containing multiple exhibits.
+
+    Represents a parsed $grid${}..$/grid$ block from markdown.
+    """
+    config: GridConfig
+    exhibit_ids: List[str] = field(default_factory=list)
+    _start_index: int = 0  # Position in content_blocks where grid starts
+    _end_index: int = 0    # Position where grid ends
 
 
 @dataclass
@@ -451,3 +585,4 @@ class NotebookConfig:
     _is_markdown: bool = False  # Flag to indicate markdown format
     _filter_collection: Optional[Any] = None  # Dynamic filters (FilterCollection)
     _block_positions: Optional[List[Any]] = None  # Block positions for editing
+    _grid_blocks: Optional[List['GridBlock']] = None  # Grid layout blocks

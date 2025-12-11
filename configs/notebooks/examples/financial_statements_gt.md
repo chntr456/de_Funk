@@ -1,17 +1,17 @@
 ---
 id: financial_statements_gt
 title: Company Financial Statements
-description: Publication-quality financial tables using Great Tables
+description: Publication-quality financial tables using Great Tables with grid layouts
 author: de_Funk
-version: 1.0
+version: 2.0
 models: [company, core]
-tags: [financials, great_tables, example]
+tags: [financials, great_tables, example, grid_layout]
 ---
 
 # Financial Statement Analysis
 
-This notebook demonstrates publication-quality financial tables using **Great Tables**.
-Select a company to view their financial statements.
+This notebook demonstrates publication-quality financial tables using **Great Tables** with **grid layouts**.
+Select a company to view their financial statements in a dashboard view.
 
 $filter${
   id: ticker
@@ -32,9 +32,93 @@ $filter${
 
 ---
 
-## Income Statement
+## Financial Dashboard
 
-View consolidated statement of operations with revenue, expenses, and profitability metrics.
+View all four financial statements at a glance in a 2x2 grid layout.
+
+$grid${
+  template: 2x2
+  gap: lg
+}
+
+$exhibits${
+  type: great_table
+  source: company.fact_income_statement
+  title: Income Statement
+  theme: financial
+  sort: {by: fiscal_date_ending, order: desc}
+  columns:
+    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: total_revenue, label: Revenue, format: currency_millions}
+    - {id: gross_profit, label: Gross Profit, format: currency_millions, style: {bold: true}}
+    - {id: operating_income, label: Op. Income, format: currency_millions}
+    - {id: net_income, label: Net Income, format: currency_millions, style: {bold: true}, conditional: {type: color_scale, palette: ['#ffcccc', '#ffffff', '#ccffcc'], domain: [-1000000000, 0, 10000000000]}}
+  spanners:
+    - {label: Revenue, columns: [total_revenue, gross_profit]}
+    - {label: Bottom Line, columns: [operating_income, net_income]}
+  source_note: "Amounts in millions USD"
+  row_striping: true
+}
+
+$exhibits${
+  type: great_table
+  source: company.fact_balance_sheet
+  title: Balance Sheet
+  theme: financial
+  sort: {by: fiscal_date_ending, order: desc}
+  columns:
+    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: total_assets, label: Total Assets, format: currency_millions, style: {bold: true}}
+    - {id: total_liabilities, label: Total Liabilities, format: currency_millions}
+    - {id: total_shareholder_equity, label: Equity, format: currency_millions, style: {bold: true}}
+  source_note: "Amounts in millions USD"
+  row_striping: true
+}
+
+$exhibits${
+  type: great_table
+  source: company.fact_cash_flow
+  title: Cash Flow
+  theme: financial
+  sort: {by: fiscal_date_ending, order: desc}
+  columns:
+    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: operating_cashflow, label: Operating, format: currency_millions, style: {bold: true}}
+    - {id: cashflow_from_investment, label: Investing, format: currency_millions}
+    - {id: cashflow_from_financing, label: Financing, format: currency_millions}
+    - {id: free_cash_flow, label: FCF, format: currency_millions, style: {bold: true}, conditional: {type: color_scale, palette: ['#ef4444', '#ffffff', '#22c55e'], domain: [-5000000000, 0, 20000000000]}}
+  source_note: "Amounts in millions USD"
+  row_striping: true
+}
+
+$exhibits${
+  type: great_table
+  source: company.fact_earnings
+  title: Earnings
+  theme: financial
+  sort: {by: fiscal_date_ending, order: desc}
+  columns:
+    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: reported_eps, label: EPS, format: currency}
+    - {id: estimated_eps, label: Est. EPS, format: currency}
+    - {id: surprise_percentage, label: Surprise %, format: percent, conditional: {type: color_scale, palette: ['#ef4444', '#fbbf24', '#22c55e'], domain: [-0.1, 0, 0.1]}}
+  spanners:
+    - {label: EPS, columns: [reported_eps, estimated_eps]}
+    - {label: Beat/Miss, columns: [surprise_percentage]}
+  source_note: "EPS data from Alpha Vantage"
+  row_striping: true
+}
+
+$/grid$
+
+---
+
+## Detailed Statements
+
+<details>
+<summary>Full Income Statement</summary>
+
+### Consolidated Statement of Operations
 
 $exhibits${
   type: great_table
@@ -58,11 +142,12 @@ $exhibits${
   row_striping: true
 }
 
----
+</details>
 
-## Balance Sheet
+<details>
+<summary>Full Balance Sheet</summary>
 
-View consolidated balance sheet showing assets, liabilities, and shareholders' equity.
+### Consolidated Balance Sheet
 
 $exhibits${
   type: great_table
@@ -87,11 +172,12 @@ $exhibits${
   row_striping: true
 }
 
----
+</details>
 
-## Cash Flow Statement
+<details>
+<summary>Full Cash Flow Statement</summary>
 
-View consolidated statement of cash flows from operating, investing, and financing activities.
+### Consolidated Statement of Cash Flows
 
 $exhibits${
   type: great_table
@@ -118,11 +204,12 @@ $exhibits${
   row_striping: true
 }
 
----
+</details>
 
-## Earnings Analysis
+<details>
+<summary>Full Earnings History</summary>
 
-View earnings per share (EPS) data comparing actual results to analyst estimates.
+### Earnings Per Share Analysis
 
 $exhibits${
   type: great_table
@@ -143,9 +230,19 @@ $exhibits${
   row_striping: true
 }
 
+</details>
+
 ---
 
 ## Notes
+
+### About Grid Layouts
+
+This notebook demonstrates the **grid layout** feature, which arranges multiple exhibits in a configurable grid pattern:
+
+- **2x2 Template**: Displays 4 exhibits in a 2-column, 2-row grid
+- **Condensed Views**: Grid exhibits use fewer columns for compact display
+- **Full Details**: Detailed views available in collapsible sections below
 
 ### About Great Tables
 

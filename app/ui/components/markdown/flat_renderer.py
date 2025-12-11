@@ -22,6 +22,7 @@ from .blocks import (
 )
 from .editors import render_block_editor
 from .styles import apply_markdown_styles
+from .grid_renderer import render_exhibit_grid, collect_grid_exhibits, get_grid_info
 
 
 # Session state keys
@@ -90,6 +91,15 @@ def flatten_blocks(
         elif block_type == 'error':
             label = "Error"
             icon = "⚠️"
+        elif block_type == 'grid_start':
+            grid_idx = block.get('grid_index', 0)
+            config = block.get('config')
+            template_name = config.template.value if config and config.template else f"{config.columns}col" if config else "grid"
+            label = f"Grid Layout ({template_name})"
+            icon = "🔲"
+        elif block_type == 'grid_end':
+            label = "End Grid"
+            icon = "🔳"
         else:
             label = f"Block {block_index + 1}"
             icon = "📄"
@@ -361,6 +371,10 @@ def _render_block_content(block: Dict[str, Any], notebook_session, connection):
     elif block_type == 'error':
         block_index = block.get('_index', 0)
         render_error_block(block, block_index)
+    elif block_type in ('grid_start', 'grid_end'):
+        # Grid markers are handled at a higher level (render_flat_notebook)
+        # They don't render anything directly
+        pass
     else:
         st.warning(f"Unknown block type: {block_type}")
 
@@ -946,6 +960,10 @@ def render_flat_notebook(
     # Compute visible blocks
     visible_blocks = compute_visibility(flat_blocks)
 
+    # Build grid info from content blocks to handle grid rendering
+    grid_info = get_grid_info(notebook_config._content_blocks)
+    rendered_in_grid = set()  # Track exhibit IDs that have been rendered in grids
+
     # Insert button at the very top if editable
     if editable and on_block_insert:
         if st.button("➕ Add block at start", key=f"insert_start_{notebook_id}", help="Insert new block at beginning"):
@@ -954,6 +972,47 @@ def render_flat_notebook(
 
     # Render each visible block as a flat row
     for block in visible_blocks:
+        block_type = block.get('type', 'unknown')
+
+        # Handle grid_start: render all exhibits in the grid as a grid layout
+        if block_type == 'grid_start':
+            grid_idx = block.get('grid_index')
+            if grid_idx is not None and grid_idx in grid_info:
+                # Collect exhibit blocks for this grid
+                grid_exhibit_blocks = collect_grid_exhibits(
+                    notebook_config._content_blocks,
+                    grid_idx
+                )
+
+                if grid_exhibit_blocks:
+                    config = grid_info[grid_idx].get('config')
+                    if config:
+                        # Define a render function that works with our exhibit blocks
+                        def render_single_exhibit(exhibit_block):
+                            render_exhibit_block(exhibit_block, notebook_session, connection)
+
+                        # Render the grid
+                        render_exhibit_grid(
+                            config,
+                            grid_exhibit_blocks,
+                            render_single_exhibit
+                        )
+
+                        # Mark these exhibits as rendered
+                        for eb in grid_exhibit_blocks:
+                            rendered_in_grid.add(eb.get('id'))
+            continue
+
+        # Skip grid_end markers
+        if block_type == 'grid_end':
+            continue
+
+        # Skip exhibits that were already rendered in a grid
+        if block_type == 'exhibit':
+            exhibit_id = block.get('id')
+            if exhibit_id in rendered_in_grid:
+                continue
+
         # Render insert button above each block when editable
         if editable:
             render_insert_button(

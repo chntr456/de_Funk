@@ -30,6 +30,10 @@ from ..schema import (
     AggregationType,
     MeasureSelectorConfig,
     DimensionSelectorConfig,
+    GridConfig,
+    GridBlock,
+    GridGap,
+    GridTemplate,
 )
 from ..filters.dynamic import (
     FilterConfig,
@@ -67,6 +71,9 @@ class MarkdownNotebookParser:
     FILTER_PATTERN = re.compile(r'\$filters?\$\{\s*\n(.*?)\n\}', re.MULTILINE | re.DOTALL)
     EXHIBIT_PATTERN = re.compile(r'\$exhibits?\$\{\s*\n(.*?)\n\}', re.MULTILINE | re.DOTALL)
     DETAILS_PATTERN = re.compile(r'<details>\s*<summary>(.*?)</summary>\s*(.*?)</details>', re.MULTILINE | re.DOTALL)
+    # Grid layout patterns
+    GRID_START_PATTERN = re.compile(r'\$grid\$\{\s*\n?(.*?)\n?\}', re.MULTILINE | re.DOTALL)
+    GRID_END_PATTERN = re.compile(r'\$/grid\$', re.MULTILINE)
 
     def __init__(self, repo_root: Optional[Path] = None):
         """
@@ -131,11 +138,14 @@ class MarkdownNotebookParser:
         # Remove filter blocks from content (they don't render in notebook view)
         content_for_parsing = self.FILTER_PATTERN.sub('', content_without_front_matter)
 
+        # Extract grid blocks first (before exhibit extraction)
+        content_for_parsing, grid_blocks = self._extract_grid_blocks(content_for_parsing)
+
         # Extract exhibits and build content structure (with positions if requested)
-        exhibits, content_blocks = self._extract_exhibits(content_for_parsing, track_positions=track_positions)
+        exhibits, content_blocks = self._extract_exhibits(content_for_parsing, track_positions=track_positions, grid_blocks=grid_blocks)
 
         # Build NotebookConfig
-        return self._build_config(front_matter, filter_collection, exhibits, content_blocks)
+        return self._build_config(front_matter, filter_collection, exhibits, content_blocks, grid_blocks)
 
     def _extract_front_matter(self, content: str) -> Optional[Dict[str, Any]]:
         """Extract and parse YAML front matter."""
@@ -169,6 +179,120 @@ class MarkdownNotebookParser:
 
         return filter_collection
 
+    def _extract_grid_blocks(self, content: str) -> Tuple[str, List[GridBlock]]:
+        """
+        Extract grid blocks from markdown content.
+
+        Processes $grid${...}..$/grid$ blocks and replaces them with placeholders
+        containing the grid content for further processing.
+
+        Args:
+            content: Markdown content to parse
+
+        Returns:
+            Tuple of (content with grid markers, list of GridBlocks)
+        """
+        grid_blocks = []
+        grid_counter = 0
+
+        # Find all grid start patterns
+        start_matches = list(self.GRID_START_PATTERN.finditer(content))
+        end_matches = list(self.GRID_END_PATTERN.finditer(content))
+
+        if len(start_matches) != len(end_matches):
+            logger.warning(f"Mismatched grid blocks: {len(start_matches)} starts, {len(end_matches)} ends")
+            # Try to match what we can
+            end_matches = end_matches[:len(start_matches)] if len(end_matches) > len(start_matches) else end_matches
+
+        # Process matched pairs in reverse order to preserve positions
+        replacements = []
+
+        for i, start_match in enumerate(start_matches):
+            if i >= len(end_matches):
+                break
+
+            end_match = end_matches[i]
+
+            # Ensure end comes after start
+            if end_match.start() <= start_match.end():
+                logger.warning(f"Grid end marker before grid start at position {start_match.start()}")
+                continue
+
+            # Parse grid config YAML
+            config_yaml = start_match.group(1).strip()
+            try:
+                config_dict = yaml.safe_load(config_yaml) or {}
+            except yaml.YAMLError as e:
+                logger.error(f"Error parsing grid config YAML: {e}")
+                config_dict = {}
+
+            # Create GridConfig
+            grid_config = self._parse_grid_config(config_dict)
+
+            # Extract content between grid markers (this contains the exhibits)
+            grid_inner_content = content[start_match.end():end_match.start()]
+
+            # Create GridBlock
+            grid_block = GridBlock(
+                config=grid_config,
+                exhibit_ids=[],  # Will be populated during exhibit parsing
+                _start_index=grid_counter,
+                _end_index=grid_counter,
+            )
+            grid_blocks.append(grid_block)
+
+            # Create placeholder that includes the inner content
+            placeholder = f"__GRID_{grid_counter}_START__{grid_inner_content}__GRID_{grid_counter}_END__"
+
+            replacements.append((start_match.start(), end_match.end(), placeholder, grid_counter))
+            grid_counter += 1
+
+        # Apply replacements in reverse order
+        modified_content = content
+        for start_pos, end_pos, placeholder, _ in reversed(replacements):
+            modified_content = modified_content[:start_pos] + placeholder + modified_content[end_pos:]
+
+        return modified_content, grid_blocks
+
+    def _parse_grid_config(self, config_dict: Dict[str, Any]) -> GridConfig:
+        """Parse grid configuration from YAML dict."""
+        # Handle template
+        template = None
+        template_str = config_dict.get('template')
+        if template_str:
+            try:
+                template = GridTemplate(template_str)
+            except ValueError:
+                logger.warning(f"Unknown grid template: {template_str}")
+                template = GridTemplate.CUSTOM
+
+        # Handle gap
+        gap = GridGap.MD
+        gap_str = config_dict.get('gap')
+        if gap_str:
+            try:
+                gap = GridGap(gap_str)
+            except ValueError:
+                logger.warning(f"Unknown grid gap: {gap_str}")
+
+        # Handle columns (can be int or list)
+        columns = config_dict.get('columns', 2)
+        if isinstance(columns, str):
+            columns = int(columns)
+
+        # Handle rows (list of lists)
+        rows = config_dict.get('rows')
+
+        return GridConfig(
+            columns=columns,
+            rows=rows,
+            template=template,
+            gap=gap,
+            align_items=config_dict.get('align_items', 'stretch'),
+            min_height=config_dict.get('min_height'),
+            id=config_dict.get('id'),
+        )
+
     def _old_parse_filter_default(self, default_str: str, var_type: VariableType) -> Any:
         """Parse default value based on variable type."""
         if var_type == VariableType.DATE_RANGE:
@@ -200,19 +324,27 @@ class MarkdownNotebookParser:
             return [v.strip() for v in default_str.split(',')]
         return None
 
-    def _extract_exhibits(self, content: str, track_positions: bool = True) -> Tuple[List[Exhibit], List[Dict[str, Any]]]:
+    def _extract_exhibits(
+        self,
+        content: str,
+        track_positions: bool = True,
+        grid_blocks: Optional[List[GridBlock]] = None
+    ) -> Tuple[List[Exhibit], List[Dict[str, Any]]]:
         """
-        Extract exhibits from markdown content and handle collapsible sections.
+        Extract exhibits from markdown content and handle collapsible sections and grids.
 
         Args:
             content: Markdown content to parse
             track_positions: Whether to track source positions for editing
+            grid_blocks: List of grid blocks extracted earlier (will be populated with exhibit IDs)
 
         Returns:
             Tuple of (exhibits list, content_blocks list)
         """
         # Initialize position tracking
         self._block_positions = [] if track_positions else None
+        grid_blocks = grid_blocks or []
+
         # First, process collapsible sections (details tags)
         # Replace them with placeholders and extract their content
         collapsible_sections = {}
@@ -238,56 +370,118 @@ class MarkdownNotebookParser:
         content_blocks = []
         exhibit_counter = 0
 
+        # Track grid context - which grid we're currently inside
+        current_grid_idx = None
+
+        # Process grid placeholders pattern
+        GRID_START_MARKER = re.compile(r'__GRID_(\d+)_START__')
+        GRID_END_MARKER = re.compile(r'__GRID_(\d+)_END__')
+
         # Process the content with placeholders
         last_pos = 0
-        for match in self.EXHIBIT_PATTERN.finditer(processed_content):
-            # Add markdown content before exhibit
-            markdown_content = processed_content[last_pos:match.start()].strip()
-            if markdown_content:
-                # Check if this markdown contains collapsible section placeholders
-                exhibit_counter = self._add_content_with_collapsibles(
-                    markdown_content,
-                    collapsible_sections,
-                    content_blocks,
-                    exhibits,
-                    exhibit_counter
-                )
+        current_content = processed_content
 
-            # Parse exhibit
-            exhibit_yaml = match.group(1)
-            exhibit_id = f"exhibit_{exhibit_counter}"
-            exhibit_counter += 1
+        # Split by grid markers and exhibits
+        pos = 0
+        while pos < len(current_content):
+            # Check for grid start marker
+            grid_start_match = GRID_START_MARKER.search(current_content, pos)
+            grid_end_match = GRID_END_MARKER.search(current_content, pos)
+            exhibit_match = self.EXHIBIT_PATTERN.search(current_content, pos)
 
-            try:
-                exhibit = self._parse_exhibit(exhibit_yaml, exhibit_id)
-                exhibits.append(exhibit)
+            # Find the next thing (grid start, grid end, or exhibit)
+            next_positions = []
+            if grid_start_match:
+                next_positions.append(('grid_start', grid_start_match.start(), grid_start_match))
+            if grid_end_match:
+                next_positions.append(('grid_end', grid_end_match.start(), grid_end_match))
+            if exhibit_match:
+                next_positions.append(('exhibit', exhibit_match.start(), exhibit_match))
 
-                # Add exhibit reference to content blocks
+            if not next_positions:
+                # No more special content, add remaining as markdown
+                remaining = current_content[pos:].strip()
+                if remaining:
+                    exhibit_counter = self._add_content_with_collapsibles(
+                        remaining,
+                        collapsible_sections,
+                        content_blocks,
+                        exhibits,
+                        exhibit_counter
+                    )
+                break
+
+            # Sort by position to find next item
+            next_positions.sort(key=lambda x: x[1])
+            next_type, next_pos, next_match = next_positions[0]
+
+            # Add content before this match
+            if next_pos > pos:
+                markdown_content = current_content[pos:next_pos].strip()
+                if markdown_content:
+                    exhibit_counter = self._add_content_with_collapsibles(
+                        markdown_content,
+                        collapsible_sections,
+                        content_blocks,
+                        exhibits,
+                        exhibit_counter
+                    )
+
+            if next_type == 'grid_start':
+                # Starting a grid block
+                grid_idx = int(next_match.group(1))
+                current_grid_idx = grid_idx
+
+                # Add grid start marker to content blocks
                 content_blocks.append({
-                    'type': 'exhibit',
-                    'id': exhibit_id,
-                    'exhibit': exhibit
+                    'type': 'grid_start',
+                    'grid_index': grid_idx,
+                    'config': grid_blocks[grid_idx].config if grid_idx < len(grid_blocks) else None
                 })
-            except Exception as e:
-                # Add error block
+                pos = next_match.end()
+
+            elif next_type == 'grid_end':
+                # Ending a grid block
+                grid_idx = int(next_match.group(1))
+
+                # Add grid end marker to content blocks
                 content_blocks.append({
-                    'type': 'error',
-                    'message': f"Error parsing exhibit: {str(e)}",
-                    'content': exhibit_yaml
+                    'type': 'grid_end',
+                    'grid_index': grid_idx
                 })
+                current_grid_idx = None
+                pos = next_match.end()
 
-            last_pos = match.end()
+            elif next_type == 'exhibit':
+                # Parse exhibit
+                exhibit_yaml = next_match.group(1)
+                exhibit_id = f"exhibit_{exhibit_counter}"
+                exhibit_counter += 1
 
-        # Add remaining markdown content
-        remaining_content = processed_content[last_pos:].strip()
-        if remaining_content:
-            exhibit_counter = self._add_content_with_collapsibles(
-                remaining_content,
-                collapsible_sections,
-                content_blocks,
-                exhibits,
-                exhibit_counter
-            )
+                try:
+                    exhibit = self._parse_exhibit(exhibit_yaml, exhibit_id)
+                    exhibits.append(exhibit)
+
+                    # Track exhibit in grid if we're inside one
+                    if current_grid_idx is not None and current_grid_idx < len(grid_blocks):
+                        grid_blocks[current_grid_idx].exhibit_ids.append(exhibit_id)
+
+                    # Add exhibit reference to content blocks
+                    content_blocks.append({
+                        'type': 'exhibit',
+                        'id': exhibit_id,
+                        'exhibit': exhibit,
+                        'grid_index': current_grid_idx  # Track which grid this exhibit belongs to
+                    })
+                except Exception as e:
+                    # Add error block
+                    content_blocks.append({
+                        'type': 'error',
+                        'message': f"Error parsing exhibit: {str(e)}",
+                        'content': exhibit_yaml
+                    })
+
+                pos = next_match.end()
 
         return exhibits, content_blocks
 
@@ -698,7 +892,8 @@ class MarkdownNotebookParser:
         front_matter: Dict[str, Any],
         filter_collection: FilterCollection,
         exhibits: List[Exhibit],
-        content_blocks: List[Dict[str, Any]]
+        content_blocks: List[Dict[str, Any]],
+        grid_blocks: Optional[List[GridBlock]] = None
     ) -> NotebookConfig:
         """Build NotebookConfig from parsed components."""
 
@@ -753,7 +948,8 @@ class MarkdownNotebookParser:
             exports=None,
             _content_blocks=content_blocks,
             _is_markdown=True,
-            _filter_collection=filter_collection
+            _filter_collection=filter_collection,
+            _grid_blocks=grid_blocks
         )
 
         # Store block positions in config for editing
