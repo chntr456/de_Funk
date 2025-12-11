@@ -100,17 +100,39 @@ def render_html_grid(
         }}
         #{grid_id} .gt-cell > div {{ width: 100% !important; }}
         #{grid_id} .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
-        /* Sticky headers within each scrollable cell */
-        #{grid_id} .gt-cell thead,
-        #{grid_id} .gt-cell .gt_col_headings {{
-            position: sticky;
-            top: 0;
-            z-index: 10;
+
+        /* Sticky headers - lock in place when scrolling */
+        #{grid_id} .sync-scroll thead {{
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10 !important;
         }}
-        #{grid_id} .gt-cell th {{
-            position: sticky;
-            top: 0;
-            z-index: 10;
+        #{grid_id} .sync-scroll th {{
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10 !important;
+            background: inherit !important;
+        }}
+        /* Great Tables specific header classes */
+        #{grid_id} .sync-scroll .gt_col_headings {{
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10 !important;
+        }}
+        #{grid_id} .sync-scroll .gt_col_heading {{
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10 !important;
+        }}
+        #{grid_id} .sync-scroll .gt_column_spanner {{
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10 !important;
+        }}
+        /* Ensure header row backgrounds are solid (not transparent) */
+        #{grid_id} .sync-scroll tr:first-child th,
+        #{grid_id} .sync-scroll thead tr th {{
+            background-color: #f8f9fa !important;
         }}
     </style>
     <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;">
