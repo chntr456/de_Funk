@@ -588,24 +588,15 @@ class GreatTableRenderer:
 
             # Wrap in scrollable container if max_height specified
             if max_height:
-                # Inject inline sticky styles into the table header elements
-                # Great Tables uses <thead> and <th> elements
-                styled_html = html
-
-                # Add sticky positioning to thead
-                styled_html = styled_html.replace(
-                    '<thead',
-                    '<thead style="position: sticky; top: 0; z-index: 10;"'
-                )
-                # Add background to th elements so content doesn't show through
-                styled_html = styled_html.replace(
-                    '<th',
-                    '<th style="position: sticky; top: 0; background: white; z-index: 10;"'
-                )
-
+                # Use scoped CSS for sticky headers - avoids breaking GT's inline styles
                 scroll_html = f'''
-                <div style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
-                    {styled_html}
+                <div class="gt-scroll-wrapper" style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
+                    <style>
+                        .gt-scroll-wrapper thead {{ position: sticky; top: 0; z-index: 10; }}
+                        .gt-scroll-wrapper th {{ position: sticky; top: 0; background: #fff !important; z-index: 10; }}
+                        .gt-scroll-wrapper .gt_col_headings {{ position: sticky; top: 0; z-index: 10; background: #fff; }}
+                    </style>
+                    {html}
                 </div>
                 '''
                 st.html(scroll_html)
@@ -706,17 +697,16 @@ def get_great_table_html(
             max_height = 400
 
         if max_height:
-            # Inject inline sticky styles
-            html = html.replace(
-                '<thead',
-                '<thead style="position: sticky; top: 0; z-index: 10;"'
-            )
-            html = html.replace(
-                '<th',
-                '<th style="position: sticky; top: 0; background: white; z-index: 10;"'
-            )
+            # Use scoped CSS for sticky headers - works within combined grid HTML
+            import uuid
+            wrapper_id = f"gt-{uuid.uuid4().hex[:8]}"
             html = f'''
-            <div style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
+            <div id="{wrapper_id}" style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
+                <style>
+                    #{wrapper_id} thead {{ position: sticky; top: 0; z-index: 10; }}
+                    #{wrapper_id} th {{ position: sticky; top: 0; background: #fff !important; z-index: 10; }}
+                    #{wrapper_id} .gt_col_headings {{ position: sticky; top: 0; z-index: 10; background: #fff; }}
+                </style>
                 {html}
             </div>
             '''

@@ -1049,8 +1049,11 @@ def render_flat_notebook(
                                 exhibit_id = exhibit_block.get('id')
                                 df = notebook_session.get_exhibit_data(exhibit_id)
                                 pdf = connection.to_pandas(df)
-                                return get_great_table_html(exhibit, pdf)
-                            except Exception:
+                                html = get_great_table_html(exhibit, pdf)
+                                return html
+                            except Exception as e:
+                                import traceback
+                                traceback.print_exc()
                                 return None
 
                         # Render the grid (uses CSS Grid if all exhibits provide HTML)
