@@ -27,16 +27,19 @@ def render_html_grid(
     grid_config: GridConfig,
     html_contents: List[str],
     titles: Optional[List[str]] = None,
+    max_height: Optional[int] = None,
 ):
     """
     Render multiple HTML blocks in a pure CSS Grid layout.
 
     This creates a single HTML block with no Streamlit padding - crisp exhibits.
+    All exhibits scroll together (linked scrolling) with sticky headers.
 
     Args:
         grid_config: Grid configuration
         html_contents: List of HTML strings to render in grid cells
         titles: Optional list of titles for each cell
+        max_height: Optional max height for scrollable grid (enables linked scrolling)
     """
     if not html_contents:
         return
@@ -72,28 +75,50 @@ def render_html_grid(
     cells_html = []
     for i, html in enumerate(html_contents):
         title = titles[i] if titles and i < len(titles) else None
-        title_html = f'<div style="font-weight: 600; padding: 4px 8px; font-size: 13px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">{title}</div>' if title else ''
+        title_html = f'<div class="gt-title" style="font-weight: 600; padding: 4px 8px; font-size: 13px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">{title}</div>' if title else ''
 
         # Cell styling: fill container, left-align, no internal margins
-        # The inner div needs to force table to fill width
-        cells_html.append(f'''<div style="display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid #e0e0e0;background:#fff;">
+        cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;background:#fff;">
 {title_html}
-<div class="gt-cell" style="flex:1;overflow:auto;">{html}</div>
+<div class="gt-cell" style="flex:1;">{html}</div>
 </div>''')
 
-    # Combine into CSS Grid - aggressive styles to eliminate whitespace
+    # Scroll wrapper style - only if max_height specified
+    scroll_style = f"max-height:{max_height}px;overflow:auto;" if max_height else ""
+
+    # Combine into CSS Grid with linked scrolling and sticky headers
     grid_html = f'''<style>
-        .de-funk-grid * {{ box-sizing: border-box; }}
-        .de-funk-grid table,
-        .de-funk-grid .gt_table {{
+        .de-funk-grid-wrapper * {{ box-sizing: border-box; }}
+        .de-funk-grid-wrapper table,
+        .de-funk-grid-wrapper .gt_table {{
             width: 100% !important;
             margin: 0 !important;
             border-collapse: collapse !important;
         }}
-        .de-funk-grid .gt-cell > div {{ width: 100% !important; }}
-        .de-funk-grid .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
+        .de-funk-grid-wrapper .gt-cell > div {{ width: 100% !important; }}
+        .de-funk-grid-wrapper .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
+        /* Sticky headers - titles stick at top of scroll container */
+        .de-funk-grid-wrapper .gt-title {{
+            position: sticky;
+            top: 0;
+            z-index: 20;
+        }}
+        /* Sticky table headers within cells */
+        .de-funk-grid-wrapper thead,
+        .de-funk-grid-wrapper .gt_col_headings {{
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }}
+        .de-funk-grid-wrapper th {{
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }}
     </style>
-    <div class="de-funk-grid" style="display:grid;grid-template-columns:{grid_template};grid-template-rows:repeat({num_rows},1fr);gap:{gap}px;width:100%;">{''.join(cells_html)}</div>'''
+    <div class="de-funk-grid-wrapper" style="{scroll_style}border:1px solid #ddd;border-radius:4px;">
+        <div class="de-funk-grid" style="display:grid;grid-template-columns:{grid_template};gap:{gap}px;width:100%;">{''.join(cells_html)}</div>
+    </div>'''
 
     st.html(grid_html)
 
@@ -135,7 +160,14 @@ def render_exhibit_grid(
             # All exhibits provided HTML - use pure CSS Grid
             # Debug: uncomment to verify CSS Grid is being used
             # st.caption("🟢 CSS Grid Mode")
-            render_html_grid(grid_config, html_contents, titles)
+
+            # Determine max_height for linked scrolling
+            max_height = getattr(grid_config, 'max_height', None)
+            scroll = getattr(grid_config, 'scroll', False)
+            if scroll and not max_height:
+                max_height = 500  # Default scroll height
+
+            render_html_grid(grid_config, html_contents, titles, max_height=max_height)
             return
         elif failed_blocks:
             # Debug: show which blocks failed HTML extraction

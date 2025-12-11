@@ -701,20 +701,8 @@ def get_great_table_html(
         if scroll and not max_height:
             max_height = 400
 
-        if max_height:
-            # Use scoped CSS for sticky headers - works within combined grid HTML
-            import uuid
-            wrapper_id = f"gt-{uuid.uuid4().hex[:8]}"
-            html = f'''
-            <div id="{wrapper_id}" style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
-                <style>
-                    #{wrapper_id} thead {{ position: sticky; top: 0; z-index: 10; }}
-                    #{wrapper_id} th {{ position: sticky; top: 0; background: #fff !important; z-index: 10; }}
-                    #{wrapper_id} .gt_col_headings {{ position: sticky; top: 0; z-index: 10; background: #fff; }}
-                </style>
-                {html}
-            </div>
-            '''
+        # Note: Scrolling is handled at grid level for linked scroll behavior
+        # Individual exhibit wrappers removed - grid_renderer handles scroll container
 
         return html
 

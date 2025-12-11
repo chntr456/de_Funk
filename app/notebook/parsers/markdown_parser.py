@@ -295,6 +295,8 @@ class MarkdownNotebookParser:
             gap=gap,
             align_items=config_dict.get('align_items', 'stretch'),
             min_height=config_dict.get('min_height'),
+            max_height=config_dict.get('max_height'),
+            scroll=config_dict.get('scroll', False),
             id=config_dict.get('id'),
         )
 
