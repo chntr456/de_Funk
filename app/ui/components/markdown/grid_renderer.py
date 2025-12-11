@@ -135,10 +135,20 @@ def render_html_grid(
             top: 0 !important;
             z-index: 10 !important;
         }}
-        /* Ensure header row backgrounds are solid (not transparent) */
+        /* Ensure header row backgrounds are solid and text is readable */
         #{grid_id} .sync-scroll tr:first-child th,
-        #{grid_id} .sync-scroll thead tr th {{
+        #{grid_id} .sync-scroll thead tr th,
+        #{grid_id} .sync-scroll .gt_col_heading,
+        #{grid_id} .sync-scroll .gt_column_spanner {{
             background-color: #f8f9fa !important;
+            color: #333 !important;
+        }}
+        /* Force all header text to be dark and readable */
+        #{grid_id} th,
+        #{grid_id} .gt_col_headings,
+        #{grid_id} .gt_col_heading,
+        #{grid_id} .gt_columns_bottom_border {{
+            color: #333 !important;
         }}
     </style>
     <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;">
