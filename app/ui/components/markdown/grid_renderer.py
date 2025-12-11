@@ -235,7 +235,7 @@ def render_exhibit_grid(
                 sample = html_contents[0][:5000]
                 # Extract class names and tag structure
                 classes = re.findall(r'class="([^"]*)"', sample)
-                st.code("Classes found: " + ", ".join(set(classes)[:20]), language="text")
+                st.code("Classes found: " + ", ".join(list(set(classes))[:20]), language="text")
                 # Show raw HTML snippet
                 st.code(sample[:1500], language="html")
 
