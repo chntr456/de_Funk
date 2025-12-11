@@ -588,24 +588,24 @@ class GreatTableRenderer:
 
             # Wrap in scrollable container if max_height specified
             if max_height:
-                # Add sticky header CSS for the table within scroll container
+                # Inject inline sticky styles into the table header elements
+                # Great Tables uses <thead> and <th> elements
+                styled_html = html
+
+                # Add sticky positioning to thead
+                styled_html = styled_html.replace(
+                    '<thead',
+                    '<thead style="position: sticky; top: 0; z-index: 10;"'
+                )
+                # Add background to th elements so content doesn't show through
+                styled_html = styled_html.replace(
+                    '<th',
+                    '<th style="position: sticky; top: 0; background: white; z-index: 10;"'
+                )
+
                 scroll_html = f'''
-                <style>
-                    .gt-scroll-container table thead th {{
-                        position: sticky;
-                        top: 0;
-                        background: white;
-                        z-index: 10;
-                        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-                    }}
-                    .gt-scroll-container table thead {{
-                        position: sticky;
-                        top: 0;
-                        z-index: 10;
-                    }}
-                </style>
-                <div class="gt-scroll-container" style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
-                    {html}
+                <div style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
+                    {styled_html}
                 </div>
                 '''
                 st.html(scroll_html)

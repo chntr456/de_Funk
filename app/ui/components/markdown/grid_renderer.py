@@ -42,24 +42,29 @@ def render_exhibit_grid(
     gap = GAP_SIZES.get(grid_config.gap, 16)
 
     # Apply compact styling to reduce whitespace
+    # Target Streamlit's internal element classes more aggressively
     st.markdown(
         f"""
         <style>
-        /* Reduce padding in grid containers */
-        .stColumn > div {{
-            padding-top: 0 !important;
-            padding-bottom: 0 !important;
+        /* Remove all default Streamlit margins in columns */
+        [data-testid="column"] > div > div > div {{
+            margin-bottom: 0 !important;
+            padding: 0 !important;
         }}
-        /* Reduce margins on elements within grid */
-        .stColumn .stMarkdown, .stColumn .stHtml {{
+        /* Remove iframe/html element margins */
+        [data-testid="column"] iframe {{
             margin-bottom: {gap}px !important;
         }}
-        /* Compact Great Tables in grid */
-        .stColumn .gt-scroll-container {{
-            margin: 0 !important;
+        [data-testid="column"] .stHtml {{
+            margin-bottom: {gap}px !important;
         }}
-        .grid-exhibit-container {{
-            margin-bottom: {gap}px;
+        /* Streamlit element block spacing */
+        [data-testid="column"] .element-container {{
+            margin-bottom: {gap}px !important;
+        }}
+        /* Remove extra container padding */
+        [data-testid="stVerticalBlock"] {{
+            gap: {gap}px !important;
         }}
         </style>
         """,
@@ -82,9 +87,8 @@ def render_exhibit_grid(
             try:
                 exhibit_block = next(exhibit_iter)
                 with col:
-                    # Wrap in container for styling
-                    with st.container():
-                        render_exhibit_fn(exhibit_block)
+                    # Render directly without extra container wrapper
+                    render_exhibit_fn(exhibit_block)
             except StopIteration:
                 # No more exhibits, leave remaining cells empty
                 with col:
