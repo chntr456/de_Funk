@@ -35,10 +35,14 @@ def render_exhibit_grid(
         render_exhibit_fn: Function to render a single exhibit block
     """
     if not exhibit_blocks:
+        st.warning("Grid: No exhibit blocks to render")
         return
 
     row_specs = grid_config.get_row_specs()
     gap = GAP_SIZES.get(grid_config.gap, 16)
+
+    # Debug info
+    st.caption(f"🔲 Grid: {len(exhibit_blocks)} exhibits, {len(row_specs)} rows, template={grid_config.template}")
 
     # Apply gap styling
     if gap > 0:
