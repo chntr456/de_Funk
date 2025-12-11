@@ -72,11 +72,9 @@ def render_html_grid(
     num_rows = (num_items + num_cols - 1) // num_cols
 
     # Build grid cells HTML - each cell fills its space completely
+    # Note: Don't add titles here - GT exhibits have their own titles
     cells_html = []
     for i, html in enumerate(html_contents):
-        title = titles[i] if titles and i < len(titles) else None
-        title_html = f'<div class="gt-title" style="font-weight: 600; padding: 4px 8px; font-size: 13px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">{title}</div>' if title else ''
-
         # Each cell gets its own scroll container with synced scrolling
         if max_height:
             wrapper_height = f"height:{max_height}px;"
@@ -85,8 +83,7 @@ def render_html_grid(
             wrapper_height = ""
             cell_scroll_style = ""
 
-        cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;background:#fff;{wrapper_height}">
-{title_html}
+        cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;{wrapper_height}">
 <div class="gt-cell sync-scroll" style="flex:1;min-height:0;{cell_scroll_style}">{html}</div>
 </div>''')
 
@@ -115,49 +112,47 @@ def render_html_grid(
         #{grid_id} .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
 
         /* Sticky headers - lock thead at top of scroll container */
+        /* Preserve GT theme colors - only set position */
         #{grid_id} .sync-scroll thead {{
             position: sticky !important;
             top: 0 !important;
             z-index: 100 !important;
         }}
-        #{grid_id} .sync-scroll thead tr {{
-            background-color: #f8f9fa !important;
-        }}
         #{grid_id} .sync-scroll thead th {{
             position: sticky !important;
             top: 0 !important;
             z-index: 100 !important;
-            background-color: #f8f9fa !important;
-            color: #333 !important;
-            border-bottom: 2px solid #dee2e6 !important;
         }}
     </style>
     <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;">
         <div class="de-funk-grid" style="display:grid;grid-template-columns:{grid_template};gap:{gap}px;width:100%;">{''.join(cells_html)}</div>
     </div>
     <script>
-        (function() {{
+        // Use setTimeout to ensure DOM is fully rendered
+        setTimeout(function() {{
             const grid = document.getElementById('{grid_id}');
             if (!grid) return;
             const scrollables = grid.querySelectorAll('.sync-scroll');
+            if (scrollables.length === 0) return;
+
             let isSyncing = false;
 
-            scrollables.forEach(el => {{
-                el.addEventListener('scroll', function() {{
+            scrollables.forEach(function(el) {{
+                el.addEventListener('scroll', function(e) {{
                     if (isSyncing) return;
                     isSyncing = true;
                     const scrollTop = this.scrollTop;
                     const scrollLeft = this.scrollLeft;
-                    scrollables.forEach(other => {{
-                        if (other !== this) {{
+                    scrollables.forEach(function(other) {{
+                        if (other !== e.target) {{
                             other.scrollTop = scrollTop;
                             other.scrollLeft = scrollLeft;
                         }}
                     }});
-                    isSyncing = false;
+                    setTimeout(function() {{ isSyncing = false; }}, 10);
                 }});
             }});
-        }})();
+        }}, 100);
     </script>'''
 
     st.html(grid_html)
