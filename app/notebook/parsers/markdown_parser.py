@@ -406,6 +406,8 @@ class MarkdownNotebookParser:
         - Selectors: measure_selector, dimension_selector (for dynamic selection)
         - metric_cards: metrics
         - table: columns, pagination, etc.
+        - Great Tables: theme, spanners, rows, row_striping, source_note, footnotes,
+                       subtitle, calculated_columns, export_html, export_png
         """
         exhibit_type = data.get('type')
         if not exhibit_type:
@@ -425,9 +427,14 @@ class MarkdownNotebookParser:
             'x_label', 'y_label', 'y2', 'y2_label',
             'actual_column', 'predicted_column', 'confidence_bounds'
         }
+        valid_great_tables = {
+            'theme', 'spanners', 'rows', 'row_striping', 'source_note',
+            'footnotes', 'subtitle', 'calculated_columns', 'export_html', 'export_png'
+        }
 
         all_valid = (valid_common | valid_chart_shorthand | valid_chart_full |
-                     valid_metric | valid_table | valid_selectors | valid_advanced)
+                     valid_metric | valid_table | valid_selectors | valid_advanced |
+                     valid_great_tables)
 
         # Internal AxisConfig params that should NOT be at root level
         # These belong inside x_axis/y_axis dicts, not at root
