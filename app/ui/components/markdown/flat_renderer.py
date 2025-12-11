@@ -1099,25 +1099,12 @@ def render_flat_notebook(
                                     label_visibility="collapsed"
                                 )
 
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    if st.button("💾 Save", key=f"save_grid_{block['_flat_id']}", type="primary"):
-                                        if on_block_edit:
-                                            # Set the content_to_replace for the edit handler
-                                            st.session_state['_content_to_replace'] = st.session_state.get(original_key, grid_source)
-                                            on_block_edit(block.get('_index', 0), edited_source)
-                                            # Clear the original after save
-                                            if original_key in st.session_state:
-                                                del st.session_state[original_key]
-                                        set_edit_state(block['_flat_id'], False)
-                                        st.rerun()
-                                with col2:
-                                    if st.button("Cancel", key=f"cancel_grid_{block['_flat_id']}"):
-                                        # Clear stored original on cancel
-                                        if original_key in st.session_state:
-                                            del st.session_state[original_key]
-                                        set_edit_state(block['_flat_id'], False)
-                                        st.rerun()
+                                st.warning("⚠️ Grid editing is read-only. Copy the markdown above and edit the notebook file directly.")
+                                if st.button("Close", key=f"close_grid_{block['_flat_id']}"):
+                                    if original_key in st.session_state:
+                                        del st.session_state[original_key]
+                                    set_edit_state(block['_flat_id'], False)
+                                    st.rerun()
 
                         # Define a render function that works with our exhibit blocks
                         def render_single_exhibit(exhibit_block):
