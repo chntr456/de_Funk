@@ -187,6 +187,9 @@ def render_exhibit_grid(
         render_exhibit_fn: Function to render a single exhibit block
         get_html_fn: Optional function to get HTML string from exhibit (for pure HTML grid)
     """
+    # Debug: confirm this function is called
+    st.caption(f"📊 render_exhibit_grid called with {len(exhibit_blocks)} exhibits, get_html_fn={'Yes' if get_html_fn else 'No'}")
+
     if not exhibit_blocks:
         st.warning("Grid: No exhibit blocks to render")
         return
@@ -207,9 +210,6 @@ def render_exhibit_grid(
 
         if len(html_contents) == len(exhibit_blocks):
             # All exhibits provided HTML - use pure CSS Grid
-            # Debug: uncomment to verify CSS Grid is being used
-            # st.caption("🟢 CSS Grid Mode")
-
             # Determine max_height for linked scrolling
             # Default to scrolling enabled for grids (better UX)
             max_height = getattr(grid_config, 'max_height', None)
@@ -217,6 +217,9 @@ def render_exhibit_grid(
 
             if scroll and not max_height:
                 max_height = 400  # Default scroll height
+
+            # Debug: show mode and height
+            st.caption(f"🟢 CSS Grid Mode (max_height={max_height})")
 
             render_html_grid(grid_config, html_contents, titles, max_height=max_height)
             return
