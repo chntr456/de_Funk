@@ -107,47 +107,51 @@ def render_html_grid(
         #{grid_id} .gt-cell > div {{ width: 100% !important; }}
         #{grid_id} .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
 
-        /* Sticky headers - lock in place when scrolling */
-        #{grid_id} .sync-scroll thead {{
+        /* Sticky headers - lock the entire thead at top */
+        #{grid_id} .sync-scroll table thead,
+        #{grid_id} .sync-scroll .gt_table thead {{
             position: sticky !important;
             top: 0 !important;
-            z-index: 10 !important;
+            z-index: 100 !important;
+            background-color: #f8f9fa !important;
         }}
-        #{grid_id} .sync-scroll th {{
+        /* Each th cell must also be sticky */
+        #{grid_id} .sync-scroll table thead th,
+        #{grid_id} .sync-scroll .gt_table thead th {{
             position: sticky !important;
             top: 0 !important;
-            z-index: 10 !important;
-            background: inherit !important;
+            z-index: 100 !important;
+            background-color: #f8f9fa !important;
+            color: #333 !important;
+            border-bottom: 2px solid #dee2e6 !important;
         }}
-        /* Great Tables specific header classes */
-        #{grid_id} .sync-scroll .gt_col_headings {{
+        /* Great Tables specific - these are the actual header cells */
+        #{grid_id} .gt_col_headings {{
             position: sticky !important;
             top: 0 !important;
-            z-index: 10 !important;
+            z-index: 100 !important;
+            background-color: #f8f9fa !important;
         }}
-        #{grid_id} .sync-scroll .gt_col_heading {{
+        #{grid_id} .gt_col_heading {{
             position: sticky !important;
             top: 0 !important;
-            z-index: 10 !important;
-        }}
-        #{grid_id} .sync-scroll .gt_column_spanner {{
-            position: sticky !important;
-            top: 0 !important;
-            z-index: 10 !important;
-        }}
-        /* Ensure header row backgrounds are solid and text is readable */
-        #{grid_id} .sync-scroll tr:first-child th,
-        #{grid_id} .sync-scroll thead tr th,
-        #{grid_id} .sync-scroll .gt_col_heading,
-        #{grid_id} .sync-scroll .gt_column_spanner {{
+            z-index: 100 !important;
             background-color: #f8f9fa !important;
             color: #333 !important;
         }}
-        /* Force all header text to be dark and readable */
-        #{grid_id} th,
-        #{grid_id} .gt_col_headings,
-        #{grid_id} .gt_col_heading,
+        #{grid_id} .gt_column_spanner {{
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 100 !important;
+            background-color: #f8f9fa !important;
+            color: #333 !important;
+        }}
+        /* Column labels row */
         #{grid_id} .gt_columns_bottom_border {{
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 100 !important;
+            background-color: #f8f9fa !important;
             color: #333 !important;
         }}
     </style>
@@ -197,9 +201,6 @@ def render_exhibit_grid(
         render_exhibit_fn: Function to render a single exhibit block
         get_html_fn: Optional function to get HTML string from exhibit (for pure HTML grid)
     """
-    # Debug: confirm this function is called
-    st.caption(f"📊 render_exhibit_grid called with {len(exhibit_blocks)} exhibits, get_html_fn={'Yes' if get_html_fn else 'No'}")
-
     if not exhibit_blocks:
         st.warning("Grid: No exhibit blocks to render")
         return
@@ -227,9 +228,6 @@ def render_exhibit_grid(
 
             if scroll and not max_height:
                 max_height = 400  # Default scroll height
-
-            # Debug: show mode and height
-            st.caption(f"🟢 CSS Grid Mode (max_height={max_height})")
 
             render_html_grid(grid_config, html_contents, titles, max_height=max_height)
             return
