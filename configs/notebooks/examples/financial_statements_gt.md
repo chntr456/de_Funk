@@ -132,6 +132,8 @@ $exhibits${
   source: company.fact_income_statement
   title: Consolidated Statement of Operations
   theme: financial
+  scroll: true
+  max_height: 400
   sort: {by: fiscal_date_ending, order: desc}
   columns:
     - {id: fiscal_date_ending, label: Period, format: date}
@@ -161,6 +163,8 @@ $exhibits${
   source: company.fact_balance_sheet
   title: Consolidated Balance Sheet
   theme: financial
+  scroll: true
+  max_height: 400
   sort: {by: fiscal_date_ending, order: desc}
   columns:
     - {id: fiscal_date_ending, label: Period, format: date}
@@ -191,6 +195,8 @@ $exhibits${
   source: company.fact_cash_flow
   title: Consolidated Statement of Cash Flows
   theme: financial
+  scroll: true
+  max_height: 400
   sort: {by: fiscal_date_ending, order: desc}
   columns:
     - {id: fiscal_date_ending, label: Period, format: date}
@@ -223,6 +229,8 @@ $exhibits${
   source: company.fact_earnings
   title: Earnings History
   theme: financial
+  scroll: true
+  max_height: 400
   sort: {by: fiscal_date_ending, order: desc}
   columns:
     - {id: fiscal_date_ending, label: Period, format: date}
