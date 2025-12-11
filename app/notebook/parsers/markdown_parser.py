@@ -771,9 +771,14 @@ class MarkdownNotebookParser:
                     agg = None
                     if 'aggregation' in m:
                         agg = AggregationType(m['aggregation'])
+                    # Support both 'column' (preferred) and 'measure' (legacy)
+                    measure_col = m.get('column') or m.get('measure')
+                    if not measure_col:
+                        logger.warning(f"Metric missing 'column' or 'measure' field: {m}")
+                        continue
                     metrics.append(MetricConfig(
-                        measure=m['measure'],
-                        label=m.get('label', m['measure']),
+                        measure=measure_col,
+                        label=m.get('label', measure_col),
                         aggregation=agg
                     ))
 
