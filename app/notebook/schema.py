@@ -274,7 +274,7 @@ class GridConfig:
     align_items: str = "stretch"  # stretch, start, center, end
     min_height: Optional[int] = None  # Minimum row height in pixels
     max_height: Optional[int] = None  # Max height for scrollable grid (enables linked scrolling)
-    scroll: bool = False  # Enable scrolling (uses default max_height of 500 if not set)
+    scroll: bool = True  # Enable scrolling by default (uses max_height of 400 if not set)
 
     # Identification
     id: Optional[str] = None
