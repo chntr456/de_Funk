@@ -1552,7 +1552,9 @@ help_text: Filter by trading volume"""
             if not orig_match:
                 st.warning("Could not parse original exhibit content")
                 return None
-            orig_yaml = orig_match.group(1).strip()
+            # Use textwrap.dedent to properly remove common leading whitespace
+            import textwrap
+            orig_yaml = textwrap.dedent(orig_match.group(1)).strip()
             orig_data = yaml.safe_load(orig_yaml)
             if not orig_data:
                 st.warning("Could not load original YAML")
