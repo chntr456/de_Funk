@@ -984,8 +984,6 @@ def render_flat_notebook(
                     grid_idx
                 )
 
-                # Debug: show what we collected
-                st.caption(f"📊 Grid {grid_idx}: Found {len(grid_exhibit_blocks)} exhibits in _content_blocks")
 
                 if grid_exhibit_blocks:
                     config = grid_info[grid_idx].get('config')

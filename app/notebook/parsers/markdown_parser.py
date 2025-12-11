@@ -219,7 +219,12 @@ class MarkdownNotebookParser:
                 continue
 
             # Parse grid config YAML
-            config_yaml = start_match.group(1).strip()
+            # Normalize indentation - each line should have no leading whitespace for YAML keys
+            raw_yaml = start_match.group(1)
+            lines = raw_yaml.split('\n')
+            # Strip leading whitespace from each line to normalize
+            normalized_lines = [line.strip() for line in lines if line.strip()]
+            config_yaml = '\n'.join(normalized_lines)
             try:
                 config_dict = yaml.safe_load(config_yaml) or {}
             except yaml.YAMLError as e:
@@ -623,7 +628,8 @@ class MarkdownNotebookParser:
         }
         valid_great_tables = {
             'theme', 'spanners', 'rows', 'row_striping', 'source_note',
-            'footnotes', 'subtitle', 'calculated_columns', 'export_html', 'export_png'
+            'footnotes', 'subtitle', 'calculated_columns', 'export_html', 'export_png',
+            'scroll', 'max_height'  # Scrollable container options
         }
 
         all_valid = (valid_common | valid_chart_shorthand | valid_chart_full |

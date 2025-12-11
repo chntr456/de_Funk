@@ -38,7 +38,6 @@ View all four financial statements at a glance in a 2x2 grid layout.
 
 $grid${
   template: 2x2
-  gap: lg
 }
 
 $exhibits${
@@ -46,6 +45,8 @@ $exhibits${
   source: company.fact_income_statement
   title: Income Statement
   theme: financial
+  scroll: true
+  max_height: 300
   sort: {by: fiscal_date_ending, order: desc}
   columns:
     - {id: fiscal_date_ending, label: Period, format: date}
@@ -65,6 +66,8 @@ $exhibits${
   source: company.fact_balance_sheet
   title: Balance Sheet
   theme: financial
+  scroll: true
+  max_height: 300
   sort: {by: fiscal_date_ending, order: desc}
   columns:
     - {id: fiscal_date_ending, label: Period, format: date}
@@ -80,6 +83,8 @@ $exhibits${
   source: company.fact_cash_flow
   title: Cash Flow
   theme: financial
+  scroll: true
+  max_height: 300
   sort: {by: fiscal_date_ending, order: desc}
   columns:
     - {id: fiscal_date_ending, label: Period, format: date}
@@ -96,6 +101,8 @@ $exhibits${
   source: company.fact_earnings
   title: Earnings
   theme: financial
+  scroll: true
+  max_height: 300
   sort: {by: fiscal_date_ending, order: desc}
   columns:
     - {id: fiscal_date_ending, label: Period, format: date}

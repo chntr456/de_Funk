@@ -41,9 +41,6 @@ def render_exhibit_grid(
     row_specs = grid_config.get_row_specs()
     gap = GAP_SIZES.get(grid_config.gap, 16)
 
-    # Debug info
-    st.caption(f"🔲 Grid: {len(exhibit_blocks)} exhibits, {len(row_specs)} rows, template={grid_config.template}")
-
     # Apply gap styling
     if gap > 0:
         st.markdown(

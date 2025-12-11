@@ -270,7 +270,7 @@ class GridConfig:
     template: Optional[GridTemplate] = None
 
     # Styling
-    gap: GridGap = GridGap.MD
+    gap: GridGap = GridGap.NONE  # Default to no gap - borders touching
     align_items: str = "stretch"  # stretch, start, center, end
     min_height: Optional[int] = None  # Minimum row height in pixels
 
@@ -532,6 +532,8 @@ class Exhibit:
     export_png: bool = False
     subtitle: Optional[str] = None  # Subtitle for Great Tables
     calculated_columns: Optional[Dict[str, Any]] = None  # Derived/computed columns
+    scroll: bool = False  # Enable scrollable container (default height 400px)
+    max_height: Optional[int] = None  # Max height in pixels for scrollable container
 
     # Raw data for 1:1 serialization - stores original YAML dict for round-trip editing
     _raw_data: Optional[Dict[str, Any]] = None

@@ -578,8 +578,25 @@ class GreatTableRenderer:
             # GT renders to HTML
             html = self.gt.as_raw_html()
 
-            # Display in Streamlit
-            st.html(html)
+            # Check for scroll/max_height option
+            max_height = getattr(self.exhibit, 'max_height', None)
+            scroll = getattr(self.exhibit, 'scroll', False)
+
+            # If scroll is True but no height specified, default to 400px
+            if scroll and not max_height:
+                max_height = 400
+
+            # Wrap in scrollable container if max_height specified
+            if max_height:
+                scroll_html = f'''
+                <div style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
+                    {html}
+                </div>
+                '''
+                st.html(scroll_html)
+            else:
+                # Display in Streamlit without scroll
+                st.html(html)
 
             # Optional: Export buttons
             self._render_export_buttons(html)
