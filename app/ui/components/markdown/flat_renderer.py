@@ -1132,7 +1132,15 @@ def render_flat_notebook(
 
                             # Only Great Tables support HTML extraction currently
                             from app.notebook.schema import ExhibitType
-                            if exhibit.type != ExhibitType.GREAT_TABLE:
+
+                            # Check if type matches (handle both enum and string)
+                            is_great_table = (
+                                exhibit.type == ExhibitType.GREAT_TABLE or
+                                exhibit.type == 'great_table' or
+                                (hasattr(exhibit.type, 'value') and exhibit.type.value == 'great_table')
+                            )
+
+                            if not is_great_table:
                                 return None
 
                             try:

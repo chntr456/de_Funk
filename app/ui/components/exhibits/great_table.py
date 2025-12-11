@@ -94,27 +94,8 @@ class GreatTableRenderer:
             return
 
         try:
-            # Filter to only declared columns (if specified)
-            filtered_df = self._filter_columns()
-
-            # Apply sorting before creating GT
-            sorted_df = self._sort_dataframe(filtered_df)
-
-            # Update internal reference to filtered data for column validation
-            self._working_df = sorted_df
-
-            # Build GT object with filtered/sorted data
-            self.gt = GT(sorted_df)
-
-            # Apply configuration in order
-            self._apply_header()
-            self._apply_columns()
-            self._apply_spanners()
-            self._apply_formatting()
-            self._apply_conditional_formatting()
-            self._apply_row_config()
-            self._apply_footer()
-            self._apply_theme()
+            # Build the GT object
+            self._build_gt()
 
             # Render to Streamlit
             self._render_to_streamlit()
@@ -124,6 +105,30 @@ class GreatTableRenderer:
             st.error(f"Error rendering table: {str(e)}")
             # Fallback to basic dataframe display
             st.dataframe(self.pdf)
+
+    def _build_gt(self) -> None:
+        """Build the Great Table object without rendering."""
+        # Filter to only declared columns (if specified)
+        filtered_df = self._filter_columns()
+
+        # Apply sorting before creating GT
+        sorted_df = self._sort_dataframe(filtered_df)
+
+        # Update internal reference to filtered data for column validation
+        self._working_df = sorted_df
+
+        # Build GT object with filtered/sorted data
+        self.gt = GT(sorted_df)
+
+        # Apply configuration in order
+        self._apply_header()
+        self._apply_columns()
+        self._apply_spanners()
+        self._apply_formatting()
+        self._apply_conditional_formatting()
+        self._apply_row_config()
+        self._apply_footer()
+        self._apply_theme()
 
     def _filter_columns(self) -> pd.DataFrame:
         """Filter DataFrame to only include declared columns."""
