@@ -78,10 +78,16 @@ def render_html_grid(
         title_html = f'<div class="gt-title" style="font-weight: 600; padding: 4px 8px; font-size: 13px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">{title}</div>' if title else ''
 
         # Each cell gets its own scroll container with synced scrolling
-        cell_scroll_style = f"max-height:{max_height}px;overflow:auto;" if max_height else ""
-        cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;background:#fff;">
+        if max_height:
+            wrapper_height = f"height:{max_height}px;"
+            cell_scroll_style = f"max-height:{max_height}px;overflow-y:scroll;overflow-x:auto;"
+        else:
+            wrapper_height = ""
+            cell_scroll_style = ""
+
+        cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;background:#fff;{wrapper_height}">
 {title_html}
-<div class="gt-cell sync-scroll" style="flex:1;{cell_scroll_style}">{html}</div>
+<div class="gt-cell sync-scroll" style="flex:1;min-height:0;{cell_scroll_style}">{html}</div>
 </div>''')
 
     # Generate unique ID for this grid instance
