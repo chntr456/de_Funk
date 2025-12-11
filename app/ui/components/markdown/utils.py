@@ -7,105 +7,102 @@ Contains helper functions for:
 - Other markdown-related utilities
 """
 
-from typing import Dict, Any
+from typing import Dict, Any, List
 import yaml
 
 
-class IndentedDumper(yaml.SafeDumper):
-    """Custom YAML dumper that properly indents list items."""
-    pass
-
-
-def _represent_list(dumper, data):
-    """Represent lists with proper indentation for nested dicts."""
-    return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=False)
-
-
-def _represent_dict(dumper, data):
-    """Represent dicts with proper indentation."""
-    return dumper.represent_mapping('tag:yaml.org,2002:map', data, flow_style=False)
-
-
-# Register custom representers
-IndentedDumper.add_representer(list, _represent_list)
-IndentedDumper.add_representer(dict, _represent_dict)
-
-
-def dump_yaml_indented(data: Dict, indent: int = 2) -> str:
+def dump_yaml_clean(data: Dict) -> str:
     """
-    Dump YAML with proper indentation for nested structures.
+    Dump YAML with flow style for nested structures to avoid indentation issues.
 
-    This ensures list items have their properties properly indented:
-
-    columns:
-      - id: value
-        label: value    # Properly indented under the list item
+    Uses inline {key: value} syntax for list items containing dicts,
+    which avoids PyYAML's problematic block-style list indentation.
 
     Args:
         data: Dictionary to dump
-        indent: Indentation level (default 2)
 
     Returns:
-        Properly formatted YAML string
+        Clean YAML string
     """
-    # Use custom dumper with proper settings
-    output = yaml.dump(
-        data,
-        Dumper=IndentedDumper,
-        default_flow_style=False,
-        sort_keys=False,
-        allow_unicode=True,
-        indent=indent,
-        width=120
-    )
+    lines = []
 
-    # Post-process to fix list item indentation
-    # PyYAML produces:
-    #   key:
-    #   - id: value
-    #     label: value
-    #
-    # We need:
-    #   key:
-    #     - id: value
-    #       label: value
-    #
-    # This adds indent spaces after each "- " sequence item marker
+    def format_value(value, indent_level=0):
+        """Format a value for YAML output."""
+        indent = '  ' * indent_level
 
-    lines = output.split('\n')
-    result = []
-    in_list_context = False
-    list_indent = 0
+        if value is None:
+            return 'null'
+        elif isinstance(value, bool):
+            return 'true' if value else 'false'
+        elif isinstance(value, (int, float)):
+            return str(value)
+        elif isinstance(value, str):
+            # Quote strings that need it
+            if any(c in value for c in ':{}[],"\'#&*!|>%@`') or value.startswith('-') or value == '':
+                # Use single quotes, escape internal single quotes
+                escaped = value.replace("'", "''")
+                return f"'{escaped}'"
+            return value
+        elif isinstance(value, list):
+            if not value:
+                return '[]'
+            # Check if it's a simple list (strings/numbers only)
+            if all(isinstance(item, (str, int, float, bool)) for item in value):
+                items = [format_value(item) for item in value]
+                return '[' + ', '.join(items) + ']'
+            # List of dicts - use flow style for each item
+            return value  # Return as-is, will be handled specially
+        elif isinstance(value, dict):
+            if not value:
+                return '{}'
+            # Format as inline dict
+            items = []
+            for k, v in value.items():
+                formatted_v = format_value(v)
+                if isinstance(formatted_v, (list, dict)):
+                    # Complex nested structure - this shouldn't happen often
+                    formatted_v = format_value(v)
+                items.append(f'{k}: {formatted_v}')
+            return '{' + ', '.join(items) + '}'
+        return str(value)
 
-    for i, line in enumerate(lines):
-        stripped = line.lstrip()
+    def write_key_value(key, value, indent_level=0):
+        """Write a key-value pair to lines."""
+        indent = '  ' * indent_level
 
-        # Check if this line starts a list item
-        if stripped.startswith('- '):
-            # Find current indentation
-            current_indent = len(line) - len(stripped)
-            # Add extra indent to list marker
-            result.append(' ' * indent + line)
-            in_list_context = True
-            list_indent = current_indent
-        elif in_list_context and stripped and not stripped.startswith('-'):
-            # This is a continuation of a list item (properties after the first)
-            current_indent = len(line) - len(stripped)
-            if current_indent > 0:
-                # Add extra indent to align with the indented list
-                result.append(' ' * indent + line)
+        if isinstance(value, list) and value and isinstance(value[0], dict):
+            # List of dicts - write each as flow style on separate line
+            lines.append(f'{indent}{key}:')
+            for item in value:
+                flow_item = format_value(item)
+                lines.append(f'{indent}  - {flow_item}')
+        elif isinstance(value, dict) and value:
+            # Check if it's a simple dict that can be inline
+            is_simple = all(
+                isinstance(v, (str, int, float, bool, type(None)))
+                for v in value.values()
+            )
+            if is_simple and len(value) <= 3:
+                # Simple dict - inline
+                lines.append(f'{indent}{key}: {format_value(value)}')
             else:
-                # Back to root level, exit list context
-                in_list_context = False
-                result.append(line)
+                # Complex dict - expand
+                lines.append(f'{indent}{key}:')
+                for k, v in value.items():
+                    write_key_value(k, v, indent_level + 1)
+        elif isinstance(value, list) and value:
+            # Simple list
+            lines.append(f'{indent}{key}: {format_value(value)}')
         else:
-            if stripped == '' or (stripped and not stripped.startswith(' ') and ':' in stripped):
-                # Empty line or new top-level key - might exit list context
-                if stripped and ':' in stripped and not stripped.startswith('-'):
-                    in_list_context = False
-            result.append(line)
+            # Simple value
+            formatted = format_value(value)
+            lines.append(f'{indent}{key}: {formatted}')
 
-    return '\n'.join(result)
+    # Process top-level keys
+    for key, value in data.items():
+        write_key_value(key, value, 0)
+
+    return '\n'.join(lines)
 
 
 def exhibit_to_syntax(exhibit) -> str:
@@ -303,7 +300,7 @@ def exhibit_to_syntax(exhibit) -> str:
         data['export_png'] = True
 
     # Convert to YAML string with proper indentation
-    yaml_content = dump_yaml_indented(data)
+    yaml_content = dump_yaml_clean(data)
     # Indent each line for the $exhibits${} wrapper
     indented = '\n'.join('  ' + line for line in yaml_content.strip().split('\n'))
     return f"$exhibits${{\n{indented}\n}}"
@@ -327,7 +324,7 @@ def exhibit_to_yaml(exhibit) -> str:
 
     # Use raw data if available for perfect round-trip
     if hasattr(exhibit, '_raw_data') and exhibit._raw_data:
-        return dump_yaml_indented(exhibit._raw_data)
+        return dump_yaml_clean(exhibit._raw_data)
 
     # Otherwise, rebuild from parsed fields
     data = {
@@ -455,7 +452,7 @@ def exhibit_to_yaml(exhibit) -> str:
     if exhibit.options:
         data.update(exhibit.options)
 
-    return dump_yaml_indented(data)
+    return dump_yaml_clean(data)
 
 
 def collapsible_to_editable(block: Dict[str, Any]) -> str:
