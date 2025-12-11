@@ -205,10 +205,12 @@ def render_exhibit_grid(
             # st.caption("🟢 CSS Grid Mode")
 
             # Determine max_height for linked scrolling
+            # Default to scrolling enabled for grids (better UX)
             max_height = getattr(grid_config, 'max_height', None)
-            scroll = getattr(grid_config, 'scroll', False)
+            scroll = getattr(grid_config, 'scroll', True)  # Default to True for grids
+
             if scroll and not max_height:
-                max_height = 500  # Default scroll height
+                max_height = 400  # Default scroll height
 
             render_html_grid(grid_config, html_contents, titles, max_height=max_height)
             return
