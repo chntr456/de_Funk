@@ -77,48 +77,69 @@ def render_html_grid(
         title = titles[i] if titles and i < len(titles) else None
         title_html = f'<div class="gt-title" style="font-weight: 600; padding: 4px 8px; font-size: 13px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">{title}</div>' if title else ''
 
-        # Cell styling: fill container, left-align, no internal margins
+        # Each cell gets its own scroll container with synced scrolling
+        cell_scroll_style = f"max-height:{max_height}px;overflow:auto;" if max_height else ""
         cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;background:#fff;">
 {title_html}
-<div class="gt-cell" style="flex:1;">{html}</div>
+<div class="gt-cell sync-scroll" style="flex:1;{cell_scroll_style}">{html}</div>
 </div>''')
 
-    # Scroll wrapper style - only if max_height specified
-    scroll_style = f"max-height:{max_height}px;overflow:auto;" if max_height else ""
+    # Generate unique ID for this grid instance
+    import uuid
+    grid_id = f"grid-{uuid.uuid4().hex[:8]}"
 
     # Combine into CSS Grid with linked scrolling and sticky headers
+    # JavaScript syncs scroll positions across all cells
     grid_html = f'''<style>
-        .de-funk-grid-wrapper * {{ box-sizing: border-box; }}
-        .de-funk-grid-wrapper table,
-        .de-funk-grid-wrapper .gt_table {{
+        #{grid_id} * {{ box-sizing: border-box; }}
+        #{grid_id} table,
+        #{grid_id} .gt_table {{
             width: 100% !important;
             margin: 0 !important;
             border-collapse: collapse !important;
         }}
-        .de-funk-grid-wrapper .gt-cell > div {{ width: 100% !important; }}
-        .de-funk-grid-wrapper .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
-        /* Sticky headers - titles stick at top of scroll container */
-        .de-funk-grid-wrapper .gt-title {{
-            position: sticky;
-            top: 0;
-            z-index: 20;
-        }}
-        /* Sticky table headers within cells */
-        .de-funk-grid-wrapper thead,
-        .de-funk-grid-wrapper .gt_col_headings {{
+        #{grid_id} .gt-cell > div {{ width: 100% !important; }}
+        #{grid_id} .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
+        /* Sticky headers within each scrollable cell */
+        #{grid_id} .gt-cell thead,
+        #{grid_id} .gt-cell .gt_col_headings {{
             position: sticky;
             top: 0;
             z-index: 10;
         }}
-        .de-funk-grid-wrapper th {{
+        #{grid_id} .gt-cell th {{
             position: sticky;
             top: 0;
             z-index: 10;
         }}
     </style>
-    <div class="de-funk-grid-wrapper" style="{scroll_style}border:1px solid #ddd;border-radius:4px;">
+    <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;">
         <div class="de-funk-grid" style="display:grid;grid-template-columns:{grid_template};gap:{gap}px;width:100%;">{''.join(cells_html)}</div>
-    </div>'''
+    </div>
+    <script>
+        (function() {{
+            const grid = document.getElementById('{grid_id}');
+            if (!grid) return;
+            const scrollables = grid.querySelectorAll('.sync-scroll');
+            let isSyncing = false;
+
+            scrollables.forEach(el => {{
+                el.addEventListener('scroll', function() {{
+                    if (isSyncing) return;
+                    isSyncing = true;
+                    const scrollTop = this.scrollTop;
+                    const scrollLeft = this.scrollLeft;
+                    scrollables.forEach(other => {{
+                        if (other !== this) {{
+                            other.scrollTop = scrollTop;
+                            other.scrollLeft = scrollLeft;
+                        }}
+                    }});
+                    isSyncing = false;
+                }});
+            }});
+        }})();
+    </script>'''
 
     st.html(grid_html)
 
