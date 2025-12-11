@@ -121,17 +121,25 @@ def render_exhibit_grid(
     if get_html_fn:
         html_contents = []
         titles = []
-        for block in exhibit_blocks:
+        failed_blocks = []
+        for i, block in enumerate(exhibit_blocks):
             html = get_html_fn(block)
             if html:
                 html_contents.append(html)
                 exhibit = block.get('exhibit')
                 titles.append(exhibit.title if exhibit and hasattr(exhibit, 'title') else None)
+            else:
+                failed_blocks.append(i)
 
         if len(html_contents) == len(exhibit_blocks):
             # All exhibits provided HTML - use pure CSS Grid
+            # Debug: uncomment to verify CSS Grid is being used
+            # st.caption("🟢 CSS Grid Mode")
             render_html_grid(grid_config, html_contents, titles)
             return
+        elif failed_blocks:
+            # Debug: show which blocks failed HTML extraction
+            st.caption(f"⚠️ Falling back to columns (blocks {failed_blocks} failed HTML)")
 
     # Fallback to Streamlit columns
     row_specs = grid_config.get_row_specs()
