@@ -229,6 +229,14 @@ def render_exhibit_grid(
             if scroll and not max_height:
                 max_height = 400  # Default scroll height
 
+            # Debug: show first exhibit's HTML structure (uncomment to inspect)
+            if html_contents:
+                import re
+                sample = html_contents[0][:2000]
+                # Extract just the table structure tags
+                tags = re.findall(r'<(/?(?:table|thead|tbody|tr|th|td|div)[^>]*?)>', sample, re.IGNORECASE)
+                st.code("HTML structure: " + " ".join(f"<{t}>" for t in tags[:30]), language="html")
+
             render_html_grid(grid_config, html_contents, titles, max_height=max_height)
             return
         elif failed_blocks:
