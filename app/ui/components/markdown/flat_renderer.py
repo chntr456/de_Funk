@@ -1032,11 +1032,33 @@ def render_flat_notebook(
                         def render_single_exhibit(exhibit_block):
                             render_exhibit_block(exhibit_block, notebook_session, connection)
 
-                        # Render the grid
+                        # Define HTML extraction function for pure CSS Grid rendering
+                        def get_exhibit_html(exhibit_block):
+                            """Get HTML from exhibit for CSS Grid layout."""
+                            exhibit = exhibit_block.get('exhibit')
+                            if not exhibit:
+                                return None
+
+                            # Only Great Tables support HTML extraction currently
+                            from app.notebook.schema import ExhibitType
+                            if exhibit.type != ExhibitType.GREAT_TABLE:
+                                return None
+
+                            try:
+                                from app.ui.components.exhibits.great_table import get_great_table_html
+                                exhibit_id = exhibit_block.get('id')
+                                df = notebook_session.get_exhibit_data(exhibit_id)
+                                pdf = connection.to_pandas(df)
+                                return get_great_table_html(exhibit, pdf)
+                            except Exception:
+                                return None
+
+                        # Render the grid (uses CSS Grid if all exhibits provide HTML)
                         render_exhibit_grid(
                             config,
                             grid_exhibit_blocks,
-                            render_single_exhibit
+                            render_single_exhibit,
+                            get_html_fn=get_exhibit_html
                         )
 
                         # Mark these exhibits as rendered

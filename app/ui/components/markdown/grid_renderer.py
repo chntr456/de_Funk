@@ -1,30 +1,101 @@
 """
 Grid layout renderer for exhibit groups.
 
-Renders multiple exhibits in configurable grid patterns using
-Streamlit's column system.
+Renders multiple exhibits in configurable grid patterns.
+Supports two modes:
+1. HTML Grid: Single HTML block with CSS Grid (crisp, no Streamlit padding)
+2. Streamlit Columns: Falls back to st.columns for non-HTML exhibits
 """
 
 import streamlit as st
 from typing import List, Dict, Any, Callable, Optional
 
-from app.notebook.schema import GridConfig, GridGap, GridBlock
+from app.notebook.schema import GridConfig, GridGap, GridBlock, GridTemplate
 
 
-# Gap size mappings (pixels for container margins)
+# Gap size mappings (pixels)
 GAP_SIZES = {
     GridGap.NONE: 0,
-    GridGap.SM: 8,
-    GridGap.MD: 16,
-    GridGap.LG: 24,
-    GridGap.XL: 32,
+    GridGap.SM: 4,
+    GridGap.MD: 8,
+    GridGap.LG: 16,
+    GridGap.XL: 24,
 }
+
+
+def render_html_grid(
+    grid_config: GridConfig,
+    html_contents: List[str],
+    titles: Optional[List[str]] = None,
+):
+    """
+    Render multiple HTML blocks in a pure CSS Grid layout.
+
+    This creates a single HTML block with no Streamlit padding - crisp exhibits.
+
+    Args:
+        grid_config: Grid configuration
+        html_contents: List of HTML strings to render in grid cells
+        titles: Optional list of titles for each cell
+    """
+    if not html_contents:
+        return
+
+    gap = GAP_SIZES.get(grid_config.gap, 0)
+
+    # Determine grid template based on config
+    if grid_config.template == GridTemplate.TWO_BY_TWO:
+        grid_template = "1fr 1fr"
+        num_cols = 2
+    elif grid_config.template == GridTemplate.ONE_TWO:
+        grid_template = "1fr 2fr"
+        num_cols = 2
+    elif grid_config.template == GridTemplate.TWO_ONE:
+        grid_template = "2fr 1fr"
+        num_cols = 2
+    elif grid_config.template == GridTemplate.THREE_COL:
+        grid_template = "1fr 1fr 1fr"
+        num_cols = 3
+    elif grid_config.template == GridTemplate.FOUR_COL:
+        grid_template = "1fr 1fr 1fr 1fr"
+        num_cols = 4
+    else:
+        # Default based on columns setting
+        num_cols = grid_config.columns or 2
+        grid_template = " ".join(["1fr"] * num_cols)
+
+    # Build grid cells HTML
+    cells_html = []
+    for i, html in enumerate(html_contents):
+        title = titles[i] if titles and i < len(titles) else None
+        title_html = f'<div style="font-weight: 600; margin-bottom: 4px; font-size: 14px;">{title}</div>' if title else ''
+        cells_html.append(f'''
+            <div style="min-width: 0; overflow: hidden;">
+                {title_html}
+                {html}
+            </div>
+        ''')
+
+    # Combine into CSS Grid
+    grid_html = f'''
+    <div style="
+        display: grid;
+        grid-template-columns: {grid_template};
+        gap: {gap}px;
+        width: 100%;
+    ">
+        {''.join(cells_html)}
+    </div>
+    '''
+
+    st.html(grid_html)
 
 
 def render_exhibit_grid(
     grid_config: GridConfig,
     exhibit_blocks: List[Dict[str, Any]],
     render_exhibit_fn: Callable[[Dict[str, Any]], None],
+    get_html_fn: Optional[Callable[[Dict[str, Any]], Optional[str]]] = None,
 ):
     """
     Render a group of exhibits in a grid layout.
@@ -33,64 +104,46 @@ def render_exhibit_grid(
         grid_config: Grid configuration (columns, rows, gap, etc.)
         exhibit_blocks: List of exhibit blocks to render
         render_exhibit_fn: Function to render a single exhibit block
+        get_html_fn: Optional function to get HTML string from exhibit (for pure HTML grid)
     """
     if not exhibit_blocks:
         st.warning("Grid: No exhibit blocks to render")
         return
 
-    row_specs = grid_config.get_row_specs()
-    gap = GAP_SIZES.get(grid_config.gap, 16)
+    # Try HTML-based grid first (crisp, no Streamlit padding)
+    if get_html_fn:
+        html_contents = []
+        titles = []
+        for block in exhibit_blocks:
+            html = get_html_fn(block)
+            if html:
+                html_contents.append(html)
+                exhibit = block.get('exhibit')
+                titles.append(exhibit.title if exhibit and hasattr(exhibit, 'title') else None)
 
-    # Apply compact styling to reduce whitespace
-    # Target Streamlit's internal element classes more aggressively
-    st.markdown(
-        f"""
-        <style>
-        /* Remove all default Streamlit margins in columns */
-        [data-testid="column"] > div > div > div {{
-            margin-bottom: 0 !important;
-            padding: 0 !important;
-        }}
-        /* Remove iframe/html element margins */
-        [data-testid="column"] iframe {{
-            margin-bottom: {gap}px !important;
-        }}
-        [data-testid="column"] .stHtml {{
-            margin-bottom: {gap}px !important;
-        }}
-        /* Streamlit element block spacing */
-        [data-testid="column"] .element-container {{
-            margin-bottom: {gap}px !important;
-        }}
-        /* Remove extra container padding */
-        [data-testid="stVerticalBlock"] {{
-            gap: {gap}px !important;
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+        if len(html_contents) == len(exhibit_blocks):
+            # All exhibits provided HTML - use pure CSS Grid
+            render_html_grid(grid_config, html_contents, titles)
+            return
+
+    # Fallback to Streamlit columns
+    row_specs = grid_config.get_row_specs()
+    gap = GAP_SIZES.get(grid_config.gap, 0)
 
     # Flatten exhibits into iterator
     exhibit_iter = iter(exhibit_blocks)
 
     # Render each row
     for row_idx, row_spec in enumerate(row_specs):
-        # Determine Streamlit gap setting based on our gap config
         st_gap = "small" if grid_config.gap in [GridGap.SM, GridGap.NONE] else "medium"
-
-        # Create columns for this row
         cols = st.columns(row_spec, gap=st_gap)
 
-        # Render exhibits into columns
         for col_idx, col in enumerate(cols):
             try:
                 exhibit_block = next(exhibit_iter)
                 with col:
-                    # Render directly without extra container wrapper
                     render_exhibit_fn(exhibit_block)
             except StopIteration:
-                # No more exhibits, leave remaining cells empty
                 with col:
                     st.empty()
 

@@ -663,3 +663,66 @@ def render_great_table(
     """
     renderer = GreatTableRenderer(exhibit, pdf, model_schema)
     renderer.render()
+
+
+def get_great_table_html(
+    exhibit: Any,
+    pdf: pd.DataFrame,
+    model_schema: Optional[Dict] = None,
+) -> Optional[str]:
+    """
+    Get HTML string from a Great Tables exhibit without rendering to Streamlit.
+
+    Used for CSS Grid layouts where all exhibits are combined into a single HTML block.
+
+    Args:
+        exhibit: Exhibit configuration object
+        pdf: Pandas DataFrame with data
+        model_schema: Optional model schema for column groups
+
+    Returns:
+        HTML string or None if rendering fails
+    """
+    if not GREAT_TABLES_AVAILABLE:
+        return None
+
+    if pdf is None or pdf.empty:
+        return '<div style="color: #888; padding: 8px;">No data available</div>'
+
+    try:
+        renderer = GreatTableRenderer(exhibit, pdf, model_schema)
+        renderer._build_gt()
+
+        if renderer.gt is None:
+            return None
+
+        html = renderer.gt.as_raw_html()
+
+        # Apply scroll wrapper if configured
+        max_height = getattr(exhibit, 'max_height', None)
+        scroll = getattr(exhibit, 'scroll', False)
+
+        if scroll and not max_height:
+            max_height = 400
+
+        if max_height:
+            # Inject inline sticky styles
+            html = html.replace(
+                '<thead',
+                '<thead style="position: sticky; top: 0; z-index: 10;"'
+            )
+            html = html.replace(
+                '<th',
+                '<th style="position: sticky; top: 0; background: white; z-index: 10;"'
+            )
+            html = f'''
+            <div style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
+                {html}
+            </div>
+            '''
+
+        return html
+
+    except Exception as e:
+        logger.error(f"Failed to get Great Table HTML: {e}")
+        return None
