@@ -1462,8 +1462,12 @@ help_text: Filter by trading volume"""
 
             updated_content = None
 
+            # Check if this is a grid block
+            if original_content.strip().startswith('$grid$'):
+                # Handle grid block replacement - find by markers
+                updated_content = self._replace_grid_block(file_content, new_content)
             # Check if this is an exhibit block
-            if original_content.strip().startswith('$exhibits$') or original_content.strip().startswith('$exhibit$'):
+            elif original_content.strip().startswith('$exhibits$') or original_content.strip().startswith('$exhibit$'):
                 # Handle exhibit block replacement
                 updated_content = self._replace_exhibit_block(file_content, original_content, new_content)
             elif original_content in file_content:
@@ -1526,6 +1530,33 @@ help_text: Filter by trading volume"""
         except Exception as e:
             # Re-raise to let the caller handle it
             raise
+
+    def _replace_grid_block(self, file_content: str, new_content: str) -> str:
+        """
+        Replace a grid block in the file content by finding $grid$ and $/grid$ markers.
+
+        Args:
+            file_content: Full file content
+            new_content: New grid content to replace with
+
+        Returns:
+            Updated file content, or None if not found
+        """
+        import re
+
+        # Find the grid block: $grid${...} ... $/grid$
+        # The pattern matches from $grid$ to $/grid$
+        grid_pattern = re.compile(
+            r'\$grid\$\{[^}]*\}.*?\$/grid\$',
+            re.DOTALL
+        )
+
+        match = grid_pattern.search(file_content)
+        if match:
+            # Replace the entire grid section
+            return file_content[:match.start()] + new_content + file_content[match.end():]
+
+        return None
 
     def _replace_exhibit_block(self, file_content: str, original_content: str, new_content: str) -> str:
         """

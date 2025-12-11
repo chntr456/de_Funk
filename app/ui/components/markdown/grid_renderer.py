@@ -128,31 +128,36 @@ def render_html_grid(
         <div class="de-funk-grid" style="display:grid;grid-template-columns:{grid_template};gap:{gap}px;width:100%;">{''.join(cells_html)}</div>
     </div>
     <script>
-        // Use setTimeout to ensure DOM is fully rendered
-        setTimeout(function() {{
+        // Sync scrolling setup
+        (function setupScrollSync() {{
             const grid = document.getElementById('{grid_id}');
-            if (!grid) return;
+            if (!grid) {{
+                console.log('Grid not found: {grid_id}');
+                return;
+            }}
             const scrollables = grid.querySelectorAll('.sync-scroll');
-            if (scrollables.length === 0) return;
+            console.log('Found ' + scrollables.length + ' scrollable elements');
+            if (scrollables.length < 2) return;
 
             let isSyncing = false;
 
-            scrollables.forEach(function(el) {{
+            scrollables.forEach(function(el, idx) {{
                 el.addEventListener('scroll', function(e) {{
                     if (isSyncing) return;
                     isSyncing = true;
-                    const scrollTop = this.scrollTop;
-                    const scrollLeft = this.scrollLeft;
+                    const top = this.scrollTop;
+                    const left = this.scrollLeft;
                     scrollables.forEach(function(other) {{
                         if (other !== e.target) {{
-                            other.scrollTop = scrollTop;
-                            other.scrollLeft = scrollLeft;
+                            other.scrollTop = top;
+                            other.scrollLeft = left;
                         }}
                     }});
-                    setTimeout(function() {{ isSyncing = false; }}, 10);
+                    requestAnimationFrame(function() {{ isSyncing = false; }});
                 }});
             }});
-        }}, 100);
+            console.log('Scroll sync setup complete for {grid_id}');
+        }})();
     </script>'''
 
     st.html(grid_html)
