@@ -75,36 +75,25 @@ def render_html_grid(
         title_html = f'<div style="font-weight: 600; padding: 4px 8px; font-size: 13px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">{title}</div>' if title else ''
 
         # Cell styling: fill container, left-align, no internal margins
-        cells_html.append(f'''<div style="
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-            overflow: hidden;
-            border: 1px solid #e0e0e0;
-            background: #fff;
-        ">
-            {title_html}
-            <div style="flex: 1; overflow: auto;">{html}</div>
-        </div>''')
+        # The inner div needs to force table to fill width
+        cells_html.append(f'''<div style="display:flex;flex-direction:column;min-width:0;overflow:hidden;border:1px solid #e0e0e0;background:#fff;">
+{title_html}
+<div class="gt-cell" style="flex:1;overflow:auto;">{html}</div>
+</div>''')
 
-    # Combine into CSS Grid - no gaps, borders handle separation
+    # Combine into CSS Grid - aggressive styles to eliminate whitespace
     grid_html = f'''<style>
-        .de-funk-grid table {{
-            width: 100% !important;
-            margin: 0 !important;
-        }}
+        .de-funk-grid * {{ box-sizing: border-box; }}
+        .de-funk-grid table,
         .de-funk-grid .gt_table {{
             width: 100% !important;
             margin: 0 !important;
+            border-collapse: collapse !important;
         }}
+        .de-funk-grid .gt-cell > div {{ width: 100% !important; }}
+        .de-funk-grid .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
     </style>
-    <div class="de-funk-grid" style="
-        display: grid;
-        grid-template-columns: {grid_template};
-        grid-template-rows: repeat({num_rows}, 1fr);
-        gap: {gap}px;
-        width: 100%;
-    ">{''.join(cells_html)}</div>'''
+    <div class="de-funk-grid" style="display:grid;grid-template-columns:{grid_template};grid-template-rows:repeat({num_rows},1fr);gap:{gap}px;width:100%;">{''.join(cells_html)}</div>'''
 
     st.html(grid_html)
 
