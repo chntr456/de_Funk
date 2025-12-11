@@ -831,7 +831,8 @@ class MarkdownNotebookParser:
             'actual_column', 'predicted_column', 'confidence_bounds',
             # Great Tables specific fields
             'theme', 'spanners', 'rows', 'row_striping', 'source_note',
-            'footnotes', 'export_html', 'export_png', 'subtitle', 'calculated_columns'
+            'footnotes', 'export_html', 'export_png', 'subtitle', 'calculated_columns',
+            'scroll', 'max_height'
         }
         extra_options = {k: v for k, v in data.items() if k not in known_keys}
         options = data.get('options', {}) or {}
@@ -894,6 +895,9 @@ class MarkdownNotebookParser:
             export_png=data.get('export_png', False),
             subtitle=data.get('subtitle'),
             calculated_columns=data.get('calculated_columns'),
+            # Scroll options
+            scroll=data.get('scroll', False),
+            max_height=data.get('max_height'),
             # Store raw data for 1:1 round-trip serialization
             _raw_data=data,
         )

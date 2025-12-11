@@ -33,7 +33,8 @@ EDIT_STATE_KEY = "flat_renderer_edit_states"
 def flatten_blocks(
     blocks: List[Dict[str, Any]],
     parent_id: Optional[str] = None,
-    depth: int = 0
+    depth: int = 0,
+    counter: Optional[List[int]] = None
 ) -> List[Dict[str, Any]]:
     """
     Flatten nested block structure into a flat list with hierarchy metadata.
@@ -42,6 +43,7 @@ def flatten_blocks(
         blocks: List of blocks (may have 'children' for nested content)
         parent_id: ID of the parent block (None for root level)
         depth: Current nesting depth
+        counter: Mutable counter list [count] to ensure globally unique IDs
 
     Returns:
         Flat list of blocks with added metadata:
@@ -52,6 +54,10 @@ def flatten_blocks(
         - _is_header: Whether this is a header block
     """
     flat_list = []
+
+    # Initialize counter on first call (use list for mutability across recursion)
+    if counter is None:
+        counter = [0]
 
     for block in blocks:
         block_index = block.get('_index', len(flat_list))
@@ -66,8 +72,9 @@ def flatten_blocks(
             if isinstance(inner_content, list):
                 children = inner_content
 
-        # Generate unique ID
-        flat_id = f"block_{block_index}_{depth}"
+        # Generate globally unique ID using counter
+        flat_id = f"block_{counter[0]}_{depth}"
+        counter[0] += 1
 
         # Determine label and icon
         if block_type == 'markdown':
@@ -119,9 +126,9 @@ def flatten_blocks(
 
         flat_list.append(flat_block)
 
-        # Recursively flatten children
+        # Recursively flatten children (pass counter for globally unique IDs)
         if children:
-            child_blocks = flatten_blocks(children, flat_id, depth + 1)
+            child_blocks = flatten_blocks(children, flat_id, depth + 1, counter)
             flat_list.extend(child_blocks)
 
     return flat_list
@@ -976,6 +983,15 @@ def render_flat_notebook(
 
         # Handle grid_start: render all exhibits in the grid as a grid layout
         if block_type == 'grid_start':
+            # Render insert button above grid when editable
+            if editable:
+                render_insert_button(
+                    block.get('_index', 0),
+                    block['_depth'],
+                    block['_flat_id'],
+                    on_block_insert
+                )
+
             grid_idx = block.get('grid_index')
             if grid_idx is not None and grid_idx in grid_info:
                 # Collect exhibit blocks for this grid
@@ -984,10 +1000,34 @@ def render_flat_notebook(
                     grid_idx
                 )
 
-
                 if grid_exhibit_blocks:
                     config = grid_info[grid_idx].get('config')
                     if config:
+                        # Render grid label with edit controls when editable
+                        if editable:
+                            template_name = config.template.value if config.template else f"{config.columns}col"
+                            grid_cols = st.columns([0.85, 0.08, 0.07])
+                            with grid_cols[0]:
+                                st.markdown(f"**🔲 Grid Layout ({template_name})**")
+                            with grid_cols[1]:
+                                edit_key = f"edit_grid_{block['_flat_id']}"
+                                if st.button("✏️", key=edit_key, help="Edit grid"):
+                                    set_edit_state(block['_flat_id'], True)
+                                    st.rerun()
+                            with grid_cols[2]:
+                                delete_key = f"delete_grid_{block['_flat_id']}"
+                                if st.button("🗑️", key=delete_key, help="Delete grid"):
+                                    if on_block_delete:
+                                        on_block_delete(block.get('_index', 0))
+                                        st.rerun()
+
+                            # Show editor if in edit state
+                            if get_edit_state(block['_flat_id']):
+                                st.info("Grid editing: Edit the markdown source directly to modify grid layout")
+                                if st.button("Close", key=f"close_edit_{block['_flat_id']}"):
+                                    set_edit_state(block['_flat_id'], False)
+                                    st.rerun()
+
                         # Define a render function that works with our exhibit blocks
                         def render_single_exhibit(exhibit_block):
                             render_exhibit_block(exhibit_block, notebook_session, connection)
