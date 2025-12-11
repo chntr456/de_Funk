@@ -98,61 +98,38 @@ def render_html_grid(
     # JavaScript syncs scroll positions across all cells
     grid_html = f'''<style>
         #{grid_id} * {{ box-sizing: border-box; }}
+
+        /* CRITICAL: Remove GT's wrapper overflow so our container handles scrolling */
+        #{grid_id} .gt-cell > div {{
+            overflow: visible !important;
+            height: auto !important;
+            width: 100% !important;
+        }}
+
         #{grid_id} table,
         #{grid_id} .gt_table {{
             width: 100% !important;
             margin: 0 !important;
             border-collapse: collapse !important;
         }}
-        #{grid_id} .gt-cell > div {{ width: 100% !important; }}
         #{grid_id} .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
 
-        /* Sticky headers - lock the entire thead at top */
-        #{grid_id} .sync-scroll table thead,
-        #{grid_id} .sync-scroll .gt_table thead {{
+        /* Sticky headers - lock thead at top of scroll container */
+        #{grid_id} .sync-scroll thead {{
             position: sticky !important;
             top: 0 !important;
             z-index: 100 !important;
+        }}
+        #{grid_id} .sync-scroll thead tr {{
             background-color: #f8f9fa !important;
         }}
-        /* Each th cell must also be sticky */
-        #{grid_id} .sync-scroll table thead th,
-        #{grid_id} .sync-scroll .gt_table thead th {{
+        #{grid_id} .sync-scroll thead th {{
             position: sticky !important;
             top: 0 !important;
             z-index: 100 !important;
             background-color: #f8f9fa !important;
             color: #333 !important;
             border-bottom: 2px solid #dee2e6 !important;
-        }}
-        /* Great Tables specific - these are the actual header cells */
-        #{grid_id} .gt_col_headings {{
-            position: sticky !important;
-            top: 0 !important;
-            z-index: 100 !important;
-            background-color: #f8f9fa !important;
-        }}
-        #{grid_id} .gt_col_heading {{
-            position: sticky !important;
-            top: 0 !important;
-            z-index: 100 !important;
-            background-color: #f8f9fa !important;
-            color: #333 !important;
-        }}
-        #{grid_id} .gt_column_spanner {{
-            position: sticky !important;
-            top: 0 !important;
-            z-index: 100 !important;
-            background-color: #f8f9fa !important;
-            color: #333 !important;
-        }}
-        /* Column labels row */
-        #{grid_id} .gt_columns_bottom_border {{
-            position: sticky !important;
-            top: 0 !important;
-            z-index: 100 !important;
-            background-color: #f8f9fa !important;
-            color: #333 !important;
         }}
     </style>
     <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;">
@@ -228,16 +205,6 @@ def render_exhibit_grid(
 
             if scroll and not max_height:
                 max_height = 400  # Default scroll height
-
-            # Debug: show first exhibit's HTML structure
-            if html_contents:
-                import re
-                sample = html_contents[0][:5000]
-                # Extract class names and tag structure
-                classes = re.findall(r'class="([^"]*)"', sample)
-                st.code("Classes found: " + ", ".join(list(set(classes))[:20]), language="text")
-                # Show raw HTML snippet
-                st.code(sample[:1500], language="html")
 
             render_html_grid(grid_config, html_contents, titles, max_height=max_height)
             return
