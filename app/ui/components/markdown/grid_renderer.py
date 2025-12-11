@@ -42,6 +42,7 @@ def render_html_grid(
         return
 
     gap = GAP_SIZES.get(grid_config.gap, 0)
+    num_items = len(html_contents)
 
     # Determine grid template based on config
     if grid_config.template == GridTemplate.TWO_BY_TWO:
@@ -64,29 +65,46 @@ def render_html_grid(
         num_cols = grid_config.columns or 2
         grid_template = " ".join(["1fr"] * num_cols)
 
-    # Build grid cells HTML
+    # Calculate rows needed
+    num_rows = (num_items + num_cols - 1) // num_cols
+
+    # Build grid cells HTML - each cell fills its space completely
     cells_html = []
     for i, html in enumerate(html_contents):
         title = titles[i] if titles and i < len(titles) else None
-        title_html = f'<div style="font-weight: 600; margin-bottom: 4px; font-size: 14px;">{title}</div>' if title else ''
-        cells_html.append(f'''
-            <div style="min-width: 0; overflow: hidden;">
-                {title_html}
-                {html}
-            </div>
-        ''')
+        title_html = f'<div style="font-weight: 600; padding: 4px 8px; font-size: 13px; background: #f8f9fa; border-bottom: 1px solid #e0e0e0;">{title}</div>' if title else ''
 
-    # Combine into CSS Grid
-    grid_html = f'''
-    <div style="
+        # Cell styling: fill container, left-align, no internal margins
+        cells_html.append(f'''<div style="
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+            background: #fff;
+        ">
+            {title_html}
+            <div style="flex: 1; overflow: auto;">{html}</div>
+        </div>''')
+
+    # Combine into CSS Grid - no gaps, borders handle separation
+    grid_html = f'''<style>
+        .de-funk-grid table {{
+            width: 100% !important;
+            margin: 0 !important;
+        }}
+        .de-funk-grid .gt_table {{
+            width: 100% !important;
+            margin: 0 !important;
+        }}
+    </style>
+    <div class="de-funk-grid" style="
         display: grid;
         grid-template-columns: {grid_template};
+        grid-template-rows: repeat({num_rows}, 1fr);
         gap: {gap}px;
         width: 100%;
-    ">
-        {''.join(cells_html)}
-    </div>
-    '''
+    ">{''.join(cells_html)}</div>'''
 
     st.html(grid_html)
 

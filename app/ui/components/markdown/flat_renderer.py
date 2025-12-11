@@ -30,6 +30,62 @@ TOGGLE_STATE_KEY = "flat_renderer_toggle_states"
 EDIT_STATE_KEY = "flat_renderer_edit_states"
 
 
+def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]]) -> str:
+    """
+    Generate markdown source from grid config and exhibit blocks.
+
+    Args:
+        config: GridConfig object
+        exhibit_blocks: List of exhibit blocks in the grid
+
+    Returns:
+        Markdown string representing the grid
+    """
+    import yaml
+
+    lines = []
+
+    # Grid start
+    template_name = config.template.value if config.template else f"{config.columns}col"
+    gap_name = config.gap.value if config.gap else "none"
+    lines.append(f"$grid${{template: {template_name}, gap: {gap_name}}}")
+    lines.append("")
+
+    # Each exhibit
+    for block in exhibit_blocks:
+        exhibit = block.get('exhibit')
+        if exhibit:
+            # Use raw data if available, otherwise reconstruct
+            if hasattr(exhibit, '_raw_data') and exhibit._raw_data:
+                exhibit_yaml = yaml.dump(exhibit._raw_data, default_flow_style=False, sort_keys=False)
+            else:
+                # Reconstruct basic exhibit data
+                exhibit_data = {
+                    'type': exhibit.type.value if hasattr(exhibit.type, 'value') else str(exhibit.type),
+                    'source': exhibit.source,
+                    'title': exhibit.title or '',
+                }
+                if exhibit.theme:
+                    exhibit_data['theme'] = exhibit.theme
+                if hasattr(exhibit, 'scroll') and exhibit.scroll:
+                    exhibit_data['scroll'] = True
+                if hasattr(exhibit, 'max_height') and exhibit.max_height:
+                    exhibit_data['max_height'] = exhibit.max_height
+                exhibit_yaml = yaml.dump(exhibit_data, default_flow_style=False, sort_keys=False)
+
+            lines.append("$exhibits${")
+            # Indent YAML content
+            for yaml_line in exhibit_yaml.strip().split('\n'):
+                lines.append(f"  {yaml_line}")
+            lines.append("}")
+            lines.append("")
+
+    # Grid end
+    lines.append("$/grid$")
+
+    return '\n'.join(lines)
+
+
 def flatten_blocks(
     blocks: List[Dict[str, Any]],
     parent_id: Optional[str] = None,
@@ -1023,10 +1079,32 @@ def render_flat_notebook(
 
                             # Show editor if in edit state
                             if get_edit_state(block['_flat_id']):
-                                st.info("Grid editing: Edit the markdown source directly to modify grid layout")
-                                if st.button("Close", key=f"close_edit_{block['_flat_id']}"):
-                                    set_edit_state(block['_flat_id'], False)
-                                    st.rerun()
+                                # Generate markdown source for the grid
+                                grid_source = _generate_grid_markdown(config, grid_exhibit_blocks)
+
+                                st.markdown("**📝 Grid Source Editor**")
+                                st.caption("Edit the grid layout and exhibits. Changes will regenerate the grid.")
+
+                                editor_key = f"grid_editor_{block['_flat_id']}"
+                                edited_source = st.text_area(
+                                    "Grid Markdown",
+                                    value=grid_source,
+                                    height=400,
+                                    key=editor_key,
+                                    label_visibility="collapsed"
+                                )
+
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    if st.button("💾 Save", key=f"save_grid_{block['_flat_id']}", type="primary"):
+                                        if on_block_edit:
+                                            on_block_edit(block.get('_index', 0), edited_source)
+                                        set_edit_state(block['_flat_id'], False)
+                                        st.rerun()
+                                with col2:
+                                    if st.button("Cancel", key=f"cancel_grid_{block['_flat_id']}"):
+                                        set_edit_state(block['_flat_id'], False)
+                                        st.rerun()
 
                         # Define a render function that works with our exhibit blocks
                         def render_single_exhibit(exhibit_block):
