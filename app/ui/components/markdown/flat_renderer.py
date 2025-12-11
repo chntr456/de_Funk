@@ -697,11 +697,11 @@ def _reconstruct_collapsible_inner_content(inner_blocks: List[Dict[str, Any]]) -
         if inner_type == 'markdown':
             parts.append(inner_block.get('content', ''))
         elif inner_type == 'exhibit':
+            # Use exhibit_to_syntax for proper YAML formatting
+            from .utils import exhibit_to_syntax
             exhibit = inner_block.get('exhibit')
             if exhibit:
-                exhibit_dict = _exhibit_to_dict(exhibit)
-                yaml_content = yaml.dump(exhibit_dict, default_flow_style=False, sort_keys=False, allow_unicode=True)
-                parts.append(f"$exhibits${{\n{yaml_content}}}")
+                parts.append(exhibit_to_syntax(exhibit))
             else:
                 parts.append("$exhibits${\n  type: line_chart\n}")
         elif inner_type == 'error':
@@ -737,12 +737,13 @@ def _render_inline_editor(
         original_content = block.get('content', '')
     elif block_type == 'exhibit':
         # Convert exhibit object back to YAML for editing
+        # Use exhibit_to_syntax for proper YAML formatting with correct indentation
+        from .utils import exhibit_to_syntax
         exhibit = block.get('exhibit')
         if exhibit:
-            exhibit_dict = _exhibit_to_dict(exhibit)
-            original_content = f"$exhibits${{\n{yaml.dump(exhibit_dict, default_flow_style=False, sort_keys=False, allow_unicode=True)}}}"
+            original_content = exhibit_to_syntax(exhibit)
         else:
-            original_content = f"$exhibits${{\n  type: line_chart\n  source: \n  x: \n  y: \n}}"
+            original_content = "$exhibits${\n  type: line_chart\n  source: \n  x: \n  y: \n}"
     elif block_type == 'collapsible':
         # Reconstruct collapsible as HTML for editing
         summary = block.get('summary', 'Details')
