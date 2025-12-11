@@ -1082,13 +1082,18 @@ def render_flat_notebook(
                                 # Generate markdown source for the grid
                                 grid_source = _generate_grid_markdown(config, grid_exhibit_blocks)
 
+                                # Store original in session state for the edit handler
+                                original_key = f"grid_original_{block['_flat_id']}"
+                                if original_key not in st.session_state:
+                                    st.session_state[original_key] = grid_source
+
                                 st.markdown("**📝 Grid Source Editor**")
                                 st.caption("Edit the grid layout and exhibits. Changes will regenerate the grid.")
 
                                 editor_key = f"grid_editor_{block['_flat_id']}"
                                 edited_source = st.text_area(
                                     "Grid Markdown",
-                                    value=grid_source,
+                                    value=st.session_state.get(original_key, grid_source),
                                     height=400,
                                     key=editor_key,
                                     label_visibility="collapsed"
@@ -1098,11 +1103,19 @@ def render_flat_notebook(
                                 with col1:
                                     if st.button("💾 Save", key=f"save_grid_{block['_flat_id']}", type="primary"):
                                         if on_block_edit:
+                                            # Set the content_to_replace for the edit handler
+                                            st.session_state['_content_to_replace'] = st.session_state.get(original_key, grid_source)
                                             on_block_edit(block.get('_index', 0), edited_source)
+                                            # Clear the original after save
+                                            if original_key in st.session_state:
+                                                del st.session_state[original_key]
                                         set_edit_state(block['_flat_id'], False)
                                         st.rerun()
                                 with col2:
                                     if st.button("Cancel", key=f"cancel_grid_{block['_flat_id']}"):
+                                        # Clear stored original on cancel
+                                        if original_key in st.session_state:
+                                            del st.session_state[original_key]
                                         set_edit_state(block['_flat_id'], False)
                                         st.rerun()
 
