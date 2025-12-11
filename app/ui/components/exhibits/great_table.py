@@ -588,8 +588,23 @@ class GreatTableRenderer:
 
             # Wrap in scrollable container if max_height specified
             if max_height:
+                # Add sticky header CSS for the table within scroll container
                 scroll_html = f'''
-                <div style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
+                <style>
+                    .gt-scroll-container table thead th {{
+                        position: sticky;
+                        top: 0;
+                        background: white;
+                        z-index: 10;
+                        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+                    }}
+                    .gt-scroll-container table thead {{
+                        position: sticky;
+                        top: 0;
+                        z-index: 10;
+                    }}
+                </style>
+                <div class="gt-scroll-container" style="max-height: {max_height}px; overflow-y: auto; overflow-x: auto; border: 1px solid #e0e0e0; border-radius: 4px;">
                     {html}
                 </div>
                 '''

@@ -41,18 +41,30 @@ def render_exhibit_grid(
     row_specs = grid_config.get_row_specs()
     gap = GAP_SIZES.get(grid_config.gap, 16)
 
-    # Apply gap styling
-    if gap > 0:
-        st.markdown(
-            f"""
-            <style>
-            .grid-exhibit-container {{
-                margin-bottom: {gap}px;
-            }}
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
+    # Apply compact styling to reduce whitespace
+    st.markdown(
+        f"""
+        <style>
+        /* Reduce padding in grid containers */
+        .stColumn > div {{
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+        }}
+        /* Reduce margins on elements within grid */
+        .stColumn .stMarkdown, .stColumn .stHtml {{
+            margin-bottom: {gap}px !important;
+        }}
+        /* Compact Great Tables in grid */
+        .stColumn .gt-scroll-container {{
+            margin: 0 !important;
+        }}
+        .grid-exhibit-container {{
+            margin-bottom: {gap}px;
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
 
     # Flatten exhibits into iterator
     exhibit_iter = iter(exhibit_blocks)
