@@ -73,7 +73,9 @@ class MarkdownNotebookParser:
     EXHIBIT_PATTERN = re.compile(r'\$exhibits?\$\{\s*\n(.*?)\n\}', re.MULTILINE | re.DOTALL)
     DETAILS_PATTERN = re.compile(r'<details>\s*<summary>(.*?)</summary>\s*(.*?)</details>', re.MULTILINE | re.DOTALL)
     # Grid layout patterns
-    GRID_START_PATTERN = re.compile(r'\$grid\$\{\s*\n?(.*?)\n?\}', re.MULTILINE | re.DOTALL)
+    # Capture content after $grid${ - use \n to ensure we start on a new line
+    # and capture all content until the closing }
+    GRID_START_PATTERN = re.compile(r'\$grid\$\{\n(.*?)\n\}', re.MULTILINE | re.DOTALL)
     GRID_END_PATTERN = re.compile(r'\$/grid\$', re.MULTILINE)
 
     def __init__(self, repo_root: Optional[Path] = None):
@@ -635,7 +637,8 @@ class MarkdownNotebookParser:
             'weighting', 'aggregate_by', 'value_measures', 'group_by', 'aggregations',
             'sort', 'layout', 'component', 'params', 'filters',
             'x_label', 'y_label', 'y2', 'y2_label',
-            'actual_column', 'predicted_column', 'confidence_bounds'
+            'actual_column', 'predicted_column', 'confidence_bounds',
+            'grid_cell'  # Matrix grid layout cell assignment
         }
         valid_great_tables = {
             'theme', 'spanners', 'rows', 'row_striping', 'source_note',
