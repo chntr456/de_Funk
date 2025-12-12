@@ -135,10 +135,19 @@ def _render_matrix_grid(
     cells_html = []
     scroll_class = "sync-scroll" if sync_scroll else "grid-scroll"
 
+    # Debug: log cell content lengths
+    import logging
+    logger = logging.getLogger(__name__)
+
     for cell_id in unique_cells:
         html = cell_contents.get(cell_id, f'<div style="padding:16px;color:#999;">Cell {cell_id} (empty)</div>')
         cell_type = cell_types.get(cell_id, 'exhibit')
         bg_color = CELL_BACKGROUNDS.get(cell_type, '#ffffff')
+
+        # Debug: log cell content info
+        html_len = len(html) if html else 0
+        html_preview = html[:100] if html else "None"
+        logger.info(f"  Cell {cell_id}: type={cell_type}, html_len={html_len}, preview={html_preview}...")
 
         if max_height:
             cell_scroll_style = f"max-height:{max_height}px;overflow-y:auto;overflow-x:auto;"
