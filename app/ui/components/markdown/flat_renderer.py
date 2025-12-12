@@ -1251,6 +1251,10 @@ def render_flat_notebook(
                                     ex = cb.get('exhibit')
                                     gc = getattr(ex, 'grid_cell', None) if ex else None
                                     logger.info(f"  Block {i}: type={cb_type}, grid_cell={gc}, title={getattr(ex, 'title', 'N/A') if ex else 'N/A'}")
+                                elif cb_type == 'markdown_block':
+                                    gc = cb.get('grid_cell')
+                                    content_preview = cb.get('content', '')[:50]
+                                    logger.info(f"  Block {i}: type={cb_type}, grid_cell={gc}, content={content_preview}...")
                                 else:
                                     logger.info(f"  Block {i}: type={cb_type}")
 
