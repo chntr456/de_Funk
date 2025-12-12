@@ -235,7 +235,17 @@ def _render_matrix_grid(
 
     # Calculate component height
     cell_height = max_height if max_height else 400
-    component_height = (num_rows * cell_height) + ((num_rows - 1) * gap) + 20
+    component_height = (num_rows * cell_height) + ((num_rows - 1) * gap) + 50  # Added more padding
+
+    # Debug: Log grid rendering info
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Matrix grid rendering: rows={num_rows}, cols={num_cols}")
+    logger.info(f"  Template areas: {grid_template_areas}")
+    logger.info(f"  Template columns: {grid_template_columns}")
+    logger.info(f"  Cell IDs: {unique_cells}")
+    logger.info(f"  Component height: {component_height}px (cell_height={cell_height})")
+    logger.info(f"  Cell contents present for: {list(cell_contents.keys())}")
 
     components.html(grid_html, height=component_height, scrolling=False)
 
