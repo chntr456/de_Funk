@@ -1165,13 +1165,68 @@ def render_flat_notebook(
                                 traceback.print_exc()
                                 return None
 
-                        # Render the grid (uses CSS Grid if all cells provide HTML)
-                        render_exhibit_grid(
-                            config,
-                            grid_cell_blocks,
-                            render_single_exhibit,
-                            get_html_fn=get_cell_html
-                        )
+                        # Check for matrix layout mode
+                        if config.layout:
+                            # Matrix mode: map cell IDs to content
+                            from .grid_renderer import render_html_grid
+
+                            cell_contents = {}
+                            cell_types = {}
+
+                            # First, assign markdown blocks to cell 1 (or first unassigned cell)
+                            # Then assign exhibits by their grid_cell attribute
+                            next_cell_id = 1
+                            for cell_block in grid_cell_blocks:
+                                block_type = cell_block.get('type')
+
+                                if block_type == 'markdown':
+                                    # Markdown goes to cell 1 by default
+                                    cell_id = 1
+                                    html = get_cell_html(cell_block)
+                                    if html:
+                                        cell_contents[cell_id] = html
+                                        cell_types[cell_id] = 'markdown'
+
+                                elif block_type == 'exhibit':
+                                    exhibit = cell_block.get('exhibit')
+                                    # Get cell assignment from exhibit
+                                    cell_id = getattr(exhibit, 'grid_cell', None) if exhibit else None
+                                    if cell_id is None:
+                                        # Auto-assign to next available cell (skipping cell 1 if markdown claimed it)
+                                        next_cell_id = max(next_cell_id, 2) if 1 in cell_contents else next_cell_id
+                                        cell_id = next_cell_id
+                                        next_cell_id += 1
+
+                                    html = get_cell_html(cell_block)
+                                    if html:
+                                        cell_contents[cell_id] = html
+                                        cell_types[cell_id] = 'exhibit'
+
+                            # Get scroll settings
+                            max_height = getattr(config, 'max_height', None)
+                            scroll = getattr(config, 'scroll', True)
+                            sync_scroll = getattr(config, 'sync_scroll', False)
+
+                            if scroll and not max_height:
+                                max_height = 400
+
+                            # Render using matrix grid
+                            render_html_grid(
+                                config,
+                                html_contents=[],  # Not used in matrix mode
+                                max_height=max_height,
+                                sync_scroll=sync_scroll,
+                                cell_contents=cell_contents,
+                                cell_types=cell_types
+                            )
+                        else:
+                            # Sequential mode: render grid normally
+                            render_exhibit_grid(
+                                config,
+                                grid_cell_blocks,
+                                render_single_exhibit,
+                                get_html_fn=get_cell_html
+                            )
 
                         # Mark these exhibits as rendered
                         for eb in grid_exhibit_blocks:

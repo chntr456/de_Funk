@@ -285,9 +285,20 @@ class MarkdownNotebookParser:
         # Handle rows (list of lists)
         rows = config_dict.get('rows')
 
+        # Handle matrix layout (list of lists of cell IDs)
+        layout = config_dict.get('layout')
+
+        # Handle cell sizes (dict of cell_id -> size string)
+        sizes = config_dict.get('sizes')
+        if sizes:
+            # Convert string keys to ints if needed (YAML may parse as strings)
+            sizes = {int(k): str(v) for k, v in sizes.items()}
+
         return GridConfig(
             columns=columns,
             rows=rows,
+            layout=layout,
+            sizes=sizes,
             template=template,
             gap=gap,
             align_items=config_dict.get('align_items', 'stretch'),
@@ -846,7 +857,9 @@ class MarkdownNotebookParser:
             # Great Tables specific fields
             'theme', 'spanners', 'rows', 'row_striping', 'source_note',
             'footnotes', 'export_html', 'export_png', 'subtitle', 'calculated_columns',
-            'scroll', 'max_height'
+            'scroll', 'max_height',
+            # Grid cell assignment
+            'grid_cell'
         }
         extra_options = {k: v for k, v in data.items() if k not in known_keys}
         options = data.get('options', {}) or {}
@@ -912,6 +925,8 @@ class MarkdownNotebookParser:
             # Scroll options
             scroll=data.get('scroll', False),
             max_height=data.get('max_height'),
+            # Grid cell assignment (for matrix layout)
+            grid_cell=data.get('grid_cell'),
             # Store raw data for 1:1 round-trip serialization
             _raw_data=data,
         )

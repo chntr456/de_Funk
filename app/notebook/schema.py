@@ -249,14 +249,27 @@ class GridConfig:
     2. Column ratios: columns=[2, 1] (2:1 ratio)
     3. Row definitions: rows=[[1,1], [2]] (custom spans per row)
     4. Templates: template="2x2" (pre-defined patterns)
+    5. Matrix layout: layout=[[1,2,3], [1,4,5]] with sizes={1: "2fr", 2: "1fr", ...}
+       - Cell IDs repeat to span multiple rows/columns
+       - Exhibits reference cells via grid_cell: N
 
     Example usage in markdown:
         $grid${
-          template: 2x2
-          gap: lg
+          layout:
+            - [1, 2, 3]
+            - [1, 4, 5]
+          sizes:
+            1: 2fr
+          gap: sm
+          sync_scroll: true
         }
-        $exhibits${ ... }
-        $exhibits${ ... }
+
+        ### Overview  <- becomes cell 1 (markdown)
+
+        $exhibits${grid_cell: 2, ...}  <- cell 2
+        $exhibits${grid_cell: 3, ...}  <- cell 3
+        $exhibits${grid_cell: 4, ...}  <- cell 4
+        $exhibits${grid_cell: 5, ...}  <- cell 5
         $/grid$
     """
     # Column specification - int for equal columns, list for ratios
@@ -265,6 +278,16 @@ class GridConfig:
     # Row definitions (optional, for complex layouts)
     # Each row is a list of column spans, e.g., [[1,1], [2]] = 2 cols then 1 spanning
     rows: Optional[List[List[int]]] = None
+
+    # Matrix layout - 2D array of cell IDs (recommended for complex layouts)
+    # Cell IDs that repeat across rows/columns will span those cells
+    # e.g., [[1,2,3], [1,4,5]] means cell 1 spans 2 rows
+    layout: Optional[List[List[int]]] = None
+
+    # Cell sizes - maps cell ID to CSS grid size (fr units or px)
+    # e.g., {1: "2fr", 2: "1fr"} - cell 1 is twice as wide
+    # Default is "1fr" for all cells
+    sizes: Optional[Dict[int, str]] = None
 
     # Pre-defined template (overrides columns/rows if set)
     template: Optional[GridTemplate] = None
@@ -511,6 +534,10 @@ class Exhibit:
     # Sort and layout
     sort: Optional[SortConfig] = None
     layout: Optional[LayoutConfig] = None
+
+    # Grid cell assignment - which cell in the grid this exhibit belongs to
+    # Used with matrix-based grid layout (e.g., grid_cell: 2 places exhibit in cell 2)
+    grid_cell: Optional[int] = None
 
     # Custom component
     component: Optional[str] = None

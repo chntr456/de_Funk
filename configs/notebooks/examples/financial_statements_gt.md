@@ -35,7 +35,11 @@ $filter${
 ## Financial Dashboard
 
 $grid${
-  rows: [[1], [1, 1], [1, 1]]
+  layout:
+    - [1, 2, 3]
+    - [1, 4, 5]
+  sizes:
+    1: 2fr
   gap: sm
   sync_scroll: true
 }
@@ -52,6 +56,7 @@ This dashboard presents the four core financial statements for the selected comp
 All data is sourced from SEC filings via Alpha Vantage. Amounts shown in millions USD unless otherwise noted.
 
 $exhibits${
+  grid_cell: 2
   type: great_table
   source: company.fact_income_statement
   title: Income Statement
@@ -73,6 +78,7 @@ $exhibits${
 }
 
 $exhibits${
+  grid_cell: 3
   type: great_table
   source: company.fact_balance_sheet
   title: Balance Sheet
@@ -90,6 +96,7 @@ $exhibits${
 }
 
 $exhibits${
+  grid_cell: 4
   type: great_table
   source: company.fact_cash_flow
   title: Cash Flow
@@ -108,6 +115,7 @@ $exhibits${
 }
 
 $exhibits${
+  grid_cell: 5
   type: great_table
   source: company.fact_earnings
   title: Earnings
@@ -264,11 +272,14 @@ $exhibits${
 
 ### About Grid Layouts
 
-This notebook demonstrates the **grid layout** feature with mixed content:
+This notebook demonstrates the **matrix-based grid layout** feature with mixed content:
 
-- **1x2x2 Layout**: Uses `rows: [[1], [1, 1], [1, 1]]` for a custom layout
-  - Row 1: Markdown overview text (1 cell spanning full width)
-  - Rows 2-3: 2x2 grid of financial statement tables
+- **Matrix Layout**: Uses `layout: [[1, 2, 3], [1, 4, 5]]` for explicit cell positioning
+  - Cell 1: Markdown overview (spans 2 rows on the left)
+  - Cells 2-5: Financial statement tables in a 2x2 grid on the right
+- **Cell Sizes**: `sizes: {1: 2fr}` makes the sidebar twice as wide as other columns
+- **Exhibit Assignment**: Each exhibit specifies its position with `grid_cell: N`
+- **Easy Swapping**: To move exhibits, just change their `grid_cell` values
 - **Mixed Content**: Grids can contain both markdown text and exhibits
 - **Synchronized Scrolling**: All tables scroll together (`sync_scroll: true`)
 - **Sticky Headers**: Table headers stay visible when scrolling
