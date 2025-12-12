@@ -297,6 +297,7 @@ class MarkdownNotebookParser:
             min_height=config_dict.get('min_height'),
             max_height=config_dict.get('max_height'),
             scroll=config_dict.get('scroll', True),  # Default to scrolling enabled
+            sync_scroll=config_dict.get('sync_scroll', False),  # Default sync scroll off
             id=config_dict.get('id'),
         )
 

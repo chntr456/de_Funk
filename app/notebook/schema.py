@@ -275,6 +275,7 @@ class GridConfig:
     min_height: Optional[int] = None  # Minimum row height in pixels
     max_height: Optional[int] = None  # Max height for scrollable grid (enables linked scrolling)
     scroll: bool = True  # Enable scrolling by default (uses max_height of 400 if not set)
+    sync_scroll: bool = False  # Synchronize scrolling across all grid cells (default off)
 
     # Identification
     id: Optional[str] = None

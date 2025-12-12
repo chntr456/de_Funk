@@ -32,18 +32,20 @@ def render_html_grid(
     html_contents: List[str],
     titles: Optional[List[str]] = None,
     max_height: Optional[int] = None,
+    sync_scroll: bool = False,
 ):
     """
     Render multiple HTML blocks in a pure CSS Grid layout.
 
     This creates a single HTML block with no Streamlit padding - crisp exhibits.
-    All exhibits scroll together (linked scrolling) with sticky headers.
+    Optionally syncs scrolling across all cells with sticky headers.
 
     Args:
         grid_config: Grid configuration
         html_contents: List of HTML strings to render in grid cells
         titles: Optional list of titles for each cell
-        max_height: Optional max height for scrollable grid (enables linked scrolling)
+        max_height: Optional max height for scrollable grid
+        sync_scroll: Enable synchronized scrolling across all grid cells (default False)
     """
     if not html_contents:
         return
@@ -78,8 +80,9 @@ def render_html_grid(
     # Build grid cells HTML - each cell fills its space completely
     # Note: Don't add titles here - GT exhibits have their own titles
     cells_html = []
+    scroll_class = "sync-scroll" if sync_scroll else "grid-scroll"
     for i, html in enumerate(html_contents):
-        # Each cell gets its own scroll container with synced scrolling
+        # Each cell gets its own scroll container
         if max_height:
             wrapper_height = f"height:{max_height}px;"
             cell_scroll_style = f"max-height:{max_height}px;overflow-y:scroll;overflow-x:auto;"
@@ -88,57 +91,30 @@ def render_html_grid(
             cell_scroll_style = ""
 
         cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;{wrapper_height}">
-<div class="gt-cell sync-scroll" style="flex:1;min-height:0;{cell_scroll_style}">{html}</div>
+<div class="gt-cell {scroll_class}" style="flex:1;min-height:0;{cell_scroll_style}">{html}</div>
 </div>''')
 
     # Generate unique ID for this grid instance
     import uuid
     grid_id = f"grid-{uuid.uuid4().hex[:8]}"
 
-    # Combine into CSS Grid with linked scrolling and sticky headers
-    # JavaScript syncs scroll positions across all cells
-    grid_html = f'''<!DOCTYPE html>
-<html>
-<head>
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
-
-        #{grid_id} * {{ box-sizing: border-box; }}
-
-        /* CRITICAL: Remove GT's wrapper overflow so our container handles scrolling */
-        #{grid_id} .gt-cell > div {{
-            overflow: visible !important;
-            height: auto !important;
-            width: 100% !important;
-        }}
-
-        #{grid_id} table,
-        #{grid_id} .gt_table {{
-            width: 100% !important;
-            margin: 0 !important;
-            border-collapse: collapse !important;
-        }}
-        #{grid_id} .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
-
+    # Build sticky header CSS (always applied for scrollable grids)
+    sticky_css = f'''
         /* Sticky headers - lock thead at top of scroll container */
-        /* Preserve GT theme colors - only set position */
-        #{grid_id} .sync-scroll thead {{
+        #{grid_id} .gt-cell thead {{
             position: sticky !important;
             top: 0 !important;
             z-index: 100 !important;
         }}
-        #{grid_id} .sync-scroll thead th {{
+        #{grid_id} .gt-cell thead th {{
             position: sticky !important;
             top: 0 !important;
             z-index: 100 !important;
         }}
-    </style>
-</head>
-<body>
-    <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;">
-        <div class="de-funk-grid" style="display:grid;grid-template-columns:{grid_template};gap:{gap}px;width:100%;">{''.join(cells_html)}</div>
-    </div>
+    ''' if max_height else ''
+
+    # Build sync scroll JavaScript (only when sync_scroll is enabled)
+    sync_js = f'''
     <script>
         // Sync scrolling setup - runs immediately when DOM is ready
         (function setupScrollSync() {{
@@ -175,6 +151,41 @@ def render_html_grid(
             console.log('Scroll sync setup complete for {grid_id}');
         }})();
     </script>
+    ''' if sync_scroll else ''
+
+    # Combine into CSS Grid layout
+    grid_html = f'''<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
+
+        #{grid_id} * {{ box-sizing: border-box; }}
+
+        /* CRITICAL: Remove GT's wrapper overflow so our container handles scrolling */
+        #{grid_id} .gt-cell > div {{
+            overflow: visible !important;
+            height: auto !important;
+            width: 100% !important;
+        }}
+
+        #{grid_id} table,
+        #{grid_id} .gt_table {{
+            width: 100% !important;
+            margin: 0 !important;
+            border-collapse: collapse !important;
+        }}
+        #{grid_id} .gt_table_container {{ width: 100% !important; margin: 0 !important; }}
+
+        {sticky_css}
+    </style>
+</head>
+<body>
+    <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;">
+        <div class="de-funk-grid" style="display:grid;grid-template-columns:{grid_template};gap:{gap}px;width:100%;">{''.join(cells_html)}</div>
+    </div>
+    {sync_js}
 </body>
 </html>'''
 
@@ -226,11 +237,12 @@ def render_exhibit_grid(
             # Default to scrolling enabled for grids (better UX)
             max_height = getattr(grid_config, 'max_height', None)
             scroll = getattr(grid_config, 'scroll', True)  # Default to True for grids
+            sync_scroll = getattr(grid_config, 'sync_scroll', False)  # Default sync off
 
             if scroll and not max_height:
                 max_height = 400  # Default scroll height
 
-            render_html_grid(grid_config, html_contents, titles, max_height=max_height)
+            render_html_grid(grid_config, html_contents, titles, max_height=max_height, sync_scroll=sync_scroll)
             return
         elif failed_blocks:
             # Debug: show which blocks failed HTML extraction
