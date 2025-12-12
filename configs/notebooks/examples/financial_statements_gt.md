@@ -34,11 +34,21 @@ $filter${
 
 ## Financial Dashboard
 
-View all four financial statements at a glance in a 2x2 grid layout.
-
 $grid${
-  template: 2x2
+  rows: [[1], [1, 1], [1, 1]]
+  gap: sm
 }
+
+### Overview
+
+This dashboard presents the four core financial statements for the selected company:
+
+- **Income Statement** - Revenue, expenses, and profitability over time
+- **Balance Sheet** - Assets, liabilities, and shareholders' equity
+- **Cash Flow** - Operating, investing, and financing cash movements
+- **Earnings** - EPS performance vs analyst estimates
+
+All data is sourced from SEC filings via Alpha Vantage. Amounts shown in millions USD unless otherwise noted.
 
 $exhibits${
   type: great_table
@@ -253,11 +263,11 @@ $exhibits${
 
 ### About Grid Layouts
 
-This notebook demonstrates the **grid layout** feature, which arranges multiple exhibits in a configurable grid pattern:
+This notebook demonstrates the **grid layout** feature with a custom row configuration:
 
-- **2x2 Template**: Displays 4 exhibits in a 2-column, 2-row grid
-- **Condensed Views**: Grid exhibits use fewer columns for compact display
-- **Full Details**: Detailed views available in collapsible sections below
+- **Row 1**: Overview text explaining the dashboard
+- **Row 2-3**: 2x2 grid of financial statement tables
+- **Detailed Views**: Full statements available in collapsible sections below
 
 ### About Great Tables
 
