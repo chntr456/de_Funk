@@ -34,6 +34,12 @@ $filter${
 
 ## Financial Dashboard
 
+$grid${
+  rows: [[1], [1, 1], [1, 1]]
+  gap: sm
+  sync_scroll: true
+}
+
 ### Overview
 
 This dashboard presents the four core financial statements for the selected company:
@@ -44,14 +50,6 @@ This dashboard presents the four core financial statements for the selected comp
 - **Earnings** - EPS performance vs analyst estimates
 
 All data is sourced from SEC filings via Alpha Vantage. Amounts shown in millions USD unless otherwise noted.
-
----
-
-$grid${
-  template: 2x2
-  gap: sm
-  sync_scroll: true
-}
 
 $exhibits${
   type: great_table
@@ -266,9 +264,12 @@ $exhibits${
 
 ### About Grid Layouts
 
-This notebook demonstrates the **grid layout** feature:
+This notebook demonstrates the **grid layout** feature with mixed content:
 
-- **2x2 Template**: Four financial statement tables in a grid
+- **1x2x2 Layout**: Uses `rows: [[1], [1, 1], [1, 1]]` for a custom layout
+  - Row 1: Markdown overview text (1 cell spanning full width)
+  - Rows 2-3: 2x2 grid of financial statement tables
+- **Mixed Content**: Grids can contain both markdown text and exhibits
 - **Synchronized Scrolling**: All tables scroll together (`sync_scroll: true`)
 - **Sticky Headers**: Table headers stay visible when scrolling
 - **Detailed Views**: Full statements available in collapsible sections below

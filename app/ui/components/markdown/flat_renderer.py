@@ -22,7 +22,7 @@ from .blocks import (
 )
 from .editors import render_block_editor
 from .styles import apply_markdown_styles
-from .grid_renderer import render_exhibit_grid, collect_grid_exhibits, get_grid_info
+from .grid_renderer import render_exhibit_grid, collect_grid_exhibits, collect_grid_cells, get_grid_info, markdown_to_html
 
 
 # Session state keys
@@ -1050,13 +1050,15 @@ def render_flat_notebook(
 
             grid_idx = block.get('grid_index')
             if grid_idx is not None and grid_idx in grid_info:
-                # Collect exhibit blocks for this grid
-                grid_exhibit_blocks = collect_grid_exhibits(
+                # Collect all cells (both markdown and exhibits) for this grid
+                grid_cell_blocks = collect_grid_cells(
                     notebook_config._content_blocks,
                     grid_idx
                 )
+                # Also collect just exhibits for backwards compatibility
+                grid_exhibit_blocks = [b for b in grid_cell_blocks if b.get('type') == 'exhibit']
 
-                if grid_exhibit_blocks:
+                if grid_cell_blocks:
                     config = grid_info[grid_idx].get('config')
                     if config:
                         # Render grid label with edit controls when editable
@@ -1122,9 +1124,19 @@ def render_flat_notebook(
                             render_exhibit_block(exhibit_block, notebook_session, connection)
 
                         # Define HTML extraction function for pure CSS Grid rendering
-                        def get_exhibit_html(exhibit_block):
-                            """Get HTML from exhibit for CSS Grid layout."""
-                            exhibit = exhibit_block.get('exhibit')
+                        def get_cell_html(cell_block):
+                            """Get HTML from exhibit or markdown for CSS Grid layout."""
+                            block_type = cell_block.get('type')
+
+                            # Handle markdown blocks
+                            if block_type == 'markdown':
+                                content = cell_block.get('content', '')
+                                if content:
+                                    return markdown_to_html(content)
+                                return None
+
+                            # Handle exhibit blocks
+                            exhibit = cell_block.get('exhibit')
                             if not exhibit:
                                 return None
 
@@ -1143,7 +1155,7 @@ def render_flat_notebook(
 
                             try:
                                 from app.ui.components.exhibits.great_table import get_great_table_html
-                                exhibit_id = exhibit_block.get('id')
+                                exhibit_id = cell_block.get('id')
                                 df = notebook_session.get_exhibit_data(exhibit_id)
                                 pdf = connection.to_pandas(df)
                                 html = get_great_table_html(exhibit, pdf)
@@ -1153,12 +1165,12 @@ def render_flat_notebook(
                                 traceback.print_exc()
                                 return None
 
-                        # Render the grid (uses CSS Grid if all exhibits provide HTML)
+                        # Render the grid (uses CSS Grid if all cells provide HTML)
                         render_exhibit_grid(
                             config,
-                            grid_exhibit_blocks,
+                            grid_cell_blocks,
                             render_single_exhibit,
-                            get_html_fn=get_exhibit_html
+                            get_html_fn=get_cell_html
                         )
 
                         # Mark these exhibits as rendered

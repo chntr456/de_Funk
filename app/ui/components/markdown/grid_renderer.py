@@ -12,9 +12,42 @@ JavaScript execution for features like synchronized scrolling.
 
 import streamlit as st
 import streamlit.components.v1 as components
+import markdown as md
 from typing import List, Dict, Any, Callable, Optional
 
 from app.notebook.schema import GridConfig, GridGap, GridBlock, GridTemplate
+
+
+def markdown_to_html(content: str) -> str:
+    """
+    Convert markdown content to HTML for use in grid cells.
+
+    Args:
+        content: Markdown string
+
+    Returns:
+        HTML string with basic styling
+    """
+    # Convert markdown to HTML
+    html = md.markdown(content, extensions=['extra', 'nl2br', 'sane_lists'])
+
+    # Wrap in a styled container
+    return f'''<div class="markdown-cell" style="padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; line-height: 1.6;">
+        <style>
+            .markdown-cell h1, .markdown-cell h2, .markdown-cell h3, .markdown-cell h4 {{
+                margin-top: 0;
+                margin-bottom: 0.5em;
+                color: #1a1a1a;
+            }}
+            .markdown-cell h3 {{ font-size: 1.2em; }}
+            .markdown-cell p {{ margin: 0.5em 0; color: #333; }}
+            .markdown-cell ul, .markdown-cell ol {{ margin: 0.5em 0; padding-left: 1.5em; }}
+            .markdown-cell li {{ margin: 0.25em 0; }}
+            .markdown-cell strong {{ font-weight: 600; }}
+            .markdown-cell code {{ background: #f5f5f5; padding: 2px 4px; border-radius: 3px; font-size: 0.9em; }}
+        </style>
+        {html}
+    </div>'''
 
 
 # Gap size mappings (pixels)
@@ -353,6 +386,50 @@ def collect_grid_exhibits(
             grid_exhibits.append(block)
 
     return grid_exhibits
+
+
+def collect_grid_cells(
+    content_blocks: List[Dict[str, Any]],
+    grid_index: int
+) -> List[Dict[str, Any]]:
+    """
+    Collect all cell blocks (markdown and exhibits) belonging to a specific grid.
+
+    This function collects both markdown content and exhibits as grid cells,
+    preserving their order. Markdown blocks become text cells in the grid.
+
+    Args:
+        content_blocks: All content blocks from notebook
+        grid_index: Index of the grid to collect cells for
+
+    Returns:
+        List of cell blocks (both markdown and exhibit types) belonging to the grid
+    """
+    grid_cells = []
+    in_grid = False
+
+    for block in content_blocks:
+        block_type = block.get('type')
+
+        if block_type == 'grid_start' and block.get('grid_index') == grid_index:
+            in_grid = True
+            continue
+
+        if block_type == 'grid_end' and block.get('grid_index') == grid_index:
+            in_grid = False
+            continue
+
+        if in_grid:
+            if block_type == 'exhibit':
+                grid_cells.append(block)
+            elif block_type == 'markdown':
+                # Only include substantial markdown content (not just whitespace/separators)
+                content = block.get('content', '').strip()
+                # Skip horizontal rules and empty content
+                if content and content not in ('---', '***', '___'):
+                    grid_cells.append(block)
+
+    return grid_cells
 
 
 def get_grid_config_from_blocks(
