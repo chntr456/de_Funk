@@ -44,6 +44,9 @@ $grid${
   sync_scroll: true
 }
 
+$markdown${
+  grid_cell: 1
+  ---
 ### Overview
 
 This dashboard presents the four core financial statements for the selected company:
@@ -54,6 +57,7 @@ This dashboard presents the four core financial statements for the selected comp
 - **Earnings** - EPS performance vs analyst estimates
 
 All data is sourced from SEC filings via Alpha Vantage. Amounts shown in millions USD unless otherwise noted.
+}
 
 $exhibits${
   grid_cell: 2

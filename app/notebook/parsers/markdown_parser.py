@@ -71,6 +71,9 @@ class MarkdownNotebookParser:
     FRONT_MATTER_PATTERN = re.compile(r'^---\s*\n(.*?)\n---\s*\n', re.MULTILINE | re.DOTALL)
     FILTER_PATTERN = re.compile(r'\$filters?\$\{\s*\n(.*?)\n\}', re.MULTILINE | re.DOTALL)
     EXHIBIT_PATTERN = re.compile(r'\$exhibits?\$\{\s*\n(.*?)\n\}', re.MULTILINE | re.DOTALL)
+    # Markdown block pattern: $markdown${ config --- content }
+    # Config is YAML (e.g., grid_cell: 1), content is raw markdown
+    MARKDOWN_BLOCK_PATTERN = re.compile(r'\$markdown\$\{\s*\n(.*?)\n\}', re.MULTILINE | re.DOTALL)
     DETAILS_PATTERN = re.compile(r'<details>\s*<summary>(.*?)</summary>\s*(.*?)</details>', re.MULTILINE | re.DOTALL)
     # Grid layout patterns
     # Capture content after $grid${ - use \n to ensure we start on a new line
@@ -406,8 +409,9 @@ class MarkdownNotebookParser:
             grid_start_match = GRID_START_MARKER.search(current_content, pos)
             grid_end_match = GRID_END_MARKER.search(current_content, pos)
             exhibit_match = self.EXHIBIT_PATTERN.search(current_content, pos)
+            markdown_block_match = self.MARKDOWN_BLOCK_PATTERN.search(current_content, pos)
 
-            # Find the next thing (grid start, grid end, or exhibit)
+            # Find the next thing (grid start, grid end, exhibit, or markdown block)
             next_positions = []
             if grid_start_match:
                 next_positions.append(('grid_start', grid_start_match.start(), grid_start_match))
@@ -415,6 +419,8 @@ class MarkdownNotebookParser:
                 next_positions.append(('grid_end', grid_end_match.start(), grid_end_match))
             if exhibit_match:
                 next_positions.append(('exhibit', exhibit_match.start(), exhibit_match))
+            if markdown_block_match:
+                next_positions.append(('markdown_block', markdown_block_match.start(), markdown_block_match))
 
             if not next_positions:
                 # No more special content, add remaining as markdown
@@ -497,6 +503,34 @@ class MarkdownNotebookParser:
                         'type': 'error',
                         'message': f"Error parsing exhibit: {str(e)}",
                         'content': exhibit_yaml
+                    })
+
+                pos = next_match.end()
+
+            elif next_type == 'markdown_block':
+                # Parse explicit markdown block (for grid cells)
+                block_content = next_match.group(1)
+                block_id = f"markdown_block_{exhibit_counter}"
+                exhibit_counter += 1
+
+                try:
+                    md_block = self._parse_markdown_block(block_content, block_id)
+
+                    # Add markdown block to content blocks
+                    content_blocks.append({
+                        'type': 'markdown_block',
+                        'id': block_id,
+                        'markdown_block': md_block,
+                        'content': md_block.content,
+                        'grid_cell': md_block.grid_cell,
+                        'grid_index': current_grid_idx
+                    })
+                except Exception as e:
+                    # Add error block
+                    content_blocks.append({
+                        'type': 'error',
+                        'message': f"Error parsing markdown block: {str(e)}",
+                        'content': block_content
                     })
 
                 pos = next_match.end()
@@ -932,6 +966,72 @@ class MarkdownNotebookParser:
             grid_cell=data.get('grid_cell'),
             # Store raw data for 1:1 round-trip serialization
             _raw_data=data,
+        )
+
+    def _parse_markdown_block(self, block_content: str, block_id: str) -> 'MarkdownBlock':
+        """
+        Parse a $markdown${...} block into a MarkdownBlock object.
+
+        Format:
+            $markdown${
+              grid_cell: 1
+              ---
+              ### My Markdown Content
+              This is the actual markdown...
+            }
+
+        The content before --- is YAML config, after --- is markdown content.
+        If no ---, the entire content is treated as markdown with no config.
+        """
+        from app.notebook.schema import MarkdownBlock
+
+        # Check for config/content separator
+        if '\n---\n' in block_content:
+            parts = block_content.split('\n---\n', 1)
+            config_yaml = parts[0].strip()
+            markdown_content = parts[1] if len(parts) > 1 else ''
+        elif block_content.strip().startswith('grid_cell:'):
+            # Simple case: just grid_cell followed by content
+            lines = block_content.split('\n')
+            config_lines = []
+            content_start = 0
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if stripped.startswith('grid_cell:'):
+                    config_lines.append(line)
+                    content_start = i + 1
+                elif stripped.startswith('#') or not stripped.startswith(('grid_cell:', 'id:')):
+                    # Found start of markdown content
+                    content_start = i
+                    break
+                else:
+                    config_lines.append(line)
+                    content_start = i + 1
+            config_yaml = '\n'.join(config_lines)
+            markdown_content = '\n'.join(lines[content_start:])
+        else:
+            # No config section, entire content is markdown
+            config_yaml = ''
+            markdown_content = block_content
+
+        # Parse config YAML
+        config_data = {}
+        if config_yaml.strip():
+            try:
+                normalized = normalize_yaml_indentation(config_yaml)
+                config_data = yaml.safe_load(normalized) or {}
+            except yaml.YAMLError as e:
+                logger.warning(f"Failed to parse markdown block config: {e}")
+
+        grid_cell = config_data.get('grid_cell')
+        if grid_cell is not None:
+            grid_cell = int(grid_cell)
+
+        return MarkdownBlock(
+            id=block_id,
+            content=markdown_content.strip(),
+            grid_cell=grid_cell,
+            _raw_data={'config': config_data, 'content': markdown_content}
         )
 
     def _build_config(

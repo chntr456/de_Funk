@@ -1178,10 +1178,17 @@ def render_flat_notebook(
 
                         # Define HTML extraction function for pure CSS Grid rendering
                         def get_cell_html(cell_block):
-                            """Get HTML from exhibit or markdown for CSS Grid layout."""
+                            """Get HTML from exhibit, markdown, or markdown_block for CSS Grid layout."""
                             block_type = cell_block.get('type')
 
-                            # Handle markdown blocks
+                            # Handle explicit $markdown${} blocks
+                            if block_type == 'markdown_block':
+                                content = cell_block.get('content', '')
+                                if content:
+                                    return markdown_to_html(content)
+                                return None
+
+                            # Handle implicit markdown blocks
                             if block_type == 'markdown':
                                 content = cell_block.get('content', '')
                                 if content:
@@ -1241,14 +1248,22 @@ def render_flat_notebook(
                                 else:
                                     logger.info(f"  Block {i}: type={cb_type}")
 
-                            # First, assign markdown blocks to cell 1 (or first unassigned cell)
-                            # Then assign exhibits by their grid_cell attribute
+                            # Assign cells based on type and grid_cell attribute
+                            # Priority: explicit grid_cell > markdown default to 1 > auto-assign
                             next_cell_id = 1
                             for cell_block in grid_cell_blocks:
                                 block_type = cell_block.get('type')
 
-                                if block_type == 'markdown':
-                                    # Markdown goes to cell 1 by default
+                                if block_type == 'markdown_block':
+                                    # Explicit $markdown${} block with grid_cell assignment
+                                    cell_id = cell_block.get('grid_cell', 1)  # Default to cell 1
+                                    html = get_cell_html(cell_block)
+                                    if html:
+                                        cell_contents[cell_id] = html
+                                        cell_types[cell_id] = 'markdown'
+
+                                elif block_type == 'markdown':
+                                    # Implicit markdown goes to cell 1 by default
                                     cell_id = 1
                                     html = get_cell_html(cell_block)
                                     if html:

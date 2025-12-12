@@ -621,6 +621,9 @@ def collect_grid_cells(
         if in_grid:
             if block_type == 'exhibit':
                 grid_cells.append(block)
+            elif block_type == 'markdown_block':
+                # Explicit $markdown${} block with grid_cell assignment
+                grid_cells.append(block)
             elif block_type == 'markdown':
                 # Only include substantial markdown content (not just whitespace/separators)
                 content = block.get('content', '').strip()

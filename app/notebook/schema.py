@@ -375,6 +375,29 @@ class GridBlock:
 
 
 @dataclass
+class MarkdownBlock:
+    """
+    An explicit markdown block for grid layouts.
+
+    Represents a parsed $markdown${...} block from notebook markdown.
+    Format:
+        $markdown${
+          grid_cell: 1
+          ---
+          ### My Markdown Content
+          This is the actual markdown...
+        }
+
+    The config section (before ---) contains YAML config like grid_cell.
+    The content section (after ---) is raw markdown.
+    """
+    id: str  # Unique identifier for this block
+    content: str  # The markdown content
+    grid_cell: Optional[int] = None  # Cell assignment for matrix grid
+    _raw_data: Optional[Dict[str, Any]] = None  # Original parsed data
+
+
+@dataclass
 class WeightingConfig:
     """Configuration for weighted aggregation."""
     method: WeightingMethod
