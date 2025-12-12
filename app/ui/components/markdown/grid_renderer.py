@@ -73,6 +73,10 @@ def render_html_grid(
     This creates a single HTML block with no Streamlit padding - crisp exhibits.
     Optionally syncs scrolling across all cells with sticky headers.
 
+    Supports special layouts:
+    - Sidebar: First cell spans all rows on the left, remaining cells in grid on right
+      Use rows: [[1], [2], [2]] or similar (1 cell first row, multiple in subsequent rows)
+
     Args:
         grid_config: Grid configuration
         html_contents: List of HTML strings to render in grid cells
@@ -86,44 +90,87 @@ def render_html_grid(
     gap = GAP_SIZES.get(grid_config.gap, 0)
     num_items = len(html_contents)
 
-    # Determine grid template based on config
-    if grid_config.template == GridTemplate.TWO_BY_TWO:
-        grid_template = "1fr 1fr"
-        num_cols = 2
-    elif grid_config.template == GridTemplate.ONE_TWO:
-        grid_template = "1fr 2fr"
-        num_cols = 2
-    elif grid_config.template == GridTemplate.TWO_ONE:
-        grid_template = "2fr 1fr"
-        num_cols = 2
-    elif grid_config.template == GridTemplate.THREE_COL:
-        grid_template = "1fr 1fr 1fr"
-        num_cols = 3
-    elif grid_config.template == GridTemplate.FOUR_COL:
-        grid_template = "1fr 1fr 1fr 1fr"
-        num_cols = 4
+    # Check for sidebar layout pattern: first row has 1 cell, subsequent rows have more
+    # e.g., rows: [[1], [1,1], [1,1]] means sidebar with 2x2 grid on right
+    is_sidebar_layout = False
+    sidebar_rows = 0
+    right_cols = 2
+
+    if grid_config.rows:
+        rows = grid_config.rows
+        if len(rows) >= 2 and len(rows[0]) == 1 and len(rows[1]) > 1:
+            is_sidebar_layout = True
+            sidebar_rows = len(rows) - 1  # How many rows the sidebar spans
+            right_cols = len(rows[1])  # How many columns on the right
+
+    if is_sidebar_layout:
+        # Sidebar layout: 1 + right_cols columns, sidebar_rows rows
+        # First cell spans all rows
+        total_cols = 1 + right_cols
+        grid_template = " ".join(["1fr"] * total_cols)
+        num_rows = sidebar_rows
+
+        # Build cells with special handling for first cell (row span)
+        cells_html = []
+        scroll_class = "sync-scroll" if sync_scroll else "grid-scroll"
+
+        for i, html in enumerate(html_contents):
+            if max_height:
+                wrapper_height = f"height:{max_height}px;"
+                cell_scroll_style = f"max-height:{max_height}px;overflow-y:scroll;overflow-x:auto;"
+            else:
+                wrapper_height = ""
+                cell_scroll_style = ""
+
+            # First cell spans all rows (sidebar)
+            if i == 0:
+                row_span_style = f"grid-row: span {sidebar_rows};"
+                cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;{row_span_style}{wrapper_height}">
+<div class="gt-cell {scroll_class}" style="flex:1;min-height:0;{cell_scroll_style}">{html}</div>
+</div>''')
+            else:
+                cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;{wrapper_height}">
+<div class="gt-cell {scroll_class}" style="flex:1;min-height:0;{cell_scroll_style}">{html}</div>
+</div>''')
+
     else:
-        # Default based on columns setting
-        num_cols = grid_config.columns or 2
-        grid_template = " ".join(["1fr"] * num_cols)
-
-    # Calculate rows needed
-    num_rows = (num_items + num_cols - 1) // num_cols
-
-    # Build grid cells HTML - each cell fills its space completely
-    # Note: Don't add titles here - GT exhibits have their own titles
-    cells_html = []
-    scroll_class = "sync-scroll" if sync_scroll else "grid-scroll"
-    for i, html in enumerate(html_contents):
-        # Each cell gets its own scroll container
-        if max_height:
-            wrapper_height = f"height:{max_height}px;"
-            cell_scroll_style = f"max-height:{max_height}px;overflow-y:scroll;overflow-x:auto;"
+        # Standard grid layout
+        # Determine grid template based on config
+        if grid_config.template == GridTemplate.TWO_BY_TWO:
+            grid_template = "1fr 1fr"
+            num_cols = 2
+        elif grid_config.template == GridTemplate.ONE_TWO:
+            grid_template = "1fr 2fr"
+            num_cols = 2
+        elif grid_config.template == GridTemplate.TWO_ONE:
+            grid_template = "2fr 1fr"
+            num_cols = 2
+        elif grid_config.template == GridTemplate.THREE_COL:
+            grid_template = "1fr 1fr 1fr"
+            num_cols = 3
+        elif grid_config.template == GridTemplate.FOUR_COL:
+            grid_template = "1fr 1fr 1fr 1fr"
+            num_cols = 4
         else:
-            wrapper_height = ""
-            cell_scroll_style = ""
+            # Default based on columns setting
+            num_cols = grid_config.columns or 2
+            grid_template = " ".join(["1fr"] * num_cols)
 
-        cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;{wrapper_height}">
+        # Calculate rows needed
+        num_rows = (num_items + num_cols - 1) // num_cols
+
+        # Build grid cells HTML - each cell fills its space completely
+        cells_html = []
+        scroll_class = "sync-scroll" if sync_scroll else "grid-scroll"
+        for i, html in enumerate(html_contents):
+            if max_height:
+                wrapper_height = f"height:{max_height}px;"
+                cell_scroll_style = f"max-height:{max_height}px;overflow-y:scroll;overflow-x:auto;"
+            else:
+                wrapper_height = ""
+                cell_scroll_style = ""
+
+            cells_html.append(f'''<div class="gt-cell-wrapper" style="display:flex;flex-direction:column;min-width:0;border:1px solid #e0e0e0;{wrapper_height}">
 <div class="gt-cell {scroll_class}" style="flex:1;min-height:0;{cell_scroll_style}">{html}</div>
 </div>''')
 
