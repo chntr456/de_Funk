@@ -481,6 +481,12 @@ def _render_block_content(block: Dict[str, Any], notebook_session, connection):
         # Grid markers are handled at a higher level (render_flat_notebook)
         # They don't render anything directly
         pass
+    elif block_type == 'markdown_block':
+        # Explicit $markdown${} blocks - render the content
+        # These are typically rendered in grid context, but handle standalone too
+        content = block.get('content', '')
+        if content:
+            render_markdown_content(content)
     else:
         st.warning(f"Unknown block type: {block_type}")
 

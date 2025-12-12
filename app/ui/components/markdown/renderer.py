@@ -311,6 +311,21 @@ def _render_nested_toggles(
                 if editable:
                     render_insert_block_button(block_index, on_block_insert)
 
+            elif block_type == 'markdown_block':
+                # Explicit $markdown${} block - render content with edit support
+                content = block.get('content', '')
+                if content:
+                    if editable:
+                        render_editable_block(
+                            block_index, {'type': 'markdown_block', 'content': content},
+                            notebook_session, connection,
+                            on_block_edit, on_block_delete
+                        )
+                    else:
+                        render_markdown_content(content)
+                if editable:
+                    render_insert_block_button(block_index, on_block_insert)
+
             else:
                 # Unknown block type - render as error
                 st.warning(f"Unknown block type: {block_type}")
