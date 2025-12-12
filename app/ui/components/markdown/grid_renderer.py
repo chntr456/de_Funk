@@ -5,9 +5,13 @@ Renders multiple exhibits in configurable grid patterns.
 Supports two modes:
 1. HTML Grid: Single HTML block with CSS Grid (crisp, no Streamlit padding)
 2. Streamlit Columns: Falls back to st.columns for non-HTML exhibits
+
+Note: Uses streamlit.components.v1.html() instead of st.html() to enable
+JavaScript execution for features like synchronized scrolling.
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 from typing import List, Dict, Any, Callable, Optional
 
 from app.notebook.schema import GridConfig, GridGap, GridBlock, GridTemplate
@@ -93,7 +97,13 @@ def render_html_grid(
 
     # Combine into CSS Grid with linked scrolling and sticky headers
     # JavaScript syncs scroll positions across all cells
-    grid_html = f'''<style>
+    grid_html = f'''<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
+
         #{grid_id} * {{ box-sizing: border-box; }}
 
         /* CRITICAL: Remove GT's wrapper overflow so our container handles scrolling */
@@ -124,20 +134,26 @@ def render_html_grid(
             z-index: 100 !important;
         }}
     </style>
+</head>
+<body>
     <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;">
         <div class="de-funk-grid" style="display:grid;grid-template-columns:{grid_template};gap:{gap}px;width:100%;">{''.join(cells_html)}</div>
     </div>
     <script>
-        // Sync scrolling setup
+        // Sync scrolling setup - runs immediately when DOM is ready
         (function setupScrollSync() {{
             const grid = document.getElementById('{grid_id}');
             if (!grid) {{
-                console.log('Grid not found: {grid_id}');
+                console.error('Grid not found: {grid_id}');
                 return;
             }}
             const scrollables = grid.querySelectorAll('.sync-scroll');
-            console.log('Found ' + scrollables.length + ' scrollable elements');
-            if (scrollables.length < 2) return;
+            console.log('Sync scroll setup: Found ' + scrollables.length + ' scrollable elements in {grid_id}');
+
+            if (scrollables.length < 2) {{
+                console.log('Not enough scrollables for sync');
+                return;
+            }}
 
             let isSyncing = false;
 
@@ -158,9 +174,17 @@ def render_html_grid(
             }});
             console.log('Scroll sync setup complete for {grid_id}');
         }})();
-    </script>'''
+    </script>
+</body>
+</html>'''
 
-    st.html(grid_html)
+    # Calculate component height based on grid structure
+    # For row-based grids, calculate total height needed
+    cell_height = max_height if max_height else 400
+    component_height = (num_rows * cell_height) + ((num_rows - 1) * gap) + 20  # 20px padding
+
+    # Use components.html which allows JavaScript execution (unlike st.html)
+    components.html(grid_html, height=component_height, scrolling=False)
 
 
 def render_exhibit_grid(
