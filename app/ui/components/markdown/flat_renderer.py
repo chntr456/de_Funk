@@ -30,13 +30,18 @@ TOGGLE_STATE_KEY = "flat_renderer_toggle_states"
 EDIT_STATE_KEY = "flat_renderer_edit_states"
 
 
-def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]]) -> str:
+def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]], markdown_content: str = None) -> str:
     """
     Generate markdown source from grid config and exhibit blocks.
+
+    Supports both:
+    - Matrix layout: layout/sizes/grid_cell for complex grids
+    - Legacy template: template/columns for simple grids
 
     Args:
         config: GridConfig object
         exhibit_blocks: List of exhibit blocks in the grid
+        markdown_content: Optional markdown content for cell 1 (matrix mode)
 
     Returns:
         Markdown string representing the grid
@@ -45,11 +50,46 @@ def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]]) -> str
 
     lines = []
 
-    # Grid start
-    template_name = config.template.value if config.template else f"{config.columns}col"
-    gap_name = config.gap.value if config.gap else "none"
-    lines.append(f"$grid${{template: {template_name}, gap: {gap_name}}}")
-    lines.append("")
+    # Check for matrix layout mode
+    if config.layout:
+        # Generate new matrix format
+        grid_config = {
+            'layout': config.layout,
+        }
+        if config.sizes:
+            grid_config['sizes'] = config.sizes
+        if config.gap:
+            grid_config['gap'] = config.gap.value if hasattr(config.gap, 'value') else config.gap
+        if config.sync_scroll:
+            grid_config['sync_scroll'] = True
+
+        # Format as multi-line YAML for readability
+        lines.append("$grid${")
+        lines.append("  layout:")
+        for row in config.layout:
+            lines.append(f"    - {row}")
+        if config.sizes:
+            lines.append("  sizes:")
+            for cell_id, size in config.sizes.items():
+                lines.append(f"    {cell_id}: {size}")
+        if config.gap:
+            gap_val = config.gap.value if hasattr(config.gap, 'value') else config.gap
+            lines.append(f"  gap: {gap_val}")
+        if config.sync_scroll:
+            lines.append("  sync_scroll: true")
+        lines.append("}")
+        lines.append("")
+
+        # Add markdown content if provided (goes to cell 1)
+        if markdown_content:
+            lines.append(markdown_content.strip())
+            lines.append("")
+    else:
+        # Generate legacy format
+        template_name = config.template.value if config.template else f"{config.columns}col"
+        gap_name = config.gap.value if config.gap else "none"
+        lines.append(f"$grid${{template: {template_name}, gap: {gap_name}}}")
+        lines.append("")
 
     # Each exhibit
     for block in exhibit_blocks:
@@ -65,6 +105,9 @@ def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]]) -> str
                     'source': exhibit.source,
                     'title': exhibit.title or '',
                 }
+                # Include grid_cell if set
+                if hasattr(exhibit, 'grid_cell') and exhibit.grid_cell:
+                    exhibit_data['grid_cell'] = exhibit.grid_cell
                 if exhibit.theme:
                     exhibit_data['theme'] = exhibit.theme
                 if hasattr(exhibit, 'scroll') and exhibit.scroll:
@@ -1061,12 +1104,22 @@ def render_flat_notebook(
                 if grid_cell_blocks:
                     config = grid_info[grid_idx].get('config')
                     if config:
+                        # Extract markdown content from grid cells (for matrix layout)
+                        grid_markdown_blocks = [b for b in grid_cell_blocks if b.get('type') == 'markdown']
+                        grid_markdown_content = '\n\n'.join(b.get('content', '') for b in grid_markdown_blocks)
+
                         # Render grid label with edit controls when editable
                         if editable:
-                            template_name = config.template.value if config.template else f"{config.columns}col"
+                            # Show layout type in label
+                            if config.layout:
+                                layout_name = f"Matrix {len(config.layout[0])}x{len(config.layout)}"
+                            elif config.template:
+                                layout_name = config.template.value
+                            else:
+                                layout_name = f"{config.columns}col"
                             grid_cols = st.columns([0.85, 0.08, 0.07])
                             with grid_cols[0]:
-                                st.markdown(f"**🔲 Grid Layout ({template_name})**")
+                                st.markdown(f"**🔲 Grid Layout ({layout_name})**")
                             with grid_cols[1]:
                                 edit_key = f"edit_grid_{block['_flat_id']}"
                                 if st.button("✏️", key=edit_key, help="Edit grid"):
@@ -1082,7 +1135,7 @@ def render_flat_notebook(
                             # Show editor if in edit state
                             if get_edit_state(block['_flat_id']):
                                 # Generate markdown source for the grid
-                                grid_source = _generate_grid_markdown(config, grid_exhibit_blocks)
+                                grid_source = _generate_grid_markdown(config, grid_exhibit_blocks, grid_markdown_content)
 
                                 # Store original in session state for the edit handler
                                 original_key = f"grid_original_{block['_flat_id']}"
