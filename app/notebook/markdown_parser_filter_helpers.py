@@ -11,6 +11,7 @@ from .filters.dynamic import (
     FilterOperator,
     FilterSource,
 )
+from .yaml_utils import normalize_yaml_indentation
 
 
 def parse_filter(filter_yaml: str) -> FilterConfig:
@@ -41,8 +42,12 @@ def parse_filter(filter_yaml: str) -> FilterConfig:
     source: {model: company, table: dim_company, column: ticker}
     multi: true
     ```
+
+    Note: YAML is auto-normalized to fix copy/paste indentation issues.
     """
-    data = yaml.safe_load(filter_yaml)
+    # Normalize YAML indentation to handle copy/paste issues
+    normalized_yaml = normalize_yaml_indentation(filter_yaml)
+    data = yaml.safe_load(normalized_yaml)
 
     # Parse filter type
     filter_type = FilterType.SELECT  # Default

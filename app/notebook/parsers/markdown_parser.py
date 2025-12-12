@@ -43,6 +43,7 @@ from ..filters.dynamic import (
     FilterCollection,
 )
 from ..markdown_parser_filter_helpers import parse_filter
+from ..yaml_utils import normalize_yaml_indentation
 
 
 @dataclass
@@ -218,13 +219,9 @@ class MarkdownNotebookParser:
                 logger.warning(f"Grid end marker before grid start at position {start_match.start()}")
                 continue
 
-            # Parse grid config YAML
-            # Normalize indentation - each line should have no leading whitespace for YAML keys
+            # Parse grid config YAML with normalization for copy/paste issues
             raw_yaml = start_match.group(1)
-            lines = raw_yaml.split('\n')
-            # Strip leading whitespace from each line to normalize
-            normalized_lines = [line.strip() for line in lines if line.strip()]
-            config_yaml = '\n'.join(normalized_lines)
+            config_yaml = normalize_yaml_indentation(raw_yaml)
             try:
                 config_dict = yaml.safe_load(config_yaml) or {}
             except yaml.YAMLError as e:
@@ -698,8 +695,22 @@ class MarkdownNotebookParser:
         Supports streamlined syntax:
         - x, y instead of x_axis, y_axis
         - Simplified metric definitions
+
+        Note: YAML is auto-normalized to fix copy/paste indentation issues.
         """
-        data = yaml.safe_load(exhibit_yaml)
+        # Normalize YAML indentation to handle copy/paste issues
+        normalized_yaml = normalize_yaml_indentation(exhibit_yaml)
+        try:
+            data = yaml.safe_load(normalized_yaml)
+        except yaml.YAMLError as e:
+            # Provide helpful error with original and normalized YAML
+            logger.error(f"YAML parse error in exhibit {exhibit_id}: {e}")
+            logger.debug(f"Original YAML:\n{exhibit_yaml}")
+            logger.debug(f"Normalized YAML:\n{normalized_yaml}")
+            raise ValueError(
+                f"YAML syntax error in exhibit '{exhibit_id}':\n{e}\n\n"
+                f"Tip: Check that all lines have consistent indentation (use spaces, not tabs)."
+            ) from e
 
         # Debug logging for exhibit parsing
         logger.debug(f"Parsing exhibit {exhibit_id}: keys={list(data.keys())}, type={data.get('type', 'MISSING')}")
