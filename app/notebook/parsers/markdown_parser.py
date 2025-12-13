@@ -984,12 +984,13 @@ class MarkdownNotebookParser:
         If no ---, the entire content is treated as markdown with no config.
         """
         from app.notebook.schema import MarkdownBlock
+        import re
 
-        # Check for config/content separator
-        if '\n---\n' in block_content:
-            parts = block_content.split('\n---\n', 1)
-            config_yaml = parts[0].strip()
-            markdown_content = parts[1] if len(parts) > 1 else ''
+        # Check for config/content separator (--- on its own line, possibly indented)
+        separator_match = re.search(r'\n\s*---\s*\n', block_content)
+        if separator_match:
+            config_yaml = block_content[:separator_match.start()].strip()
+            markdown_content = block_content[separator_match.end():]
         elif block_content.strip().startswith('grid_cell:'):
             # Simple case: just grid_cell followed by content
             lines = block_content.split('\n')
@@ -997,16 +998,21 @@ class MarkdownNotebookParser:
             content_start = 0
             for i, line in enumerate(lines):
                 stripped = line.strip()
-                if stripped.startswith('grid_cell:'):
+                if stripped == '---':
+                    # Found separator
+                    content_start = i + 1
+                    break
+                elif stripped.startswith('grid_cell:') or stripped.startswith('id:'):
                     config_lines.append(line)
                     content_start = i + 1
-                elif stripped.startswith('#') or not stripped.startswith(('grid_cell:', 'id:')):
-                    # Found start of markdown content
+                elif stripped.startswith('#'):
+                    # Found start of markdown content (header)
                     content_start = i
                     break
-                else:
-                    config_lines.append(line)
-                    content_start = i + 1
+                elif stripped and not any(stripped.startswith(k) for k in ['grid_cell:', 'id:']):
+                    # Found non-config content
+                    content_start = i
+                    break
             config_yaml = '\n'.join(config_lines)
             markdown_content = '\n'.join(lines[content_start:])
         else:
