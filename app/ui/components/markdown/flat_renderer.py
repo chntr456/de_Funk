@@ -116,6 +116,62 @@ def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]], markdo
             if exhibit.source:
                 lines.append(f"  source: {exhibit.source}")
 
+            # X axis (shorthand)
+            if hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension') and exhibit.x_axis.dimension:
+                lines.append(f"  x: {exhibit.x_axis.dimension}")
+
+            # Y axis (shorthand) - single measure or list
+            if hasattr(exhibit, 'y_axis') and exhibit.y_axis:
+                if hasattr(exhibit.y_axis, 'measure') and exhibit.y_axis.measure:
+                    if isinstance(exhibit.y_axis.measure, list):
+                        lines.append(f"  y: [{', '.join(exhibit.y_axis.measure)}]")
+                    else:
+                        lines.append(f"  y: {exhibit.y_axis.measure}")
+                elif hasattr(exhibit.y_axis, 'measures') and exhibit.y_axis.measures:
+                    lines.append(f"  y: [{', '.join(exhibit.y_axis.measures)}]")
+
+            # Color by
+            if hasattr(exhibit, 'color_by') and exhibit.color_by:
+                lines.append(f"  color: {exhibit.color_by}")
+
+            # Height
+            if hasattr(exhibit, 'options') and exhibit.options and exhibit.options.get('height'):
+                lines.append(f"  height: {exhibit.options['height']}")
+
+            # Measure selector (for dynamic measure selection)
+            if hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
+                ms = exhibit.measure_selector
+                lines.append("  measure_selector:")
+                if hasattr(ms, 'available_measures') and ms.available_measures:
+                    lines.append(f"    available_measures: [{', '.join(ms.available_measures)}]")
+                if hasattr(ms, 'default_measures') and ms.default_measures:
+                    lines.append(f"    default_measures: [{', '.join(ms.default_measures)}]")
+                if hasattr(ms, 'label') and ms.label:
+                    lines.append(f"    label: {ms.label}")
+                if hasattr(ms, 'allow_multiple') and ms.allow_multiple is not None:
+                    lines.append(f"    allow_multiple: {str(ms.allow_multiple).lower()}")
+                if hasattr(ms, 'selector_type') and ms.selector_type:
+                    lines.append(f"    selector_type: {ms.selector_type}")
+                if hasattr(ms, 'help_text') and ms.help_text:
+                    lines.append(f"    help_text: {ms.help_text}")
+
+            # Dimension selector (for dynamic dimension selection)
+            if hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
+                ds = exhibit.dimension_selector
+                lines.append("  dimension_selector:")
+                if hasattr(ds, 'available_dimensions') and ds.available_dimensions:
+                    lines.append(f"    available_dimensions: [{', '.join(ds.available_dimensions)}]")
+                if hasattr(ds, 'default_dimension') and ds.default_dimension:
+                    lines.append(f"    default_dimension: {ds.default_dimension}")
+                if hasattr(ds, 'label') and ds.label:
+                    lines.append(f"    label: {ds.label}")
+                if hasattr(ds, 'selector_type') and ds.selector_type:
+                    lines.append(f"    selector_type: {ds.selector_type}")
+                if hasattr(ds, 'applies_to') and ds.applies_to:
+                    lines.append(f"    applies_to: {ds.applies_to}")
+                if hasattr(ds, 'help_text') and ds.help_text:
+                    lines.append(f"    help_text: {ds.help_text}")
+
             # Theme
             if hasattr(exhibit, 'theme') and exhibit.theme:
                 lines.append(f"  theme: {exhibit.theme}")

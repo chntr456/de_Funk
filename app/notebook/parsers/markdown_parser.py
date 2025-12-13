@@ -1270,12 +1270,53 @@ class MarkdownNotebookParser:
             yaml_parts.append(f"x: {exhibit.x_axis.dimension}")
         if exhibit.y_axis:
             if exhibit.y_axis.measure:
-                yaml_parts.append(f"y: {exhibit.y_axis.measure}")
+                if isinstance(exhibit.y_axis.measure, list):
+                    yaml_parts.append(f"y: [{', '.join(exhibit.y_axis.measure)}]")
+                else:
+                    yaml_parts.append(f"y: {exhibit.y_axis.measure}")
             elif exhibit.y_axis.measures:
                 yaml_parts.append(f"y: [{', '.join(exhibit.y_axis.measures)}]")
 
         if exhibit.color_by:
             yaml_parts.append(f"color: {exhibit.color_by}")
+
+        # Height
+        if hasattr(exhibit, 'options') and exhibit.options and exhibit.options.get('height'):
+            yaml_parts.append(f"height: {exhibit.options['height']}")
+
+        # Measure selector (for dynamic measure selection)
+        if hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
+            ms = exhibit.measure_selector
+            yaml_parts.append("measure_selector:")
+            if hasattr(ms, 'available_measures') and ms.available_measures:
+                yaml_parts.append(f"  available_measures: [{', '.join(ms.available_measures)}]")
+            if hasattr(ms, 'default_measures') and ms.default_measures:
+                yaml_parts.append(f"  default_measures: [{', '.join(ms.default_measures)}]")
+            if hasattr(ms, 'label') and ms.label:
+                yaml_parts.append(f"  label: {ms.label}")
+            if hasattr(ms, 'allow_multiple') and ms.allow_multiple is not None:
+                yaml_parts.append(f"  allow_multiple: {str(ms.allow_multiple).lower()}")
+            if hasattr(ms, 'selector_type') and ms.selector_type:
+                yaml_parts.append(f"  selector_type: {ms.selector_type}")
+            if hasattr(ms, 'help_text') and ms.help_text:
+                yaml_parts.append(f"  help_text: {ms.help_text}")
+
+        # Dimension selector (for dynamic dimension selection)
+        if hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
+            ds = exhibit.dimension_selector
+            yaml_parts.append("dimension_selector:")
+            if hasattr(ds, 'available_dimensions') and ds.available_dimensions:
+                yaml_parts.append(f"  available_dimensions: [{', '.join(ds.available_dimensions)}]")
+            if hasattr(ds, 'default_dimension') and ds.default_dimension:
+                yaml_parts.append(f"  default_dimension: {ds.default_dimension}")
+            if hasattr(ds, 'label') and ds.label:
+                yaml_parts.append(f"  label: {ds.label}")
+            if hasattr(ds, 'selector_type') and ds.selector_type:
+                yaml_parts.append(f"  selector_type: {ds.selector_type}")
+            if hasattr(ds, 'applies_to') and ds.applies_to:
+                yaml_parts.append(f"  applies_to: {ds.applies_to}")
+            if hasattr(ds, 'help_text') and ds.help_text:
+                yaml_parts.append(f"  help_text: {ds.help_text}")
 
         yaml_content = '\n'.join(f"  {line}" for line in yaml_parts)
         return f"$exhibits${{\n{yaml_content}\n}}"
