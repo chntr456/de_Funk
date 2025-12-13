@@ -1304,26 +1304,34 @@ def render_flat_notebook(
                             if not exhibit:
                                 return None
 
-                            # Only Great Tables support HTML extraction currently
+                            # Check exhibit type for HTML extraction
                             from app.notebook.schema import ExhibitType
 
-                            # Check if type matches (handle both enum and string)
-                            is_great_table = (
-                                exhibit.type == ExhibitType.GREAT_TABLE or
-                                exhibit.type == 'great_table' or
-                                (hasattr(exhibit.type, 'value') and exhibit.type.value == 'great_table')
-                            )
-
-                            if not is_great_table:
-                                return None
+                            # Helper to check exhibit type
+                            def is_type(exhibit, type_name):
+                                return (
+                                    exhibit.type == getattr(ExhibitType, type_name.upper(), None) or
+                                    exhibit.type == type_name or
+                                    (hasattr(exhibit.type, 'value') and exhibit.type.value == type_name)
+                                )
 
                             try:
-                                from app.ui.components.exhibits.great_table import get_great_table_html
                                 exhibit_id = cell_block.get('id')
                                 df = notebook_session.get_exhibit_data(exhibit_id)
                                 pdf = connection.to_pandas(df)
-                                html = get_great_table_html(exhibit, pdf)
-                                return html
+
+                                # Great Tables
+                                if is_type(exhibit, 'great_table'):
+                                    from app.ui.components.exhibits.great_table import get_great_table_html
+                                    return get_great_table_html(exhibit, pdf)
+
+                                # Line Charts
+                                if is_type(exhibit, 'line_chart'):
+                                    from app.ui.components.exhibits.line_chart import get_line_chart_html
+                                    return get_line_chart_html(exhibit, pdf)
+
+                                # Other chart types not yet supported for HTML extraction
+                                return None
                             except Exception as e:
                                 import traceback
                                 traceback.print_exc()
