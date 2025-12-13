@@ -1239,6 +1239,9 @@ def render_flat_notebook(
                             cell_contents = {}
                             cell_types = {}
 
+                            # DEBUG: Show what blocks we're processing
+                            st.caption(f"🔍 DEBUG: Processing {len(grid_cell_blocks)} grid cell blocks")
+
                             # Assign cells based on type and grid_cell attribute
                             # Priority: explicit grid_cell > markdown default to 1 > auto-assign
                             next_cell_id = 1
@@ -1249,6 +1252,7 @@ def render_flat_notebook(
                                     # Explicit $markdown${} block with grid_cell assignment
                                     cell_id = cell_block.get('grid_cell', 1)  # Default to cell 1
                                     html = get_cell_html(cell_block)
+                                    st.caption(f"  → markdown_block: cell_id={cell_id}, html_len={len(html) if html else 0}")
                                     if html:
                                         cell_contents[cell_id] = html
                                         cell_types[cell_id] = 'markdown'
@@ -1257,6 +1261,7 @@ def render_flat_notebook(
                                     # Implicit markdown goes to cell 1 by default
                                     cell_id = 1
                                     html = get_cell_html(cell_block)
+                                    st.caption(f"  → markdown: cell_id={cell_id}, html_len={len(html) if html else 0}")
                                     if html:
                                         cell_contents[cell_id] = html
                                         cell_types[cell_id] = 'markdown'
@@ -1265,6 +1270,7 @@ def render_flat_notebook(
                                     exhibit = cell_block.get('exhibit')
                                     # Get cell assignment from exhibit
                                     cell_id = getattr(exhibit, 'grid_cell', None) if exhibit else None
+                                    title = getattr(exhibit, 'title', 'N/A') if exhibit else 'N/A'
                                     if cell_id is None:
                                         # Auto-assign to next available cell (skipping cell 1 if markdown claimed it)
                                         next_cell_id = max(next_cell_id, 2) if 1 in cell_contents else next_cell_id
@@ -1272,9 +1278,14 @@ def render_flat_notebook(
                                         next_cell_id += 1
 
                                     html = get_cell_html(cell_block)
+                                    st.caption(f"  → exhibit '{title}': cell_id={cell_id}, html_len={len(html) if html else 0}")
                                     if html:
                                         cell_contents[cell_id] = html
                                         cell_types[cell_id] = 'exhibit'
+
+                            # DEBUG: Show final cell mapping
+                            st.caption(f"📊 Final cell_contents keys: {list(cell_contents.keys())}")
+                            st.caption(f"📊 Final cell_types: {cell_types}")
 
                             # Get scroll settings
                             max_height = getattr(config, 'max_height', None)
