@@ -38,6 +38,7 @@ $grid${
   layout:
     - [1, 2, 3]
     - [1, 4, 5]
+    - [6, 6, 6]
   gap: sm
   sync_scroll: true
 }
@@ -137,20 +138,13 @@ $exhibits${
   row_striping: true
 }
 
-$/grid$
-
----
-
-## Stock Price Explorer
-
-Explore stock price data with dynamic measure and dimension selection.
-
 $exhibits${
+  grid_cell: 6
   type: line_chart
   source: stocks.fact_stock_prices
-  title: Stock Price History
+  title: Stock Price Explorer
   x: trade_date
-  height: 450
+  height: 300
   measure_selector:
     available_measures: [close, open, high, low, volume]
     default_measures: [close]
@@ -166,6 +160,8 @@ $exhibits${
     applies_to: group_by
     help_text: Choose how to group/color the lines
 }
+
+$/grid$
 
 ---
 
