@@ -38,8 +38,6 @@ $grid${
   layout:
     - [1, 2, 3]
     - [1, 4, 5]
-  sizes:
-    1: 2fr
   gap: sm
   sync_scroll: true
 }
