@@ -1316,6 +1316,11 @@ def render_flat_notebook(
                         # Mark these exhibits as rendered
                         for eb in grid_exhibit_blocks:
                             rendered_in_grid.add(eb.get('id'))
+                        # Also mark markdown_blocks as rendered
+                        for mb in grid_cell_blocks:
+                            if mb.get('type') == 'markdown_block':
+                                rendered_in_grid.add(mb.get('id'))
+                        st.caption(f"🏷️ Marked as rendered: {rendered_in_grid}")
                     else:
                         st.warning(f"Grid {grid_idx}: No config found")
                 else:
@@ -1331,6 +1336,19 @@ def render_flat_notebook(
             exhibit_id = block.get('id')
             if exhibit_id in rendered_in_grid:
                 continue
+
+        # Skip markdown_blocks that were already rendered in a grid
+        if block_type == 'markdown_block':
+            block_id = block.get('id')
+            if block_id in rendered_in_grid:
+                continue
+
+        # DEBUG: Show what's being rendered
+        if block_type in ('exhibit', 'markdown_block', 'markdown'):
+            block_id = block.get('id', 'no-id')
+            exhibit = block.get('exhibit')
+            title = getattr(exhibit, 'title', None) if exhibit else block.get('content', '')[:30]
+            st.caption(f"⚠️ RENDERING outside grid: type={block_type}, id={block_id}, title={title}")
 
         # Render insert button above each block when editable
         if editable:
