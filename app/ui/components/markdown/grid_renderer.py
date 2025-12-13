@@ -15,7 +15,10 @@ import streamlit.components.v1 as components
 import markdown as md
 from typing import List, Dict, Any, Callable, Optional
 
+from config.logging import get_logger
 from app.notebook.schema import GridConfig, GridGap, GridBlock, GridTemplate
+
+logger = get_logger(__name__)
 
 
 def markdown_to_html(content: str) -> str:
@@ -98,6 +101,11 @@ def _render_matrix_grid(
     num_rows = len(layout)
     num_cols = len(layout[0]) if layout else 0
 
+    # Log grid configuration for validation
+    logger.debug(f"Matrix grid: {num_rows}x{num_cols} layout, {len(cell_contents)} cells populated")
+    logger.debug(f"  Cell IDs with content: {sorted(cell_contents.keys())}")
+    logger.debug(f"  Cell types: {cell_types}")
+
     # Build CSS Grid template areas
     # e.g., [[1,2,3], [1,4,5]] -> "cell1 cell2 cell3" "cell1 cell4 cell5"
     template_areas = []
@@ -105,6 +113,8 @@ def _render_matrix_grid(
         row_areas = " ".join(f"cell{cell_id}" for cell_id in row)
         template_areas.append(f'"{row_areas}"')
     grid_template_areas = " ".join(template_areas)
+
+    logger.debug(f"  CSS grid-template-areas: {grid_template_areas}")
 
     # Build column sizes from config.sizes
     # Determine unique columns and their sizes
@@ -248,7 +258,12 @@ def _render_matrix_grid(
     cell_height = max_height if max_height else 400
     component_height = (num_rows * cell_height) + ((num_rows - 1) * gap) + 50  # Extra padding for borders
 
+    # Log render metrics for validation
+    logger.debug(f"  Component height: {component_height}px (cell_height={cell_height}, rows={num_rows})")
+    logger.debug(f"  HTML size: {len(grid_html)} bytes")
+
     components.html(grid_html, height=component_height, scrolling=False)
+    logger.debug("Matrix grid rendered successfully")
 
 
 def render_html_grid(
@@ -488,8 +503,8 @@ def render_exhibit_grid(
             render_html_grid(grid_config, html_contents, titles, max_height=max_height, sync_scroll=sync_scroll)
             return
         elif failed_blocks:
-            # Debug: show which blocks failed HTML extraction
-            st.caption(f"⚠️ Falling back to columns (blocks {failed_blocks} failed HTML)")
+            # Log which blocks failed HTML extraction
+            logger.debug(f"Falling back to columns - blocks {failed_blocks} failed HTML extraction")
 
     # Fallback to Streamlit columns
     row_specs = grid_config.get_row_specs()

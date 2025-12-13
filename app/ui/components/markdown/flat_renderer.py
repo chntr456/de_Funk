@@ -14,6 +14,10 @@ Each row has a consistent column layout:
 import streamlit as st
 from typing import Dict, Any, List, Optional, Callable
 
+from config.logging import get_logger
+
+logger = get_logger(__name__)
+
 from .blocks import (
     render_markdown_content,
     render_exhibit_block,
@@ -1274,6 +1278,8 @@ def render_flat_notebook(
                             # Matrix mode: map cell IDs to content
                             from .grid_renderer import render_html_grid
 
+                            logger.debug(f"Processing matrix grid with {len(grid_cell_blocks)} cell blocks")
+
                             cell_contents = {}
                             cell_types = {}
 
@@ -1314,6 +1320,12 @@ def render_flat_notebook(
                                         cell_contents[cell_id] = html
                                         cell_types[cell_id] = 'exhibit'
 
+                            # Log final cell mapping for validation
+                            logger.debug(f"Cell assignment complete: {len(cell_contents)} cells populated")
+                            for cid in sorted(cell_contents.keys()):
+                                html_len = len(cell_contents[cid]) if cell_contents[cid] else 0
+                                logger.debug(f"  Cell {cid}: type={cell_types.get(cid, 'unknown')}, html_len={html_len}")
+
                             # Get scroll settings
                             max_height = getattr(config, 'max_height', None)
                             scroll = getattr(config, 'scroll', True)
@@ -1347,6 +1359,10 @@ def render_flat_notebook(
                         for mb in grid_cell_blocks:
                             if mb.get('type') == 'markdown_block':
                                 rendered_in_grid.add(mb.get('id'))
+
+                        # Log rendered_in_grid tracking for validation
+                        logger.debug(f"Grid {grid_idx} render complete: {len(rendered_in_grid)} blocks tracked")
+                        logger.debug(f"  Tracked IDs: {sorted(rendered_in_grid)}")
                     else:
                         st.warning(f"Grid {grid_idx}: No config found")
                 else:
@@ -1361,12 +1377,14 @@ def render_flat_notebook(
         if block_type == 'exhibit':
             exhibit_id = block.get('id')
             if exhibit_id in rendered_in_grid:
+                logger.debug(f"Skipping exhibit {exhibit_id} - already rendered in grid")
                 continue
 
         # Skip markdown_blocks that were already rendered in a grid
         if block_type == 'markdown_block':
             block_id = block.get('id')
             if block_id in rendered_in_grid:
+                logger.debug(f"Skipping markdown_block {block_id} - already rendered in grid")
                 continue
 
         # Render insert button above each block when editable
