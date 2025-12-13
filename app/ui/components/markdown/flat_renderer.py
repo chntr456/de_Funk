@@ -30,9 +30,9 @@ TOGGLE_STATE_KEY = "flat_renderer_toggle_states"
 EDIT_STATE_KEY = "flat_renderer_edit_states"
 
 
-def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]], markdown_content: str = None) -> str:
+def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]], markdown_blocks: List[Dict[str, Any]] = None) -> str:
     """
-    Generate markdown source from grid config and exhibit blocks.
+    Generate markdown source from grid config, exhibit blocks, and markdown blocks.
 
     Supports both:
     - Matrix layout: layout/sizes/grid_cell for complex grids
@@ -41,7 +41,7 @@ def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]], markdo
     Args:
         config: GridConfig object
         exhibit_blocks: List of exhibit blocks in the grid
-        markdown_content: Optional markdown content for cell 1 (matrix mode)
+        markdown_blocks: List of markdown_block dicts with 'content' and 'grid_cell'
 
     Returns:
         Markdown string representing the grid
@@ -52,18 +52,7 @@ def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]], markdo
 
     # Check for matrix layout mode
     if config.layout:
-        # Generate new matrix format
-        grid_config = {
-            'layout': config.layout,
-        }
-        if config.sizes:
-            grid_config['sizes'] = config.sizes
-        if config.gap:
-            grid_config['gap'] = config.gap.value if hasattr(config.gap, 'value') else config.gap
-        if config.sync_scroll:
-            grid_config['sync_scroll'] = True
-
-        # Format as multi-line YAML for readability
+        # Generate grid config
         lines.append("$grid${")
         lines.append("  layout:")
         for row in config.layout:
@@ -80,10 +69,20 @@ def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]], markdo
         lines.append("}")
         lines.append("")
 
-        # Add markdown content if provided (goes to cell 1)
-        if markdown_content:
-            lines.append(markdown_content.strip())
-            lines.append("")
+        # Add markdown blocks with proper $markdown${} syntax
+        if markdown_blocks:
+            for mb in markdown_blocks:
+                content = mb.get('content', '')
+                grid_cell = mb.get('grid_cell', 1)
+                if content:
+                    lines.append("$markdown${")
+                    lines.append(f"  grid_cell: {grid_cell}")
+                    lines.append("  ---")
+                    # Add content lines (preserve original indentation)
+                    for content_line in content.split('\n'):
+                        lines.append(content_line)
+                    lines.append("}")
+                    lines.append("")
     else:
         # Generate legacy format
         template_name = config.template.value if config.template else f"{config.columns}col"
@@ -91,35 +90,74 @@ def _generate_grid_markdown(config, exhibit_blocks: List[Dict[str, Any]], markdo
         lines.append(f"$grid${{template: {template_name}, gap: {gap_name}}}")
         lines.append("")
 
-    # Each exhibit
+    # Each exhibit with clean YAML formatting
     for block in exhibit_blocks:
         exhibit = block.get('exhibit')
         if exhibit:
-            # Use raw data if available, otherwise reconstruct
-            if hasattr(exhibit, '_raw_data') and exhibit._raw_data:
-                exhibit_yaml = yaml.dump(exhibit._raw_data, default_flow_style=False, sort_keys=False)
-            else:
-                # Reconstruct basic exhibit data
-                exhibit_data = {
-                    'type': exhibit.type.value if hasattr(exhibit.type, 'value') else str(exhibit.type),
-                    'source': exhibit.source,
-                    'title': exhibit.title or '',
-                }
-                # Include grid_cell if set
-                if hasattr(exhibit, 'grid_cell') and exhibit.grid_cell:
-                    exhibit_data['grid_cell'] = exhibit.grid_cell
-                if exhibit.theme:
-                    exhibit_data['theme'] = exhibit.theme
-                if hasattr(exhibit, 'scroll') and exhibit.scroll:
-                    exhibit_data['scroll'] = True
-                if hasattr(exhibit, 'max_height') and exhibit.max_height:
-                    exhibit_data['max_height'] = exhibit.max_height
-                exhibit_yaml = yaml.dump(exhibit_data, default_flow_style=False, sort_keys=False)
-
             lines.append("$exhibits${")
-            # Indent YAML content
-            for yaml_line in exhibit_yaml.strip().split('\n'):
-                lines.append(f"  {yaml_line}")
+
+            # Get grid_cell first if present
+            if hasattr(exhibit, 'grid_cell') and exhibit.grid_cell:
+                lines.append(f"  grid_cell: {exhibit.grid_cell}")
+
+            # Type
+            type_val = exhibit.type.value if hasattr(exhibit.type, 'value') else str(exhibit.type)
+            lines.append(f"  type: {type_val}")
+
+            # Title
+            if exhibit.title:
+                lines.append(f"  title: {exhibit.title}")
+
+            # Source
+            if exhibit.source:
+                lines.append(f"  source: {exhibit.source}")
+
+            # Theme
+            if hasattr(exhibit, 'theme') and exhibit.theme:
+                lines.append(f"  theme: {exhibit.theme}")
+
+            # Scroll options
+            if hasattr(exhibit, 'scroll') and exhibit.scroll:
+                lines.append("  scroll: true")
+            if hasattr(exhibit, 'max_height') and exhibit.max_height:
+                lines.append(f"  max_height: {exhibit.max_height}")
+
+            # Sort
+            if hasattr(exhibit, 'sort') and exhibit.sort:
+                sort_data = exhibit.sort
+                if hasattr(sort_data, 'by'):
+                    lines.append(f"  sort: {{by: {sort_data.by}, order: {sort_data.order or 'asc'}}}")
+                elif isinstance(sort_data, dict):
+                    lines.append(f"  sort: {{by: {sort_data.get('by')}, order: {sort_data.get('order', 'asc')}}}")
+
+            # Columns - format as list of dicts on separate lines
+            if hasattr(exhibit, 'columns') and exhibit.columns:
+                lines.append("  columns:")
+                for col in exhibit.columns:
+                    if isinstance(col, dict):
+                        col_str = yaml.dump(col, default_flow_style=True).strip()
+                        lines.append(f"    - {col_str}")
+                    elif hasattr(col, '__dict__'):
+                        col_dict = {k: v for k, v in col.__dict__.items() if v is not None and not k.startswith('_')}
+                        col_str = yaml.dump(col_dict, default_flow_style=True).strip()
+                        lines.append(f"    - {col_str}")
+
+            # Spanners
+            if hasattr(exhibit, 'spanners') and exhibit.spanners:
+                lines.append("  spanners:")
+                for spanner in exhibit.spanners:
+                    if isinstance(spanner, dict):
+                        sp_str = yaml.dump(spanner, default_flow_style=True).strip()
+                        lines.append(f"    - {sp_str}")
+
+            # Source note
+            if hasattr(exhibit, 'source_note') and exhibit.source_note:
+                lines.append(f"  source_note: '{exhibit.source_note}'")
+
+            # Row striping
+            if hasattr(exhibit, 'row_striping') and exhibit.row_striping:
+                lines.append("  row_striping: true")
+
             lines.append("}")
             lines.append("")
 
@@ -1110,9 +1148,9 @@ def render_flat_notebook(
                 if grid_cell_blocks:
                     config = grid_info[grid_idx].get('config')
                     if config:
-                        # Extract markdown content from grid cells (for matrix layout)
-                        grid_markdown_blocks = [b for b in grid_cell_blocks if b.get('type') == 'markdown']
-                        grid_markdown_content = '\n\n'.join(b.get('content', '') for b in grid_markdown_blocks)
+                        # Extract markdown blocks from grid cells (for matrix layout)
+                        # Include both 'markdown' and 'markdown_block' types
+                        grid_markdown_blocks = [b for b in grid_cell_blocks if b.get('type') in ('markdown', 'markdown_block')]
 
                         # Render grid label with edit controls when editable
                         if editable:
@@ -1141,7 +1179,7 @@ def render_flat_notebook(
                             # Show editor if in edit state
                             if get_edit_state(block['_flat_id']):
                                 # Generate markdown source for the grid
-                                grid_source = _generate_grid_markdown(config, grid_exhibit_blocks, grid_markdown_content)
+                                grid_source = _generate_grid_markdown(config, grid_exhibit_blocks, grid_markdown_blocks)
 
                                 # Store original in session state for the edit handler
                                 original_key = f"grid_original_{block['_flat_id']}"
@@ -1239,9 +1277,6 @@ def render_flat_notebook(
                             cell_contents = {}
                             cell_types = {}
 
-                            # DEBUG: Show what blocks we're processing
-                            st.caption(f"🔍 DEBUG: Processing {len(grid_cell_blocks)} grid cell blocks")
-
                             # Assign cells based on type and grid_cell attribute
                             # Priority: explicit grid_cell > markdown default to 1 > auto-assign
                             next_cell_id = 1
@@ -1252,7 +1287,6 @@ def render_flat_notebook(
                                     # Explicit $markdown${} block with grid_cell assignment
                                     cell_id = cell_block.get('grid_cell', 1)  # Default to cell 1
                                     html = get_cell_html(cell_block)
-                                    st.caption(f"  → markdown_block: cell_id={cell_id}, html_len={len(html) if html else 0}")
                                     if html:
                                         cell_contents[cell_id] = html
                                         cell_types[cell_id] = 'markdown'
@@ -1261,7 +1295,6 @@ def render_flat_notebook(
                                     # Implicit markdown goes to cell 1 by default
                                     cell_id = 1
                                     html = get_cell_html(cell_block)
-                                    st.caption(f"  → markdown: cell_id={cell_id}, html_len={len(html) if html else 0}")
                                     if html:
                                         cell_contents[cell_id] = html
                                         cell_types[cell_id] = 'markdown'
@@ -1270,7 +1303,6 @@ def render_flat_notebook(
                                     exhibit = cell_block.get('exhibit')
                                     # Get cell assignment from exhibit
                                     cell_id = getattr(exhibit, 'grid_cell', None) if exhibit else None
-                                    title = getattr(exhibit, 'title', 'N/A') if exhibit else 'N/A'
                                     if cell_id is None:
                                         # Auto-assign to next available cell (skipping cell 1 if markdown claimed it)
                                         next_cell_id = max(next_cell_id, 2) if 1 in cell_contents else next_cell_id
@@ -1278,14 +1310,9 @@ def render_flat_notebook(
                                         next_cell_id += 1
 
                                     html = get_cell_html(cell_block)
-                                    st.caption(f"  → exhibit '{title}': cell_id={cell_id}, html_len={len(html) if html else 0}")
                                     if html:
                                         cell_contents[cell_id] = html
                                         cell_types[cell_id] = 'exhibit'
-
-                            # DEBUG: Show final cell mapping
-                            st.caption(f"📊 Final cell_contents keys: {list(cell_contents.keys())}")
-                            st.caption(f"📊 Final cell_types: {cell_types}")
 
                             # Get scroll settings
                             max_height = getattr(config, 'max_height', None)
@@ -1320,7 +1347,6 @@ def render_flat_notebook(
                         for mb in grid_cell_blocks:
                             if mb.get('type') == 'markdown_block':
                                 rendered_in_grid.add(mb.get('id'))
-                        st.caption(f"🏷️ Marked as rendered: {rendered_in_grid}")
                     else:
                         st.warning(f"Grid {grid_idx}: No config found")
                 else:
@@ -1342,13 +1368,6 @@ def render_flat_notebook(
             block_id = block.get('id')
             if block_id in rendered_in_grid:
                 continue
-
-        # DEBUG: Show what's being rendered
-        if block_type in ('exhibit', 'markdown_block', 'markdown'):
-            block_id = block.get('id', 'no-id')
-            exhibit = block.get('exhibit')
-            title = getattr(exhibit, 'title', None) if exhibit else block.get('content', '')[:30]
-            st.caption(f"⚠️ RENDERING outside grid: type={block_type}, id={block_id}, title={title}")
 
         # Render insert button above each block when editable
         if editable:
