@@ -4,7 +4,7 @@ title: Company Financial Statements
 description: Publication-quality financial tables using Great Tables with grid layouts
 author: de_Funk
 version: 2.0
-models: [company, core]
+models: [company, stocks, core]
 tags: [financials, great_tables, example, grid_layout]
 ---
 
@@ -138,6 +138,34 @@ $exhibits${
 }
 
 $/grid$
+
+---
+
+## Stock Price Explorer
+
+Explore stock price data with dynamic measure and dimension selection.
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  title: Stock Price History
+  x: trade_date
+  height: 450
+  measure_selector:
+    available_measures: [close, open, high, low, volume]
+    default_measures: [close]
+    label: Price Metrics
+    allow_multiple: true
+    selector_type: checkbox
+    help_text: Select one or more price metrics to display
+  dimension_selector:
+    available_dimensions: [ticker, exchange_code]
+    default_dimension: ticker
+    label: Group By
+    selector_type: radio
+    applies_to: group_by
+    help_text: Choose how to group/color the lines
+}
 
 ---
 
