@@ -198,7 +198,7 @@ def _render_matrix_grid(
     </script>
     ''' if sync_scroll else ''
 
-    # Build the full HTML
+    # Build the full HTML - grid styles go in <style> block to avoid quote conflicts
     grid_html = f'''<!DOCTYPE html>
 <html style="height:100%;">
 <head>
@@ -208,6 +208,16 @@ def _render_matrix_grid(
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
 
         #{grid_id} * {{ box-sizing: border-box; }}
+
+        #{grid_id} .de-funk-grid {{
+            display: grid;
+            grid-template-areas: {grid_template_areas};
+            grid-template-columns: {grid_template_columns};
+            grid-template-rows: repeat({num_rows}, 1fr);
+            gap: {gap}px;
+            width: 100%;
+            height: 100%;
+        }}
 
         #{grid_id} .gt-cell > div {{
             overflow: visible !important;
@@ -228,7 +238,7 @@ def _render_matrix_grid(
 </head>
 <body>
     <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;height:100%;">
-        <div class="de-funk-grid" style="display:grid;grid-template-areas:{grid_template_areas};grid-template-columns:{grid_template_columns};grid-template-rows:repeat({num_rows}, 1fr);gap:{gap}px;width:100%;height:100%;">{''.join(cells_html)}</div>
+        <div class="de-funk-grid">{''.join(cells_html)}</div>
     </div>
     {sync_js}
 </body>
