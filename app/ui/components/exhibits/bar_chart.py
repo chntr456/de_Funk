@@ -130,3 +130,126 @@ def render_bar_chart(exhibit, pdf: pd.DataFrame):
     """
     renderer = BarChartRenderer(exhibit, pdf)
     renderer.render()
+
+
+def get_bar_chart_html(exhibit, pdf: pd.DataFrame) -> str:
+    """
+    Get bar chart as embeddable HTML for CSS grid rendering.
+
+    Args:
+        exhibit: Exhibit configuration
+        pdf: Pandas DataFrame with data
+
+    Returns:
+        HTML string with embedded Plotly chart
+    """
+    import plotly.io as pio
+
+    if not hasattr(exhibit, 'x_axis') or not exhibit.x_axis:
+        return "<div>Bar chart requires x_axis configuration</div>"
+
+    x_col = exhibit.x_axis.dimension
+
+    # Get selected measures (use defaults from measure_selector or y_axis)
+    selected_measures = []
+    if hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
+        ms = exhibit.measure_selector
+        if hasattr(ms, 'default_measures') and ms.default_measures:
+            selected_measures = ms.default_measures
+        elif hasattr(ms, 'available_measures') and ms.available_measures:
+            selected_measures = [ms.available_measures[0]]
+    elif hasattr(exhibit, 'y_axis') and exhibit.y_axis:
+        if hasattr(exhibit.y_axis, 'measure') and exhibit.y_axis.measure:
+            if isinstance(exhibit.y_axis.measure, list):
+                selected_measures = exhibit.y_axis.measure
+            else:
+                selected_measures = [exhibit.y_axis.measure]
+        elif hasattr(exhibit.y_axis, 'measures') and exhibit.y_axis.measures:
+            selected_measures = exhibit.y_axis.measures
+
+    if not selected_measures:
+        return "<div>No measures configured for bar chart</div>"
+
+    # Get selected dimension (use default from dimension_selector or color_by)
+    selected_dimension = None
+    if hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
+        ds = exhibit.dimension_selector
+        if hasattr(ds, 'default_dimension') and ds.default_dimension:
+            selected_dimension = ds.default_dimension
+    elif hasattr(exhibit, 'color_by') and exhibit.color_by:
+        selected_dimension = exhibit.color_by
+
+    # Check for static aggregation
+    pdf_to_use = pdf
+    agg_method = None
+    if hasattr(exhibit, 'options') and exhibit.options:
+        agg_method = exhibit.options.get('aggregation')
+
+    if agg_method and x_col in pdf_to_use.columns:
+        agg_map = {
+            'avg': 'mean', 'mean': 'mean',
+            'sum': 'sum', 'min': 'min', 'max': 'max',
+            'count': 'count', 'first': 'first', 'last': 'last'
+        }
+        pandas_agg = agg_map.get(agg_method, 'sum')
+        agg_dict = {}
+        for col in selected_measures:
+            if col in pdf_to_use.columns:
+                agg_dict[col] = pandas_agg
+        if agg_dict:
+            try:
+                pdf_to_use = pdf_to_use.groupby(x_col, as_index=False).agg(agg_dict)
+            except Exception:
+                pass
+
+    # Sort by first measure
+    pdf_sorted = pdf_to_use.sort_values(by=selected_measures[0], ascending=False)
+
+    # Build the figure
+    if len(selected_measures) == 1:
+        y_col = selected_measures[0]
+        fig = px.bar(
+            pdf_sorted,
+            x=x_col,
+            y=y_col,
+            color=selected_dimension if selected_dimension and selected_dimension in pdf_sorted.columns else None,
+            labels={
+                x_col: exhibit.x_axis.label or x_col.replace('_', ' ').title(),
+                y_col: exhibit.y_axis.label if hasattr(exhibit, 'y_axis') and exhibit.y_axis and exhibit.y_axis.label else y_col.replace('_', ' ').title()
+            },
+        )
+    else:
+        fig = go.Figure()
+        for measure in selected_measures:
+            fig.add_trace(go.Bar(
+                x=pdf_sorted[x_col],
+                y=pdf_sorted[measure],
+                name=measure.replace('_', ' ').title(),
+            ))
+        fig.update_layout(barmode='group')
+
+    # Style the figure
+    fig.update_layout(
+        title=exhibit.title if exhibit.title else None,
+        hovermode='closest',
+        margin=dict(l=40, r=40, t=40 if exhibit.title else 20, b=40),
+        legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
+        template='plotly_white',
+    )
+    fig.update_xaxes(showgrid=False)
+    fig.update_yaxes(showgrid=True)
+
+    # Get height from exhibit config
+    height = 300
+    if hasattr(exhibit, 'options') and exhibit.options and exhibit.options.get('height'):
+        height = exhibit.options['height']
+
+    # Convert to HTML
+    html = pio.to_html(
+        fig,
+        full_html=False,
+        include_plotlyjs='cdn',
+        config={'displayModeBar': True, 'responsive': True}
+    )
+
+    return f'<div style="height: {height}px; width: 100%;">{html}</div>'

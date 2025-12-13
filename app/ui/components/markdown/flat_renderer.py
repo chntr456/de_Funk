@@ -1304,35 +1304,17 @@ def render_flat_notebook(
                             if not exhibit:
                                 return None
 
-                            # Check exhibit type for HTML extraction
-                            from app.notebook.schema import ExhibitType
-
-                            # Helper to check exhibit type
-                            def is_type(exhibit, type_name):
-                                return (
-                                    exhibit.type == getattr(ExhibitType, type_name.upper(), None) or
-                                    exhibit.type == type_name or
-                                    (hasattr(exhibit.type, 'value') and exhibit.type.value == type_name)
-                                )
-
                             try:
                                 exhibit_id = cell_block.get('id')
                                 df = notebook_session.get_exhibit_data(exhibit_id)
                                 pdf = connection.to_pandas(df)
 
-                                # Great Tables
-                                if is_type(exhibit, 'great_table'):
-                                    from app.ui.components.exhibits.great_table import get_great_table_html
-                                    return get_great_table_html(exhibit, pdf)
+                                # Use the generic exhibit HTML dispatcher for any exhibit type
+                                from app.ui.components.exhibits import get_exhibit_html
+                                return get_exhibit_html(exhibit, pdf)
 
-                                # Line Charts
-                                if is_type(exhibit, 'line_chart'):
-                                    from app.ui.components.exhibits.line_chart import get_line_chart_html
-                                    return get_line_chart_html(exhibit, pdf)
-
-                                # Other chart types not yet supported for HTML extraction
-                                return None
                             except Exception as e:
+                                logger.error(f"Error getting HTML for cell {cell_block.get('id')}: {e}")
                                 import traceback
                                 traceback.print_exc()
                                 return None
