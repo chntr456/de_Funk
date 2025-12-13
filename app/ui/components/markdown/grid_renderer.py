@@ -200,10 +200,11 @@ def _render_matrix_grid(
 
     # Build the full HTML
     grid_html = f'''<!DOCTYPE html>
-<html>
+<html style="height:100%;">
 <head>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        html, body {{ height: 100%; }}
         body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }}
 
         #{grid_id} * {{ box-sizing: border-box; }}
@@ -226,8 +227,8 @@ def _render_matrix_grid(
     </style>
 </head>
 <body>
-    <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;">
-        <div class="de-funk-grid" style="display:grid;grid-template-areas:{grid_template_areas};grid-template-columns:{grid_template_columns};gap:{gap}px;width:100%;">{''.join(cells_html)}</div>
+    <div id="{grid_id}" class="de-funk-grid-wrapper" style="border:1px solid #ddd;border-radius:4px;height:100%;">
+        <div class="de-funk-grid" style="display:grid;grid-template-areas:{grid_template_areas};grid-template-columns:{grid_template_columns};grid-template-rows:repeat({num_rows}, 1fr);gap:{gap}px;width:100%;height:100%;">{''.join(cells_html)}</div>
     </div>
     {sync_js}
 </body>
