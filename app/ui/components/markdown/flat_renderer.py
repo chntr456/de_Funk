@@ -1235,28 +1235,9 @@ def render_flat_notebook(
                         if config.layout:
                             # Matrix mode: map cell IDs to content
                             from .grid_renderer import render_html_grid
-                            import logging
-                            logger = logging.getLogger(__name__)
 
                             cell_contents = {}
                             cell_types = {}
-
-                            # Debug: log grid configuration
-                            logger.info(f"Matrix grid layout: {config.layout}")
-                            logger.info(f"Matrix grid sizes: {config.sizes}")
-                            logger.info(f"Grid cell blocks count: {len(grid_cell_blocks)}")
-                            for i, cb in enumerate(grid_cell_blocks):
-                                cb_type = cb.get('type')
-                                if cb_type == 'exhibit':
-                                    ex = cb.get('exhibit')
-                                    gc = getattr(ex, 'grid_cell', None) if ex else None
-                                    logger.info(f"  Block {i}: type={cb_type}, grid_cell={gc}, title={getattr(ex, 'title', 'N/A') if ex else 'N/A'}")
-                                elif cb_type == 'markdown_block':
-                                    gc = cb.get('grid_cell')
-                                    content_preview = cb.get('content', '')[:50]
-                                    logger.info(f"  Block {i}: type={cb_type}, grid_cell={gc}, content={content_preview}...")
-                                else:
-                                    logger.info(f"  Block {i}: type={cb_type}")
 
                             # Assign cells based on type and grid_cell attribute
                             # Priority: explicit grid_cell > markdown default to 1 > auto-assign
@@ -1294,10 +1275,6 @@ def render_flat_notebook(
                                     if html:
                                         cell_contents[cell_id] = html
                                         cell_types[cell_id] = 'exhibit'
-
-                            # Debug: log final cell mapping
-                            logger.info(f"Final cell_contents keys: {list(cell_contents.keys())}")
-                            logger.info(f"Final cell_types: {cell_types}")
 
                             # Get scroll settings
                             max_height = getattr(config, 'max_height', None)
