@@ -94,3 +94,15 @@ edges:
     "on": ["trade_date=date"]
     type: left
     description: "Join prices to calendar for date filtering"
+
+paths:
+  # Path for cross-model ticker filtering: company → stock → prices
+  company_ticker_to_prices:
+    description: "Enable ticker filter from company.dim_company to apply to fact_stock_prices"
+    steps:
+      - from: company.dim_company
+        to: dim_stock
+        via: ticker
+      - from: dim_stock
+        to: fact_stock_prices
+        via: ticker

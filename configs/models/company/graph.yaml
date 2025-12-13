@@ -203,6 +203,14 @@ nodes:
     unique_key: [cik, fiscal_date_ending, report_type]
 
 edges:
+  # Cross-model edge to stocks for ticker-based filtering
+  company_to_stock:
+    from: dim_company
+    to: stocks.dim_stock
+    "on": ["ticker=ticker"]
+    type: one_to_one
+    description: "Company's primary stock listing - enables ticker filter to apply to stock prices"
+
   # Link financial statements to company dimension
   income_statement_to_company:
     from: fact_income_statement
