@@ -136,171 +136,141 @@ def get_bar_chart_html(exhibit, pdf: pd.DataFrame) -> str:
     """
     Get bar chart as embeddable HTML for CSS grid rendering.
 
-    Features:
-    - Aggregates large datasets to prevent browser overload
-    - Uses Plotly dropdown menus for measure selection
-    - Supports all the same configurations as the Streamlit version
+    Renders the chart based on YAML-defined measures and dimensions,
+    matching the existing exhibit paradigm. Measure/dimension selectors
+    are handled separately by the sidebar UI, not embedded in the chart.
 
     Args:
         exhibit: Exhibit configuration
         pdf: Pandas DataFrame with data
 
     Returns:
-        HTML string with embedded Plotly chart and interactive dropdowns
+        HTML string with embedded Plotly chart
     """
     import plotly.io as pio
     from config.logging import get_logger
     logger = get_logger(__name__)
 
+    # Get x column
     if not hasattr(exhibit, 'x_axis') or not exhibit.x_axis:
-        return "<div>Bar chart requires x_axis configuration</div>"
+        x_col = getattr(exhibit, 'x', None)
+        if not x_col:
+            return "<div>Bar chart requires x_axis configuration</div>"
+    else:
+        x_col = exhibit.x_axis.dimension
 
-    x_col = exhibit.x_axis.dimension
+    if x_col not in pdf.columns:
+        return f"<div>X column '{x_col}' not found in data</div>"
 
-    # Get available measures from measure_selector or y_axis
-    available_measures = []
-    default_measures = []
-    if hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
-        ms = exhibit.measure_selector
-        if hasattr(ms, 'available_measures') and ms.available_measures:
-            available_measures = [m for m in ms.available_measures if m in pdf.columns]
-        if hasattr(ms, 'default_measures') and ms.default_measures:
-            default_measures = [m for m in ms.default_measures if m in pdf.columns]
-    elif hasattr(exhibit, 'y_axis') and exhibit.y_axis:
+    # Get measures from YAML config
+    measures = []
+    if hasattr(exhibit, 'y_axis') and exhibit.y_axis:
         if hasattr(exhibit.y_axis, 'measure') and exhibit.y_axis.measure:
             if isinstance(exhibit.y_axis.measure, list):
-                available_measures = [m for m in exhibit.y_axis.measure if m in pdf.columns]
+                measures = exhibit.y_axis.measure
             else:
-                available_measures = [exhibit.y_axis.measure] if exhibit.y_axis.measure in pdf.columns else []
+                measures = [exhibit.y_axis.measure]
         elif hasattr(exhibit.y_axis, 'measures') and exhibit.y_axis.measures:
-            available_measures = [m for m in exhibit.y_axis.measures if m in pdf.columns]
-        default_measures = available_measures[:1] if available_measures else []
+            measures = exhibit.y_axis.measures
+    elif hasattr(exhibit, 'y') and exhibit.y:
+        if isinstance(exhibit.y, list):
+            measures = exhibit.y
+        else:
+            measures = [exhibit.y]
+    elif hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
+        ms = exhibit.measure_selector
+        if hasattr(ms, 'default_measures') and ms.default_measures:
+            measures = ms.default_measures
+        elif hasattr(ms, 'available_measures') and ms.available_measures:
+            measures = ms.available_measures[:1]
 
-    if not available_measures:
-        # Fallback: find numeric columns
-        available_measures = [c for c in pdf.columns if pd.api.types.is_numeric_dtype(pdf[c]) and c != x_col][:5]
-        default_measures = available_measures[:1]
+    # Filter to columns that exist
+    measures = [m for m in measures if m in pdf.columns]
 
-    if not available_measures:
+    if not measures:
+        measures = [c for c in pdf.columns if pd.api.types.is_numeric_dtype(pdf[c]) and c != x_col][:3]
+
+    if not measures:
         return "<div>No numeric measures found for bar chart</div>"
 
-    if not default_measures:
-        default_measures = available_measures[:1]
-
-    # Get selected dimension (use default from dimension_selector or color_by)
-    selected_dimension = None
-    if hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
+    # Get color/dimension from YAML config
+    color_col = None
+    if hasattr(exhibit, 'color_by') and exhibit.color_by and exhibit.color_by in pdf.columns:
+        color_col = exhibit.color_by
+    elif hasattr(exhibit, 'color') and exhibit.color and exhibit.color in pdf.columns:
+        color_col = exhibit.color
+    elif hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
         ds = exhibit.dimension_selector
-        if hasattr(ds, 'default_dimension') and ds.default_dimension:
-            selected_dimension = ds.default_dimension if ds.default_dimension in pdf.columns else None
-    elif hasattr(exhibit, 'color_by') and exhibit.color_by:
-        selected_dimension = exhibit.color_by if exhibit.color_by in pdf.columns else None
+        if hasattr(ds, 'default_dimension') and ds.default_dimension and ds.default_dimension in pdf.columns:
+            color_col = ds.default_dimension
 
-    # Check for static aggregation
-    agg_method = 'sum'  # Default aggregation for bar charts
+    # Check for aggregation config
+    agg_method = 'sum'
     if hasattr(exhibit, 'options') and exhibit.options:
         agg_method = exhibit.options.get('aggregation', 'sum')
 
     agg_map = {
-        'avg': 'mean', 'mean': 'mean',
-        'sum': 'sum', 'min': 'min', 'max': 'max',
-        'count': 'count', 'first': 'first', 'last': 'last'
+        'avg': 'mean', 'mean': 'mean', 'sum': 'sum',
+        'min': 'min', 'max': 'max', 'count': 'count'
     }
     pandas_agg = agg_map.get(agg_method, 'sum')
 
-    # Limit dimension values for large datasets
+    # Limit data size
     MAX_BARS = 50
     MAX_DIMENSION_VALUES = 10
 
     # Aggregate data
     group_cols = [x_col]
-    if selected_dimension and selected_dimension in pdf.columns:
-        # Limit dimension values
-        top_dims = pdf[selected_dimension].value_counts().head(MAX_DIMENSION_VALUES).index.tolist()
-        pdf = pdf[pdf[selected_dimension].isin(top_dims)]
-        group_cols.append(selected_dimension)
+    if color_col:
+        top_dims = pdf[color_col].value_counts().head(MAX_DIMENSION_VALUES).index.tolist()
+        pdf = pdf[pdf[color_col].isin(top_dims)]
+        group_cols.append(color_col)
 
-    agg_dict = {m: pandas_agg for m in available_measures if m in pdf.columns}
-    if agg_dict:
-        try:
-            pdf_agg = pdf.groupby(group_cols, as_index=False).agg(agg_dict)
-        except Exception as e:
-            logger.warning(f"Bar chart aggregation failed: {e}")
-            pdf_agg = pdf
-    else:
-        pdf_agg = pdf
+    agg_dict = {m: pandas_agg for m in measures}
+    try:
+        pdf = pdf.groupby(group_cols, as_index=False).agg(agg_dict)
+    except Exception as e:
+        logger.warning(f"Bar chart aggregation failed: {e}")
 
     # Limit number of bars
-    if len(pdf_agg) > MAX_BARS:
-        # Keep top N by first default measure
-        pdf_agg = pdf_agg.nlargest(MAX_BARS, default_measures[0])
+    if len(pdf) > MAX_BARS:
+        pdf = pdf.nlargest(MAX_BARS, measures[0])
 
-    # Sort by first default measure
-    pdf_sorted = pdf_agg.sort_values(by=default_measures[0], ascending=False)
+    # Sort by first measure
+    pdf = pdf.sort_values(by=measures[0], ascending=False)
 
-    logger.debug(f"Bar chart HTML: {len(pdf_sorted)} bars after aggregation, measures={available_measures}")
+    logger.debug(f"Bar chart HTML: {len(pdf)} bars, measures={measures}, color={color_col}")
 
-    # Build figure with all measures as traces
+    # Build figure
     fig = go.Figure()
-    trace_info = []
 
-    for measure in available_measures:
-        is_visible = measure in default_measures
-        if selected_dimension and selected_dimension in pdf_sorted.columns:
-            # Create grouped bars by dimension
-            for dim_val in pdf_sorted[selected_dimension].unique():
-                df_subset = pdf_sorted[pdf_sorted[selected_dimension] == dim_val]
+    if color_col:
+        for measure in measures:
+            for dim_val in pdf[color_col].unique():
+                df_subset = pdf[pdf[color_col] == dim_val]
+                name = f"{dim_val}" if len(measures) == 1 else f"{dim_val} - {measure.replace('_', ' ').title()}"
                 fig.add_trace(go.Bar(
                     x=df_subset[x_col],
                     y=df_subset[measure],
-                    name=f"{dim_val}",
-                    visible=is_visible,
+                    name=name,
                     legendgroup=str(dim_val),
                 ))
-                trace_info.append((measure, dim_val))
-        else:
+    else:
+        for measure in measures:
             fig.add_trace(go.Bar(
-                x=pdf_sorted[x_col],
-                y=pdf_sorted[measure],
+                x=pdf[x_col],
+                y=pdf[measure],
                 name=measure.replace('_', ' ').title(),
-                visible=is_visible,
             ))
-            trace_info.append((measure, None))
-
-    # Build dropdown menus for measure selection
-    buttons = []
-    for measure in available_measures:
-        visibility = [info[0] == measure for info in trace_info]
-        buttons.append(dict(
-            label=measure.replace('_', ' ').title(),
-            method='update',
-            args=[{'visible': visibility},
-                  {'title': f"{exhibit.title} - {measure.replace('_', ' ').title()}" if exhibit.title else measure.replace('_', ' ').title()}]
-        ))
 
     # Style the figure
     fig.update_layout(
-        title=exhibit.title if exhibit.title else None,
-        barmode='group' if selected_dimension else 'relative',
+        title=exhibit.title if hasattr(exhibit, 'title') and exhibit.title else None,
+        barmode='group' if color_col or len(measures) > 1 else 'relative',
         hovermode='closest',
-        margin=dict(l=40, r=40, t=60 if len(buttons) > 1 else 40, b=40),
+        margin=dict(l=40, r=40, t=40 if not (hasattr(exhibit, 'title') and exhibit.title) else 60, b=40),
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
         template='plotly_white',
-        updatemenus=[
-            dict(
-                active=available_measures.index(default_measures[0]) if default_measures and default_measures[0] in available_measures else 0,
-                buttons=buttons,
-                direction='down',
-                showactive=True,
-                x=0.0,
-                xanchor='left',
-                y=1.15,
-                yanchor='top',
-                bgcolor='white',
-                bordercolor='#ccc',
-                font=dict(size=11),
-            )
-        ] if len(buttons) > 1 else []
     )
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(showgrid=True)
