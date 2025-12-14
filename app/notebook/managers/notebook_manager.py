@@ -734,14 +734,25 @@ class NotebookManager:
                     filters[filter_id] = value
                     continue
 
-                # Check if filter should apply based on model relationships
+                # Check if filter should apply based on model relationships or column existence
                 if exhibit_model and filter_config.source:
                     filter_model = filter_config.source.model
+                    filter_column = filter_config.source.column
 
-                    # Check if filter should be applied (same model or related models)
+                    # Check if filter should be applied:
+                    # 1. Same model or related models via graph (relationship check)
+                    # 2. OR the filter column exists in the target table (direct column match)
                     if not self.session.should_apply_cross_model_filter(filter_model, exhibit_model):
-                        # No relationship declared - skip this filter
-                        continue
+                        # No relationship declared - check if column exists in target table
+                        # This handles cases like ticker filter from company applying to stocks
+                        try:
+                            _, exhibit_table = self._parse_source(exhibit.source)
+                            if not self.session.column_exists_in_table(exhibit_model, exhibit_table, filter_column):
+                                # Column doesn't exist in target table - skip this filter
+                                continue
+                        except (ValueError, AttributeError):
+                            # Can't determine target table - skip filter to be safe
+                            continue
 
                 # Convert based on filter type
                 if filter_config.type == FilterType.DATE_RANGE:

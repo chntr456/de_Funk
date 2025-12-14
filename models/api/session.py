@@ -107,11 +107,12 @@ class UniversalSession:
         # Cache loaded models
         self._models: Dict[str, Any] = {}
 
-        # Build model dependency graph
+        # Build model dependency graph from registry (handles modular YAML)
         from models.api.graph import ModelGraph
         self.model_graph = ModelGraph()
         try:
-            self.model_graph.build_from_config_dir(models_dir)
+            # Use registry to handle modular YAML configs (v2.0+)
+            self.model_graph.build_from_registry(self.registry)
         except Exception as e:
             print(f"Warning: Could not build model graph: {e}")
 
@@ -173,12 +174,50 @@ class UniversalSession:
         - Same model (always apply)
         - Models are related via graph (cross-model filter is valid)
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         if source_model == target_model:
             return True
 
         if hasattr(self, 'model_graph') and self.model_graph:
-            return self.model_graph.are_related(target_model, source_model)
+            result = self.model_graph.are_related(target_model, source_model)
+            logger.debug(
+                f"Cross-model filter check: {source_model} -> {target_model} = {result}"
+            )
+            return result
 
+        logger.warning("Model graph not available for cross-model filter check")
+        return False
+
+    def column_exists_in_table(
+        self,
+        model_name: str,
+        table_name: str,
+        column_name: str
+    ) -> bool:
+        """
+        Check if a column exists in a table.
+
+        This is used to determine if a filter can be applied to a table
+        regardless of model relationships. If the column exists, the filter
+        can be applied directly.
+
+        Args:
+            model_name: Name of the model (e.g., 'stocks')
+            table_name: Name of the table (e.g., 'fact_stock_prices')
+            column_name: Name of the column to check (e.g., 'ticker')
+
+        Returns:
+            True if the column exists in the table, False otherwise
+        """
+        try:
+            model = self.load_model(model_name)
+            schema = model.get_table_schema(table_name)
+            if schema:
+                return column_name in schema
+        except Exception:
+            pass
         return False
 
     # ============================================================
