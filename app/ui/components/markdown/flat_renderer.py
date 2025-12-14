@@ -1276,6 +1276,61 @@ def render_flat_notebook(
                                         set_edit_state(block['_flat_id'], False)
                                         st.rerun()
 
+                        # Render dimension selectors for grid exhibits BEFORE the grid
+                        # This allows server-side dimension switching for exhibits in grids
+                        def _render_grid_dimension_selectors(exhibit_blocks):
+                            """Render dimension selectors for exhibits that have them."""
+                            selectors_rendered = False
+                            for eb in exhibit_blocks:
+                                exhibit = eb.get('exhibit')
+                                if not exhibit:
+                                    continue
+
+                                has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
+                                if not has_dimension_selector:
+                                    continue
+
+                                ds = exhibit.dimension_selector
+                                available_dims = getattr(ds, 'available_dimensions', [])
+                                if len(available_dims) <= 1:
+                                    continue
+
+                                # Render selector for this exhibit
+                                exhibit_id = eb.get('id')
+                                default_dim = getattr(ds, 'default_dimension', available_dims[0])
+                                state_key = f"dim_selector_{exhibit_id}"
+
+                                if state_key not in st.session_state:
+                                    st.session_state[state_key] = default_dim
+
+                                label = getattr(ds, 'label', 'Group By')
+                                exhibit_title = getattr(exhibit, 'title', exhibit_id) or exhibit_id
+
+                                # Render in a compact column layout
+                                if not selectors_rendered:
+                                    st.markdown("**Dimension Selectors**")
+                                    selectors_rendered = True
+
+                                col1, col2 = st.columns([0.3, 0.7])
+                                with col1:
+                                    st.caption(exhibit_title)
+                                with col2:
+                                    selected = st.selectbox(
+                                        label,
+                                        options=available_dims,
+                                        index=available_dims.index(st.session_state[state_key]) if st.session_state[state_key] in available_dims else 0,
+                                        key=f"{state_key}_grid_select",
+                                        format_func=lambda x: x.replace('_', ' ').title(),
+                                        label_visibility="collapsed"
+                                    )
+                                    st.session_state[state_key] = selected
+
+                            if selectors_rendered:
+                                st.markdown("---")
+
+                        # Render dimension selectors above the grid
+                        _render_grid_dimension_selectors(grid_exhibit_blocks)
+
                         # Define a render function that works with our exhibit blocks
                         def render_single_exhibit(exhibit_block):
                             render_exhibit_block(exhibit_block, notebook_session, connection)
@@ -1309,9 +1364,16 @@ def render_flat_notebook(
                                 df = notebook_session.get_exhibit_data(exhibit_id)
                                 pdf = connection.to_pandas(df)
 
+                                # Get selected dimension from session state (set by selectors above grid)
+                                selected_dimension = None
+                                has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
+                                if has_dimension_selector:
+                                    state_key = f"dim_selector_{exhibit_id}"
+                                    selected_dimension = st.session_state.get(state_key)
+
                                 # Use the generic exhibit HTML dispatcher for any exhibit type
                                 from app.ui.components.exhibits import get_exhibit_html
-                                return get_exhibit_html(exhibit, pdf)
+                                return get_exhibit_html(exhibit, pdf, selected_dimension=selected_dimension)
 
                             except Exception as e:
                                 logger.error(f"Error getting HTML for cell {cell_block.get('id')}: {e}")
