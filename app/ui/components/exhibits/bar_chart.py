@@ -248,7 +248,7 @@ def get_bar_chart_html(
             yanchor='top',
             font=dict(size=14)
         ) if has_title else None,
-        barmode='group' if color_col or len(available_measures) > 1 else 'relative',
+        barmode='group' if default_dimension or len(measures_to_display) > 1 else 'relative',
         hovermode='closest',
         margin=dict(l=40, r=40, t=top_margin, b=40),
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
