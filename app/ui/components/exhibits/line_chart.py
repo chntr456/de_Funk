@@ -317,7 +317,7 @@ def get_line_chart_html(
         updatemenus.append(dict(
             active=0,
             buttons=measure_buttons,
-            direction='right',  # Buttons expand to the right
+            direction='down',
             showactive=True,
             x=0,
             xanchor='left',
@@ -342,9 +342,9 @@ def get_line_chart_html(
         updatemenus.append(dict(
             active=available_dimensions.index(default_dimension) if default_dimension in available_dimensions else 0,
             buttons=dim_buttons,
-            direction='right',
+            direction='down',
             showactive=True,
-            x=0.5,  # Position to the right of measure selector
+            x=0.15,  # Position close to measure selector
             xanchor='left',
             y=menu_y_offset,
             yanchor='bottom',

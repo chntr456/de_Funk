@@ -313,7 +313,7 @@ def get_bar_chart_html(
         updatemenus.append(dict(
             active=0,
             buttons=measure_buttons,
-            direction='right',
+            direction='down',
             showactive=True,
             x=0,
             xanchor='left',
@@ -345,9 +345,9 @@ def get_bar_chart_html(
             updatemenus.append(dict(
                 active=available_dimensions.index(color_col) if color_col in available_dimensions else 0,
                 buttons=dim_buttons,
-                direction='right',
+                direction='down',
                 showactive=True,
-                x=0.5,
+                x=0.15,  # Position close to measure selector
                 xanchor='left',
                 y=menu_y_offset,
                 yanchor='bottom',
