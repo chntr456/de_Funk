@@ -339,7 +339,7 @@ def get_bar_chart_html(
                 dim_buttons.append(dict(
                     label=dim.replace('_', ' ').title(),
                     method='update',
-                    args=[{}]
+                    args=[{}]  # No-op - dimension is set at render time
                 ))
 
             updatemenus.append(dict(

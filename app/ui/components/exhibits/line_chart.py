@@ -293,7 +293,7 @@ def get_line_chart_html(
             ))
             trace_info.append((measure, None))
 
-    # Build dropdown menus for selectors (left-aligned, stacked vertically)
+    # Build dropdown menus for selectors (left-aligned)
     updatemenus = []
     menu_y_offset = 1.0  # Position just above chart area
 
@@ -336,7 +336,7 @@ def get_line_chart_html(
             dim_buttons.append(dict(
                 label=dim.replace('_', ' ').title(),
                 method='update',
-                args=[{}]  # No-op for now, dimension is set at render time
+                args=[{}]  # No-op - dimension is set at render time
             ))
 
         updatemenus.append(dict(
