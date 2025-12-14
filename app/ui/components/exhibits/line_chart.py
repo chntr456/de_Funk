@@ -293,9 +293,9 @@ def get_line_chart_html(
             ))
             trace_info.append((measure, None))
 
-    # Build dropdown menus for selectors
+    # Build dropdown menus for selectors (left-aligned, stacked vertically)
     updatemenus = []
-    menu_x_offset = 0.0  # Track horizontal position for multiple dropdowns
+    menu_y_offset = 1.02  # Start below title area
 
     # Measure selector dropdown (if measure_selector is configured and has multiple measures)
     if has_measure_selector and len(available_measures) > 1:
@@ -314,49 +314,44 @@ def get_line_chart_html(
             args=[{'visible': [True] * len(trace_info)}]
         ))
 
-        ms_label = getattr(exhibit.measure_selector, 'label', 'Measures') if has_measure_selector else 'Measures'
         updatemenus.append(dict(
             active=0,
             buttons=measure_buttons,
-            direction='down',
+            direction='right',  # Buttons expand to the right
             showactive=True,
-            x=menu_x_offset,
+            x=0,
             xanchor='left',
-            y=1.15,
-            yanchor='top',
-            bgcolor='white',
-            bordercolor='#ccc',
+            y=menu_y_offset,
+            yanchor='bottom',
+            bgcolor='rgba(255,255,255,0.9)',
+            bordercolor='#ddd',
             font=dict(size=10),
-            pad=dict(r=5, t=5),
+            pad=dict(r=2, t=2, b=2, l=2),
         ))
-        menu_x_offset += 0.25  # Move next dropdown to the right
 
     # Dimension selector dropdown (if dimension_selector is configured and has multiple dimensions)
     if has_dimension_selector and len(available_dimensions) > 1:
         dim_buttons = []
         for dim in available_dimensions:
-            # For dimension switching, we show all traces but this requires page reload
-            # For now, just show which dimension is selected
             dim_buttons.append(dict(
                 label=dim.replace('_', ' ').title(),
                 method='update',
                 args=[{}]  # No-op for now, dimension is set at render time
             ))
 
-        ds_label = getattr(exhibit.dimension_selector, 'label', 'Group By') if has_dimension_selector else 'Group By'
         updatemenus.append(dict(
             active=available_dimensions.index(default_dimension) if default_dimension in available_dimensions else 0,
             buttons=dim_buttons,
-            direction='down',
+            direction='right',
             showactive=True,
-            x=menu_x_offset,
+            x=0.5,  # Position to the right of measure selector
             xanchor='left',
-            y=1.15,
-            yanchor='top',
-            bgcolor='white',
-            bordercolor='#ccc',
+            y=menu_y_offset,
+            yanchor='bottom',
+            bgcolor='rgba(255,255,255,0.9)',
+            bordercolor='#ddd',
             font=dict(size=10),
-            pad=dict(r=5, t=5),
+            pad=dict(r=2, t=2, b=2, l=2),
         ))
 
     # Style the figure with proper spacing for dropdowns and title

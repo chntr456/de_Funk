@@ -289,9 +289,9 @@ def get_bar_chart_html(
             ))
             trace_info.append((measure, None))
 
-    # Build dropdown menus for selectors
+    # Build dropdown menus for selectors (left-aligned)
     updatemenus = []
-    menu_x_offset = 0.0
+    menu_y_offset = 1.02
 
     # Measure selector dropdown (if measure_selector is configured and has multiple measures)
     if has_measure_selector and len(available_measures) > 1:
@@ -313,18 +313,17 @@ def get_bar_chart_html(
         updatemenus.append(dict(
             active=0,
             buttons=measure_buttons,
-            direction='down',
+            direction='right',
             showactive=True,
-            x=menu_x_offset,
+            x=0,
             xanchor='left',
-            y=1.15,
-            yanchor='top',
-            bgcolor='white',
-            bordercolor='#ccc',
+            y=menu_y_offset,
+            yanchor='bottom',
+            bgcolor='rgba(255,255,255,0.9)',
+            bordercolor='#ddd',
             font=dict(size=10),
-            pad=dict(r=5, t=5),
+            pad=dict(r=2, t=2, b=2, l=2),
         ))
-        menu_x_offset += 0.25
 
     # Dimension selector dropdown (if configured)
     has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
@@ -346,16 +345,16 @@ def get_bar_chart_html(
             updatemenus.append(dict(
                 active=available_dimensions.index(color_col) if color_col in available_dimensions else 0,
                 buttons=dim_buttons,
-                direction='down',
+                direction='right',
                 showactive=True,
-                x=menu_x_offset,
+                x=0.5,
                 xanchor='left',
-                y=1.15,
-                yanchor='top',
-                bgcolor='white',
-                bordercolor='#ccc',
+                y=menu_y_offset,
+                yanchor='bottom',
+                bgcolor='rgba(255,255,255,0.9)',
+                bordercolor='#ddd',
                 font=dict(size=10),
-                pad=dict(r=5, t=5),
+                pad=dict(r=2, t=2, b=2, l=2),
             ))
 
     # Style the figure with proper spacing for dropdowns and title
