@@ -51,6 +51,36 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
     has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
     has_selectors = has_measure_selector or has_dimension_selector
 
+    def _get_selected_dimension() -> str:
+        """Get selected dimension from Streamlit session state or render selector."""
+        if not has_dimension_selector:
+            return None
+
+        ds = exhibit.dimension_selector
+        available_dims = getattr(ds, 'available_dimensions', [])
+        if len(available_dims) <= 1:
+            return available_dims[0] if available_dims else None
+
+        default_dim = getattr(ds, 'default_dimension', available_dims[0])
+
+        # Session state key
+        state_key = f"dim_selector_{exhibit_id}"
+        if state_key not in st.session_state:
+            st.session_state[state_key] = default_dim
+
+        # Render selectbox for dimension switching
+        label = getattr(ds, 'label', 'Group By')
+        selected = st.selectbox(
+            label,
+            options=available_dims,
+            index=available_dims.index(st.session_state[state_key]) if st.session_state[state_key] in available_dims else 0,
+            key=f"{state_key}_select",
+            format_func=lambda x: x.replace('_', ' ').title()
+        )
+
+        st.session_state[state_key] = selected
+        return selected
+
     # Check if exhibit should be rendered in collapsible section
     # NOTE: Don't auto-wrap exhibits with selectors - they'll create their own individual expanders
     is_collapsible = getattr(exhibit, 'collapsible', False) and not has_selectors
@@ -72,16 +102,18 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
             if exhibit.type == ExhibitType.METRIC_CARDS:
                 render_metric_cards(exhibit, pdf)
             elif exhibit.type == ExhibitType.LINE_CHART:
-                # Use unified HTML rendering for consistency with grid views
-                html = get_exhibit_html(exhibit, pdf)
+                # Render dimension selector (Streamlit) and get selection
+                selected_dim = _get_selected_dimension()
+                html = get_exhibit_html(exhibit, pdf, selected_dimension=selected_dim)
                 if html:
                     height = getattr(exhibit, 'height', None) or 400
                     components.html(html, height=height + 50, scrolling=False)
                 else:
                     st.warning("Could not render line chart")
             elif exhibit.type == ExhibitType.BAR_CHART:
-                # Use unified HTML rendering for consistency with grid views
-                html = get_exhibit_html(exhibit, pdf)
+                # Render dimension selector (Streamlit) and get selection
+                selected_dim = _get_selected_dimension()
+                html = get_exhibit_html(exhibit, pdf, selected_dimension=selected_dim)
                 if html:
                     height = getattr(exhibit, 'height', None) or 350
                     components.html(html, height=height + 50, scrolling=False)

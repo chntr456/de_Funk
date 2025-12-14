@@ -20,6 +20,49 @@ from .exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_c
 from .exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
 
 
+def _render_dimension_selector(exhibit) -> Optional[str]:
+    """
+    Render a Streamlit dimension selector if configured.
+
+    Uses session state to track selection and triggers server-side re-aggregation
+    when dimension changes.
+
+    Args:
+        exhibit: Exhibit configuration
+
+    Returns:
+        Selected dimension name or None
+    """
+    has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
+    if not has_dimension_selector:
+        return None
+
+    ds = exhibit.dimension_selector
+    available_dimensions = getattr(ds, 'available_dimensions', [])
+    if len(available_dimensions) <= 1:
+        return available_dimensions[0] if available_dimensions else None
+
+    default_dimension = getattr(ds, 'default_dimension', available_dimensions[0])
+
+    # Session state key for this exhibit's dimension
+    state_key = f"dim_selector_{exhibit.id}"
+    if state_key not in st.session_state:
+        st.session_state[state_key] = default_dimension
+
+    # Render selectbox
+    label = getattr(ds, 'label', 'Group By')
+    selected = st.selectbox(
+        label,
+        options=available_dimensions,
+        index=available_dimensions.index(st.session_state[state_key]) if st.session_state[state_key] in available_dimensions else 0,
+        key=f"{state_key}_select",
+        format_func=lambda x: x.replace('_', ' ').title()
+    )
+
+    st.session_state[state_key] = selected
+    return selected
+
+
 def render_notebook_exhibits(
     notebook_id: str,
     notebook_config,
@@ -127,17 +170,18 @@ def render_exhibit(exhibit_id: str, notebook_config, notebook_session, connectio
         if exhibit.type == ExhibitType.METRIC_CARDS:
             render_metric_cards(exhibit, pdf)
         elif exhibit.type == ExhibitType.LINE_CHART:
-            # Use unified HTML rendering for consistency with grid views
-            html = get_exhibit_html(exhibit, pdf)
+            # Check for dimension selector - use Streamlit for server-side aggregation
+            selected_dim = _render_dimension_selector(exhibit)
+            html = get_exhibit_html(exhibit, pdf, selected_dimension=selected_dim)
             if html:
-                # Get height from exhibit config
                 height = getattr(exhibit, 'height', None) or 400
                 components.html(html, height=height + 50, scrolling=False)
             else:
                 st.warning("Could not render line chart")
         elif exhibit.type == ExhibitType.BAR_CHART:
-            # Use unified HTML rendering for consistency with grid views
-            html = get_exhibit_html(exhibit, pdf)
+            # Check for dimension selector - use Streamlit for server-side aggregation
+            selected_dim = _render_dimension_selector(exhibit)
+            html = get_exhibit_html(exhibit, pdf, selected_dimension=selected_dim)
             if html:
                 height = getattr(exhibit, 'height', None) or 350
                 components.html(html, height=height + 50, scrolling=False)

@@ -90,23 +90,43 @@ def get_bar_chart_html(
     if not default_measures:
         default_measures = available_measures[:1]
 
-    # Get color/dimension from YAML config
-    color_col = None
-    if selected_dimension and selected_dimension in pdf.columns:
-        color_col = selected_dimension
-    elif hasattr(exhibit, 'color_by') and exhibit.color_by and exhibit.color_by in pdf.columns:
-        color_col = exhibit.color_by
-    elif hasattr(exhibit, 'color') and exhibit.color and exhibit.color in pdf.columns:
-        color_col = exhibit.color
-    elif hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
+    # Check for dimension_selector configuration
+    has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
+
+    # Get available dimensions and default dimension
+    available_dimensions = []
+    default_dimension = None
+
+    if has_dimension_selector:
         ds = exhibit.dimension_selector
-        if hasattr(ds, 'default_dimension') and ds.default_dimension and ds.default_dimension in pdf.columns:
-            color_col = ds.default_dimension
+        if hasattr(ds, 'available_dimensions') and ds.available_dimensions:
+            available_dimensions = [d for d in ds.available_dimensions if d in pdf.columns]
+        if hasattr(ds, 'default_dimension') and ds.default_dimension:
+            default_dimension = ds.default_dimension if ds.default_dimension in pdf.columns else None
+    elif hasattr(exhibit, 'color_by') and exhibit.color_by and exhibit.color_by in pdf.columns:
+        available_dimensions = [exhibit.color_by]
+        default_dimension = exhibit.color_by
+    elif hasattr(exhibit, 'color') and exhibit.color and exhibit.color in pdf.columns:
+        available_dimensions = [exhibit.color]
+        default_dimension = exhibit.color
+
+    # Use passed dimension if provided (from Streamlit selectbox)
+    if selected_dimension and selected_dimension in pdf.columns:
+        default_dimension = selected_dimension
+
+    # If no default but have available, use first
+    if not default_dimension and available_dimensions:
+        default_dimension = available_dimensions[0]
 
     # Check for aggregation config
     agg_method = 'sum'
     if hasattr(exhibit, 'options') and exhibit.options:
         agg_method = exhibit.options.get('aggregation', 'sum')
+    if has_dimension_selector:
+        ds = exhibit.dimension_selector
+        dim_agg = getattr(ds, 'aggregation', None)
+        if dim_agg:
+            agg_method = dim_agg
 
     agg_map = {
         'avg': 'mean', 'mean': 'mean', 'sum': 'sum',
@@ -118,12 +138,15 @@ def get_bar_chart_html(
     MAX_BARS = 50
     MAX_DIMENSION_VALUES = 10
 
-    # Aggregate data
+    logger.debug(f"Bar chart HTML: measures={available_measures}, dim={default_dimension}")
+
+    # Aggregate data by x_col and selected dimension
     group_cols = [x_col]
-    if color_col:
-        top_dims = pdf[color_col].value_counts().head(MAX_DIMENSION_VALUES).index.tolist()
-        pdf = pdf[pdf[color_col].isin(top_dims)]
-        group_cols.append(color_col)
+    if default_dimension and default_dimension in pdf.columns:
+        # Filter to top dimension values first
+        top_dims = pdf[default_dimension].value_counts().head(MAX_DIMENSION_VALUES).index.tolist()
+        pdf = pdf[pdf[default_dimension].isin(top_dims)]
+        group_cols.append(default_dimension)
 
     agg_dict = {m: pandas_agg for m in available_measures if m in pdf.columns}
     try:
@@ -131,24 +154,20 @@ def get_bar_chart_html(
     except Exception as e:
         logger.warning(f"Bar chart aggregation failed: {e}")
 
-    # Limit number of bars
+    # Limit bars and sort
     if len(pdf) > MAX_BARS:
         pdf = pdf.nlargest(MAX_BARS, default_measures[0])
-
-    # Sort by first measure
     pdf = pdf.sort_values(by=default_measures[0], ascending=False)
 
-    logger.debug(f"Bar chart HTML: {len(pdf)} bars, measures={available_measures}, color={color_col}")
-
-    # Build figure with all measures as traces
+    # Build figure with traces for the selected dimension
     fig = go.Figure()
-    trace_info = []
+    trace_info = []  # [(measure, dimension_value or None)]
 
-    if color_col:
+    if default_dimension and default_dimension in pdf.columns:
         for measure in available_measures:
             is_visible = measure in default_measures
-            for dim_val in pdf[color_col].unique():
-                df_subset = pdf[pdf[color_col] == dim_val]
+            for dim_val in pdf[default_dimension].unique():
+                df_subset = pdf[pdf[default_dimension] == dim_val]
                 name = f"{dim_val}" if len(available_measures) == 1 else f"{dim_val} - {measure.replace('_', ' ').title()}"
                 fig.add_trace(go.Bar(
                     x=df_subset[x_col],
@@ -169,9 +188,9 @@ def get_bar_chart_html(
             ))
             trace_info.append((measure, None))
 
-    # Build dropdown menus for selectors (left-aligned)
+    # Build dropdown menus for measure selector only (dimension is handled by Streamlit)
     updatemenus = []
-    menu_y_offset = 1.0  # Position just above chart area
+    menu_y_offset = 1.0
 
     # Measure selector dropdown (if measure_selector is configured and has multiple measures)
     if has_measure_selector and len(available_measures) > 1:
@@ -204,38 +223,6 @@ def get_bar_chart_html(
             font=dict(size=10),
             pad=dict(r=2, t=2, b=2, l=2),
         ))
-
-    # Dimension selector dropdown (if configured)
-    has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
-    if has_dimension_selector:
-        ds = exhibit.dimension_selector
-        available_dimensions = []
-        if hasattr(ds, 'available_dimensions') and ds.available_dimensions:
-            available_dimensions = [d for d in ds.available_dimensions if d in pdf.columns]
-
-        if len(available_dimensions) > 1:
-            dim_buttons = []
-            for dim in available_dimensions:
-                dim_buttons.append(dict(
-                    label=dim.replace('_', ' ').title(),
-                    method='update',
-                    args=[{}]  # No-op - dimension is set at render time
-                ))
-
-            updatemenus.append(dict(
-                active=available_dimensions.index(color_col) if color_col in available_dimensions else 0,
-                buttons=dim_buttons,
-                direction='down',
-                showactive=True,
-                x=0.15,  # Position close to measure selector
-                xanchor='left',
-                y=menu_y_offset,
-                yanchor='bottom',
-                bgcolor='rgba(255,255,255,0.9)',
-                bordercolor='#ddd',
-                font=dict(size=10),
-                pad=dict(r=2, t=2, b=2, l=2),
-            ))
 
     # Style the figure with proper spacing for dropdowns and title
     has_title = hasattr(exhibit, 'title') and exhibit.title

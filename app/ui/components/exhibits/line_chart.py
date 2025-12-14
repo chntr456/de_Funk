@@ -116,39 +116,48 @@ def get_line_chart_html(
     MAX_POINTS_PER_LINE = 500
     MAX_DIMENSION_VALUES = 10
 
-    # Filter to top dimension values by frequency if too many
-    if default_dimension and default_dimension in pdf.columns:
-        unique_vals = pdf[default_dimension].nunique()
-        if unique_vals > MAX_DIMENSION_VALUES:
-            top_dims = pdf[default_dimension].value_counts().head(MAX_DIMENSION_VALUES).index.tolist()
-            pdf = pdf[pdf[default_dimension].isin(top_dims)]
-        group_cols = [x_col, default_dimension]
-    else:
-        group_cols = [x_col]
+    # Get aggregation method from dimension_selector config
+    agg_method = 'mean'
+    if has_dimension_selector:
+        ds = exhibit.dimension_selector
+        agg_method = getattr(ds, 'aggregation', 'avg')
+        if agg_method == 'avg':
+            agg_method = 'mean'
 
-    # Aggregate data if too large
-    agg_dict = {m: 'mean' for m in available_measures if m in pdf.columns}
-    if len(pdf) > MAX_POINTS_PER_LINE * (MAX_DIMENSION_VALUES if default_dimension else 1):
+    # Determine if we need to aggregate (when using a non-primary dimension)
+    primary_dim = available_dimensions[0] if available_dimensions else None
+    needs_aggregation = default_dimension and default_dimension != primary_dim and default_dimension in pdf.columns
+
+    # Aggregate if needed (e.g., switching from ticker to sector)
+    if needs_aggregation:
+        agg_dict = {m: agg_method for m in available_measures if m in pdf.columns}
         try:
-            pdf = pdf.groupby(group_cols, as_index=False).agg(agg_dict)
+            pdf = pdf.groupby([x_col, default_dimension], as_index=False).agg(agg_dict)
+            logger.debug(f"Aggregated by {default_dimension}: {len(pdf)} rows")
         except Exception as e:
-            logger.warning(f"Aggregation failed: {e}")
+            logger.warning(f"Aggregation for {default_dimension} failed: {e}")
 
     # Sort by x-axis
     pdf = pdf.sort_values(by=x_col)
 
     logger.debug(f"Line chart HTML: {len(pdf)} points, measures={available_measures}, dim={default_dimension}")
 
-    # Build figure with all measures as traces (for dropdown switching)
+    # Build figure with traces for the selected dimension
     fig = go.Figure()
     trace_info = []  # [(measure, dimension_value or None)]
 
-    if default_dimension and default_dimension in pdf.columns:
-        dim_values = pdf[default_dimension].unique().tolist()
+    dim_to_use = default_dimension
+    if dim_to_use and dim_to_use in pdf.columns:
+        # Filter to top dimension values by frequency
+        unique_vals = pdf[dim_to_use].nunique()
+        if unique_vals > MAX_DIMENSION_VALUES:
+            top_dims = pdf[dim_to_use].value_counts().head(MAX_DIMENSION_VALUES).index.tolist()
+            pdf = pdf[pdf[dim_to_use].isin(top_dims)]
+
+        dim_values = pdf[dim_to_use].unique().tolist()
         for measure in available_measures:
             for dim_val in dim_values:
-                df_subset = pdf[pdf[default_dimension] == dim_val]
-                # Visible if this is a default measure
+                df_subset = pdf[pdf[dim_to_use] == dim_val]
                 is_visible = measure in default_measures
                 fig.add_trace(go.Scatter(
                     x=df_subset[x_col],
@@ -162,6 +171,7 @@ def get_line_chart_html(
                 ))
                 trace_info.append((measure, dim_val))
     else:
+        # No dimension - just plot measures
         for measure in available_measures:
             is_visible = measure in default_measures
             fig.add_trace(go.Scatter(
@@ -175,9 +185,9 @@ def get_line_chart_html(
             ))
             trace_info.append((measure, None))
 
-    # Build dropdown menus for selectors (left-aligned)
+    # Build dropdown menus for measure selector only (dimension is handled by Streamlit)
     updatemenus = []
-    menu_y_offset = 1.0  # Position just above chart area
+    menu_y_offset = 1.0
 
     # Measure selector dropdown (if measure_selector is configured and has multiple measures)
     if has_measure_selector and len(available_measures) > 1:
@@ -202,31 +212,6 @@ def get_line_chart_html(
             direction='down',
             showactive=True,
             x=0,
-            xanchor='left',
-            y=menu_y_offset,
-            yanchor='bottom',
-            bgcolor='rgba(255,255,255,0.9)',
-            bordercolor='#ddd',
-            font=dict(size=10),
-            pad=dict(r=2, t=2, b=2, l=2),
-        ))
-
-    # Dimension selector dropdown (if dimension_selector is configured and has multiple dimensions)
-    if has_dimension_selector and len(available_dimensions) > 1:
-        dim_buttons = []
-        for dim in available_dimensions:
-            dim_buttons.append(dict(
-                label=dim.replace('_', ' ').title(),
-                method='update',
-                args=[{}]  # No-op - dimension is set at render time
-            ))
-
-        updatemenus.append(dict(
-            active=available_dimensions.index(default_dimension) if default_dimension in available_dimensions else 0,
-            buttons=dim_buttons,
-            direction='down',
-            showactive=True,
-            x=0.15,  # Position close to measure selector
             xanchor='left',
             y=menu_y_offset,
             yanchor='bottom',
