@@ -295,7 +295,7 @@ def get_line_chart_html(
 
     # Build dropdown menus for selectors (left-aligned, stacked vertically)
     updatemenus = []
-    menu_y_offset = 1.02  # Start below title area
+    menu_y_offset = 1.0  # Position just above chart area
 
     # Measure selector dropdown (if measure_selector is configured and has multiple measures)
     if has_measure_selector and len(available_measures) > 1:
@@ -356,12 +356,11 @@ def get_line_chart_html(
 
     # Style the figure with proper spacing for dropdowns and title
     has_title = hasattr(exhibit, 'title') and exhibit.title
-    # Add extra top margin: base 40 + 30 for title + 35 for each dropdown row
-    top_margin = 40
+    top_margin = 30
     if has_title:
-        top_margin += 35
+        top_margin += 25
     if updatemenus:
-        top_margin += 40  # Space for dropdown row
+        top_margin += 30
 
     fig.update_layout(
         title=dict(
