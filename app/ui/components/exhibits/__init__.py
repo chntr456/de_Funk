@@ -14,8 +14,8 @@ import pandas as pd
 from config.logging import get_logger
 
 from .metric_cards import render_metric_cards
-from .line_chart import render_line_chart
-from .bar_chart import render_bar_chart
+from .line_chart import get_line_chart_html
+from .bar_chart import get_bar_chart_html
 from .data_table import render_data_table
 from .weighted_aggregate_chart import render_weighted_aggregate_chart
 from .forecast_chart import render_forecast_chart, render_forecast_metrics_table
@@ -403,8 +403,8 @@ def _get_weighted_aggregate_chart_html(exhibit: Any, pdf: pd.DataFrame) -> str:
 
 __all__ = [
     'render_metric_cards',
-    'render_line_chart',
-    'render_bar_chart',
+    'get_line_chart_html',
+    'get_bar_chart_html',
     'render_data_table',
     'render_weighted_aggregate_chart',
     'render_forecast_chart',

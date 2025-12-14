@@ -294,18 +294,18 @@ def _register_builtin_types(registry: ExhibitTypeRegistry) -> None:
     registry.register(
         name="line_chart",
         renderer_module="app.ui.components.exhibits.line_chart",
-        renderer_function="render_line_chart",
+        renderer_function="get_line_chart_html",
         requires=["plotly"],
-        description="Interactive line charts",
+        description="Interactive line charts (returns HTML)",
     )
 
     # Bar chart
     registry.register(
         name="bar_chart",
         renderer_module="app.ui.components.exhibits.bar_chart",
-        renderer_function="render_bar_chart",
+        renderer_function="get_bar_chart_html",
         requires=["plotly"],
-        description="Interactive bar charts",
+        description="Interactive bar charts (returns HTML)",
     )
 
     # Data table (basic)

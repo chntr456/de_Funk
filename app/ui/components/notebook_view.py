@@ -3,16 +3,18 @@ Notebook view component.
 
 Handles rendering of notebook exhibits in layout sections.
 Supports both YAML and Markdown notebook formats.
+
+Uses unified HTML-based rendering for consistency between grid and non-grid views.
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 from typing import Optional, Callable
 from app.notebook.schema import ExhibitType
 from .exhibits import (
     render_metric_cards,
-    render_line_chart,
-    render_bar_chart,
     render_data_table,
+    get_exhibit_html,
 )
 from .exhibits.weighted_aggregate_chart_model import render_weighted_aggregate_chart
 from .exhibits.forecast_chart import render_forecast_chart, render_forecast_metrics_table
@@ -125,9 +127,22 @@ def render_exhibit(exhibit_id: str, notebook_config, notebook_session, connectio
         if exhibit.type == ExhibitType.METRIC_CARDS:
             render_metric_cards(exhibit, pdf)
         elif exhibit.type == ExhibitType.LINE_CHART:
-            render_line_chart(exhibit, pdf)
+            # Use unified HTML rendering for consistency with grid views
+            html = get_exhibit_html(exhibit, pdf)
+            if html:
+                # Get height from exhibit config
+                height = getattr(exhibit, 'height', None) or 400
+                components.html(html, height=height + 50, scrolling=False)
+            else:
+                st.warning("Could not render line chart")
         elif exhibit.type == ExhibitType.BAR_CHART:
-            render_bar_chart(exhibit, pdf)
+            # Use unified HTML rendering for consistency with grid views
+            html = get_exhibit_html(exhibit, pdf)
+            if html:
+                height = getattr(exhibit, 'height', None) or 350
+                components.html(html, height=height + 50, scrolling=False)
+            else:
+                st.warning("Could not render bar chart")
         elif exhibit.type == ExhibitType.DATA_TABLE:
             render_data_table(exhibit, pdf)
         elif exhibit.type == ExhibitType.WEIGHTED_AGGREGATE_CHART:
