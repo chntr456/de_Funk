@@ -295,6 +295,7 @@ def get_line_chart_html(
 
     # Build dropdown menus for selectors
     updatemenus = []
+    menu_x_offset = 0.0  # Track horizontal position for multiple dropdowns
 
     # Measure selector dropdown (if measure_selector is configured and has multiple measures)
     if has_measure_selector and len(available_measures) > 1:
@@ -319,28 +320,63 @@ def get_line_chart_html(
             buttons=measure_buttons,
             direction='down',
             showactive=True,
-            x=0.0,
+            x=menu_x_offset,
             xanchor='left',
-            y=1.18,
+            y=1.15,
             yanchor='top',
             bgcolor='white',
             bordercolor='#ccc',
-            font=dict(size=11),
-            pad=dict(r=10, t=10),
+            font=dict(size=10),
+            pad=dict(r=5, t=5),
         ))
+        menu_x_offset += 0.25  # Move next dropdown to the right
 
     # Dimension selector dropdown (if dimension_selector is configured and has multiple dimensions)
     if has_dimension_selector and len(available_dimensions) > 1:
-        # Note: Dimension switching requires rebuilding traces, which isn't easily
-        # done with Plotly updatemenus. For now, we'll skip this advanced feature.
-        pass
+        dim_buttons = []
+        for dim in available_dimensions:
+            # For dimension switching, we show all traces but this requires page reload
+            # For now, just show which dimension is selected
+            dim_buttons.append(dict(
+                label=dim.replace('_', ' ').title(),
+                method='update',
+                args=[{}]  # No-op for now, dimension is set at render time
+            ))
 
-    # Style the figure
+        ds_label = getattr(exhibit.dimension_selector, 'label', 'Group By') if has_dimension_selector else 'Group By'
+        updatemenus.append(dict(
+            active=available_dimensions.index(default_dimension) if default_dimension in available_dimensions else 0,
+            buttons=dim_buttons,
+            direction='down',
+            showactive=True,
+            x=menu_x_offset,
+            xanchor='left',
+            y=1.15,
+            yanchor='top',
+            bgcolor='white',
+            bordercolor='#ccc',
+            font=dict(size=10),
+            pad=dict(r=5, t=5),
+        ))
+
+    # Style the figure with proper spacing for dropdowns and title
     has_title = hasattr(exhibit, 'title') and exhibit.title
-    top_margin = 80 if updatemenus else (60 if has_title else 40)
+    # Add extra top margin: base 40 + 30 for title + 35 for each dropdown row
+    top_margin = 40
+    if has_title:
+        top_margin += 35
+    if updatemenus:
+        top_margin += 40  # Space for dropdown row
 
     fig.update_layout(
-        title=exhibit.title if has_title else None,
+        title=dict(
+            text=exhibit.title if has_title else None,
+            y=0.98,
+            x=0.5,
+            xanchor='center',
+            yanchor='top',
+            font=dict(size=14)
+        ) if has_title else None,
         hovermode='x unified',
         margin=dict(l=40, r=40, t=top_margin, b=40),
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),

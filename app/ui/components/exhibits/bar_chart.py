@@ -291,6 +291,7 @@ def get_bar_chart_html(
 
     # Build dropdown menus for selectors
     updatemenus = []
+    menu_x_offset = 0.0
 
     # Measure selector dropdown (if measure_selector is configured and has multiple measures)
     if has_measure_selector and len(available_measures) > 1:
@@ -314,22 +315,66 @@ def get_bar_chart_html(
             buttons=measure_buttons,
             direction='down',
             showactive=True,
-            x=0.0,
+            x=menu_x_offset,
             xanchor='left',
-            y=1.18,
+            y=1.15,
             yanchor='top',
             bgcolor='white',
             bordercolor='#ccc',
-            font=dict(size=11),
-            pad=dict(r=10, t=10),
+            font=dict(size=10),
+            pad=dict(r=5, t=5),
         ))
+        menu_x_offset += 0.25
 
-    # Style the figure
+    # Dimension selector dropdown (if configured)
+    has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
+    if has_dimension_selector:
+        ds = exhibit.dimension_selector
+        available_dimensions = []
+        if hasattr(ds, 'available_dimensions') and ds.available_dimensions:
+            available_dimensions = [d for d in ds.available_dimensions if d in pdf.columns]
+
+        if len(available_dimensions) > 1:
+            dim_buttons = []
+            for dim in available_dimensions:
+                dim_buttons.append(dict(
+                    label=dim.replace('_', ' ').title(),
+                    method='update',
+                    args=[{}]
+                ))
+
+            updatemenus.append(dict(
+                active=available_dimensions.index(color_col) if color_col in available_dimensions else 0,
+                buttons=dim_buttons,
+                direction='down',
+                showactive=True,
+                x=menu_x_offset,
+                xanchor='left',
+                y=1.15,
+                yanchor='top',
+                bgcolor='white',
+                bordercolor='#ccc',
+                font=dict(size=10),
+                pad=dict(r=5, t=5),
+            ))
+
+    # Style the figure with proper spacing for dropdowns and title
     has_title = hasattr(exhibit, 'title') and exhibit.title
-    top_margin = 80 if updatemenus else (60 if has_title else 40)
+    top_margin = 40
+    if has_title:
+        top_margin += 35
+    if updatemenus:
+        top_margin += 40
 
     fig.update_layout(
-        title=exhibit.title if has_title else None,
+        title=dict(
+            text=exhibit.title if has_title else None,
+            y=0.98,
+            x=0.5,
+            xanchor='center',
+            yanchor='top',
+            font=dict(size=14)
+        ) if has_title else None,
         barmode='group' if color_col or len(available_measures) > 1 else 'relative',
         hovermode='closest',
         margin=dict(l=40, r=40, t=top_margin, b=40),
