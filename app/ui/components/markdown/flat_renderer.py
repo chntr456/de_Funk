@@ -1276,60 +1276,91 @@ def render_flat_notebook(
                                         set_edit_state(block['_flat_id'], False)
                                         st.rerun()
 
-                        # Render dimension selectors for grid exhibits BEFORE the grid
-                        # This allows server-side dimension switching for exhibits in grids
-                        def _render_grid_dimension_selectors(exhibit_blocks):
-                            """Render dimension selectors for exhibits that have them."""
-                            selectors_rendered = False
+                        # Render chart controls (dimensions, measures, etc.) for grid exhibits
+                        # Uses a collapsible expander to reduce clutter
+                        def _render_grid_chart_controls(exhibit_blocks):
+                            """Render chart controls (dimension/measure selectors) in a collapsible container."""
+                            # Check if any exhibits have selectors
+                            exhibits_with_controls = []
                             for eb in exhibit_blocks:
                                 exhibit = eb.get('exhibit')
                                 if not exhibit:
                                     continue
 
-                                has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
-                                if not has_dimension_selector:
-                                    continue
+                                has_dim_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
+                                has_measure_selector = hasattr(exhibit, 'measure_selector') and exhibit.measure_selector
 
-                                ds = exhibit.dimension_selector
-                                available_dims = getattr(ds, 'available_dimensions', [])
-                                if len(available_dims) <= 1:
-                                    continue
+                                if has_dim_selector or has_measure_selector:
+                                    exhibits_with_controls.append(eb)
 
-                                # Render selector for this exhibit
-                                exhibit_id = eb.get('id')
-                                default_dim = getattr(ds, 'default_dimension', available_dims[0])
-                                state_key = f"dim_selector_{exhibit_id}"
+                            if not exhibits_with_controls:
+                                return
 
-                                if state_key not in st.session_state:
-                                    st.session_state[state_key] = default_dim
+                            # Use expander for collapsible controls
+                            with st.expander("⚙️ Chart Controls", expanded=False):
+                                for eb in exhibits_with_controls:
+                                    exhibit = eb.get('exhibit')
+                                    exhibit_id = eb.get('id')
+                                    exhibit_title = getattr(exhibit, 'title', exhibit_id) or exhibit_id
 
-                                label = getattr(ds, 'label', 'Group By')
-                                exhibit_title = getattr(exhibit, 'title', exhibit_id) or exhibit_id
+                                    st.markdown(f"**{exhibit_title}**")
 
-                                # Render in a compact column layout
-                                if not selectors_rendered:
-                                    st.markdown("**Dimension Selectors**")
-                                    selectors_rendered = True
+                                    # Create columns for dimension and measure selectors
+                                    col1, col2 = st.columns(2)
 
-                                col1, col2 = st.columns([0.3, 0.7])
-                                with col1:
-                                    st.caption(exhibit_title)
-                                with col2:
-                                    selected = st.selectbox(
-                                        label,
-                                        options=available_dims,
-                                        index=available_dims.index(st.session_state[state_key]) if st.session_state[state_key] in available_dims else 0,
-                                        key=f"{state_key}_grid_select",
-                                        format_func=lambda x: x.replace('_', ' ').title(),
-                                        label_visibility="collapsed"
-                                    )
-                                    st.session_state[state_key] = selected
+                                    # Dimension selector
+                                    has_dim_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
+                                    if has_dim_selector:
+                                        ds = exhibit.dimension_selector
+                                        available_dims = getattr(ds, 'available_dimensions', [])
 
-                            if selectors_rendered:
-                                st.markdown("---")
+                                        if len(available_dims) > 1:
+                                            with col1:
+                                                default_dim = getattr(ds, 'default_dimension', available_dims[0])
+                                                dim_state_key = f"dim_selector_{exhibit_id}"
 
-                        # Render dimension selectors above the grid
-                        _render_grid_dimension_selectors(grid_exhibit_blocks)
+                                                if dim_state_key not in st.session_state:
+                                                    st.session_state[dim_state_key] = default_dim
+
+                                                selected_dim = st.selectbox(
+                                                    "Group By",
+                                                    options=available_dims,
+                                                    index=available_dims.index(st.session_state[dim_state_key]) if st.session_state[dim_state_key] in available_dims else 0,
+                                                    key=f"{dim_state_key}_grid_select",
+                                                    format_func=lambda x: x.replace('_', ' ').title(),
+                                                )
+                                                st.session_state[dim_state_key] = selected_dim
+
+                                    # Measure selector (multi-select)
+                                    has_measure_selector = hasattr(exhibit, 'measure_selector') and exhibit.measure_selector
+                                    if has_measure_selector:
+                                        ms = exhibit.measure_selector
+                                        available_measures = getattr(ms, 'available_measures', [])
+
+                                        if len(available_measures) > 1:
+                                            with col2:
+                                                default_measures = getattr(ms, 'default_measures', available_measures[:1])
+                                                measure_state_key = f"measure_selector_{exhibit_id}"
+
+                                                if measure_state_key not in st.session_state:
+                                                    st.session_state[measure_state_key] = default_measures
+
+                                                selected_measures = st.multiselect(
+                                                    "Measures",
+                                                    options=available_measures,
+                                                    default=st.session_state[measure_state_key],
+                                                    key=f"{measure_state_key}_grid_select",
+                                                    format_func=lambda x: x.replace('_', ' ').title(),
+                                                )
+                                                # Ensure at least one measure is selected
+                                                if not selected_measures:
+                                                    selected_measures = default_measures[:1]
+                                                st.session_state[measure_state_key] = selected_measures
+
+                                    st.markdown("---")
+
+                        # Render chart controls above the grid
+                        _render_grid_chart_controls(grid_exhibit_blocks)
 
                         # Define a render function that works with our exhibit blocks
                         def render_single_exhibit(exhibit_block):
@@ -1364,16 +1395,27 @@ def render_flat_notebook(
                                 df = notebook_session.get_exhibit_data(exhibit_id)
                                 pdf = connection.to_pandas(df)
 
-                                # Get selected dimension from session state (set by selectors above grid)
+                                # Get selected dimension from session state (set by Chart Controls above grid)
                                 selected_dimension = None
                                 has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
                                 if has_dimension_selector:
-                                    state_key = f"dim_selector_{exhibit_id}"
-                                    selected_dimension = st.session_state.get(state_key)
+                                    dim_state_key = f"dim_selector_{exhibit_id}"
+                                    selected_dimension = st.session_state.get(dim_state_key)
+
+                                # Get selected measures from session state (set by Chart Controls above grid)
+                                selected_measures = None
+                                has_measure_selector = hasattr(exhibit, 'measure_selector') and exhibit.measure_selector
+                                if has_measure_selector:
+                                    measure_state_key = f"measure_selector_{exhibit_id}"
+                                    selected_measures = st.session_state.get(measure_state_key)
 
                                 # Use the generic exhibit HTML dispatcher for any exhibit type
                                 from app.ui.components.exhibits import get_exhibit_html
-                                return get_exhibit_html(exhibit, pdf, selected_dimension=selected_dimension)
+                                return get_exhibit_html(
+                                    exhibit, pdf,
+                                    selected_measures=selected_measures,
+                                    selected_dimension=selected_dimension
+                                )
 
                             except Exception as e:
                                 logger.error(f"Error getting HTML for cell {cell_block.get('id')}: {e}")

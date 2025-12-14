@@ -51,35 +51,67 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
     has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
     has_selectors = has_measure_selector or has_dimension_selector
 
-    def _get_selected_dimension() -> str:
-        """Get selected dimension from Streamlit session state or render selector."""
-        if not has_dimension_selector:
-            return None
+    def _render_chart_controls():
+        """Render chart controls (dimension/measure selectors) in a collapsible expander."""
+        if not has_selectors:
+            return None, None
 
-        ds = exhibit.dimension_selector
-        available_dims = getattr(ds, 'available_dimensions', [])
-        if len(available_dims) <= 1:
-            return available_dims[0] if available_dims else None
+        selected_dim = None
+        selected_measures = None
 
-        default_dim = getattr(ds, 'default_dimension', available_dims[0])
+        with st.expander("⚙️ Chart Controls", expanded=False):
+            col1, col2 = st.columns(2)
 
-        # Session state key
-        state_key = f"dim_selector_{exhibit_id}"
-        if state_key not in st.session_state:
-            st.session_state[state_key] = default_dim
+            # Dimension selector
+            if has_dimension_selector:
+                ds = exhibit.dimension_selector
+                available_dims = getattr(ds, 'available_dimensions', [])
 
-        # Render selectbox for dimension switching
-        label = getattr(ds, 'label', 'Group By')
-        selected = st.selectbox(
-            label,
-            options=available_dims,
-            index=available_dims.index(st.session_state[state_key]) if st.session_state[state_key] in available_dims else 0,
-            key=f"{state_key}_select",
-            format_func=lambda x: x.replace('_', ' ').title()
-        )
+                if len(available_dims) > 1:
+                    with col1:
+                        default_dim = getattr(ds, 'default_dimension', available_dims[0])
+                        dim_state_key = f"dim_selector_{exhibit_id}"
 
-        st.session_state[state_key] = selected
-        return selected
+                        if dim_state_key not in st.session_state:
+                            st.session_state[dim_state_key] = default_dim
+
+                        selected_dim = st.selectbox(
+                            "Group By",
+                            options=available_dims,
+                            index=available_dims.index(st.session_state[dim_state_key]) if st.session_state[dim_state_key] in available_dims else 0,
+                            key=f"{dim_state_key}_select",
+                            format_func=lambda x: x.replace('_', ' ').title()
+                        )
+                        st.session_state[dim_state_key] = selected_dim
+                elif available_dims:
+                    selected_dim = available_dims[0]
+
+            # Measure selector (multi-select)
+            if has_measure_selector:
+                ms = exhibit.measure_selector
+                available_measures = getattr(ms, 'available_measures', [])
+
+                if len(available_measures) > 1:
+                    with col2:
+                        default_measures = getattr(ms, 'default_measures', available_measures[:1])
+                        measure_state_key = f"measure_selector_{exhibit_id}"
+
+                        if measure_state_key not in st.session_state:
+                            st.session_state[measure_state_key] = default_measures
+
+                        selected_measures = st.multiselect(
+                            "Measures",
+                            options=available_measures,
+                            default=st.session_state[measure_state_key],
+                            key=f"{measure_state_key}_select",
+                            format_func=lambda x: x.replace('_', ' ').title()
+                        )
+                        # Ensure at least one measure is selected
+                        if not selected_measures:
+                            selected_measures = default_measures[:1]
+                        st.session_state[measure_state_key] = selected_measures
+
+        return selected_dim, selected_measures
 
     # Check if exhibit should be rendered in collapsible section
     # NOTE: Don't auto-wrap exhibits with selectors - they'll create their own individual expanders
@@ -102,18 +134,26 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
             if exhibit.type == ExhibitType.METRIC_CARDS:
                 render_metric_cards(exhibit, pdf)
             elif exhibit.type == ExhibitType.LINE_CHART:
-                # Render dimension selector (Streamlit) and get selection
-                selected_dim = _get_selected_dimension()
-                html = get_exhibit_html(exhibit, pdf, selected_dimension=selected_dim)
+                # Render chart controls (collapsible expander) and get selections
+                selected_dim, selected_measures = _render_chart_controls()
+                html = get_exhibit_html(
+                    exhibit, pdf,
+                    selected_measures=selected_measures,
+                    selected_dimension=selected_dim
+                )
                 if html:
                     height = getattr(exhibit, 'height', None) or 400
                     components.html(html, height=height + 50, scrolling=False)
                 else:
                     st.warning("Could not render line chart")
             elif exhibit.type == ExhibitType.BAR_CHART:
-                # Render dimension selector (Streamlit) and get selection
-                selected_dim = _get_selected_dimension()
-                html = get_exhibit_html(exhibit, pdf, selected_dimension=selected_dim)
+                # Render chart controls (collapsible expander) and get selections
+                selected_dim, selected_measures = _render_chart_controls()
+                html = get_exhibit_html(
+                    exhibit, pdf,
+                    selected_measures=selected_measures,
+                    selected_dimension=selected_dim
+                )
                 if html:
                     height = getattr(exhibit, 'height', None) or 350
                     components.html(html, height=height + 50, scrolling=False)

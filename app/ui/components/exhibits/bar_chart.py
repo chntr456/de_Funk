@@ -159,16 +159,22 @@ def get_bar_chart_html(
         pdf = pdf.nlargest(MAX_BARS, default_measures[0])
     pdf = pdf.sort_values(by=default_measures[0], ascending=False)
 
+    # Determine which measures to display
+    # If selected_measures was provided (server-side selection), only show those
+    # Otherwise, use default_measures but keep all available for client-side dropdown
+    server_side_selection = selected_measures is not None
+    measures_to_display = default_measures if server_side_selection else available_measures
+
     # Build figure with traces for the selected dimension
     fig = go.Figure()
     trace_info = []  # [(measure, dimension_value or None)]
 
     if default_dimension and default_dimension in pdf.columns:
-        for measure in available_measures:
+        for measure in measures_to_display:
             is_visible = measure in default_measures
             for dim_val in pdf[default_dimension].unique():
                 df_subset = pdf[pdf[default_dimension] == dim_val]
-                name = f"{dim_val}" if len(available_measures) == 1 else f"{dim_val} - {measure.replace('_', ' ').title()}"
+                name = f"{dim_val}" if len(measures_to_display) == 1 else f"{dim_val} - {measure.replace('_', ' ').title()}"
                 fig.add_trace(go.Bar(
                     x=df_subset[x_col],
                     y=df_subset[measure],
@@ -178,7 +184,7 @@ def get_bar_chart_html(
                 ))
                 trace_info.append((measure, dim_val))
     else:
-        for measure in available_measures:
+        for measure in measures_to_display:
             is_visible = measure in default_measures
             fig.add_trace(go.Bar(
                 x=pdf[x_col],
@@ -189,11 +195,12 @@ def get_bar_chart_html(
             trace_info.append((measure, None))
 
     # Build dropdown menus for measure selector only (dimension is handled by Streamlit)
+    # Skip Plotly dropdown when using server-side selection (multiselect in Chart Controls)
     updatemenus = []
     menu_y_offset = 1.0
 
-    # Measure selector dropdown (if measure_selector is configured and has multiple measures)
-    if has_measure_selector and len(available_measures) > 1:
+    # Measure selector dropdown (only if not using server-side selection and measure_selector is configured)
+    if not server_side_selection and has_measure_selector and len(available_measures) > 1:
         measure_buttons = []
         for measure in available_measures:
             visibility = [info[0] == measure for info in trace_info]
