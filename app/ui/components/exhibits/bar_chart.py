@@ -266,11 +266,84 @@ def get_bar_chart_html(
         height = exhibit.options['height']
 
     # Convert to HTML
-    html = pio.to_html(
+    chart_html = pio.to_html(
         fig,
         full_html=False,
         include_plotlyjs='cdn',
         config={'displayModeBar': True, 'responsive': True}
     )
 
-    return f'<div style="height: {height}px; width: 100%;">{html}</div>'
+    # Build in-chart controls if we have multiple measures and not using server-side selection
+    controls_html = ""
+    if has_measure_selector and len(measures_to_display) > 1 and not server_side_selection:
+        # Build checkbox controls for measure multi-select
+        checkbox_items = []
+        for i, measure in enumerate(measures_to_display):
+            checked = "checked" if measure in default_measures else ""
+            label = measure.replace('_', ' ').title()
+            checkbox_items.append(
+                f'<label style="margin-right:12px;cursor:pointer;">'
+                f'<input type="checkbox" class="measure-cb" data-measure="{measure}" {checked} '
+                f'style="margin-right:4px;cursor:pointer;"> {label}</label>'
+            )
+
+        controls_html = f'''
+        <div class="chart-controls" style="
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        ">
+            <span style="font-weight:600;color:#495057;margin-right:8px;">Measures:</span>
+            {''.join(checkbox_items)}
+        </div>
+        '''
+
+    # Build JavaScript for checkbox interactivity
+    controls_js = ""
+    if controls_html:
+        # Map measures to trace indices
+        measure_trace_map = {}
+        for idx, (measure, dim_val) in enumerate(trace_info):
+            if measure not in measure_trace_map:
+                measure_trace_map[measure] = []
+            measure_trace_map[measure].append(idx)
+
+        controls_js = f'''
+        <script>
+        (function() {{
+            const measureTraceMap = {measure_trace_map};
+            const container = document.currentScript.parentElement;
+            const checkboxes = container.querySelectorAll('.measure-cb');
+            const plotDiv = container.querySelector('.plotly-graph-div');
+
+            checkboxes.forEach(cb => {{
+                cb.addEventListener('change', function() {{
+                    const measure = this.dataset.measure;
+                    const visible = this.checked;
+                    const traceIndices = measureTraceMap[measure] || [];
+
+                    if (plotDiv && traceIndices.length > 0) {{
+                        traceIndices.forEach(idx => {{
+                            Plotly.restyle(plotDiv, {{'visible': visible}}, [idx]);
+                        }});
+                    }}
+                }});
+            }});
+        }})();
+        </script>
+        '''
+
+    return f'''
+    <div style="height: {height}px; width: 100%; display: flex; flex-direction: column;">
+        {controls_html}
+        <div style="flex: 1; min-height: 0;">
+            {chart_html}
+        </div>
+        {controls_js}
+    </div>
+    '''
