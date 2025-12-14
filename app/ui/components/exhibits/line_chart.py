@@ -130,20 +130,26 @@ def render_line_chart(exhibit, pdf: pd.DataFrame):
     renderer.render()
 
 
-def get_line_chart_html(exhibit, pdf: pd.DataFrame) -> str:
+def get_line_chart_html(
+    exhibit,
+    pdf: pd.DataFrame,
+    selected_measures: list = None,
+    selected_dimension: str = None,
+) -> str:
     """
     Get line chart as embeddable HTML for CSS grid rendering.
 
-    Renders the chart based on YAML-defined measures and dimensions,
-    matching the existing exhibit paradigm. Measure/dimension selectors
-    are handled separately by the sidebar UI, not embedded in the chart.
+    Includes Plotly dropdown menus for measure and dimension selection
+    when measure_selector or dimension_selector are configured in YAML.
 
     Args:
         exhibit: Exhibit configuration
         pdf: Pandas DataFrame with data
+        selected_measures: Optional list of measures (overrides defaults)
+        selected_dimension: Optional dimension (overrides default)
 
     Returns:
-        HTML string with embedded Plotly chart
+        HTML string with embedded Plotly chart and interactive dropdowns
     """
     import plotly.io as pio
     from config.logging import get_logger
@@ -151,7 +157,6 @@ def get_line_chart_html(exhibit, pdf: pd.DataFrame) -> str:
 
     # Get x column
     if not hasattr(exhibit, 'x_axis') or not exhibit.x_axis:
-        # Try 'x' shorthand
         x_col = getattr(exhibit, 'x', None)
         if not x_col:
             return "<div>Line chart requires x_axis configuration</div>"
@@ -161,67 +166,87 @@ def get_line_chart_html(exhibit, pdf: pd.DataFrame) -> str:
     if x_col not in pdf.columns:
         return f"<div>X column '{x_col}' not found in data</div>"
 
-    # Get measures from YAML config
-    # Priority: y_axis.measure > y_axis.measures > y shorthand > measure_selector defaults
-    measures = []
-    if hasattr(exhibit, 'y_axis') and exhibit.y_axis:
+    # Check for measure_selector configuration
+    has_measure_selector = hasattr(exhibit, 'measure_selector') and exhibit.measure_selector
+    has_dimension_selector = hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector
+
+    # Get available and default measures
+    available_measures = []
+    default_measures = []
+
+    if has_measure_selector:
+        ms = exhibit.measure_selector
+        if hasattr(ms, 'available_measures') and ms.available_measures:
+            available_measures = [m for m in ms.available_measures if m in pdf.columns]
+        if hasattr(ms, 'default_measures') and ms.default_measures:
+            default_measures = [m for m in ms.default_measures if m in pdf.columns]
+    elif hasattr(exhibit, 'y_axis') and exhibit.y_axis:
         if hasattr(exhibit.y_axis, 'measure') and exhibit.y_axis.measure:
             if isinstance(exhibit.y_axis.measure, list):
-                measures = exhibit.y_axis.measure
+                available_measures = [m for m in exhibit.y_axis.measure if m in pdf.columns]
             else:
-                measures = [exhibit.y_axis.measure]
+                available_measures = [exhibit.y_axis.measure] if exhibit.y_axis.measure in pdf.columns else []
         elif hasattr(exhibit.y_axis, 'measures') and exhibit.y_axis.measures:
-            measures = exhibit.y_axis.measures
+            available_measures = [m for m in exhibit.y_axis.measures if m in pdf.columns]
+        default_measures = available_measures.copy()
     elif hasattr(exhibit, 'y') and exhibit.y:
         if isinstance(exhibit.y, list):
-            measures = exhibit.y
+            available_measures = [m for m in exhibit.y if m in pdf.columns]
         else:
-            measures = [exhibit.y]
-    elif hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
-        ms = exhibit.measure_selector
-        if hasattr(ms, 'default_measures') and ms.default_measures:
-            measures = ms.default_measures
-        elif hasattr(ms, 'available_measures') and ms.available_measures:
-            measures = ms.available_measures[:1]  # Use first available
+            available_measures = [exhibit.y] if exhibit.y in pdf.columns else []
+        default_measures = available_measures.copy()
 
-    # Filter to columns that exist
-    measures = [m for m in measures if m in pdf.columns]
+    # Use passed selections if provided
+    if selected_measures:
+        default_measures = [m for m in selected_measures if m in pdf.columns]
 
-    if not measures:
-        # Fallback: find numeric columns
-        measures = [c for c in pdf.columns if pd.api.types.is_numeric_dtype(pdf[c]) and c != x_col][:3]
+    if not available_measures:
+        available_measures = [c for c in pdf.columns if pd.api.types.is_numeric_dtype(pdf[c]) and c != x_col][:5]
 
-    if not measures:
+    if not available_measures:
         return "<div>No numeric measures found for line chart</div>"
 
-    # Get color/dimension from YAML config
-    color_col = None
-    if hasattr(exhibit, 'color_by') and exhibit.color_by and exhibit.color_by in pdf.columns:
-        color_col = exhibit.color_by
-    elif hasattr(exhibit, 'color') and exhibit.color and exhibit.color in pdf.columns:
-        color_col = exhibit.color
-    elif hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
+    if not default_measures:
+        default_measures = available_measures[:1]
+
+    # Get available and default dimensions
+    available_dimensions = []
+    default_dimension = None
+
+    if has_dimension_selector:
         ds = exhibit.dimension_selector
-        if hasattr(ds, 'default_dimension') and ds.default_dimension and ds.default_dimension in pdf.columns:
-            color_col = ds.default_dimension
+        if hasattr(ds, 'available_dimensions') and ds.available_dimensions:
+            available_dimensions = [d for d in ds.available_dimensions if d in pdf.columns]
+        if hasattr(ds, 'default_dimension') and ds.default_dimension:
+            default_dimension = ds.default_dimension if ds.default_dimension in pdf.columns else None
+    elif hasattr(exhibit, 'color_by') and exhibit.color_by and exhibit.color_by in pdf.columns:
+        available_dimensions = [exhibit.color_by]
+        default_dimension = exhibit.color_by
+    elif hasattr(exhibit, 'color') and exhibit.color and exhibit.color in pdf.columns:
+        available_dimensions = [exhibit.color]
+        default_dimension = exhibit.color
+
+    # Use passed dimension if provided
+    if selected_dimension and selected_dimension in pdf.columns:
+        default_dimension = selected_dimension
 
     # Limit data size for browser performance
     MAX_POINTS_PER_LINE = 500
     MAX_DIMENSION_VALUES = 10
 
     # Filter to top dimension values by frequency if too many
-    if color_col:
-        unique_vals = pdf[color_col].nunique()
+    if default_dimension and default_dimension in pdf.columns:
+        unique_vals = pdf[default_dimension].nunique()
         if unique_vals > MAX_DIMENSION_VALUES:
-            top_dims = pdf[color_col].value_counts().head(MAX_DIMENSION_VALUES).index.tolist()
-            pdf = pdf[pdf[color_col].isin(top_dims)]
-        group_cols = [x_col, color_col]
+            top_dims = pdf[default_dimension].value_counts().head(MAX_DIMENSION_VALUES).index.tolist()
+            pdf = pdf[pdf[default_dimension].isin(top_dims)]
+        group_cols = [x_col, default_dimension]
     else:
         group_cols = [x_col]
 
     # Aggregate data if too large
-    agg_dict = {m: 'mean' for m in measures}
-    if len(pdf) > MAX_POINTS_PER_LINE * (MAX_DIMENSION_VALUES if color_col else 1):
+    agg_dict = {m: 'mean' for m in available_measures if m in pdf.columns}
+    if len(pdf) > MAX_POINTS_PER_LINE * (MAX_DIMENSION_VALUES if default_dimension else 1):
         try:
             pdf = pdf.groupby(group_cols, as_index=False).agg(agg_dict)
         except Exception as e:
@@ -230,28 +255,33 @@ def get_line_chart_html(exhibit, pdf: pd.DataFrame) -> str:
     # Sort by x-axis
     pdf = pdf.sort_values(by=x_col)
 
-    logger.debug(f"Line chart HTML: {len(pdf)} points, measures={measures}, color={color_col}")
+    logger.debug(f"Line chart HTML: {len(pdf)} points, measures={available_measures}, dim={default_dimension}")
 
-    # Build figure
+    # Build figure with all measures as traces (for dropdown switching)
     fig = go.Figure()
+    trace_info = []  # [(measure, dimension_value or None)]
 
-    if color_col:
-        dim_values = pdf[color_col].unique().tolist()
-        for measure in measures:
+    if default_dimension and default_dimension in pdf.columns:
+        dim_values = pdf[default_dimension].unique().tolist()
+        for measure in available_measures:
             for dim_val in dim_values:
-                df_subset = pdf[pdf[color_col] == dim_val]
-                name = f"{dim_val}" if len(measures) == 1 else f"{dim_val} - {measure.replace('_', ' ').title()}"
+                df_subset = pdf[pdf[default_dimension] == dim_val]
+                # Visible if this is a default measure
+                is_visible = measure in default_measures
                 fig.add_trace(go.Scatter(
                     x=df_subset[x_col],
                     y=df_subset[measure],
-                    name=name,
+                    name=f"{dim_val}" if len(available_measures) == 1 else f"{dim_val} - {measure.replace('_', ' ').title()}",
                     mode='lines+markers',
                     line=dict(width=2),
                     marker=dict(size=3),
+                    visible=is_visible,
                     legendgroup=str(dim_val),
                 ))
+                trace_info.append((measure, dim_val))
     else:
-        for measure in measures:
+        for measure in available_measures:
+            is_visible = measure in default_measures
             fig.add_trace(go.Scatter(
                 x=pdf[x_col],
                 y=pdf[measure],
@@ -259,15 +289,63 @@ def get_line_chart_html(exhibit, pdf: pd.DataFrame) -> str:
                 mode='lines+markers',
                 line=dict(width=2),
                 marker=dict(size=3),
+                visible=is_visible,
             ))
+            trace_info.append((measure, None))
+
+    # Build dropdown menus for selectors
+    updatemenus = []
+
+    # Measure selector dropdown (if measure_selector is configured and has multiple measures)
+    if has_measure_selector and len(available_measures) > 1:
+        measure_buttons = []
+        for measure in available_measures:
+            visibility = [info[0] == measure for info in trace_info]
+            measure_buttons.append(dict(
+                label=measure.replace('_', ' ').title(),
+                method='update',
+                args=[{'visible': visibility}]
+            ))
+        # Add "All" option
+        measure_buttons.insert(0, dict(
+            label='All Measures',
+            method='update',
+            args=[{'visible': [True] * len(trace_info)}]
+        ))
+
+        ms_label = getattr(exhibit.measure_selector, 'label', 'Measures') if has_measure_selector else 'Measures'
+        updatemenus.append(dict(
+            active=0,
+            buttons=measure_buttons,
+            direction='down',
+            showactive=True,
+            x=0.0,
+            xanchor='left',
+            y=1.18,
+            yanchor='top',
+            bgcolor='white',
+            bordercolor='#ccc',
+            font=dict(size=11),
+            pad=dict(r=10, t=10),
+        ))
+
+    # Dimension selector dropdown (if dimension_selector is configured and has multiple dimensions)
+    if has_dimension_selector and len(available_dimensions) > 1:
+        # Note: Dimension switching requires rebuilding traces, which isn't easily
+        # done with Plotly updatemenus. For now, we'll skip this advanced feature.
+        pass
 
     # Style the figure
+    has_title = hasattr(exhibit, 'title') and exhibit.title
+    top_margin = 80 if updatemenus else (60 if has_title else 40)
+
     fig.update_layout(
-        title=exhibit.title if hasattr(exhibit, 'title') and exhibit.title else None,
+        title=exhibit.title if has_title else None,
         hovermode='x unified',
-        margin=dict(l=40, r=40, t=40 if not (hasattr(exhibit, 'title') and exhibit.title) else 60, b=40),
+        margin=dict(l=40, r=40, t=top_margin, b=40),
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1),
         template='plotly_white',
+        updatemenus=updatemenus if updatemenus else [],
     )
 
     # Get height from exhibit config

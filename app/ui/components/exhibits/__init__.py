@@ -27,6 +27,8 @@ def get_exhibit_html(
     exhibit: Any,
     pdf: pd.DataFrame,
     model_schema: Optional[Dict] = None,
+    selected_measures: Optional[list] = None,
+    selected_dimension: Optional[str] = None,
 ) -> Optional[str]:
     """
     Get HTML string from any exhibit type for CSS grid embedding.
@@ -38,6 +40,8 @@ def get_exhibit_html(
         exhibit: Exhibit configuration object with a 'type' attribute
         pdf: Pandas DataFrame with data
         model_schema: Optional model schema (used by great_table for column groups)
+        selected_measures: Optional list of selected measures (from UI selector)
+        selected_dimension: Optional selected dimension for grouping (from UI selector)
 
     Returns:
         HTML string or None if the exhibit type doesn't support HTML export
@@ -52,7 +56,7 @@ def get_exhibit_html(
         logger.warning(f"Could not determine exhibit type for {exhibit}")
         return None
 
-    logger.debug(f"get_exhibit_html: type={exhibit_type}")
+    logger.debug(f"get_exhibit_html: type={exhibit_type}, selected_measures={selected_measures}, selected_dimension={selected_dimension}")
 
     try:
         # Great Tables
@@ -63,12 +67,12 @@ def get_exhibit_html(
         # Line Charts
         if exhibit_type == 'line_chart':
             from .line_chart import get_line_chart_html
-            return get_line_chart_html(exhibit, pdf)
+            return get_line_chart_html(exhibit, pdf, selected_measures, selected_dimension)
 
         # Bar Charts
         if exhibit_type == 'bar_chart':
             from .bar_chart import get_bar_chart_html
-            return get_bar_chart_html(exhibit, pdf)
+            return get_bar_chart_html(exhibit, pdf, selected_measures, selected_dimension)
 
         # Data Tables (fallback to simple HTML table)
         if exhibit_type == 'data_table':
