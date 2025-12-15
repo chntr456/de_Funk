@@ -1226,3 +1226,387 @@ The current `city_finance` model should be renamed to `chicago_actuarial` to ref
 3. Update storage paths in `storage.json`
 4. Deprecate old `city_finance` with redirect
 5. Update notebooks and references
+
+---
+
+## Appendix C: Ingestion Pipeline Architecture
+
+### Current Architecture Rating: ✅ 7/10
+
+The ingestion pipeline follows a clean, pluggable architecture:
+
+```
+API → Provider → Facet (normalize) → BronzeSink → Bronze Layer (Delta Lake)
+```
+
+### Component Summary
+
+| Component | Purpose | Rating |
+|-----------|---------|--------|
+| **BaseFacet** | Normalizes raw JSON → Spark DataFrame | ✅ 8/10 |
+| **BaseProvider** | Abstract interface for data sources | ✅ 8/10 |
+| **BaseRegistry** | Config-driven endpoint rendering | ✅ 8/10 |
+| **HttpClient** | Rate limiting, retries, key rotation | ✅ 8/10 |
+| **BronzeSink** | Delta Lake writes (upsert/append) | ✅ 9/10 |
+| **ChicagoIngestor** | Chicago-specific pagination | ⚠️ 6/10 |
+
+### Chicago Provider Gap Analysis
+
+**Implemented Facets (2):**
+- `building_permits_facet.py` ✅
+- `unemployment_rates_facet.py` ✅
+
+**Configured but Missing Facets (4):**
+- `business_licenses` (r5kz-chrr) ❌
+- `per_capita_income` (qpxx-qyaw) ❌
+- `economic_indicators` (nej5-8p3s) ❌
+- `affordable_rental_housing` (s6ha-ppgi) ❌
+
+### New Facets Needed for Actuarial Model
+
+| Facet | Dataset ID | Bronze Table | Effort |
+|-------|------------|--------------|--------|
+| `community_areas_facet.py` | `igwz-8jzy` | `chicago_community_areas` | 2 hours |
+| `tax_assessments_facet.py` | Cook County | `chicago_tax_assessments` | 4 hours |
+| `tax_bills_facet.py` | Cook County | `chicago_tax_bills` | 4 hours |
+| `city_budget_facet.py` | `fg6s-gzvg` | `chicago_city_budget` | 2 hours |
+
+### Facet Implementation Pattern
+
+```python
+# datapipelines/providers/chicago/facets/tax_assessments_facet.py (NEW)
+
+class TaxAssessmentsFacet(ChicagoFacet):
+    """Transform Cook County tax assessment data."""
+
+    SPARK_CASTS = {
+        "pin": "string",
+        "tax_year": "int",
+        "assessed_value": "double",
+        "market_value": "double",
+        "property_class": "string",
+        "community_area": "int",
+    }
+
+    FINAL_COLUMNS = [
+        ("pin", "string"),
+        ("tax_year", "int"),
+        ("community_area", "int"),
+        ("property_class", "string"),
+        ("land_assessed", "double"),
+        ("building_assessed", "double"),
+        ("total_assessed", "double"),
+        ("market_value", "double"),
+        ("exemption_total", "double"),
+    ]
+
+    def calls(self):
+        params = {}
+        if self.date_from:
+            params["$where"] = f"tax_year >= {self.date_from[:4]}"
+        yield {"ep_name": "tax_assessments", "params": params}
+
+    def postprocess(self, df):
+        from pyspark.sql import functions as F
+        return (
+            df.select(
+                F.col("pin").alias("pin"),
+                F.col("tax_year").cast("int"),
+                F.col("community_area_number").cast("int").alias("community_area"),
+                F.col("class").alias("property_class"),
+                F.col("land_av").cast("double").alias("land_assessed"),
+                F.col("bldg_av").cast("double").alias("building_assessed"),
+                (F.col("land_av") + F.col("bldg_av")).alias("total_assessed"),
+                F.col("market_value").cast("double"),
+                F.coalesce(F.col("exe_total"), F.lit(0)).cast("double").alias("exemption_total"),
+            )
+            .dropna(subset=["pin"])
+            .dropDuplicates(["pin", "tax_year"])
+        )
+```
+
+### Storage Configuration Updates
+
+```json
+// configs/storage.json additions
+{
+  "chicago_community_areas": {
+    "root": "bronze",
+    "rel": "chicago/community_areas",
+    "partitions": [],
+    "write_strategy": "upsert",
+    "key_columns": ["community_area_number"]
+  },
+  "chicago_tax_assessments": {
+    "root": "bronze",
+    "rel": "chicago/tax_assessments",
+    "partitions": ["tax_year"],
+    "write_strategy": "upsert",
+    "key_columns": ["pin", "tax_year"]
+  },
+  "chicago_tax_bills": {
+    "root": "bronze",
+    "rel": "chicago/tax_bills",
+    "partitions": ["tax_year"],
+    "write_strategy": "append",
+    "key_columns": ["pin", "tax_year", "agency_number"]
+  },
+  "chicago_city_budget": {
+    "root": "bronze",
+    "rel": "chicago/city_budget",
+    "partitions": ["fiscal_year"],
+    "write_strategy": "upsert",
+    "key_columns": ["fund_code", "fiscal_year"]
+  }
+}
+```
+
+---
+
+## Appendix D: Model Building Process
+
+### Current Architecture Rating: ✅ 8/10
+
+The model building system uses a well-designed composition pattern:
+
+```
+Bronze Layer → YAML Config → GraphBuilder → In-Memory DataFrames → ModelWriter → Silver Layer
+```
+
+### Build Flow Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ SCRIPTS                                                             │
+│ scripts/build/build_all_models.py                                   │
+│ scripts/build/build_silver_layer.py                                 │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ Orchestrates
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ MODEL INSTANTIATION                                                  │
+│ model = ChicagoActuarialModel(connection, storage_cfg, model_cfg)   │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ Calls
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ BaseModel.build()                                                    │
+│ ├── before_build() hook                                             │
+│ ├── GraphBuilder._build_nodes()                                     │
+│ │   ├── For each node in graph.yaml:                               │
+│ │   │   ├── _load_bronze_table()  → StorageRouter → BronzeTable    │
+│ │   │   ├── _apply_filters()      → Backend-agnostic filtering     │
+│ │   │   ├── _apply_joins()        → Internal table joins           │
+│ │   │   ├── _apply_select()       → Column mapping/aliasing        │
+│ │   │   ├── _apply_derive()       → Computed columns               │
+│ │   │   └── _enforce_unique_key() → Deduplication                  │
+│ │   └── Return {node_id: DataFrame}                                │
+│ ├── Separate dims (dim_*) vs facts (fact_*)                        │
+│ └── after_build() hook                                              │
+└──────────────────────────┬──────────────────────────────────────────┘
+                           │ Returns (dims, facts)
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│ ModelWriter.write_tables()                                           │
+│ ├── For each dimension:                                             │
+│ │   └── Write to storage/silver/{model}/dims/{dim_name}/           │
+│ └── For each fact:                                                  │
+│     └── Write to storage/silver/{model}/facts/{fact_name}/         │
+│ Format: Delta Lake (default) or Parquet                             │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Key Components
+
+| Component | File | Lines | Purpose |
+|-----------|------|-------|---------|
+| **BaseModel** | `models/base/model.py` | 397 | Orchestrator (composition) |
+| **GraphBuilder** | `models/base/graph_builder.py` | 550 | Node loading + transforms |
+| **TableAccessor** | `models/base/table_accessor.py` | 269 | Table access methods |
+| **MeasureCalculator** | `models/base/measure_calculator.py` | 277 | Measure computation |
+| **ModelWriter** | `models/base/model_writer.py` | 341 | Silver persistence |
+| **StorageRouter** | `models/api/dal.py` | 78 | Path resolution |
+| **BronzeTable** | `models/api/dal.py` | 78 | Auto-detect Delta/Parquet |
+
+### Graph Node Processing
+
+Each node in `graph.yaml` goes through this pipeline:
+
+```yaml
+# Example node definition
+- id: fact_tax_assessment
+  from: bronze.chicago_tax_assessments    # 1. Load from Bronze
+  filters:                                  # 2. Apply filters
+    - "tax_year >= 2015"
+  join:                                     # 3. Join other nodes
+    table: dim_geography
+    on: ["community_area=community_area_number"]
+  select:                                   # 4. Map columns
+    geography_id: geography_id
+    tax_year: tax_year
+  derive:                                   # 5. Compute columns
+    assessment_id: "CONCAT(geography_id, '_', tax_year)"
+  unique_key: [assessment_id]               # 6. Deduplicate
+```
+
+### city_finance Current Build Status
+
+**Status:** ⚠️ NOT in active build pipeline
+
+**Issue:** `city_finance` is not in `BUILDABLE_MODELS` list in `build_silver_layer.py`
+
+**Fix Required:**
+```python
+# scripts/build/build_silver_layer.py
+BUILDABLE_MODELS = [
+    "core",
+    "company",
+    "stocks",
+    "macro",
+    "city_finance",      # ADD THIS
+    "chicago_actuarial", # ADD THIS (new model)
+]
+```
+
+### Build Script for Chicago Actuarial
+
+```bash
+# Step 1: Ensure Bronze data exists
+python -m scripts.ingest.chicago_ingestor --datasets community_areas,tax_assessments,unemployment
+
+# Step 2: Build Silver model
+python -m scripts.build.build_silver_layer --model chicago_actuarial
+
+# Step 3: Verify output
+ls -la storage/silver/chicago_actuarial/dims/
+ls -la storage/silver/chicago_actuarial/facts/
+```
+
+### Model Build Hooks
+
+The `chicago_actuarial` model can implement custom hooks:
+
+```python
+# models/implemented/chicago_actuarial/model.py
+
+class ChicagoActuarialModel(BaseModel):
+    """Chicago actuarial forecast model."""
+
+    def before_build(self) -> None:
+        """Pre-build validation."""
+        # Verify required Bronze tables exist
+        required_tables = [
+            'chicago_community_areas',
+            'chicago_tax_assessments',
+            'chicago_unemployment'
+        ]
+        for table in required_tables:
+            path = self.storage_router.bronze_path(table)
+            if not Path(path).exists():
+                raise ValueError(f"Required Bronze table missing: {table}")
+
+    def after_build(
+        self,
+        dims: Dict[str, DataFrame],
+        facts: Dict[str, DataFrame]
+    ) -> Tuple[Dict[str, DataFrame], Dict[str, DataFrame]]:
+        """Post-build transformations."""
+        # Calculate YoY changes for tax assessments
+        if 'fact_tax_assessment' in facts:
+            facts['fact_tax_assessment'] = self._add_yoy_changes(
+                facts['fact_tax_assessment']
+            )
+        return dims, facts
+
+    def _add_yoy_changes(self, df: DataFrame) -> DataFrame:
+        """Add year-over-year value changes."""
+        from pyspark.sql import Window
+        from pyspark.sql import functions as F
+
+        window = Window.partitionBy('geography_id').orderBy('tax_year')
+
+        return df.withColumn(
+            'prior_year_value',
+            F.lag('total_assessed_value').over(window)
+        ).withColumn(
+            'yoy_value_change',
+            (F.col('total_assessed_value') - F.col('prior_year_value')) /
+            F.col('prior_year_value')
+        ).drop('prior_year_value')
+```
+
+---
+
+## Appendix E: Complete Implementation Checklist
+
+### Phase 5 Detailed: Data Ingestion
+
+| Step | Task | File | Est. Hours |
+|------|------|------|------------|
+| 5.1a | Create community areas endpoint config | `chicago_endpoints.json` | 0.5 |
+| 5.1b | Create `CommunityAreasFacet` class | `community_areas_facet.py` | 2 |
+| 5.1c | Add storage config | `storage.json` | 0.25 |
+| 5.2a | Research Cook County Assessor API | Documentation | 2 |
+| 5.2b | Create tax assessments endpoint config | `chicago_endpoints.json` | 0.5 |
+| 5.2c | Create `TaxAssessmentsFacet` class | `tax_assessments_facet.py` | 4 |
+| 5.2d | Add storage config | `storage.json` | 0.25 |
+| 5.3a | Research Cook County Treasurer API | Documentation | 2 |
+| 5.3b | Create tax bills endpoint config | `chicago_endpoints.json` | 0.5 |
+| 5.3c | Create `TaxBillsFacet` class | `tax_bills_facet.py` | 4 |
+| 5.3d | Add storage config | `storage.json` | 0.25 |
+| 5.4 | Update `ChicagoIngestor` to use new facets | `chicago_ingestor.py` | 2 |
+| 5.5 | Run test ingestion | CLI | 1 |
+| 5.6 | Verify Bronze data quality | Notebook | 2 |
+| **Total** | | | **~21 hours** |
+
+### Phase 4 Detailed: Model Configuration
+
+| Step | Task | File | Est. Hours |
+|------|------|------|------------|
+| 4.1 | Create model directory | `configs/models/chicago_actuarial/` | 0.25 |
+| 4.2 | Create model.yaml with dependencies | `model.yaml` | 0.5 |
+| 4.3a | Define dim_geography schema | `schema.yaml` | 1 |
+| 4.3b | Define dim_property_class schema | `schema.yaml` | 0.5 |
+| 4.3c | Define dim_tax_district schema | `schema.yaml` | 0.5 |
+| 4.3d | Define fact_tax_assessment schema | `schema.yaml` | 1 |
+| 4.3e | Define fact_tax_collection schema | `schema.yaml` | 1 |
+| 4.3f | Define fact_economic_activity schema | `schema.yaml` | 0.5 |
+| 4.4a | Define dimension nodes | `graph.yaml` | 2 |
+| 4.4b | Define fact nodes with aggregations | `graph.yaml` | 3 |
+| 4.4c | Define edges and paths | `graph.yaml` | 1 |
+| 4.5 | Define YAML measures | `measures.yaml` | 1 |
+| 4.6a | Create model.py with hooks | `model.py` | 2 |
+| 4.6b | Create measures.py with Python measures | `measures.py` | 4 |
+| 4.7 | Add to build pipeline | `build_silver_layer.py` | 0.5 |
+| **Total** | | | **~19 hours** |
+
+---
+
+## Appendix F: Data Source Details
+
+### Chicago Data Portal Datasets
+
+| Dataset | ID | Records | Update Frequency |
+|---------|----|---------|--------------------|
+| Community Areas | `igwz-8jzy` | 77 | Static |
+| Unemployment by Area | `ane4-dwhs` | ~50K | Monthly |
+| Building Permits | `ydr8-5enu` | ~1.5M | Daily |
+| Business Licenses | `r5kz-chrr` | ~200K | Daily |
+| Budget - Appropriations | `fg6s-gzvg` | ~5K | Annual |
+
+### Cook County Data Sources
+
+| Dataset | Source | Format | Access |
+|---------|--------|--------|--------|
+| Property Assessments | Cook County Assessor | CSV/API | Public |
+| Tax Bills | Cook County Treasurer | CSV | Public |
+| Property Classes | Cook County Assessor | Reference | Static |
+| Taxing Districts | Cook County Clerk | Reference | Public |
+
+### API Rate Limits
+
+| Provider | Rate Limit | Auth Required |
+|----------|------------|---------------|
+| Chicago Data Portal | 5 req/sec with token | Optional (X-App-Token) |
+| Cook County Assessor | Unknown | Check terms |
+| Cook County Treasurer | Unknown | Check terms |
