@@ -1,0 +1,49 @@
+# Alpha Vantage Provider Configuration
+# Auto-discovered by ProviderRegistry
+
+name: alpha_vantage
+version: "2.0"
+description: "Stock market data from Alpha Vantage API - company fundamentals, prices, and technicals"
+
+# Models this provider feeds data to
+models:
+  - stocks
+  - company
+  - options
+  - etfs
+
+# Bronze tables this provider writes to
+bronze_tables:
+  - securities_reference
+  - securities_prices_daily
+
+# API configuration key (maps to configs/pipelines/{config_key}_endpoints.json)
+config_key: alpha_vantage
+
+# Rate limiting
+rate_limit: 5        # requests per minute (free tier)
+daily_limit: 25      # requests per day (free tier)
+# Note: Premium tiers have higher limits
+
+# Ingestor class configuration
+module_path: datapipelines.providers.alpha_vantage
+class_name: AlphaVantageIngestor
+
+# Tags for filtering/grouping
+tags:
+  - securities
+  - stocks
+  - market_data
+  - fundamentals
+
+# Provider status
+enabled: true
+
+# Additional metadata
+metadata:
+  api_docs: "https://www.alphavantage.co/documentation/"
+  data_quality: high
+  historical_depth: "20+ years"
+  update_frequency: daily
+  supports_intraday: true
+  supports_adjusted: true

@@ -1,0 +1,50 @@
+# Bureau of Labor Statistics Provider Configuration
+# Auto-discovered by ProviderRegistry
+
+name: bls
+version: "1.0"
+description: "Economic indicators from the Bureau of Labor Statistics - employment, CPI, wages, and productivity"
+
+# Models this provider feeds data to
+models:
+  - macro
+
+# Bronze tables this provider writes to
+bronze_tables:
+  - bls_series_data
+  - bls_series_catalog
+
+# API configuration key (maps to configs/pipelines/{config_key}_endpoints.json)
+config_key: bls
+
+# Rate limiting (BLS is generous with limits)
+rate_limit: 25       # requests per minute
+daily_limit: 500     # requests per day (registered)
+# Note: Unregistered users have lower limits
+
+# Ingestor class configuration
+module_path: datapipelines.providers.bls
+class_name: BlsIngestor
+
+# Tags for filtering/grouping
+tags:
+  - economic
+  - government
+  - macro
+  - employment
+  - inflation
+
+# Provider status
+enabled: true
+
+# Additional metadata
+metadata:
+  api_docs: "https://www.bls.gov/developers/"
+  data_quality: authoritative
+  historical_depth: "varies by series, some back to 1940s"
+  update_frequency: monthly
+  requires_registration: recommended
+  key_series:
+    - CUUR0000SA0  # CPI-U All Urban Consumers
+    - LNS14000000  # Unemployment Rate
+    - CES0000000001  # Total Nonfarm Employment
