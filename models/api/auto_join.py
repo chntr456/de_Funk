@@ -138,7 +138,7 @@ class AutoJoinHandler:
                     table_columns = {r[0] for r in cols_result}
 
                     if all(col in table_columns for col in required_columns):
-                        logger.info(f"AUTO-JOIN MATERIALIZED: Found view '{table_name}' with all columns in {time.time() - t_start:.2f}s")
+                        logger.debug(f"AUTO-JOIN MATERIALIZED: Found view '{table_name}' with all columns in {time.time() - t_start:.2f}s")
                         return table_name
 
                 logger.debug(f"AUTO-JOIN MATERIALIZED: No matching view found in {time.time() - t_start:.2f}s")
@@ -159,7 +159,7 @@ class AutoJoinHandler:
                     table_columns = set(schema.keys())
 
                     if all(col in table_columns for col in required_columns):
-                        logger.info(f"AUTO-JOIN MATERIALIZED: Found '{table_name}' via model in {time.time() - t_start:.2f}s")
+                        logger.debug(f"AUTO-JOIN MATERIALIZED: Found '{table_name}' via model in {time.time() - t_start:.2f}s")
                         return table_name
                 except Exception:
                     continue
@@ -193,7 +193,7 @@ class AutoJoinHandler:
             ValueError: If no join path found
         """
         import time
-        logger.info(f"AUTO-JOIN PLAN: Starting for {model_name}.{base_table}, missing={missing_columns}")
+        logger.debug(f"AUTO-JOIN PLAN: Starting for {model_name}.{base_table}, missing={missing_columns}")
         t_start = time.time()
 
         model_config = self.registry.get_model_config(model_name)
@@ -206,7 +206,7 @@ class AutoJoinHandler:
         # Build column-to-table index
         t0 = time.time()
         column_index = self.build_column_index(model_name)
-        logger.info(f"AUTO-JOIN PLAN: build_column_index took {time.time() - t0:.2f}s, indexed {len(column_index)} columns")
+        logger.debug(f"AUTO-JOIN PLAN: build_column_index took {time.time() - t0:.2f}s, indexed {len(column_index)} columns")
 
         # Find which tables have the missing columns
         target_tables = {}
@@ -217,7 +217,7 @@ class AutoJoinHandler:
             else:
                 raise ValueError(f"Column '{col}' not found in any table in model {model_name}")
 
-        logger.info(f"AUTO-JOIN PLAN: Target tables: {target_tables}")
+        logger.debug(f"AUTO-JOIN PLAN: Target tables: {target_tables}")
 
         # Find join path from base_table to target tables
         table_sequence = [base_table]
@@ -473,7 +473,7 @@ class AutoJoinHandler:
             if col in UNIVERSAL_DATE_COLUMNS and col not in available_cols:
                 if local_date_col in available_cols:
                     # Translate the filter to use the local date column
-                    logger.info(f"DATE TRANSLATE: {col} -> {local_date_col} (via dim_calendar)")
+                    logger.debug(f"DATE TRANSLATE: {col} -> {local_date_col} (via dim_calendar)")
                     translated[local_date_col] = val
                 else:
                     logger.debug(f"DATE TRANSLATE: Can't translate {col}, local column {local_date_col} not available")
@@ -578,7 +578,7 @@ class AutoJoinHandler:
                     break
 
             if views_available:
-                logger.info(f"AUTO-JOIN DUCKDB: Using views for {len(table_sequence)} tables")
+                logger.debug(f"AUTO-JOIN DUCKDB: Using views for {len(table_sequence)} tables")
                 return self._execute_duckdb_joins_via_views(
                     model_name, view_names, table_sequence, join_keys,
                     required_columns, filters
@@ -588,7 +588,7 @@ class AutoJoinHandler:
             logger.debug(f"AUTO-JOIN DUCKDB: View-based join failed: {e}")
 
         # Strategy 2: Fall back to loading tables (slower but always works)
-        logger.info(f"AUTO-JOIN DUCKDB: Falling back to table loading for {len(table_sequence)} tables")
+        logger.debug(f"AUTO-JOIN DUCKDB: Falling back to table loading for {len(table_sequence)} tables")
         return self._execute_duckdb_joins_via_tables(
             model_name, model, table_sequence, join_keys, required_columns, filters
         )
@@ -667,7 +667,7 @@ class AutoJoinHandler:
         t0 = time.time()
         result = self.connection.conn.execute(sql)
         result_df = result.fetchdf()
-        logger.info(f"AUTO-JOIN DUCKDB: View query took {time.time() - t0:.2f}s, shape={result_df.shape}")
+        logger.debug(f"AUTO-JOIN DUCKDB: View query took {time.time() - t0:.2f}s, shape={result_df.shape}")
 
         return self.connection.conn.from_df(result_df)
 
@@ -696,7 +696,7 @@ class AutoJoinHandler:
                 temp_name = f"_autojoin_{table_name}"
                 temp_df = df_temp.df()  # Convert to pandas
                 t2 = time.time()
-                logger.info(f"AUTO-JOIN DUCKDB: {table_name}: get_table={t1-t0:.2f}s, to_pandas={t2-t1:.2f}s, shape={temp_df.shape}")
+                logger.debug(f"AUTO-JOIN DUCKDB: {table_name}: get_table={t1-t0:.2f}s, to_pandas={t2-t1:.2f}s, shape={temp_df.shape}")
                 self.connection.conn.register(temp_name, temp_df)
                 temp_tables[table_name] = temp_name
 
@@ -739,7 +739,7 @@ class AutoJoinHandler:
             t0 = time.time()
             result = self.connection.conn.execute(sql)
             result_df = result.fetchdf()
-            logger.info(f"AUTO-JOIN DUCKDB: SQL execution took {time.time() - t0:.2f}s, result shape={result_df.shape}")
+            logger.debug(f"AUTO-JOIN DUCKDB: SQL execution took {time.time() - t0:.2f}s, result shape={result_df.shape}")
 
             # Cleanup temp tables
             for temp_name in temp_tables.values():

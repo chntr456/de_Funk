@@ -53,6 +53,9 @@ try:
 except Exception:
     yaml = None
 
+import logging
+logger = logging.getLogger(__name__)
+
 
 class UniversalSession:
     """
@@ -114,7 +117,7 @@ class UniversalSession:
             # Use registry to handle modular YAML configs (v2.0+)
             self.model_graph.build_from_registry(self.registry)
         except Exception as e:
-            print(f"Warning: Could not build model graph: {e}")
+            logger.warning(f"Could not build model graph: {e}")
 
         # Composition helpers (lazy-loaded)
         self._auto_join_handler = None
@@ -335,7 +338,7 @@ class UniversalSession:
             parquet_files = glob.glob(parquet_pattern, recursive=True)
 
             if parquet_files and hasattr(self.connection, 'conn'):
-                logger.info(f"Reading Silver parquet directly from {silver_table_path}")
+                logger.debug(f"Reading Silver parquet directly from {silver_table_path}")
                 try:
                     # Read parquet files directly with DuckDB
                     sql = f"SELECT * FROM read_parquet('{parquet_pattern}', hive_partitioning=true)"
@@ -438,11 +441,9 @@ class UniversalSession:
 
         # Missing columns - use auto-join to get them from related tables
         # Auto-join uses the model graph to find join paths
-        import logging
         import time
-        logger = logging.getLogger(__name__)
 
-        logger.info(f"AUTO-JOIN START: {missing} not in {table_name}, searching for join path...")
+        logger.debug(f"AUTO-JOIN START: {missing} not in {table_name}, searching for join path...")
         start_time = time.time()
 
         # Strategy 1: Check for materialized view
@@ -451,7 +452,7 @@ class UniversalSession:
         logger.debug(f"AUTO-JOIN: find_materialized_view took {time.time() - t0:.2f}s")
 
         if materialized_table:
-            logger.info(f"AUTO-JOIN: Using materialized view: {materialized_table}")
+            logger.debug(f"AUTO-JOIN: Using materialized view: {materialized_table}")
             df = model.get_table(materialized_table)
 
             if filters:
@@ -462,7 +463,7 @@ class UniversalSession:
             if group_by:
                 df = aggregation.aggregate_data(model_name, df, required_columns, group_by, aggregations)
 
-            logger.info(f"AUTO-JOIN COMPLETE: Total time {time.time() - start_time:.2f}s (materialized view)")
+            logger.debug(f"AUTO-JOIN COMPLETE: Total time {time.time() - start_time:.2f}s (materialized view)")
             return df
 
         # Strategy 2: Build joins from graph
@@ -470,7 +471,7 @@ class UniversalSession:
             t0 = time.time()
             join_plan = auto_join.plan_auto_joins(model_name, table_name, missing)
             logger.debug(f"AUTO-JOIN: plan_auto_joins took {time.time() - t0:.2f}s")
-            logger.info(f"AUTO-JOIN: Join plan: {' -> '.join(join_plan['table_sequence'])}")
+            logger.debug(f"AUTO-JOIN: Join plan: {' -> '.join(join_plan['table_sequence'])}")
 
             t0 = time.time()
             df = auto_join.execute_auto_joins(model_name, join_plan, required_columns, filters)
@@ -488,7 +489,7 @@ class UniversalSession:
             df = aggregation.aggregate_data(model_name, df, required_columns, group_by, aggregations)
             logger.debug(f"AUTO-JOIN: aggregate_data took {time.time() - t0:.2f}s")
 
-        logger.info(f"AUTO-JOIN COMPLETE: Total time {time.time() - start_time:.2f}s")
+        logger.debug(f"AUTO-JOIN COMPLETE: Total time {time.time() - start_time:.2f}s")
         return df
 
     def get_filter_column_mappings(self, model_name: str, table_name: str) -> Dict[str, str]:

@@ -78,6 +78,8 @@ class LogConfig:
         'fsevents': 'WARNING',
         'httpx': 'WARNING',
         'httpcore': 'WARNING',
+        'numexpr': 'WARNING',
+        'numexpr.utils': 'WARNING',
     })
 
     @classmethod
