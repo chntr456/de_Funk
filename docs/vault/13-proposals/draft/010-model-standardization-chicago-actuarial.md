@@ -1610,3 +1610,656 @@ class ChicagoActuarialModel(BaseModel):
 | Chicago Data Portal | 5 req/sec with token | Optional (X-App-Token) |
 | Cook County Assessor | Unknown | Check terms |
 | Cook County Treasurer | Unknown | Check terms |
+
+---
+
+## Appendix G: Orchestration Layer Redesign
+
+### Current State Rating: ⚠️ 5/10
+
+The current orchestration has significant limitations:
+
+| Issue | Current State | Impact |
+|-------|---------------|--------|
+| **Provider selection** | AlphaVantage hardcoded | Can't ingest BLS/Chicago from CLI |
+| **Model selection** | Hardcoded in run_full_pipeline | Can't selectively build models |
+| **Dependency resolution** | Static category sort | Ignores `depends_on` from configs |
+| **Resumability** | None | Failures restart entire pipeline |
+| **Parallel processing** | Limited | Single-threaded by default |
+
+### Current Architecture Problems
+
+```
+run_full_pipeline.py
+├── AlphaVantage ONLY (hardcoded at line 173)
+├── company + stocks ONLY (hardcoded at lines 321-359)
+└── No dependency graph resolution
+
+build_all_models.py
+├── Has --models flag ✓
+├── Has --parallel flag ✓
+└── Uses hardcoded category sort (ignores depends_on) ✗
+```
+
+### Proposed: Unified Pipeline Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                     UNIFIED ORCHESTRATOR                             │
+│                  scripts/orchestrate.py (NEW)                        │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  CLI Interface:                                                      │
+│  python -m scripts.orchestrate \                                     │
+│    --providers alpha_vantage,chicago \                              │
+│    --models core,company,stocks,chicago_actuarial \                 │
+│    --mode ingest-then-build \                                       │
+│    --resume \                                                        │
+│    --parallel                                                        │
+│                                                                      │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐ │
+│  │ Provider        │    │ Dependency      │    │ Checkpoint      │ │
+│  │ Registry        │    │ Graph Engine    │    │ Manager         │ │
+│  │                 │    │                 │    │                 │ │
+│  │ - discover()    │    │ - build_graph() │    │ - save()        │ │
+│  │ - get(name)     │    │ - topo_sort()   │    │ - load()        │ │
+│  │ - list_all()    │    │ - validate()    │    │ - resume()      │ │
+│  └─────────────────┘    └─────────────────┘    └─────────────────┘ │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              ▼               ▼               ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│ AlphaVantage    │ │ BLS             │ │ Chicago         │
+│ Ingestor        │ │ Ingestor        │ │ Ingestor        │
+│                 │ │                 │ │                 │
+│ → securities    │ │ → unemployment  │ │ → community     │
+│ → company       │ │ → cpi           │ │ → tax_assess    │
+│ → prices        │ │ → employment    │ │ → permits       │
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+              │               │               │
+              └───────────────┼───────────────┘
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                      MODEL BUILDER                                   │
+│                                                                      │
+│  Dependency-Ordered Build:                                          │
+│  1. core (no deps)                                                  │
+│  2. company (deps: core)                                            │
+│  3. macro (deps: core)                                              │
+│  4. stocks (deps: core, company)                                    │
+│  5. chicago_actuarial (deps: core, macro)                          │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Component 1: Provider Registry
+
+```python
+# datapipelines/providers/registry.py (NEW)
+
+from typing import Dict, Type, Optional
+from datapipelines.base.provider import BaseProvider
+
+class ProviderRegistry:
+    """
+    Dynamic provider discovery and instantiation.
+
+    Usage:
+        registry = ProviderRegistry()
+        chicago = registry.get('chicago', spark=spark, storage_cfg=storage_cfg)
+        chicago.ingest(facets=['unemployment', 'building_permits'])
+    """
+
+    _providers: Dict[str, Type] = {}
+
+    @classmethod
+    def register(cls, name: str, provider_class: Type):
+        """Register a provider class."""
+        cls._providers[name] = provider_class
+
+    @classmethod
+    def discover(cls) -> Dict[str, Dict]:
+        """Auto-discover providers from directory structure."""
+        providers = {}
+        provider_dir = Path(__file__).parent
+
+        for subdir in provider_dir.iterdir():
+            if subdir.is_dir() and not subdir.name.startswith('_'):
+                config_file = subdir / 'provider.yaml'
+                if config_file.exists():
+                    providers[subdir.name] = yaml.safe_load(config_file.read_text())
+
+        return providers
+
+    @classmethod
+    def get(cls, name: str, **kwargs) -> BaseProvider:
+        """Get an instantiated provider."""
+        if name not in cls._providers:
+            # Auto-import
+            module = importlib.import_module(f'datapipelines.providers.{name}')
+            cls._providers[name] = module.get_ingestor_class()
+
+        return cls._providers[name](**kwargs)
+
+    @classmethod
+    def list_available(cls) -> List[str]:
+        """List all available providers."""
+        return list(cls.discover().keys())
+
+
+# Provider configuration file
+# datapipelines/providers/chicago/provider.yaml (NEW)
+name: chicago
+display_name: Chicago Data Portal
+base_url: https://data.cityofchicago.org
+rate_limit: 5.0
+auth_type: optional_token
+
+facets:
+  - name: unemployment_rates
+    dataset_id: ane4-dwhs
+    bronze_table: chicago_unemployment
+  - name: building_permits
+    dataset_id: ydr8-5enu
+    bronze_table: chicago_building_permits
+  - name: community_areas
+    dataset_id: igwz-8jzy
+    bronze_table: chicago_community_areas
+  - name: tax_assessments
+    dataset_id: cook_county
+    bronze_table: chicago_tax_assessments
+
+models_supported:
+  - city_finance
+  - chicago_actuarial
+```
+
+### Component 2: Dependency Graph Engine
+
+```python
+# orchestration/dependency_graph.py (NEW)
+
+from typing import Dict, List, Set
+from pathlib import Path
+import networkx as nx
+from config.model_loader import ModelConfigLoader
+
+class DependencyGraph:
+    """
+    Build and traverse model dependency graph.
+
+    Uses `depends_on` field from model.yaml files.
+
+    Usage:
+        graph = DependencyGraph(configs_path)
+        graph.build()
+
+        # Get build order
+        order = graph.topological_sort()
+        # ['core', 'company', 'macro', 'stocks', 'chicago_actuarial']
+
+        # Get dependencies for a model
+        deps = graph.get_dependencies('chicago_actuarial')
+        # ['core', 'macro']
+
+        # Validate before build
+        graph.validate(['stocks', 'chicago_actuarial'])
+    """
+
+    def __init__(self, configs_path: Path):
+        self.configs_path = configs_path
+        self.loader = ModelConfigLoader(configs_path)
+        self.graph = nx.DiGraph()
+        self._models: Dict[str, dict] = {}
+
+    def build(self) -> None:
+        """Build dependency graph from model configs."""
+        # Discover all models
+        for model_dir in self.configs_path.iterdir():
+            if model_dir.is_dir() and not model_dir.name.startswith('_'):
+                model_yaml = model_dir / 'model.yaml'
+                if model_yaml.exists():
+                    config = yaml.safe_load(model_yaml.read_text())
+                    model_name = config.get('model', model_dir.name)
+                    self._models[model_name] = config
+                    self.graph.add_node(model_name)
+
+        # Also check single-file models (v1.x)
+        for yaml_file in self.configs_path.glob('*.yaml'):
+            if yaml_file.stem not in self._models:
+                config = yaml.safe_load(yaml_file.read_text())
+                model_name = config.get('model', yaml_file.stem)
+                self._models[model_name] = config
+                self.graph.add_node(model_name)
+
+        # Add edges for dependencies
+        for model_name, config in self._models.items():
+            depends_on = config.get('depends_on', [])
+            for dep in depends_on:
+                if dep in self._models:
+                    self.graph.add_edge(dep, model_name)
+
+    def topological_sort(self) -> List[str]:
+        """Return models in dependency order (build order)."""
+        try:
+            return list(nx.topological_sort(self.graph))
+        except nx.NetworkXUnfeasible:
+            raise ValueError("Circular dependency detected in models")
+
+    def get_dependencies(self, model: str, recursive: bool = True) -> List[str]:
+        """Get dependencies for a model."""
+        if recursive:
+            return list(nx.ancestors(self.graph, model))
+        else:
+            return list(self.graph.predecessors(model))
+
+    def get_dependents(self, model: str) -> List[str]:
+        """Get models that depend on this model."""
+        return list(nx.descendants(self.graph, model))
+
+    def validate(self, models: List[str]) -> Dict[str, List[str]]:
+        """
+        Validate that all dependencies exist for requested models.
+
+        Returns:
+            Dict mapping model → missing dependencies
+        """
+        missing = {}
+        for model in models:
+            deps = self.get_dependencies(model)
+            for dep in deps:
+                if dep not in self._models:
+                    missing.setdefault(model, []).append(dep)
+        return missing
+
+    def filter_buildable(self, requested: List[str]) -> List[str]:
+        """
+        Given requested models, return them with dependencies in build order.
+
+        Example:
+            filter_buildable(['stocks', 'chicago_actuarial'])
+            → ['core', 'company', 'macro', 'stocks', 'chicago_actuarial']
+        """
+        # Collect all required models (requested + their dependencies)
+        required = set(requested)
+        for model in requested:
+            required.update(self.get_dependencies(model))
+
+        # Return in topological order
+        full_order = self.topological_sort()
+        return [m for m in full_order if m in required]
+
+    def visualize(self) -> str:
+        """Return ASCII visualization of dependency graph."""
+        lines = ["Model Dependency Graph:", "=" * 40]
+
+        for model in self.topological_sort():
+            deps = self.get_dependencies(model, recursive=False)
+            if deps:
+                lines.append(f"  {model} ← {', '.join(deps)}")
+            else:
+                lines.append(f"  {model} (no dependencies)")
+
+        return "\n".join(lines)
+```
+
+### Component 3: Checkpoint Manager
+
+```python
+# orchestration/checkpoint.py (NEW)
+
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
+import json
+
+@dataclass
+class PipelineState:
+    """Tracks pipeline execution state for resume capability."""
+
+    started_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    completed_at: Optional[str] = None
+
+    # Provider ingestion state
+    providers_completed: List[str] = field(default_factory=list)
+    provider_progress: Dict[str, Dict] = field(default_factory=dict)
+    # e.g., {"alpha_vantage": {"last_ticker": "MSFT", "tickers_done": 150}}
+
+    # Model build state
+    models_completed: List[str] = field(default_factory=list)
+    models_failed: Dict[str, str] = field(default_factory=dict)
+    # e.g., {"options": "Missing dependency: stocks"}
+
+    # Overall status
+    status: str = "running"  # running, completed, failed, paused
+
+
+class CheckpointManager:
+    """
+    Manages pipeline checkpoints for resume capability.
+
+    Usage:
+        checkpoint = CheckpointManager(storage_path)
+
+        # Save progress
+        checkpoint.mark_provider_complete('alpha_vantage')
+        checkpoint.mark_model_complete('stocks')
+        checkpoint.save()
+
+        # Resume from checkpoint
+        state = checkpoint.load()
+        remaining_providers = checkpoint.get_remaining_providers(['alpha_vantage', 'chicago'])
+        remaining_models = checkpoint.get_remaining_models(['core', 'stocks', 'chicago_actuarial'])
+    """
+
+    def __init__(self, storage_path: Path):
+        self.storage_path = storage_path
+        self.checkpoint_file = storage_path / '.pipeline-checkpoint.json'
+        self.state = PipelineState()
+
+    def load(self) -> Optional[PipelineState]:
+        """Load existing checkpoint if available."""
+        if self.checkpoint_file.exists():
+            data = json.loads(self.checkpoint_file.read_text())
+            self.state = PipelineState(**data)
+            return self.state
+        return None
+
+    def save(self) -> None:
+        """Save current state to checkpoint file."""
+        self.checkpoint_file.write_text(
+            json.dumps(self.state.__dict__, indent=2)
+        )
+
+    def clear(self) -> None:
+        """Clear checkpoint (start fresh)."""
+        if self.checkpoint_file.exists():
+            self.checkpoint_file.unlink()
+        self.state = PipelineState()
+
+    def mark_provider_complete(self, provider: str) -> None:
+        """Mark a provider as fully ingested."""
+        if provider not in self.state.providers_completed:
+            self.state.providers_completed.append(provider)
+        self.save()
+
+    def update_provider_progress(self, provider: str, progress: Dict) -> None:
+        """Update incremental progress for a provider."""
+        self.state.provider_progress[provider] = progress
+        self.save()
+
+    def mark_model_complete(self, model: str) -> None:
+        """Mark a model as successfully built."""
+        if model not in self.state.models_completed:
+            self.state.models_completed.append(model)
+        self.save()
+
+    def mark_model_failed(self, model: str, error: str) -> None:
+        """Record a model build failure."""
+        self.state.models_failed[model] = error
+        self.save()
+
+    def get_remaining_providers(self, requested: List[str]) -> List[str]:
+        """Get providers that still need to be ingested."""
+        return [p for p in requested if p not in self.state.providers_completed]
+
+    def get_remaining_models(self, requested: List[str]) -> List[str]:
+        """Get models that still need to be built."""
+        return [m for m in requested
+                if m not in self.state.models_completed
+                and m not in self.state.models_failed]
+
+    def get_provider_resume_point(self, provider: str) -> Optional[Dict]:
+        """Get the last progress point for a provider (for resume)."""
+        return self.state.provider_progress.get(provider)
+```
+
+### Component 4: Unified Orchestrator CLI
+
+```python
+# scripts/orchestrate.py (NEW)
+
+"""
+Unified Pipeline Orchestrator
+
+Replaces fragmented scripts with single entry point for:
+- Multi-provider data ingestion
+- Dependency-aware model building
+- Checkpoint/resume capability
+
+Usage:
+    # Full pipeline (all providers, all models)
+    python -m scripts.orchestrate --all
+
+    # Selective providers
+    python -m scripts.orchestrate --providers chicago --ingest-only
+
+    # Selective models with auto-dependency resolution
+    python -m scripts.orchestrate --models chicago_actuarial --build-only
+    # Automatically builds: core → macro → chicago_actuarial
+
+    # Resume failed pipeline
+    python -m scripts.orchestrate --resume
+
+    # Show what would be built
+    python -m scripts.orchestrate --models stocks,chicago_actuarial --dry-run
+"""
+
+import argparse
+from pathlib import Path
+
+from config.logging import setup_logging, get_logger
+from orchestration.dependency_graph import DependencyGraph
+from orchestration.checkpoint import CheckpointManager
+from datapipelines.providers.registry import ProviderRegistry
+
+logger = get_logger(__name__)
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Unified Pipeline Orchestrator")
+
+    # Provider selection
+    parser.add_argument('--providers', type=str, default='all',
+                        help='Comma-separated providers: alpha_vantage,bls,chicago or "all"')
+
+    # Model selection
+    parser.add_argument('--models', type=str, default='all',
+                        help='Comma-separated models or "all"')
+
+    # Mode selection
+    parser.add_argument('--ingest-only', action='store_true',
+                        help='Only run data ingestion (skip model build)')
+    parser.add_argument('--build-only', action='store_true',
+                        help='Only run model build (skip ingestion)')
+
+    # Resume/checkpoint
+    parser.add_argument('--resume', action='store_true',
+                        help='Resume from last checkpoint')
+    parser.add_argument('--fresh', action='store_true',
+                        help='Clear checkpoint and start fresh')
+
+    # Execution options
+    parser.add_argument('--parallel', action='store_true',
+                        help='Enable parallel execution where possible')
+    parser.add_argument('--max-workers', type=int, default=3,
+                        help='Max parallel workers')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Show what would be executed without running')
+
+    # Date range (for ingestion)
+    parser.add_argument('--days', type=int, default=30,
+                        help='Days of data to ingest')
+    parser.add_argument('--max-tickers', type=int, default=2000,
+                        help='Maximum tickers to process')
+
+    # Verbosity
+    parser.add_argument('--verbose', '-v', action='store_true')
+    parser.add_argument('--show-dependencies', action='store_true',
+                        help='Show model dependency graph and exit')
+
+    args = parser.parse_args()
+    setup_logging()
+
+    # Initialize components
+    repo_root = Path(__file__).parent.parent
+    configs_path = repo_root / 'configs' / 'models'
+    storage_path = repo_root / 'storage'
+
+    dep_graph = DependencyGraph(configs_path)
+    dep_graph.build()
+
+    checkpoint = CheckpointManager(storage_path)
+
+    # Show dependencies and exit
+    if args.show_dependencies:
+        print(dep_graph.visualize())
+        return
+
+    # Parse selections
+    if args.providers == 'all':
+        providers = ProviderRegistry.list_available()
+    else:
+        providers = [p.strip() for p in args.providers.split(',')]
+
+    if args.models == 'all':
+        models = dep_graph.topological_sort()
+    else:
+        requested = [m.strip() for m in args.models.split(',')]
+        # Auto-include dependencies
+        models = dep_graph.filter_buildable(requested)
+
+    # Handle resume
+    if args.resume:
+        state = checkpoint.load()
+        if state:
+            providers = checkpoint.get_remaining_providers(providers)
+            models = checkpoint.get_remaining_models(models)
+            logger.info(f"Resuming: {len(providers)} providers, {len(models)} models remaining")
+    elif args.fresh:
+        checkpoint.clear()
+
+    # Dry run
+    if args.dry_run:
+        print("\n=== DRY RUN ===")
+        print(f"\nProviders to ingest: {providers}")
+        print(f"\nModels to build (in order):")
+        for i, model in enumerate(models, 1):
+            deps = dep_graph.get_dependencies(model, recursive=False)
+            deps_str = f" (deps: {', '.join(deps)})" if deps else ""
+            print(f"  {i}. {model}{deps_str}")
+        return
+
+    # Execute pipeline
+    try:
+        # Phase 1: Ingestion
+        if not args.build_only:
+            for provider in providers:
+                logger.info(f"Ingesting from {provider}...")
+                ingestor = ProviderRegistry.get(provider,
+                                                spark=get_spark(),
+                                                storage_cfg=load_storage_cfg())
+                ingestor.run(days=args.days, max_tickers=args.max_tickers)
+                checkpoint.mark_provider_complete(provider)
+
+        # Phase 2: Build
+        if not args.ingest_only:
+            for model in models:
+                logger.info(f"Building model: {model}...")
+                try:
+                    build_model(model)
+                    checkpoint.mark_model_complete(model)
+                except Exception as e:
+                    checkpoint.mark_model_failed(model, str(e))
+                    raise
+
+        checkpoint.state.status = 'completed'
+        checkpoint.state.completed_at = datetime.now().isoformat()
+        checkpoint.save()
+
+        logger.info("Pipeline completed successfully!")
+
+    except Exception as e:
+        checkpoint.state.status = 'failed'
+        checkpoint.save()
+        logger.error(f"Pipeline failed: {e}")
+        logger.info("Run with --resume to continue from last checkpoint")
+        raise
+
+
+if __name__ == '__main__':
+    main()
+```
+
+### Updated Implementation Plan
+
+**Add Phase 8: Orchestration Improvements (Week 7-8)**
+
+| Step | Task | File | Est. Hours |
+|------|------|------|------------|
+| 8.1 | Create ProviderRegistry class | `datapipelines/providers/registry.py` | 3 |
+| 8.2 | Create provider.yaml for each provider | `providers/{name}/provider.yaml` | 2 |
+| 8.3 | Create DependencyGraph class | `orchestration/dependency_graph.py` | 4 |
+| 8.4 | Create CheckpointManager class | `orchestration/checkpoint.py` | 3 |
+| 8.5 | Create unified orchestrate.py | `scripts/orchestrate.py` | 6 |
+| 8.6 | Integrate BLS ingestor | Wire up to registry | 2 |
+| 8.7 | Integrate Chicago ingestor | Wire up to registry | 2 |
+| 8.8 | Add --resume capability | Checkpoint integration | 2 |
+| 8.9 | Add parallel execution | Thread pool for providers | 3 |
+| 8.10 | Update documentation | CLAUDE.md, README | 2 |
+| **Total** | | | **~29 hours** |
+
+### CLI Examples After Redesign
+
+```bash
+# Full pipeline (replaces run_full_pipeline.py)
+python -m scripts.orchestrate --all
+
+# Ingest only Chicago data
+python -m scripts.orchestrate --providers chicago --ingest-only
+
+# Build only Chicago actuarial (auto-resolves dependencies)
+python -m scripts.orchestrate --models chicago_actuarial --build-only
+# Output: Building core → macro → chicago_actuarial
+
+# Resume a failed pipeline
+python -m scripts.orchestrate --resume
+
+# Show dependency graph
+python -m scripts.orchestrate --show-dependencies
+# Output:
+#   core (no dependencies)
+#   company ← core
+#   macro ← core
+#   stocks ← core, company
+#   chicago_actuarial ← core, macro
+
+# Dry run with selective models
+python -m scripts.orchestrate --models stocks,chicago_actuarial --dry-run
+# Output: Would build: core, company, macro, stocks, chicago_actuarial
+
+# Parallel execution with limits
+python -m scripts.orchestrate --parallel --max-workers 4 --max-tickers 500
+```
+
+### Backward Compatibility
+
+The existing scripts (`run_full_pipeline.py`, `build_all_models.py`) will continue to work but will be marked as **deprecated**. They can call into the new orchestrator internally:
+
+```python
+# run_full_pipeline.py (deprecated wrapper)
+import warnings
+warnings.warn(
+    "run_full_pipeline.py is deprecated. Use: python -m scripts.orchestrate",
+    DeprecationWarning
+)
+
+# Delegate to new orchestrator
+from scripts.orchestrate import main as orchestrate_main
+orchestrate_main()
+```
