@@ -257,10 +257,15 @@ models/base/
 ├── measure_calculator.py  # Existing
 ├── model_writer.py        # Existing
 ├── query_helpers.py       # ✅ NEW - backend-agnostic operations
+├── securities/            # ✅ NEW - Securities model base classes
+│   ├── __init__.py        # (placeholder for future shared logic)
+│   └── measures.py        # Returns, volatility, Sharpe (move from stocks)
 └── financial/             # ✅ NEW - Financial model base classes
     ├── __init__.py
-    └── chart_of_accounts.py  # Cash flow, NPV, CAGR patterns
+    └── measures.py        # Cash flow, NPV, CAGR patterns
 ```
+
+**Note**: `models/base/securities/` mirrors `_base/securities/` in configs. Even if initially sparse, this provides a consistent location for shared Python logic across stocks/options/etf/futures models.
 
 ---
 
@@ -322,14 +327,29 @@ dimensions:
       is_leaf: boolean
 
   _dim_fiscal_period:
-    description: "Fiscal period dimension (beyond calendar date)"
+    description: "Fiscal/reporting period dimension"
     columns:
       fiscal_period_id: string
       fiscal_year: int
       fiscal_quarter: int
       fiscal_month: int
       period_name: string  # "FY2024-Q1"
+      period_start_date: date
+      period_end_date: date
       is_actual: boolean  # actual vs budget/forecast
+
+  _dim_incurred_period:
+    description: "Incurred/accrual period dimension - when expense/revenue actually occurred"
+    columns:
+      incurred_period_id: string
+      incurred_year: int
+      incurred_quarter: int
+      incurred_month: int
+      incurred_date: date  # Specific date if known
+      # This enables accrual accounting:
+      # - Pension liability incurred in 2020, paid over 30 years
+      # - Revenue recognized in Q1, cash received in Q3
+      # - Multi-year capital projects
 
 facts:
   _fact_financial_transaction:
@@ -337,12 +357,14 @@ facts:
     columns:
       transaction_id: string
       account_id: string  # FK to dim_account
-      fiscal_period_id: string  # FK to dim_fiscal_period
+      fiscal_period_id: string  # FK to dim_fiscal_period (when reported)
+      incurred_period_id: string  # FK to dim_incurred_period (when incurred)
       transaction_date: date
       amount: double
       budget_amount: double  # budgeted/planned
       variance: double  # actual - budget
       transaction_type: string  # debit, credit
+      accounting_basis: string  # 'cash', 'accrual', 'modified_accrual'
 ```
 
 ### Chart of Accounts Measures (Base Template)
@@ -1113,31 +1135,181 @@ if __name__ == "__main__":
 | 3.7 | Create grid exhibit preset | NEW: `configs/exhibits/presets/grid.yaml` |
 | 3.8 | Update exhibit registry | `configs/exhibits/registry.yaml` |
 
-### Phase 4: Core Geography Model (Days 7-9)
+### Phase 4: Core Geography Model (Days 7-11)
 
-**Goal:** Foundational geography dimension for all location-based analysis
+**Goal:** Foundational US geography dimension - location-agnostic down to county level with GIS support
+
+**IMPORTANT**: Geography model is US-agnostic. Chicago is an ANALYSIS target, not a model constraint. The model should work for any US city/county.
 
 | # | Task | Files Affected |
 |---|------|----------------|
 | 4.1 | Create geography model config | NEW: `configs/models/geography/*.yaml` |
-| 4.2 | Define dim_geography (multi-level) | schema.yaml |
-| 4.3 | Define dim_census_tract | schema.yaml |
-| 4.4 | Define dim_zip_code | schema.yaml |
-| 4.5 | Create GeographyModel class | NEW: `models/implemented/geography/model.py` |
-| 4.6 | Create Census data provider | NEW: `datapipelines/providers/census/` |
-| 4.7 | Create geography facets | NEW: `census/facets/geography.py` |
+| 4.2 | Define dim_state | schema.yaml |
+| 4.3 | Define dim_county | schema.yaml |
+| 4.4 | Define dim_place (cities/towns) | schema.yaml |
+| 4.5 | Define dim_census_tract | schema.yaml |
+| 4.6 | Define dim_zip_code | schema.yaml |
+| 4.7 | Define fact_geography_gis (optional GIS data) | schema.yaml |
+| 4.8 | Create GeographyModel class | NEW: `models/implemented/geography/model.py` |
+| 4.9 | Create Census data provider | NEW: `datapipelines/providers/census/` |
+| 4.10 | Create TIGER/Line GIS provider | NEW: `datapipelines/providers/tiger/` |
+| 4.11 | Create geography facets | NEW: `census/facets/geography.py` |
 
-**Geography Hierarchy:**
+**US Geography Hierarchy (Standard - Works for ANY Location):**
 ```
-State (Illinois)
-  └── County (Cook)
-       └── City (Chicago)
-            └── Community Area (77 areas)
-                 └── Census Tract (~800 tracts)
-                      └── Block Group
+┌─────────────────────────────────────────────────────────────────────┐
+│                    US GEOGRAPHY HIERARCHY                            │
+│                    (Location-Agnostic Model)                         │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  Level 1: Nation                                                    │
+│  └── fips_code: 'US'                                               │
+│                                                                     │
+│  Level 2: State (50 states + territories)                          │
+│  └── fips_code: '17' (Illinois), '06' (California), etc.           │
+│                                                                     │
+│  Level 3: County (~3,200 US counties)                              │
+│  └── fips_code: '17031' (Cook County, IL)                          │
+│  └── fips_code: '06037' (Los Angeles County, CA)                   │
+│                                                                     │
+│  Level 4: Place/City (Census-designated places)                    │
+│  └── place_fips: '1714000' (Chicago)                               │
+│  └── place_fips: '0644000' (Los Angeles)                           │
+│                                                                     │
+│  Level 5: Census Tract (~85,000 US tracts)                         │
+│  └── tract_fips: '17031010100' (tract in Cook County)              │
+│                                                                     │
+│  Level 6: Block Group                                              │
+│  └── bg_fips: '170310101001'                                       │
+│                                                                     │
+│  SUPPLEMENTAL (City-Specific - Loaded When Analyzing):             │
+│  ─────────────────────────────────────────────────────              │
+│  Chicago: Community Areas (77), Wards (50)                         │
+│  NYC: Boroughs (5), Community Districts (59), NTAs                 │
+│  LA: Council Districts (15), Neighborhoods                         │
+│                                                                     │
+│  These are loaded as supplemental dimensions when analyzing        │
+│  a specific city, NOT hardcoded into the base model.               │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### Phase 5: Orchestration Layer (Days 10-11)
+**Geography Schema (US-Agnostic):**
+
+```yaml
+# configs/models/geography/schema.yaml
+
+dimensions:
+  dim_state:
+    primary_key: [state_fips]
+    columns:
+      state_fips: string  # '17' for Illinois
+      state_name: string  # 'Illinois'
+      state_abbr: string  # 'IL'
+      region: string  # 'Midwest'
+      division: string  # 'East North Central'
+
+  dim_county:
+    primary_key: [county_fips]
+    columns:
+      county_fips: string  # '17031' for Cook County
+      state_fips: string  # FK to dim_state
+      county_name: string  # 'Cook County'
+      county_type: string  # 'county', 'parish', 'borough'
+      land_area_sq_mi: double
+      water_area_sq_mi: double
+
+  dim_place:
+    description: "Census-designated places (cities, towns, CDPs)"
+    primary_key: [place_fips]
+    columns:
+      place_fips: string  # '1714000' for Chicago
+      state_fips: string  # FK to dim_state
+      county_fips: string  # FK to dim_county (primary county)
+      place_name: string  # 'Chicago'
+      place_type: string  # 'incorporated', 'cdp'
+      legal_type: string  # 'city', 'village', 'town'
+      population: long
+      land_area_sq_mi: double
+
+  dim_census_tract:
+    primary_key: [tract_fips]
+    columns:
+      tract_fips: string  # '17031010100'
+      county_fips: string  # FK to dim_county
+      state_fips: string  # FK to dim_state
+      tract_name: string  # '101' or 'Census Tract 101'
+      land_area_sq_mi: double
+
+  dim_zip_code:
+    primary_key: [zip_code]
+    columns:
+      zip_code: string  # '60601'
+      zip_type: string  # 'standard', 'po_box', 'unique'
+      primary_city: string
+      state_abbr: string
+      # Note: ZIPs cross county/tract boundaries
+
+  dim_block_group:
+    primary_key: [bg_fips]
+    columns:
+      bg_fips: string  # '170310101001'
+      tract_fips: string  # FK to dim_census_tract
+      bg_number: string  # '1'
+
+facts:
+  fact_geography_crosswalk:
+    description: "Many-to-many relationships between geographies"
+    columns:
+      crosswalk_id: string
+      source_geo_type: string  # 'zip', 'tract', 'place'
+      source_geo_id: string
+      target_geo_type: string
+      target_geo_id: string
+      overlap_pct: double  # % of source in target
+      population_weight: double  # population-weighted overlap
+
+  fact_geography_gis:
+    description: "GIS/spatial data (optional - requires GIS libraries)"
+    columns:
+      geo_id: string
+      geo_type: string  # 'tract', 'county', 'place'
+      geometry_wkt: string  # WKT representation
+      centroid_lat: double
+      centroid_lon: double
+      bounding_box: string  # 'minx,miny,maxx,maxy'
+```
+
+**City-Specific Supplemental Tables (Loaded On Demand):**
+
+```yaml
+# configs/models/geography/supplemental/chicago.yaml
+# Only loaded when analyzing Chicago
+
+supplemental_dimensions:
+  dim_chicago_community_area:
+    primary_key: [community_area_id]
+    columns:
+      community_area_id: int  # 1-77
+      community_area_name: string  # 'Rogers Park', 'Loop'
+      side: string  # 'North Side', 'South Side', 'West Side'
+
+  dim_chicago_ward:
+    primary_key: [ward_id]
+    columns:
+      ward_id: int  # 1-50
+      alderman_name: string
+      # Wards change with redistricting
+
+supplemental_crosswalks:
+  fact_tract_to_community_area:
+    columns:
+      tract_fips: string
+      community_area_id: int
+      overlap_pct: double
+```
+
+### Phase 5: Orchestration Layer (Days 12-13)
 
 **Goal:** Unified build/ingest system
 
@@ -1150,7 +1322,7 @@ State (Illinois)
 | 5.5 | Create unified orchestrate.py CLI | NEW: `scripts/orchestrate.py` |
 | 5.6 | Deprecate old scripts | Add warnings to old scripts |
 
-### Phase 6: Economic Series Model (Days 12-18)
+### Phase 6: Economic Series Model (Days 14-20)
 
 **Goal:** Generalized time series model for federal/state economic data
 
@@ -1187,7 +1359,7 @@ fact_series_observation
 └── vintage
 ```
 
-### Phase 7: Chart of Accounts Base Class (Days 19-24)
+### Phase 7: Chart of Accounts Base Class (Days 21-26)
 
 **Goal:** Implement shared financial model base for city_finance and company
 
@@ -1198,19 +1370,138 @@ fact_series_observation
 | 7.3 | Update city_finance to inherit from _base.financial | `configs/models/city_finance/*.yaml` |
 | 7.4 | Update company to inherit from _base.financial | `configs/models/company/*.yaml` |
 | 7.5 | Add NPV, CAGR, YoY measures to financial base | `measures.py` |
-| 7.6 | Test inheritance works correctly | Run test suite |
-| 7.7 | Update company model for financial statements | `company/model.py` |
+| 7.6 | Add incurred_period dimension support | `schema.yaml` |
+| 7.7 | Test inheritance works correctly | Run test suite |
+| 7.8 | Update company model for financial statements | `company/model.py` |
 
-### Phase 8: Complete Missing Securities Models (Days 25-31)
+### Phase 8: City Services & Departmental Performance (Days 27-33)
+
+**Goal:** Model city departments, services, and performance metrics by geography
+
+This phase adds the ability to analyze how well city services perform across different geographic areas - critical for understanding service equity and resource allocation.
+
+| # | Task | Files Affected |
+|---|------|----------------|
+| 8.1 | Create city_services model config | NEW: `configs/models/city_services/*.yaml` |
+| 8.2 | Define dim_department (Fire, Police, Admin, etc.) | schema.yaml |
+| 8.3 | Define dim_service_type (emergency response, permits, etc.) | schema.yaml |
+| 8.4 | Define fact_service_call (311, 911 calls by geo) | schema.yaml |
+| 8.5 | Define fact_response_time (response metrics by geo) | schema.yaml |
+| 8.6 | Define fact_department_budget (extends Chart of Accounts) | schema.yaml |
+| 8.7 | Create CityServicesModel class | NEW: `models/implemented/city_services/model.py` |
+| 8.8 | Create service performance measures | NEW: `city_services/measures.py` |
+| 8.9 | Add Chicago 311/911 data endpoints | `chicago/chicago_ingestor.py` |
+| 8.10 | Create analysis notebooks | NEW: `configs/notebooks/city_services/*.md` |
+
+**City Services Schema:**
+
+```yaml
+# configs/models/city_services/schema.yaml
+# Inherits from _base.financial for budget tracking
+
+extends: _base.financial.schema
+
+dimensions:
+  dim_department:
+    primary_key: [department_id]
+    columns:
+      department_id: string
+      department_code: string  # 'CFD', 'CPD', 'DOB'
+      department_name: string  # 'Fire Department', 'Police Department'
+      department_type: string  # 'public_safety', 'administrative', 'infrastructure'
+      parent_department_id: string  # For rollup (e.g., sub-bureaus)
+
+  dim_service_type:
+    primary_key: [service_type_id]
+    columns:
+      service_type_id: string
+      service_code: string
+      service_name: string  # 'Building Permit', 'Fire Response', 'Pothole Repair'
+      department_id: string  # FK to dim_department
+      service_category: string  # 'emergency', 'permit', 'maintenance', 'inspection'
+      sla_target_hours: double  # Service level agreement target
+
+  dim_call_type:
+    primary_key: [call_type_id]
+    columns:
+      call_type_id: string
+      call_type_code: string  # '311', '911'
+      call_type_name: string
+      priority_level: int  # 1=highest priority
+
+facts:
+  fact_service_call:
+    description: "311/911 calls and service requests"
+    columns:
+      call_id: string
+      call_type_id: string  # FK to dim_call_type
+      service_type_id: string  # FK to dim_service_type
+      department_id: string  # FK to dim_department
+      geography_id: string  # FK to geography (tract, community area, etc.)
+      call_datetime: timestamp
+      created_date: date
+      closed_date: date
+      status: string  # 'open', 'in_progress', 'closed'
+      resolution_time_hours: double
+      latitude: double
+      longitude: double
+
+  fact_response_metric:
+    description: "Aggregated response/performance metrics by geography"
+    columns:
+      metric_id: string
+      department_id: string
+      service_type_id: string
+      geography_id: string  # FK to geography
+      period_id: string  # FK to calendar
+      metric_type: string  # 'response_time', 'completion_rate', 'volume'
+      metric_value: double
+      target_value: double
+      variance_pct: double
+
+  fact_department_budget:
+    extends: _base.financial._fact_financial_transaction
+    description: "Department budgets with incurred period tracking"
+    columns:
+      # Inherited: amount, budget_amount, variance, fiscal_period_id, incurred_period_id
+      department_id: string
+      program_id: string
+      personnel_cost: double
+      non_personnel_cost: double
+      capital_cost: double
+      headcount_budgeted: int
+      headcount_actual: int
+```
+
+**City Services Measures:**
+
+| Category | Measure | Description |
+|----------|---------|-------------|
+| **Response Time** | `avg_response_time` | Average time to respond by geography |
+| | `response_time_p90` | 90th percentile response time |
+| | `sla_compliance_rate` | % of calls meeting SLA target |
+| **Service Volume** | `calls_per_capita` | 311/911 calls per 1000 residents |
+| | `calls_by_type` | Call volume by service type |
+| | `call_trend` | YoY change in call volume |
+| **Service Equity** | `response_time_disparity` | Variance in response time across geographies |
+| | `service_equity_index` | Composite equity score (0-100) |
+| | `resource_allocation_ratio` | Budget per capita by area |
+| **Department Performance** | `budget_utilization` | Actual spend / budget |
+| | `cost_per_call` | Operating cost / calls handled |
+| | `staff_efficiency` | Calls handled / FTE |
+
+### Phase 9: Complete Missing Securities Models (Days 34-40)
 
 **Goal:** All securities models have working implementations
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 8.1 | Implement ETF model | NEW: `models/implemented/etf/model.py`, `measures.py` |
-| 8.2 | Implement Options model | NEW: `models/implemented/options/model.py`, `measures.py` |
-| 8.3 | Implement Futures model | NEW: `models/implemented/futures/model.py`, `measures.py` |
-| 8.4 | Test all model builds | Run orchestrate.py --all |
+| 9.1 | Create _base/securities Python module | NEW: `models/base/securities/measures.py` |
+| 9.2 | Move shared securities measures from stocks | Refactor `stocks/measures.py` |
+| 9.3 | Implement ETF model | NEW: `models/implemented/etf/model.py`, `measures.py` |
+| 9.4 | Implement Options model | NEW: `models/implemented/options/model.py`, `measures.py` |
+| 9.5 | Implement Futures model | NEW: `models/implemented/futures/model.py`, `measures.py` |
+| 9.6 | Test all model builds | Run orchestrate.py --all |
 
 ---
 
@@ -1599,21 +1890,31 @@ These components were created and are **NOT duplicates** of existing functionali
 
 1. **Phase 1-2**: Cleanup and backend abstraction (QueryHelper)
 2. **Phase 3**: Configuration standardization (v1.x migration + exhibits)
-3. **Phase 4**: Core geography model (foundational)
+3. **Phase 4**: Core geography model (US-agnostic, down to tract level with GIS)
 4. **Phase 5**: Orchestration layer (partially complete)
 5. **Phase 6**: Economic series model (federal/state data)
-6. **Phase 7**: Chart of Accounts base class (financial model inheritance)
-7. **Phase 8**: Missing securities models (ETF, Options, Futures)
+6. **Phase 7**: Chart of Accounts base class (financial model inheritance with incurred period)
+7. **Phase 8**: City Services & Departmental Performance (Fire, Police, Admin by geography)
+8. **Phase 9**: Missing securities models (ETF, Options, Futures)
 
 ### New Providers Needed
 
 | Provider | Priority | Data | Model(s) Fed |
 |----------|----------|------|--------------|
-| `census` | High | Geography, population, demographics | geography, city_finance |
+| `census` | High | Geography, population, demographics | geography, city_services |
+| `tiger` | High | TIGER/Line GIS boundaries | geography |
 | `fred` | High | Interest rates, housing indices | macro, city_finance |
 | `bea` | High | GDP, personal income | macro |
 | `cook_county` | Medium | Property assessments, tax rates | city_finance |
 | `illinois` | Low | State tax revenue, transfers | city_finance |
+
+### New Models Needed
+
+| Model | Inherits From | Purpose |
+|-------|---------------|---------|
+| `geography` | (base) | US geography hierarchy, GIS data |
+| `city_services` | `_base.financial` | Department performance by geography |
+| `economic_series` | (base) | Federal/state time series data |
 
 ### Total Estimated Effort
 
@@ -1622,12 +1923,13 @@ These components were created and are **NOT duplicates** of existing functionali
 | Phase 1: Cleanup | 1 | High |
 | Phase 2: Backend Abstraction | 2 | High |
 | Phase 3: Config Standardization | 3 | High |
-| Phase 4: Core Geography | 3 | High |
+| Phase 4: Core Geography (US-Agnostic) | 5 | High |
 | Phase 5: Orchestration | 2 | High (partially done) |
 | Phase 6: Economic Series | 7 | High |
-| Phase 7: Chart of Accounts | 6 | High |
-| Phase 8: Securities Models | 7 | Medium |
-| **Total** | **31 days** | |
+| Phase 7: Chart of Accounts (+ Incurred Period) | 6 | High |
+| Phase 8: City Services & Departments | 7 | High |
+| Phase 9: Securities Models | 7 | Medium |
+| **Total** | **40 days** | |
 
 ---
 
