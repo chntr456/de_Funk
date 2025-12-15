@@ -7,8 +7,7 @@ description: "Municipal data from Chicago Data Portal - finance, property, and c
 
 # Models this provider feeds data to
 models:
-  - city_finance
-  - chicago_actuarial  # Future model for actuarial analysis
+  - city_finance  # Municipal finance with Chart of Accounts base
 
 # Bronze tables this provider writes to
 bronze_tables:

@@ -1,7 +1,8 @@
-# Proposal 010: Model Standardization & Chicago Actuarial Forecast
+# Proposal 010: Model Standardization & Chicago Economic Analysis
 
 **Status**: Draft
 **Created**: 2025-12-15
+**Updated**: 2025-12-15
 **Author**: Claude (AI Assistant)
 **Priority**: High
 
@@ -12,24 +13,31 @@
 This proposal provides a step-by-step roadmap for:
 
 1. **Model Standardization**: Clean up inconsistencies, remove legacy code, create unified patterns
-2. **Chicago Actuarial Forecast Model**: Build comprehensive municipal economic analysis
-3. **Orchestration Improvements**: Unified build/ingest system for all models and providers
+2. **Chart of Accounts Base Class**: Create inherited base class for financial models (like securities)
+3. **Chicago Economic Data**: Expand data sources for municipal/economic analysis (NOT a separate model)
+4. **Orchestration Improvements**: Unified build/ingest system for all models and providers
+5. **Logging & Error Handling**: Document existing framework and patterns
 
 This is a **planning document** - implementation should follow after approval.
+
+**Key Change**: There is NO "actuarial model" - economic/municipal data feeds into existing models (macro, city_finance, company) via expanded data sources and the Chart of Accounts base class pattern.
 
 ---
 
 ## Table of Contents
 
 1. [Current Architecture Assessment](#part-1-current-architecture-assessment)
-2. [Target Architecture](#part-2-target-architecture)
-3. [Model Build Flow - Current vs Target](#part-3-model-build-flow)
-4. [Ingestion Flow - Current vs Target](#part-4-ingestion-flow)
-5. [Files to Remove](#part-5-files-to-remove)
-6. [Files to Create](#part-6-files-to-create)
-7. [Files to Modify](#part-7-files-to-modify)
-8. [Step-by-Step Implementation Tasks](#part-8-step-by-step-implementation-tasks)
-9. [Chicago Actuarial Model Design](#part-9-chicago-actuarial-model-design)
+2. [What Already Exists](#part-2-what-already-exists)
+3. [Target Architecture](#part-3-target-architecture)
+4. [Chart of Accounts Base Class](#part-4-chart-of-accounts-base-class)
+5. [Logging & Error Handling Walkthrough](#part-5-logging-and-error-handling)
+6. [Model Build Flow - Current vs Target](#part-6-model-build-flow)
+7. [Ingestion Flow - Current vs Target](#part-7-ingestion-flow)
+8. [Files to Remove](#part-8-files-to-remove)
+9. [Files to Create](#part-9-files-to-create)
+10. [Files to Modify](#part-10-files-to-modify)
+11. [Step-by-Step Implementation Tasks](#part-11-step-by-step-implementation-tasks)
+12. [Chicago Economic Data Sources](#part-12-chicago-economic-data-sources)
 
 ---
 
@@ -110,7 +118,77 @@ else:
 
 ---
 
-## Part 2: Target Architecture
+## Part 2: What Already Exists
+
+Before proposing new components, it's critical to understand what's already implemented.
+
+### Registry Classes (NOT Duplicates - Different Purposes)
+
+| Registry | Location | Purpose | Status |
+|----------|----------|---------|--------|
+| `BaseRegistry` | `datapipelines/base/registry.py` | API endpoint rendering (URLs, params) | ✅ Exists |
+| `AlphaVantageRegistry` | `providers/alpha_vantage/alpha_vantage_registry.py` | Alpha Vantage API endpoints | ✅ Exists |
+| `BLSRegistry` | `providers/bls/bls_registry.py` | BLS API endpoints | ✅ Exists |
+| `ChicagoRegistry` | `providers/chicago/chicago_registry.py` | Chicago API endpoints | ✅ Exists |
+| `ModelRegistry` | `models/registry.py` | Discovers model YAMLs, instantiates model classes | ✅ Exists |
+| `MeasureRegistry` | `models/base/measures/registry.py` | Measure definitions | ✅ Exists |
+| `ProviderRegistry` | `datapipelines/providers/registry.py` | Discovers data **providers**, instantiates ingestors | ✅ NEW (created this session) |
+
+**Key Distinction:**
+- `BaseRegistry` + subclasses = API endpoint management (how to call APIs)
+- `ModelRegistry` = Model class discovery (how to build models)
+- `ProviderRegistry` = Data provider discovery (which data sources exist)
+
+These serve **different purposes** and are NOT duplicates.
+
+### Orchestration Components
+
+| Component | Location | Purpose | Status |
+|-----------|----------|---------|--------|
+| `DependencyGraph` | `orchestration/dependency_graph.py` | Model build order via topological sort | ✅ NEW (created this session) |
+| `CheckpointManager` | `orchestration/checkpoint.py` | Resume from failure | ✅ Exists |
+| `orchestrate.py` | `scripts/orchestrate.py` | Unified CLI | ✅ NEW (created this session) |
+
+### Build Scripts (Current - Fragmented)
+
+| Script | Purpose | Status |
+|--------|---------|--------|
+| `build_company_model.py` | Build company model only (hardcoded) | ⚠️ To deprecate |
+| `build_silver_duckdb.py` | Build with DuckDB (hardcoded model list) | ⚠️ To deprecate |
+| `run_full_pipeline.py` | Full pipeline (Alpha Vantage only) | ⚠️ To deprecate |
+| `orchestrate.py` | Unified replacement | ✅ NEW |
+
+### Logging Framework (Complete)
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| `setup_logging()` | `config/logging.py` | ✅ Complete |
+| `get_logger()` | `config/logging.py` | ✅ Complete |
+| `LogTimer` | `config/logging.py` | ✅ Complete |
+| `ColoredFormatter` | `config/logging.py` | ✅ Complete |
+| `StructuredFormatter` | `config/logging.py` | ✅ Complete (JSON) |
+
+### Error Handling Framework (Complete)
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| `DeFunkError` | `core/exceptions.py` | ✅ Complete |
+| `ConfigurationError` | `core/exceptions.py` | ✅ Complete |
+| `ModelNotFoundError` | `core/exceptions.py` | ✅ Complete |
+| `@handle_exceptions` | `core/error_handling.py` | ✅ Complete |
+| `@retry_on_exception` | `core/error_handling.py` | ✅ Complete |
+
+### Working Providers
+
+| Provider | Status | Notes |
+|----------|--------|-------|
+| `alpha_vantage` | ✅ Working | Only working securities provider |
+| `bls` | ⚠️ Partial | Needs testing |
+| `chicago` | ⚠️ Partial | Basic budget data only |
+
+---
+
+## Part 3: Target Architecture
 
 ### Target Model Configuration Layout
 
@@ -129,8 +207,10 @@ configs/models/
 ├── futures/               # Complete implementation
 ├── macro/                 # Existing v2.0
 ├── city_finance/          # Existing v2.0
-├── chicago_actuarial/     # ✅ NEW - actuarial forecast model
 └── forecast/              # ✅ MIGRATE from v1.x
+
+# NOTE: No "chicago_actuarial" model - economic data feeds into
+# existing models via Chart of Accounts base class pattern
 
 # DELETED:
 # - core.yaml (migrated to core/)
@@ -162,10 +242,7 @@ models/implemented/
 ├── macro/
 │   └── model.py           # Existing
 ├── city_finance/
-│   └── model.py           # Existing
-├── chicago_actuarial/     # ✅ NEW
-│   ├── model.py
-│   └── measures.py        # Actuarial calculations
+│   └── model.py           # Existing → enhance with Chart of Accounts
 └── forecast/
     └── model.py           # ✅ Refactored
 ```
@@ -179,14 +256,481 @@ models/base/
 ├── table_accessor.py      # Existing
 ├── measure_calculator.py  # Existing
 ├── model_writer.py        # Existing
-└── query_helpers.py       # ✅ NEW - backend-agnostic operations
+├── query_helpers.py       # ✅ NEW - backend-agnostic operations
+└── financial/             # ✅ NEW - Financial model base classes
+    ├── __init__.py
+    └── chart_of_accounts.py  # Cash flow, NPV, CAGR patterns
 ```
 
 ---
 
-## Part 3: Model Build Flow
+## Part 4: Chart of Accounts Base Class
+
+### Concept
+
+Just as `_base/securities/` provides inherited schema/graph/measures for stock/options/etf/futures models, we need a **`_base/financial/`** template for models dealing with:
+
+- **Budget tracking** (city_finance)
+- **Financial statements** (company income/balance/cash flow)
+- **NPV, CAGR, trend calculations** (both city and company)
+
+### Why This Pattern?
+
+```
+SECURITIES INHERITANCE (existing):
+─────────────────────────────────
+_base/securities/
+├── schema.yaml     # OHLCV columns, ticker, asset_type
+├── graph.yaml      # Price nodes, technical indicator edges
+└── measures.yaml   # Returns, volatility, Sharpe ratio
+
+↓ inherited by
+
+stocks/   → extends _base.securities + adds company_id, shares_outstanding
+options/  → extends _base.securities + adds strike, expiry, Greeks
+etfs/     → extends _base.securities + adds holdings, NAV
+
+FINANCIAL INHERITANCE (proposed):
+──────────────────────────────────
+_base/financial/
+├── schema.yaml     # Revenue, expenses, assets, liabilities columns
+├── graph.yaml      # Budget hierarchy, account structure
+└── measures.yaml   # NPV, CAGR, YoY growth, variance analysis
+
+↓ inherited by
+
+city_finance/ → extends _base.financial + adds department, fund_type
+company/      → extends _base.financial + adds CIK, ticker linkage
+```
+
+### Chart of Accounts Schema (Base Template)
+
+```yaml
+# configs/models/_base/financial/schema.yaml
+
+dimensions:
+  _dim_account:
+    description: "Base account dimension for Chart of Accounts"
+    columns:
+      account_id: string
+      account_code: string
+      account_name: string
+      account_type: string  # asset, liability, equity, revenue, expense
+      account_category: string  # operating, capital, debt_service
+      parent_account_id: string  # hierarchical rollup
+      level: int  # 1=top level, 2=department, 3=line item
+      is_leaf: boolean
+
+  _dim_fiscal_period:
+    description: "Fiscal period dimension (beyond calendar date)"
+    columns:
+      fiscal_period_id: string
+      fiscal_year: int
+      fiscal_quarter: int
+      fiscal_month: int
+      period_name: string  # "FY2024-Q1"
+      is_actual: boolean  # actual vs budget/forecast
+
+facts:
+  _fact_financial_transaction:
+    description: "Base fact for financial transactions"
+    columns:
+      transaction_id: string
+      account_id: string  # FK to dim_account
+      fiscal_period_id: string  # FK to dim_fiscal_period
+      transaction_date: date
+      amount: double
+      budget_amount: double  # budgeted/planned
+      variance: double  # actual - budget
+      transaction_type: string  # debit, credit
+```
+
+### Chart of Accounts Measures (Base Template)
+
+```yaml
+# configs/models/_base/financial/measures.yaml
+
+simple_measures:
+  total_revenue:
+    type: simple
+    source: fact_financial_transaction.amount
+    filters: ["account_type = 'revenue'"]
+    aggregation: sum
+
+  total_expenses:
+    type: simple
+    source: fact_financial_transaction.amount
+    filters: ["account_type = 'expense'"]
+    aggregation: sum
+
+  net_income:
+    type: computed
+    formula: "total_revenue - total_expenses"
+
+  budget_variance:
+    type: simple
+    source: fact_financial_transaction.variance
+    aggregation: sum
+
+python_measures:
+  npv:
+    function: "financial.measures.calculate_npv"
+    params:
+      discount_rate: 0.05
+
+  cagr:
+    function: "financial.measures.calculate_cagr"
+    params:
+      years: 5
+
+  yoy_growth:
+    function: "financial.measures.calculate_yoy_growth"
+
+  trend_forecast:
+    function: "financial.measures.forecast_trend"
+    params:
+      periods: 4
+      method: "linear"  # linear, exponential, arima
+```
+
+### Python Measures Implementation
+
+```python
+# models/base/financial/measures.py
+
+class FinancialMeasures:
+    """Base class for financial model measures."""
+
+    def calculate_npv(self, cash_flows, discount_rate=0.05, **kwargs):
+        """
+        Calculate Net Present Value of cash flows.
+
+        Args:
+            cash_flows: DataFrame with columns [period, amount]
+            discount_rate: Annual discount rate (default 5%)
+
+        Returns:
+            NPV as float
+        """
+        npv = 0.0
+        for i, row in enumerate(cash_flows.itertuples()):
+            npv += row.amount / ((1 + discount_rate) ** i)
+        return npv
+
+    def calculate_cagr(self, df, value_col='amount', years=5, **kwargs):
+        """
+        Calculate Compound Annual Growth Rate.
+
+        Args:
+            df: DataFrame with time-ordered values
+            value_col: Column containing values
+            years: Number of years for CAGR
+
+        Returns:
+            CAGR as decimal (0.08 = 8%)
+        """
+        start_value = df[value_col].iloc[0]
+        end_value = df[value_col].iloc[-1]
+
+        if start_value <= 0:
+            return None
+
+        cagr = (end_value / start_value) ** (1 / years) - 1
+        return cagr
+
+    def calculate_yoy_growth(self, df, value_col='amount', date_col='fiscal_year', **kwargs):
+        """
+        Calculate Year-over-Year growth rates.
+
+        Returns:
+            DataFrame with yoy_growth column added
+        """
+        df = df.sort_values(date_col)
+        df['yoy_growth'] = df[value_col].pct_change()
+        return df
+
+    def forecast_trend(self, df, value_col='amount', periods=4, method='linear', **kwargs):
+        """
+        Forecast future values using trend analysis.
+
+        Args:
+            df: Historical data
+            value_col: Column to forecast
+            periods: Number of periods to forecast
+            method: 'linear', 'exponential', or 'arima'
+
+        Returns:
+            DataFrame with forecast values
+        """
+        import numpy as np
+        from scipy import stats
+
+        x = np.arange(len(df))
+        y = df[value_col].values
+
+        if method == 'linear':
+            slope, intercept, r, p, se = stats.linregress(x, y)
+            future_x = np.arange(len(df), len(df) + periods)
+            forecast = slope * future_x + intercept
+        elif method == 'exponential':
+            log_y = np.log(y[y > 0])
+            slope, intercept, r, p, se = stats.linregress(x[:len(log_y)], log_y)
+            future_x = np.arange(len(df), len(df) + periods)
+            forecast = np.exp(slope * future_x + intercept)
+        else:
+            # ARIMA requires statsmodels
+            from statsmodels.tsa.arima.model import ARIMA
+            model = ARIMA(y, order=(1, 1, 1))
+            fitted = model.fit()
+            forecast = fitted.forecast(steps=periods)
+
+        return forecast
+```
+
+### How Models Inherit
+
+**city_finance model (example):**
+
+```yaml
+# configs/models/city_finance/model.yaml
+model: city_finance
+version: 2.0
+inherits_from: _base.financial  # ← KEY INHERITANCE
+
+components:
+  schema: city_finance/schema.yaml
+  graph: city_finance/graph.yaml
+  measures: city_finance/measures.yaml
+
+depends_on: [core, geography]
+```
+
+```yaml
+# configs/models/city_finance/schema.yaml
+extends: _base.financial.schema
+
+dimensions:
+  dim_department:
+    extends: _base.financial._dim_account
+    columns:
+      # Inherited: account_id, account_code, account_name, account_type, etc.
+      department_code: string  # Added
+      fund_type: string  # corporate, enterprise, special
+      appropriation_authority: string
+
+  dim_fiscal_period:
+    extends: _base.financial._dim_fiscal_period
+    columns:
+      # Inherited: fiscal_year, fiscal_quarter, etc.
+      chicago_fiscal_year: string  # "FY2024" (Jan-Dec for Chicago)
+
+facts:
+  fact_budget_line_item:
+    extends: _base.financial._fact_financial_transaction
+    columns:
+      # Inherited: transaction_id, account_id, fiscal_period_id, amount, etc.
+      appropriation_amount: double
+      expenditure_actual: double
+      encumbrance: double
+```
+
+**company model (example):**
+
+```yaml
+# configs/models/company/model.yaml
+model: company
+version: 2.0
+inherits_from: _base.financial  # ← KEY INHERITANCE (NEW)
+
+# Also inherits fundamentals from Alpha Vantage
+depends_on: [core]
+```
+
+```yaml
+# configs/models/company/schema.yaml
+extends: _base.financial.schema
+
+facts:
+  fact_income_statement:
+    extends: _base.financial._fact_financial_transaction
+    columns:
+      # Inherited base columns
+      cik: string  # SEC CIK identifier
+      ticker: string  # Stock ticker
+      fiscal_date_ending: date
+      reported_currency: string
+      total_revenue: double
+      cost_of_revenue: double
+      gross_profit: double
+      operating_income: double
+      net_income: double
+      # etc.
+```
+
+---
+
+## Part 5: Logging & Error Handling Walkthrough
+
+### Logging Framework (config/logging.py)
+
+The codebase has a **complete logging framework** - use it instead of print statements.
+
+#### Setup (Once at Script Start)
+
+```python
+from config.logging import setup_logging, get_logger
+
+# Call once at script entry point
+setup_logging()
+
+# Get module-specific logger
+logger = get_logger(__name__)
+```
+
+#### Log Levels and When to Use
+
+```python
+# DEBUG: Detailed info for debugging (file only by default)
+logger.debug(f"Processing row {i}: {row}")
+
+# INFO: Normal operation progress (console + file)
+logger.info(f"Processing {ticker}")
+
+# WARNING: Issues that don't stop execution
+logger.warning(f"Rate limit reached, waiting 60s")
+
+# ERROR: Failures with stack traces
+logger.error(f"Failed to process {ticker}", exc_info=True)
+
+# CRITICAL: System is unusable
+logger.critical(f"Database connection lost")
+```
+
+#### LogTimer for Timing Operations
+
+```python
+from config.logging import LogTimer
+
+# Automatic timing with logging
+with LogTimer(logger, "Building model"):
+    model.build()
+# Output: "Starting: Building model"
+# Output: "Completed: Building model (2350.45ms)"
+
+# With context
+with LogTimer(logger, "Processing ticker", ticker="AAPL"):
+    process(ticker)
+```
+
+#### Configuration via Environment
+
+```bash
+# .env file
+LOG_LEVEL=DEBUG           # Console level
+LOG_FILE_LEVEL=DEBUG      # File level (default: DEBUG)
+LOG_DIR=logs/             # Log directory
+LOG_JSON=true             # Enable JSON structured logging
+```
+
+#### Log File Location
+
+- Main log: `logs/de_funk.log`
+- JSON log: `logs/de_funk.json` (if enabled)
+- Rotation: 10MB max, 5 file rotation
+
+### Error Handling Framework (core/exceptions.py)
+
+#### Exception Hierarchy
+
+```python
+from core.exceptions import (
+    DeFunkError,           # Base class for all de_Funk errors
+    ConfigurationError,    # Config loading issues
+    ModelNotFoundError,    # Model doesn't exist
+    MeasureError,          # Measure calculation failed
+    RateLimitError,        # API rate limit exceeded
+    IngestionError,        # Data ingestion failed
+)
+
+# All exceptions include recovery hints
+try:
+    model = registry.get_model("stocks")
+except ModelNotFoundError as e:
+    print(e)              # "Model not found: 'stocks'"
+    print(e.recovery_hint)  # "Available models: core, company"
+    print(e.details)       # {'model': 'stocks', 'available': [...]}
+```
+
+#### Error Handling Decorators (core/error_handling.py)
+
+```python
+from core.error_handling import handle_exceptions, retry_on_exception, safe_call
+
+# Automatic error handling with default return
+@handle_exceptions(ValueError, TypeError, default_return=None)
+def parse_config(data):
+    return json.loads(data)
+
+# Automatic retry with exponential backoff
+@retry_on_exception(ConnectionError, max_retries=3, delay_seconds=1.0)
+def fetch_api_data(url):
+    return requests.get(url)
+
+# Safe function call with default
+result = safe_call(risky_function, default="fallback_value")
+```
+
+### Recommended Pattern for New Scripts
+
+```python
+#!/usr/bin/env python
+"""Script description."""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+from utils.repo import setup_repo_imports
+repo_root = setup_repo_imports()
+
+from config.logging import setup_logging, get_logger, LogTimer
+from core.exceptions import DeFunkError
+
+logger = get_logger(__name__)
+
+
+def main():
+    setup_logging()
+
+    try:
+        with LogTimer(logger, "Running pipeline"):
+            # Main logic here
+            pass
+
+        logger.info("Pipeline completed successfully")
+        return 0
+
+    except DeFunkError as e:
+        logger.error(f"Pipeline failed: {e}", exc_info=True)
+        logger.info(f"Recovery hint: {e.recovery_hint}")
+        return 1
+
+    except Exception as e:
+        logger.critical(f"Unexpected error: {e}", exc_info=True)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```
+
+---
+
+## Part 6: Model Build Flow
 
 ### Current Flow (Fragmented)
+
+**Note**: The build scripts (`build_company_model.py`, `build_silver_duckdb.py`) have hardcoded model lists and manual imports. The new `orchestrate.py` CLI fixes this.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -396,7 +940,7 @@ models/base/
 │  │  Discovers from provider.yaml files:                        │ │
 │  │  - alpha_vantage → feeds: stocks, company                   │ │
 │  │  - bls → feeds: macro                                       │ │
-│  │  - chicago → feeds: city_finance, chicago_actuarial         │ │
+│  │  - chicago → feeds: city_finance                            │ │
 │  └────────────────────────────┬───────────────────────────────┘ │
 │                               │                                 │
 │         ┌─────────────────────┼─────────────────────┐           │
@@ -457,8 +1001,8 @@ models/base/
 │  chicago        →  chicago_budget          →  city_finance         │
 │                    chicago_employees       →  city_finance         │
 │                    chicago_contracts       →  city_finance         │
-│                    chicago_tax_assessment  →  chicago_actuarial    │
-│                    chicago_community_areas →  chicago_actuarial    │
+│                    chicago_tax_assessment  →  city_finance (future)│
+│                    chicago_community_areas →  city_finance (future)│
 │                                                                    │
 │  Encoded in: datapipelines/providers/{name}/provider.yaml          │
 │                                                                    │
@@ -493,12 +1037,11 @@ models/base/
 | `configs/models/forecast/model.yaml` | v2.0 modular config for forecast | Medium |
 | `configs/models/forecast/schema.yaml` | Forecast schema | Medium |
 | `configs/models/forecast/graph.yaml` | Forecast graph | Medium |
-| `configs/models/chicago_actuarial/model.yaml` | New actuarial model config | High |
-| `configs/models/chicago_actuarial/schema.yaml` | Actuarial schema | High |
-| `configs/models/chicago_actuarial/graph.yaml` | Actuarial graph | High |
-| `configs/models/chicago_actuarial/measures.yaml` | Actuarial measures | High |
-| `models/implemented/chicago_actuarial/model.py` | Actuarial model class | High |
-| `models/implemented/chicago_actuarial/measures.py` | Actuarial Python measures | High |
+| `configs/models/_base/financial/schema.yaml` | Chart of Accounts base schema | High |
+| `configs/models/_base/financial/graph.yaml` | Financial model graph base | High |
+| `configs/models/_base/financial/measures.yaml` | NPV, CAGR, YoY measures | High |
+| `models/base/financial/__init__.py` | Financial measures package | High |
+| `models/base/financial/measures.py` | NPV, CAGR Python implementations | High |
 | `models/implemented/etf/model.py` | ETF model implementation | Medium |
 | `models/implemented/etf/measures.py` | ETF Python measures | Medium |
 | `models/implemented/options/model.py` | Options model implementation | Medium |
@@ -644,24 +1187,21 @@ fact_series_observation
 └── vintage
 ```
 
-### Phase 7: Chicago Actuarial Model (Days 19-28)
+### Phase 7: Chart of Accounts Base Class (Days 19-24)
 
-**Goal:** Complete actuarial economic forecast model for Chicago
+**Goal:** Implement shared financial model base for city_finance and company
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 7.1 | Create chicago_actuarial config | NEW: `configs/models/chicago_actuarial/*.yaml` |
-| 7.2 | Create Cook County Assessor provider | NEW: `datapipelines/providers/cook_county/` |
-| 7.3 | Create TaxAssessmentFacet | NEW: `cook_county/facets/tax_assessment.py` |
-| 7.4 | Create ParcelFacet | NEW: `cook_county/facets/parcel.py` |
-| 7.5 | Expand Chicago provider with new endpoints | `chicago/chicago_ingestor.py` |
-| 7.6 | Create ChicagoActuarialModel class | NEW: `models/implemented/chicago_actuarial/model.py` |
-| 7.7 | Create actuarial measures | NEW: `chicago_actuarial/measures.py` |
-| 7.8 | Create pension analysis measures | measures.py |
-| 7.9 | Create fiscal stress measures | measures.py |
-| 7.10 | Create analysis notebooks | NEW: `configs/notebooks/chicago_actuarial/*.md` |
+| 7.1 | Create _base/financial config templates | NEW: `configs/models/_base/financial/*.yaml` |
+| 7.2 | Create FinancialMeasures base class | NEW: `models/base/financial/measures.py` |
+| 7.3 | Update city_finance to inherit from _base.financial | `configs/models/city_finance/*.yaml` |
+| 7.4 | Update company to inherit from _base.financial | `configs/models/company/*.yaml` |
+| 7.5 | Add NPV, CAGR, YoY measures to financial base | `measures.py` |
+| 7.6 | Test inheritance works correctly | Run test suite |
+| 7.7 | Update company model for financial statements | `company/model.py` |
 
-### Phase 8: Complete Missing Securities Models (Days 29-35)
+### Phase 8: Complete Missing Securities Models (Days 25-31)
 
 **Goal:** All securities models have working implementations
 
@@ -674,11 +1214,13 @@ fact_series_observation
 
 ---
 
-## Part 9: Chicago Actuarial Model Design
+## Part 12: Chicago Economic Data Sources
 
 ### Comprehensive Data Source Inventory
 
-The Chicago actuarial model requires data from **multiple government levels**:
+**Note**: These data sources feed into **existing models** (city_finance, macro, company) via the Chart of Accounts pattern. There is no separate "actuarial model" - this is economic data composition.
+
+The Chicago economic analysis requires data from **multiple government levels**:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -1042,36 +1584,36 @@ The Chicago actuarial model requires data from **multiple government levels**:
 
 ## Summary
 
-### What We Have Now (Implemented - May Need Removal/Revision)
+### What Already Exists (Created This Session)
 
-The following files were created during this session but should be reviewed against this plan:
+These components were created and are **NOT duplicates** of existing functionality:
 
-- `datapipelines/providers/registry.py` - ProviderRegistry ✓
-- `datapipelines/providers/{name}/provider.yaml` - Provider metadata ✓
-- `orchestration/dependency_graph.py` - DependencyGraph ✓
-- `scripts/orchestrate.py` - Unified CLI ✓
-
-**Decision Needed:** Keep these implementations or revise based on the planning document?
+| Component | Location | Status | Notes |
+|-----------|----------|--------|-------|
+| `ProviderRegistry` | `datapipelines/providers/registry.py` | ✅ Keep | Different from BaseRegistry (providers vs endpoints) |
+| `DependencyGraph` | `orchestration/dependency_graph.py` | ✅ Keep | New - topological sort for build ordering |
+| `orchestrate.py` | `scripts/orchestrate.py` | ✅ Keep | Unified CLI replacing fragmented scripts |
+| `provider.yaml` | `providers/{name}/provider.yaml` | ✅ Keep | Metadata for provider discovery |
 
 ### What's Left to Build
 
 1. **Phase 1-2**: Cleanup and backend abstraction (QueryHelper)
 2. **Phase 3**: Configuration standardization (v1.x migration + exhibits)
 3. **Phase 4**: Core geography model (foundational)
-4. **Phase 5**: Orchestration layer
+4. **Phase 5**: Orchestration layer (partially complete)
 5. **Phase 6**: Economic series model (federal/state data)
-6. **Phase 7**: Chicago actuarial model (comprehensive)
+6. **Phase 7**: Chart of Accounts base class (financial model inheritance)
 7. **Phase 8**: Missing securities models (ETF, Options, Futures)
 
 ### New Providers Needed
 
-| Provider | Priority | Data |
-|----------|----------|------|
-| `census` | High | Geography, population, demographics |
-| `fred` | High | Interest rates, housing indices, regional indicators |
-| `bea` | High | GDP, personal income |
-| `cook_county` | High | Property assessments, tax rates, parcels |
-| `illinois` | Medium | State tax revenue, transfers |
+| Provider | Priority | Data | Model(s) Fed |
+|----------|----------|------|--------------|
+| `census` | High | Geography, population, demographics | geography, city_finance |
+| `fred` | High | Interest rates, housing indices | macro, city_finance |
+| `bea` | High | GDP, personal income | macro |
+| `cook_county` | Medium | Property assessments, tax rates | city_finance |
+| `illinois` | Low | State tax revenue, transfers | city_finance |
 
 ### Total Estimated Effort
 
@@ -1081,11 +1623,11 @@ The following files were created during this session but should be reviewed agai
 | Phase 2: Backend Abstraction | 2 | High |
 | Phase 3: Config Standardization | 3 | High |
 | Phase 4: Core Geography | 3 | High |
-| Phase 5: Orchestration | 2 | High |
+| Phase 5: Orchestration | 2 | High (partially done) |
 | Phase 6: Economic Series | 7 | High |
-| Phase 7: Chicago Actuarial | 10 | High |
+| Phase 7: Chart of Accounts | 6 | High |
 | Phase 8: Securities Models | 7 | Medium |
-| **Total** | **35 days** | |
+| **Total** | **31 days** | |
 
 ---
 
@@ -1106,12 +1648,12 @@ How models are discovered and instantiated:
 │     - Read component references                                    │
 │                                                                    │
 │  3. Build dependency graph                                         │
-│     core → geography → economic_series → chicago_actuarial         │
+│     core → geography → city_finance (via Chart of Accounts)        │
 │                                                                    │
 │  4. To instantiate a model:                                        │
 │     a. Map model name to class:                                    │
 │        'stocks' → models.implemented.stocks.model.StocksModel      │
-│        'geography' → models.implemented.geography.model.GeographyModel │
+│        'city_finance' → models.implemented.city_finance.model.CityFinanceModel │
 │                                                                    │
 │     b. Convention: {name}/model.py contains {Name}Model class      │
 │                                                                    │
