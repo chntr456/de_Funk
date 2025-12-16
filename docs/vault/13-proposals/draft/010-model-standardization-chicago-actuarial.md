@@ -1107,20 +1107,204 @@ if __name__ == "__main__":
 | 1.3 | Rename `etfs/` to `etf/` for consistency | `configs/models/etfs/` → `etf/` |
 | 1.4 | Update any imports referencing renamed dirs | Search and replace |
 
-### Phase 2: Backend Abstraction (Days 2-3)
+### Phase 2: Backend Abstraction via UniversalSession (Days 2-4)
 
-**Goal:** Eliminate backend branching in model implementations
+**Goal:** Models become backend-agnostic by using UniversalSession for all data operations
+
+**Principle:** Models should NEVER know or care what backend is running. All backend-specific logic lives in UniversalSession.
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 2.1 | Create QueryHelper class | NEW: `models/base/query_helpers.py` |
-| 2.2 | Refactor CompanyModel to use QueryHelper | `models/implemented/company/model.py` |
-| 2.3 | Refactor StocksModel to use QueryHelper | `models/implemented/stocks/model.py` |
-| 2.4 | Refactor StocksMeasures to use QueryHelper | `models/implemented/stocks/measures.py` |
-| 2.5 | Refactor CoreModel to use QueryHelper | `models/implemented/core/model.py` |
-| 2.6 | Test all models with both backends | Run test suite |
+| 2.1 | Add query helper methods to UniversalSession | `models/api/session.py` |
+| 2.2 | Remove `self._backend` from all models | All `models/implemented/*/model.py` |
+| 2.3 | Refactor CompanyModel to use session methods | `models/implemented/company/model.py` |
+| 2.4 | Refactor StocksModel to use session methods | `models/implemented/stocks/model.py` |
+| 2.5 | Refactor StocksMeasures to use session methods | `models/implemented/stocks/measures.py` |
+| 2.6 | Refactor CoreModel to use session methods | `models/implemented/core/model.py` |
+| 2.7 | Test all models with both backends | Run test suite |
 
-### Phase 3: Configuration Standardization (Days 4-6)
+---
+
+#### Architecture: Before vs After
+
+**BEFORE (Current - Models know about backend):**
+```python
+# models/implemented/stocks/model.py
+class StocksModel(BaseModel):
+    def __init__(self, connection, backend='spark', ...):
+        self._backend = backend  # ❌ Model knows about backend
+
+    def get_prices(self, tickers):
+        if self._backend == 'spark':           # ❌ Backend branching in model
+            return df.join(ticker_df, ...)
+        else:
+            return df.filter(df.ticker.isin(tickers))
+```
+
+**AFTER (Target - Models are backend-agnostic):**
+```python
+# models/implemented/stocks/model.py
+class StocksModel(BaseModel):
+    def __init__(self, session: UniversalSession, ...):
+        self.session = session  # ✅ Just uses session
+
+    def get_prices(self, tickers):
+        df = self.session.get_table('stocks', 'fact_prices')
+        return self.session.filter_by_values(df, 'ticker', tickers)  # ✅ Session handles backend
+```
+
+---
+
+#### UniversalSession Query Helper Methods
+
+Add these methods to UniversalSession - they handle backend differences internally:
+
+```python
+# models/api/session.py
+
+class UniversalSession:
+    """
+    Backend-agnostic session for all model operations.
+    Models call these methods - they never need to know
+    whether Spark or DuckDB is running underneath.
+    """
+
+    def __init__(self, backend: str = 'duckdb', ...):
+        self._backend = backend  # Only session knows backend
+        self._connection = self._init_connection()
+
+    # === Filtering ===
+
+    def filter_by_values(self, df, column: str, values: list):
+        """
+        Filter DataFrame where column is in values list.
+        Handles: Spark semi-join vs DuckDB isin()
+        """
+        if self._backend == 'spark':
+            values_df = self._connection.createDataFrame([(v,) for v in values], [column])
+            return df.join(values_df, column, 'semi')
+        else:
+            return df.filter(df[column].isin(values))
+
+    def filter_by_range(self, df, column: str, min_val=None, max_val=None):
+        """Filter DataFrame by range (dates, numbers)."""
+        # Backend-specific implementation inside
+
+    # === Joins ===
+
+    def join(self, left_df, right_df, on: list, how: str = 'inner'):
+        """Join two DataFrames - handles syntax differences."""
+
+    def semi_join(self, df, filter_df, on: str):
+        """Efficient filtering via semi-join."""
+
+    # === Aggregations ===
+
+    def aggregate(self, df, group_by: list, aggregations: dict):
+        """
+        Aggregate DataFrame with grouping.
+        Args:
+            aggregations: {'new_col': ('source_col', 'sum'|'avg'|'count'|'min'|'max')}
+        """
+
+    def window_aggregate(self, df, partition_by: list, order_by: str, aggregations: dict):
+        """Window functions (rolling averages, ranks, etc.)."""
+
+    # === Column Operations ===
+
+    def select_columns(self, df, columns: list):
+        """Select specific columns."""
+
+    def add_column(self, df, name: str, expression: str):
+        """Add computed column using SQL expression."""
+
+    def rename_columns(self, df, mapping: dict):
+        """Rename columns: {'old_name': 'new_name'}"""
+
+    def cast_column(self, df, column: str, dtype: str):
+        """Cast column to type: 'string', 'int', 'double', 'date'"""
+
+    # === Output ===
+
+    def to_pandas(self, df) -> 'pd.DataFrame':
+        """Convert to pandas DataFrame."""
+
+    def collect(self, df) -> list:
+        """Collect all rows as list of dicts."""
+
+    def row_count(self, df) -> int:
+        """Get row count."""
+
+    def distinct_values(self, df, column: str) -> list:
+        """Get distinct values from column."""
+
+    # === Read/Write ===
+
+    def read_table(self, path: str):
+        """Read table with format auto-detection (Delta/Parquet)."""
+
+    def write_table(self, df, path: str, mode: str = 'overwrite', partition_by: list = None):
+        """Write table to storage."""
+```
+
+---
+
+#### Model Refactoring Pattern
+
+**Before (21+ backend if-statements across codebase):**
+```python
+def get_prices_for_tickers(self, tickers: list, start_date=None, end_date=None):
+    df = self._get_table('fact_prices')
+
+    if self._backend == 'spark':
+        from pyspark.sql import functions as F
+        ticker_df = self._spark.createDataFrame([(t,) for t in tickers], ['ticker'])
+        df = df.join(ticker_df, 'ticker', 'semi')
+        if start_date:
+            df = df.filter(F.col('trade_date') >= start_date)
+    else:
+        df = df.filter(df.ticker.isin(tickers))
+        if start_date:
+            df = df.filter(f"trade_date >= '{start_date}'")
+    return df
+```
+
+**After (clean, backend-agnostic):**
+```python
+def get_prices_for_tickers(self, tickers: list, start_date=None, end_date=None):
+    df = self.session.get_table('stocks', 'fact_prices')
+    df = self.session.filter_by_values(df, 'ticker', tickers)
+    df = self.session.filter_by_range(df, 'trade_date', min_val=start_date, max_val=end_date)
+    return df
+```
+
+---
+
+#### Files Changed Summary
+
+| File | Changes |
+|------|---------|
+| `models/api/session.py` | Add ~15 query helper methods |
+| `models/base/model.py` | Remove `_backend` parameter, require `session` injection |
+| `models/implemented/stocks/model.py` | Remove 9 backend if-statements |
+| `models/implemented/stocks/measures.py` | Remove 6 backend if-statements |
+| `models/implemented/company/model.py` | Remove 6 backend if-statements |
+| `models/implemented/core/model.py` | Remove backend-specific code |
+
+---
+
+#### Benefits
+
+| Benefit | Description |
+|---------|-------------|
+| **Single source of truth** | All backend logic in UniversalSession |
+| **Models are simpler** | Just call session methods, no branching |
+| **Easier testing** | Mock session to test model logic in isolation |
+| **Backend swappable** | Change backend in one config, models unchanged |
+| **New backends easier** | Add Polars/DataFusion by extending session only |
+| **Consistent API** | Same method calls regardless of backend |
+
+### Phase 3: Configuration Standardization (Days 5-7)
 
 **Goal:** All configs use v2.0 modular YAML pattern + complete exhibit presets
 
@@ -3168,12 +3352,12 @@ These components were created and are **NOT duplicates** of existing functionali
 | Phase | Days | Priority | Type |
 |-------|------|----------|------|
 | Phase 1: Cleanup | 1 | High | Foundation |
-| Phase 2: Backend Abstraction | 2 | High | Foundation |
+| Phase 2: Backend Abstraction (UniversalSession) | 3 | High | Foundation |
 | Phase 3: Config Standardization | 3 | High | Foundation |
 | Phase 4: Core Geography (US-Agnostic) | 5 | High | Foundation |
 | Phase 5: Orchestration Layer (Queue + Cluster) | 7 | High | Foundation |
 | Phase 6: Bronze Expansion & Ingestion Testing | 5 | High | Foundation |
-| **Foundation Subtotal** | **23 days** | | |
+| **Foundation Subtotal** | **24 days** | | |
 | Phase 7: Economic Series Enhancement | 7 | High | Enhancement |
 | Phase 8: Chart of Accounts Enhancement | 6 | High | Enhancement |
 | Phase 9: City Services Enhancement | 7 | High | Enhancement |
@@ -3182,7 +3366,7 @@ These components were created and are **NOT duplicates** of existing functionali
 | Phase 12: Metadata Table Enhancement | 5 | High | Enhancement |
 | Phase 13: Logger Model Enhancement | 6 | High | Enhancement |
 | **Enhancement Subtotal** | **45 days** | | |
-| **Total** | **68 days** | | |
+| **Total** | **69 days** | | |
 
 ---
 
