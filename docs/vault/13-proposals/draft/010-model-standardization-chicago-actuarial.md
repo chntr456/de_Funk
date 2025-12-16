@@ -1562,6 +1562,8 @@ supplemental_crosswalks:
 **Goal:** Unified build/ingest system with queue-based distributed processing across a cluster
 
 This phase creates a production-grade orchestration system that:
+- Standardizes ingestor interface via BaseIngestor class
+- Creates Orchestrator class to coordinate ingestors and model builds
 - Queues all ingestion and model build tasks
 - Distributes work across multiple machines (cluster)
 - Allows querying task status at any time
@@ -1570,18 +1572,322 @@ This phase creates a production-grade orchestration system that:
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 5.1 | Extend DependencyGraph for queue integration | EXTEND: `orchestration/dependency_graph.py` (431 lines exists) |
-| 5.2 | Extend ProviderRegistry for queue integration | EXTEND: `datapipelines/providers/registry.py` (exists) |
-| 5.3 | Create provider.yaml for each provider | NEW: `providers/{name}/provider.yaml` |
-| 5.4 | Create TaskQueue with Delta Lake or Celery backend | NEW: `orchestration/queue/task_queue.py` |
-| 5.5 | Create Worker process for task execution | NEW: `orchestration/queue/worker.py` |
-| 5.6 | Create WorkerPool for cluster management | NEW: `orchestration/queue/worker_pool.py` |
-| 5.7 | Create queue status API | NEW: `orchestration/queue/status.py` |
-| 5.8 | Create model_builder module | NEW: `orchestration/builders/model_builder.py` |
-| 5.9 | Extend orchestrate.py CLI with queue commands | EXTEND: `scripts/orchestrate.py` (760 lines exists) |
-| 5.10 | Create worker daemon script | NEW: `scripts/worker.py` |
-| 5.11 | Add cluster configuration | NEW: `configs/cluster.yaml` |
-| 5.12 | Deprecate old scripts | Add warnings to old scripts |
+| 5.1 | Create standardized BaseIngestor class | NEW: `datapipelines/base/ingestor.py` |
+| 5.2 | Refactor AlphaVantageIngestor to use BaseIngestor | REFACTOR: `providers/alpha_vantage/alpha_vantage_ingestor.py` |
+| 5.3 | Refactor BLSIngestor to use BaseIngestor | REFACTOR: `providers/bls/bls_ingestor.py` |
+| 5.4 | Refactor ChicagoIngestor to use BaseIngestor | REFACTOR: `providers/chicago/chicago_ingestor.py` |
+| 5.5 | Create Orchestrator class | NEW: `orchestration/orchestrator.py` |
+| 5.6 | Extend DependencyGraph for queue integration | EXTEND: `orchestration/dependency_graph.py` (431 lines exists) |
+| 5.7 | Extend ProviderRegistry for queue integration | EXTEND: `datapipelines/providers/registry.py` (exists) |
+| 5.8 | Create TaskQueue with Delta Lake backend | NEW: `orchestration/queue/task_queue.py` |
+| 5.9 | Create Worker process for task execution | NEW: `orchestration/queue/worker.py` |
+| 5.10 | Create WorkerPool for cluster management | NEW: `orchestration/queue/worker_pool.py` |
+| 5.11 | Create queue status API | NEW: `orchestration/queue/status.py` |
+| 5.12 | Extend orchestrate.py CLI with queue commands | EXTEND: `scripts/orchestrate.py` (760 lines exists) |
+| 5.13 | Create worker daemon script | NEW: `scripts/worker.py` |
+| 5.14 | Add cluster configuration | NEW: `configs/cluster.yaml` |
+
+---
+
+#### BaseIngestor Standardization
+
+**Problem:** Current ingestors have inconsistent interfaces:
+- `Ingestor` base class only requires `run_all()` (10 lines, too minimal)
+- `BaseProvider` exists but isn't consistently used
+- Alpha Vantage has 15+ methods, other ingestors have different patterns
+- Orchestrator can't uniformly call ingestors
+
+**Solution:** Standardized `BaseIngestor` that all providers implement:
+
+```python
+# datapipelines/base/ingestor.py
+
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+from typing import List, Optional, Dict, Any
+
+@dataclass
+class IngestResult:
+    """Result from ingesting a single table."""
+    table: str
+    success: bool
+    rows_written: int = 0
+    error: Optional[str] = None
+    duration_seconds: float = 0.0
+
+class BaseIngestor(ABC):
+    """
+    Standard interface all data providers must implement.
+
+    The Orchestrator calls these methods uniformly across all providers.
+    Provider-specific logic is encapsulated in the implementation.
+    """
+
+    def __init__(self, spark, storage_cfg: Dict, provider_cfg: Dict):
+        """
+        Initialize ingestor with required dependencies.
+
+        Args:
+            spark: SparkSession for Delta Lake writes
+            storage_cfg: Storage configuration (paths, tables)
+            provider_cfg: Provider-specific config (from provider.yaml)
+        """
+        self.spark = spark
+        self.storage_cfg = storage_cfg
+        self.provider_cfg = provider_cfg
+        self._setup()
+
+    @abstractmethod
+    def _setup(self) -> None:
+        """Provider-specific initialization (HTTP client, API keys, etc.)"""
+        pass
+
+    @property
+    def name(self) -> str:
+        """Provider name from config."""
+        return self.provider_cfg.get('name', 'unknown')
+
+    @property
+    def bronze_tables(self) -> List[str]:
+        """Bronze tables this ingestor writes to (from provider.yaml)."""
+        return self.provider_cfg.get('bronze_tables', [])
+
+    @abstractmethod
+    def ingest_table(
+        self,
+        table_name: str,
+        tickers: List[str] = None,
+        **kwargs
+    ) -> IngestResult:
+        """
+        Ingest a specific bronze table.
+
+        Args:
+            table_name: Name of bronze table (must be in bronze_tables)
+            tickers: Optional ticker filter (for securities providers)
+            **kwargs: Provider-specific options (date_from, date_to, etc.)
+
+        Returns:
+            IngestResult with success/failure and metadata
+        """
+        pass
+
+    def ingest_all(
+        self,
+        tables: List[str] = None,
+        tickers: List[str] = None,
+        **kwargs
+    ) -> List[IngestResult]:
+        """
+        Ingest all or specified tables.
+
+        Default implementation calls ingest_table for each table.
+        Override if provider needs special handling.
+        """
+        tables = tables or self.bronze_tables
+        results = []
+        for table in tables:
+            result = self.ingest_table(table, tickers=tickers, **kwargs)
+            results.append(result)
+        return results
+
+    def validate_table(self, table_name: str) -> bool:
+        """Check if table is valid for this provider."""
+        return table_name in self.bronze_tables
+```
+
+**Refactored Alpha Vantage Ingestor Example:**
+
+```python
+# datapipelines/providers/alpha_vantage/alpha_vantage_ingestor.py
+
+class AlphaVantageIngestor(BaseIngestor):
+    """Alpha Vantage data provider."""
+
+    def _setup(self):
+        """Initialize HTTP client and API key pool."""
+        self.http_client = HttpClient(...)
+        self.key_pool = KeyPool(...)
+
+    def ingest_table(self, table_name: str, tickers=None, **kwargs) -> IngestResult:
+        """Route to appropriate ingestion method based on table name."""
+
+        # Table name → method mapping
+        table_methods = {
+            'securities_reference': self._ingest_reference,
+            'securities_prices_daily': self._ingest_prices,
+            'income_statements': self._ingest_income_statements,
+            'balance_sheets': self._ingest_balance_sheets,
+            'cash_flows': self._ingest_cash_flows,
+            'earnings': self._ingest_earnings,
+        }
+
+        if table_name not in table_methods:
+            return IngestResult(table=table_name, success=False,
+                              error=f"Unknown table: {table_name}")
+
+        method = table_methods[table_name]
+        return method(tickers=tickers, **kwargs)
+
+    def _ingest_reference(self, tickers, **kwargs) -> IngestResult:
+        """Internal: Ingest securities reference data."""
+        # ... existing logic from ingest_reference_data() ...
+
+    def _ingest_prices(self, tickers, **kwargs) -> IngestResult:
+        """Internal: Ingest daily price data."""
+        # ... existing logic from ingest_prices() ...
+```
+
+---
+
+#### Orchestrator Class
+
+**Problem:** Orchestration logic is scattered in scripts (760 lines in orchestrate.py)
+
+**Solution:** `Orchestrator` class that coordinates ingestors and model builds:
+
+```python
+# orchestration/orchestrator.py
+
+class Orchestrator:
+    """
+    Coordinates data ingestion and model building.
+
+    Provides uniform interface for:
+    - Running ingestors via BaseIngestor interface
+    - Building models via DependencyGraph ordering
+    - Managing task queue for distributed execution
+    """
+
+    def __init__(
+        self,
+        spark,
+        storage_cfg: Dict,
+        providers: List[str] = None,
+        models: List[str] = None
+    ):
+        self.spark = spark
+        self.storage_cfg = storage_cfg
+        self.provider_registry = ProviderRegistry()
+        self.dependency_graph = DependencyGraph()
+        self.providers = providers or []
+        self.models = models or []
+
+    def ingest(
+        self,
+        providers: List[str] = None,
+        tables: List[str] = None,
+        tickers: List[str] = None,
+        **kwargs
+    ) -> Dict[str, List[IngestResult]]:
+        """
+        Run ingestion for specified providers.
+
+        Args:
+            providers: Provider names (default: all configured)
+            tables: Specific tables to ingest (default: all from provider.yaml)
+            tickers: Ticker filter (for securities providers)
+
+        Returns:
+            Dict mapping provider name to list of IngestResults
+        """
+        providers = providers or self.providers
+        results = {}
+
+        for provider_name in providers:
+            ingestor = self.provider_registry.get_ingestor(
+                provider_name,
+                spark=self.spark,
+                storage_cfg=self.storage_cfg
+            )
+            results[provider_name] = ingestor.ingest_all(
+                tables=tables,
+                tickers=tickers,
+                **kwargs
+            )
+
+        return results
+
+    def build(
+        self,
+        models: List[str] = None,
+        **kwargs
+    ) -> Dict[str, bool]:
+        """
+        Build models in dependency order.
+
+        Args:
+            models: Model names (default: all configured)
+
+        Returns:
+            Dict mapping model name to success/failure
+        """
+        models = models or self.models
+        build_order = self.dependency_graph.resolve_order(models)
+        results = {}
+
+        for model_name in build_order:
+            model = ModelRegistry.get_model(model_name, ...)
+            try:
+                model.build(**kwargs)
+                results[model_name] = True
+            except Exception as e:
+                logger.error(f"Failed to build {model_name}: {e}")
+                results[model_name] = False
+
+        return results
+
+    def run_pipeline(
+        self,
+        providers: List[str] = None,
+        models: List[str] = None,
+        skip_ingest: bool = False,
+        skip_build: bool = False,
+        **kwargs
+    ) -> Dict:
+        """
+        Run full pipeline: ingest then build.
+
+        Returns:
+            Dict with 'ingest' and 'build' results
+        """
+        results = {'ingest': {}, 'build': {}}
+
+        if not skip_ingest:
+            results['ingest'] = self.ingest(providers=providers, **kwargs)
+
+        if not skip_build:
+            results['build'] = self.build(models=models, **kwargs)
+
+        return results
+```
+
+**Scripts become thin wrappers:**
+
+```python
+# scripts/orchestrate.py (simplified)
+
+def main():
+    args = parse_args()
+    spark = get_spark()
+    storage_cfg = load_storage_config()
+
+    orchestrator = Orchestrator(
+        spark=spark,
+        storage_cfg=storage_cfg,
+        providers=args.providers,
+        models=args.models
+    )
+
+    if args.ingest_only:
+        results = orchestrator.ingest(tickers=args.tickers)
+    elif args.build_only:
+        results = orchestrator.build()
+    else:
+        results = orchestrator.run_pipeline(tickers=args.tickers)
+
+    print_results(results)
+```
 
 ---
 
