@@ -132,7 +132,7 @@ Before proposing new components, it's critical to understand what's already impl
 | `ChicagoRegistry` | `providers/chicago/chicago_registry.py` | Chicago API endpoints | ✅ Exists |
 | `ModelRegistry` | `models/registry.py` | Discovers model YAMLs, instantiates model classes | ✅ Exists |
 | `MeasureRegistry` | `models/base/measures/registry.py` | Measure definitions | ✅ Exists |
-| `ProviderRegistry` | `datapipelines/providers/registry.py` | Discovers data **providers**, instantiates ingestors | ✅ NEW (created this session) |
+| `ProviderRegistry` | `datapipelines/providers/registry.py` | Discovers data **providers**, instantiates ingestors | ✅ Exists |
 
 **Key Distinction:**
 - `BaseRegistry` + subclasses = API endpoint management (how to call APIs)
@@ -145,9 +145,10 @@ These serve **different purposes** and are NOT duplicates.
 
 | Component | Location | Purpose | Status |
 |-----------|----------|---------|--------|
-| `DependencyGraph` | `orchestration/dependency_graph.py` | Model build order via topological sort | ✅ NEW (created this session) |
+| `DependencyGraph` | `orchestration/dependency_graph.py` | Model build order via topological sort (431 lines) | ✅ Exists |
 | `CheckpointManager` | `orchestration/checkpoint.py` | Resume from failure | ✅ Exists |
-| `orchestrate.py` | `scripts/orchestrate.py` | Unified CLI | ✅ NEW (created this session) |
+| `orchestrate.py` | `scripts/orchestrate.py` | Unified CLI (760 lines) | ✅ Exists |
+| `FilterEngine` | `core/session/filters.py` | Backend-agnostic filter application (356 lines) | ✅ Exists |
 
 ### Build Scripts (Current - Fragmented)
 
@@ -156,7 +157,9 @@ These serve **different purposes** and are NOT duplicates.
 | `build_company_model.py` | Build company model only (hardcoded) | ⚠️ To deprecate |
 | `build_silver_duckdb.py` | Build with DuckDB (hardcoded model list) | ⚠️ To deprecate |
 | `run_full_pipeline.py` | Full pipeline (Alpha Vantage only) | ⚠️ To deprecate |
-| `orchestrate.py` | Unified replacement | ✅ NEW |
+| `orchestrate.py` | Unified replacement | ✅ Exists - extend for queue |
+
+**Key Issue**: `orchestrate.py` exists but fragmented scripts are still used. Phase 1 cleanup should ensure consistent usage of the unified orchestrator.
 
 ### Logging Framework (Complete)
 
@@ -1096,9 +1099,11 @@ if __name__ == "__main__":
 
 ## Part 8: Step-by-Step Implementation Tasks
 
-### Phase 1: Cleanup (Day 1)
+### Phase 1: Cleanup (Days 1-2)
 
-**Goal:** Remove deprecated files, fix naming inconsistencies
+**Goal:** Remove deprecated files, fix naming inconsistencies, ensure consistent utilization of existing tools
+
+#### 1A: File Cleanup (Day 1)
 
 | # | Task | Files Affected |
 |---|------|----------------|
@@ -1107,11 +1112,35 @@ if __name__ == "__main__":
 | 1.3 | Rename `etfs/` to `etf/` for consistency | `configs/models/etfs/` → `etf/` |
 | 1.4 | Update any imports referencing renamed dirs | Search and replace |
 
-### Phase 2: Backend Abstraction via UniversalSession (Days 2-4)
+#### 1B: Tool Utilization Audit (Day 2)
+
+Existing tools that MUST be consistently used - not recreated or bypassed:
+
+| # | Task | Tool | Current Issue |
+|---|------|------|---------------|
+| 1.5 | Audit FilterEngine usage in models | `core/session/filters.py` | Models bypass FilterEngine with inline `if self._backend` |
+| 1.6 | Audit orchestrate.py usage | `scripts/orchestrate.py` | Fragmented scripts still called directly |
+| 1.7 | Audit DependencyGraph usage | `orchestration/dependency_graph.py` | May not be used by all build paths |
+| 1.8 | Audit ProviderRegistry usage | `datapipelines/providers/registry.py` | Ingestors may instantiate directly |
+| 1.9 | Deprecate fragmented scripts | `build_company_model.py`, `build_silver_duckdb.py`, `run_full_pipeline.py` | Add deprecation warnings pointing to `orchestrate.py` |
+
+**Deliverable**: Audit report showing:
+- Which models use FilterEngine vs inline backend checks
+- Which scripts bypass orchestrate.py
+- Which ingestors bypass ProviderRegistry
+
+This audit informs Phase 2 - we need to know the full scope of inconsistent usage before refactoring.
+
+### Phase 2: Backend Abstraction via UniversalSession (Days 3-5)
 
 **Goal:** Models become backend-agnostic by using UniversalSession for all data operations
 
 **Principle:** Models should NEVER know or care what backend is running. All backend-specific logic lives in UniversalSession.
+
+**Key Insight**: `FilterEngine` (356 lines) already exists in `core/session/filters.py` and provides backend-agnostic filtering. Phase 2 should:
+1. Make UniversalSession use FilterEngine internally
+2. Add additional query helper methods to UniversalSession
+3. Refactor models to use session methods (which internally use FilterEngine)
 
 | # | Task | Files Affected |
 |---|------|----------------|
@@ -1541,18 +1570,58 @@ This phase creates a production-grade orchestration system that:
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 5.1 | Create DependencyGraph class | NEW: `orchestration/dependency_graph.py` |
-| 5.2 | Create ProviderRegistry class | NEW: `datapipelines/providers/registry.py` |
+| 5.1 | Extend DependencyGraph for queue integration | EXTEND: `orchestration/dependency_graph.py` (431 lines exists) |
+| 5.2 | Extend ProviderRegistry for queue integration | EXTEND: `datapipelines/providers/registry.py` (exists) |
 | 5.3 | Create provider.yaml for each provider | NEW: `providers/{name}/provider.yaml` |
-| 5.4 | Create TaskQueue with SQLite backend | NEW: `orchestration/queue/task_queue.py` |
+| 5.4 | Create TaskQueue with Delta Lake or Celery backend | NEW: `orchestration/queue/task_queue.py` |
 | 5.5 | Create Worker process for task execution | NEW: `orchestration/queue/worker.py` |
 | 5.6 | Create WorkerPool for cluster management | NEW: `orchestration/queue/worker_pool.py` |
 | 5.7 | Create queue status API | NEW: `orchestration/queue/status.py` |
 | 5.8 | Create model_builder module | NEW: `orchestration/builders/model_builder.py` |
-| 5.9 | Create unified orchestrate.py CLI | NEW: `scripts/orchestrate.py` |
+| 5.9 | Extend orchestrate.py CLI with queue commands | EXTEND: `scripts/orchestrate.py` (760 lines exists) |
 | 5.10 | Create worker daemon script | NEW: `scripts/worker.py` |
 | 5.11 | Add cluster configuration | NEW: `configs/cluster.yaml` |
 | 5.12 | Deprecate old scripts | Add warnings to old scripts |
+
+---
+
+#### Queue Backend Options
+
+**Option A: Delta Lake Queue (Recommended for simplicity)**
+
+Since we already use Delta Lake for Bronze/Silver, we can use it for the task queue:
+- ACID transactions ensure task state consistency
+- No new infrastructure needed
+- Polling-based (check for new tasks every N seconds)
+- Works well for batch orchestration (not real-time)
+
+```
+storage/queue/
+├── tasks/           # Delta table: task definitions and state
+├── task_logs/       # Delta table: execution logs
+└── workers/         # Delta table: worker registrations
+```
+
+**Option B: Celery + Redis (Production-grade)**
+
+If we need more sophisticated queue features:
+- Battle-tested distributed task queue
+- Built-in retries, scheduling, rate limiting
+- Real-time task dispatch (not polling)
+- Requires Redis infrastructure
+
+```python
+# With Celery, tasks become decorated functions
+@celery_app.task(bind=True, max_retries=3)
+def ingest_task(self, provider: str, table: str):
+    ...
+```
+
+**Recommendation**: Start with **Delta Lake queue** since:
+1. No new dependencies
+2. Already using Delta Lake patterns
+3. Batch orchestration doesn't need sub-second dispatch
+4. Can migrate to Celery later if needed
 
 ---
 
@@ -1573,14 +1642,14 @@ This phase creates a production-grade orchestration system that:
 │   ┌──────────────┐         ┌─────────────────────────────────────────┐  │
 │   │ orchestrate  │────────▶│              TASK QUEUE                 │  │
 │   │    CLI       │         │  ┌─────────────────────────────────┐    │  │
-│   └──────────────┘         │  │ SQLite: tasks.db                │    │  │
+│   └──────────────┘         │  │ Delta Lake: storage/queue/      │    │  │
 │                            │  │                                  │    │  │
 │   Commands:                │  │ Tables:                          │    │  │
-│   - submit                 │  │ - tasks (id, type, status, ...)  │    │  │
-│   - status                 │  │ - task_dependencies              │    │  │
-│   - cancel                 │  │ - workers                        │    │  │
-│   - retry                  │  │ - task_logs                      │    │  │
-│   - workers                │  │                                  │    │  │
+│   - submit                 │  │ - tasks/ (Delta: id, type, ...)  │    │  │
+│   - status                 │  │ - task_logs/ (Delta: logs)       │    │  │
+│   - cancel                 │  │ - workers/ (Delta: registrations)│    │  │
+│   - retry                  │  │                                  │    │  │
+│   - workers                │  │ (ACID transactions, time travel) │    │  │
 │                            │  └─────────────────────────────────┘    │  │
 │                            └──────────────┬──────────────────────────┘  │
 │                                           │                              │
@@ -1607,6 +1676,7 @@ This phase creates a production-grade orchestration system that:
 │                            │                 │                          │
 │                            │ storage/bronze/ │                          │
 │                            │ storage/silver/ │                          │
+│                            │ storage/queue/  │  ← Queue lives here too  │
 │                            └─────────────────┘                          │
 │                                                                          │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -1744,13 +1814,18 @@ $ python -m scripts.orchestrate workers
 cluster:
   name: "de_funk_cluster"
 
-  # Queue backend (SQLite for simplicity, can upgrade to Redis/Postgres)
+  # Queue backend (Delta Lake - uses same storage pattern as Bronze/Silver)
   queue:
-    backend: "sqlite"
-    path: "storage/queue/tasks.db"
-    # For multi-node: use shared storage or network database
-    # backend: "postgresql"
-    # connection: "postgresql://user:pass@host:5432/de_funk_queue"
+    backend: "delta"
+    path: "storage/queue"
+    tables:
+      tasks: "storage/queue/tasks"           # Task definitions and state
+      task_logs: "storage/queue/task_logs"   # Execution logs
+      workers: "storage/queue/workers"       # Worker registrations
+    poll_interval_seconds: 5  # How often workers check for new tasks
+    # Alternative: Celery + Redis for real-time dispatch
+    # backend: "celery"
+    # broker: "redis://localhost:6379/0"
 
   # Shared storage (all workers must access)
   storage:
@@ -3465,13 +3540,13 @@ These components were created and are **NOT duplicates** of existing functionali
 
 | Phase | Days | Priority | Type |
 |-------|------|----------|------|
-| Phase 1: Cleanup | 1 | High | Foundation |
+| Phase 1: Cleanup + Tool Utilization Audit | 2 | High | Foundation |
 | Phase 2: Backend Abstraction (UniversalSession) | 3 | High | Foundation |
 | Phase 3: Config Standardization | 3 | High | Foundation |
 | Phase 4: Core Geography (US-Agnostic) | 5 | High | Foundation |
-| Phase 5: Orchestration Layer (Queue + Cluster) | 7 | High | Foundation |
+| Phase 5: Orchestration Layer (Delta Lake Queue) | 7 | High | Foundation |
 | Phase 6: Bronze Expansion & Ingestion Testing | 5 | High | Foundation |
-| **Foundation Subtotal** | **24 days** | | |
+| **Foundation Subtotal** | **25 days** | | |
 | Phase 7: Economic Series Enhancement | 7 | High | Enhancement |
 | Phase 8: Chart of Accounts Enhancement | 6 | High | Enhancement |
 | Phase 9: City Services Enhancement | 7 | High | Enhancement |
@@ -3480,7 +3555,7 @@ These components were created and are **NOT duplicates** of existing functionali
 | Phase 12: Metadata Table Enhancement | 5 | High | Enhancement |
 | Phase 13: Logger Model Enhancement | 6 | High | Enhancement |
 | **Enhancement Subtotal** | **45 days** | | |
-| **Total** | **69 days** | | |
+| **Total** | **70 days** | | |
 
 ---
 
@@ -3494,10 +3569,12 @@ Phase N: [Phase Name] - [Brief Description]
 Example commits (Foundation phases):
 - "Phase 1: Cleanup - Delete deprecated v1.x YAML files"
 - "Phase 1: Cleanup - Rename etfs to etf directory"
-- "Phase 2: Backend Abstraction - Create QueryHelper class"
+- "Phase 1: Cleanup - Audit tool utilization and add deprecation warnings"
+- "Phase 2: Backend Abstraction - Add query helper methods to UniversalSession"
+- "Phase 2: Backend Abstraction - Refactor StocksModel to use session methods"
 - "Phase 3: Config Standardization - Migrate core.yaml to modular structure"
 - "Phase 4: Core Geography - Create US geography model schema"
-- "Phase 5: Orchestration - Create unified orchestrate.py CLI"
+- "Phase 5: Orchestration - Add Delta Lake queue to orchestrate.py"
 - "Phase 6: Bronze Expansion - Test Alpha Vantage ingestor via orchestration"
 
 Example commits (Enhancement phases):
@@ -3547,7 +3624,9 @@ How models are discovered and instantiated:
 
 This log tracks all completed implementation steps as they are finished.
 
-### Phase 1: Cleanup ✅ COMPLETE
+### Phase 1: Cleanup ⏳ PARTIAL
+
+#### 1A: File Cleanup ✅ COMPLETE
 
 | Date | Commit | Task | Description |
 |------|--------|------|-------------|
@@ -3557,11 +3636,22 @@ This log tracks all completed implementation steps as they are finished.
 | 2025-12-16 | `40c558e` | 1.3 | Renamed `configs/models/etfs/` → `configs/models/etf/` |
 | 2025-12-16 | `40c558e` | 1.4 | Updated doc references: `docs/vault/INDEX.md`, `010-alpha-vantage-expansion-unified-cashflow.md` |
 
-**Phase 1 Summary:**
+**1A Summary:**
 - Lines removed: 423 (deprecated v1.x configurations)
 - Files deleted: 2 (company.yaml, etf.yaml)
 - Directories renamed: 1 (etfs → etf)
-- Status: Awaiting user review before Phase 2
+
+#### 1B: Tool Utilization Audit 🔲 PENDING
+
+| Task | Description | Status |
+|------|-------------|--------|
+| 1.5 | Audit FilterEngine usage in models | Not started |
+| 1.6 | Audit orchestrate.py usage | Not started |
+| 1.7 | Audit DependencyGraph usage | Not started |
+| 1.8 | Audit ProviderRegistry usage | Not started |
+| 1.9 | Deprecate fragmented scripts | Not started |
+
+**Phase 1 Status:** File cleanup complete, tool utilization audit pending
 
 ---
 
