@@ -1557,18 +1557,15 @@ supplemental_crosswalks:
       overlap_pct: double
 ```
 
-### Phase 5: Orchestration Layer with Distributed Queue (Days 12-18)
+### Phase 5: Ingestor & Orchestrator Standardization (Days 12-15)
 
-**Goal:** Unified build/ingest system with queue-based distributed processing across a cluster
+**Goal:** Standardize ingestor interfaces and create unified Orchestrator class
 
-This phase creates a production-grade orchestration system that:
+This phase creates a clean abstraction layer for data ingestion:
 - Standardizes ingestor interface via BaseIngestor class
 - Creates Orchestrator class to coordinate ingestors and model builds
-- Queues all ingestion and model build tasks
-- Distributes work across multiple machines (cluster)
-- Allows querying task status at any time
-- Handles API rate limits gracefully (non-blocking)
-- Enables concurrent execution of independent tasks
+- Simplifies scripts to thin wrappers around the Orchestrator
+- Enables future queue-based distribution (Phase 6)
 
 | # | Task | Files Affected |
 |---|------|----------------|
@@ -1577,15 +1574,9 @@ This phase creates a production-grade orchestration system that:
 | 5.3 | Refactor BLSIngestor to use BaseIngestor | REFACTOR: `providers/bls/bls_ingestor.py` |
 | 5.4 | Refactor ChicagoIngestor to use BaseIngestor | REFACTOR: `providers/chicago/chicago_ingestor.py` |
 | 5.5 | Create Orchestrator class | NEW: `orchestration/orchestrator.py` |
-| 5.6 | Extend DependencyGraph for queue integration | EXTEND: `orchestration/dependency_graph.py` (431 lines exists) |
-| 5.7 | Extend ProviderRegistry for queue integration | EXTEND: `datapipelines/providers/registry.py` (exists) |
-| 5.8 | Create TaskQueue with Delta Lake backend | NEW: `orchestration/queue/task_queue.py` |
-| 5.9 | Create Worker process for task execution | NEW: `orchestration/queue/worker.py` |
-| 5.10 | Create WorkerPool for cluster management | NEW: `orchestration/queue/worker_pool.py` |
-| 5.11 | Create queue status API | NEW: `orchestration/queue/status.py` |
-| 5.12 | Extend orchestrate.py CLI with queue commands | EXTEND: `scripts/orchestrate.py` (760 lines exists) |
-| 5.13 | Create worker daemon script | NEW: `scripts/worker.py` |
-| 5.14 | Add cluster configuration | NEW: `configs/cluster.yaml` |
+| 5.6 | Integrate DependencyGraph into Orchestrator | EXTEND: `orchestration/dependency_graph.py` (431 lines exists) |
+| 5.7 | Integrate ProviderRegistry into Orchestrator | EXTEND: `datapipelines/providers/registry.py` (exists) |
+| 5.8 | Update orchestrate.py to use Orchestrator class | REFACTOR: `scripts/orchestrate.py` (760 lines → thin wrapper) |
 
 ---
 
@@ -1888,6 +1879,29 @@ def main():
 
     print_results(results)
 ```
+
+---
+
+### Phase 6: Distributed Queue (Days 16-20)
+
+**Goal:** Queue-based distributed processing for ingestion and model building across a cluster
+
+This phase adds production-grade distributed execution:
+- Queues all ingestion and model build tasks via Delta Lake
+- Distributes work across multiple machines (cluster)
+- Allows querying task status at any time
+- Handles API rate limits gracefully (non-blocking)
+- Enables concurrent execution of independent tasks
+
+| # | Task | Files Affected |
+|---|------|----------------|
+| 6.1 | Create TaskQueue with Delta Lake backend | NEW: `orchestration/queue/task_queue.py` |
+| 6.2 | Create Worker process for task execution | NEW: `orchestration/queue/worker.py` |
+| 6.3 | Create WorkerPool for cluster management | NEW: `orchestration/queue/worker_pool.py` |
+| 6.4 | Create queue status API | NEW: `orchestration/queue/status.py` |
+| 6.5 | Extend orchestrate.py CLI with queue commands | EXTEND: `scripts/orchestrate.py` |
+| 6.6 | Create worker daemon script | NEW: `scripts/worker.py` |
+| 6.7 | Add cluster configuration | NEW: `configs/cluster.yaml` |
 
 ---
 
@@ -2518,7 +2532,7 @@ Time 0:10 - Dependencies resolve
 ... continues until all tasks complete
 ```
 
-### Phase 6: Bronze Expansion & Ingestion Testing (Days 19-23)
+### Phase 7: Bronze Expansion & Ingestion Testing (Days 21-24)
 
 **Goal:** Test all ingestors through orchestration, expand Bronze layer with complete data
 
@@ -2526,13 +2540,13 @@ This phase validates the orchestration layer by running all ingestors and ensuri
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 6.1 | Test Alpha Vantage ingestor via orchestration | `scripts/orchestrate.py ingest --provider alpha_vantage` |
-| 6.2 | Test BLS ingestor via orchestration | `scripts/orchestrate.py ingest --provider bls` |
-| 6.3 | Test Chicago ingestor via orchestration | `scripts/orchestrate.py ingest --provider chicago` |
-| 6.4 | Create generalized Bronze validation script | NEW: `scripts/validate_bronze.py` |
-| 6.5 | Run validation on all Bronze tables | Generate validation report |
-| 6.6 | Fix any ingestor issues discovered | Various provider files |
-| 6.7 | Document Bronze table inventory | UPDATE: `docs/bronze-inventory.md` |
+| 7.1 | Test Alpha Vantage ingestor via orchestration | `scripts/orchestrate.py ingest --provider alpha_vantage` |
+| 7.2 | Test BLS ingestor via orchestration | `scripts/orchestrate.py ingest --provider bls` |
+| 7.3 | Test Chicago ingestor via orchestration | `scripts/orchestrate.py ingest --provider chicago` |
+| 7.4 | Create generalized Bronze validation script | NEW: `scripts/validate_bronze.py` |
+| 7.5 | Run validation on all Bronze tables | Generate validation report |
+| 7.6 | Fix any ingestor issues discovered | Various provider files |
+| 7.7 | Document Bronze table inventory | UPDATE: `docs/bronze-inventory.md` |
 
 **Generalized Bronze Validation Script:**
 
@@ -2720,7 +2734,7 @@ python -m scripts.validate_bronze --all --fail-on-warnings
 
 The following phases enhance the foundation with domain-specific models and features.
 
-### Phase 7: Economic Series Enhancement (Days 19-25)
+### Phase 8: Economic Series Enhancement (Days 25-29)
 
 **Goal:** Generalized time series model for federal/state economic data
 
@@ -2728,14 +2742,14 @@ This phase creates a **reusable series model** that can ingest time series data 
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 7.1 | Create series model config | NEW: `configs/models/economic_series/*.yaml` |
-| 7.2 | Create FRED provider | NEW: `datapipelines/providers/fred/` |
-| 7.3 | Create BEA provider | NEW: `datapipelines/providers/bea/` |
-| 7.4 | Create Census ACS provider | NEW: `datapipelines/providers/census_acs/` |
-| 7.5 | Create EconomicSeriesModel class | NEW: `models/implemented/economic_series/model.py` |
-| 7.6 | Define series catalog dimension | schema.yaml |
-| 7.7 | Define series observations fact | schema.yaml |
-| 7.8 | Create series measures | measures.py |
+| 8.1 | Create series model config | NEW: `configs/models/economic_series/*.yaml` |
+| 8.2 | Create FRED provider | NEW: `datapipelines/providers/fred/` |
+| 8.3 | Create BEA provider | NEW: `datapipelines/providers/bea/` |
+| 8.4 | Create Census ACS provider | NEW: `datapipelines/providers/census_acs/` |
+| 8.5 | Create EconomicSeriesModel class | NEW: `models/implemented/economic_series/model.py` |
+| 8.6 | Define series catalog dimension | schema.yaml |
+| 8.7 | Define series observations fact | schema.yaml |
+| 8.8 | Create series measures | measures.py |
 
 **Series Model Schema:**
 ```
@@ -2757,22 +2771,22 @@ fact_series_observation
 └── vintage
 ```
 
-### Phase 8: Chart of Accounts Enhancement (Days 26-31)
+### Phase 9: Chart of Accounts Enhancement (Days 30-35)
 
 **Goal:** Implement shared financial model base for city_finance and company
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 8.1 | Create _base/financial config templates | NEW: `configs/models/_base/financial/*.yaml` |
-| 8.2 | Create FinancialMeasures base class | NEW: `models/base/financial/measures.py` |
-| 8.3 | Update city_finance to inherit from _base.financial | `configs/models/city_finance/*.yaml` |
-| 8.4 | Update company to inherit from _base.financial | `configs/models/company/*.yaml` |
-| 8.5 | Add NPV, CAGR, YoY measures to financial base | `measures.py` |
-| 8.6 | Add incurred_period dimension support | `schema.yaml` |
-| 8.7 | Test inheritance works correctly | Run test suite |
-| 8.8 | Update company model for financial statements | `company/model.py` |
+| 9.1 | Create _base/financial config templates | NEW: `configs/models/_base/financial/*.yaml` |
+| 9.2 | Create FinancialMeasures base class | NEW: `models/base/financial/measures.py` |
+| 9.3 | Update city_finance to inherit from _base.financial | `configs/models/city_finance/*.yaml` |
+| 9.4 | Update company to inherit from _base.financial | `configs/models/company/*.yaml` |
+| 9.5 | Add NPV, CAGR, YoY measures to financial base | `measures.py` |
+| 9.6 | Add incurred_period dimension support | `schema.yaml` |
+| 9.7 | Test inheritance works correctly | Run test suite |
+| 9.8 | Update company model for financial statements | `company/model.py` |
 
-### Phase 9: City Services Enhancement (Days 32-38)
+### Phase 10: City Services Enhancement (Days 36-42)
 
 **Goal:** Model city departments, services, and performance metrics by geography
 
@@ -2780,16 +2794,16 @@ This phase adds the ability to analyze how well city services perform across dif
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 9.1 | Create city_services model config | NEW: `configs/models/city_services/*.yaml` |
-| 9.2 | Define dim_department (Fire, Police, Admin, etc.) | schema.yaml |
-| 9.3 | Define dim_service_type (emergency response, permits, etc.) | schema.yaml |
-| 9.4 | Define fact_service_call (311, 911 calls by geo) | schema.yaml |
-| 9.5 | Define fact_response_time (response metrics by geo) | schema.yaml |
-| 9.6 | Define fact_department_budget (extends Chart of Accounts) | schema.yaml |
-| 9.7 | Create CityServicesModel class | NEW: `models/implemented/city_services/model.py` |
-| 9.8 | Create service performance measures | NEW: `city_services/measures.py` |
-| 9.9 | Add Chicago 311/911 data endpoints | `chicago/chicago_ingestor.py` |
-| 9.10 | Create analysis notebooks | NEW: `configs/notebooks/city_services/*.md` |
+| 10.1 | Create city_services model config | NEW: `configs/models/city_services/*.yaml` |
+| 10.2 | Define dim_department (Fire, Police, Admin, etc.) | schema.yaml |
+| 10.3 | Define dim_service_type (emergency response, permits, etc.) | schema.yaml |
+| 10.4 | Define fact_service_call (311, 911 calls by geo) | schema.yaml |
+| 10.5 | Define fact_response_time (response metrics by geo) | schema.yaml |
+| 10.6 | Define fact_department_budget (extends Chart of Accounts) | schema.yaml |
+| 10.7 | Create CityServicesModel class | NEW: `models/implemented/city_services/model.py` |
+| 10.8 | Create service performance measures | NEW: `city_services/measures.py` |
+| 10.9 | Add Chicago 311/911 data endpoints | `chicago/chicago_ingestor.py` |
+| 10.10 | Create analysis notebooks | NEW: `configs/notebooks/city_services/*.md` |
 
 **City Services Schema:**
 
@@ -2888,20 +2902,20 @@ facts:
 | | `cost_per_call` | Operating cost / calls handled |
 | | `staff_efficiency` | Calls handled / FTE |
 
-### Phase 10: Securities Models Enhancement (Days 39-45)
+### Phase 11: Securities Models Enhancement (Days 43-49)
 
 **Goal:** All securities models have working implementations
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 10.1 | Create _base/securities Python module | NEW: `models/base/securities/measures.py` |
-| 10.2 | Move shared securities measures from stocks | Refactor `stocks/measures.py` |
-| 10.3 | Implement ETF model | NEW: `models/implemented/etf/model.py`, `measures.py` |
-| 10.4 | Implement Options model | NEW: `models/implemented/options/model.py`, `measures.py` |
-| 10.5 | Implement Futures model | NEW: `models/implemented/futures/model.py`, `measures.py` |
-| 10.6 | Test all model builds | Run orchestrate.py --all |
+| 11.1 | Create _base/securities Python module | NEW: `models/base/securities/measures.py` |
+| 11.2 | Move shared securities measures from stocks | Refactor `stocks/measures.py` |
+| 11.3 | Implement ETF model | NEW: `models/implemented/etf/model.py`, `measures.py` |
+| 11.4 | Implement Options model | NEW: `models/implemented/options/model.py`, `measures.py` |
+| 11.5 | Implement Futures model | NEW: `models/implemented/futures/model.py`, `measures.py` |
+| 11.6 | Test all model builds | Run orchestrate.py --all |
 
-### Phase 11: Company Chart of Accounts Enhancement (Days 46-52)
+### Phase 12: Company Chart of Accounts Enhancement (Days 50-56)
 
 **Goal:** Build company-level Chart of Accounts from SEC filings (10-K, 10-Q) and cash flow statements
 
@@ -2912,15 +2926,15 @@ This extends the company model to use the `_base.financial` Chart of Accounts pa
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 11.1 | Update company model to inherit from _base.financial | `configs/models/company/model.yaml` |
-| 11.2 | Map SEC XBRL tags to Chart of Accounts structure | `configs/models/company/account_mapping.yaml` |
-| 11.3 | Create dim_sec_account (standardized account codes) | `configs/models/company/schema.yaml` |
-| 11.4 | Create fact_financial_position (balance sheet changes) | `configs/models/company/schema.yaml` |
-| 11.5 | Create fact_cash_flow_detail (cash flow line items) | `configs/models/company/schema.yaml` |
-| 11.6 | Add SEC filing facets for XBRL parsing | `alpha_vantage/facets/sec_filing.py` |
-| 11.7 | Implement CompanyAccountingMeasures | `company/measures.py` |
-| 11.8 | Add period-over-period change calculations | `company/measures.py` |
-| 11.9 | Test with sample company filings | Test suite |
+| 12.1 | Update company model to inherit from _base.financial | `configs/models/company/model.yaml` |
+| 12.2 | Map SEC XBRL tags to Chart of Accounts structure | `configs/models/company/account_mapping.yaml` |
+| 12.3 | Create dim_sec_account (standardized account codes) | `configs/models/company/schema.yaml` |
+| 12.4 | Create fact_financial_position (balance sheet changes) | `configs/models/company/schema.yaml` |
+| 12.5 | Create fact_cash_flow_detail (cash flow line items) | `configs/models/company/schema.yaml` |
+| 12.6 | Add SEC filing facets for XBRL parsing | `alpha_vantage/facets/sec_filing.py` |
+| 12.7 | Implement CompanyAccountingMeasures | `company/measures.py` |
+| 12.8 | Add period-over-period change calculations | `company/measures.py` |
+| 12.9 | Test with sample company filings | Test suite |
 
 **Company Chart of Accounts Schema:**
 
@@ -3023,7 +3037,7 @@ facts:
 | | `roe` | Net Income / Shareholders Equity |
 | | `roa` | Net Income / Total Assets |
 
-### Phase 12: Metadata Table Enhancement (Days 53-57)
+### Phase 13: Metadata Table Enhancement (Days 57-61)
 
 **Goal:** Create operational model for tracking table metadata, pipeline runs, and data freshness
 
@@ -3031,15 +3045,15 @@ This model provides visibility into the data warehouse itself - tracking when ta
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 12.1 | Create metadata model config | NEW: `configs/models/metadata/*.yaml` |
-| 12.2 | Define dim_table (catalog of all tables) | schema.yaml |
-| 12.3 | Define dim_pipeline (pipeline definitions) | schema.yaml |
-| 12.4 | Define fact_table_stats (row counts, sizes) | schema.yaml |
-| 12.5 | Define fact_pipeline_run (execution history) | schema.yaml |
-| 12.6 | Create MetadataModel class | NEW: `models/implemented/metadata/model.py` |
-| 12.7 | Create metadata collection hooks | `orchestration/hooks/metadata_collector.py` |
-| 12.8 | Add auto-update on model builds | Integrate with orchestrate.py |
-| 12.9 | Create metadata dashboard notebook | `configs/notebooks/metadata/*.md` |
+| 13.1 | Create metadata model config | NEW: `configs/models/metadata/*.yaml` |
+| 13.2 | Define dim_table (catalog of all tables) | schema.yaml |
+| 13.3 | Define dim_pipeline (pipeline definitions) | schema.yaml |
+| 13.4 | Define fact_table_stats (row counts, sizes) | schema.yaml |
+| 13.5 | Define fact_pipeline_run (execution history) | schema.yaml |
+| 13.6 | Create MetadataModel class | NEW: `models/implemented/metadata/model.py` |
+| 13.7 | Create metadata collection hooks | `orchestration/hooks/metadata_collector.py` |
+| 13.8 | Add auto-update on model builds | Integrate with orchestrate.py |
+| 13.9 | Create metadata dashboard notebook | `configs/notebooks/metadata/*.md` |
 
 **Metadata Model Schema:**
 
@@ -3172,7 +3186,7 @@ facts:
 | | `null_rate` | % null values by column |
 | | `duplicate_rate` | % duplicate rows |
 
-### Phase 13: Logger Model Enhancement (Days 58-63)
+### Phase 14: Logger Model Enhancement (Days 62-67)
 
 **Goal:** Create operational model for analyzing logs, errors, and warnings across all pipeline runs
 
@@ -3180,16 +3194,16 @@ This model aggregates log data to provide easy filtering, categorization, and st
 
 | # | Task | Files Affected |
 |---|------|----------------|
-| 13.1 | Create logger model config | NEW: `configs/models/logger/*.yaml` |
-| 13.2 | Define dim_log_source (where logs come from) | schema.yaml |
-| 13.3 | Define dim_error_category (error classification) | schema.yaml |
-| 13.4 | Define fact_log_entry (individual log records) | schema.yaml |
-| 13.5 | Define fact_error_summary (aggregated errors) | schema.yaml |
-| 13.6 | Create LoggerModel class | NEW: `models/implemented/logger/model.py` |
-| 13.7 | Create log ingestion from de_funk.log | `logger/log_parser.py` |
-| 13.8 | Create error categorization rules | `configs/models/logger/error_rules.yaml` |
-| 13.9 | Create logger dashboard notebook | `configs/notebooks/logger/*.md` |
-| 13.10 | Add log rotation and archival | `scripts/maintenance/archive_logs.py` |
+| 14.1 | Create logger model config | NEW: `configs/models/logger/*.yaml` |
+| 14.2 | Define dim_log_source (where logs come from) | schema.yaml |
+| 14.3 | Define dim_error_category (error classification) | schema.yaml |
+| 14.4 | Define fact_log_entry (individual log records) | schema.yaml |
+| 14.5 | Define fact_error_summary (aggregated errors) | schema.yaml |
+| 14.6 | Create LoggerModel class | NEW: `models/implemented/logger/model.py` |
+| 14.7 | Create log ingestion from de_funk.log | `logger/log_parser.py` |
+| 14.8 | Create error categorization rules | `configs/models/logger/error_rules.yaml` |
+| 14.9 | Create logger dashboard notebook | `configs/notebooks/logger/*.md` |
+| 14.10 | Add log rotation and archival | `scripts/maintenance/archive_logs.py` |
 
 **Logger Model Schema:**
 
@@ -3850,18 +3864,19 @@ These components were created and are **NOT duplicates** of existing functionali
 | Phase 2: Backend Abstraction (UniversalSession) | 3 | High | Foundation |
 | Phase 3: Config Standardization | 3 | High | Foundation |
 | Phase 4: Core Geography (US-Agnostic) | 5 | High | Foundation |
-| Phase 5: Orchestration Layer (Delta Lake Queue) | 7 | High | Foundation |
-| Phase 6: Bronze Expansion & Ingestion Testing | 5 | High | Foundation |
-| **Foundation Subtotal** | **25 days** | | |
-| Phase 7: Economic Series Enhancement | 7 | High | Enhancement |
-| Phase 8: Chart of Accounts Enhancement | 6 | High | Enhancement |
-| Phase 9: City Services Enhancement | 7 | High | Enhancement |
-| Phase 10: Securities Models Enhancement | 7 | Medium | Enhancement |
-| Phase 11: Company Chart of Accounts Enhancement | 7 | High | Enhancement |
-| Phase 12: Metadata Table Enhancement | 5 | High | Enhancement |
-| Phase 13: Logger Model Enhancement | 6 | High | Enhancement |
-| **Enhancement Subtotal** | **45 days** | | |
-| **Total** | **70 days** | | |
+| Phase 5: Ingestor & Orchestrator Standardization | 4 | High | Foundation |
+| Phase 6: Distributed Queue | 5 | High | Foundation |
+| Phase 7: Bronze Expansion & Ingestion Testing | 4 | High | Foundation |
+| **Foundation Subtotal** | **26 days** | | |
+| Phase 8: Economic Series Enhancement | 5 | High | Enhancement |
+| Phase 9: Chart of Accounts Enhancement | 6 | High | Enhancement |
+| Phase 10: City Services Enhancement | 7 | High | Enhancement |
+| Phase 11: Securities Models Enhancement | 7 | Medium | Enhancement |
+| Phase 12: Company Chart of Accounts Enhancement | 7 | High | Enhancement |
+| Phase 13: Metadata Table Enhancement | 5 | High | Enhancement |
+| Phase 14: Logger Model Enhancement | 6 | High | Enhancement |
+| **Enhancement Subtotal** | **43 days** | | |
+| **Total** | **69 days** | | |
 
 ---
 
@@ -3880,13 +3895,15 @@ Example commits (Foundation phases):
 - "Phase 2: Backend Abstraction - Refactor StocksModel to use session methods"
 - "Phase 3: Config Standardization - Migrate core.yaml to modular structure"
 - "Phase 4: Core Geography - Create US geography model schema"
-- "Phase 5: Orchestration - Add Delta Lake queue to orchestrate.py"
-- "Phase 6: Bronze Expansion - Test Alpha Vantage ingestor via orchestration"
+- "Phase 5: Ingestor Standardization - Create BaseIngestor class"
+- "Phase 5: Orchestrator - Create Orchestrator class for coordinated builds"
+- "Phase 6: Distributed Queue - Add Delta Lake queue backend"
+- "Phase 7: Bronze Expansion - Test Alpha Vantage ingestor via orchestration"
 
 Example commits (Enhancement phases):
-- "Phase 7: Economic Series Enhancement - Create FRED provider"
-- "Phase 8: Chart of Accounts Enhancement - Create _base/financial templates"
-- "Phase 9: City Services Enhancement - Add 311/911 data endpoints"
+- "Phase 8: Economic Series Enhancement - Create FRED provider"
+- "Phase 9: Chart of Accounts Enhancement - Create _base/financial templates"
+- "Phase 10: City Services Enhancement - Add 311/911 data endpoints"
 ```
 
 Each phase will be completed before moving to the next, with a thorough review at the end of each phase.
@@ -4015,17 +4032,23 @@ This log tracks all completed implementation steps as they are finished.
 
 ---
 
-### Phase 5: Orchestration Layer (Pending)
+### Phase 5: Ingestor & Orchestrator Standardization (Pending)
 
 *Not started*
 
 ---
 
-### Phase 6: Bronze Expansion & Ingestion Testing (Pending)
+### Phase 6: Distributed Queue (Pending)
 
 *Not started*
 
 ---
 
-*Enhancement phases (7-13) will be logged as they are completed.*
+### Phase 7: Bronze Expansion & Ingestion Testing (Pending)
+
+*Not started*
+
+---
+
+*Enhancement phases (8-14) will be logged as they are completed.*
 
