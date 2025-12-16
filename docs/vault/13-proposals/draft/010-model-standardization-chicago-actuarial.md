@@ -1309,20 +1309,537 @@ supplemental_crosswalks:
       overlap_pct: double
 ```
 
-### Phase 5: Orchestration Layer (Days 12-13)
+### Phase 5: Orchestration Layer with Distributed Queue (Days 12-18)
 
-**Goal:** Unified build/ingest system
+**Goal:** Unified build/ingest system with queue-based distributed processing across a cluster
+
+This phase creates a production-grade orchestration system that:
+- Queues all ingestion and model build tasks
+- Distributes work across multiple machines (cluster)
+- Allows querying task status at any time
+- Handles API rate limits gracefully (non-blocking)
+- Enables concurrent execution of independent tasks
 
 | # | Task | Files Affected |
 |---|------|----------------|
 | 5.1 | Create DependencyGraph class | NEW: `orchestration/dependency_graph.py` |
 | 5.2 | Create ProviderRegistry class | NEW: `datapipelines/providers/registry.py` |
 | 5.3 | Create provider.yaml for each provider | NEW: `providers/{name}/provider.yaml` |
-| 5.4 | Create model_builder module | NEW: `orchestration/builders/model_builder.py` |
-| 5.5 | Create unified orchestrate.py CLI | NEW: `scripts/orchestrate.py` |
-| 5.6 | Deprecate old scripts | Add warnings to old scripts |
+| 5.4 | Create TaskQueue with SQLite backend | NEW: `orchestration/queue/task_queue.py` |
+| 5.5 | Create Worker process for task execution | NEW: `orchestration/queue/worker.py` |
+| 5.6 | Create WorkerPool for cluster management | NEW: `orchestration/queue/worker_pool.py` |
+| 5.7 | Create queue status API | NEW: `orchestration/queue/status.py` |
+| 5.8 | Create model_builder module | NEW: `orchestration/builders/model_builder.py` |
+| 5.9 | Create unified orchestrate.py CLI | NEW: `scripts/orchestrate.py` |
+| 5.10 | Create worker daemon script | NEW: `scripts/worker.py` |
+| 5.11 | Add cluster configuration | NEW: `configs/cluster.yaml` |
+| 5.12 | Deprecate old scripts | Add warnings to old scripts |
 
-### Phase 6: Bronze Expansion & Ingestion Testing (Days 14-18)
+---
+
+#### Queue Architecture
+
+**Design Principles:**
+- All tasks flow through the queue (no direct execution)
+- Workers pull tasks when ready (pull model, not push)
+- Stalled tasks don't block other work
+- Task status queryable at any time
+- Cluster-aware but works single-node too
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         ORCHESTRATION ARCHITECTURE                       │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                          │
+│   ┌──────────────┐         ┌─────────────────────────────────────────┐  │
+│   │ orchestrate  │────────▶│              TASK QUEUE                 │  │
+│   │    CLI       │         │  ┌─────────────────────────────────┐    │  │
+│   └──────────────┘         │  │ SQLite: tasks.db                │    │  │
+│                            │  │                                  │    │  │
+│   Commands:                │  │ Tables:                          │    │  │
+│   - submit                 │  │ - tasks (id, type, status, ...)  │    │  │
+│   - status                 │  │ - task_dependencies              │    │  │
+│   - cancel                 │  │ - workers                        │    │  │
+│   - retry                  │  │ - task_logs                      │    │  │
+│   - workers                │  │                                  │    │  │
+│                            │  └─────────────────────────────────┘    │  │
+│                            └──────────────┬──────────────────────────┘  │
+│                                           │                              │
+│              ┌────────────────────────────┼────────────────────────┐    │
+│              │                            │                        │    │
+│              ▼                            ▼                        ▼    │
+│   ┌──────────────────┐       ┌──────────────────┐      ┌─────────────┐ │
+│   │   WORKER 1       │       │   WORKER 2       │      │  WORKER N   │ │
+│   │   (local)        │       │   (remote)       │      │  (remote)   │ │
+│   │                  │       │                  │      │             │ │
+│   │ ┌──────────────┐ │       │ ┌──────────────┐ │      │ ┌─────────┐ │ │
+│   │ │ Ingest Task  │ │       │ │ Build Task   │ │      │ │ Ingest  │ │ │
+│   │ │ alpha_vantage│ │       │ │ stocks model │ │      │ │ chicago │ │ │
+│   │ │ [rate limit] │ │       │ │ [running]    │ │      │ │ [done]  │ │ │
+│   │ └──────────────┘ │       │ └──────────────┘ │      │ └─────────┘ │ │
+│   └──────────────────┘       └──────────────────┘      └─────────────┘ │
+│         │                            │                       │         │
+│         └────────────────────────────┴───────────────────────┘         │
+│                                      │                                  │
+│                                      ▼                                  │
+│                            ┌─────────────────┐                          │
+│                            │  Shared Storage │                          │
+│                            │  (NFS/S3/local) │                          │
+│                            │                 │                          │
+│                            │ storage/bronze/ │                          │
+│                            │ storage/silver/ │                          │
+│                            └─────────────────┘                          │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### Task Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| `ingest` | Pull data from external API to Bronze | `ingest:alpha_vantage:securities_reference` |
+| `build` | Build Silver model from Bronze | `build:stocks` |
+| `validate` | Run validation on table | `validate:bronze:securities_reference` |
+| `transform` | Run custom transformation | `transform:calculate_technicals` |
+
+---
+
+#### Task States
+
+```
+┌─────────┐     ┌─────────┐     ┌─────────┐     ┌─────────┐
+│ PENDING │────▶│ QUEUED  │────▶│ RUNNING │────▶│  DONE   │
+└─────────┘     └─────────┘     └─────────┘     └─────────┘
+     │               │               │
+     │               │               ▼
+     │               │          ┌─────────┐
+     │               │          │ FAILED  │
+     │               │          └─────────┘
+     │               │               │
+     │               ▼               ▼
+     │          ┌─────────┐     ┌─────────┐
+     └─────────▶│ BLOCKED │     │  RETRY  │──────────┐
+                └─────────┘     └─────────┘          │
+                     │               │               │
+                     └───────────────┴───────────────┘
+                              (back to QUEUED)
+
+States:
+- PENDING: Task created, waiting for dependencies
+- QUEUED: Ready to run, waiting for worker
+- RUNNING: Being executed by a worker
+- DONE: Completed successfully
+- FAILED: Failed after all retries
+- BLOCKED: Waiting on dependency or rate limit
+- RETRY: Scheduled for retry (with backoff)
+```
+
+---
+
+#### Rate Limit Handling
+
+When a task hits an API rate limit:
+1. Task moves to `BLOCKED` state with `blocked_until` timestamp
+2. Worker releases the task and picks up another
+3. Task automatically re-queues when block period expires
+4. Other tasks continue executing (non-blocking)
+
+```python
+# Example: Alpha Vantage rate limit handling
+class RateLimitHandler:
+    def handle_rate_limit(self, task, retry_after_seconds):
+        task.status = TaskStatus.BLOCKED
+        task.blocked_until = datetime.now() + timedelta(seconds=retry_after_seconds)
+        task.blocked_reason = "API rate limit exceeded"
+        # Worker continues with other tasks
+```
+
+---
+
+#### Queue Status API
+
+Query task and queue status at any time:
+
+```bash
+# Check overall queue status
+$ python -m scripts.orchestrate status
+
+╔═══════════════════════════════════════════════════════════════════╗
+║                        QUEUE STATUS                                ║
+╠═══════════════════════════════════════════════════════════════════╣
+║ Tasks:    42 total │ 12 queued │ 3 running │ 25 done │ 2 blocked  ║
+║ Workers:  3 active │ 1 idle │ 0 offline                           ║
+║ Throughput: 8.5 tasks/min (last 10 min)                           ║
+╚═══════════════════════════════════════════════════════════════════╝
+
+┌─ Running Tasks ──────────────────────────────────────────────────┐
+│ ID     │ Type    │ Target              │ Worker    │ Duration    │
+│────────│─────────│─────────────────────│───────────│─────────────│
+│ task-1 │ ingest  │ alpha_vantage:prices│ worker-1  │ 2m 34s      │
+│ task-2 │ build   │ stocks              │ worker-2  │ 1m 12s      │
+│ task-3 │ ingest  │ bls:unemployment    │ worker-3  │ 0m 45s      │
+└──────────────────────────────────────────────────────────────────┘
+
+┌─ Blocked Tasks ──────────────────────────────────────────────────┐
+│ ID     │ Type    │ Target              │ Reason          │ Until │
+│────────│─────────│─────────────────────│─────────────────│───────│
+│ task-7 │ ingest  │ alpha_vantage:fund  │ API rate limit  │ 2m    │
+│ task-9 │ build   │ company             │ Waiting: stocks │ -     │
+└──────────────────────────────────────────────────────────────────┘
+
+# Check specific task
+$ python -m scripts.orchestrate status --task task-1
+
+Task: task-1
+Type: ingest
+Target: alpha_vantage:securities_prices_daily
+Status: RUNNING
+Worker: worker-1 (192.168.1.10)
+Started: 2025-12-16 10:30:00
+Duration: 2m 34s
+Progress: 850/1000 tickers (85%)
+Logs: storage/logs/tasks/task-1.log
+
+# Check worker status
+$ python -m scripts.orchestrate workers
+
+┌─ Workers ────────────────────────────────────────────────────────┐
+│ ID       │ Host           │ Status │ Current Task │ Completed    │
+│──────────│────────────────│────────│──────────────│──────────────│
+│ worker-1 │ localhost      │ ACTIVE │ task-1       │ 15 tasks     │
+│ worker-2 │ 192.168.1.10   │ ACTIVE │ task-2       │ 12 tasks     │
+│ worker-3 │ 192.168.1.11   │ ACTIVE │ task-3       │ 8 tasks      │
+│ worker-4 │ 192.168.1.12   │ IDLE   │ -            │ 5 tasks      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### Cluster Configuration
+
+```yaml
+# configs/cluster.yaml
+
+cluster:
+  name: "de_funk_cluster"
+
+  # Queue backend (SQLite for simplicity, can upgrade to Redis/Postgres)
+  queue:
+    backend: "sqlite"
+    path: "storage/queue/tasks.db"
+    # For multi-node: use shared storage or network database
+    # backend: "postgresql"
+    # connection: "postgresql://user:pass@host:5432/de_funk_queue"
+
+  # Shared storage (all workers must access)
+  storage:
+    type: "local"  # or "nfs", "s3"
+    bronze_path: "storage/bronze"
+    silver_path: "storage/silver"
+    # For NFS:
+    # type: "nfs"
+    # mount_point: "/mnt/de_funk_storage"
+    # For S3:
+    # type: "s3"
+    # bucket: "de-funk-data"
+    # region: "us-east-1"
+
+  # Worker configuration
+  workers:
+    # Local worker (always runs on main node)
+    - id: "worker-local"
+      host: "localhost"
+      max_concurrent_tasks: 2
+      task_types: ["ingest", "build", "validate"]
+
+    # Remote workers (connect via SSH)
+    - id: "worker-pi-1"
+      host: "192.168.1.10"
+      user: "pi"
+      ssh_key: "~/.ssh/id_rsa"
+      max_concurrent_tasks: 1
+      task_types: ["ingest"]  # Lighter work for Pi
+
+    - id: "worker-pi-2"
+      host: "192.168.1.11"
+      user: "pi"
+      ssh_key: "~/.ssh/id_rsa"
+      max_concurrent_tasks: 1
+      task_types: ["ingest"]
+
+  # Task defaults
+  tasks:
+    default_timeout: 3600  # 1 hour
+    max_retries: 3
+    retry_delay: 60  # seconds
+
+  # Rate limit configuration per provider
+  rate_limits:
+    alpha_vantage:
+      requests_per_minute: 5  # Free tier
+      # requests_per_minute: 75  # Premium
+      cooldown_seconds: 12
+    bls:
+      requests_per_minute: 100
+    chicago:
+      requests_per_minute: 1000  # Very generous
+```
+
+---
+
+#### CLI Commands
+
+```bash
+# === SUBMIT TASKS ===
+
+# Submit single ingestion
+python -m scripts.orchestrate submit ingest alpha_vantage --tables securities_reference
+
+# Submit all ingestions for a provider
+python -m scripts.orchestrate submit ingest alpha_vantage --all
+
+# Submit model build (auto-queues dependencies)
+python -m scripts.orchestrate submit build stocks
+# This automatically queues:
+# 1. ingest:alpha_vantage:securities_reference (if stale)
+# 2. ingest:alpha_vantage:securities_prices_daily (if stale)
+# 3. build:core (dependency)
+# 4. build:company (dependency)
+# 5. build:stocks (requested)
+
+# Submit full pipeline
+python -m scripts.orchestrate submit pipeline --full
+
+# === QUERY STATUS ===
+
+# Queue overview
+python -m scripts.orchestrate status
+
+# Specific task
+python -m scripts.orchestrate status --task task-123
+
+# Filter by state
+python -m scripts.orchestrate status --state blocked
+python -m scripts.orchestrate status --state running
+
+# Watch mode (live updates)
+python -m scripts.orchestrate status --watch
+
+# === MANAGE TASKS ===
+
+# Cancel a task
+python -m scripts.orchestrate cancel task-123
+
+# Retry failed task
+python -m scripts.orchestrate retry task-123
+
+# Retry all failed
+python -m scripts.orchestrate retry --all-failed
+
+# Clear completed tasks
+python -m scripts.orchestrate clear --done
+
+# === MANAGE WORKERS ===
+
+# List workers
+python -m scripts.orchestrate workers
+
+# Start local worker
+python -m scripts.worker start
+
+# Start worker on remote (via SSH)
+python -m scripts.orchestrate worker start --host 192.168.1.10
+
+# Stop worker gracefully
+python -m scripts.orchestrate worker stop worker-pi-1
+
+# === CLUSTER MANAGEMENT ===
+
+# Initialize cluster from config
+python -m scripts.orchestrate cluster init
+
+# Check cluster health
+python -m scripts.orchestrate cluster health
+
+# Sync storage to workers
+python -m scripts.orchestrate cluster sync
+```
+
+---
+
+#### Worker Implementation
+
+```python
+# orchestration/queue/worker.py (conceptual)
+
+class Worker:
+    def __init__(self, worker_id: str, queue: TaskQueue):
+        self.worker_id = worker_id
+        self.queue = queue
+        self.current_task = None
+
+    def run(self):
+        """Main worker loop - pull and execute tasks."""
+        logger.info(f"Worker {self.worker_id} started")
+        self.queue.register_worker(self.worker_id)
+
+        while self.running:
+            # Get next available task (non-blocking)
+            task = self.queue.claim_task(
+                worker_id=self.worker_id,
+                task_types=self.config.task_types
+            )
+
+            if task is None:
+                time.sleep(1)  # No tasks available, wait
+                continue
+
+            self.current_task = task
+            try:
+                self.execute_task(task)
+                self.queue.complete_task(task.id)
+            except RateLimitError as e:
+                # Don't fail - just block and continue
+                self.queue.block_task(
+                    task.id,
+                    blocked_until=e.retry_after,
+                    reason="API rate limit"
+                )
+            except Exception as e:
+                self.queue.fail_task(task.id, error=str(e))
+            finally:
+                self.current_task = None
+
+    def execute_task(self, task: Task):
+        """Execute a single task."""
+        if task.type == "ingest":
+            self.run_ingestion(task)
+        elif task.type == "build":
+            self.run_model_build(task)
+        elif task.type == "validate":
+            self.run_validation(task)
+```
+
+---
+
+#### Database Schema (SQLite)
+
+```sql
+-- storage/queue/tasks.db
+
+CREATE TABLE tasks (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,  -- 'ingest', 'build', 'validate'
+    target TEXT NOT NULL,  -- 'alpha_vantage:securities_reference'
+    status TEXT NOT NULL DEFAULT 'PENDING',
+    priority INTEGER DEFAULT 0,
+
+    -- Execution tracking
+    worker_id TEXT,
+    started_at TIMESTAMP,
+    completed_at TIMESTAMP,
+    duration_seconds REAL,
+
+    -- Blocking/retry
+    blocked_until TIMESTAMP,
+    blocked_reason TEXT,
+    retry_count INTEGER DEFAULT 0,
+    max_retries INTEGER DEFAULT 3,
+
+    -- Results
+    result_status TEXT,  -- 'success', 'partial', 'failed'
+    result_message TEXT,
+    rows_affected INTEGER,
+
+    -- Metadata
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by TEXT,
+
+    -- Progress (for long-running tasks)
+    progress_current INTEGER,
+    progress_total INTEGER,
+    progress_message TEXT
+);
+
+CREATE TABLE task_dependencies (
+    task_id TEXT NOT NULL,
+    depends_on_task_id TEXT NOT NULL,
+    PRIMARY KEY (task_id, depends_on_task_id),
+    FOREIGN KEY (task_id) REFERENCES tasks(id),
+    FOREIGN KEY (depends_on_task_id) REFERENCES tasks(id)
+);
+
+CREATE TABLE workers (
+    id TEXT PRIMARY KEY,
+    host TEXT NOT NULL,
+    status TEXT DEFAULT 'OFFLINE',  -- 'ACTIVE', 'IDLE', 'OFFLINE'
+    current_task_id TEXT,
+    last_heartbeat TIMESTAMP,
+    tasks_completed INTEGER DEFAULT 0,
+    registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (current_task_id) REFERENCES tasks(id)
+);
+
+CREATE TABLE task_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    level TEXT,  -- 'DEBUG', 'INFO', 'WARNING', 'ERROR'
+    message TEXT,
+    FOREIGN KEY (task_id) REFERENCES tasks(id)
+);
+
+-- Indexes for common queries
+CREATE INDEX idx_tasks_status ON tasks(status);
+CREATE INDEX idx_tasks_type ON tasks(type);
+CREATE INDEX idx_tasks_blocked_until ON tasks(blocked_until);
+CREATE INDEX idx_workers_status ON workers(status);
+```
+
+---
+
+#### Non-Blocking Execution Example
+
+```
+Scenario: Running full pipeline with API rate limits
+
+Time 0:00 - Submit full pipeline
+├── Task 1: ingest:alpha_vantage:reference    → QUEUED
+├── Task 2: ingest:alpha_vantage:prices       → QUEUED
+├── Task 3: ingest:bls:unemployment           → QUEUED
+├── Task 4: ingest:chicago:budget             → QUEUED
+├── Task 5: build:core                        → PENDING (no deps)
+├── Task 6: build:company                     → PENDING (needs Task 1)
+└── Task 7: build:stocks                      → PENDING (needs Task 1, 2, 6)
+
+Time 0:01 - Workers start pulling
+├── Worker 1: picks Task 1 (alpha_vantage:reference) → RUNNING
+├── Worker 2: picks Task 3 (bls:unemployment)        → RUNNING
+├── Worker 3: picks Task 4 (chicago:budget)          → RUNNING
+└── Task 2: still QUEUED (rate limit - only 1 AV task at a time)
+
+Time 0:05 - Alpha Vantage rate limit hit
+├── Worker 1: Task 1 hits rate limit → BLOCKED (until 0:06)
+├── Worker 1: releases Task 1, picks Task 5 (build:core) → RUNNING
+└── Other workers continue unaffected
+
+Time 0:06 - Block expires
+├── Task 1: BLOCKED → QUEUED (auto-requeued)
+├── Worker 3: finished Task 4, picks Task 1 → RUNNING
+└── Task 5: still running
+
+Time 0:10 - Dependencies resolve
+├── Task 1: DONE
+├── Task 6: PENDING → QUEUED (dependency met)
+├── Worker 1: picks Task 6 (build:company) → RUNNING
+
+... continues until all tasks complete
+```
+
+### Phase 6: Bronze Expansion & Ingestion Testing (Days 19-23)
 
 **Goal:** Test all ingestors through orchestration, expand Bronze layer with complete data
 
@@ -2654,9 +3171,9 @@ These components were created and are **NOT duplicates** of existing functionali
 | Phase 2: Backend Abstraction | 2 | High | Foundation |
 | Phase 3: Config Standardization | 3 | High | Foundation |
 | Phase 4: Core Geography (US-Agnostic) | 5 | High | Foundation |
-| Phase 5: Orchestration Layer | 2 | High | Foundation |
+| Phase 5: Orchestration Layer (Queue + Cluster) | 7 | High | Foundation |
 | Phase 6: Bronze Expansion & Ingestion Testing | 5 | High | Foundation |
-| **Foundation Subtotal** | **18 days** | | |
+| **Foundation Subtotal** | **23 days** | | |
 | Phase 7: Economic Series Enhancement | 7 | High | Enhancement |
 | Phase 8: Chart of Accounts Enhancement | 6 | High | Enhancement |
 | Phase 9: City Services Enhancement | 7 | High | Enhancement |
@@ -2665,7 +3182,7 @@ These components were created and are **NOT duplicates** of existing functionali
 | Phase 12: Metadata Table Enhancement | 5 | High | Enhancement |
 | Phase 13: Logger Model Enhancement | 6 | High | Enhancement |
 | **Enhancement Subtotal** | **45 days** | | |
-| **Total** | **63 days** | | |
+| **Total** | **68 days** | | |
 
 ---
 
