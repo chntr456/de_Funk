@@ -1333,37 +1333,189 @@ This phase validates the orchestration layer by running all ingestors and ensuri
 | 6.1 | Test Alpha Vantage ingestor via orchestration | `scripts/orchestrate.py ingest --provider alpha_vantage` |
 | 6.2 | Test BLS ingestor via orchestration | `scripts/orchestrate.py ingest --provider bls` |
 | 6.3 | Test Chicago ingestor via orchestration | `scripts/orchestrate.py ingest --provider chicago` |
-| 6.4 | Validate Bronze securities_reference table | Verify schema, row counts, data quality |
-| 6.5 | Validate Bronze securities_prices_daily table | Verify partitioning, date ranges |
-| 6.6 | Validate Bronze BLS tables | Verify economic indicators loaded |
-| 6.7 | Validate Bronze Chicago tables | Verify municipal data loaded |
-| 6.8 | Create Bronze validation report | NEW: `scripts/validate_bronze.py` |
-| 6.9 | Fix any ingestor issues discovered | Various provider files |
-| 6.10 | Document Bronze table inventory | UPDATE: `docs/bronze-inventory.md` |
+| 6.4 | Create generalized Bronze validation script | NEW: `scripts/validate_bronze.py` |
+| 6.5 | Run validation on all Bronze tables | Generate validation report |
+| 6.6 | Fix any ingestor issues discovered | Various provider files |
+| 6.7 | Document Bronze table inventory | UPDATE: `docs/bronze-inventory.md` |
 
-**Bronze Validation Checklist:**
+**Generalized Bronze Validation Script:**
+
+The validation script (`scripts/validate_bronze.py`) will provide comprehensive data quality metrics for ANY Bronze table:
+
+```python
+# Usage:
+# python -m scripts.validate_bronze --table securities_reference
+# python -m scripts.validate_bronze --provider alpha_vantage
+# python -m scripts.validate_bronze --all
+
+# Output: JSON report + console summary
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    BRONZE VALIDATION                             │
-├─────────────────────────────────────────────────────────────────┤
-│ Provider: Alpha Vantage                                          │
-│ ├── securities_reference: _____ rows, schema valid: [ ]          │
-│ ├── securities_prices_daily: _____ rows, partitions: [ ]         │
-│ ├── fundamentals_income: _____ rows                              │
-│ ├── fundamentals_balance: _____ rows                             │
-│ ├── fundamentals_cashflow: _____ rows                            │
-│ └── fundamentals_earnings: _____ rows                            │
-│                                                                   │
-│ Provider: BLS                                                     │
-│ ├── unemployment: _____ series, date range: ____                 │
-│ ├── cpi: _____ series                                            │
-│ └── employment: _____ series                                     │
-│                                                                   │
-│ Provider: Chicago                                                 │
-│ ├── budget_appropriations: _____ rows                            │
-│ ├── expenditures: _____ rows                                     │
-│ └── revenue: _____ rows                                          │
-└─────────────────────────────────────────────────────────────────┘
+
+**Validation Metrics per Table:**
+
+| Category | Metric | Description |
+|----------|--------|-------------|
+| **Row Stats** | `row_count` | Total rows in table |
+| | `partition_count` | Number of partitions (if partitioned) |
+| | `partition_row_distribution` | Min/max/avg rows per partition |
+| **Column Stats** | `column_count` | Number of columns |
+| | `column_types` | Data type of each column |
+| **Null Analysis** | `null_count` | Nulls per column |
+| | `null_pct` | Null percentage per column |
+| | `columns_with_nulls` | List of columns with any nulls |
+| | `fully_null_columns` | Columns that are 100% null (red flag) |
+| **Diversity Stats** | `distinct_count` | Distinct values per column |
+| | `distinct_pct` | Distinct % (distinct/total) |
+| | `cardinality_class` | 'id' (>90%), 'category' (1-90%), 'constant' (<1%) |
+| | `top_values` | Top 10 most frequent values per column |
+| **Date Range** | `min_date` | Earliest date (for date columns) |
+| | `max_date` | Latest date |
+| | `date_gaps` | Missing dates in sequence |
+| **Data Quality** | `duplicate_rows` | Count of exact duplicate rows |
+| | `duplicate_keys` | Duplicates on expected unique columns |
+| | `empty_strings` | Columns with empty string values |
+| | `whitespace_only` | Columns with whitespace-only values |
+
+**Validation Report Schema:**
+
+```yaml
+# Output: storage/reports/bronze_validation_{timestamp}.json
+
+validation_report:
+  generated_at: "2025-12-16T10:30:00Z"
+  tables_validated: 12
+
+  summary:
+    total_rows: 1_500_000
+    tables_with_issues: 3
+    critical_issues: 1
+    warnings: 5
+
+  tables:
+    - table: "bronze.alpha_vantage.securities_reference"
+      path: "storage/bronze/alpha_vantage/securities_reference"
+      format: "delta"
+
+      row_stats:
+        row_count: 8500
+        partition_count: 45
+
+      column_stats:
+        column_count: 15
+        columns:
+          - name: "ticker"
+            type: "string"
+            null_count: 0
+            null_pct: 0.0
+            distinct_count: 8500
+            distinct_pct: 100.0
+            cardinality_class: "id"
+
+          - name: "sector"
+            type: "string"
+            null_count: 234
+            null_pct: 2.75
+            distinct_count: 11
+            distinct_pct: 0.13
+            cardinality_class: "category"
+            top_values:
+              - value: "Technology"
+                count: 2100
+              - value: "Healthcare"
+                count: 1500
+              # ...
+
+      date_analysis:
+        date_columns: ["snapshot_dt"]
+        snapshot_dt:
+          min_date: "2024-01-01"
+          max_date: "2025-12-15"
+          date_gaps: []
+
+      quality_issues:
+        - severity: "warning"
+          issue: "null_values"
+          column: "sector"
+          details: "234 rows (2.75%) have null sector"
+
+        - severity: "info"
+          issue: "low_cardinality"
+          column: "asset_type"
+          details: "Only 1 distinct value - may be constant"
+```
+
+**Console Output Example:**
+
+```
+╔══════════════════════════════════════════════════════════════════════╗
+║                    BRONZE LAYER VALIDATION REPORT                     ║
+╠══════════════════════════════════════════════════════════════════════╣
+║ Generated: 2025-12-16 10:30:00                                        ║
+║ Tables Validated: 12                                                  ║
+╠══════════════════════════════════════════════════════════════════════╣
+
+┌─ alpha_vantage.securities_reference ─────────────────────────────────┐
+│ Rows: 8,500 │ Columns: 15 │ Partitions: 45 │ Format: delta           │
+├──────────────────────────────────────────────────────────────────────┤
+│ Column              │ Type    │ Nulls  │ Distinct │ Cardinality      │
+│─────────────────────│─────────│────────│──────────│──────────────────│
+│ ticker              │ string  │ 0%     │ 8,500    │ id (100%)        │
+│ company_name        │ string  │ 0%     │ 8,495    │ id (99.9%)       │
+│ sector              │ string  │ 2.75%  │ 11       │ category (0.1%)  │
+│ industry            │ string  │ 3.1%   │ 142      │ category (1.7%)  │
+│ market_cap          │ double  │ 5.2%   │ 8,100    │ id (95.3%)       │
+│ cik                 │ string  │ 12.4%  │ 7,450    │ id (87.6%)       │
+│ asset_type          │ string  │ 0%     │ 1        │ constant (0%)    │
+├──────────────────────────────────────────────────────────────────────┤
+│ ⚠ WARNING: 12.4% null CIK values - may impact company joins          │
+│ ℹ INFO: asset_type is constant ('stocks') - expected for filtered    │
+└──────────────────────────────────────────────────────────────────────┘
+
+┌─ alpha_vantage.securities_prices_daily ──────────────────────────────┐
+│ Rows: 1,250,000 │ Columns: 12 │ Partitions: 365 │ Format: delta      │
+├──────────────────────────────────────────────────────────────────────┤
+│ Date Range: 2024-01-02 to 2025-12-13 (347 trading days)              │
+│ Tickers: 8,450 │ Avg rows/ticker: 148                                │
+├──────────────────────────────────────────────────────────────────────┤
+│ Column              │ Type    │ Nulls  │ Distinct │ Cardinality      │
+│─────────────────────│─────────│────────│──────────│──────────────────│
+│ ticker              │ string  │ 0%     │ 8,450    │ id               │
+│ trade_date          │ date    │ 0%     │ 347      │ category         │
+│ open                │ double  │ 0.02%  │ 892,000  │ id               │
+│ close               │ double  │ 0%     │ 895,000  │ id               │
+│ volume              │ long    │ 0.5%   │ 1,100K   │ id               │
+├──────────────────────────────────────────────────────────────────────┤
+│ ✓ No critical issues                                                 │
+└──────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════
+SUMMARY: 12 tables │ 1 critical │ 3 warnings │ 8 clean
+═══════════════════════════════════════════════════════════════════════
+```
+
+**CLI Options:**
+
+```bash
+# Validate all Bronze tables
+python -m scripts.validate_bronze --all
+
+# Validate specific provider
+python -m scripts.validate_bronze --provider alpha_vantage
+
+# Validate specific table
+python -m scripts.validate_bronze --table securities_reference
+
+# Output formats
+python -m scripts.validate_bronze --all --format json > report.json
+python -m scripts.validate_bronze --all --format markdown > report.md
+
+# Save to standard location
+python -m scripts.validate_bronze --all --save
+# Creates: storage/reports/bronze_validation_20251216_103000.json
+
+# Fail on issues (for CI/CD)
+python -m scripts.validate_bronze --all --fail-on-critical
+python -m scripts.validate_bronze --all --fail-on-warnings
 ```
 
 ---
