@@ -14,8 +14,20 @@ models:
 
 # Bronze tables this provider writes to
 bronze_tables:
-  - securities_reference
-  - securities_prices_daily
+  # Reference & Prices
+  - securities_reference        # company_overview, listing_status
+  - securities_prices_daily     # time_series_daily_adjusted
+
+  # Company Fundamentals (filings) - names match storage.json
+  - income_statements           # income_statement endpoint
+  - balance_sheets              # balance_sheet endpoint
+  - cash_flows                  # cash_flow endpoint
+  - earnings                    # earnings endpoint
+
+  # Technical Indicators (optional - not yet implemented)
+  # - technicals_sma
+  # - technicals_rsi
+  # - technicals_macd
 
 # API configuration key (maps to configs/pipelines/{config_key}_endpoints.json)
 config_key: alpha_vantage
