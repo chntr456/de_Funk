@@ -1503,6 +1503,529 @@ facts:
 | 9.5 | Implement Futures model | NEW: `models/implemented/futures/model.py`, `measures.py` |
 | 9.6 | Test all model builds | Run orchestrate.py --all |
 
+### Phase 10: Company Chart of Accounts from SEC Filings (Days 41-47)
+
+**Goal:** Build company-level Chart of Accounts from SEC filings (10-K, 10-Q) and cash flow statements
+
+This extends the company model to use the `_base.financial` Chart of Accounts pattern, mapping SEC XBRL filings to a standardized account structure. This enables:
+- Cash flow analysis across periods
+- Balance sheet change tracking
+- Cross-company comparisons using standardized accounts
+
+| # | Task | Files Affected |
+|---|------|----------------|
+| 10.1 | Update company model to inherit from _base.financial | `configs/models/company/model.yaml` |
+| 10.2 | Map SEC XBRL tags to Chart of Accounts structure | `configs/models/company/account_mapping.yaml` |
+| 10.3 | Create dim_sec_account (standardized account codes) | `configs/models/company/schema.yaml` |
+| 10.4 | Create fact_financial_position (balance sheet changes) | `configs/models/company/schema.yaml` |
+| 10.5 | Create fact_cash_flow_detail (cash flow line items) | `configs/models/company/schema.yaml` |
+| 10.6 | Add SEC filing facets for XBRL parsing | `alpha_vantage/facets/sec_filing.py` |
+| 10.7 | Implement CompanyAccountingMeasures | `company/measures.py` |
+| 10.8 | Add period-over-period change calculations | `company/measures.py` |
+| 10.9 | Test with sample company filings | Test suite |
+
+**Company Chart of Accounts Schema:**
+
+```yaml
+# configs/models/company/schema.yaml
+extends: _base.financial.schema
+
+dimensions:
+  dim_sec_account:
+    description: "Standardized SEC XBRL account mapping"
+    extends: _base.financial._dim_account
+    columns:
+      # Inherited: account_id, account_code, account_name, account_type, etc.
+      xbrl_tag: string  # Original XBRL tag (e.g., 'us-gaap:Assets')
+      xbrl_namespace: string  # 'us-gaap', 'dei', 'company-specific'
+      gaap_category: string  # Current Assets, Long-term Liabilities, etc.
+      cash_flow_section: string  # Operating, Investing, Financing, null
+      is_monetary: boolean  # true for dollar amounts, false for shares/ratios
+
+  dim_filing:
+    description: "SEC filing metadata"
+    primary_key: [filing_id]
+    columns:
+      filing_id: string
+      cik: string
+      ticker: string
+      form_type: string  # '10-K', '10-Q', '8-K'
+      filing_date: date
+      period_end_date: date
+      fiscal_year: int
+      fiscal_quarter: int  # 0 for annual
+      accession_number: string
+      document_url: string
+
+facts:
+  fact_financial_position:
+    description: "Balance sheet positions with period-over-period changes"
+    extends: _base.financial._fact_financial_transaction
+    columns:
+      # Inherited: amount, fiscal_period_id, incurred_period_id, accounting_basis
+      position_id: string
+      cik: string
+      filing_id: string  # FK to dim_filing
+      account_id: string  # FK to dim_sec_account
+      period_end_date: date
+      amount: double  # Current period value
+      prior_period_amount: double  # Prior period value
+      change_amount: double  # Absolute change
+      change_pct: double  # Percentage change
+      is_restated: boolean
+
+  fact_cash_flow_detail:
+    description: "Cash flow statement line items"
+    extends: _base.financial._fact_financial_transaction
+    columns:
+      # Inherited: amount, fiscal_period_id, incurred_period_id
+      cash_flow_id: string
+      cik: string
+      filing_id: string
+      account_id: string  # FK to dim_sec_account
+      cash_flow_section: string  # 'operating', 'investing', 'financing'
+      period_start_date: date
+      period_end_date: date
+      amount: double
+      is_non_cash: boolean  # Non-cash adjustments
+      adjustment_type: string  # 'add_back', 'deduction', 'direct'
+
+  fact_accounting_ratio:
+    description: "Derived financial ratios"
+    columns:
+      ratio_id: string
+      cik: string
+      filing_id: string
+      period_end_date: date
+      ratio_name: string  # 'current_ratio', 'debt_to_equity', 'roe'
+      ratio_value: double
+      numerator_account_id: string
+      denominator_account_id: string
+```
+
+**Company Accounting Measures:**
+
+| Category | Measure | Description |
+|----------|---------|-------------|
+| **Cash Flow** | `operating_cash_flow` | Net cash from operations |
+| | `free_cash_flow` | OCF - CapEx |
+| | `cash_burn_rate` | Monthly cash consumption |
+| | `cash_runway_months` | Cash / Monthly burn |
+| **Balance Sheet** | `working_capital` | Current Assets - Current Liabilities |
+| | `working_capital_change` | Period-over-period change |
+| | `asset_turnover` | Revenue / Average Assets |
+| **Liquidity** | `current_ratio` | Current Assets / Current Liabilities |
+| | `quick_ratio` | (Current - Inventory) / Current Liab |
+| | `cash_ratio` | Cash / Current Liabilities |
+| **Leverage** | `debt_to_equity` | Total Debt / Equity |
+| | `interest_coverage` | EBIT / Interest Expense |
+| **Profitability** | `gross_margin` | Gross Profit / Revenue |
+| | `operating_margin` | Operating Income / Revenue |
+| | `net_margin` | Net Income / Revenue |
+| | `roe` | Net Income / Shareholders Equity |
+| | `roa` | Net Income / Total Assets |
+
+### Phase 11: Metadata Table Model (Days 48-52)
+
+**Goal:** Create operational model for tracking table metadata, pipeline runs, and data freshness
+
+This model provides visibility into the data warehouse itself - tracking when tables were last updated, row counts, schema changes, and pipeline execution history.
+
+| # | Task | Files Affected |
+|---|------|----------------|
+| 11.1 | Create metadata model config | NEW: `configs/models/metadata/*.yaml` |
+| 11.2 | Define dim_table (catalog of all tables) | schema.yaml |
+| 11.3 | Define dim_pipeline (pipeline definitions) | schema.yaml |
+| 11.4 | Define fact_table_stats (row counts, sizes) | schema.yaml |
+| 11.5 | Define fact_pipeline_run (execution history) | schema.yaml |
+| 11.6 | Create MetadataModel class | NEW: `models/implemented/metadata/model.py` |
+| 11.7 | Create metadata collection hooks | `orchestration/hooks/metadata_collector.py` |
+| 11.8 | Add auto-update on model builds | Integrate with orchestrate.py |
+| 11.9 | Create metadata dashboard notebook | `configs/notebooks/metadata/*.md` |
+
+**Metadata Model Schema:**
+
+```yaml
+# configs/models/metadata/schema.yaml
+
+dimensions:
+  dim_table:
+    description: "Catalog of all Bronze/Silver tables"
+    primary_key: [table_id]
+    columns:
+      table_id: string  # 'bronze.alpha_vantage.securities_prices_daily'
+      layer: string  # 'bronze', 'silver'
+      provider: string  # 'alpha_vantage', 'chicago', null for silver
+      model_name: string  # null for bronze, 'stocks' for silver
+      table_name: string  # 'securities_prices_daily'
+      table_type: string  # 'dimension', 'fact', 'raw'
+      storage_format: string  # 'delta', 'parquet'
+      storage_path: string
+      partition_columns: string  # JSON array
+      primary_key_columns: string  # JSON array
+      created_date: timestamp
+      schema_version: int
+
+  dim_pipeline:
+    description: "Pipeline/job definitions"
+    primary_key: [pipeline_id]
+    columns:
+      pipeline_id: string
+      pipeline_name: string  # 'alpha_vantage_ingest', 'stocks_build'
+      pipeline_type: string  # 'ingest', 'build', 'transform'
+      provider: string  # For ingest pipelines
+      model_name: string  # For build pipelines
+      schedule: string  # Cron expression or 'manual'
+      timeout_minutes: int
+      retry_count: int
+      created_date: timestamp
+
+  dim_column:
+    description: "Column-level metadata"
+    primary_key: [column_id]
+    columns:
+      column_id: string
+      table_id: string  # FK to dim_table
+      column_name: string
+      data_type: string
+      is_nullable: boolean
+      is_partition: boolean
+      is_primary_key: boolean
+      description: string
+      source_column: string  # Original column before transform
+
+facts:
+  fact_table_stats:
+    description: "Point-in-time table statistics"
+    columns:
+      stats_id: string
+      table_id: string  # FK to dim_table
+      snapshot_timestamp: timestamp
+      row_count: long
+      file_count: int
+      total_size_bytes: long
+      avg_row_size_bytes: double
+      null_count_by_column: string  # JSON object
+      distinct_count_by_column: string  # JSON object
+      min_partition_date: date
+      max_partition_date: date
+
+  fact_pipeline_run:
+    description: "Pipeline execution history"
+    columns:
+      run_id: string
+      pipeline_id: string  # FK to dim_pipeline
+      start_timestamp: timestamp
+      end_timestamp: timestamp
+      status: string  # 'running', 'success', 'failed', 'cancelled'
+      records_processed: long
+      records_written: long
+      records_failed: long
+      duration_seconds: double
+      error_message: string  # null on success
+      error_type: string  # Exception class name
+      triggered_by: string  # 'schedule', 'manual', 'dependency'
+      parent_run_id: string  # For dependent runs
+      checkpoint_data: string  # JSON for resume
+
+  fact_schema_change:
+    description: "Track schema evolution"
+    columns:
+      change_id: string
+      table_id: string
+      change_timestamp: timestamp
+      change_type: string  # 'column_added', 'column_removed', 'type_changed'
+      column_name: string
+      old_value: string  # Old type or null
+      new_value: string  # New type
+      schema_version_before: int
+      schema_version_after: int
+
+  fact_data_quality:
+    description: "Data quality metrics per table"
+    columns:
+      quality_id: string
+      table_id: string
+      run_id: string  # FK to fact_pipeline_run
+      check_timestamp: timestamp
+      check_name: string  # 'null_check', 'unique_check', 'range_check'
+      column_name: string
+      passed: boolean
+      expected_value: string
+      actual_value: string
+      records_checked: long
+      records_failed: long
+```
+
+**Metadata Measures:**
+
+| Category | Measure | Description |
+|----------|---------|-------------|
+| **Freshness** | `hours_since_update` | Time since last successful run |
+| | `stale_tables` | Tables not updated in >24h |
+| | `data_lag_hours` | Max date in table vs current date |
+| **Volume** | `daily_row_growth` | New rows per day |
+| | `storage_growth_rate` | GB growth per week |
+| | `largest_tables` | Top N by size |
+| **Pipeline Health** | `success_rate_7d` | % successful runs in 7 days |
+| | `avg_duration` | Average pipeline duration |
+| | `failure_trend` | Increasing/decreasing failures |
+| **Data Quality** | `quality_score` | % of quality checks passing |
+| | `null_rate` | % null values by column |
+| | `duplicate_rate` | % duplicate rows |
+
+### Phase 12: Logger Model - Run Analytics (Days 53-58)
+
+**Goal:** Create operational model for analyzing logs, errors, and warnings across all pipeline runs
+
+This model aggregates log data to provide easy filtering, categorization, and statistics on pipeline health. Enables quick identification of recurring issues and trend analysis.
+
+| # | Task | Files Affected |
+|---|------|----------------|
+| 12.1 | Create logger model config | NEW: `configs/models/logger/*.yaml` |
+| 12.2 | Define dim_log_source (where logs come from) | schema.yaml |
+| 12.3 | Define dim_error_category (error classification) | schema.yaml |
+| 12.4 | Define fact_log_entry (individual log records) | schema.yaml |
+| 12.5 | Define fact_error_summary (aggregated errors) | schema.yaml |
+| 12.6 | Create LoggerModel class | NEW: `models/implemented/logger/model.py` |
+| 12.7 | Create log ingestion from de_funk.log | `logger/log_parser.py` |
+| 12.8 | Create error categorization rules | `configs/models/logger/error_rules.yaml` |
+| 12.9 | Create logger dashboard notebook | `configs/notebooks/logger/*.md` |
+| 12.10 | Add log rotation and archival | `scripts/maintenance/archive_logs.py` |
+
+**Logger Model Schema:**
+
+```yaml
+# configs/models/logger/schema.yaml
+
+dimensions:
+  dim_log_source:
+    description: "Source of log entries"
+    primary_key: [source_id]
+    columns:
+      source_id: string
+      source_type: string  # 'pipeline', 'model', 'api', 'system'
+      source_name: string  # 'alpha_vantage_ingestor', 'StocksModel'
+      module_path: string  # 'datapipelines.providers.alpha_vantage'
+      component: string  # 'ingestor', 'facet', 'model', 'measure'
+
+  dim_error_category:
+    description: "Error classification hierarchy"
+    primary_key: [category_id]
+    columns:
+      category_id: string
+      category_name: string  # 'API Error', 'Data Validation', 'Configuration'
+      parent_category_id: string  # For hierarchy
+      severity: string  # 'critical', 'error', 'warning', 'info'
+      is_transient: boolean  # True for rate limits, network errors
+      suggested_action: string  # 'Retry', 'Check config', 'Contact support'
+      documentation_url: string
+
+  dim_log_level:
+    description: "Log level dimension"
+    primary_key: [level_id]
+    columns:
+      level_id: int  # 10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR, 50=CRITICAL
+      level_name: string
+      is_problem: boolean  # true for WARNING and above
+
+facts:
+  fact_log_entry:
+    description: "Individual log records"
+    columns:
+      log_id: string
+      timestamp: timestamp
+      level_id: int  # FK to dim_log_level
+      source_id: string  # FK to dim_log_source
+      run_id: string  # FK to metadata.fact_pipeline_run (if applicable)
+      message: string
+      message_template: string  # Message with placeholders (for grouping)
+      # Structured fields (extracted from log)
+      ticker: string
+      model_name: string
+      table_name: string
+      duration_ms: double
+      record_count: long
+      # Error details
+      error_category_id: string  # FK to dim_error_category
+      exception_type: string  # 'ValueError', 'ConnectionError'
+      exception_message: string
+      stack_trace: string
+      # Context
+      file_name: string
+      line_number: int
+      function_name: string
+
+  fact_error_summary:
+    description: "Aggregated error statistics by time period"
+    columns:
+      summary_id: string
+      period_date: date
+      period_hour: int  # 0-23, null for daily summaries
+      source_id: string
+      error_category_id: string
+      level_id: int
+      occurrence_count: long
+      first_occurrence: timestamp
+      last_occurrence: timestamp
+      affected_runs: long  # Distinct run_ids
+      affected_tickers: long  # Distinct tickers
+      sample_message: string  # One example message
+      is_resolved: boolean  # Manual flag
+
+  fact_log_stats:
+    description: "Log volume statistics"
+    columns:
+      stats_id: string
+      period_date: date
+      source_id: string
+      total_entries: long
+      debug_count: long
+      info_count: long
+      warning_count: long
+      error_count: long
+      critical_count: long
+      unique_messages: long  # Distinct message_templates
+      avg_entries_per_hour: double
+```
+
+**Error Categorization Rules:**
+
+```yaml
+# configs/models/logger/error_rules.yaml
+# Rules for auto-categorizing errors
+
+categories:
+  api_rate_limit:
+    name: "API Rate Limit"
+    severity: warning
+    is_transient: true
+    patterns:
+      - "rate limit"
+      - "429"
+      - "too many requests"
+    suggested_action: "Wait and retry automatically"
+
+  api_authentication:
+    name: "API Authentication"
+    severity: error
+    is_transient: false
+    patterns:
+      - "401"
+      - "unauthorized"
+      - "invalid api key"
+      - "authentication failed"
+    suggested_action: "Check API key in .env file"
+
+  api_not_found:
+    name: "API Resource Not Found"
+    severity: warning
+    is_transient: false
+    patterns:
+      - "404"
+      - "not found"
+      - "no data"
+      - "symbol not found"
+    suggested_action: "Verify ticker/symbol exists"
+
+  connection_error:
+    name: "Network/Connection Error"
+    severity: error
+    is_transient: true
+    patterns:
+      - "connection refused"
+      - "timeout"
+      - "network unreachable"
+      - "ConnectionError"
+    suggested_action: "Check network connectivity, retry"
+
+  data_validation:
+    name: "Data Validation Error"
+    severity: error
+    is_transient: false
+    patterns:
+      - "validation failed"
+      - "schema mismatch"
+      - "invalid data type"
+      - "null constraint"
+    suggested_action: "Check source data quality"
+
+  configuration:
+    name: "Configuration Error"
+    severity: critical
+    is_transient: false
+    patterns:
+      - "config not found"
+      - "missing required"
+      - "invalid configuration"
+      - "ConfigurationError"
+    suggested_action: "Review configuration files"
+
+  out_of_memory:
+    name: "Memory Error"
+    severity: critical
+    is_transient: false
+    patterns:
+      - "out of memory"
+      - "MemoryError"
+      - "heap space"
+    suggested_action: "Increase memory allocation or reduce batch size"
+```
+
+**Logger Measures:**
+
+| Category | Measure | Description |
+|----------|---------|-------------|
+| **Volume** | `logs_per_hour` | Log entry rate |
+| | `error_rate` | Errors / Total logs |
+| | `warning_rate` | Warnings / Total logs |
+| **Errors** | `errors_today` | Error count today |
+| | `errors_7d_trend` | % change vs prior 7 days |
+| | `top_errors` | Most frequent error categories |
+| | `new_errors` | Errors first seen in last 24h |
+| **Health** | `error_free_hours` | Hours since last error |
+| | `mtbf` | Mean time between failures |
+| | `mttr` | Mean time to resolution |
+| **By Source** | `errors_by_pipeline` | Errors grouped by pipeline |
+| | `errors_by_model` | Errors grouped by model |
+| | `noisiest_source` | Source with most warnings |
+
+**Logger Dashboard Features:**
+
+```markdown
+# Logger Dashboard Notebook Features
+
+## Filters
+- Date range (last hour, day, week, custom)
+- Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+- Source (pipeline, model, component)
+- Error category
+- Run ID
+- Ticker/Symbol
+
+## Views
+1. **Overview**
+   - Error/warning count by hour (line chart)
+   - Error rate trend
+   - Current health status
+
+2. **Error Deep Dive**
+   - Top 10 errors by frequency
+   - Error timeline
+   - Stack trace viewer
+   - Related logs (same run_id)
+
+3. **Pipeline Health**
+   - Success/failure by pipeline
+   - Duration trends
+   - Failure patterns
+
+4. **Alerting**
+   - New error types (not seen before)
+   - Spike detection (>2x normal rate)
+   - Critical errors
+```
+
 ---
 
 ## Part 12: Chicago Economic Data Sources
@@ -1896,6 +2419,9 @@ These components were created and are **NOT duplicates** of existing functionali
 6. **Phase 7**: Chart of Accounts base class (financial model inheritance with incurred period)
 7. **Phase 8**: City Services & Departmental Performance (Fire, Police, Admin by geography)
 8. **Phase 9**: Missing securities models (ETF, Options, Futures)
+9. **Phase 10**: Company Chart of Accounts from SEC filings (cash flows, balance sheet changes)
+10. **Phase 11**: Metadata Table Model (operational tracking, data freshness)
+11. **Phase 12**: Logger Model (error/warning analytics, filtering, statistics)
 
 ### New Providers Needed
 
@@ -1915,6 +2441,8 @@ These components were created and are **NOT duplicates** of existing functionali
 | `geography` | (base) | US geography hierarchy, GIS data |
 | `city_services` | `_base.financial` | Department performance by geography |
 | `economic_series` | (base) | Federal/state time series data |
+| `metadata` | (operational) | Table stats, pipeline runs, schema tracking |
+| `logger` | (operational) | Log analytics, error categorization |
 
 ### Total Estimated Effort
 
@@ -1929,7 +2457,28 @@ These components were created and are **NOT duplicates** of existing functionali
 | Phase 7: Chart of Accounts (+ Incurred Period) | 6 | High |
 | Phase 8: City Services & Departments | 7 | High |
 | Phase 9: Securities Models | 7 | Medium |
-| **Total** | **40 days** | |
+| Phase 10: Company Chart of Accounts | 7 | High |
+| Phase 11: Metadata Table Model | 5 | High |
+| Phase 12: Logger Model | 6 | High |
+| **Total** | **58 days** | |
+
+---
+
+## Commit Strategy
+
+All commits during implementation will follow this naming convention:
+
+```
+Phase N: [Phase Name] - [Brief Description]
+
+Example commits:
+- "Phase 1: Cleanup - Delete deprecated v1.x YAML files"
+- "Phase 1: Cleanup - Remove orphaned services.py"
+- "Phase 2: Backend Abstraction - Create QueryHelper class"
+- "Phase 3: Config Standardization - Migrate core.yaml to modular structure"
+```
+
+Each phase will be completed before moving to the next, with a thorough review at the end of each phase.
 
 ---
 
