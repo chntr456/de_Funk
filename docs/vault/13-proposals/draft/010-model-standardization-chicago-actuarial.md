@@ -3624,7 +3624,7 @@ How models are discovered and instantiated:
 
 This log tracks all completed implementation steps as they are finished.
 
-### Phase 1: Cleanup ⏳ PARTIAL
+### Phase 1: Cleanup ✅ COMPLETE
 
 #### 1A: File Cleanup ✅ COMPLETE
 
@@ -3641,17 +3641,53 @@ This log tracks all completed implementation steps as they are finished.
 - Files deleted: 2 (company.yaml, etf.yaml)
 - Directories renamed: 1 (etfs → etf)
 
-#### 1B: Tool Utilization Audit 🔲 PENDING
+#### 1B: Tool Utilization Audit ✅ COMPLETE
 
 | Task | Description | Status |
 |------|-------------|--------|
-| 1.5 | Audit FilterEngine usage in models | Not started |
-| 1.6 | Audit orchestrate.py usage | Not started |
-| 1.7 | Audit DependencyGraph usage | Not started |
-| 1.8 | Audit ProviderRegistry usage | Not started |
-| 1.9 | Deprecate fragmented scripts | Not started |
+| 1.5 | Audit FilterEngine usage in models | ✅ Complete |
+| 1.6 | Audit orchestrate.py usage | ✅ Complete |
+| 1.7 | Audit DependencyGraph usage | ✅ Complete |
+| 1.8 | Audit ProviderRegistry usage | ✅ Complete |
+| 1.9 | Deprecate fragmented scripts | ✅ Complete |
 
-**Phase 1 Status:** File cleanup complete, tool utilization audit pending
+**Audit Results:**
+
+**1.5 FilterEngine Usage:**
+- FilterEngine exists at `core/session/filters.py` (356 lines)
+- **Used by**: `models/api/session.py` (4 uses), `models/api/auto_join.py` (6 uses)
+- **NOT used by**: Domain models, base layer
+- **Backend if-statements found**: 41 total instances
+  - `models/implemented/stocks/model.py`: 9 instances
+  - `models/implemented/company/model.py`: 6 instances
+  - `models/implemented/etf/model.py`: 5 instances
+  - `models/implemented/forecast/company_forecast_model.py`: 1 instance
+  - `models/base/` layer: 11 instances
+  - `models/api/` layer: 9 instances (some acceptable in session abstraction)
+- **Phase 2 Target**: Remove 21 instances from domain models, push 11 from base layer to session
+
+**1.6 orchestrate.py Usage:**
+- Exists at `scripts/orchestrate.py` (760 lines)
+- Uses DependencyGraph and ProviderRegistry internally
+- **NOT called by**: Any other scripts (fragmented scripts bypass it)
+
+**1.7 DependencyGraph Usage:**
+- Exists at `orchestration/dependency_graph.py` (431 lines)
+- **Used by**: `scripts/orchestrate.py` only
+- **NOT used by**: Fragmented build scripts
+
+**1.8 ProviderRegistry Usage:**
+- Exists at `datapipelines/providers/registry.py`
+- Provider.yaml files exist for: alpha_vantage, bls, chicago
+- **Used by**: `scripts/orchestrate.py`, example scripts
+- **NOT used by**: Fragmented pipeline scripts
+
+**1.9 Deprecation Warnings Added:**
+- `scripts/build_company_model.py` → use `orchestrate --models company --build-only`
+- `scripts/build_silver_duckdb.py` → use `orchestrate --models <model> --build-only --backend duckdb`
+- `scripts/run_full_pipeline.py` → use `orchestrate --all`
+
+**Phase 1 Status:** ✅ COMPLETE - Ready for Phase 2
 
 ---
 

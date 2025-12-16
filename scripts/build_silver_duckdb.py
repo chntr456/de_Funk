@@ -1,12 +1,30 @@
 """
 Build Silver Layer using DuckDB (no Spark required).
 
+DEPRECATED: This script is deprecated and will be removed in a future version.
+Use the unified orchestrator instead:
+
+    python -m scripts.orchestrate --models stocks --build-only --backend duckdb
+
+The unified orchestrator provides:
+- Automatic dependency resolution (builds required models first)
+- Checkpoint/resume for fault tolerance
+- Provider registry integration
+- Queue-based execution (coming soon)
+
 This script builds the Silver layer from Bronze data using DuckDB,
 which is much faster to start up and doesn't require PySpark.
 
-Usage:
+Usage (deprecated):
     python -m scripts.build_silver_duckdb --model stocks
 """
+import warnings
+warnings.warn(
+    "build_silver_duckdb.py is deprecated. "
+    "Use: python -m scripts.orchestrate --models <model> --build-only --backend duckdb",
+    DeprecationWarning,
+    stacklevel=2
+)
 from __future__ import annotations
 
 import sys

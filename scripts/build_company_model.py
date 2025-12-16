@@ -2,9 +2,27 @@
 """
 Build Company Model - Build silver layer from bronze.
 
-Usage:
+DEPRECATED: This script is deprecated and will be removed in a future version.
+Use the unified orchestrator instead:
+
+    python -m scripts.orchestrate --models company --build-only
+
+The unified orchestrator provides:
+- Automatic dependency resolution (builds required models first)
+- Checkpoint/resume for fault tolerance
+- Consistent backend handling
+- Queue-based execution (coming soon)
+
+Usage (deprecated):
     python -m scripts.build_company_model
 """
+import warnings
+warnings.warn(
+    "build_company_model.py is deprecated. "
+    "Use: python -m scripts.orchestrate --models company --build-only",
+    DeprecationWarning,
+    stacklevel=2
+)
 from __future__ import annotations
 
 import sys

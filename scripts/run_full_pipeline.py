@@ -1,6 +1,20 @@
 """
 Full Pipeline Orchestrator
 
+DEPRECATED: This script is deprecated and will be removed in a future version.
+Use the unified orchestrator instead:
+
+    python -m scripts.orchestrate --all
+    python -m scripts.orchestrate --providers alpha_vantage --models stocks,company
+    python -m scripts.orchestrate --providers alpha_vantage,bls,chicago --all
+
+The unified orchestrator provides:
+- Multi-provider support (Alpha Vantage, BLS, Chicago, etc.)
+- Automatic dependency resolution via DependencyGraph
+- Provider registry integration via ProviderRegistry
+- Checkpoint/resume for fault tolerance
+- Queue-based execution (coming soon)
+
 This script orchestrates the complete end-to-end pipeline:
 1. Data Ingestion: Alpha Vantage API → Bronze layer (scripts/ingest/)
 2. Silver Build: Bronze → Silver dimensional models (scripts/build/)
@@ -12,10 +26,10 @@ Separation of Concerns:
 - scripts/forecast/    → Predictive model building
 - scripts/run_full_pipeline.py → Orchestrates all stages (this script)
 
-Usage:
+Usage (deprecated):
     python -m scripts.run_full_pipeline [options]
 
-Examples:
+Examples (deprecated):
     # Run full pipeline for top 2000 stocks by market cap
     python -m scripts.run_full_pipeline --days 30 --max-tickers 2000
 
@@ -34,6 +48,13 @@ Examples:
     # Run with specific models
     python -m scripts.run_full_pipeline --days 90 --models arima_30d,prophet_30d
 """
+import warnings
+warnings.warn(
+    "run_full_pipeline.py is deprecated. "
+    "Use: python -m scripts.orchestrate --all",
+    DeprecationWarning,
+    stacklevel=2
+)
 
 from __future__ import annotations
 
