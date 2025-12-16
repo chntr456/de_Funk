@@ -1304,6 +1304,41 @@ def get_prices_for_tickers(self, tickers: list, start_date=None, end_date=None):
 | **New backends easier** | Add Polars/DataFusion by extending session only |
 | **Consistent API** | Same method calls regardless of backend |
 
+---
+
+#### Session Architecture Clarification
+
+**UniversalSession supports BOTH backends** - models don't know which is running:
+
+```python
+# For batch builds (orchestration uses Spark)
+session = UniversalSession(backend='spark')
+model = StocksModel(session)
+model.build()  # Heavy ETL work via Spark
+
+# For interactive queries (UI/notebooks use DuckDB)
+session = UniversalSession(backend='duckdb')
+model = StocksModel(session)
+df = model.get_prices(...)  # Fast analytics via DuckDB
+```
+
+**Key distinction:**
+- `backend='spark'` → SparkSession for heavy ETL, Delta writes
+- `backend='duckdb'` → DuckDB for fast reads, analytics, UI queries
+
+**Same model code works either way** - the abstraction handles differences.
+
+**Session lifecycle:**
+
+| Backend | Weight | Lifecycle | Notes |
+|---------|--------|-----------|-------|
+| Spark | Heavy | Per-worker (reused) | One SparkSession per JVM, expensive to create |
+| DuckDB | Light | Per-task or per-worker | Cheap to create, can have many |
+
+This means:
+- **Orchestration workers** create ONE session at startup, reuse for all tasks
+- **Interactive queries** can create sessions as needed (DuckDB is cheap)
+
 ### Phase 3: Configuration Standardization (Days 5-7)
 
 **Goal:** All configs use v2.0 modular YAML pattern + complete exhibit presets
@@ -1731,27 +1766,57 @@ cluster:
     # region: "us-east-1"
 
   # Worker configuration
+  # Each worker creates ONE session at startup, reuses for all tasks
   workers:
-    # Local worker (always runs on main node)
-    - id: "worker-local"
-      host: "localhost"
-      max_concurrent_tasks: 2
-      task_types: ["ingest", "build", "validate"]
+    # === OPTION A: Task-type based workers (simpler) ===
 
-    # Remote workers (connect via SSH)
+    # Build worker - Spark session for heavy ETL
+    - id: "worker-build"
+      host: "localhost"
+      backend: "spark"  # Creates SparkSession at startup
+      max_concurrent_tasks: 1  # Spark tasks are heavy
+      task_types: ["build"]
+      spark_config:
+        driver_memory: "4g"
+        executor_memory: "4g"
+
+    # Ingest worker - Spark for Delta writes
+    - id: "worker-ingest"
+      host: "localhost"
+      backend: "spark"
+      max_concurrent_tasks: 2
+      task_types: ["ingest"]
+
+    # Validation worker - DuckDB for fast reads
+    - id: "worker-validate"
+      host: "localhost"
+      backend: "duckdb"  # Lightweight, fast reads
+      max_concurrent_tasks: 4  # DuckDB handles concurrency well
+      task_types: ["validate", "query"]
+
+    # === OPTION B: Provider-specific workers (if needed) ===
+    # Use this if you want to isolate slow/rate-limited providers
+
+    # - id: "worker-alpha-vantage"
+    #   host: "192.168.1.10"
+    #   backend: "spark"
+    #   max_concurrent_tasks: 1
+    #   task_types: ["ingest:alpha_vantage"]  # Only Alpha Vantage
+    #
+    # - id: "worker-fast-apis"
+    #   host: "192.168.1.11"
+    #   backend: "spark"
+    #   max_concurrent_tasks: 2
+    #   task_types: ["ingest:bls", "ingest:chicago"]  # Fast APIs together
+
+    # === Remote workers (Raspberry Pi, etc.) ===
     - id: "worker-pi-1"
       host: "192.168.1.10"
       user: "pi"
       ssh_key: "~/.ssh/id_rsa"
+      backend: "duckdb"  # Pi can't run Spark well
       max_concurrent_tasks: 1
-      task_types: ["ingest"]  # Lighter work for Pi
-
-    - id: "worker-pi-2"
-      host: "192.168.1.11"
-      user: "pi"
-      ssh_key: "~/.ssh/id_rsa"
-      max_concurrent_tasks: 1
-      task_types: ["ingest"]
+      task_types: ["validate"]  # Light work only
 
   # Task defaults
   tasks:
@@ -1770,6 +1835,55 @@ cluster:
     chicago:
       requests_per_minute: 1000  # Very generous
 ```
+
+---
+
+#### Worker-Session Relationship
+
+**Key principle:** Each worker creates ONE session at startup, reuses it for all tasks.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    WORKER-SESSION ARCHITECTURE                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  worker-build (Spark)              worker-validate (DuckDB)          │
+│  ┌─────────────────────┐           ┌─────────────────────┐          │
+│  │ SparkSession        │           │ DuckDB Connection   │          │
+│  │ (created at start)  │           │ (created at start)  │          │
+│  ├─────────────────────┤           ├─────────────────────┤          │
+│  │ Task: build:stocks  │           │ Task: validate:ref  │          │
+│  │ Task: build:company │           │ Task: validate:prices│         │
+│  │ Task: build:core    │           │ Task: query:...     │          │
+│  │ (all reuse session) │           │ (all reuse session) │          │
+│  └─────────────────────┘           └─────────────────────┘          │
+│                                                                      │
+│  worker-ingest (Spark)                                               │
+│  ┌─────────────────────┐                                            │
+│  │ SparkSession        │  Why Spark for ingest?                     │
+│  │ (created at start)  │  - Delta Lake writes require Spark         │
+│  ├─────────────────────┤  - Schema evolution handled by Spark       │
+│  │ Task: ingest:av     │  - Partitioning managed by Spark           │
+│  │ Task: ingest:bls    │                                            │
+│  │ Task: ingest:chicago│                                            │
+│  └─────────────────────┘                                            │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Why not one session per task?**
+- SparkSession is expensive to create (JVM startup, resource allocation)
+- Creating per-task would add 10-30 seconds overhead per task
+- DuckDB is cheap, but still more efficient to reuse
+
+**When to use provider-specific workers:**
+
+| Scenario | Recommendation |
+|----------|----------------|
+| All APIs similar speed | Generic `ingest` worker (simpler) |
+| One slow API (Alpha Vantage 5/min) | Dedicated worker isolates blocking |
+| Different IPs help with rate limits | Separate workers on different hosts |
+| Resource constraints | Dedicate resources to heavy providers |
 
 ---
 
