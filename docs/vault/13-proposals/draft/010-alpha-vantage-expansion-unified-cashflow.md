@@ -954,10 +954,10 @@ facts:
 
 ### ETF Model Enhancement
 
-Update `configs/models/etfs/` to include profile data:
+Update `configs/models/etf/` to include profile data:
 
 ```yaml
-# configs/models/etfs/schema.yaml (additions)
+# configs/models/etf/schema.yaml (additions)
 dimensions:
   dim_etf:
     description: "ETF master with profile data"

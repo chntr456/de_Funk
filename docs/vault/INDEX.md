@@ -50,7 +50,7 @@
 - [Company](04-implemented-models/company/) - Corporate entities
 - [Stocks](04-implemented-models/stocks/) - Stock securities
 - [Options](04-implemented-models/options/) - Options contracts [PARTIAL]
-- [ETFs](04-implemented-models/etfs/) - Exchange-traded funds [SKELETON]
+- [ETF](04-implemented-models/etf/) - Exchange-traded funds [SKELETON]
 - [Futures](04-implemented-models/futures/) - Futures contracts [SKELETON]
 - [Macro](04-implemented-models/macro/) - Economic indicators
 - [City Finance](04-implemented-models/city-finance/) - Municipal data
