@@ -292,84 +292,159 @@ def _calculate_hierarchical_layout(
     show_tables: bool
 ) -> Dict[str, Tuple[float, float]]:
     """
-    Calculate hierarchical layout positions (Sugiyama-style).
+    Calculate force-directed spring layout with hierarchical hints.
 
-    - Base templates at top (y=3)
-    - Tier 0 (core) below (y=2)
-    - Tier 1 (company) below (y=1)
-    - Tier 2+ (stocks, options, etc.) at bottom (y=0, -1)
+    Uses spring forces to pull connected nodes together while maintaining
+    reasonable spacing. Base templates are positioned near their inheriting
+    models rather than at a fixed top position.
     """
     positions = {}
 
-    # Group models by depth
+    # Collect node types
+    model_nodes = [n for n in nodes if n['type'] == 'model']
+    base_templates = [n for n in nodes if n['type'] == 'base_template']
+    table_nodes = [n for n in nodes if n['type'] in ('dimension', 'fact')]
+
+    # Build adjacency for spring forces (only model-level edges)
+    adjacency = {}  # node_id -> list of connected node_ids
+    for node in model_nodes + base_templates:
+        adjacency[node['id']] = []
+
+    # Add dependency connections
+    for node in model_nodes:
+        node_id = node['id']
+        for dep in node.get('depends_on', []):
+            if dep in adjacency:
+                adjacency[node_id].append(dep)
+                adjacency[dep].append(node_id)
+        # Add inheritance connections
+        if node.get('inherits_from'):
+            base_name = node['inherits_from'].replace('_base.', '')
+            base_id = f"_base_{base_name}"
+            if base_id in adjacency:
+                adjacency[node_id].append(base_id)
+                adjacency[base_id].append(node_id)
+
+    # Initial positions: depth-based Y, spread X
     depth_groups = {}
-    base_templates = []
+    for node in model_nodes:
+        depth = node.get('depth', 0)
+        if depth not in depth_groups:
+            depth_groups[depth] = []
+        depth_groups[depth].append(node['id'])
 
-    for node in nodes:
-        if node['type'] == 'base_template':
-            base_templates.append(node['id'])
-        elif node['type'] == 'model':
-            depth = node.get('depth', 0)
-            if depth not in depth_groups:
-                depth_groups[depth] = []
-            depth_groups[depth].append(node['id'])
-
-    # Layout base templates at the top
-    if base_templates:
-        y = 2.5
-        width = len(base_templates)
-        for i, template_id in enumerate(base_templates):
-            x = (i - (width - 1) / 2) * 1.5
-            positions[template_id] = (x, y)
-
-    # Layout models by depth tier
-    max_depth = max(depth_groups.keys()) if depth_groups else 0
-
+    # Place models by depth tier initially
     for depth, model_list in sorted(depth_groups.items()):
-        # Y position: higher depth = lower on screen
-        y = 1.5 - (depth * 1.2)
-
-        # X position: spread horizontally
+        y = 1.5 - (depth * 1.0)
         width = len(model_list)
         for i, model_id in enumerate(model_list):
             x = (i - (width - 1) / 2) * 2.0
-            positions[model_id] = (x, y)
+            positions[model_id] = [x, y]  # Use lists for mutation
+
+    # Place base templates near their inheriting models (not at top)
+    for base_node in base_templates:
+        base_id = base_node['id']
+        # Find models that inherit from this base
+        inheritors = [n['id'] for n in model_nodes
+                      if n.get('inherits_from', '').replace('_base.', '') == base_node['label']]
+        if inheritors:
+            # Position to the right of the centroid of inheritors
+            avg_x = sum(positions[m][0] for m in inheritors if m in positions) / len(inheritors)
+            avg_y = sum(positions[m][1] for m in inheritors if m in positions) / len(inheritors)
+            positions[base_id] = [avg_x + 1.8, avg_y]
+        else:
+            positions[base_id] = [2.5, 0.5]
+
+    # Spring layout iterations
+    iterations = 50
+    k_attract = 0.08  # Attraction strength
+    k_repel = 0.5     # Repulsion strength
+    damping = 0.9     # Velocity damping
+    min_dist = 0.8    # Minimum distance between nodes
+
+    # Initialize velocities
+    velocities = {node_id: [0.0, 0.0] for node_id in positions}
+
+    for _ in range(iterations):
+        forces = {node_id: [0.0, 0.0] for node_id in positions}
+
+        # Attractive forces (spring edges)
+        for node_id, neighbors in adjacency.items():
+            if node_id not in positions:
+                continue
+            x1, y1 = positions[node_id]
+            for neighbor in neighbors:
+                if neighbor not in positions:
+                    continue
+                x2, y2 = positions[neighbor]
+                dx, dy = x2 - x1, y2 - y1
+                dist = math.sqrt(dx * dx + dy * dy) + 0.01
+                # Attractive force proportional to distance
+                force = k_attract * dist
+                forces[node_id][0] += force * dx / dist
+                forces[node_id][1] += force * dy / dist
+
+        # Repulsive forces (all pairs)
+        node_ids = list(positions.keys())
+        for i, id1 in enumerate(node_ids):
+            x1, y1 = positions[id1]
+            for id2 in node_ids[i + 1:]:
+                x2, y2 = positions[id2]
+                dx, dy = x2 - x1, y2 - y1
+                dist = math.sqrt(dx * dx + dy * dy) + 0.01
+                if dist < min_dist * 3:
+                    # Repulsive force inversely proportional to distance squared
+                    force = k_repel / (dist * dist)
+                    fx = force * dx / dist
+                    fy = force * dy / dist
+                    forces[id1][0] -= fx
+                    forces[id1][1] -= fy
+                    forces[id2][0] += fx
+                    forces[id2][1] += fy
+
+        # Apply forces with damping
+        for node_id in positions:
+            velocities[node_id][0] = (velocities[node_id][0] + forces[node_id][0]) * damping
+            velocities[node_id][1] = (velocities[node_id][1] + forces[node_id][1]) * damping
+            positions[node_id][0] += velocities[node_id][0]
+            positions[node_id][1] += velocities[node_id][1]
+
+    # Convert to tuples
+    positions = {k: (v[0], v[1]) for k, v in positions.items()}
 
     # Layout table nodes around their parent models
     if show_tables:
-        for node in nodes:
-            if node['type'] in ('dimension', 'fact'):
-                parent = node.get('parent')
-                if parent and parent in positions:
-                    parent_x, parent_y = positions[parent]
+        for node in table_nodes:
+            parent = node.get('parent')
+            if parent and parent in positions:
+                parent_x, parent_y = positions[parent]
 
-                    # Get all siblings
-                    siblings = [n for n in nodes
-                               if n.get('parent') == parent and n['type'] in ('dimension', 'fact')]
-                    num_siblings = len(siblings)
+                # Get all siblings
+                siblings = [n for n in table_nodes if n.get('parent') == parent]
+                num_siblings = len(siblings)
 
-                    if num_siblings == 0:
-                        continue
+                if num_siblings == 0:
+                    continue
 
-                    # Find this node's index
-                    try:
-                        idx = next(i for i, n in enumerate(siblings) if n['id'] == node['id'])
-                    except StopIteration:
-                        continue
+                # Find this node's index
+                try:
+                    idx = next(i for i, n in enumerate(siblings) if n['id'] == node['id'])
+                except StopIteration:
+                    continue
 
-                    # Position tables in a small arc below the model
-                    table_radius = 0.4
-                    spread = min(math.pi * 0.6, math.pi * 0.15 * num_siblings)
-                    base_angle = -math.pi / 2  # Point downward
+                # Position tables in a small arc below the model
+                table_radius = 0.4
+                spread = min(math.pi * 0.6, math.pi * 0.15 * num_siblings)
+                base_angle = -math.pi / 2  # Point downward
 
-                    if num_siblings == 1:
-                        angle = base_angle
-                    else:
-                        angle = base_angle - spread / 2 + (spread * idx / (num_siblings - 1))
+                if num_siblings == 1:
+                    angle = base_angle
+                else:
+                    angle = base_angle - spread / 2 + (spread * idx / (num_siblings - 1))
 
-                    x = parent_x + table_radius * math.cos(angle)
-                    y = parent_y + table_radius * math.sin(angle)
-                    positions[node['id']] = (x, y)
+                x = parent_x + table_radius * math.cos(angle)
+                y = parent_y + table_radius * math.sin(angle)
+                positions[node['id']] = (x, y)
 
     return positions
 
