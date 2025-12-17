@@ -1741,8 +1741,15 @@ This phase creates a clean abstraction layer for data ingestion:
 | 5.8 | Update orchestrate.py to use Orchestrator class | REFACTOR: `scripts/orchestrate.py` (760 lines → thin wrapper) |
 | 5.9 | Inject session at model instantiation | REFACTOR: `models/base/model.py`, `orchestration/orchestrator.py` |
 | 5.10 | Remove `_backend` fallback code from all models | All `models/implemented/*/model.py` (deferred from Phase 2) |
+| 5.11 | Wire model YAML configs into build logic | REFACTOR: CoreModel reads `calendar_config` from YAML |
+| 5.12 | Wire forecast YAML configs into build logic | REFACTOR: ForecastModel reads `ml_models` config from YAML |
 
 **Note on 5.9-5.10**: These tasks complete the backend abstraction started in Phase 2. Once Orchestrator ensures session is always available at model instantiation, we can remove the fallback `_backend` code from all models.
+
+**Note on 5.11-5.12**: Phase 3 created modular YAML configs for core and forecast, but the model build classes still have hardcoded defaults. These tasks ensure:
+- `CoreModel` / `CalendarBuilder` reads `calendar_config` from `core/graph.yaml`
+- `ForecastModel` reads `ml_models` config from `forecast/model.yaml`
+- Build logic lives within each model, not in separate scripts
 
 ---
 
@@ -4090,6 +4097,8 @@ This phase is a catch-all for:
 | Item | Source Phase | Description | Priority |
 |------|-------------|-------------|----------|
 | ETFs model config files | Phase 11 | Validate `etfs/schema.yaml`, `graph.yaml`, `measures.yaml` exist and errors resolved | High |
+| Core YAML wiring | Phase 5 | Validate CoreModel/CalendarBuilder reads config from `core/graph.yaml` | High |
+| Forecast YAML wiring | Phase 5 | Validate ForecastModel reads `ml_models` from `forecast/model.yaml` | High |
 
 **Validation Checklist:**
 
@@ -4102,6 +4111,8 @@ This phase is a catch-all for:
 - [ ] Documentation up to date
 - [ ] ETFs model config errors resolved (no missing schema/graph/measures.yaml)
 - [ ] Exhibit YAML presets wired into renderers (Phase 15 validation)
+- [ ] CoreModel reads calendar_config from YAML (Phase 5.11 validation)
+- [ ] ForecastModel reads ml_models from YAML (Phase 5.12 validation)
 
 ---
 

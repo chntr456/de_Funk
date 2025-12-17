@@ -1940,8 +1940,9 @@ help_text: Filter by trading volume"""
                 height=450
             )
         except Exception as e:
-            logger.warning(f"Could not render model graph: {e}")
-            # Fallback to summary cards
+            logger.warning(f"Could not render model graph: {e}", exc_info=True)
+            # Fallback to summary cards with error message
+            st.warning(f"Graph visualization unavailable: {e}")
             render_model_summary_cards(self.model_registry)
 
         st.divider()
