@@ -50,6 +50,7 @@ from app.ui.components.theme import apply_professional_theme
 from app.ui.components.sidebar import SidebarNavigator, close_tab
 from app.ui.components.filters import render_filters_section
 from app.ui.components.notebook_view import render_notebook_exhibits
+from app.ui.components.model_node_graph import render_model_node_graph, render_model_summary_cards
 
 
 # Configure page
@@ -1918,51 +1919,45 @@ help_text: Filter by trading volume"""
             st.code(traceback.format_exc())
 
     def _render_welcome(self):
-        """Render welcome screen."""
+        """Render welcome screen with model graph visualization."""
         st.markdown("""
-        <div style='text-align: center; padding: 4rem 2rem;'>
-            <h1 style='font-size: 3rem; margin-bottom: 1rem;'>📊 Welcome to Data Notebooks</h1>
-            <p style='font-size: 1.2rem; color: #666; margin-bottom: 2rem;'>
+        <div style='text-align: center; padding: 2rem 2rem 1rem 2rem;'>
+            <h1 style='font-size: 2.5rem; margin-bottom: 0.5rem;'>📊 Data Notebooks</h1>
+            <p style='font-size: 1rem; color: #666; margin-bottom: 1rem;'>
                 Modern, markdown-based analytics platform
             </p>
         </div>
         """, unsafe_allow_html=True)
 
-        # Feature cards
-        col1, col2, col3 = st.columns(3)
+        # Model Graph Visualization
+        st.markdown("### 🗺️ Data Model Architecture")
+        st.caption("Interactive visualization of available data models and their structure. Hover over nodes for details.")
+
+        try:
+            render_model_node_graph(
+                self.model_registry,
+                show_tables=True,
+                height=450
+            )
+        except Exception as e:
+            logger.warning(f"Could not render model graph: {e}")
+            # Fallback to summary cards
+            render_model_summary_cards(self.model_registry)
+
+        st.divider()
+
+        # Compact feature cards and get started
+        col1, col2 = st.columns([2, 1])
 
         with col1:
             st.markdown("""
-            ### 📝 Markdown First
-            Write analysis in natural markdown with embedded visualizations and dynamic filters.
+            **Features:** 📝 Markdown-first analysis · ⚡ DuckDB backend (10-100x faster) · 🎨 Professional themes
             """)
 
         with col2:
             st.markdown("""
-            ### ⚡ Lightning Fast
-            DuckDB backend provides instant queries - 10-100x faster than traditional systems.
+            **Get Started:** Select a notebook from the sidebar →
             """)
-
-        with col3:
-            st.markdown("""
-            ### 🎨 Professional
-            Modern, clean interface with dark/light themes and responsive design.
-            """)
-
-        st.divider()
-
-        st.markdown("""
-        ### 🚀 Get Started
-
-        1. **Select a notebook** from the sidebar
-        2. **Apply filters** to explore your data
-        3. **Edit markdown** to customize your analysis
-        4. **Share insights** with your team
-
-        <div style='text-align: center; margin-top: 2rem;'>
-            <p style='color: #888;'>Select a notebook from the sidebar to begin →</p>
-        </div>
-        """, unsafe_allow_html=True)
 
 
 def main():
