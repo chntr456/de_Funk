@@ -1,0 +1,65 @@
+# Forecast Graph - Model relationships
+# Version: 2.0
+
+nodes:
+  - id: fact_forecasts
+    from: silver.forecasts
+    description: "Pre-computed forecast predictions"
+    tags: [fact, forecast, predictions]
+
+  - id: fact_forecast_metrics
+    from: silver.metrics
+    description: "Pre-computed forecast accuracy metrics"
+    tags: [fact, metrics]
+
+  - id: fact_model_registry
+    from: silver.model_registry
+    description: "Registry of trained models"
+    tags: [dim, registry]
+
+# Cross-model edges define relationships to other models
+edges:
+  # Join forecasts to calendar for date filtering
+  - from: fact_forecasts
+    to: core.dim_calendar
+    on: ["prediction_date=date"]
+    type: left
+    via: prediction_date
+    description: "Join forecasts to calendar on prediction date"
+
+  # Join metrics to calendar
+  - from: fact_forecast_metrics
+    to: core.dim_calendar
+    on: ["metric_date=date"]
+    type: left
+    via: metric_date
+    description: "Join metrics to calendar on metric date"
+
+  # Cross-model: forecast to stocks for ticker dimension
+  - from: fact_forecasts
+    to: stocks.fact_stock_prices
+    on: ["ticker=ticker"]
+    type: left
+    via: ticker
+    description: "Join forecasts to stock prices (shared ticker)"
+
+  - from: fact_forecasts
+    to: stocks.dim_stock
+    on: ["ticker=ticker"]
+    type: left
+    via: ticker
+    description: "Join forecasts to stock dimension"
+
+# Common query paths
+paths:
+  - id: forecasts_with_calendar
+    nodes: [fact_forecasts, core.dim_calendar]
+    description: "Forecasts with calendar attributes for date filtering"
+
+  - id: metrics_with_calendar
+    nodes: [fact_forecast_metrics, core.dim_calendar]
+    description: "Metrics with calendar attributes for date filtering"
+
+  - id: forecasts_with_stocks
+    nodes: [fact_forecasts, stocks.dim_stock]
+    description: "Forecasts joined to stock dimension"

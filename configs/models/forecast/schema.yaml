@@ -1,0 +1,64 @@
+# Forecast Schema - Prediction tables
+# Version: 2.0
+
+# No dimensions in forecast - uses stocks.dim_stock and core.dim_calendar
+dimensions: {}
+
+# Fact tables for predictions and metrics
+facts:
+  fact_forecasts:
+    path: facts/forecast_price
+    description: "Price and volume forecasts with confidence intervals"
+    columns:
+      ticker: string
+      target: string                # 'close' or 'volume'
+      forecast_date: date           # Date of the forecast
+      prediction_date: date         # Date being predicted
+      horizon: integer              # Days ahead (1-30)
+      model_name: string            # ARIMA_7d, Prophet_30d, etc.
+      predicted_close: double       # Predicted closing price (null for volume)
+      predicted_volume: long        # Predicted volume (null for price)
+      lower_bound: double           # Lower confidence interval (95%)
+      upper_bound: double           # Upper confidence interval (95%)
+      confidence: double            # Confidence level (0-1)
+    partitions: [forecast_date]
+    tags: [fact, forecast, price, volume]
+
+  fact_forecast_metrics:
+    path: facts/forecast_metrics
+    description: "Forecast accuracy metrics and errors"
+    columns:
+      ticker: string
+      model_name: string
+      metric_date: date
+      training_start: date
+      training_end: date
+      test_start: date
+      test_end: date
+      mae: double                   # Mean Absolute Error
+      rmse: double                  # Root Mean Squared Error
+      mape: double                  # Mean Absolute Percentage Error
+      r2_score: double              # R-squared score
+      num_predictions: integer
+      avg_error_pct: double
+    partitions: [metric_date]
+    tags: [fact, metrics, accuracy]
+
+  fact_model_registry:
+    path: facts/model_registry
+    description: "Registry of trained models and parameters"
+    columns:
+      model_id: string
+      model_name: string
+      model_type: string            # ARIMA, Prophet, RandomForest
+      ticker: string
+      target_variable: string       # close, volume
+      lookback_days: integer
+      forecast_horizon: integer
+      day_of_week_adj: boolean
+      parameters: string            # JSON of model parameters
+      trained_date: date
+      training_samples: integer
+      status: string                # active, archived
+    partitions: [trained_date]
+    tags: [dim, registry, models]
