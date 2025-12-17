@@ -1,0 +1,115 @@
+# Geography Graph - Foundation model graph structure
+# Version: 2.0
+
+nodes:
+  - id: dim_state
+    from: bronze.us_states
+    description: "US states and territories"
+    select:
+      state_fips: state_fips
+      state_code: state_code
+      state_name: state_name
+      region: region
+      division: division
+      is_state: is_state
+      population: population
+      land_area_sq_mi: land_area_sq_mi
+    tags: [dim, geography, state]
+    unique_key: [state_fips]
+
+  - id: dim_county
+    from: bronze.us_counties
+    description: "US counties and county-equivalents"
+    select:
+      county_fips: county_fips
+      state_fips: state_fips
+      county_name: county_name
+      county_type: county_type
+      class_fips: class_fips
+      population: population
+      land_area_sq_mi: land_area_sq_mi
+    tags: [dim, geography, county]
+    unique_key: [county_fips]
+
+  - id: dim_city
+    from: bronze.us_cities
+    description: "US cities and incorporated places"
+    select:
+      place_fips: place_fips
+      state_fips: state_fips
+      city_name: city_name
+      city_type: city_type
+      is_capital: is_capital
+      county_fips: county_fips
+      population: population
+      land_area_sq_mi: land_area_sq_mi
+      latitude: latitude
+      longitude: longitude
+    tags: [dim, geography, city]
+    unique_key: [place_fips]
+
+  - id: dim_zip
+    from: bronze.us_zip_codes
+    description: "US ZIP codes"
+    select:
+      zip_code: zip_code
+      city_name: city_name
+      state_code: state_code
+      state_fips: state_fips
+      county_fips: county_fips
+      latitude: latitude
+      longitude: longitude
+      timezone: timezone
+      population: population
+      zip_type: zip_type
+    tags: [dim, geography, zip]
+    unique_key: [zip_code]
+
+# Internal edges - geographic hierarchy
+edges:
+  - from: dim_county
+    to: dim_state
+    "on": ["state_fips=state_fips"]
+    type: many_to_one
+    description: "Counties belong to states"
+
+  - from: dim_city
+    to: dim_state
+    "on": ["state_fips=state_fips"]
+    type: many_to_one
+    description: "Cities belong to states"
+
+  - from: dim_city
+    to: dim_county
+    "on": ["county_fips=county_fips"]
+    type: many_to_one
+    description: "Cities are in counties (primary county)"
+
+  - from: dim_zip
+    to: dim_state
+    "on": ["state_fips=state_fips"]
+    type: many_to_one
+    description: "ZIP codes belong to states"
+
+  - from: dim_zip
+    to: dim_county
+    "on": ["county_fips=county_fips"]
+    type: many_to_one
+    description: "ZIP codes are in counties (primary county)"
+
+# Paths for common joins
+paths:
+  - id: county_with_state
+    hops: "dim_county -> dim_state"
+    description: "County with full state context"
+    tags: [analytics, geography]
+
+  - id: city_with_hierarchy
+    hops: "dim_city -> dim_county -> dim_state"
+    description: "City with county and state context"
+    tags: [analytics, geography]
+
+  - id: zip_with_hierarchy
+    hops: "dim_zip -> dim_county -> dim_state"
+    description: "ZIP with county and state context"
+    tags: [analytics, geography]

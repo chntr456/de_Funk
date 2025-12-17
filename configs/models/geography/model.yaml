@@ -1,0 +1,39 @@
+# Geography Model - US location reference dimensions
+# Foundation model for location-based analysis
+
+model: geography
+version: 2.0
+description: "US geography dimensions - foundation for location-based analysis"
+tags: [geography, location, us, foundation, shared]
+
+# No inheritance - geography is foundational
+depends_on: []  # No dependencies - this is a foundation model
+
+# Component composition
+components:
+  schema: geography/schema.yaml
+  graph: geography/graph.yaml
+  measures: geography/measures.yaml
+
+# Storage configuration
+storage:
+  root: storage/silver/geography
+  format: parquet
+
+# Build configuration
+build:
+  partitions: []
+  sort_by: [state_fips]
+  optimize: true
+
+# Metadata
+metadata:
+  owner: data_engineering
+  domain: foundation
+  sla_hours: 1
+  description: |
+    Geography model provides US location-based dimensions:
+    - dim_state: US states with FIPS codes
+    - dim_county: US counties with FIPS codes
+    - dim_zip: US ZIP codes (5-digit)
+    - Geographic hierarchies (state > county > city)

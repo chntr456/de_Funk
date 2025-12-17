@@ -1,0 +1,32 @@
+# Geography Measures - Foundation model measures
+# Version: 2.0
+# Note: Geography model is primarily reference dimensions, so measures are minimal
+
+# Other models can use geography dimensions for location-based filtering and grouping
+# Example: city_finance.fact_permits JOIN geography.dim_county for county-level analysis
+
+simple_measures:
+  total_state_population:
+    type: simple
+    source: dim_state.population
+    aggregation: sum
+    description: "Total population across selected states"
+    format: "#,##0"
+
+  avg_county_population:
+    type: simple
+    source: dim_county.population
+    aggregation: avg
+    description: "Average population per county"
+    format: "#,##0"
+
+  total_land_area:
+    type: simple
+    source: dim_state.land_area_sq_mi
+    aggregation: sum
+    description: "Total land area in square miles"
+    format: "#,##0.0"
+
+computed_measures: {}
+
+python_measures: {}

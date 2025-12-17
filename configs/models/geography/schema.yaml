@@ -1,0 +1,69 @@
+# Geography Schema - US location dimension definitions
+# Version: 2.0
+
+dimensions:
+  dim_state:
+    path: dims/dim_state
+    description: "US states and territories"
+    columns:
+      state_fips: string        # 2-digit FIPS code (e.g., '17' for Illinois)
+      state_code: string        # 2-letter code (e.g., 'IL')
+      state_name: string        # Full name (e.g., 'Illinois')
+      region: string            # Census region (Northeast, South, Midwest, West)
+      division: string          # Census division (e.g., 'East North Central')
+      is_state: boolean         # True for states, False for territories
+      population: long          # Latest census population
+      land_area_sq_mi: double   # Land area in square miles
+    primary_key: [state_fips]
+    tags: [dim, geography, state]
+
+  dim_county:
+    path: dims/dim_county
+    description: "US counties and county-equivalents"
+    columns:
+      county_fips: string       # 5-digit FIPS code (state + county)
+      state_fips: string        # 2-digit state FIPS code
+      county_name: string       # County name
+      county_type: string       # 'County', 'Parish', 'Borough', etc.
+      class_fips: string        # FIPS class code
+      population: long          # Latest census population
+      land_area_sq_mi: double   # Land area in square miles
+    primary_key: [county_fips]
+    tags: [dim, geography, county]
+
+  dim_city:
+    path: dims/dim_city
+    description: "US cities and incorporated places"
+    columns:
+      place_fips: string        # 7-digit place FIPS code
+      state_fips: string        # 2-digit state FIPS code
+      city_name: string         # City name
+      city_type: string         # 'City', 'Town', 'Village', etc.
+      is_capital: boolean       # State capital
+      county_fips: string       # Primary county (for multi-county cities)
+      population: long          # Latest census population
+      land_area_sq_mi: double   # Land area in square miles
+      latitude: double          # City center latitude
+      longitude: double         # City center longitude
+    primary_key: [place_fips]
+    tags: [dim, geography, city]
+
+  dim_zip:
+    path: dims/dim_zip
+    description: "US ZIP codes (5-digit)"
+    columns:
+      zip_code: string          # 5-digit ZIP code
+      city_name: string         # Primary city name
+      state_code: string        # 2-letter state code
+      state_fips: string        # 2-digit state FIPS
+      county_fips: string       # Primary county FIPS
+      latitude: double          # ZIP centroid latitude
+      longitude: double         # ZIP centroid longitude
+      timezone: string          # Timezone (e.g., 'America/Chicago')
+      population: long          # Estimated population
+      zip_type: string          # 'Standard', 'PO Box', 'Unique'
+    primary_key: [zip_code]
+    tags: [dim, geography, zip]
+
+# No facts in geography - it's all reference dimensions
+facts: {}

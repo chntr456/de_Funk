@@ -201,6 +201,30 @@ SELECT * FROM {read_sql};
             dry_run=dry_run
         )
 
+    def create_geography_views(self, dry_run: bool = False):
+        """Create views for geography model (US location dimensions)."""
+        logger.info("\n" + "="*80)
+        logger.info("GEOGRAPHY MODEL VIEWS")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('geography')
+
+        # Dimensions
+        dimensions = [
+            'dim_state',
+            'dim_county',
+            'dim_city',
+            'dim_zip'
+        ]
+
+        for dim in dimensions:
+            self.create_view(
+                schema='geography',
+                table=dim,
+                table_path=silver_path / 'dims' / dim,
+                dry_run=dry_run
+            )
+
     def create_company_views(self, dry_run: bool = False):
         """Create views for company model."""
         logger.info("\n" + "="*80)
@@ -555,6 +579,7 @@ LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
         try:
             # v2.0 models
             self.create_temporal_views(dry_run=dry_run)
+            self.create_geography_views(dry_run=dry_run)
             self.create_company_views(dry_run=dry_run)
             self.create_stocks_views(dry_run=dry_run)
             self.create_options_views(dry_run=dry_run)

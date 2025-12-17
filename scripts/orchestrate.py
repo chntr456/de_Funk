@@ -136,6 +136,7 @@ def get_model_class(model_name: str) -> type:
     # Model name to class mapping
     model_map = {
         'temporal': ('models.implemented.temporal.model', 'TemporalModel'),
+        'geography': ('models.implemented.geography.model', 'GeographyModel'),
         'company': ('models.implemented.company.model', 'CompanyModel'),
         'stocks': ('models.implemented.stocks.model', 'StocksModel'),
         'macro': ('models.implemented.macro.model', 'MacroModel'),
