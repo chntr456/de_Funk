@@ -32,24 +32,42 @@ def render_model_node_graph(
         show_tables: Whether to show dimension/fact sub-nodes
         height: Chart height in pixels
     """
+    import logging
+    logger = logging.getLogger(__name__)
+
     models = registry.list_models()
+    logger.debug(f"Found {len(models)} models: {models}")
 
     if not models:
         st.info("No models found in registry")
         return
 
     # Build graph data with dependencies and inheritance
-    nodes, edges, model_metadata = _build_graph_data(registry, models, show_tables)
+    try:
+        nodes, edges, model_metadata = _build_graph_data(registry, models, show_tables)
+        logger.debug(f"Built {len(nodes)} nodes, {len(edges)} edges")
+    except Exception as e:
+        logger.error(f"Failed to build graph data: {e}", exc_info=True)
+        raise
 
     if not nodes:
         st.info("No model data available")
         return
 
     # Calculate hierarchical layout positions
-    positions = _calculate_hierarchical_layout(nodes, models, model_metadata, show_tables)
+    try:
+        positions = _calculate_hierarchical_layout(nodes, models, model_metadata, show_tables)
+        logger.debug(f"Calculated {len(positions)} positions")
+    except Exception as e:
+        logger.error(f"Failed to calculate layout: {e}", exc_info=True)
+        raise
 
     # Create Plotly figure
-    fig = _create_figure(nodes, edges, positions, height)
+    try:
+        fig = _create_figure(nodes, edges, positions, height)
+    except Exception as e:
+        logger.error(f"Failed to create figure: {e}", exc_info=True)
+        raise
 
     # Render
     st.plotly_chart(fig, use_container_width=True, key="model_node_graph")
