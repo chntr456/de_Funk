@@ -201,25 +201,47 @@ def _build_graph_data(
             if 'to' in edge:
                 target_model = edge['to'].split('.')[0]
                 if target_model in models and target_model != model_name:
-                    # Safely extract via/on field
-                    via = ''
+                    # Extract all join keys from on/via fields
+                    join_keys = []
+                    via_label = ''
+
                     if edge.get('via'):
-                        via = edge['via']
-                    elif edge.get('on'):
+                        via_label = edge['via']
+                        join_keys.append(edge['via'])
+
+                    if edge.get('on'):
                         on_val = edge['on']
-                        if isinstance(on_val, list) and on_val:
-                            via = on_val[0].split('=')[0] if '=' in on_val[0] else on_val[0]
+                        if isinstance(on_val, list):
+                            for condition in on_val:
+                                if isinstance(condition, str):
+                                    join_keys.append(condition)
+                                    if not via_label:
+                                        # Use first key as short label
+                                        via_label = condition.split('=')[0] if '=' in condition else condition
                         elif isinstance(on_val, str):
-                            via = on_val.split('=')[0] if '=' in on_val else on_val
-                    # Avoid duplicate edges
+                            join_keys.append(on_val)
+                            if not via_label:
+                                via_label = on_val.split('=')[0] if '=' in on_val else on_val
+
+                    # Also check for description
+                    description = edge.get('description', '')
+
+                    # Avoid duplicate edges (but merge join keys if same source/target)
                     edge_key = (model_name, target_model, 'relationship')
                     existing = [e for e in edges if (e['source'], e['target'], e['type']) == edge_key]
-                    if not existing:
+                    if existing:
+                        # Merge join keys into existing edge
+                        for key in join_keys:
+                            if key not in existing[0].get('join_keys', []):
+                                existing[0].setdefault('join_keys', []).append(key)
+                    else:
                         edges.append({
                             'source': model_name,
                             'target': target_model,
                             'type': 'relationship',
-                            'label': via
+                            'label': via_label,
+                            'join_keys': join_keys,
+                            'description': description
                         })
 
     # Add base template nodes if any model inherits from them
@@ -496,6 +518,22 @@ def _create_figure(
                 mid_x += perp_x
                 mid_y += perp_y
 
+            # Build hover text with join keys
+            hover_lines = [f"<b>{source_id} → {target_id}</b>", f"Type: {edge['type']}"]
+
+            # Add join keys if present
+            join_keys = edge.get('join_keys', [])
+            if join_keys:
+                hover_lines.append("<b>Join Keys:</b>")
+                for key in join_keys:
+                    hover_lines.append(f"  • {key}")
+
+            # Add description if present
+            if edge.get('description'):
+                hover_lines.append(f"<i>{edge['description']}</i>")
+
+            hover_text = "<br>".join(hover_lines)
+
             # Draw as quadratic bezier approximation (3 points)
             fig.add_trace(go.Scatter(
                 x=[x0, mid_x, x1],
@@ -509,7 +547,7 @@ def _create_figure(
                     smoothing=1.3
                 ),
                 hoverinfo='text',
-                hovertext=f"{source_id} → {target_id}<br>Type: {edge['type']}<br>{edge.get('label', '')}",
+                hovertext=hover_text,
                 showlegend=False
             ))
         else:
