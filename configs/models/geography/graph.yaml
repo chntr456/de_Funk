@@ -3,7 +3,7 @@
 
 nodes:
   - id: dim_state
-    from: bronze.us_states
+    from: bronze.geography_states
     description: "US states and territories"
     select:
       state_fips: state_fips
@@ -18,7 +18,7 @@ nodes:
     unique_key: [state_fips]
 
   - id: dim_county
-    from: bronze.us_counties
+    from: bronze.geography_counties
     description: "US counties and county-equivalents"
     select:
       county_fips: county_fips
@@ -32,7 +32,7 @@ nodes:
     unique_key: [county_fips]
 
   - id: dim_city
-    from: bronze.us_cities
+    from: bronze.geography_cities
     description: "US cities and incorporated places"
     select:
       place_fips: place_fips
@@ -49,7 +49,7 @@ nodes:
     unique_key: [place_fips]
 
   - id: dim_zip
-    from: bronze.us_zip_codes
+    from: bronze.geography_zip_codes
     description: "US ZIP codes"
     select:
       zip_code: zip_code
