@@ -18,11 +18,12 @@ nodes:
     tags: [dim, registry]
 
 # Cross-model edges define relationships to other models
+# NOTE: "on" must be quoted because bare `on` is YAML keyword for `true`
 edges:
   # Join forecasts to calendar for date filtering
   - from: fact_forecasts
     to: core.dim_calendar
-    on: ["prediction_date=date"]
+    "on": ["prediction_date=date"]
     type: left
     via: prediction_date
     description: "Join forecasts to calendar on prediction date"
@@ -30,7 +31,7 @@ edges:
   # Join metrics to calendar
   - from: fact_forecast_metrics
     to: core.dim_calendar
-    on: ["metric_date=date"]
+    "on": ["metric_date=date"]
     type: left
     via: metric_date
     description: "Join metrics to calendar on metric date"
@@ -38,14 +39,14 @@ edges:
   # Cross-model: forecast to stocks for ticker dimension
   - from: fact_forecasts
     to: stocks.fact_stock_prices
-    on: ["ticker=ticker"]
+    "on": ["ticker=ticker"]
     type: left
     via: ticker
     description: "Join forecasts to stock prices (shared ticker)"
 
   - from: fact_forecasts
     to: stocks.dim_stock
-    on: ["ticker=ticker"]
+    "on": ["ticker=ticker"]
     type: left
     via: ticker
     description: "Join forecasts to stock dimension"

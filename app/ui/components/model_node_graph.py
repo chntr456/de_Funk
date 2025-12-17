@@ -214,8 +214,9 @@ def _build_graph_data(
                         via_label = edge['via']
                         join_keys.append(edge['via'])
 
-                    if edge.get('on'):
-                        on_val = edge['on']
+                    # Check for 'on' key (also handle YAML bug where bare `on` parses as True)
+                    on_val = edge.get('on') or edge.get(True)  # True key from YAML parse bug
+                    if on_val:
                         if isinstance(on_val, list):
                             for condition in on_val:
                                 if isinstance(condition, str):
