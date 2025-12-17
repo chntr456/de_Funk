@@ -22,7 +22,7 @@ from pathlib import Path
 def render_model_node_graph(
     registry,
     show_tables: bool = True,
-    height: int = 500
+    height: int = 1000
 ):
     """
     Render hierarchical model graph for splash screen.
@@ -69,8 +69,13 @@ def render_model_node_graph(
         logger.error(f"Failed to create figure: {e}", exc_info=True)
         raise
 
-    # Render
-    st.plotly_chart(fig, use_container_width=True, key="model_node_graph")
+    # Render with scroll zoom and pan enabled
+    config = {
+        'scrollZoom': True,
+        'displayModeBar': True,
+        'modeBarButtonsToAdd': ['pan2d', 'zoom2d', 'zoomIn2d', 'zoomOut2d', 'resetScale2d'],
+    }
+    st.plotly_chart(fig, use_container_width=True, key="model_node_graph", config=config)
 
     # Legend
     _render_legend()
@@ -665,22 +670,35 @@ def _create_figure(
             showlegend=False
         ))
 
-    # Layout
+    # Calculate dynamic axis ranges based on node positions
+    if positions:
+        x_vals = [p[0] for p in positions.values()]
+        y_vals = [p[1] for p in positions.values()]
+        x_margin = 1.5
+        y_margin = 1.0
+        x_range = [min(x_vals) - x_margin, max(x_vals) + x_margin]
+        y_range = [min(y_vals) - y_margin, max(y_vals) + y_margin]
+    else:
+        x_range = [-5, 5]
+        y_range = [-3, 4]
+
+    # Layout with pan/zoom enabled
     fig.update_layout(
         showlegend=False,
         hovermode='closest',
+        dragmode='pan',  # Enable pan by default (use scroll to zoom)
         margin=dict(b=10, l=10, r=10, t=10),
         xaxis=dict(
             showgrid=False,
             zeroline=False,
             showticklabels=False,
-            range=[-4, 4]
+            range=x_range
         ),
         yaxis=dict(
             showgrid=False,
             zeroline=False,
             showticklabels=False,
-            range=[-2.5, 3.5],
+            range=y_range,
             scaleanchor='x',
             scaleratio=1
         ),
