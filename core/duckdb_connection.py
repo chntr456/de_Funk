@@ -108,7 +108,7 @@ class DuckDBConnection(DataConnection):
             existing_schemas = self.conn.execute("""
                 SELECT schema_name
                 FROM information_schema.schemata
-                WHERE schema_name IN ('stocks', 'options', 'company', 'core')
+                WHERE schema_name IN ('stocks', 'options', 'company', 'temporal')
             """).fetchall()
 
             # If schemas exist with tables, views likely already setup

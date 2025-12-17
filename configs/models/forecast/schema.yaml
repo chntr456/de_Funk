@@ -1,7 +1,7 @@
 # Forecast Schema - Prediction tables
 # Version: 2.0
 
-# No dimensions in forecast - uses stocks.dim_stock and core.dim_calendar
+# No dimensions in forecast - uses stocks.dim_stock and temporal.dim_calendar
 dimensions: {}
 
 # Fact tables for predictions and metrics

@@ -90,7 +90,7 @@ edges:
 
   prices_to_calendar:
     from: fact_stock_prices
-    to: core.dim_calendar
+    to: temporal.dim_calendar
     "on": ["trade_date=date"]
     type: left
     description: "Join prices to calendar for date filtering"

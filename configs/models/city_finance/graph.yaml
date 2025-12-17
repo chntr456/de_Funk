@@ -70,13 +70,13 @@ edges:
 
   # Cross-model edges
   - from: fact_local_unemployment
-    to: core.dim_calendar
+    to: temporal.dim_calendar
     "on": ["date=date"]
     type: left
     description: "Join unemployment to calendar for date-based filtering"
 
   - from: fact_building_permits
-    to: core.dim_calendar
+    to: temporal.dim_calendar
     "on": ["issue_date=date"]
     type: left
     description: "Join permits to calendar for date-based filtering"

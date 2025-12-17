@@ -243,28 +243,28 @@ edges:
   # Link to calendar for time-series analysis
   income_statement_to_calendar:
     from: fact_income_statement
-    to: core.dim_calendar
+    to: temporal.dim_calendar
     "on": ["report_date=date"]
     type: left
     description: "Link income statements to calendar"
 
   balance_sheet_to_calendar:
     from: fact_balance_sheet
-    to: core.dim_calendar
+    to: temporal.dim_calendar
     "on": ["report_date=date"]
     type: left
     description: "Link balance sheets to calendar"
 
   cash_flow_to_calendar:
     from: fact_cash_flow
-    to: core.dim_calendar
+    to: temporal.dim_calendar
     "on": ["report_date=date"]
     type: left
     description: "Link cash flows to calendar"
 
   earnings_to_calendar:
     from: fact_earnings
-    to: core.dim_calendar
+    to: temporal.dim_calendar
     "on": ["report_date=date"]
     type: left
     description: "Link earnings to calendar"

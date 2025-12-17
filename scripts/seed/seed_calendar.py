@@ -2,7 +2,7 @@
 """
 Seed Calendar to Bronze Layer.
 
-Generates calendar dimension data and writes to Bronze layer so the core model
+Generates calendar dimension data and writes to Bronze layer so the temporal model
 can read it during Silver layer build.
 
 Usage:
@@ -20,7 +20,7 @@ from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 from orchestration.common.spark_session import get_spark
-from models.implemented.core.builders.calendar_builder import CalendarBuilder
+from models.implemented.temporal.builders.calendar_builder import CalendarBuilder
 
 
 def main():
@@ -34,7 +34,7 @@ def main():
     spark = get_spark("CalendarSeed")
     print()
 
-    # Calendar configuration (matches core.yaml calendar_config)
+    # Calendar configuration (matches temporal model calendar_config)
     start_date = "2000-01-01"
     end_date = "2050-12-31"
     fiscal_year_start_month = 1

@@ -37,7 +37,7 @@ nodes:
     unique_key: [date]
 
 # No internal edges - calendar is a standalone dimension
-# Other models join TO core.dim_calendar via their edges
+# Other models join TO temporal.dim_calendar via their edges
 edges: []
 
 # No paths needed for core itself

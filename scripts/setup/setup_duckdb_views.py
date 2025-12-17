@@ -19,7 +19,7 @@ Usage:
     python -m scripts.setup.setup_duckdb_views --db-path custom/path/analytics.db
 
 Features:
-- Creates views for ALL v2.0 models (core, company, stocks, options, etfs, futures)
+- Creates views for ALL v2.0 models (temporal, company, stocks, options, etfs, futures)
 - Auto-detects Delta Lake vs Parquet format (uses delta_scan or read_parquet)
 - Points views to Silver layer tables (zero data duplication)
 - Creates alias views (stocks.fact_prices → stocks.fact_stock_prices) for DuckDB caching
@@ -185,17 +185,17 @@ SELECT * FROM {read_sql};
             self.skipped_views.append(f"{schema}.{table}")
             return False
 
-    def create_core_views(self, dry_run: bool = False):
-        """Create views for core model (calendar dimension)."""
+    def create_temporal_views(self, dry_run: bool = False):
+        """Create views for temporal model (calendar dimension)."""
         logger.info("\n" + "="*80)
-        logger.info("CORE MODEL VIEWS")
+        logger.info("TEMPORAL MODEL VIEWS")
         logger.info("="*80)
 
-        silver_path = self.get_silver_path('core')
+        silver_path = self.get_silver_path('temporal')
 
         # dim_calendar
         self.create_view(
-            schema='core',
+            schema='temporal',
             table='dim_calendar',
             table_path=silver_path / 'dims' / 'dim_calendar',
             dry_run=dry_run
@@ -554,7 +554,7 @@ LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
 
         try:
             # v2.0 models
-            self.create_core_views(dry_run=dry_run)
+            self.create_temporal_views(dry_run=dry_run)
             self.create_company_views(dry_run=dry_run)
             self.create_stocks_views(dry_run=dry_run)
             self.create_options_views(dry_run=dry_run)

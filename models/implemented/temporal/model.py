@@ -1,10 +1,10 @@
 """
-CoreModel - Shared dimensions and reference data used across all models.
+TemporalModel - Time and calendar dimensions for time-series analysis.
 
-This model contains common dimensions that all other models reference:
+This model contains time-based dimensions:
 - dim_calendar: Universal calendar dimension with rich date attributes
 
-All other models should depend on this core model for shared dimensions.
+All time-series models should depend on temporal for date-based queries.
 
 Version: 2.1 - Backend-agnostic via UniversalSession methods
 """
@@ -19,21 +19,21 @@ logger = logging.getLogger(__name__)
 DataFrame = Any
 
 
-class CoreModel(BaseModel):
+class TemporalModel(BaseModel):
     """
-    Core model - shared dimensions and reference data.
+    Temporal model - time and calendar dimensions.
 
     Inherits all functionality from BaseModel:
     - Generic graph building from YAML config
     - Node loading from Bronze
     - Table access methods
 
-    This model is special because:
-    - It has no dependencies (it's the foundation)
-    - Other models depend on it for shared dimensions
-    - It provides reference data like calendar
+    This model is foundational because:
+    - It has no dependencies (it's the time foundation)
+    - Other models depend on it for date-based queries
+    - It provides calendar and time reference data
 
-    The YAML config (configs/models/core.yaml) drives everything.
+    The YAML config (configs/models/temporal/) drives everything.
 
     Backend-agnostic: uses session methods for all DataFrame operations.
     """

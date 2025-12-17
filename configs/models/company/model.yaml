@@ -7,7 +7,7 @@ description: "Corporate legal entities with SEC registration and fundamentals"
 tags: [company, corporate, legal_entity, fundamentals]
 
 # Dependencies
-depends_on: [core]  # Only depends on calendar
+depends_on: [temporal]  # Only depends on calendar
 
 # Component composition
 components:

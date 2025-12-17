@@ -22,7 +22,7 @@ nodes:
 edges:
   # Join forecasts to calendar for date filtering
   - from: fact_forecasts
-    to: core.dim_calendar
+    to: temporal.dim_calendar
     "on": ["prediction_date=date"]
     type: left
     via: prediction_date
@@ -30,7 +30,7 @@ edges:
 
   # Join metrics to calendar
   - from: fact_forecast_metrics
-    to: core.dim_calendar
+    to: temporal.dim_calendar
     "on": ["metric_date=date"]
     type: left
     via: metric_date
@@ -54,11 +54,11 @@ edges:
 # Common query paths
 paths:
   - id: forecasts_with_calendar
-    nodes: [fact_forecasts, core.dim_calendar]
+    nodes: [fact_forecasts, temporal.dim_calendar]
     description: "Forecasts with calendar attributes for date filtering"
 
   - id: metrics_with_calendar
-    nodes: [fact_forecast_metrics, core.dim_calendar]
+    nodes: [fact_forecast_metrics, temporal.dim_calendar]
     description: "Metrics with calendar attributes for date filtering"
 
   - id: forecasts_with_stocks

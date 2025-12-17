@@ -2,8 +2,9 @@
 Implemented models - concrete model implementations.
 
 This package contains all implemented models:
-- core: Shared dimensions (calendar, etc.)
+- temporal: Time and calendar dimensions (foundation model)
 - company: Company financial data model
+- stocks: Stock securities with prices
 - forecast: Time series forecast model
 - city_finance: Municipal finance model
 - macro: Macroeconomic indicators model

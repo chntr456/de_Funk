@@ -8,7 +8,7 @@ tags: [futures, derivatives, commodities, indices]
 
 # Model inheritance and dependencies
 inherits_from: _base.securities
-depends_on: [core]                   # Futures are standalone
+depends_on: [temporal]               # Futures are standalone
 
 # Component composition
 components:

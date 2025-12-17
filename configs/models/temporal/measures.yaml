@@ -3,7 +3,7 @@
 # Note: Core model is primarily reference dimensions, so measures are minimal
 
 # No measures needed for core model (it's all reference data)
-# Other models use core.dim_calendar for date-based filtering and aggregation
+# Other models use temporal.dim_calendar for date-based filtering and aggregation
 
 simple_measures: {}
 

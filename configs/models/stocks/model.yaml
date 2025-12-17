@@ -8,7 +8,7 @@ tags: [stocks, equities, securities, trading]
 
 # Model inheritance and dependencies
 inherits_from: _base.securities      # Inherits schema, graph, measures from securities
-depends_on: [core, company]          # Runtime dependencies
+depends_on: [temporal, company]      # Runtime dependencies
 
 # Component composition
 components:
