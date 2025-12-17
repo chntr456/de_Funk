@@ -1142,15 +1142,23 @@ This audit informs Phase 2 - we need to know the full scope of inconsistent usag
 2. Add additional query helper methods to UniversalSession
 3. Refactor models to use session methods (which internally use FilterEngine)
 
-| # | Task | Files Affected |
-|---|------|----------------|
-| 2.1 | Add query helper methods to UniversalSession | `models/api/session.py` |
-| 2.2 | Remove `self._backend` from all models | All `models/implemented/*/model.py` |
-| 2.3 | Refactor CompanyModel to use session methods | `models/implemented/company/model.py` |
-| 2.4 | Refactor StocksModel to use session methods | `models/implemented/stocks/model.py` |
-| 2.5 | Refactor StocksMeasures to use session methods | `models/implemented/stocks/measures.py` |
-| 2.6 | Refactor CoreModel to use session methods | `models/implemented/core/model.py` |
-| 2.7 | Test all models with both backends | Run test suite |
+| # | Task | Files Affected | Status |
+|---|------|----------------|--------|
+| 2.1 | Add query helper methods to UniversalSession | `models/api/session.py` | ✅ Done |
+| 2.2 | Remove `self._backend` from all models | All `models/implemented/*/model.py` | ⏳ **Deferred to Phase 5** |
+| 2.3 | Refactor CompanyModel to use session methods | `models/implemented/company/model.py` | ✅ Done |
+| 2.4 | Refactor StocksModel to use session methods | `models/implemented/stocks/model.py` | ✅ Done |
+| 2.5 | Refactor StocksMeasures to use session methods | `models/implemented/stocks/measures.py` | ✅ Done |
+| 2.6 | Refactor CoreModel to use session methods | `models/implemented/core/model.py` | ✅ Done |
+| 2.6a | Refactor MacroModel to use session methods | `models/implemented/macro/model.py` | ✅ Done |
+| 2.6b | Refactor ETFModel to use session methods | `models/implemented/etf/model.py` | ✅ Done |
+| 2.6c | Refactor CityFinanceModel to use session methods | `models/implemented/city_finance/model.py` | ✅ Done |
+| 2.7 | Test all models with both backends | Run test suite | Pending |
+
+**Note on Task 2.2**: Removing `_backend` is deferred to Phase 5 (Orchestrator Standardization). Currently, models need the fallback `_backend` code because:
+1. Session is injected via `set_session()` **after** model instantiation
+2. During `build()`, session may not be available yet
+3. Phase 5 will ensure session is always injected at instantiation, allowing removal of fallback code
 
 ---
 
@@ -1730,6 +1738,10 @@ This phase creates a clean abstraction layer for data ingestion:
 | 5.6 | Integrate DependencyGraph into Orchestrator | EXTEND: `orchestration/dependency_graph.py` (431 lines exists) |
 | 5.7 | Integrate ProviderRegistry into Orchestrator | EXTEND: `datapipelines/providers/registry.py` (exists) |
 | 5.8 | Update orchestrate.py to use Orchestrator class | REFACTOR: `scripts/orchestrate.py` (760 lines → thin wrapper) |
+| 5.9 | Inject session at model instantiation | REFACTOR: `models/base/model.py`, `orchestration/orchestrator.py` |
+| 5.10 | Remove `_backend` fallback code from all models | All `models/implemented/*/model.py` (deferred from Phase 2) |
+
+**Note on 5.9-5.10**: These tasks complete the backend abstraction started in Phase 2. Once Orchestrator ensures session is always available at model instantiation, we can remove the fallback `_backend` code from all models.
 
 ---
 
