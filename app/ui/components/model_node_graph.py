@@ -363,28 +363,28 @@ def _calculate_hierarchical_layout(
         for node in table_nodes:
             G.add_node(node['id'], node_type=node['type'])
 
-    # Add inheritance edges (STRONGEST - models cluster with base templates)
+    # Add inheritance edges (STRONG - models cluster with base templates)
     for node in model_nodes:
         node_id = node['id']
         if node.get('inherits_from'):
             base_name = node['inherits_from'].replace('_base.', '')
             base_id = f"_base_{base_name}"
             if G.has_node(base_id):
-                G.add_edge(node_id, base_id, weight=5.0)  # Strongest
+                G.add_edge(node_id, base_id, weight=8.0)
 
     # Add dependency edges (captures relationships like stocks<->company)
     for node in model_nodes:
         node_id = node['id']
         for dep in node.get('depends_on', []):
             if G.has_node(dep):
-                G.add_edge(node_id, dep, weight=2.0)  # Medium strength
+                G.add_edge(node_id, dep, weight=2.0)
 
-    # Add table->model edges (VERY STRONG - dims/facts stay close to parent)
+    # Add table->model edges (STRONGEST - dims/facts stay close to parent)
     if show_tables:
         for node in table_nodes:
             parent = node.get('parent')
             if parent and G.has_node(parent):
-                G.add_edge(node['id'], parent, weight=8.0)  # Very strong
+                G.add_edge(node['id'], parent, weight=16.0)
 
     # Simple initial positions (spread models in a circle)
     init_pos = {}
@@ -394,15 +394,28 @@ def _calculate_hierarchical_layout(
             angle = 2 * math.pi * i / n_models
             init_pos[node['id']] = (math.cos(angle), math.sin(angle))
 
-    # Position tables near their parents initially
+    # Position tables in a fan around their parents initially
     if show_tables:
+        # Group tables by parent
+        tables_by_parent = {}
         for node in table_nodes:
             parent = node.get('parent')
-            if parent and parent in init_pos:
-                px, py = init_pos[parent]
-                # Small random offset
-                offset = 0.1
-                init_pos[node['id']] = (px + offset, py - offset)
+            if parent:
+                if parent not in tables_by_parent:
+                    tables_by_parent[parent] = []
+                tables_by_parent[parent].append(node)
+
+        # Position each group in a fan
+        for parent, tables in tables_by_parent.items():
+            if parent not in init_pos:
+                continue
+            px, py = init_pos[parent]
+            n_tables = len(tables)
+            for i, node in enumerate(tables):
+                # Fan out in a semicircle below the parent
+                angle = math.pi + (math.pi * (i + 0.5) / max(n_tables, 1))
+                radius = 0.3
+                init_pos[node['id']] = (px + radius * math.cos(angle), py + radius * math.sin(angle))
 
     # Use NetworkX spring layout
     if len(G.nodes()) > 0:
