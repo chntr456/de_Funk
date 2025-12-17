@@ -4049,7 +4049,7 @@ This phase is a catch-all for:
 
 | Item | Source Phase | Description | Priority |
 |------|-------------|-------------|----------|
-| *(empty - add items as they emerge)* | | | |
+| ETFs model config files | Phase 11 | Validate `etfs/schema.yaml`, `graph.yaml`, `measures.yaml` exist and errors resolved | High |
 
 **Validation Checklist:**
 
@@ -4060,6 +4060,7 @@ This phase is a catch-all for:
 - [ ] All deprecated files removed
 - [ ] All tests passing
 - [ ] Documentation up to date
+- [ ] ETFs model config errors resolved (no missing schema/graph/measures.yaml)
 
 ---
 
