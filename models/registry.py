@@ -439,6 +439,12 @@ class ModelRegistry:
         except Exception:
             pass  # Will use auto-registration on first access
 
+        try:
+            from models.domain.actuarial.model import ActuarialModel
+            self.register_model_class('actuarial', ActuarialModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
     def register_model_class(self, model_name: str, model_class: type):
         """
         Register a model class for dynamic instantiation.

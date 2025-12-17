@@ -1,0 +1,95 @@
+# Actuarial Schema - Tables for actuarial analysis
+# Version: 2.0
+
+dimensions:
+  dim_mortality_table:
+    path: dims/dim_mortality_table
+    description: "Mortality table metadata and versions"
+    columns:
+      table_id: string            # Unique identifier (e.g., '2017_CSO_M')
+      table_name: string          # Full name (e.g., '2017 CSO Mortality Table')
+      table_year: integer         # Publication year
+      gender: string              # 'Male', 'Female', 'Unisex'
+      smoker_status: string       # 'Smoker', 'Non-Smoker', 'Aggregate'
+      table_type: string          # 'CSO', 'VBT', 'GAM', 'IAM', etc.
+      select_period: integer      # Select period in years (for select tables)
+      ultimate_age: integer       # Maximum age in table
+      source: string              # Source organization (SOA, NAIC, etc.)
+      effective_date: date        # When table became effective
+    primary_key: [table_id]
+    tags: [dim, actuarial, mortality]
+
+  dim_age_band:
+    path: dims/dim_age_band
+    description: "Age bands for demographic grouping"
+    columns:
+      age_band_id: string         # e.g., '25-34'
+      age_min: integer            # Lower bound (inclusive)
+      age_max: integer            # Upper bound (inclusive)
+      age_band_name: string       # Display name
+      generation: string          # Gen Z, Millennial, Gen X, Boomer, Silent
+    primary_key: [age_band_id]
+    tags: [dim, actuarial, demographics]
+
+  dim_risk_class:
+    path: dims/dim_risk_class
+    description: "Insurance risk classification"
+    columns:
+      risk_class_id: string       # e.g., 'PREFERRED_NS'
+      risk_class_name: string     # e.g., 'Preferred Non-Smoker'
+      risk_category: string       # 'Standard', 'Preferred', 'Substandard'
+      smoker_status: string       # 'Smoker', 'Non-Smoker'
+      relative_risk: double       # Risk multiplier (1.0 = standard)
+      description: string         # Full description
+    primary_key: [risk_class_id]
+    tags: [dim, actuarial, risk]
+
+facts:
+  fact_mortality_rates:
+    path: facts/fact_mortality_rates
+    description: "Age-specific mortality rates (qx values)"
+    columns:
+      table_id: string            # FK to dim_mortality_table
+      age: integer                # Attained age
+      duration: integer           # Policy duration (for select tables, 0 for ultimate)
+      qx: double                  # Probability of death within year
+      lx: double                  # Number living at start of year (per 100,000)
+      dx: double                  # Number dying during year
+      ex: double                  # Life expectancy at age x
+      ax: double                  # Present value of life annuity
+      Ax: double                  # Present value of whole life insurance
+    partitions: [table_id]
+    tags: [fact, actuarial, mortality]
+
+  fact_demographic_rates:
+    path: facts/fact_demographic_rates
+    description: "Demographic statistics by geography and time"
+    columns:
+      state_fips: string          # FK to geography.dim_state
+      year: integer               # Observation year
+      age_band_id: string         # FK to dim_age_band
+      population: long            # Population count
+      births: long                # Number of births
+      deaths: long                # Number of deaths
+      crude_death_rate: double    # Deaths per 1,000 population
+      life_expectancy: double     # Life expectancy at birth
+      median_age: double          # Median age of population
+    partitions: [year, state_fips]
+    tags: [fact, actuarial, demographics]
+
+  fact_policy_experience:
+    path: facts/fact_policy_experience
+    description: "Insurance policy experience data (for experience studies)"
+    columns:
+      experience_id: string       # Unique identifier
+      observation_date: date      # Date of observation
+      risk_class_id: string       # FK to dim_risk_class
+      age_band_id: string         # FK to dim_age_band
+      state_fips: string          # FK to geography.dim_state
+      exposure_count: long        # Number of policy years exposed
+      claim_count: long           # Number of claims
+      claim_amount: double        # Total claim amount
+      actual_to_expected: double  # A/E ratio
+      credibility_factor: double  # Statistical credibility
+    partitions: [observation_date]
+    tags: [fact, actuarial, experience]

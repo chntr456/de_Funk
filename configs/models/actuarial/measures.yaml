@@ -1,0 +1,132 @@
+# Actuarial Measures - Calculation definitions
+# Version: 2.0
+
+simple_measures:
+  # Mortality measures
+  avg_mortality_rate:
+    type: simple
+    source: fact_mortality_rates.qx
+    aggregation: avg
+    description: "Average mortality rate (qx)"
+    format: "#,##0.000000"
+    tags: [mortality, actuarial]
+
+  max_age_in_table:
+    type: simple
+    source: fact_mortality_rates.age
+    aggregation: max
+    description: "Maximum age in mortality table"
+    format: "#,##0"
+    tags: [mortality, actuarial]
+
+  avg_life_expectancy:
+    type: simple
+    source: fact_mortality_rates.ex
+    aggregation: avg
+    description: "Average life expectancy"
+    format: "#,##0.00"
+    tags: [mortality, actuarial]
+
+  # Demographic measures
+  total_population:
+    type: simple
+    source: fact_demographic_rates.population
+    aggregation: sum
+    description: "Total population"
+    format: "#,##0"
+    tags: [demographics, actuarial]
+
+  total_deaths:
+    type: simple
+    source: fact_demographic_rates.deaths
+    aggregation: sum
+    description: "Total deaths"
+    format: "#,##0"
+    tags: [demographics, actuarial]
+
+  avg_crude_death_rate:
+    type: simple
+    source: fact_demographic_rates.crude_death_rate
+    aggregation: avg
+    description: "Average crude death rate per 1,000"
+    format: "#,##0.00"
+    tags: [demographics, actuarial]
+
+  # Experience measures
+  total_exposure:
+    type: simple
+    source: fact_policy_experience.exposure_count
+    aggregation: sum
+    description: "Total exposure count"
+    format: "#,##0"
+    tags: [experience, actuarial]
+
+  total_claims:
+    type: simple
+    source: fact_policy_experience.claim_count
+    aggregation: sum
+    description: "Total claim count"
+    format: "#,##0"
+    tags: [experience, actuarial]
+
+  total_claim_amount:
+    type: simple
+    source: fact_policy_experience.claim_amount
+    aggregation: sum
+    description: "Total claim amount"
+    format: "$#,##0.00"
+    tags: [experience, actuarial]
+
+  avg_actual_to_expected:
+    type: simple
+    source: fact_policy_experience.actual_to_expected
+    aggregation: avg
+    description: "Average A/E ratio"
+    format: "#,##0.00%"
+    tags: [experience, actuarial]
+
+computed_measures:
+  # Derived mortality measures
+  survival_rate:
+    type: computed
+    formula: "1 - qx"
+    description: "Probability of surviving one year (px)"
+    format: "#,##0.000000"
+    tags: [mortality, actuarial]
+
+  claim_frequency:
+    type: computed
+    formula: "claim_count / exposure_count"
+    description: "Claims per exposure"
+    format: "#,##0.000000"
+    tags: [experience, actuarial]
+
+  avg_claim_size:
+    type: computed
+    formula: "claim_amount / claim_count"
+    description: "Average claim amount"
+    format: "$#,##0.00"
+    tags: [experience, actuarial]
+
+# Complex calculations via Python
+python_measures:
+  present_value_annuity:
+    function: "actuarial.measures.calculate_present_value_annuity"
+    description: "Calculate present value of life annuity"
+    params:
+      interest_rate: 0.045
+    tags: [actuarial, valuation]
+
+  net_single_premium:
+    function: "actuarial.measures.calculate_net_single_premium"
+    description: "Calculate net single premium for life insurance"
+    params:
+      interest_rate: 0.045
+    tags: [actuarial, valuation]
+
+  credibility_weighted_rate:
+    function: "actuarial.measures.calculate_credibility_weighted_rate"
+    description: "Calculate credibility-weighted mortality/experience rate"
+    params:
+      full_credibility_claims: 1082
+    tags: [actuarial, experience]
