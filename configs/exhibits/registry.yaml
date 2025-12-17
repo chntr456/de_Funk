@@ -1,57 +1,122 @@
 # Exhibit Type Registry
-# Maps exhibit types to their renderers and preset configurations
+# Maps exhibit types to their renderers, presets, and inheritance chain
+# Version: 2.0
+
+# Base configuration that all exhibits inherit from
+base_config: _base/exhibit.yaml
+
+# Inheritance hierarchy documentation:
+# _base/exhibit.yaml          <- All exhibits inherit common settings
+#   ├── presets/plotly_base.yaml    <- All Plotly charts inherit this
+#   │     ├── presets/line_chart.yaml
+#   │     ├── presets/bar_chart.yaml
+#   │     ├── presets/scatter_chart.yaml (planned)
+#   │     ├── presets/weighted_aggregate_chart.yaml (planned)
+#   │     └── presets/forecast_chart.yaml (planned)
+#   ├── presets/great_table.yaml    <- Publication tables
+#   ├── presets/data_table.yaml (planned)
+#   └── presets/metric_cards.yaml (planned)
 
 exhibit_types:
   # Great Tables - Publication-quality tables
   great_table:
     renderer: app.ui.components.exhibits.great_table.render_great_table
     preset: presets/great_table.yaml
+    extends: _base/exhibit.yaml
     requires: [great_tables]
     description: Publication-quality tables using Great Tables library
+    category: table
 
-  # Plotly Charts
+  # Plotly Charts - All extend plotly_base
   line_chart:
     renderer: app.ui.components.exhibits.line_chart.render_line_chart
     preset: presets/line_chart.yaml
+    extends: presets/plotly_base.yaml
     requires: [plotly]
-    description: Interactive line charts
+    description: Interactive line charts for time series data
+    category: chart
+    features:
+      - measure_selector
+      - dimension_selector
+      - range_slider
+      - hover_tooltips
 
   bar_chart:
     renderer: app.ui.components.exhibits.bar_chart.render_bar_chart
     preset: presets/bar_chart.yaml
+    extends: presets/plotly_base.yaml
     requires: [plotly]
-    description: Interactive bar charts
+    description: Interactive bar charts for categorical comparison
+    category: chart
+    features:
+      - measure_selector
+      - dimension_selector
+      - stacking
+      - hover_tooltips
 
   scatter_chart:
     renderer: app.ui.components.exhibits.scatter_chart.render_scatter_chart
+    preset: presets/scatter_chart.yaml  # TODO: Create in Phase 15
+    extends: presets/plotly_base.yaml
     requires: [plotly]
-    description: Scatter plot charts
-
-  # Basic Tables
-  data_table:
-    renderer: app.ui.components.exhibits.data_table.render_data_table
-    requires: []
-    description: Basic interactive data table
-
-  # Metric Cards
-  metric_cards:
-    renderer: app.ui.components.exhibits.metric_cards.render_metric_cards
-    requires: []
-    description: Summary metric cards with aggregations
+    description: Scatter plot charts for correlation analysis
+    category: chart
+    features:
+      - trendlines
+      - hover_tooltips
 
   # Weighted Charts
   weighted_aggregate_chart:
     renderer: app.ui.components.exhibits.weighted_aggregate_chart.render_weighted_aggregate_chart
+    preset: presets/weighted_aggregate_chart.yaml  # TODO: Create in Phase 15
+    extends: presets/plotly_base.yaml
     requires: [plotly]
     description: Weighted index charts (market cap, volume weighted)
+    category: chart
+    features:
+      - weighting_strategies
+      - benchmark_comparison
 
   # Forecast Charts
   forecast_chart:
     renderer: app.ui.components.exhibits.forecast_chart.render_forecast_chart
+    preset: presets/forecast_chart.yaml  # TODO: Create in Phase 15
+    extends: presets/plotly_base.yaml
     requires: [plotly]
-    description: Forecast with confidence bands
+    description: Forecast charts with confidence bands
+    category: chart
+    features:
+      - confidence_bands
+      - historical_overlay
+      - model_selection
 
-# Aliases for convenience
+  # Basic Tables
+  data_table:
+    renderer: app.ui.components.exhibits.data_table.render_data_table
+    preset: presets/data_table.yaml  # TODO: Create in Phase 15
+    extends: _base/exhibit.yaml
+    requires: []
+    description: Basic interactive data table with sorting/filtering
+    category: table
+    features:
+      - sorting
+      - filtering
+      - pagination
+
+  # Metric Cards
+  metric_cards:
+    renderer: app.ui.components.exhibits.metric_cards.render_metric_cards
+    preset: presets/metric_cards.yaml  # TODO: Create in Phase 15
+    extends: _base/exhibit.yaml
+    requires: []
+    description: Summary metric cards with aggregations and sparklines
+    category: metric
+    features:
+      - aggregations
+      - delta_indicators
+      - sparklines
+
+# Aliases for convenience (shorthand names)
 aliases:
   gt: great_table
   table: great_table
@@ -60,3 +125,20 @@ aliases:
   bar: bar_chart
   scatter: scatter_chart
   metrics: metric_cards
+  forecast: forecast_chart
+  weighted: weighted_aggregate_chart
+
+# Category groupings for UI organization
+categories:
+  chart:
+    label: "Charts"
+    icon: "chart-line"
+    types: [line_chart, bar_chart, scatter_chart, weighted_aggregate_chart, forecast_chart]
+  table:
+    label: "Tables"
+    icon: "table"
+    types: [great_table, data_table]
+  metric:
+    label: "Metrics"
+    icon: "dashboard"
+    types: [metric_cards]

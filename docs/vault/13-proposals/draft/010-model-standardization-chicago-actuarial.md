@@ -1386,10 +1386,11 @@ This means:
 | 3.2 | Create `forecast/` modular config from forecast.yaml | NEW: `configs/models/forecast/*.yaml` |
 | 3.3 | Delete old v1.x files after migration | DELETE: `core.yaml`, `forecast.yaml` |
 | 3.4 | Update ModelConfigLoader if needed | `config/model_loader.py` |
-| 3.5 | Create base exhibit preset | NEW: `configs/exhibits/presets/base_exhibit.yaml` |
-| 3.6 | Create markdown exhibit preset | NEW: `configs/exhibits/presets/markdown.yaml` |
-| 3.7 | Create grid exhibit preset | NEW: `configs/exhibits/presets/grid.yaml` |
-| 3.8 | Update exhibit registry | `configs/exhibits/registry.yaml` |
+| 3.5 | Create base exhibit preset | NEW: `configs/exhibits/_base/exhibit.yaml` |
+| 3.6 | Create Plotly base preset | NEW: `configs/exhibits/presets/plotly_base.yaml` |
+| 3.7 | Create line chart preset | NEW: `configs/exhibits/presets/line_chart.yaml` (referenced by registry, missing) |
+| 3.8 | Create bar chart preset | NEW: `configs/exhibits/presets/bar_chart.yaml` (referenced by registry, missing) |
+| 3.8a | Update exhibit registry | `configs/exhibits/registry.yaml` - add inheritance fields |
 | 3.9 | Create hierarchical model graph component | REFACTOR: `app/ui/components/model_graph_viewer.py` |
 | 3.10 | Add global model graph to home page | UPDATE: `app/ui/notebook_app_duckdb.py` |
 | 3.11 | Add context-aware graph for notebook view | UPDATE: `app/ui/components/notebook_viewer.py` |
@@ -4023,7 +4024,46 @@ These components were created and are **NOT duplicates** of existing functionali
 
 ---
 
-### Phase 15: Final Cleanup & Validation (Days 68-70)
+### Phase 15: Exhibit Enhancements (Days 68-72)
+
+**Goal:** Wire exhibit YAML presets into rendering code and research/implement improved rendering methodology
+
+This phase addresses the gap between Phase 3 (YAML preset definition) and actual exhibit rendering:
+- Connect YAML presets to exhibit renderers (currently hardcoded defaults)
+- Research and implement best practices for exhibit rendering architecture
+- Standardize the exhibit inheritance pattern to match models
+- Improve maintainability and configurability of exhibit components
+
+| # | Task | Description | Status |
+|---|------|-------------|--------|
+| 15.1 | Audit current exhibit rendering | Document hardcoded values in all exhibit renderers | Pending |
+| 15.2 | Create ExhibitConfigLoader | Load YAML presets similar to ModelConfigLoader | Pending |
+| 15.3 | Wire presets into great_table.py | Connect `great_table.yaml` to renderer (currently unused) | Pending |
+| 15.4 | Wire presets into line_chart.py | Load config from `line_chart.yaml` instead of hardcoded | Pending |
+| 15.5 | Wire presets into bar_chart.py | Load config from `bar_chart.yaml` instead of hardcoded | Pending |
+| 15.6 | Update BaseExhibitRenderer | Support preset loading in base class | Pending |
+| 15.7 | Research rendering methodology | Evaluate Plotly vs alternatives, chart sizing, responsive design | Pending |
+| 15.8 | Implement rendering improvements | Apply research findings to exhibit components | Pending |
+| 15.9 | Update exhibit.py dispatcher | Use registry.yaml for dynamic renderer loading | Pending |
+| 15.10 | Test exhibit rendering | Verify all exhibit types work with new preset system | Pending |
+
+**Research Areas (Task 15.7):**
+- Current rendering methodology (Plotly via `components.html()`)
+- Alternative approaches (Streamlit native charts, Altair, etc.)
+- Responsive design patterns for different screen sizes
+- Chart interactivity and performance optimization
+- Theme consistency between light/dark modes
+
+**Current State Analysis:**
+- `registry.yaml` exists but presets are NOT loaded by code
+- `great_table.yaml` exists but is completely unused (hardcoded defaults in `great_table.py`)
+- `line_chart.yaml`, `bar_chart.yaml` referenced in registry but don't exist
+- `base_renderer.py` has hardcoded theme logic that should come from presets
+- `exhibit.py` has hardcoded imports instead of using registry
+
+---
+
+### Phase 16: Final Cleanup & Validation (Days 73-75)
 
 **Goal:** Address scope creep, deferred items, and perform final validation across all implemented phases
 
@@ -4036,13 +4076,13 @@ This phase is a catch-all for:
 
 | # | Task | Description | Status |
 |---|------|-------------|--------|
-| 15.1 | Complete _backend removal from all models | Deferred from Phase 2 (requires Phase 5 session injection) | Pending |
-| 15.2 | Optimize measure implementations | Consider Window Functions vs `_to_pandas()` for performance-critical measures | Pending |
-| 15.3 | Final integration test suite | Run all models with both backends (Spark + DuckDB) | Pending |
-| 15.4 | Performance benchmarking | Compare build times, query performance across backends | Pending |
-| 15.5 | Documentation sync | Update CLAUDE.md, README, and guide docs with all changes | Pending |
-| 15.6 | Deprecation cleanup | Remove all files marked with deprecation warnings in Phase 1 | Pending |
-| 15.7 | **Scope creep backlog** | *(Items added during implementation go here)* | Backlog |
+| 16.1 | Complete _backend removal from all models | Deferred from Phase 2 (requires Phase 5 session injection) | Pending |
+| 16.2 | Optimize measure implementations | Consider Window Functions vs `_to_pandas()` for performance-critical measures | Pending |
+| 16.3 | Final integration test suite | Run all models with both backends (Spark + DuckDB) | Pending |
+| 16.4 | Performance benchmarking | Compare build times, query performance across backends | Pending |
+| 16.5 | Documentation sync | Update CLAUDE.md, README, and guide docs with all changes | Pending |
+| 16.6 | Deprecation cleanup | Remove all files marked with deprecation warnings in Phase 1 | Pending |
+| 16.7 | **Scope creep backlog** | *(Items added during implementation go here)* | Backlog |
 
 **Scope Creep Backlog:**
 *(This section captures items that emerge during implementation but don't fit earlier phases)*
@@ -4061,6 +4101,7 @@ This phase is a catch-all for:
 - [ ] All tests passing
 - [ ] Documentation up to date
 - [ ] ETFs model config errors resolved (no missing schema/graph/measures.yaml)
+- [ ] Exhibit YAML presets wired into renderers (Phase 15 validation)
 
 ---
 
@@ -4084,9 +4125,11 @@ This phase is a catch-all for:
 | Phase 13: Metadata Table Enhancement | 5 | High | Enhancement |
 | Phase 14: Logger Model Enhancement | 6 | High | Enhancement |
 | **Enhancement Subtotal** | **43 days** | | |
-| Phase 15: Final Cleanup & Validation | 3 | Medium | Cleanup |
+| Phase 15: Exhibit Enhancements | 5 | Medium | Exhibits |
+| **Exhibits Subtotal** | **5 days** | | |
+| Phase 16: Final Cleanup & Validation | 3 | Medium | Cleanup |
 | **Cleanup Subtotal** | **3 days** | | |
-| **Total** | **72 days** | | |
+| **Total** | **77 days** | | |
 
 ---
 
@@ -4115,11 +4158,15 @@ Example commits (Enhancement phases):
 - "Phase 9: Chart of Accounts Enhancement - Create _base/financial templates"
 - "Phase 10: City Services Enhancement - Add 311/911 data endpoints"
 
+Example commits (Exhibits phase):
+- "Phase 15: Exhibits - Create ExhibitConfigLoader for preset loading"
+- "Phase 15: Exhibits - Wire line_chart.yaml into renderer"
+
 Example commits (Cleanup phase):
-- "Phase 15: Final Cleanup - Remove _backend from all models"
-- "Phase 15: Final Cleanup - Optimize rolling measures with Window Functions"
-- "Phase 15: Final Cleanup - Run integration tests across both backends"
-- "Phase 15: Final Cleanup - Remove deprecated scripts from Phase 1"
+- "Phase 16: Final Cleanup - Remove _backend from all models"
+- "Phase 16: Final Cleanup - Optimize rolling measures with Window Functions"
+- "Phase 16: Final Cleanup - Run integration tests across both backends"
+- "Phase 16: Final Cleanup - Remove deprecated scripts from Phase 1"
 ```
 
 Each phase will be completed before moving to the next, with a thorough review at the end of each phase.
@@ -4270,7 +4317,17 @@ This log tracks all completed implementation steps as they are finished.
 
 ---
 
-### Phase 15: Final Cleanup & Validation (Pending)
+### Phase 15: Exhibit Enhancements (Pending)
+
+*This phase will address:*
+- Wire YAML presets into exhibit renderers (currently hardcoded)
+- Create ExhibitConfigLoader for preset loading
+- Research rendering methodology improvements
+- Standardize exhibit inheritance pattern
+
+---
+
+### Phase 16: Final Cleanup & Validation (Pending)
 
 *This phase will address:*
 - Deferred items from earlier phases (e.g., _backend removal from Phase 2)

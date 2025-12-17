@@ -1,5 +1,12 @@
 # Great Tables Preset Configuration
-# Default parameters for Great Tables exhibits
+# Publication-quality tables using Great Tables library
+# Extends: _base/exhibit.yaml
+# Version: 1.0
+
+extends: _base/exhibit.yaml
+
+# Great Table specific description
+description: "Publication-quality tables with advanced formatting"
 
 defaults:
   # Theme

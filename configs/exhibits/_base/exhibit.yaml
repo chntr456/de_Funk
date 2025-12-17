@@ -1,0 +1,80 @@
+# Base Exhibit Configuration
+# All exhibit types inherit from this base configuration
+# Version: 1.0
+
+# Metadata
+version: "1.0"
+description: "Base configuration for all exhibit types"
+
+# Common defaults inherited by all exhibits
+defaults:
+  # Display settings
+  title: null              # Exhibit title (optional)
+  description: null        # Subtitle/description (optional)
+
+  # Collapsible behavior
+  collapsible: false       # Whether exhibit can be collapsed
+  collapsible_title: null  # Title when collapsed (defaults to title)
+  collapsible_expanded: true  # Initial state if collapsible
+
+  # Sizing
+  height: 400              # Default height in pixels
+  width: null              # Null = auto/100%
+  min_height: 200          # Minimum height
+  max_height: 800          # Maximum height
+
+  # Interactivity
+  interactive: true        # Enable interactive features
+
+  # Theme
+  theme: "auto"            # auto, light, dark (auto follows system)
+
+# Theme configurations
+themes:
+  light:
+    background_color: "#FFFFFF"
+    paper_color: "#F8F9FA"
+    font_color: "#212529"
+    grid_color: "#E0E0E0"
+    border_color: "#DEE2E6"
+    accent_color: "#0066CC"
+
+  dark:
+    background_color: "#1E2130"
+    paper_color: "#262730"
+    font_color: "#FAFAFA"
+    grid_color: "#3A3D45"
+    border_color: "#3A3D45"
+    accent_color: "#4DA6FF"
+
+# Font configuration
+fonts:
+  family: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
+  size:
+    title: 16
+    subtitle: 12
+    label: 11
+    tick: 10
+    legend: 11
+
+# Common selector configurations
+selectors:
+  measure_selector:
+    enabled: false
+    multiselect: true
+    min_selections: 1
+    max_selections: null  # null = no limit
+
+  dimension_selector:
+    enabled: false
+    aggregation: "avg"  # avg, sum, min, max, count
+    aggregate_on_change: true
+
+# Export options
+export:
+  enabled: true
+  formats:
+    - png
+    - svg
+  default_filename: "{exhibit_id}_{timestamp}"
+  scale: 2  # Image scale factor
