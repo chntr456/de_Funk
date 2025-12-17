@@ -251,7 +251,12 @@ def test_scheduler():
         for job in jobs:
             print(f"    - {job.id}: {job.name}")
 
-        scheduler.stop()
+        # Verify jobs were registered correctly
+        assert len(jobs) == 4, f"Expected 4 jobs, got {len(jobs)}"
+        job_ids = {job.id for job in jobs}
+        assert 'daily_market_cap_refresh' in job_ids
+        assert 'daily_price_ingestion' in job_ids
+
         print("✓ APScheduler test passed")
         return True
 

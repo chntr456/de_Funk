@@ -1,0 +1,188 @@
+# Cluster Configuration for de_Funk
+# Version: 1.0
+#
+# This configuration defines settings for distributed computing with Ray
+# and scheduled jobs with APScheduler.
+#
+# Usage:
+#   - Copy to ~/.de_funk/cluster.yaml for user-specific settings
+#   - Or set DEFUNK_CLUSTER_CONFIG env var to point to custom location
+
+# =============================================================================
+# RAY CLUSTER SETTINGS
+# =============================================================================
+ray:
+  # Cluster mode: "local", "auto", or "address"
+  # - local: Start local Ray instance (all cores on this machine)
+  # - auto: Connect to existing cluster (ray start --head must be running)
+  # - address: Connect to specific cluster address
+  mode: local
+
+  # Address for "address" mode (ray://host:port)
+  address: null
+
+  # Local mode settings
+  local:
+    # Limit CPUs (null = use all available)
+    num_cpus: null
+    # Limit memory in GB (null = use all available)
+    memory_gb: null
+
+  # Cluster mode settings (for multi-node setup)
+  cluster:
+    # Head node configuration
+    head:
+      host: "192.168.1.100"
+      port: 6379
+      dashboard_port: 8265
+
+    # Worker nodes (for documentation/setup scripts)
+    workers:
+      - host: "192.168.1.101"
+        cpus: 4
+        memory_gb: 16
+      - host: "192.168.1.102"
+        cpus: 4
+        memory_gb: 16
+      - host: "192.168.1.103"
+        cpus: 4
+        memory_gb: 16
+
+  # Runtime environment for Ray workers
+  runtime_env:
+    # Working directory (synced to workers)
+    working_dir: null
+    # Python packages to install on workers
+    pip: []
+    # Environment variables
+    env_vars: {}
+
+# =============================================================================
+# SHARED STORAGE SETTINGS
+# =============================================================================
+storage:
+  # Storage type: "local" or "nfs"
+  type: local
+
+  # Local storage paths (relative to repo root)
+  local:
+    bronze: "storage/bronze"
+    silver: "storage/silver"
+    forecasts: "storage/forecasts"
+
+  # NFS settings (for cluster mode)
+  nfs:
+    # NFS mount point on workers
+    mount_point: "/shared/storage"
+    # NFS server settings (for setup reference)
+    server:
+      host: "192.168.1.100"
+      export_path: "/home/de_funk/storage"
+
+# =============================================================================
+# SCHEDULER SETTINGS
+# =============================================================================
+scheduler:
+  # Enable scheduler
+  enabled: true
+
+  # Timezone for cron schedules
+  timezone: "America/New_York"
+
+  # Default jobs
+  jobs:
+    daily_market_cap_refresh:
+      enabled: true
+      description: "Refresh market cap rankings"
+      schedule:
+        hour: 6
+        minute: 0
+      settings:
+        max_tickers: 1000
+
+    daily_price_ingestion:
+      enabled: true
+      description: "Ingest daily prices after market close"
+      schedule:
+        hour: 16
+        minute: 30
+      settings:
+        max_tickers: 500
+        data_types: ["prices"]
+        use_market_cap: true
+
+    daily_silver_rebuild:
+      enabled: true
+      description: "Rebuild silver layer models"
+      schedule:
+        hour: 5
+        minute: 0
+      settings:
+        models: ["temporal", "company", "stocks", "macro"]
+
+    weekly_forecasts:
+      enabled: true
+      description: "Run full forecast on cluster"
+      schedule:
+        day_of_week: "sun"
+        hour: 2
+        minute: 0
+      settings:
+        max_tickers: 500
+        models: ["arima"]
+        horizon: 30
+        use_cluster: true
+
+# =============================================================================
+# INGESTION SETTINGS
+# =============================================================================
+ingestion:
+  # Default batch size for ingestion
+  batch_size: 20
+
+  # Auto-compact Delta tables after ingestion
+  auto_compact: true
+
+  # Rate limiting (requests per second)
+  rate_limit: 1.0
+
+  # Retry settings
+  max_retries: 3
+  retry_delay_seconds: 2.0
+
+# =============================================================================
+# FORECASTING SETTINGS
+# =============================================================================
+forecasting:
+  # Minimum data points required for forecasting
+  min_data_points: 60
+
+  # Default forecast horizon (days)
+  default_horizon: 30
+
+  # Available models
+  models:
+    arima:
+      enabled: true
+      order: [5, 1, 0]
+    prophet:
+      enabled: true
+      daily_seasonality: false
+      yearly_seasonality: true
+    ets:
+      enabled: true
+      trend: "add"
+      damped: true
+
+# =============================================================================
+# MONITORING SETTINGS
+# =============================================================================
+monitoring:
+  # Enable metrics collection
+  metrics_enabled: true
+
+  # Log level for pipeline operations
+  log_level: "INFO"
+
+  # Progress display mode: "minimal" or "verbose"
+  progress_mode: "minimal"
