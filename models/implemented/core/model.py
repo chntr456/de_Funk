@@ -5,11 +5,18 @@ This model contains common dimensions that all other models reference:
 - dim_calendar: Universal calendar dimension with rich date attributes
 
 All other models should depend on this core model for shared dimensions.
+
+Version: 2.1 - Backend-agnostic via UniversalSession methods
 """
 
-from typing import Optional
-from pyspark.sql import DataFrame
+from typing import Optional, Any, Dict
 from models.base.model import BaseModel
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Type alias for DataFrame (can be Spark or DuckDB)
+DataFrame = Any
 
 
 class CoreModel(BaseModel):
@@ -27,6 +34,8 @@ class CoreModel(BaseModel):
     - It provides reference data like calendar
 
     The YAML config (configs/models/core.yaml) drives everything.
+
+    Backend-agnostic: uses session methods for all DataFrame operations.
     """
 
     # ============================================================
@@ -54,16 +63,37 @@ class CoreModel(BaseModel):
         """
         df = self.get_dimension_df('dim_calendar')
 
-        if date_from:
-            df = df.filter(df.date >= date_from)
-        if date_to:
-            df = df.filter(df.date <= date_to)
-        if year:
-            df = df.filter(df.year == year)
-        if month:
-            df = df.filter(df.month == month)
-
-        return df.orderBy('date')
+        if self.session:
+            # Use session methods for filtering
+            df = self.session.filter_by_range(df, 'date', min_val=date_from, max_val=date_to)
+            if year:
+                df = self.session.filter_by_value(df, 'year', year)
+            if month:
+                df = self.session.filter_by_value(df, 'month', month)
+            return self.session.order_by(df, 'date')
+        else:
+            # Fallback for when session is not available
+            if self.backend == 'spark':
+                if date_from:
+                    df = df.filter(df.date >= date_from)
+                if date_to:
+                    df = df.filter(df.date <= date_to)
+                if year:
+                    df = df.filter(df.year == year)
+                if month:
+                    df = df.filter(df.month == month)
+                return df.orderBy('date')
+            else:
+                # DuckDB/pandas
+                if date_from:
+                    df = df[df['date'] >= date_from]
+                if date_to:
+                    df = df[df['date'] <= date_to]
+                if year:
+                    df = df[df['year'] == year]
+                if month:
+                    df = df[df['month'] == month]
+                return df.sort_values('date') if hasattr(df, 'sort_values') else df
 
     def get_weekdays(
         self,
@@ -81,7 +111,13 @@ class CoreModel(BaseModel):
             DataFrame with weekday dates
         """
         df = self.get_calendar(date_from, date_to)
-        return df.filter(df.is_weekday == True)
+
+        if self.session:
+            return self.session.filter_by_value(df, 'is_weekday', True)
+        elif self.backend == 'spark':
+            return df.filter(df.is_weekday == True)
+        else:
+            return df[df['is_weekday'] == True]
 
     def get_weekends(
         self,
@@ -99,7 +135,13 @@ class CoreModel(BaseModel):
             DataFrame with weekend dates
         """
         df = self.get_calendar(date_from, date_to)
-        return df.filter(df.is_weekend == True)
+
+        if self.session:
+            return self.session.filter_by_value(df, 'is_weekend', True)
+        elif self.backend == 'spark':
+            return df.filter(df.is_weekend == True)
+        else:
+            return df[df['is_weekend'] == True]
 
     def get_fiscal_year_dates(self, fiscal_year: int) -> DataFrame:
         """
@@ -112,7 +154,15 @@ class CoreModel(BaseModel):
             DataFrame with dates in fiscal year
         """
         df = self.get_dimension_df('dim_calendar')
-        return df.filter(df.fiscal_year == fiscal_year).orderBy('date')
+
+        if self.session:
+            df = self.session.filter_by_value(df, 'fiscal_year', fiscal_year)
+            return self.session.order_by(df, 'date')
+        elif self.backend == 'spark':
+            return df.filter(df.fiscal_year == fiscal_year).orderBy('date')
+        else:
+            filtered = df[df['fiscal_year'] == fiscal_year]
+            return filtered.sort_values('date') if hasattr(filtered, 'sort_values') else filtered
 
     def get_quarter_dates(self, year: int, quarter: int) -> DataFrame:
         """
@@ -126,9 +176,18 @@ class CoreModel(BaseModel):
             DataFrame with dates in quarter
         """
         df = self.get_dimension_df('dim_calendar')
-        return df.filter(
-            (df.year == year) & (df.quarter == quarter)
-        ).orderBy('date')
+
+        if self.session:
+            df = self.session.filter_by_value(df, 'year', year)
+            df = self.session.filter_by_value(df, 'quarter', quarter)
+            return self.session.order_by(df, 'date')
+        elif self.backend == 'spark':
+            return df.filter(
+                (df.year == year) & (df.quarter == quarter)
+            ).orderBy('date')
+        else:
+            filtered = df[(df['year'] == year) & (df['quarter'] == quarter)]
+            return filtered.sort_values('date') if hasattr(filtered, 'sort_values') else filtered
 
     def get_month_dates(self, year: int, month: int) -> DataFrame:
         """
@@ -142,11 +201,20 @@ class CoreModel(BaseModel):
             DataFrame with dates in month
         """
         df = self.get_dimension_df('dim_calendar')
-        return df.filter(
-            (df.year == year) & (df.month == month)
-        ).orderBy('date')
 
-    def get_date_range_info(self, date_from: str, date_to: str) -> dict:
+        if self.session:
+            df = self.session.filter_by_value(df, 'year', year)
+            df = self.session.filter_by_value(df, 'month', month)
+            return self.session.order_by(df, 'date')
+        elif self.backend == 'spark':
+            return df.filter(
+                (df.year == year) & (df.month == month)
+            ).orderBy('date')
+        else:
+            filtered = df[(df['year'] == year) & (df['month'] == month)]
+            return filtered.sort_values('date') if hasattr(filtered, 'sort_values') else filtered
+
+    def get_date_range_info(self, date_from: str, date_to: str) -> Dict[str, Any]:
         """
         Get summary information about a date range.
 
@@ -157,20 +225,45 @@ class CoreModel(BaseModel):
         Returns:
             Dictionary with date range statistics
         """
-        from pyspark.sql import functions as F
-
         df = self.get_calendar(date_from, date_to)
 
-        total_days = df.count()
-        weekdays = df.filter(df.is_weekday == True).count()
-        weekends = df.filter(df.is_weekend == True).count()
+        if self.session:
+            # Convert to pandas for aggregations (works for both backends)
+            pdf = self.session.to_pandas(df)
+            total_days = len(pdf)
+            weekdays = len(pdf[pdf['is_weekday'] == True])
+            weekends = len(pdf[pdf['is_weekend'] == True])
+            num_years = pdf['year'].nunique()
+            num_quarters = pdf['year_quarter'].nunique()
+            num_months = pdf['year_month'].nunique()
+        elif self.backend == 'spark':
+            from pyspark.sql import functions as F
 
-        # Get unique years, quarters, months
-        summary = df.agg(
-            F.countDistinct('year').alias('num_years'),
-            F.countDistinct('year_quarter').alias('num_quarters'),
-            F.countDistinct('year_month').alias('num_months')
-        ).first()
+            total_days = df.count()
+            weekdays = df.filter(df.is_weekday == True).count()
+            weekends = df.filter(df.is_weekend == True).count()
+
+            summary = df.agg(
+                F.countDistinct('year').alias('num_years'),
+                F.countDistinct('year_quarter').alias('num_quarters'),
+                F.countDistinct('year_month').alias('num_months')
+            ).first()
+
+            num_years = summary['num_years']
+            num_quarters = summary['num_quarters']
+            num_months = summary['num_months']
+        else:
+            # DuckDB/pandas fallback
+            if hasattr(df, 'df'):
+                pdf = df.df()
+            else:
+                pdf = df
+            total_days = len(pdf)
+            weekdays = len(pdf[pdf['is_weekday'] == True])
+            weekends = len(pdf[pdf['is_weekend'] == True])
+            num_years = pdf['year'].nunique()
+            num_quarters = pdf['year_quarter'].nunique()
+            num_months = pdf['year_month'].nunique()
 
         return {
             'date_from': date_from,
@@ -178,12 +271,12 @@ class CoreModel(BaseModel):
             'total_days': total_days,
             'weekdays': weekdays,
             'weekends': weekends,
-            'num_years': summary['num_years'],
-            'num_quarters': summary['num_quarters'],
-            'num_months': summary['num_months']
+            'num_years': num_years,
+            'num_quarters': num_quarters,
+            'num_months': num_months
         }
 
-    def get_calendar_config(self) -> dict:
+    def get_calendar_config(self) -> Dict[str, Any]:
         """
         Get calendar generation configuration from YAML.
 

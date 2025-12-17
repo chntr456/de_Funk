@@ -4,7 +4,7 @@ Company Model - Corporate legal entities.
 Represents companies as legal entities (not tradable securities).
 Primary key is SEC CIK (Central Index Key).
 
-Version: 2.0 - Redesigned model architecture
+Version: 2.1 - Backend-agnostic via UniversalSession methods
 """
 
 from models.base.model import BaseModel
@@ -23,6 +23,8 @@ class CompanyModel(BaseModel):
 
     This model focuses on corporate entities, fundamentals, and SEC filings.
     For tradable securities and prices, use StocksModel.
+
+    Backend-agnostic: uses session methods for all DataFrame operations.
     """
 
     def get_company_by_cik(self, cik: str) -> Any:
@@ -37,9 +39,11 @@ class CompanyModel(BaseModel):
         """
         dim_company = self.get_table('dim_company')
 
-        if self._backend == 'spark':
+        if self.session:
+            return self.session.filter_by_value(dim_company, 'cik', cik)
+        elif self.backend == 'spark':
             return dim_company.filter(dim_company.cik == cik)
-        else:  # duckdb/pandas
+        else:
             return dim_company[dim_company['cik'] == cik]
 
     def get_company_by_ticker(self, ticker: str) -> Any:
@@ -54,9 +58,11 @@ class CompanyModel(BaseModel):
         """
         dim_company = self.get_table('dim_company')
 
-        if self._backend == 'spark':
+        if self.session:
+            return self.session.filter_by_value(dim_company, 'ticker_primary', ticker)
+        elif self.backend == 'spark':
             return dim_company.filter(dim_company.ticker_primary == ticker)
-        else:  # duckdb/pandas
+        else:
             return dim_company[dim_company['ticker_primary'] == ticker]
 
     def get_companies_by_sector(self, sector: str) -> Any:
@@ -71,9 +77,11 @@ class CompanyModel(BaseModel):
         """
         dim_company = self.get_table('dim_company')
 
-        if self._backend == 'spark':
+        if self.session:
+            return self.session.filter_by_value(dim_company, 'sector', sector)
+        elif self.backend == 'spark':
             return dim_company.filter(dim_company.sector == sector)
-        else:  # duckdb/pandas
+        else:
             return dim_company[dim_company['sector'] == sector]
 
     def get_active_companies(self) -> Any:
@@ -85,9 +93,11 @@ class CompanyModel(BaseModel):
         """
         dim_company = self.get_table('dim_company')
 
-        if self._backend == 'spark':
+        if self.session:
+            return self.session.filter_by_value(dim_company, 'is_active', True)
+        elif self.backend == 'spark':
             return dim_company.filter(dim_company.is_active == True)
-        else:  # duckdb/pandas
+        else:
             return dim_company[dim_company['is_active'] == True]
 
     def list_sectors(self) -> List[str]:
@@ -99,10 +109,13 @@ class CompanyModel(BaseModel):
         """
         dim_company = self.get_table('dim_company')
 
-        if self._backend == 'spark':
+        if self.session:
+            sectors = self.session.distinct_values(dim_company, 'sector')
+            return [s for s in sectors if s is not None]
+        elif self.backend == 'spark':
             sectors = dim_company.select('sector').distinct().collect()
             return [row.sector for row in sectors if row.sector]
-        else:  # duckdb/pandas
+        else:
             return dim_company['sector'].dropna().unique().tolist()
 
     def get_company_count_by_sector(self) -> Dict[str, int]:
@@ -114,10 +127,13 @@ class CompanyModel(BaseModel):
         """
         dim_company = self.get_table('dim_company')
 
-        if self._backend == 'spark':
+        # Note: aggregation is not yet abstracted in session, using backend-specific code
+        if self.backend == 'spark':
             result = dim_company.groupBy('sector').count().collect()
             return {row.sector: row['count'] for row in result if row.sector}
-        else:  # duckdb/pandas
+        else:
+            if hasattr(dim_company, 'df'):
+                return dim_company.df()['sector'].value_counts().to_dict()
             return dim_company['sector'].value_counts().to_dict()
 
     # Future methods when we add financial data:

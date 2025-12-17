@@ -3,10 +3,18 @@ ETFModel - Domain model for ETF data.
 
 Inherits all graph building logic from BaseModel.
 Adds ETF-specific convenience methods.
+
+Version: 2.1 - Backend-agnostic via UniversalSession methods
 """
 
-from typing import Optional
+from typing import Optional, Any, List
 from models.base.model import BaseModel
+import logging
+
+logger = logging.getLogger(__name__)
+
+# Type alias for DataFrame (can be Spark or DuckDB)
+DataFrame = Any
 
 # Bootstrap ETF-specific domain features when this model is loaded
 # This ensures ETF weighting strategies are available
@@ -29,6 +37,8 @@ class ETFModel(BaseModel):
     - Path materialization
 
     The YAML config (configs/models/etf.yaml) drives everything.
+
+    Backend-agnostic: uses session methods for all DataFrame operations.
     """
 
     # ============================================================
@@ -62,7 +72,7 @@ class ETFModel(BaseModel):
             limit=limit
         )
 
-    def get_top_etfs_by_measure(self, measure_name: str, limit: int = 10) -> list:
+    def get_top_etfs_by_measure(self, measure_name: str, limit: int = 10) -> List[str]:
         """
         Get list of top ETF ticker symbols by a measure.
 
@@ -79,17 +89,23 @@ class ETFModel(BaseModel):
         """
         result = self.calculate_measure_by_etf(measure_name, limit=limit)
 
-        # Handle both Pandas and Spark DataFrames
-        if self.backend == 'duckdb':
-            return result.data['etf_ticker'].tolist()
-        else:  # spark
+        if self.session:
+            # Use session to convert to list
+            pdf = self.session.to_pandas(result.data)
+            return pdf['etf_ticker'].tolist()
+        elif self.backend == 'spark':
             return [row['etf_ticker'] for row in result.data.collect()]
+        else:
+            # DuckDB/pandas
+            if hasattr(result.data, 'df'):
+                return result.data.df()['etf_ticker'].tolist()
+            return result.data['etf_ticker'].tolist()
 
     # ============================================================
     # ETF-SPECIFIC CONVENIENCE METHODS
     # ============================================================
 
-    def get_etf_prices(self, etf_ticker: Optional[str] = None):
+    def get_etf_prices(self, etf_ticker: Optional[str] = None) -> DataFrame:
         """
         Get ETF price data.
 
@@ -100,14 +116,18 @@ class ETFModel(BaseModel):
             DataFrame with ETF price data
         """
         df = self.get_table('fact_etf_prices')
+
         if etf_ticker:
-            if self.backend == 'duckdb':
-                df = df[df['etf_ticker'] == etf_ticker]
+            if self.session:
+                return self.session.filter_by_value(df, 'etf_ticker', etf_ticker)
+            elif self.backend == 'spark':
+                return df.filter(df.etf_ticker == etf_ticker)
             else:
-                df = df.filter(df.etf_ticker == etf_ticker)
+                return df[df['etf_ticker'] == etf_ticker]
+
         return df
 
-    def get_etf_info(self, etf_ticker: Optional[str] = None):
+    def get_etf_info(self, etf_ticker: Optional[str] = None) -> DataFrame:
         """
         Get ETF information.
 
@@ -118,18 +138,22 @@ class ETFModel(BaseModel):
             DataFrame with ETF info
         """
         df = self.get_dimension_df('dim_etf')
+
         if etf_ticker:
-            if self.backend == 'duckdb':
-                df = df[df['etf_ticker'] == etf_ticker]
+            if self.session:
+                return self.session.filter_by_value(df, 'etf_ticker', etf_ticker)
+            elif self.backend == 'spark':
+                return df.filter(df.etf_ticker == etf_ticker)
             else:
-                df = df.filter(df.etf_ticker == etf_ticker)
+                return df[df['etf_ticker'] == etf_ticker]
+
         return df
 
     def get_etf_holdings(
         self,
         etf_ticker: Optional[str] = None,
         as_of_date: Optional[str] = None
-    ):
+    ) -> DataFrame:
         """
         Get ETF holdings data.
 
@@ -146,20 +170,26 @@ class ETFModel(BaseModel):
         """
         df = self.get_dimension_df('dim_etf_holdings')
 
-        if self.backend == 'duckdb':
+        if self.session:
             if etf_ticker:
-                df = df[df['etf_ticker'] == etf_ticker]
+                df = self.session.filter_by_value(df, 'etf_ticker', etf_ticker)
             if as_of_date:
-                df = df[df['as_of_date'] == as_of_date]
-        else:
+                df = self.session.filter_by_value(df, 'as_of_date', as_of_date)
+        elif self.backend == 'spark':
             if etf_ticker:
                 df = df.filter(df.etf_ticker == etf_ticker)
             if as_of_date:
                 df = df.filter(df.as_of_date == as_of_date)
+        else:
+            # DuckDB/pandas
+            if etf_ticker:
+                df = df[df['etf_ticker'] == etf_ticker]
+            if as_of_date:
+                df = df[df['as_of_date'] == as_of_date]
 
         return df
 
-    def get_etf_with_context(self, etf_ticker: Optional[str] = None):
+    def get_etf_with_context(self, etf_ticker: Optional[str] = None) -> DataFrame:
         """
         Get ETF prices with full fund information.
 
@@ -172,9 +202,51 @@ class ETFModel(BaseModel):
             DataFrame with prices and fund info
         """
         df = self.get_table('etf_prices_with_info')
+
         if etf_ticker:
-            if self.backend == 'duckdb':
-                df = df[df['etf_ticker'] == etf_ticker]
+            if self.session:
+                return self.session.filter_by_value(df, 'etf_ticker', etf_ticker)
+            elif self.backend == 'spark':
+                return df.filter(df.etf_ticker == etf_ticker)
             else:
-                df = df.filter(df.etf_ticker == etf_ticker)
+                return df[df['etf_ticker'] == etf_ticker]
+
         return df
+
+    def list_etf_tickers(self, active_only: bool = True) -> List[str]:
+        """
+        Get list of all ETF tickers.
+
+        Args:
+            active_only: Only return active ETFs
+
+        Returns:
+            List of ETF ticker symbols
+        """
+        df = self.get_dimension_df('dim_etf')
+
+        if active_only and 'is_active' in self._get_columns(df):
+            if self.session:
+                df = self.session.filter_by_value(df, 'is_active', True)
+            elif self.backend == 'spark':
+                df = df.filter(df.is_active == True)
+            else:
+                df = df[df['is_active'] == True]
+
+        if self.session:
+            return self.session.distinct_values(df, 'etf_ticker')
+        elif self.backend == 'spark':
+            return [row.etf_ticker for row in df.select('etf_ticker').distinct().collect()]
+        else:
+            if hasattr(df, 'df'):
+                return df.df()['etf_ticker'].unique().tolist()
+            return df['etf_ticker'].unique().tolist()
+
+    def _get_columns(self, df) -> List[str]:
+        """Get column names from DataFrame (helper for both backends)."""
+        if self.backend == 'spark':
+            return df.columns
+        elif hasattr(df, 'columns'):
+            return list(df.columns)
+        else:
+            return []

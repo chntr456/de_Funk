@@ -596,3 +596,375 @@ class UniversalSession:
         """Get metadata for a model."""
         model = self.load_model(model_name)
         return model.get_metadata()
+
+    # ============================================================
+    # BACKEND-AGNOSTIC QUERY HELPERS
+    # ============================================================
+    # These methods encapsulate backend differences so models
+    # can remain backend-agnostic. Models should use these
+    # instead of writing backend-specific code.
+
+    def filter_by_value(self, df: Any, column: str, value: Any) -> Any:
+        """
+        Filter DataFrame where column equals value (exact match).
+
+        Args:
+            df: DataFrame (Spark or DuckDB/pandas)
+            column: Column name to filter on
+            value: Value to match
+
+        Returns:
+            Filtered DataFrame
+        """
+        if self.backend == 'spark':
+            return df.filter(df[column] == value)
+        else:
+            # DuckDB relation or pandas
+            if hasattr(df, 'filter'):
+                return df.filter(f"{column} = {self._sql_value(value)}")
+            else:
+                return df[df[column] == value]
+
+    def filter_by_values(self, df: Any, column: str, values: List[Any]) -> Any:
+        """
+        Filter DataFrame where column is in values list.
+
+        Handles Spark semi-join vs DuckDB isin() transparently.
+
+        Args:
+            df: DataFrame (Spark or DuckDB/pandas)
+            column: Column name to filter on
+            values: List of values to match
+
+        Returns:
+            Filtered DataFrame
+        """
+        if not values:
+            return df
+
+        if self.backend == 'spark':
+            # Spark: Use semi-join for efficient large list filtering
+            values_df = self.connection.createDataFrame([(v,) for v in values], [column])
+            return df.join(values_df, column, 'left_semi')
+        else:
+            # DuckDB/pandas: Use isin
+            if hasattr(df, 'filter'):
+                # DuckDB relation
+                values_str = ', '.join(self._sql_value(v) for v in values)
+                return df.filter(f"{column} IN ({values_str})")
+            else:
+                # pandas
+                return df[df[column].isin(values)]
+
+    def filter_by_range(
+        self,
+        df: Any,
+        column: str,
+        min_val: Any = None,
+        max_val: Any = None
+    ) -> Any:
+        """
+        Filter DataFrame by range (dates, numbers).
+
+        Args:
+            df: DataFrame (Spark or DuckDB/pandas)
+            column: Column name to filter on
+            min_val: Minimum value (inclusive), None to skip
+            max_val: Maximum value (inclusive), None to skip
+
+        Returns:
+            Filtered DataFrame
+        """
+        if min_val is None and max_val is None:
+            return df
+
+        if self.backend == 'spark':
+            if min_val is not None:
+                df = df.filter(df[column] >= min_val)
+            if max_val is not None:
+                df = df.filter(df[column] <= max_val)
+        else:
+            if hasattr(df, 'filter'):
+                # DuckDB relation
+                if min_val is not None:
+                    df = df.filter(f"{column} >= {self._sql_value(min_val)}")
+                if max_val is not None:
+                    df = df.filter(f"{column} <= {self._sql_value(max_val)}")
+            else:
+                # pandas
+                if min_val is not None:
+                    df = df[df[column] >= min_val]
+                if max_val is not None:
+                    df = df[df[column] <= max_val]
+
+        return df
+
+    def semi_join(self, df: Any, filter_df: Any, on: str) -> Any:
+        """
+        Efficient filtering via semi-join.
+
+        Keeps rows from df where the join column exists in filter_df.
+        Useful for filtering a large table to a subset of keys.
+
+        Args:
+            df: Main DataFrame to filter
+            filter_df: DataFrame with values to keep
+            on: Column name to join on
+
+        Returns:
+            Filtered DataFrame (rows from df where on-column exists in filter_df)
+        """
+        if self.backend == 'spark':
+            # Spark: native left_semi join
+            return df.join(filter_df.select(on).distinct(), on, 'left_semi')
+        else:
+            # DuckDB/pandas: use isin
+            import pandas as pd
+
+            # Get filter values
+            if hasattr(filter_df, 'df'):
+                filter_values = set(filter_df.df()[on].unique())
+            elif isinstance(filter_df, pd.DataFrame):
+                filter_values = set(filter_df[on].unique())
+            else:
+                filter_values = set(filter_df[on].unique())
+
+            # Apply filter
+            if hasattr(df, 'filter'):
+                values_str = ', '.join(self._sql_value(v) for v in filter_values)
+                return df.filter(f"{on} IN ({values_str})")
+            elif hasattr(df, 'df'):
+                pdf = df.df()
+                filtered = pdf[pdf[on].isin(filter_values)]
+                return self.connection.conn.from_df(filtered)
+            else:
+                return df[df[on].isin(filter_values)]
+
+    def join(
+        self,
+        left_df: Any,
+        right_df: Any,
+        on: List[str],
+        how: str = 'inner'
+    ) -> Any:
+        """
+        Join two DataFrames.
+
+        Args:
+            left_df: Left DataFrame
+            right_df: Right DataFrame
+            on: List of column names to join on
+            how: Join type ('inner', 'left', 'right', 'outer')
+
+        Returns:
+            Joined DataFrame
+        """
+        if self.backend == 'spark':
+            return left_df.join(right_df, on, how)
+        else:
+            import pandas as pd
+
+            # Convert to pandas if needed
+            left_pdf = left_df.df() if hasattr(left_df, 'df') else left_df
+            right_pdf = right_df.df() if hasattr(right_df, 'df') else right_df
+
+            result = left_pdf.merge(right_pdf, on=on, how=how)
+
+            # Convert back to DuckDB if needed
+            if hasattr(self.connection, 'conn'):
+                return self.connection.conn.from_df(result)
+            return result
+
+    def distinct_values(self, df: Any, column: str) -> List[Any]:
+        """
+        Get distinct values from a column as a list.
+
+        Args:
+            df: DataFrame
+            column: Column name
+
+        Returns:
+            List of unique values
+        """
+        if self.backend == 'spark':
+            return [row[column] for row in df.select(column).distinct().collect()]
+        else:
+            if hasattr(df, 'df'):
+                return df.df()[column].unique().tolist()
+            else:
+                return df[column].unique().tolist()
+
+    def order_by(self, df: Any, column: str, ascending: bool = True) -> Any:
+        """
+        Order DataFrame by column.
+
+        Args:
+            df: DataFrame
+            column: Column to order by
+            ascending: True for ascending, False for descending
+
+        Returns:
+            Ordered DataFrame
+        """
+        if self.backend == 'spark':
+            if ascending:
+                return df.orderBy(df[column].asc())
+            else:
+                return df.orderBy(df[column].desc())
+        else:
+            if hasattr(df, 'order'):
+                direction = 'ASC' if ascending else 'DESC'
+                return df.order(f"{column} {direction}")
+            else:
+                return df.sort_values(column, ascending=ascending)
+
+    def limit(self, df: Any, n: int) -> Any:
+        """
+        Limit DataFrame to first n rows.
+
+        Args:
+            df: DataFrame
+            n: Number of rows to return
+
+        Returns:
+            DataFrame with at most n rows
+        """
+        if self.backend == 'spark':
+            return df.limit(n)
+        else:
+            if hasattr(df, 'limit'):
+                return df.limit(n)
+            else:
+                return df.head(n)
+
+    def top_n_by(self, df: Any, n: int, column: str, ascending: bool = False) -> Any:
+        """
+        Get top N rows by a column value.
+
+        Args:
+            df: DataFrame
+            n: Number of rows
+            column: Column to rank by
+            ascending: True for smallest, False for largest (default)
+
+        Returns:
+            DataFrame with top N rows
+        """
+        if self.backend == 'spark':
+            if ascending:
+                return df.orderBy(df[column].asc()).limit(n)
+            else:
+                return df.orderBy(df[column].desc()).limit(n)
+        else:
+            if hasattr(df, 'df'):
+                pdf = df.df()
+            else:
+                pdf = df
+
+            if ascending:
+                result = pdf.nsmallest(n, column)
+            else:
+                result = pdf.nlargest(n, column)
+
+            if hasattr(self.connection, 'conn'):
+                return self.connection.conn.from_df(result)
+            return result
+
+    def row_count(self, df: Any) -> int:
+        """
+        Get row count of DataFrame.
+
+        Args:
+            df: DataFrame
+
+        Returns:
+            Number of rows
+        """
+        if self.backend == 'spark':
+            return df.count()
+        else:
+            if hasattr(df, 'count'):
+                # DuckDB relation
+                result = df.count('*').fetchone()
+                return result[0] if result else 0
+            elif hasattr(df, 'df'):
+                return len(df.df())
+            else:
+                return len(df)
+
+    def to_pandas(self, df: Any) -> 'pd.DataFrame':
+        """
+        Convert DataFrame to pandas.
+
+        Args:
+            df: DataFrame (Spark or DuckDB)
+
+        Returns:
+            pandas DataFrame
+        """
+        import pandas as pd
+
+        if self.backend == 'spark':
+            return df.toPandas()
+        else:
+            if hasattr(df, 'df'):
+                return df.df()
+            elif isinstance(df, pd.DataFrame):
+                return df
+            else:
+                return df.fetchdf()
+
+    def select_columns(self, df: Any, columns: List[str]) -> Any:
+        """
+        Select specific columns from DataFrame.
+
+        Args:
+            df: DataFrame
+            columns: List of column names to select
+
+        Returns:
+            DataFrame with only specified columns
+        """
+        if self.backend == 'spark':
+            return df.select(columns)
+        else:
+            if hasattr(df, 'select'):
+                return df.select(', '.join(columns))
+            else:
+                return df[columns]
+
+    def add_column(self, df: Any, name: str, expression: Any) -> Any:
+        """
+        Add a computed column to DataFrame.
+
+        Args:
+            df: DataFrame
+            name: New column name
+            expression: Column expression (Spark Column or SQL string for DuckDB)
+
+        Returns:
+            DataFrame with new column
+        """
+        if self.backend == 'spark':
+            return df.withColumn(name, expression)
+        else:
+            if hasattr(df, 'project'):
+                # DuckDB: add column via SQL expression
+                return df.project(f"*, {expression} AS {name}")
+            else:
+                # pandas: evaluate expression
+                df = df.copy()
+                df[name] = expression
+                return df
+
+    def _sql_value(self, value: Any) -> str:
+        """Format value for SQL (internal helper)."""
+        if value is None:
+            return 'NULL'
+        elif isinstance(value, bool):
+            return 'TRUE' if value else 'FALSE'
+        elif isinstance(value, (int, float)):
+            return str(value)
+        else:
+            escaped = str(value).replace("'", "''")
+            return f"'{escaped}'"

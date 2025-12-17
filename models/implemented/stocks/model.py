@@ -4,7 +4,7 @@ Stocks Model - Common stock equities.
 Inherits from BaseModel with securities pattern.
 Filters bronze data by asset_type='stocks'.
 
-Version: 2.0 - Redesigned with inheritance architecture
+Version: 2.1 - Backend-agnostic via UniversalSession methods
 """
 
 from models.base.model import BaseModel
@@ -27,6 +27,7 @@ class StocksModel(BaseModel):
     - Links to Company model via company_id
     - Includes technical indicators (RSI, MACD, Bollinger Bands, etc.)
     - Supports complex Python measures (Sharpe, correlation, momentum, etc.)
+    - Backend-agnostic: uses session methods for all DataFrame operations
 
     Architecture Note:
         Bronze prices table may have NULL asset_type. Instead of filtering by
@@ -85,66 +86,66 @@ class StocksModel(BaseModel):
         dim_stock = dims['dim_stock']
         fact_prices = facts['fact_stock_prices']
 
-        # Get stock tickers from dim_stock
-        if self._backend == 'spark':
-            # Spark: Use semi-join for efficiency
-            stock_tickers = dim_stock.select('ticker').distinct()
-
+        # Use session methods if available, otherwise fall back to direct approach
+        if self.session:
             # Count before filtering
-            before_count = fact_prices.count()
+            before_count = self.session.row_count(fact_prices)
 
             # Semi-join to keep only prices for stock tickers
-            filtered_prices = fact_prices.join(
-                stock_tickers,
-                on='ticker',
-                how='left_semi'  # Keep rows from left where ticker exists in right
-            )
+            filtered_prices = self.session.semi_join(fact_prices, dim_stock, on='ticker')
 
-            after_count = filtered_prices.count()
+            after_count = self.session.row_count(filtered_prices)
+            ticker_count = len(self.session.distinct_values(dim_stock, 'ticker'))
+
             logger.info(
                 f"  JOIN filter: {before_count:,} → {after_count:,} prices "
-                f"(filtered to {stock_tickers.count()} stock tickers)"
+                f"(filtered to {ticker_count} stock tickers)"
             )
 
             facts['fact_stock_prices'] = filtered_prices
-
         else:
-            # DuckDB/pandas: Use isin filter
-            import pandas as pd
-
-            # Convert to pandas if needed
-            if hasattr(dim_stock, 'df'):
-                dim_stock_pdf = dim_stock.df()
-            elif isinstance(dim_stock, pd.DataFrame):
-                dim_stock_pdf = dim_stock
+            # Fallback for when session is not available (e.g., during initial build)
+            # Use backend property from BaseModel
+            if self.backend == 'spark':
+                stock_tickers = dim_stock.select('ticker').distinct()
+                before_count = fact_prices.count()
+                filtered_prices = fact_prices.join(stock_tickers, on='ticker', how='left_semi')
+                after_count = filtered_prices.count()
+                logger.info(
+                    f"  JOIN filter: {before_count:,} → {after_count:,} prices "
+                    f"(filtered to {stock_tickers.count()} stock tickers)"
+                )
+                facts['fact_stock_prices'] = filtered_prices
             else:
-                dim_stock_pdf = dim_stock
+                import pandas as pd
+                if hasattr(dim_stock, 'df'):
+                    dim_stock_pdf = dim_stock.df()
+                elif isinstance(dim_stock, pd.DataFrame):
+                    dim_stock_pdf = dim_stock
+                else:
+                    dim_stock_pdf = dim_stock
 
-            if hasattr(fact_prices, 'df'):
-                fact_prices_pdf = fact_prices.df()
-            elif isinstance(fact_prices, pd.DataFrame):
-                fact_prices_pdf = fact_prices
-            else:
-                fact_prices_pdf = fact_prices
+                if hasattr(fact_prices, 'df'):
+                    fact_prices_pdf = fact_prices.df()
+                elif isinstance(fact_prices, pd.DataFrame):
+                    fact_prices_pdf = fact_prices
+                else:
+                    fact_prices_pdf = fact_prices
 
-            stock_tickers = set(dim_stock_pdf['ticker'].unique())
-            before_count = len(fact_prices_pdf)
+                stock_tickers = set(dim_stock_pdf['ticker'].unique())
+                before_count = len(fact_prices_pdf)
+                filtered_prices_pdf = fact_prices_pdf[fact_prices_pdf['ticker'].isin(stock_tickers)]
+                after_count = len(filtered_prices_pdf)
 
-            filtered_prices_pdf = fact_prices_pdf[
-                fact_prices_pdf['ticker'].isin(stock_tickers)
-            ]
+                logger.info(
+                    f"  JOIN filter: {before_count:,} → {after_count:,} prices "
+                    f"(filtered to {len(stock_tickers)} stock tickers)"
+                )
 
-            after_count = len(filtered_prices_pdf)
-            logger.info(
-                f"  JOIN filter: {before_count:,} → {after_count:,} prices "
-                f"(filtered to {len(stock_tickers)} stock tickers)"
-            )
-
-            # Convert back to DuckDB relation if needed
-            if hasattr(self.connection, 'conn'):
-                facts['fact_stock_prices'] = self.connection.conn.from_df(filtered_prices_pdf)
-            else:
-                facts['fact_stock_prices'] = filtered_prices_pdf
+                if hasattr(self.connection, 'conn'):
+                    facts['fact_stock_prices'] = self.connection.conn.from_df(filtered_prices_pdf)
+                else:
+                    facts['fact_stock_prices'] = filtered_prices_pdf
 
         return dims, facts
 
@@ -164,21 +165,29 @@ class StocksModel(BaseModel):
         """
         prices_df = self.get_table('fact_stock_prices')
 
-        # Apply filters
-        if self._backend == 'spark':
+        # Use session methods if available
+        if self.session:
             if ticker:
-                prices_df = prices_df.filter(prices_df.ticker == ticker)
-            if start_date:
-                prices_df = prices_df.filter(prices_df.trade_date >= start_date)
-            if end_date:
-                prices_df = prices_df.filter(prices_df.trade_date <= end_date)
-        else:  # duckdb/pandas
-            if ticker:
-                prices_df = prices_df[prices_df['ticker'] == ticker]
-            if start_date:
-                prices_df = prices_df[prices_df['trade_date'] >= start_date]
-            if end_date:
-                prices_df = prices_df[prices_df['trade_date'] <= end_date]
+                prices_df = self.session.filter_by_value(prices_df, 'ticker', ticker)
+            prices_df = self.session.filter_by_range(
+                prices_df, 'trade_date', min_val=start_date, max_val=end_date
+            )
+        else:
+            # Fallback for when session is not available
+            if self.backend == 'spark':
+                if ticker:
+                    prices_df = prices_df.filter(prices_df.ticker == ticker)
+                if start_date:
+                    prices_df = prices_df.filter(prices_df.trade_date >= start_date)
+                if end_date:
+                    prices_df = prices_df.filter(prices_df.trade_date <= end_date)
+            else:
+                if ticker:
+                    prices_df = prices_df[prices_df['ticker'] == ticker]
+                if start_date:
+                    prices_df = prices_df[prices_df['trade_date'] >= start_date]
+                if end_date:
+                    prices_df = prices_df[prices_df['trade_date'] <= end_date]
 
         return prices_df
 
@@ -212,7 +221,9 @@ class StocksModel(BaseModel):
         dim_stock = self.get_table('dim_stock')
 
         if ticker:
-            if self._backend == 'spark':
+            if self.session:
+                return self.session.filter_by_value(dim_stock, 'ticker', ticker)
+            elif self.backend == 'spark':
                 return dim_stock.filter(dim_stock.ticker == ticker)
             else:
                 return dim_stock[dim_stock['ticker'] == ticker]
@@ -237,15 +248,7 @@ class StocksModel(BaseModel):
         if self.session:
             company_model = self.session.get_model_instance('company')
             company_dim = company_model.get_table('dim_company')
-
-            if self._backend == 'spark':
-                return dim_stock.join(
-                    company_dim,
-                    dim_stock.company_id == company_dim.company_id,
-                    'left'
-                )
-            else:  # pandas
-                return dim_stock.merge(company_dim, on='company_id', how='left')
+            return self.session.join(dim_stock, company_dim, on=['company_id'], how='left')
 
         return dim_stock
 
@@ -261,7 +264,9 @@ class StocksModel(BaseModel):
         """
         dim_stock = self.get_table('dim_stock')
 
-        if self._backend == 'spark':
+        if self.session:
+            return self.session.filter_by_value(dim_stock, 'sector', sector)
+        elif self.backend == 'spark':
             return dim_stock.filter(dim_stock.sector == sector)
         else:
             return dim_stock[dim_stock['sector'] == sector]
@@ -279,12 +284,16 @@ class StocksModel(BaseModel):
         dim_stock = self.get_table('dim_stock')
 
         if active_only:
-            if self._backend == 'spark':
+            if self.session:
+                dim_stock = self.session.filter_by_value(dim_stock, 'is_active', True)
+            elif self.backend == 'spark':
                 dim_stock = dim_stock.filter(dim_stock.is_active == True)
             else:
                 dim_stock = dim_stock[dim_stock['is_active'] == True]
 
-        if self._backend == 'spark':
+        if self.session:
+            return self.session.distinct_values(dim_stock, 'ticker')
+        elif self.backend == 'spark':
             return [row.ticker for row in dim_stock.select('ticker').distinct().collect()]
         else:
             return dim_stock['ticker'].unique().tolist()
@@ -298,7 +307,10 @@ class StocksModel(BaseModel):
         """
         dim_stock = self.get_table('dim_stock')
 
-        if self._backend == 'spark':
+        if self.session:
+            sectors = self.session.distinct_values(dim_stock, 'sector')
+            return [s for s in sectors if s is not None]
+        elif self.backend == 'spark':
             sectors = dim_stock.select('sector').distinct().collect()
             return [row.sector for row in sectors if row.sector]
         else:
@@ -316,7 +328,9 @@ class StocksModel(BaseModel):
         """
         dim_stock = self.get_table('dim_stock')
 
-        if self._backend == 'spark':
+        if self.session:
+            return self.session.top_n_by(dim_stock, limit, 'market_cap', ascending=False)
+        elif self.backend == 'spark':
             return dim_stock.orderBy(dim_stock.market_cap.desc()).limit(limit)
         else:
             return dim_stock.nlargest(limit, 'market_cap')

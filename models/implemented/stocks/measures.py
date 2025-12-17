@@ -3,6 +3,8 @@ Complex measures for stocks model.
 
 These functions are referenced from stocks/measures.yaml via python_measures.
 Each function receives the model instance and can access all model data.
+
+Version: 2.1 - Backend-agnostic via UniversalSession methods
 """
 
 import pandas as pd
@@ -17,6 +19,8 @@ class StocksMeasures:
     """
     Complex measure calculations for stocks.
     Each method is referenced from stocks/measures.yaml.
+
+    Backend-agnostic: uses session.to_pandas() for DataFrame conversion.
     """
 
     def __init__(self, model):
@@ -27,6 +31,23 @@ class StocksMeasures:
             model: StocksModel instance (provides access to data and session)
         """
         self.model = model
+
+    def _to_pandas(self, df) -> pd.DataFrame:
+        """
+        Convert DataFrame to pandas using session if available.
+
+        This helper ensures consistent conversion regardless of backend.
+        """
+        if self.model.session:
+            return self.model.session.to_pandas(df)
+        elif self.model.backend == 'spark':
+            return df.toPandas()
+        elif hasattr(df, 'df'):
+            return df.df()
+        elif isinstance(df, pd.DataFrame):
+            return df
+        else:
+            return pd.DataFrame(df)
 
     def calculate_sharpe_ratio(
         self,
@@ -56,9 +77,8 @@ class StocksMeasures:
         # Get price data
         prices_df = self.model.get_table('fact_stock_prices')
 
-        # Convert to pandas if Spark
-        if self.model._backend == 'spark':
-            prices_df = prices_df.toPandas()
+        # Convert to pandas (backend-agnostic)
+        prices_df = self._to_pandas(prices_df)
 
         # Apply filters
         if ticker:
@@ -119,9 +139,8 @@ class StocksMeasures:
 
         prices_df = self.model.get_table('fact_stock_prices')
 
-        # Convert to pandas if Spark
-        if self.model._backend == 'spark':
-            prices_df = prices_df.toPandas()
+        # Convert to pandas (backend-agnostic)
+        prices_df = self._to_pandas(prices_df)
 
         # Apply filters
         if tickers:
@@ -187,9 +206,8 @@ class StocksMeasures:
         # Get technical data (includes RSI, MACD, etc.)
         technicals_df = self.model.get_table('fact_stock_technicals')
 
-        # Convert to pandas if Spark
-        if self.model._backend == 'spark':
-            technicals_df = technicals_df.toPandas()
+        # Convert to pandas (backend-agnostic)
+        technicals_df = self._to_pandas(technicals_df)
 
         # Apply filters
         if ticker:
@@ -259,10 +277,9 @@ class StocksMeasures:
         dim_stock = self.model.get_table('dim_stock')
         prices_df = self.model.get_table('fact_stock_prices')
 
-        # Convert to pandas if Spark
-        if self.model._backend == 'spark':
-            dim_stock = dim_stock.toPandas()
-            prices_df = prices_df.toPandas()
+        # Convert to pandas (backend-agnostic)
+        dim_stock = self._to_pandas(dim_stock)
+        prices_df = self._to_pandas(prices_df)
 
         # Merge to get sector for each ticker
         df = prices_df.merge(dim_stock[['ticker', 'sector']], on='ticker', how='inner')
@@ -320,9 +337,8 @@ class StocksMeasures:
 
         prices_df = self.model.get_table('fact_stock_prices')
 
-        # Convert to pandas if Spark
-        if self.model._backend == 'spark':
-            prices_df = prices_df.toPandas()
+        # Convert to pandas (backend-agnostic)
+        prices_df = self._to_pandas(prices_df)
 
         # Apply filters
         if ticker:
@@ -395,9 +411,8 @@ class StocksMeasures:
 
         prices_df = self.model.get_table('fact_stock_prices')
 
-        # Convert to pandas if Spark
-        if self.model._backend == 'spark':
-            prices_df = prices_df.toPandas()
+        # Convert to pandas (backend-agnostic)
+        prices_df = self._to_pandas(prices_df)
 
         # Apply filters
         if ticker:
