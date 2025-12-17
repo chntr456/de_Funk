@@ -383,40 +383,58 @@ class ModelRegistry:
         # Try to register known models
         # Imports are delayed and failures are silently ignored
 
-        # New models (v2.0 architecture)
+        # Foundation models
         try:
-            from models.implemented.company.model import CompanyModel
+            from models.foundation.temporal.model import TemporalModel
+            self.register_model_class('temporal', TemporalModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
+        try:
+            from models.foundation.geography.model import GeographyModel
+            self.register_model_class('geography', GeographyModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
+        # Domain models (v2.0 architecture)
+        try:
+            from models.domain.company.model import CompanyModel
             self.register_model_class('company', CompanyModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         try:
-            from models.implemented.stocks.model import StocksModel
+            from models.domain.stocks.model import StocksModel
             self.register_model_class('stocks', StocksModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         try:
-            from models.implemented.options.model import OptionsModel
+            from models.domain.options.model import OptionsModel
             self.register_model_class('options', OptionsModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         try:
-            from models.implemented.etfs.model import ETFsModel
-            self.register_model_class('etfs', ETFsModel)
+            from models.domain.etf.model import ETFModel
+            self.register_model_class('etf', ETFModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         try:
-            from models.implemented.futures.model import FuturesModel
-            self.register_model_class('futures', FuturesModel)
+            from models.domain.macro.model import MacroModel
+            self.register_model_class('macro', MacroModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
-        # Legacy models (will be deprecated)
         try:
-            from models.implemented.forecast import ForecastModel
+            from models.domain.city_finance.model import CityFinanceModel
+            self.register_model_class('city_finance', CityFinanceModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
+        try:
+            from models.domain.forecast import ForecastModel
             self.register_model_class('forecast', ForecastModel)
         except Exception:
             pass  # Will use auto-registration on first access
@@ -461,8 +479,10 @@ class ModelRegistry:
         Try to auto-register a model class by convention.
 
         Convention (tries in order):
-        1. Package import: models.implemented.{model_name} (uses __init__.py exports)
-        2. Module import: models.implemented.{model_name}.model.{ModelName}Model
+        1. Foundation package: models.foundation.{model_name}
+        2. Domain package: models.domain.{model_name}
+        3. Foundation module: models.foundation.{model_name}.model
+        4. Domain module: models.domain.{model_name}.model
 
         Args:
             model_name: Name of the model
@@ -472,29 +492,25 @@ class ModelRegistry:
         # Convert model name to class name (e.g., 'stocks' -> 'StocksModel')
         class_name = ''.join(word.capitalize() for word in model_name.split('_')) + 'Model'
 
-        try:
-            # Try package import first (preferred - allows package to control exports)
-            package_path = f"models.implemented.{model_name}"
-            module = importlib.import_module(package_path)
+        # Try paths in order of preference
+        paths_to_try = [
+            f"models.foundation.{model_name}",
+            f"models.domain.{model_name}",
+            f"models.foundation.{model_name}.model",
+            f"models.domain.{model_name}.model",
+        ]
 
-            if hasattr(module, class_name):
-                model_class = getattr(module, class_name)
-                self.register_model_class(model_name, model_class)
-                return
+        for path in paths_to_try:
+            try:
+                module = importlib.import_module(path)
+                if hasattr(module, class_name):
+                    model_class = getattr(module, class_name)
+                    self.register_model_class(model_name, model_class)
+                    return
+            except (ImportError, AttributeError):
+                continue
 
-        except (ImportError, AttributeError):
-            pass
-
-        try:
-            # Fall back to old convention: models.implemented.{model_name}.model
-            module_path = f"models.implemented.{model_name}.model"
-            module = importlib.import_module(module_path)
-            model_class = getattr(module, class_name)
-            self.register_model_class(model_name, model_class)
-
-        except (ImportError, AttributeError):
-            # Auto-registration failed - model needs manual registration
-            pass
+        # Auto-registration failed - model needs manual registration
 
     def get_model_config(self, model_name: str) -> Dict:
         """

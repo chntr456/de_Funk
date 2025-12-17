@@ -18,7 +18,7 @@ DataFrame = Any
 
 # Bootstrap ETF-specific domain features when this model is loaded
 # This ensures ETF weighting strategies are available
-from models.implemented.etf.domains import weighting
+from .domains import weighting
 
 
 class ETFModel(BaseModel):

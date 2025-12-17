@@ -1,4 +1,4 @@
 """Macro economic model package"""
-from models.implemented.macro.model import MacroModel
+from .model import MacroModel
 
 __all__ = ['MacroModel']

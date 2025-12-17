@@ -9,14 +9,14 @@ Provides:
 """
 from __future__ import annotations
 
-from models.implemented.options.black_scholes import (
+from .black_scholes import (
     BlackScholes,
     OptionType,
     OptionParams,
     OptionResult,
 )
-from models.implemented.options.measures import OptionsMeasures
-from models.implemented.options.model import OptionsModel
+from .measures import OptionsMeasures
+from .model import OptionsModel
 
 __all__ = [
     'BlackScholes',

@@ -14,7 +14,7 @@ import pandas as pd
 import numpy as np
 
 from config.logging import get_logger
-from models.implemented.options.black_scholes import BlackScholes, OptionType, OptionParams
+from .black_scholes import BlackScholes, OptionType, OptionParams
 
 logger = get_logger(__name__)
 

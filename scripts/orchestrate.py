@@ -135,13 +135,17 @@ def get_model_class(model_name: str) -> type:
     """
     # Model name to class mapping
     model_map = {
-        'temporal': ('models.implemented.temporal.model', 'TemporalModel'),
-        'geography': ('models.implemented.geography.model', 'GeographyModel'),
-        'company': ('models.implemented.company.model', 'CompanyModel'),
-        'stocks': ('models.implemented.stocks.model', 'StocksModel'),
-        'macro': ('models.implemented.macro.model', 'MacroModel'),
-        'city_finance': ('models.implemented.city_finance.model', 'CityFinanceModel'),
-        'forecast': ('models.implemented.forecast.model', 'ForecastModel'),
+        # Foundation models
+        'temporal': ('models.foundation.temporal.model', 'TemporalModel'),
+        'geography': ('models.foundation.geography.model', 'GeographyModel'),
+        # Domain models
+        'company': ('models.domain.company.model', 'CompanyModel'),
+        'stocks': ('models.domain.stocks.model', 'StocksModel'),
+        'macro': ('models.domain.macro.model', 'MacroModel'),
+        'city_finance': ('models.domain.city_finance.model', 'CityFinanceModel'),
+        'forecast': ('models.domain.forecast.model', 'ForecastModel'),
+        'options': ('models.domain.options.model', 'OptionsModel'),
+        'etf': ('models.domain.etf.model', 'ETFModel'),
         # Add more as needed
     }
 

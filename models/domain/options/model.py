@@ -63,7 +63,7 @@ class OptionsModel(BaseModel):
             OptionsMeasures instance
         """
         if self._measures_instance is None:
-            from models.implemented.options.measures import OptionsMeasures
+            from .measures import OptionsMeasures
             self._measures_instance = OptionsMeasures(self)
         return self._measures_instance
 
@@ -238,7 +238,7 @@ class OptionsModel(BaseModel):
         Returns:
             Dict with price and Greeks
         """
-        from models.implemented.options.black_scholes import BlackScholes, OptionType
+        from .black_scholes import BlackScholes, OptionType
 
         bs = BlackScholes()
         opt_type = OptionType.CALL if option_type.lower() == 'call' else OptionType.PUT
@@ -289,7 +289,7 @@ class OptionsModel(BaseModel):
         Returns:
             Implied volatility (decimal), or None if calculation fails
         """
-        from models.implemented.options.black_scholes import BlackScholes, OptionType
+        from .black_scholes import BlackScholes, OptionType
 
         bs = BlackScholes()
         opt_type = OptionType.CALL if option_type.lower() == 'call' else OptionType.PUT

@@ -8,6 +8,6 @@ This file re-exports them for backward compatibility.
 from __future__ import annotations
 
 # Import from new location
-from models.implemented.company.services import NewsAPI, PricesAPI, CompanyAPI
+from models.domain.company.services import NewsAPI, PricesAPI, CompanyAPI
 
 __all__ = ['NewsAPI', 'PricesAPI', 'CompanyAPI']

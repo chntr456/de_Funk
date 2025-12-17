@@ -1,5 +1,5 @@
 """Forecast model package"""
-from models.implemented.forecast.company_forecast_model import CompanyForecastModel
+from .company_forecast_model import CompanyForecastModel
 
 # Backward compatibility alias
 ForecastModel = CompanyForecastModel

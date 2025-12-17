@@ -3,7 +3,7 @@
 from typing import Iterable, List
 from pyspark.sql import DataFrame, Window, functions as F
 from models.base.service import BaseAPI
-from models.implemented.company.types import PriceBar
+from ..types import PriceBar
 
 
 class PricesAPI(BaseAPI):

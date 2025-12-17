@@ -36,7 +36,7 @@ class StocksModel(BaseModel):
         the securities_reference table). This JOIN-based approach is more robust.
 
     Usage:
-        from models.implemented.stocks.model import StocksModel
+        from models.domain.stocks.model import StocksModel
         stocks = StocksModel(connection, storage_cfg, model_cfg)
         stocks.build()
 

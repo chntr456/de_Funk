@@ -20,7 +20,7 @@ from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 from orchestration.common.spark_session import get_spark
-from models.implemented.temporal.builders.calendar_builder import CalendarBuilder
+from models.foundation.temporal.builders.calendar_builder import CalendarBuilder
 
 
 def main():

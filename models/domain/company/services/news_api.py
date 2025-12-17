@@ -3,7 +3,7 @@
 from typing import List
 from pyspark.sql import DataFrame, functions as F
 from models.base.service import BaseAPI
-from models.implemented.company.types import NewsItem
+from ..types import NewsItem
 
 
 class NewsAPI(BaseAPI):
