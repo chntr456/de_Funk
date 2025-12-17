@@ -6,9 +6,9 @@ Provides an interactive visualization for the splash screen showing:
 - Dependency edges (depends_on) showing runtime dependencies
 - Inheritance edges (inherits_from) showing template relationships
 - Cross-model relationship edges (via ticker, date, etc.)
-- Hierarchical layout to minimize edge crossings
+- Force-directed spring layout using NetworkX
 
-Uses Plotly for interactive network diagrams with hover tooltips.
+Uses NetworkX for layout and Plotly for interactive rendering with hover tooltips.
 """
 
 import streamlit as st
@@ -17,6 +17,12 @@ from typing import Dict, List, Optional, Tuple, Set
 import math
 import yaml
 from pathlib import Path
+
+try:
+    import networkx as nx
+    HAS_NETWORKX = True
+except ImportError:
+    HAS_NETWORKX = False
 
 
 def render_model_node_graph(
@@ -320,11 +326,10 @@ def _calculate_hierarchical_layout(
     show_tables: bool
 ) -> Dict[str, Tuple[float, float]]:
     """
-    Calculate force-directed spring layout with hierarchical hints.
+    Calculate force-directed spring layout using NetworkX.
 
-    Uses spring forces to pull connected nodes together while maintaining
-    reasonable spacing. Base templates are positioned near their inheriting
-    models rather than at a fixed top position.
+    Uses NetworkX's spring_layout (Fruchterman-Reingold) which is well-tuned
+    for producing balanced graph layouts.
     """
     positions = {}
 
@@ -333,27 +338,36 @@ def _calculate_hierarchical_layout(
     base_templates = [n for n in nodes if n['type'] == 'base_template']
     table_nodes = [n for n in nodes if n['type'] in ('dimension', 'fact')]
 
-    # Build adjacency for spring forces (only model-level edges)
-    adjacency = {}  # node_id -> list of connected node_ids
-    for node in model_nodes + base_templates:
-        adjacency[node['id']] = []
+    if not HAS_NETWORKX:
+        # Fallback to simple grid layout if NetworkX not available
+        return _simple_grid_layout(nodes, model_nodes, base_templates, table_nodes)
 
-    # Add dependency connections
+    # Build NetworkX graph for model-level nodes only
+    G = nx.Graph()
+
+    # Add model nodes
+    for node in model_nodes:
+        G.add_node(node['id'], depth=node.get('depth', 0))
+
+    # Add base template nodes
+    for node in base_templates:
+        G.add_node(node['id'], depth=-1)  # Base templates at top
+
+    # Add dependency edges (weighted higher for stronger attraction)
     for node in model_nodes:
         node_id = node['id']
         for dep in node.get('depends_on', []):
-            if dep in adjacency:
-                adjacency[node_id].append(dep)
-                adjacency[dep].append(node_id)
-        # Add inheritance connections
+            if G.has_node(dep):
+                G.add_edge(node_id, dep, weight=2.0)
+
+        # Add inheritance edges
         if node.get('inherits_from'):
             base_name = node['inherits_from'].replace('_base.', '')
             base_id = f"_base_{base_name}"
-            if base_id in adjacency:
-                adjacency[node_id].append(base_id)
-                adjacency[base_id].append(node_id)
+            if G.has_node(base_id):
+                G.add_edge(node_id, base_id, weight=1.5)
 
-    # Initial positions: depth-based Y, spread X
+    # Calculate initial positions based on depth (for better starting point)
     depth_groups = {}
     for node in model_nodes:
         depth = node.get('depth', 0)
@@ -361,84 +375,42 @@ def _calculate_hierarchical_layout(
             depth_groups[depth] = []
         depth_groups[depth].append(node['id'])
 
-    # Place models by depth tier initially
+    init_pos = {}
     for depth, model_list in sorted(depth_groups.items()):
-        y = 1.5 - (depth * 1.0)
+        y = 1.0 - (depth * 0.5)
         width = len(model_list)
         for i, model_id in enumerate(model_list):
-            x = (i - (width - 1) / 2) * 2.0
-            positions[model_id] = [x, y]  # Use lists for mutation
+            x = (i - (width - 1) / 2) * 0.5
+            init_pos[model_id] = (x, y)
 
-    # Place base templates near their inheriting models (not at top)
+    # Position base templates near their inheritors
     for base_node in base_templates:
         base_id = base_node['id']
-        # Find models that inherit from this base
         inheritors = [n['id'] for n in model_nodes
                       if n.get('inherits_from', '').replace('_base.', '') == base_node['label']]
-        if inheritors:
-            # Position to the right of the centroid of inheritors
-            avg_x = sum(positions[m][0] for m in inheritors if m in positions) / len(inheritors)
-            avg_y = sum(positions[m][1] for m in inheritors if m in positions) / len(inheritors)
-            positions[base_id] = [avg_x + 1.8, avg_y]
+        if inheritors and all(m in init_pos for m in inheritors):
+            avg_x = sum(init_pos[m][0] for m in inheritors) / len(inheritors)
+            avg_y = sum(init_pos[m][1] for m in inheritors) / len(inheritors)
+            init_pos[base_id] = (avg_x + 0.3, avg_y)
         else:
-            positions[base_id] = [2.5, 0.5]
+            init_pos[base_id] = (0.5, 0.5)
 
-    # Spring layout iterations
-    iterations = 50
-    k_attract = 0.08  # Attraction strength
-    k_repel = 0.5     # Repulsion strength
-    damping = 0.9     # Velocity damping
-    min_dist = 0.8    # Minimum distance between nodes
-
-    # Initialize velocities
-    velocities = {node_id: [0.0, 0.0] for node_id in positions}
-
-    for _ in range(iterations):
-        forces = {node_id: [0.0, 0.0] for node_id in positions}
-
-        # Attractive forces (spring edges)
-        for node_id, neighbors in adjacency.items():
-            if node_id not in positions:
-                continue
-            x1, y1 = positions[node_id]
-            for neighbor in neighbors:
-                if neighbor not in positions:
-                    continue
-                x2, y2 = positions[neighbor]
-                dx, dy = x2 - x1, y2 - y1
-                dist = math.sqrt(dx * dx + dy * dy) + 0.01
-                # Attractive force proportional to distance
-                force = k_attract * dist
-                forces[node_id][0] += force * dx / dist
-                forces[node_id][1] += force * dy / dist
-
-        # Repulsive forces (all pairs)
-        node_ids = list(positions.keys())
-        for i, id1 in enumerate(node_ids):
-            x1, y1 = positions[id1]
-            for id2 in node_ids[i + 1:]:
-                x2, y2 = positions[id2]
-                dx, dy = x2 - x1, y2 - y1
-                dist = math.sqrt(dx * dx + dy * dy) + 0.01
-                if dist < min_dist * 3:
-                    # Repulsive force inversely proportional to distance squared
-                    force = k_repel / (dist * dist)
-                    fx = force * dx / dist
-                    fy = force * dy / dist
-                    forces[id1][0] -= fx
-                    forces[id1][1] -= fy
-                    forces[id2][0] += fx
-                    forces[id2][1] += fy
-
-        # Apply forces with damping
-        for node_id in positions:
-            velocities[node_id][0] = (velocities[node_id][0] + forces[node_id][0]) * damping
-            velocities[node_id][1] = (velocities[node_id][1] + forces[node_id][1]) * damping
-            positions[node_id][0] += velocities[node_id][0]
-            positions[node_id][1] += velocities[node_id][1]
-
-    # Convert to tuples
-    positions = {k: (v[0], v[1]) for k, v in positions.items()}
+    # Use NetworkX spring layout with initial positions
+    if len(G.nodes()) > 0:
+        # k controls optimal distance between nodes (higher = more spread)
+        # iterations controls convergence
+        nx_positions = nx.spring_layout(
+            G,
+            pos=init_pos if init_pos else None,
+            k=2.0 / math.sqrt(len(G.nodes())),  # Optimal distance
+            iterations=100,
+            seed=42,  # Reproducible layout
+            scale=3.0,  # Scale to reasonable size
+            center=(0, 0)
+        )
+        positions = {k: (v[0], v[1]) for k, v in nx_positions.items()}
+    else:
+        positions = init_pos
 
     # Layout table nodes around their parent models
     if show_tables:
@@ -473,6 +445,31 @@ def _calculate_hierarchical_layout(
                 x = parent_x + table_radius * math.cos(angle)
                 y = parent_y + table_radius * math.sin(angle)
                 positions[node['id']] = (x, y)
+
+    return positions
+
+
+def _simple_grid_layout(nodes, model_nodes, base_templates, table_nodes):
+    """Fallback grid layout when NetworkX is not available."""
+    positions = {}
+
+    # Simple grid for models
+    cols = max(3, int(math.sqrt(len(model_nodes))))
+    for i, node in enumerate(model_nodes):
+        x = (i % cols) * 2.0
+        y = -(i // cols) * 1.5
+        positions[node['id']] = (x, y)
+
+    # Base templates above
+    for i, node in enumerate(base_templates):
+        positions[node['id']] = (i * 2.0 + 1.0, 2.0)
+
+    # Tables below parents
+    for node in table_nodes:
+        parent = node.get('parent')
+        if parent and parent in positions:
+            parent_x, parent_y = positions[parent]
+            positions[node['id']] = (parent_x + 0.3, parent_y - 0.3)
 
     return positions
 
