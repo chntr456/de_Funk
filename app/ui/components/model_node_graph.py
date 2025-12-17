@@ -330,6 +330,11 @@ def _calculate_hierarchical_layout(
 
     Uses NetworkX's spring_layout (Fruchterman-Reingold) which is well-tuned
     for producing balanced graph layouts.
+
+    Focus on model abstractions and join keys (not build order):
+    - Inheritance has strongest weight (models cluster with their base)
+    - Dims/facts have very strong weight to stay close to their model
+    - No dependency edges (build order is separate concern)
     """
     positions = {}
 
@@ -342,109 +347,78 @@ def _calculate_hierarchical_layout(
         # Fallback to simple grid layout if NetworkX not available
         return _simple_grid_layout(nodes, model_nodes, base_templates, table_nodes)
 
-    # Build NetworkX graph for model-level nodes only
+    # Build NetworkX graph including ALL nodes (models, bases, dims, facts)
     G = nx.Graph()
 
     # Add model nodes
     for node in model_nodes:
-        G.add_node(node['id'], depth=node.get('depth', 0))
+        G.add_node(node['id'], node_type='model')
 
     # Add base template nodes
     for node in base_templates:
-        G.add_node(node['id'], depth=-1)  # Base templates at top
+        G.add_node(node['id'], node_type='base')
 
-    # Add dependency edges (weighted higher for stronger attraction)
+    # Add table nodes (dims/facts)
+    if show_tables:
+        for node in table_nodes:
+            G.add_node(node['id'], node_type=node['type'])
+
+    # Add inheritance edges (STRONGEST - models cluster with base templates)
     for node in model_nodes:
         node_id = node['id']
-        for dep in node.get('depends_on', []):
-            if G.has_node(dep):
-                G.add_edge(node_id, dep, weight=2.0)
-
-        # Add inheritance edges
         if node.get('inherits_from'):
             base_name = node['inherits_from'].replace('_base.', '')
             base_id = f"_base_{base_name}"
             if G.has_node(base_id):
-                G.add_edge(node_id, base_id, weight=1.5)
+                G.add_edge(node_id, base_id, weight=5.0)  # Strongest
 
-    # Calculate initial positions based on depth (for better starting point)
-    depth_groups = {}
+    # Add dependency edges (captures relationships like stocks<->company)
     for node in model_nodes:
-        depth = node.get('depth', 0)
-        if depth not in depth_groups:
-            depth_groups[depth] = []
-        depth_groups[depth].append(node['id'])
+        node_id = node['id']
+        for dep in node.get('depends_on', []):
+            if G.has_node(dep):
+                G.add_edge(node_id, dep, weight=2.0)  # Medium strength
 
+    # Add table->model edges (VERY STRONG - dims/facts stay close to parent)
+    if show_tables:
+        for node in table_nodes:
+            parent = node.get('parent')
+            if parent and G.has_node(parent):
+                G.add_edge(node['id'], parent, weight=8.0)  # Very strong
+
+    # Simple initial positions (spread models in a circle)
     init_pos = {}
-    for depth, model_list in sorted(depth_groups.items()):
-        y = 1.0 - (depth * 0.5)
-        width = len(model_list)
-        for i, model_id in enumerate(model_list):
-            x = (i - (width - 1) / 2) * 0.5
-            init_pos[model_id] = (x, y)
+    n_models = len(model_nodes) + len(base_templates)
+    if n_models > 0:
+        for i, node in enumerate(model_nodes + base_templates):
+            angle = 2 * math.pi * i / n_models
+            init_pos[node['id']] = (math.cos(angle), math.sin(angle))
 
-    # Position base templates near their inheritors
-    for base_node in base_templates:
-        base_id = base_node['id']
-        inheritors = [n['id'] for n in model_nodes
-                      if n.get('inherits_from', '').replace('_base.', '') == base_node['label']]
-        if inheritors and all(m in init_pos for m in inheritors):
-            avg_x = sum(init_pos[m][0] for m in inheritors) / len(inheritors)
-            avg_y = sum(init_pos[m][1] for m in inheritors) / len(inheritors)
-            init_pos[base_id] = (avg_x + 0.3, avg_y)
-        else:
-            init_pos[base_id] = (0.5, 0.5)
+    # Position tables near their parents initially
+    if show_tables:
+        for node in table_nodes:
+            parent = node.get('parent')
+            if parent and parent in init_pos:
+                px, py = init_pos[parent]
+                # Small random offset
+                offset = 0.1
+                init_pos[node['id']] = (px + offset, py - offset)
 
-    # Use NetworkX spring layout with initial positions
+    # Use NetworkX spring layout
     if len(G.nodes()) > 0:
-        # k controls optimal distance between nodes (higher = more spread)
-        # iterations controls convergence
         nx_positions = nx.spring_layout(
             G,
             pos=init_pos if init_pos else None,
-            k=2.0 / math.sqrt(len(G.nodes())),  # Optimal distance
-            iterations=100,
+            k=1.5 / math.sqrt(len(G.nodes())),  # Optimal distance
+            iterations=150,  # More iterations for better convergence
             seed=42,  # Reproducible layout
             scale=3.0,  # Scale to reasonable size
-            center=(0, 0)
+            center=(0, 0),
+            weight='weight'  # Use edge weights
         )
         positions = {k: (v[0], v[1]) for k, v in nx_positions.items()}
     else:
         positions = init_pos
-
-    # Layout table nodes around their parent models
-    if show_tables:
-        for node in table_nodes:
-            parent = node.get('parent')
-            if parent and parent in positions:
-                parent_x, parent_y = positions[parent]
-
-                # Get all siblings
-                siblings = [n for n in table_nodes if n.get('parent') == parent]
-                num_siblings = len(siblings)
-
-                if num_siblings == 0:
-                    continue
-
-                # Find this node's index
-                try:
-                    idx = next(i for i, n in enumerate(siblings) if n['id'] == node['id'])
-                except StopIteration:
-                    continue
-
-                # Position tables in a small arc below the model
-                table_radius = 0.4
-                spread = min(math.pi * 0.6, math.pi * 0.15 * num_siblings)
-                base_angle = -math.pi / 2  # Point downward
-
-                if num_siblings == 1:
-                    angle = base_angle
-                else:
-                    angle = base_angle - spread / 2 + (spread * idx / (num_siblings - 1))
-
-                x = parent_x + table_radius * math.cos(angle)
-                y = parent_y + table_radius * math.sin(angle)
-                positions[node['id']] = (x, y)
 
     return positions
 
@@ -594,15 +568,14 @@ def _create_figure(
             showlegend=False
         ))
 
-    # Draw model nodes (blue circles) with depth-based sizing
+    # Draw model nodes (blue circles)
     if model_nodes:
-        sizes = [45 if n.get('depth', 0) == 0 else 38 for n in model_nodes if n['id'] in positions]
         fig.add_trace(go.Scatter(
             x=[positions[n['id']][0] for n in model_nodes if n['id'] in positions],
             y=[positions[n['id']][1] for n in model_nodes if n['id'] in positions],
             mode='markers+text',
             marker=dict(
-                size=sizes,
+                size=40,
                 color='rgba(99, 110, 250, 0.9)',
                 line=dict(width=2, color='white'),
                 symbol='circle'
@@ -612,10 +585,9 @@ def _create_figure(
             textfont=dict(size=8, color='white', family='Arial Black'),
             hoverinfo='text',
             hovertext=[
-                f"<b>{n['label']}</b> (Tier {n.get('depth', 0)})<br>"
+                f"<b>{n['label']}</b><br>"
                 f"Dimensions: {n['dims']}<br>"
                 f"Facts: {n['facts']}<br>"
-                f"Depends on: {', '.join(n.get('depends_on', [])) or 'none'}<br>"
                 f"Inherits: {n.get('inherits_from', 'none') or 'none'}"
                 for n in model_nodes if n['id'] in positions
             ],

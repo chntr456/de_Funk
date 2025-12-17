@@ -1937,7 +1937,7 @@ help_text: Filter by trading volume"""
             render_model_node_graph(
                 self.model_registry,
                 show_tables=True,
-                height=450
+                height=800
             )
         except Exception as e:
             logger.warning(f"Could not render model graph: {e}", exc_info=True)
