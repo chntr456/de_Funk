@@ -138,16 +138,15 @@ def get_model_class(model_name: str) -> type:
         # Foundation models
         'temporal': ('models.foundation.temporal.model', 'TemporalModel'),
         'geography': ('models.foundation.geography.model', 'GeographyModel'),
-        # Domain models - Securities
+        # Domain models
         'company': ('models.domain.company.model', 'CompanyModel'),
         'stocks': ('models.domain.stocks.model', 'StocksModel'),
-        'options': ('models.domain.options.model', 'OptionsModel'),
-        'etf': ('models.domain.etf.model', 'ETFModel'),
-        # Domain models - Analytics
         'macro': ('models.domain.macro.model', 'MacroModel'),
         'city_finance': ('models.domain.city_finance.model', 'CityFinanceModel'),
         'forecast': ('models.domain.forecast.model', 'ForecastModel'),
-        'actuarial': ('models.domain.actuarial.model', 'ActuarialModel'),
+        'options': ('models.domain.options.model', 'OptionsModel'),
+        'etf': ('models.domain.etf.model', 'ETFModel'),
+        # Add more as needed
     }
 
     if model_name not in model_map:

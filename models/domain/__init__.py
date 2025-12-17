@@ -14,7 +14,6 @@ Analytics:
 - forecast: Time series forecasting models
 - macro: Macroeconomic indicators (BLS data)
 - city_finance: Municipal finance data (Chicago)
-- actuarial: Mortality, demographics, and insurance risk analysis
 """
 # Import models as they're needed - avoid circular imports
 # Models should be imported directly from their module paths
@@ -25,5 +24,4 @@ __all__ = [
     'ForecastModel',
     'MacroModel',
     'CityFinanceModel',
-    'ActuarialModel',
 ]
