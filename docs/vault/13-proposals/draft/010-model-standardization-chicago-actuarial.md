@@ -4021,6 +4021,48 @@ These components were created and are **NOT duplicates** of existing functionali
 | `metadata` | (operational) | Table stats, pipeline runs, schema tracking |
 | `logger` | (operational) | Log analytics, error categorization |
 
+---
+
+### Phase 15: Final Cleanup & Validation (Days 68-70)
+
+**Goal:** Address scope creep, deferred items, and perform final validation across all implemented phases
+
+This phase is a catch-all for:
+- Items deferred during earlier phases
+- Scope creep that emerged during implementation
+- Final integration testing across all models
+- Performance validation and optimization
+- Documentation updates
+
+| # | Task | Description | Status |
+|---|------|-------------|--------|
+| 15.1 | Complete _backend removal from all models | Deferred from Phase 2 (requires Phase 5 session injection) | Pending |
+| 15.2 | Optimize measure implementations | Consider Window Functions vs `_to_pandas()` for performance-critical measures | Pending |
+| 15.3 | Final integration test suite | Run all models with both backends (Spark + DuckDB) | Pending |
+| 15.4 | Performance benchmarking | Compare build times, query performance across backends | Pending |
+| 15.5 | Documentation sync | Update CLAUDE.md, README, and guide docs with all changes | Pending |
+| 15.6 | Deprecation cleanup | Remove all files marked with deprecation warnings in Phase 1 | Pending |
+| 15.7 | **Scope creep backlog** | *(Items added during implementation go here)* | Backlog |
+
+**Scope Creep Backlog:**
+*(This section captures items that emerge during implementation but don't fit earlier phases)*
+
+| Item | Source Phase | Description | Priority |
+|------|-------------|-------------|----------|
+| *(empty - add items as they emerge)* | | | |
+
+**Validation Checklist:**
+
+- [ ] All models build successfully with DuckDB
+- [ ] All models build successfully with Spark
+- [ ] All measures calculate correctly on both backends
+- [ ] No direct `import duckdb` or `import pyspark` in model code
+- [ ] All deprecated files removed
+- [ ] All tests passing
+- [ ] Documentation up to date
+
+---
+
 ### Total Estimated Effort
 
 | Phase | Days | Priority | Type |
@@ -4041,7 +4083,9 @@ These components were created and are **NOT duplicates** of existing functionali
 | Phase 13: Metadata Table Enhancement | 5 | High | Enhancement |
 | Phase 14: Logger Model Enhancement | 6 | High | Enhancement |
 | **Enhancement Subtotal** | **43 days** | | |
-| **Total** | **69 days** | | |
+| Phase 15: Final Cleanup & Validation | 3 | Medium | Cleanup |
+| **Cleanup Subtotal** | **3 days** | | |
+| **Total** | **72 days** | | |
 
 ---
 
@@ -4069,6 +4113,12 @@ Example commits (Enhancement phases):
 - "Phase 8: Economic Series Enhancement - Create FRED provider"
 - "Phase 9: Chart of Accounts Enhancement - Create _base/financial templates"
 - "Phase 10: City Services Enhancement - Add 311/911 data endpoints"
+
+Example commits (Cleanup phase):
+- "Phase 15: Final Cleanup - Remove _backend from all models"
+- "Phase 15: Final Cleanup - Optimize rolling measures with Window Functions"
+- "Phase 15: Final Cleanup - Run integration tests across both backends"
+- "Phase 15: Final Cleanup - Remove deprecated scripts from Phase 1"
 ```
 
 Each phase will be completed before moving to the next, with a thorough review at the end of each phase.
@@ -4216,4 +4266,14 @@ This log tracks all completed implementation steps as they are finished.
 ---
 
 *Enhancement phases (8-14) will be logged as they are completed.*
+
+---
+
+### Phase 15: Final Cleanup & Validation (Pending)
+
+*This phase will address:*
+- Deferred items from earlier phases (e.g., _backend removal from Phase 2)
+- Scope creep items captured during implementation
+- Performance optimization (e.g., Window Functions for measures)
+- Final integration testing and documentation sync
 
