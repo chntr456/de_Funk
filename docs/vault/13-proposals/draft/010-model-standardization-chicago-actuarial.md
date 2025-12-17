@@ -1743,13 +1743,15 @@ This phase creates a clean abstraction layer for data ingestion:
 | 5.10 | Remove `_backend` fallback code from all models | All `models/implemented/*/model.py` (deferred from Phase 2) |
 | 5.11 | Wire model YAML configs into build logic | REFACTOR: CoreModel reads `calendar_config` from YAML |
 | 5.12 | Wire forecast YAML configs into build logic | REFACTOR: ForecastModel reads `ml_models` config from YAML |
+| 5.13 | Fix run_forecasts.py to use modular config | REFACTOR: `scripts/forecast/run_forecasts.py` uses ModelConfigLoader |
 
 **Note on 5.9-5.10**: These tasks complete the backend abstraction started in Phase 2. Once Orchestrator ensures session is always available at model instantiation, we can remove the fallback `_backend` code from all models.
 
-**Note on 5.11-5.12**: Phase 3 created modular YAML configs for core and forecast, but the model build classes still have hardcoded defaults. These tasks ensure:
+**Note on 5.11-5.13**: Phase 3 created modular YAML configs for core and forecast, but the model build classes still have hardcoded defaults. These tasks ensure:
 - `CoreModel` / `CalendarBuilder` reads `calendar_config` from `core/graph.yaml`
 - `ForecastModel` reads `ml_models` config from `forecast/model.yaml`
 - Build logic lives within each model, not in separate scripts
+- **KNOWN ERROR**: `run_forecasts.py` line 176 looks for `forecast.yaml` but file was migrated to `forecast/model.yaml`. Task 5.13 addresses this.
 
 ---
 
@@ -4288,15 +4290,36 @@ This log tracks all completed implementation steps as they are finished.
 
 ---
 
-### Phase 2: Backend Abstraction (Pending)
+### Phase 2: Backend Abstraction (COMPLETE)
 
-*Not started - awaiting Phase 1 review*
+✅ **Completed 2025-12-17**
+
+All session abstraction verified working. Models use UniversalSession without direct backend imports.
 
 ---
 
-### Phase 3: Configuration Standardization (Pending)
+### Phase 3: Configuration Standardization (COMPLETE)
 
-*Not started*
+✅ **Completed 2025-12-17**
+
+**Completed Tasks:**
+- 3.5-3.10: Exhibit preset YAML files created (`_base/exhibit.yaml`, `plotly_base.yaml`, `line_chart.yaml`, `bar_chart.yaml`)
+- 3.11: Registry updated with inheritance hierarchy
+- 3.12: Model graph visualization on splash screen
+- Core model migrated to modular YAML structure (`core/model.yaml`, `schema.yaml`, `graph.yaml`, `measures.yaml`)
+- Forecast model migrated to modular YAML structure (`forecast/model.yaml`, etc.)
+
+**Model Graph Visualization:**
+- NetworkX spring_layout for force-directed positioning
+- Interactive scroll zoom and pan via Plotly
+- Shows inheritance, dependencies, and join key relationships
+- Dims/facts fanned out around parent models
+- Join keys displayed in edge hover tooltips
+
+**Next Steps (Future Enhancements):**
+- [ ] Add click interactivity to model nodes
+- [ ] Create model profiling panel when node is clicked (show schema, measures, row counts)
+- [ ] Add edge click to show full join definition
 
 ---
 
