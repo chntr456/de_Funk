@@ -1370,7 +1370,7 @@ This means:
 
 ### Phase 3: Configuration Standardization (Days 5-7)
 
-**Goal:** All configs use v2.0 modular YAML pattern + complete exhibit presets
+**Goal:** All configs use v2.0 modular YAML pattern + complete exhibit presets + context-aware model graph
 
 | # | Task | Files Affected |
 |---|------|----------------|
@@ -1382,6 +1382,159 @@ This means:
 | 3.6 | Create markdown exhibit preset | NEW: `configs/exhibits/presets/markdown.yaml` |
 | 3.7 | Create grid exhibit preset | NEW: `configs/exhibits/presets/grid.yaml` |
 | 3.8 | Update exhibit registry | `configs/exhibits/registry.yaml` |
+| 3.9 | Create hierarchical model graph component | REFACTOR: `app/ui/components/model_graph_viewer.py` |
+| 3.10 | Add global model graph to home page | UPDATE: `app/ui/notebook_app_duckdb.py` |
+| 3.11 | Add context-aware graph for notebook view | UPDATE: `app/ui/components/notebook_viewer.py` |
+| 3.12 | Create model node with dim/fact sub-nodes | NEW: `app/ui/components/model_node_graph.py` |
+
+---
+
+#### Context-Aware Model Graph Visualization
+
+**Problem:** Current graph viewer shows flat table-level relationships. Users need to:
+- See which models are relevant to their current notebook
+- Understand the hierarchical structure (model → dims/facts)
+- Navigate between global view (all models) and focused view (notebook models)
+
+**Solution:** Hierarchical, context-aware model graph with two modes:
+
+**1. Global View (Home Page):**
+- Shows ALL registered models as expandable nodes
+- Each model node can expand to show its dimensions and facts
+- Cross-model edges shown at model level
+- Useful for understanding overall data architecture
+
+**2. Notebook View (When Notebook Selected):**
+- Shows ONLY models declared in notebook `properties.models`
+- Automatically includes dependent models (from `depends_on`)
+- Highlights active tables used by notebook filters/exhibits
+- Shows relevant cross-model paths for filter propagation
+
+**Hierarchical Node Structure:**
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      MODEL GRAPH VISUALIZATION                       │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                      │
+│  ┌──────────────────┐         ┌──────────────────┐                  │
+│  │   stocks (model) │─────────│  company (model) │                  │
+│  ├──────────────────┤         ├──────────────────┤                  │
+│  │ ○ dim_stock      │         │ ○ dim_company    │                  │
+│  │ ○ fact_prices    │         │ ○ fact_income    │                  │
+│  │ ○ fact_technicals│         │ ○ fact_balance   │                  │
+│  └────────┬─────────┘         └────────┬─────────┘                  │
+│           │                            │                             │
+│           └────────────┬───────────────┘                             │
+│                        │                                             │
+│                        ▼                                             │
+│               ┌──────────────────┐                                   │
+│               │   core (model)   │                                   │
+│               ├──────────────────┤                                   │
+│               │ ○ dim_calendar   │                                   │
+│               └──────────────────┘                                   │
+│                                                                      │
+│  Legend:                                                             │
+│  ─────── Cross-model edge (join relationship)                       │
+│  ○       Dimension or Fact table (sub-node)                         │
+│  (model) Collapsible model container                                │
+│                                                                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**Implementation Approach:**
+
+```python
+# app/ui/components/model_node_graph.py
+
+class ModelNodeGraph:
+    """Hierarchical model graph with expandable nodes."""
+
+    def __init__(self, model_registry, mode: str = "global"):
+        """
+        Args:
+            model_registry: Registry to discover models
+            mode: "global" (all models) or "notebook" (filtered)
+        """
+        self.registry = model_registry
+        self.mode = mode
+        self.selected_models: List[str] = []  # For notebook mode
+
+    def set_notebook_context(self, notebook_properties: dict):
+        """Filter to models declared in notebook properties."""
+        declared = notebook_properties.get('models', [])
+        # Include declared models + their dependencies
+        self.selected_models = self._resolve_with_dependencies(declared)
+
+    def _resolve_with_dependencies(self, models: List[str]) -> List[str]:
+        """Expand model list to include depends_on models."""
+        result = set(models)
+        for model in models:
+            config = self.registry.get_model_config(model)
+            deps = config.get('depends_on', [])
+            result.update(deps)
+        return list(result)
+
+    def build_hierarchical_graph(self) -> nx.DiGraph:
+        """Create graph with model nodes containing dim/fact sub-nodes."""
+        G = nx.DiGraph()
+
+        models = self.selected_models if self.mode == "notebook" else self.registry.list_models()
+
+        for model_name in models:
+            # Add model as parent node
+            G.add_node(model_name, type="model", expanded=True)
+
+            # Add dims/facts as child nodes
+            schema = self.registry.get_schema(model_name)
+            for dim in schema.get('dimensions', {}):
+                node_id = f"{model_name}.{dim}"
+                G.add_node(node_id, type="dimension", parent=model_name)
+                G.add_edge(model_name, node_id, type="contains")
+
+            for fact in schema.get('facts', {}):
+                node_id = f"{model_name}.{fact}"
+                G.add_node(node_id, type="fact", parent=model_name)
+                G.add_edge(model_name, node_id, type="contains")
+
+        # Add cross-model edges at model level
+        self._add_cross_model_edges(G, models)
+
+        return G
+
+    def render(self, container):
+        """Render interactive Plotly graph with collapsible nodes."""
+        G = self.build_hierarchical_graph()
+        # ... Plotly rendering with node colors by type
+        # ... Click handlers for expand/collapse
+```
+
+**UI Integration:**
+
+```python
+# Home page - global view
+def render_home_page():
+    st.header("Data Model Overview")
+    graph = ModelNodeGraph(registry, mode="global")
+    graph.render(st.container())
+
+# Notebook view - context-aware
+def render_notebook(notebook):
+    # ... notebook content ...
+
+    with st.expander("📊 Model Graph", expanded=False):
+        graph = ModelNodeGraph(registry, mode="notebook")
+        graph.set_notebook_context(notebook.properties)
+        graph.render(st.container())
+```
+
+**Visual Differentiation:**
+| Node Type | Color | Shape | Behavior |
+|-----------|-------|-------|----------|
+| Model | Blue | Rectangle | Expandable/collapsible |
+| Dimension | Green | Circle | Shows columns on hover |
+| Fact | Orange | Circle | Shows columns on hover |
+| Cross-model edge | Gray dashed | Arrow | Shows join condition |
+| Contains edge | Light gray | Line | Hierarchical relationship |
 
 ### Phase 4: Core Geography Model (Days 7-11)
 
