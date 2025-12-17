@@ -195,10 +195,22 @@ def _build_graph_data(
 
         # Add cross-model relationship edges from graph config
         for edge in model_config.get_edges():
+            # Skip non-dict edges (some configs return strings)
+            if not isinstance(edge, dict):
+                continue
             if 'to' in edge:
                 target_model = edge['to'].split('.')[0]
                 if target_model in models and target_model != model_name:
-                    via = edge.get('via', edge.get('on', [''])[0].split('=')[0] if edge.get('on') else '')
+                    # Safely extract via/on field
+                    via = ''
+                    if edge.get('via'):
+                        via = edge['via']
+                    elif edge.get('on'):
+                        on_val = edge['on']
+                        if isinstance(on_val, list) and on_val:
+                            via = on_val[0].split('=')[0] if '=' in on_val[0] else on_val[0]
+                        elif isinstance(on_val, str):
+                            via = on_val.split('=')[0] if '=' in on_val else on_val
                     # Avoid duplicate edges
                     edge_key = (model_name, target_model, 'relationship')
                     existing = [e for e in edges if (e['source'], e['target'], e['type']) == edge_key]
