@@ -221,34 +221,198 @@ def create_ingest_task():
     @ray.remote
     def ingest_ticker(
         ticker: str,
+        key_manager_handle: Any,
         data_types: List[str] = None,
-        alpha_vantage_cfg: Dict = None,
         storage_path: str = "/shared/storage"
     ) -> Dict[str, Any]:
         """
         Ingest data for a single ticker on a Ray worker.
 
-        Note: API key management and rate limiting should be handled
-        by the calling orchestrator, not by individual tasks.
+        Uses DistributedKeyManager for coordinated rate limiting.
 
         Args:
             ticker: Ticker symbol
-            data_types: Data types to fetch
-            alpha_vantage_cfg: Alpha Vantage API configuration
+            key_manager_handle: Ray Actor handle to DistributedKeyManager
+            data_types: Data types to fetch ('prices', 'overview', 'technicals')
             storage_path: Path to shared storage
 
         Returns:
             Dict with ingestion results
         """
-        # This is a placeholder - actual implementation would need
-        # careful handling of API keys and rate limits across workers
-        return {
+        import requests
+        import pandas as pd
+        from pathlib import Path
+
+        if data_types is None:
+            data_types = ['prices']
+
+        results = {
             'ticker': ticker,
-            'status': 'not_implemented',
-            'note': 'Distributed ingestion requires API key coordination'
+            'status': 'success',
+            'data_types': {},
+            'errors': []
         }
 
+        for data_type in data_types:
+            try:
+                # Acquire API key from distributed manager
+                key = ray.get(key_manager_handle.acquire_key.remote(timeout=120.0))
+                if not key:
+                    results['errors'].append(f"{data_type}: timeout waiting for API key")
+                    results['status'] = 'partial'
+                    continue
+
+                try:
+                    # Make API call based on data type
+                    if data_type == 'prices':
+                        url = (
+                            f"https://www.alphavantage.co/query"
+                            f"?function=TIME_SERIES_DAILY"
+                            f"&symbol={ticker}"
+                            f"&outputsize=full"
+                            f"&apikey={key}"
+                        )
+                    elif data_type == 'overview':
+                        url = (
+                            f"https://www.alphavantage.co/query"
+                            f"?function=OVERVIEW"
+                            f"&symbol={ticker}"
+                            f"&apikey={key}"
+                        )
+                    elif data_type == 'technicals':
+                        url = (
+                            f"https://www.alphavantage.co/query"
+                            f"?function=RSI"
+                            f"&symbol={ticker}"
+                            f"&interval=daily"
+                            f"&time_period=14"
+                            f"&series_type=close"
+                            f"&apikey={key}"
+                        )
+                    else:
+                        results['errors'].append(f"Unknown data_type: {data_type}")
+                        continue
+
+                    response = requests.get(url, timeout=30)
+                    data = response.json()
+
+                    # Check for rate limit error
+                    if 'Note' in data or 'Information' in data:
+                        results['errors'].append(f"{data_type}: rate limited")
+                        results['status'] = 'partial'
+                        continue
+
+                    # Store results
+                    results['data_types'][data_type] = {
+                        'status': 'success',
+                        'records': len(data) if isinstance(data, dict) else 0
+                    }
+
+                finally:
+                    # Always release the key back to pool
+                    ray.get(key_manager_handle.release_key.remote(key))
+
+            except Exception as e:
+                results['errors'].append(f"{data_type}: {str(e)}")
+                results['status'] = 'partial'
+
+        if results['errors'] and not results['data_types']:
+            results['status'] = 'failed'
+
+        return results
+
     return ingest_ticker
+
+
+def create_batch_ingest_task():
+    """
+    Create a batch ingestion task that processes multiple tickers.
+
+    More efficient than individual tasks for large batches.
+    """
+    ray = _get_ray()
+
+    @ray.remote
+    def batch_ingest(
+        tickers: List[str],
+        key_manager_handle: Any,
+        data_types: List[str] = None,
+        storage_path: str = "/shared/storage"
+    ) -> Dict[str, Any]:
+        """
+        Ingest data for multiple tickers sequentially on one worker.
+
+        Args:
+            tickers: List of ticker symbols
+            key_manager_handle: Ray Actor handle to DistributedKeyManager
+            data_types: Data types to fetch
+            storage_path: Path to shared storage
+
+        Returns:
+            Dict with batch results
+        """
+        import requests
+        import time
+
+        if data_types is None:
+            data_types = ['prices']
+
+        results = {
+            'total': len(tickers),
+            'success': 0,
+            'failed': 0,
+            'tickers': {}
+        }
+
+        for ticker in tickers:
+            ticker_result = {'status': 'success', 'data_types': {}}
+
+            for data_type in data_types:
+                # Acquire key
+                key = ray.get(key_manager_handle.acquire_key.remote(timeout=120.0))
+                if not key:
+                    ticker_result['status'] = 'failed'
+                    ticker_result['error'] = 'timeout waiting for key'
+                    break
+
+                try:
+                    if data_type == 'prices':
+                        url = (
+                            f"https://www.alphavantage.co/query"
+                            f"?function=TIME_SERIES_DAILY"
+                            f"&symbol={ticker}&outputsize=compact&apikey={key}"
+                        )
+                    elif data_type == 'overview':
+                        url = (
+                            f"https://www.alphavantage.co/query"
+                            f"?function=OVERVIEW&symbol={ticker}&apikey={key}"
+                        )
+                    else:
+                        continue
+
+                    response = requests.get(url, timeout=30)
+                    data = response.json()
+
+                    if 'Note' in data or 'Information' in data:
+                        ticker_result['data_types'][data_type] = 'rate_limited'
+                    else:
+                        ticker_result['data_types'][data_type] = 'success'
+
+                except Exception as e:
+                    ticker_result['data_types'][data_type] = f'error: {str(e)}'
+
+                finally:
+                    ray.get(key_manager_handle.release_key.remote(key))
+
+            results['tickers'][ticker] = ticker_result
+            if ticker_result['status'] == 'success':
+                results['success'] += 1
+            else:
+                results['failed'] += 1
+
+        return results
+
+    return batch_ingest
 
 
 # ============================================================================
@@ -295,9 +459,11 @@ def create_build_model_task():
 try:
     forecast_ticker = create_forecast_task()
     ingest_ticker = create_ingest_task()
+    batch_ingest = create_batch_ingest_task()
     build_model_task = create_build_model_task()
 except ImportError:
     # Ray not installed - create dummy functions
     forecast_ticker = None
     ingest_ticker = None
+    batch_ingest = None
     build_model_task = None
