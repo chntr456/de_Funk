@@ -24,29 +24,32 @@ ray:
   # Local mode settings
   local:
     # Limit CPUs (null = use all available)
-    num_cpus: null
+    num_cpus: 12
     # Limit memory in GB (null = use all available)
-    memory_gb: null
+    memory_gb: 8
 
   # Cluster mode settings (for multi-node setup)
   cluster:
     # Head node configuration
     head:
-      host: "192.168.1.100"
+      host: "192.168.1.212"
       port: 6379
       dashboard_port: 8265
 
     # Worker nodes (for documentation/setup scripts)
     workers:
-      - host: "192.168.1.101"
-        cpus: 4
-        memory_gb: 16
-      - host: "192.168.1.102"
-        cpus: 4
-        memory_gb: 16
-      - host: "192.168.1.103"
-        cpus: 4
-        memory_gb: 16
+      # Node name: bark_1
+      - host: "192.168.1.207"
+        cpus: 11
+        memory_gb: 10
+      # Node name: bark_2
+      - host: "192.168.1.202"
+        cpus: 11
+        memory_gb: 10
+      # Node name: bark_3
+      - host: "192.168.1.203"
+        cpus: 11
+        memory_gb: 10
 
   # Runtime environment for Ray workers
   runtime_env:
