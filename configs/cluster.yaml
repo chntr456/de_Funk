@@ -16,7 +16,7 @@ ray:
   # - local: Start local Ray instance (all cores on this machine)
   # - auto: Connect to existing cluster (ray start --head must be running)
   # - address: Connect to specific cluster address
-  mode: local
+  mode: auto
 
   # Address for "address" mode (ray://host:port)
   address: null
@@ -24,29 +24,32 @@ ray:
   # Local mode settings
   local:
     # Limit CPUs (null = use all available)
-    num_cpus: null
+    num_cpus: 12
     # Limit memory in GB (null = use all available)
-    memory_gb: null
+    memory_gb: 8
 
   # Cluster mode settings (for multi-node setup)
   cluster:
     # Head node configuration
     head:
-      host: "192.168.1.100"
+      host: "192.168.1.212"
       port: 6379
       dashboard_port: 8265
 
     # Worker nodes (for documentation/setup scripts)
     workers:
-      - host: "192.168.1.101"
-        cpus: 4
-        memory_gb: 16
-      - host: "192.168.1.102"
-        cpus: 4
-        memory_gb: 16
-      - host: "192.168.1.103"
-        cpus: 4
-        memory_gb: 16
+      - host: "192.168.1.207"
+        name: "bark-1"
+        cpus: 11
+        memory_gb: 10
+      - host: "192.168.1.202"
+        name: "bark-2"
+        cpus: 11
+        memory_gb: 10
+      - host: "192.168.1.203"
+        name: "bark-3"
+        cpus: 11
+        memory_gb: 10
 
   # Runtime environment for Ray workers
   runtime_env:
@@ -62,22 +65,23 @@ ray:
 # =============================================================================
 storage:
   # Storage type: "local" or "nfs"
-  type: local
+  type: nfs
 
-  # Local storage paths (relative to repo root)
+  # Local storage paths (relative to repo root) - used on head node
   local:
-    bronze: "storage/bronze"
-    silver: "storage/silver"
-    forecasts: "storage/forecasts"
+    root: "/data/de_funk"
+    bronze: "/data/de_funk/bronze"
+    silver: "/data/de_funk/silver"
+    forecasts: "/data/de_funk/forecasts"
 
-  # NFS settings (for cluster mode)
+  # NFS settings (for cluster mode) - used on worker nodes
   nfs:
     # NFS mount point on workers
     mount_point: "/shared/storage"
-    # NFS server settings (for setup reference)
+    # NFS server settings
     server:
-      host: "192.168.1.100"
-      export_path: "/home/de_funk/storage"
+      host: "192.168.1.212"
+      export_path: "/data/de_funk"
 
 # =============================================================================
 # SCHEDULER SETTINGS
