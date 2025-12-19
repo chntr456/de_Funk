@@ -157,13 +157,13 @@ apt install -y \
     software-properties-common
 
 # =============================================================================
-# Step 2: Python 3.11
+# Step 2: Python 3.13 (must match head node)
 # =============================================================================
 
-log "Installing Python 3.11..."
+log "Installing Python 3.13..."
 add-apt-repository -y ppa:deadsnakes/ppa
 apt update
-apt install -y python3.11 python3.11-venv python3.11-dev
+apt install -y python3.13 python3.13-venv python3.13-dev
 
 # =============================================================================
 # Step 3: Create de_funk user
@@ -242,7 +242,7 @@ done
 log "Setting up Python virtual environment..."
 
 sudo -u $DE_FUNK_USER bash << EOF
-python3.11 -m venv $VENV_PATH
+python3.13 -m venv $VENV_PATH
 source $VENV_PATH/bin/activate
 pip install --upgrade pip setuptools wheel
 pip install 'ray[default]>=2.9.0' pandas numpy pyarrow deltalake statsmodels requests

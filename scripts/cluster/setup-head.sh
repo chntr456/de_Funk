@@ -17,6 +17,25 @@
 set -e
 
 # =============================================================================
+# Parse Arguments
+# =============================================================================
+
+SKIP_STORAGE=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --skip-storage)
+            SKIP_STORAGE=true
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# =============================================================================
 # Configuration (matches cluster.yaml)
 # =============================================================================
 
@@ -29,7 +48,7 @@ DE_FUNK_USER="ms_trixie"
 PROJECT_PATH="/home/$DE_FUNK_USER/PycharmProjects/de_Funk"
 
 # Storage settings
-STORAGE_LV_SIZE="500G"
+STORAGE_LV_SIZE="300G"
 STORAGE_VG="ubuntu-vg"
 STORAGE_LV_NAME="storage-lv"
 STORAGE_MOUNT="/data/de_funk"
@@ -67,48 +86,46 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # =============================================================================
-# Step 1: Check LVM Space
+# Step 1-3: Storage Setup (LVM)
 # =============================================================================
 
-log "Checking LVM volume group..."
+if [ "$SKIP_STORAGE" = false ]; then
+    log "Checking LVM volume group..."
 
-VG_FREE=$(vgs --noheadings -o vg_free --units g $STORAGE_VG 2>/dev/null | tr -d ' ')
-log "Available space in $STORAGE_VG: $VG_FREE"
+    VG_FREE=$(vgs --noheadings -o vg_free --units g $STORAGE_VG 2>/dev/null | tr -d ' ')
+    log "Available space in $STORAGE_VG: $VG_FREE"
 
-# =============================================================================
-# Step 2: Create Storage LV (if not exists)
-# =============================================================================
+    if lvs $STORAGE_VG/$STORAGE_LV_NAME &>/dev/null; then
+        log "Storage LV already exists"
+    else
+        log "Creating $STORAGE_LV_SIZE logical volume..."
+        lvcreate -L $STORAGE_LV_SIZE -n $STORAGE_LV_NAME $STORAGE_VG
 
-if lvs $STORAGE_VG/$STORAGE_LV_NAME &>/dev/null; then
-    log "Storage LV already exists"
+        log "Formatting as ext4..."
+        mkfs.ext4 /dev/$STORAGE_VG/$STORAGE_LV_NAME
+    fi
+
+    log "Setting up mount point..."
+
+    mkdir -p $STORAGE_MOUNT
+
+    # Add to fstab if not present
+    if ! grep -q "$STORAGE_MOUNT" /etc/fstab; then
+        echo "/dev/$STORAGE_VG/$STORAGE_LV_NAME $STORAGE_MOUNT ext4 defaults 0 2" >> /etc/fstab
+        log "Added to /etc/fstab"
+    fi
+
+    # Mount
+    mount -a
+    log "Mounted at $STORAGE_MOUNT"
+
+    # Set ownership
+    chown -R $DE_FUNK_USER:$DE_FUNK_USER $STORAGE_MOUNT
 else
-    log "Creating $STORAGE_LV_SIZE logical volume..."
-    lvcreate -L $STORAGE_LV_SIZE -n $STORAGE_LV_NAME $STORAGE_VG
-
-    log "Formatting as ext4..."
-    mkfs.ext4 /dev/$STORAGE_VG/$STORAGE_LV_NAME
+    warn "Skipping storage setup (--skip-storage)"
+    # Just ensure mount point exists
+    mkdir -p $STORAGE_MOUNT
 fi
-
-# =============================================================================
-# Step 3: Mount Storage
-# =============================================================================
-
-log "Setting up mount point..."
-
-mkdir -p $STORAGE_MOUNT
-
-# Add to fstab if not present
-if ! grep -q "$STORAGE_MOUNT" /etc/fstab; then
-    echo "/dev/$STORAGE_VG/$STORAGE_LV_NAME $STORAGE_MOUNT ext4 defaults 0 2" >> /etc/fstab
-    log "Added to /etc/fstab"
-fi
-
-# Mount
-mount -a
-log "Mounted at $STORAGE_MOUNT"
-
-# Set ownership
-chown -R $DE_FUNK_USER:$DE_FUNK_USER $STORAGE_MOUNT
 
 # =============================================================================
 # Step 4: Create Storage Structure
@@ -163,20 +180,29 @@ systemctl restart nfs-kernel-server
 log "NFS server configured"
 
 # =============================================================================
-# Step 7: Ray Head Service
+# Step 7: Python 3.13 Environment
+# =============================================================================
+
+log "Installing Python 3.13..."
+add-apt-repository -y ppa:deadsnakes/ppa
+apt update
+apt install -y python3.13 python3.13-venv python3.13-dev
+
+VENV_PATH="/home/$DE_FUNK_USER/venv"
+
+if [ ! -d "$VENV_PATH" ]; then
+    log "Creating Python virtual environment..."
+    sudo -u $DE_FUNK_USER python3.13 -m venv $VENV_PATH
+    sudo -u $DE_FUNK_USER bash -c "source $VENV_PATH/bin/activate && pip install --upgrade pip setuptools wheel && pip install 'ray[default]>=2.9.0' pandas numpy pyarrow deltalake statsmodels requests pyspark"
+else
+    log "Virtual environment already exists at $VENV_PATH"
+fi
+
+# =============================================================================
+# Step 8: Ray Head Service
 # =============================================================================
 
 log "Creating Ray head systemd service..."
-
-# Find venv path
-if [ -d "/home/$DE_FUNK_USER/venv" ]; then
-    VENV_PATH="/home/$DE_FUNK_USER/venv"
-elif [ -d "$PROJECT_PATH/venv" ]; then
-    VENV_PATH="$PROJECT_PATH/venv"
-else
-    warn "No venv found - Ray service will need manual venv path"
-    VENV_PATH="/home/$DE_FUNK_USER/venv"
-fi
 
 cat > /etc/systemd/system/ray-head.service << EOF
 [Unit]
@@ -205,7 +231,7 @@ systemctl enable ray-head
 log "Ray head service created (not started - start manually or reboot)"
 
 # =============================================================================
-# Step 8: Firewall
+# Step 9: Firewall
 # =============================================================================
 
 if command -v ufw &>/dev/null && ufw status | grep -q "active"; then
