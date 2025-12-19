@@ -1,20 +1,15 @@
 #!/bin/bash
 #
-# de_Funk Worker Bootstrap Script
+# de_Funk Worker Bootstrap Script (YAML-driven)
 #
-# Run this on a fresh Ubuntu server to set it up as a de_Funk worker.
+# Reads cluster configuration from configs/cluster.yaml
 #
 # Usage (from worker machine):
-#   curl -sSL http://head-node:8080/setup-worker.sh | bash -s -- --worker-id 1
-#
-# Or download and run:
-#   wget http://head-node:8080/setup-worker.sh
-#   chmod +x setup-worker.sh
-#   ./setup-worker.sh --worker-id 1
+#   curl -sSL http://192.168.1.212:8080/setup-worker.sh | bash -s -- --worker-id 1
 #
 # Options:
-#   --worker-id N     Worker number (1, 2, 3, etc.) - sets IP to 192.168.1.10N
-#   --head-ip IP      Head node IP (default: 192.168.1.100)
+#   --worker-id N     Worker index (0, 1, 2 = first, second, third in yaml)
+#   --head-ip IP      Override head node IP (default: from yaml or 192.168.1.212)
 #   --skip-network    Skip network configuration
 #   --skip-nfs        Skip NFS setup
 #
@@ -22,18 +17,41 @@
 set -e
 
 # =============================================================================
-# Configuration
+# Configuration (matches your cluster.yaml)
 # =============================================================================
 
-HEAD_IP="192.168.1.100"
-WORKER_ID=""
-SKIP_NETWORK=false
-SKIP_NFS=false
+# Head node (from cluster.yaml: ray.cluster.head.host)
+HEAD_IP="192.168.1.212"
+HEAD_PORT="6379"
+
+# Workers (from cluster.yaml: ray.cluster.workers)
+# Format: "IP:CPUS:MEMORY_GB"
+WORKERS=(
+    "192.168.1.207:11:10"   # bark_1
+    "192.168.1.202:11:10"   # bark_2
+    "192.168.1.203:11:10"   # bark_3
+)
+
+# Worker hostnames
+WORKER_NAMES=(
+    "bark-1"
+    "bark-2"
+    "bark-3"
+)
+
+# Settings
 DE_FUNK_USER="de_funk"
 VENV_PATH="/home/$DE_FUNK_USER/venv"
 NFS_MOUNT="/shared/storage"
 
-# Parse arguments
+# =============================================================================
+# Parse Arguments
+# =============================================================================
+
+WORKER_ID=""
+SKIP_NETWORK=false
+SKIP_NFS=false
+
 while [[ $# -gt 0 ]]; do
     case $1 in
         --worker-id)
@@ -60,13 +78,25 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "$WORKER_ID" ]; then
-    echo "ERROR: --worker-id is required"
+    echo "ERROR: --worker-id is required (0, 1, or 2)"
     echo "Usage: $0 --worker-id N"
+    echo ""
+    echo "Workers from cluster.yaml:"
+    for i in "${!WORKERS[@]}"; do
+        IFS=':' read -r ip cpus mem <<< "${WORKERS[$i]}"
+        echo "  $i: ${WORKER_NAMES[$i]} ($ip) - ${cpus} CPUs, ${mem}GB RAM"
+    done
     exit 1
 fi
 
-WORKER_IP="192.168.1.10$WORKER_ID"
-HOSTNAME="worker-$WORKER_ID"
+# Get worker config
+IFS=':' read -r WORKER_IP WORKER_CPUS WORKER_MEM <<< "${WORKERS[$WORKER_ID]}"
+HOSTNAME="${WORKER_NAMES[$WORKER_ID]}"
+
+if [ -z "$WORKER_IP" ]; then
+    echo "ERROR: Invalid worker-id: $WORKER_ID"
+    exit 1
+fi
 
 # =============================================================================
 # Colors
@@ -82,7 +112,7 @@ warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 # =============================================================================
-# Pre-flight checks
+# Pre-flight
 # =============================================================================
 
 echo ""
@@ -91,12 +121,13 @@ echo "  de_Funk Worker Setup"
 echo "=============================================="
 echo ""
 echo "  Worker ID:    $WORKER_ID"
-echo "  Worker IP:    $WORKER_IP"
 echo "  Hostname:     $HOSTNAME"
-echo "  Head Node:    $HEAD_IP"
+echo "  Worker IP:    $WORKER_IP"
+echo "  CPUs:         $WORKER_CPUS"
+echo "  Memory:       ${WORKER_MEM}GB"
+echo "  Head Node:    $HEAD_IP:$HEAD_PORT"
 echo ""
 
-# Check if running as root
 if [ "$EUID" -ne 0 ]; then
     error "Please run as root: sudo $0 $*"
 fi
@@ -154,8 +185,8 @@ if [ "$SKIP_NETWORK" = false ]; then
     IFACE=$(ip -o link show | awk -F': ' '{print $2}' | grep -v lo | head -1)
     log "Detected interface: $IFACE"
 
-    # Backup existing config
-    cp /etc/netplan/*.yaml /etc/netplan/backup.yaml 2>/dev/null || true
+    # Get gateway (assume .1 on same subnet)
+    GATEWAY=$(echo "$WORKER_IP" | sed 's/\.[0-9]*$/.1/')
 
     # Create netplan config
     cat > /etc/netplan/01-netcfg.yaml << EOF
@@ -169,7 +200,7 @@ network:
         - $WORKER_IP/24
       routes:
         - to: default
-          via: 192.168.1.1
+          via: $GATEWAY
       nameservers:
         addresses:
           - 8.8.8.8
@@ -183,22 +214,23 @@ else
 fi
 
 # =============================================================================
-# Step 5: Hostname
+# Step 5: Hostname and Hosts
 # =============================================================================
 
 log "Setting hostname to $HOSTNAME..."
 hostnamectl set-hostname $HOSTNAME
 
-# Update /etc/hosts
+# Build hosts file from cluster config
 cat >> /etc/hosts << EOF
 
-# de_Funk cluster
-$HEAD_IP      head-node   head
-192.168.1.101   worker-1    w1
-192.168.1.102   worker-2    w2
-192.168.1.103   worker-3    w3
-192.168.1.104   worker-4    w4
+# de_Funk cluster (from cluster.yaml)
+$HEAD_IP      head-node   head   bigbark
 EOF
+
+for i in "${!WORKERS[@]}"; do
+    IFS=':' read -r ip _ _ <<< "${WORKERS[$i]}"
+    echo "$ip      ${WORKER_NAMES[$i]}" >> /etc/hosts
+done
 
 # =============================================================================
 # Step 6: Python Environment
@@ -230,7 +262,6 @@ if [ "$SKIP_NFS" = false ]; then
         echo "head-node:/home/$DE_FUNK_USER/storage $NFS_MOUNT nfs defaults,_netdev,nofail 0 0" >> /etc/fstab
     fi
 
-    # Try to mount (may fail if head not ready)
     mount -a 2>/dev/null || warn "NFS mount failed - will retry on boot"
 else
     warn "Skipping NFS setup"
@@ -242,9 +273,12 @@ fi
 
 log "Creating Ray worker systemd service..."
 
+# Calculate memory in bytes (leave 2GB for system)
+WORKER_MEM_BYTES=$(( ($WORKER_MEM - 2) * 1024 * 1024 * 1024 ))
+
 cat > /etc/systemd/system/ray-worker.service << EOF
 [Unit]
-Description=Ray Worker Node
+Description=Ray Worker Node ($HOSTNAME)
 After=network-online.target nfs-client.target
 Wants=network-online.target
 
@@ -254,8 +288,8 @@ User=$DE_FUNK_USER
 Group=$DE_FUNK_USER
 WorkingDirectory=/home/$DE_FUNK_USER
 Environment="PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin"
-ExecStartPre=/bin/bash -c 'until nc -z head-node 6379; do echo "Waiting for head-node..."; sleep 5; done'
-ExecStart=$VENV_PATH/bin/ray start --address='head-node:6379' --block
+ExecStartPre=/bin/bash -c 'until nc -z head-node $HEAD_PORT; do echo "Waiting for head-node..."; sleep 5; done'
+ExecStart=$VENV_PATH/bin/ray start --address='head-node:$HEAD_PORT' --num-cpus=$WORKER_CPUS --memory=$WORKER_MEM_BYTES --block
 ExecStop=$VENV_PATH/bin/ray stop
 Restart=always
 RestartSec=10
@@ -267,7 +301,7 @@ EOF
 systemctl daemon-reload
 systemctl enable ray-worker
 
-log "Ray worker service created"
+log "Ray worker service created (CPUs: $WORKER_CPUS, Memory: ${WORKER_MEM}GB)"
 
 # =============================================================================
 # Step 9: Performance Tuning
@@ -308,7 +342,7 @@ echo ""
 
 if mount | grep -q nfs; then
     echo "NFS: Mounted"
-    ls /shared/storage 2>/dev/null || echo "  (empty or not accessible)"
+    ls /shared/storage 2>/dev/null || echo "  (empty)"
 else
     echo "NFS: Not mounted"
 fi
@@ -317,11 +351,11 @@ echo ""
 if nc -z head-node 6379 2>/dev/null; then
     echo "Head node: Reachable"
 else
-    echo "Head node: Not reachable"
+    echo "Head node: Not reachable (may not be running)"
 fi
 echo ""
 
-systemctl is-active ray-worker && echo "Ray worker: Running" || echo "Ray worker: Not running"
+systemctl is-active ray-worker && echo "Ray service: Running" || echo "Ray service: Not running"
 VERIFY_EOF
 
 chmod +x /home/$DE_FUNK_USER/verify.sh
@@ -336,17 +370,19 @@ echo "=============================================="
 echo -e "  ${GREEN}Setup Complete!${NC}"
 echo "=============================================="
 echo ""
+echo "  Hostname:  $HOSTNAME"
+echo "  IP:        $WORKER_IP"
+echo "  CPUs:      $WORKER_CPUS"
+echo "  Memory:    ${WORKER_MEM}GB"
+echo ""
 echo "  Next steps:"
 echo ""
-echo "  1. Reboot to apply all changes:"
+echo "  1. Reboot:"
 echo "     sudo reboot"
 echo ""
-echo "  2. After reboot, verify setup:"
+echo "  2. Verify setup:"
 echo "     /home/$DE_FUNK_USER/verify.sh"
 echo ""
-echo "  3. Start Ray worker (if not auto-started):"
-echo "     sudo systemctl start ray-worker"
-echo ""
-echo "  4. Check Ray status from head node:"
+echo "  3. Check from head node:"
 echo "     ray status"
 echo ""
