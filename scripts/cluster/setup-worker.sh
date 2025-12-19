@@ -40,9 +40,12 @@ WORKER_NAMES=(
 )
 
 # Settings
-DE_FUNK_USER="de_funk"
+DE_FUNK_USER="ms_trixie"
 VENV_PATH="/home/$DE_FUNK_USER/venv"
 NFS_MOUNT="/shared/storage"
+# Head node paths (PyCharm project folder)
+HEAD_PROJECT_PATH="/home/ms_trixie/PycharmProjects/de_Funk"
+HEAD_STORAGE_PATH="/data/de_funk"
 
 # =============================================================================
 # Parse Arguments
@@ -257,9 +260,9 @@ if [ "$SKIP_NFS" = false ]; then
     mkdir -p $NFS_MOUNT
     chown $DE_FUNK_USER:$DE_FUNK_USER $NFS_MOUNT
 
-    # Add to fstab
+    # Add to fstab - mount from head node's dedicated storage
     if ! grep -q "$NFS_MOUNT" /etc/fstab; then
-        echo "head-node:/home/$DE_FUNK_USER/storage $NFS_MOUNT nfs defaults,_netdev,nofail 0 0" >> /etc/fstab
+        echo "head-node:$HEAD_STORAGE_PATH $NFS_MOUNT nfs defaults,_netdev,nofail 0 0" >> /etc/fstab
     fi
 
     mount -a 2>/dev/null || warn "NFS mount failed - will retry on boot"

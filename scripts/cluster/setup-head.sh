@@ -1,0 +1,255 @@
+#!/bin/bash
+#
+# de_Funk Head Node Setup Script
+#
+# Run this on the HEAD NODE (bigbark) to set up storage and NFS.
+#
+# Usage:
+#   sudo ./scripts/cluster/setup-head.sh
+#
+# This script:
+#   1. Creates dedicated 500GB storage LV (if not exists)
+#   2. Sets up NFS server
+#   3. Creates storage directories
+#   4. Sets up Ray head service
+#
+
+set -e
+
+# =============================================================================
+# Configuration (matches cluster.yaml)
+# =============================================================================
+
+HEAD_IP="192.168.1.212"
+HEAD_PORT="6379"
+DASHBOARD_PORT="8265"
+
+# User settings
+DE_FUNK_USER="ms_trixie"
+PROJECT_PATH="/home/$DE_FUNK_USER/PycharmProjects/de_Funk"
+
+# Storage settings
+STORAGE_LV_SIZE="500G"
+STORAGE_VG="ubuntu-vg"
+STORAGE_LV_NAME="storage-lv"
+STORAGE_MOUNT="/data/de_funk"
+
+# =============================================================================
+# Colors
+# =============================================================================
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+log() { echo -e "${GREEN}[+]${NC} $1"; }
+warn() { echo -e "${YELLOW}[!]${NC} $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
+
+# =============================================================================
+# Pre-flight
+# =============================================================================
+
+echo ""
+echo "=============================================="
+echo "  de_Funk Head Node Setup"
+echo "=============================================="
+echo ""
+echo "  Host:         $(hostname) ($HEAD_IP)"
+echo "  User:         $DE_FUNK_USER"
+echo "  Project:      $PROJECT_PATH"
+echo "  Storage:      $STORAGE_MOUNT ($STORAGE_LV_SIZE)"
+echo ""
+
+if [ "$EUID" -ne 0 ]; then
+    error "Please run as root: sudo $0"
+fi
+
+# =============================================================================
+# Step 1: Check LVM Space
+# =============================================================================
+
+log "Checking LVM volume group..."
+
+VG_FREE=$(vgs --noheadings -o vg_free --units g $STORAGE_VG 2>/dev/null | tr -d ' ')
+log "Available space in $STORAGE_VG: $VG_FREE"
+
+# =============================================================================
+# Step 2: Create Storage LV (if not exists)
+# =============================================================================
+
+if lvs $STORAGE_VG/$STORAGE_LV_NAME &>/dev/null; then
+    log "Storage LV already exists"
+else
+    log "Creating $STORAGE_LV_SIZE logical volume..."
+    lvcreate -L $STORAGE_LV_SIZE -n $STORAGE_LV_NAME $STORAGE_VG
+
+    log "Formatting as ext4..."
+    mkfs.ext4 /dev/$STORAGE_VG/$STORAGE_LV_NAME
+fi
+
+# =============================================================================
+# Step 3: Mount Storage
+# =============================================================================
+
+log "Setting up mount point..."
+
+mkdir -p $STORAGE_MOUNT
+
+# Add to fstab if not present
+if ! grep -q "$STORAGE_MOUNT" /etc/fstab; then
+    echo "/dev/$STORAGE_VG/$STORAGE_LV_NAME $STORAGE_MOUNT ext4 defaults 0 2" >> /etc/fstab
+    log "Added to /etc/fstab"
+fi
+
+# Mount
+mount -a
+log "Mounted at $STORAGE_MOUNT"
+
+# Set ownership
+chown -R $DE_FUNK_USER:$DE_FUNK_USER $STORAGE_MOUNT
+
+# =============================================================================
+# Step 4: Create Storage Structure
+# =============================================================================
+
+log "Creating storage directories..."
+
+sudo -u $DE_FUNK_USER bash << EOF
+mkdir -p $STORAGE_MOUNT/{bronze,silver,forecasts,duckdb}
+EOF
+
+log "Storage structure created"
+
+# =============================================================================
+# Step 5: Symlink from Project
+# =============================================================================
+
+log "Creating symlink from project..."
+
+STORAGE_LINK="$PROJECT_PATH/storage"
+
+if [ -L "$STORAGE_LINK" ]; then
+    log "Symlink already exists"
+elif [ -d "$STORAGE_LINK" ]; then
+    warn "storage/ is a directory - backing up and replacing with symlink"
+    mv "$STORAGE_LINK" "${STORAGE_LINK}.backup.$(date +%s)"
+    sudo -u $DE_FUNK_USER ln -s $STORAGE_MOUNT "$STORAGE_LINK"
+else
+    sudo -u $DE_FUNK_USER ln -s $STORAGE_MOUNT "$STORAGE_LINK"
+fi
+
+log "Symlink: $STORAGE_LINK -> $STORAGE_MOUNT"
+
+# =============================================================================
+# Step 6: Install NFS Server
+# =============================================================================
+
+log "Setting up NFS server..."
+
+apt install -y nfs-kernel-server
+
+# Configure exports
+cat > /etc/exports << EOF
+# de_Funk cluster storage
+$STORAGE_MOUNT 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash)
+EOF
+
+exportfs -ra
+systemctl enable nfs-kernel-server
+systemctl restart nfs-kernel-server
+
+log "NFS server configured"
+
+# =============================================================================
+# Step 7: Ray Head Service
+# =============================================================================
+
+log "Creating Ray head systemd service..."
+
+# Find venv path
+if [ -d "/home/$DE_FUNK_USER/venv" ]; then
+    VENV_PATH="/home/$DE_FUNK_USER/venv"
+elif [ -d "$PROJECT_PATH/venv" ]; then
+    VENV_PATH="$PROJECT_PATH/venv"
+else
+    warn "No venv found - Ray service will need manual venv path"
+    VENV_PATH="/home/$DE_FUNK_USER/venv"
+fi
+
+cat > /etc/systemd/system/ray-head.service << EOF
+[Unit]
+Description=Ray Head Node (bigbark)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$DE_FUNK_USER
+Group=$DE_FUNK_USER
+WorkingDirectory=$PROJECT_PATH
+Environment="PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin"
+ExecStart=$VENV_PATH/bin/ray start --head --port=$HEAD_PORT --dashboard-host=0.0.0.0 --dashboard-port=$DASHBOARD_PORT --num-cpus=12 --block
+ExecStop=$VENV_PATH/bin/ray stop
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+systemctl daemon-reload
+systemctl enable ray-head
+
+log "Ray head service created (not started - start manually or reboot)"
+
+# =============================================================================
+# Step 8: Firewall
+# =============================================================================
+
+if command -v ufw &>/dev/null && ufw status | grep -q "active"; then
+    log "Configuring firewall..."
+    ufw allow from 192.168.1.0/24 to any port 6379   # Ray
+    ufw allow from 192.168.1.0/24 to any port 8265   # Dashboard
+    ufw allow from 192.168.1.0/24 to any port 2049   # NFS
+    ufw allow from 192.168.1.0/24 to any port 8080   # Setup server
+    ufw reload
+fi
+
+# =============================================================================
+# Done
+# =============================================================================
+
+echo ""
+echo "=============================================="
+echo -e "  ${GREEN}Head Node Setup Complete!${NC}"
+echo "=============================================="
+echo ""
+echo "  Storage:"
+echo "    Mount:    $STORAGE_MOUNT"
+echo "    Symlink:  $PROJECT_PATH/storage -> $STORAGE_MOUNT"
+echo "    Size:     $(df -h $STORAGE_MOUNT | awk 'NR==2 {print $2}')"
+echo ""
+echo "  NFS Export:"
+echo "    $(exportfs -v | grep de_funk)"
+echo ""
+echo "  Next steps:"
+echo ""
+echo "  1. Start Ray head:"
+echo "     sudo systemctl start ray-head"
+echo "     # or manually:"
+echo "     ray start --head --port=6379 --dashboard-host=0.0.0.0"
+echo ""
+echo "  2. Serve worker setup script:"
+echo "     cd $PROJECT_PATH"
+echo "     ./scripts/cluster/serve-setup.sh"
+echo ""
+echo "  3. On each worker, run:"
+echo "     curl -sSL http://$HEAD_IP:8080/setup-worker.sh | sudo bash -s -- --worker-id N"
+echo ""
+echo "  4. Check cluster:"
+echo "     ray status"
+echo ""
+echo "  Dashboard: http://$HEAD_IP:$DASHBOARD_PORT"
+echo ""
