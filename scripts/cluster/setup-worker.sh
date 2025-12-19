@@ -153,7 +153,7 @@ apt install -y \
     net-tools \
     nfs-common \
     openssh-server \
-    netcat \
+    netcat-openbsd \
     software-properties-common
 
 # =============================================================================
