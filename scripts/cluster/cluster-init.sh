@@ -131,9 +131,18 @@ setup_head() {
 
     log "Head node setup complete"
 
+    # Clean up any existing Ray processes
+    log "Cleaning up existing Ray processes..."
+    sudo -u $DE_FUNK_USER bash -c "source /home/$DE_FUNK_USER/venv/bin/activate && ray stop --force" 2>/dev/null || true
+    pkill -9 -f "ray::" 2>/dev/null || true
+    pkill -9 -f "gcs_server" 2>/dev/null || true
+    pkill -9 -f "raylet" 2>/dev/null || true
+    rm -rf /tmp/ray/* 2>/dev/null || true
+    sleep 2
+
     # Start Ray head
     log "Starting Ray head node..."
-    sudo -u $DE_FUNK_USER bash -c "source /home/$DE_FUNK_USER/venv/bin/activate && ray stop 2>/dev/null; ray start --head --port=$HEAD_PORT --dashboard-host=0.0.0.0 --dashboard-port=8265 --num-cpus=12"
+    sudo -u $DE_FUNK_USER bash -c "source /home/$DE_FUNK_USER/venv/bin/activate && ray start --head --port=$HEAD_PORT --dashboard-host=0.0.0.0 --dashboard-port=8265 --num-cpus=12"
 
     log "Ray head started"
 }
@@ -172,6 +181,12 @@ setup_worker() {
     ssh $SSH_USER@$worker_ip "$SSH_PREFIX bash /tmp/setup-worker.sh --worker-id $worker_id" 2>&1 | tee /tmp/worker-$worker_id-setup.log
 
     log "Worker $worker_name setup complete"
+
+    # Clean up any existing Ray processes on worker
+    log "Cleaning up existing Ray processes on $worker_name..."
+    ssh $SSH_USER@$worker_ip "$SSH_PREFIX systemctl stop ray-worker" 2>/dev/null || true
+    ssh $SSH_USER@$worker_ip "$SSH_PREFIX pkill -9 -f 'ray::' 2>/dev/null; pkill -9 -f 'raylet' 2>/dev/null; rm -rf /tmp/ray/* 2>/dev/null" || true
+    sleep 2
 
     # Start worker service
     log "Starting Ray worker on $worker_name..."
