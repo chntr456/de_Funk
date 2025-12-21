@@ -3,20 +3,32 @@
 de_Funk Distributed Pipeline Runner
 
 Runs the full data ingestion pipeline distributed across the Ray cluster.
-Uses existing config files for rate limits and API configuration.
-
-This is a cluster-aware wrapper around the existing pipeline infrastructure.
+All parameters are configurable via configs/pipelines/run_config.json.
+CLI arguments override config file defaults.
 
 Usage:
     python scripts/cluster/run_distributed_pipeline.py [options]
 
 Options:
-    --max-tickers N     Maximum tickers to ingest (default: from config or all)
-    --days N            Number of days of data (default: 30)
+    --profile NAME      Load named profile from config (quick_test, dev, staging, production)
+    --max-tickers N     Maximum tickers to ingest
+    --days N            Number of days of data
     --dry-run           Simulate without API calls
     --skip-bronze       Skip bronze layer ingestion
     --skip-silver       Skip silver layer build
     --log-level LEVEL   Logging level (DEBUG, INFO, WARNING, ERROR)
+    --endpoints LIST    Comma-separated endpoints to ingest
+    --show-config       Show effective configuration and exit
+
+Examples:
+    # Quick test with profile
+    python scripts/cluster/run_distributed_pipeline.py --profile quick_test
+
+    # Override profile settings
+    python scripts/cluster/run_distributed_pipeline.py --profile dev --max-tickers 100
+
+    # Show what would run
+    python scripts/cluster/run_distributed_pipeline.py --profile staging --show-config
 """
 
 from __future__ import annotations
@@ -30,6 +42,7 @@ import json
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
+from copy import deepcopy
 
 # Add project root to path
 project_root = Path(__file__).parent.parent.parent
@@ -43,12 +56,31 @@ from config.logging import setup_logging, get_logger
 
 
 # =============================================================================
-# Load configuration from existing config files
+# Configuration Loading
 # =============================================================================
+
+def load_run_config() -> dict:
+    """
+    Load the pipeline run configuration from configs/pipelines/run_config.json.
+
+    Returns:
+        Full run configuration dict
+    """
+    config_path = project_root / "configs" / "pipelines" / "run_config.json"
+
+    if not config_path.exists():
+        raise FileNotFoundError(
+            f"Run config not found: {config_path}\n"
+            "Create this file or copy from run_config.json.example"
+        )
+
+    with open(config_path) as f:
+        return json.load(f)
+
 
 def load_pipeline_config(provider: str) -> dict:
     """
-    Load pipeline configuration from existing config files.
+    Load pipeline configuration for a specific provider.
 
     Args:
         provider: Provider name (alpha_vantage, bls, chicago)
@@ -92,6 +124,127 @@ def load_api_keys(provider: str) -> List[str]:
     return [k.strip() for k in keys.split(",") if k.strip()]
 
 
+def build_effective_config(run_config: dict, args: argparse.Namespace) -> dict:
+    """
+    Build effective configuration by merging: defaults <- profile <- CLI args.
+
+    Priority (highest to lowest):
+    1. CLI arguments (if explicitly provided)
+    2. Profile settings (if --profile specified)
+    3. Default values from config file
+
+    Args:
+        run_config: Full run configuration from file
+        args: Parsed CLI arguments
+
+    Returns:
+        Merged effective configuration
+    """
+    # Start with defaults
+    effective = deepcopy(run_config.get("defaults", {}))
+
+    # Add other sections
+    effective["providers"] = deepcopy(run_config.get("providers", {}))
+    effective["silver_models"] = deepcopy(run_config.get("silver_models", {}))
+    effective["cluster"] = deepcopy(run_config.get("cluster", {}))
+    effective["ticker_source"] = deepcopy(run_config.get("ticker_source", {}))
+    effective["retry"] = deepcopy(run_config.get("retry", {}))
+
+    # Apply profile if specified
+    if args.profile:
+        profiles = run_config.get("profiles", {})
+        if args.profile not in profiles:
+            available = [k for k in profiles.keys() if not k.startswith("_")]
+            raise ValueError(
+                f"Unknown profile: {args.profile}\n"
+                f"Available profiles: {', '.join(available)}"
+            )
+
+        profile = profiles[args.profile]
+        for key, value in profile.items():
+            if not key.startswith("_"):
+                effective[key] = value
+
+    # Override with CLI arguments (only if explicitly provided)
+    cli_overrides = {
+        "max_tickers": args.max_tickers,
+        "days": args.days,
+        "dry_run": args.dry_run if args.dry_run else None,  # Only if flag set
+        "skip_bronze": args.skip_bronze if args.skip_bronze else None,
+        "skip_silver": args.skip_silver if args.skip_silver else None,
+        "log_level": args.log_level if args.log_level != "INFO" else None,
+        "storage_path": args.storage_path,
+    }
+
+    for key, value in cli_overrides.items():
+        if value is not None:
+            effective[key] = value
+
+    # Handle endpoints override
+    if args.endpoints:
+        effective["providers"]["alpha_vantage"]["endpoints"] = [
+            e.strip() for e in args.endpoints.split(",")
+        ]
+
+    return effective
+
+
+def show_config(effective: dict, run_config: dict):
+    """Display effective configuration for debugging."""
+    print("\n" + "=" * 70)
+    print("  Effective Configuration")
+    print("=" * 70)
+
+    print("\nRun Parameters:")
+    print(f"  max_tickers:  {effective.get('max_tickers', 'all')}")
+    print(f"  days:         {effective.get('days', 30)}")
+    print(f"  dry_run:      {effective.get('dry_run', False)}")
+    print(f"  skip_bronze:  {effective.get('skip_bronze', False)}")
+    print(f"  skip_silver:  {effective.get('skip_silver', False)}")
+    print(f"  log_level:    {effective.get('log_level', 'INFO')}")
+    print(f"  storage_path: {effective.get('storage_path', 'auto-detect')}")
+
+    print("\nProviders:")
+    for provider, settings in effective.get("providers", {}).items():
+        if isinstance(settings, dict):
+            enabled = settings.get("enabled", False)
+            endpoints = settings.get("endpoints", settings.get("series", []))
+            print(f"  {provider}: {'ENABLED' if enabled else 'disabled'}")
+            if enabled and endpoints:
+                print(f"    endpoints: {', '.join(endpoints)}")
+
+    print("\nSilver Models:")
+    silver = effective.get("silver_models", {})
+    if silver.get("enabled", True):
+        models = silver.get("models", [])
+        print(f"  models: {', '.join(models)}")
+        print(f"  skip_on_dry_run: {silver.get('skip_on_dry_run', True)}")
+    else:
+        print("  disabled")
+
+    print("\nCluster:")
+    cluster = effective.get("cluster", {})
+    print(f"  ray_address: {cluster.get('ray_address', 'auto')}")
+    print(f"  fallback_to_local: {cluster.get('fallback_to_local', True)}")
+
+    print("\nRate Limits (from provider configs):")
+    for provider in ["alpha_vantage", "bls"]:
+        try:
+            config = load_pipeline_config(provider)
+            rate = config.get("rate_limit_per_sec", "not set")
+            print(f"  {provider}: {rate} req/sec ({float(rate) * 60:.0f}/min)")
+        except FileNotFoundError:
+            print(f"  {provider}: config not found")
+
+    print("\nAvailable Profiles:")
+    for name, profile in run_config.get("profiles", {}).items():
+        if not name.startswith("_"):
+            desc = ", ".join(f"{k}={v}" for k, v in profile.items() if not k.startswith("_"))
+            print(f"  {name}: {desc}")
+
+    print()
+
+
 # =============================================================================
 # Distributed Key Manager (Ray Actor)
 # =============================================================================
@@ -104,16 +257,18 @@ class DistributedKeyManager:
     Reads rate limits from existing config files - does NOT hardcode values.
     """
 
-    def __init__(self, providers: List[str]):
+    def __init__(self, providers: List[str], retry_config: dict = None):
         """
         Initialize key manager from existing config files.
 
         Args:
             providers: List of provider names to initialize
+            retry_config: Retry configuration from run_config
         """
         import logging
         self.logger = logging.getLogger("ray.key_manager")
         self.providers = {}
+        self.retry_config = retry_config or {"max_retries": 3, "retry_delay_seconds": 2.0}
 
         for provider in providers:
             try:
@@ -132,6 +287,7 @@ class DistributedKeyManager:
                     "total_requests": 0,
                     "successful_requests": 0,
                     "failed_requests": 0,
+                    "retried_requests": 0,
                     "wait_time_total": 0,
                     "config": config,
                 }
@@ -193,13 +349,15 @@ class DistributedKeyManager:
             "request_num": state["total_requests"],
         }
 
-    def report_result(self, provider: str, success: bool):
+    def report_result(self, provider: str, success: bool, was_retry: bool = False):
         """Report request result for tracking."""
         if provider in self.providers:
             if success:
                 self.providers[provider]["successful_requests"] += 1
             else:
                 self.providers[provider]["failed_requests"] += 1
+            if was_retry:
+                self.providers[provider]["retried_requests"] += 1
 
     def get_stats(self) -> dict:
         """Get usage statistics for all providers."""
@@ -210,6 +368,7 @@ class DistributedKeyManager:
                 "total_requests": total,
                 "successful_requests": state["successful_requests"],
                 "failed_requests": state["failed_requests"],
+                "retried_requests": state["retried_requests"],
                 "success_rate": state["successful_requests"] / max(total, 1),
                 "total_wait_time": state["wait_time_total"],
                 "avg_wait_time": state["wait_time_total"] / max(total, 1),
@@ -222,6 +381,10 @@ class DistributedKeyManager:
         if provider in self.providers:
             return self.providers[provider]["config"]
         return {}
+
+    def get_retry_config(self) -> dict:
+        """Get retry configuration."""
+        return self.retry_config
 
 
 # =============================================================================
@@ -316,66 +479,99 @@ def ingest_ticker_data(
         "errors": [],
     }
 
-    # Get config from key manager
+    # Get config and retry settings from key manager
     config = ray.get(key_manager.get_config.remote("alpha_vantage"))
+    retry_config = ray.get(key_manager.get_retry_config.remote())
     base_url = config.get("base_urls", {}).get("core", "https://www.alphavantage.co/query")
+
+    max_retries = retry_config.get("max_retries", 3)
+    retry_delay = retry_config.get("retry_delay_seconds", 2.0)
+    exponential_backoff = retry_config.get("exponential_backoff", True)
 
     for endpoint in endpoints:
         endpoint_config = config.get("endpoints", {}).get(endpoint, {})
         if not endpoint_config:
             continue
 
-        try:
-            # Acquire API key with rate limiting
-            key_info = ray.get(key_manager.acquire_key.remote("alpha_vantage"))
-            api_key = key_info["key"]
+        retries = 0
+        success = False
 
-            if dry_run:
-                # Simulate API response
-                import random
-                time.sleep(random.uniform(0.05, 0.15))
-                result["endpoints"][endpoint] = {
-                    "success": random.random() > 0.02,
-                    "simulated": True,
-                }
-            else:
-                # Real API call
-                params = {**endpoint_config.get("default_query", {})}
-                params["symbol"] = ticker
-                params["apikey"] = api_key
+        while retries <= max_retries and not success:
+            try:
+                # Acquire API key with rate limiting
+                key_info = ray.get(key_manager.acquire_key.remote("alpha_vantage"))
+                api_key = key_info["key"]
 
-                response = requests.get(base_url, params=params, timeout=30)
-                data = response.json()
-
-                # Check for errors
-                if "Error Message" in data or "Note" in data:
+                if dry_run:
+                    # Simulate API response
+                    import random
+                    time.sleep(random.uniform(0.05, 0.15))
                     result["endpoints"][endpoint] = {
-                        "success": False,
-                        "error": data.get("Error Message") or data.get("Note"),
+                        "success": random.random() > 0.02,
+                        "simulated": True,
                     }
-                    result["errors"].append(f"{endpoint}: {data.get('Error Message') or data.get('Note')}")
+                    success = True
                 else:
-                    # Write to storage
-                    output_dir = Path(storage_path) / "bronze" / "alpha_vantage" / endpoint
-                    output_dir.mkdir(parents=True, exist_ok=True)
+                    # Real API call
+                    params = {**endpoint_config.get("default_query", {})}
+                    params["symbol"] = ticker
+                    params["apikey"] = api_key
 
-                    output_file = output_dir / f"{ticker}.json"
-                    with open(output_file, "w") as f:
-                        json.dump(data, f)
+                    response = requests.get(base_url, params=params, timeout=30)
+                    data = response.json()
 
-                    result["endpoints"][endpoint] = {
-                        "success": True,
-                        "file": str(output_file),
-                    }
+                    # Check for errors
+                    if "Error Message" in data or "Note" in data:
+                        error_msg = data.get("Error Message") or data.get("Note")
 
-            # Report result
-            success = result["endpoints"].get(endpoint, {}).get("success", False)
-            ray.get(key_manager.report_result.remote("alpha_vantage", success))
+                        # Rate limit hit - retry
+                        if "rate limit" in str(error_msg).lower() or "Note" in data:
+                            retries += 1
+                            if retries <= max_retries:
+                                delay = retry_delay * (2 ** (retries - 1)) if exponential_backoff else retry_delay
+                                time.sleep(delay)
+                                ray.get(key_manager.report_result.remote("alpha_vantage", False, True))
+                                continue
 
-        except Exception as e:
-            result["endpoints"][endpoint] = {"success": False, "error": str(e)}
-            result["errors"].append(f"{endpoint}: {str(e)}")
-            logger.error(f"Error ingesting {ticker}/{endpoint}: {e}")
+                        result["endpoints"][endpoint] = {
+                            "success": False,
+                            "error": error_msg,
+                        }
+                        result["errors"].append(f"{endpoint}: {error_msg}")
+                    else:
+                        # Write to storage
+                        output_dir = Path(storage_path) / "bronze" / "alpha_vantage" / endpoint
+                        output_dir.mkdir(parents=True, exist_ok=True)
+
+                        output_file = output_dir / f"{ticker}.json"
+                        with open(output_file, "w") as f:
+                            json.dump(data, f)
+
+                        result["endpoints"][endpoint] = {
+                            "success": True,
+                            "file": str(output_file),
+                        }
+
+                    success = True
+
+                # Report result
+                endpoint_success = result["endpoints"].get(endpoint, {}).get("success", False)
+                ray.get(key_manager.report_result.remote("alpha_vantage", endpoint_success))
+
+            except requests.exceptions.Timeout:
+                retries += 1
+                if retries <= max_retries:
+                    delay = retry_delay * (2 ** (retries - 1)) if exponential_backoff else retry_delay
+                    time.sleep(delay)
+                else:
+                    result["endpoints"][endpoint] = {"success": False, "error": "Timeout after retries"}
+                    result["errors"].append(f"{endpoint}: Timeout")
+
+            except Exception as e:
+                result["endpoints"][endpoint] = {"success": False, "error": str(e)}
+                result["errors"].append(f"{endpoint}: {str(e)}")
+                logger.error(f"Error ingesting {ticker}/{endpoint}: {e}")
+                success = True  # Don't retry on unknown errors
 
     # Calculate overall success
     endpoint_results = result["endpoints"].values()
@@ -390,45 +586,62 @@ def ingest_ticker_data(
 
 
 # =============================================================================
-# Pipeline Orchestration
+# Ticker Discovery
 # =============================================================================
 
-def get_ticker_list(storage_path: str, max_tickers: Optional[int] = None) -> List[str]:
+def get_ticker_list(
+    storage_path: str,
+    ticker_source_config: dict,
+    max_tickers: Optional[int] = None
+) -> List[str]:
     """
-    Get list of tickers from existing bronze data or config.
+    Get list of tickers based on configured sources.
 
     Args:
         storage_path: Path to storage directory
+        ticker_source_config: Ticker source configuration
         max_tickers: Optional limit
 
     Returns:
         List of ticker symbols
     """
-    # Try to read from existing reference data
-    ref_path = Path(storage_path) / "bronze" / "alpha_vantage" / "company_overview"
+    priority = ticker_source_config.get("priority", ["bronze_reference", "listing_status"])
 
-    if ref_path.exists():
-        tickers = [f.stem for f in ref_path.glob("*.json")]
+    for source in priority:
+        tickers = []
+
+        if source == "bronze_reference":
+            ref_path = Path(storage_path) / ticker_source_config.get(
+                "bronze_reference_path", "bronze/alpha_vantage/company_overview"
+            )
+            if ref_path.exists():
+                tickers = [f.stem for f in ref_path.glob("*.json")]
+
+        elif source == "listing_status":
+            listing_path = Path(storage_path) / ticker_source_config.get(
+                "listing_status_path", "bronze/alpha_vantage/listing_status"
+            )
+            if listing_path.exists():
+                import csv
+                for csv_file in listing_path.glob("*.csv"):
+                    with open(csv_file) as f:
+                        reader = csv.DictReader(f)
+                        tickers = [row["symbol"] for row in reader if row.get("symbol")]
+                    break
+
         if tickers:
+            tickers = sorted(set(tickers))
             if max_tickers:
-                return sorted(tickers)[:max_tickers]
-            return sorted(tickers)
+                return tickers[:max_tickers]
+            return tickers
 
-    # Fallback: read from listing_status if available
-    listing_path = Path(storage_path) / "bronze" / "alpha_vantage" / "listing_status"
-    if listing_path.exists():
-        import csv
-        for csv_file in listing_path.glob("*.csv"):
-            with open(csv_file) as f:
-                reader = csv.DictReader(f)
-                tickers = [row["symbol"] for row in reader if row.get("symbol")]
-                if max_tickers:
-                    return tickers[:max_tickers]
-                return tickers
-
-    # No existing data - return empty and let caller handle
+    # No tickers found from any source
     return []
 
+
+# =============================================================================
+# Main Pipeline
+# =============================================================================
 
 def main():
     """Main pipeline entry point."""
@@ -437,26 +650,66 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    # Dry run with 50 tickers
-    python scripts/cluster/run_distributed_pipeline.py --dry-run --max-tickers 50
+    # Use a profile
+    python scripts/cluster/run_distributed_pipeline.py --profile quick_test
 
-    # Live ingestion for 100 tickers
-    python scripts/cluster/run_distributed_pipeline.py --max-tickers 100
+    # Override profile settings
+    python scripts/cluster/run_distributed_pipeline.py --profile dev --max-tickers 100
 
-    # Full pipeline with silver build
-    python scripts/cluster/run_distributed_pipeline.py --max-tickers 500
+    # Show effective config
+    python scripts/cluster/run_distributed_pipeline.py --profile staging --show-config
+
+    # Custom run
+    python scripts/cluster/run_distributed_pipeline.py --max-tickers 50 --dry-run
         """
     )
-    parser.add_argument("--max-tickers", type=int, default=None, help="Max tickers to ingest")
-    parser.add_argument("--days", type=int, default=30, help="Days of historical data")
-    parser.add_argument("--dry-run", action="store_true", help="Simulate API calls")
-    parser.add_argument("--skip-bronze", action="store_true", help="Skip bronze ingestion")
-    parser.add_argument("--skip-silver", action="store_true", help="Skip silver build")
-    parser.add_argument("--log-level", default="INFO", help="Logging level")
-    parser.add_argument("--storage-path", default=None, help="Storage path (auto-detected)")
-    parser.add_argument("--endpoints", default="time_series_daily,company_overview",
+
+    # Profile selection
+    parser.add_argument("--profile", type=str, default=None,
+                       help="Load named profile (quick_test, dev, staging, production)")
+
+    # Run parameters (override config/profile)
+    parser.add_argument("--max-tickers", type=int, default=None,
+                       help="Max tickers to ingest")
+    parser.add_argument("--days", type=int, default=None,
+                       help="Days of historical data")
+    parser.add_argument("--dry-run", action="store_true",
+                       help="Simulate API calls")
+    parser.add_argument("--skip-bronze", action="store_true",
+                       help="Skip bronze ingestion")
+    parser.add_argument("--skip-silver", action="store_true",
+                       help="Skip silver build")
+    parser.add_argument("--log-level", default="INFO",
+                       help="Logging level")
+    parser.add_argument("--storage-path", default=None,
+                       help="Storage path (auto-detected)")
+    parser.add_argument("--endpoints", default=None,
                        help="Comma-separated endpoints to ingest")
+
+    # Utility options
+    parser.add_argument("--show-config", action="store_true",
+                       help="Show effective configuration and exit")
+
     args = parser.parse_args()
+
+    # Load run configuration
+    try:
+        run_config = load_run_config()
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    # Build effective configuration
+    try:
+        effective = build_effective_config(run_config, args)
+    except ValueError as e:
+        print(f"ERROR: {e}")
+        return 1
+
+    # Show config and exit if requested
+    if args.show_config:
+        show_config(effective, run_config)
+        return 0
 
     # Setup logging
     setup_logging()
@@ -466,60 +719,87 @@ Examples:
     print("  de_Funk Distributed Pipeline")
     print("=" * 70)
 
-    # Load config
+    if args.profile:
+        print(f"  Profile: {args.profile}")
+
+    # Load app config for storage path
     config_loader = ConfigLoader()
-    config = config_loader.load()
+    app_config = config_loader.load()
 
     # Determine storage path
-    storage_path = args.storage_path or str(config.repo_root / "storage")
-
-    # Check for NFS mount on workers
-    if Path("/shared/storage").exists():
-        storage_path = "/shared/storage"
+    storage_path = effective.get("storage_path")
+    if not storage_path:
+        storage_path = str(app_config.repo_root / "storage")
+        # Check for NFS mount on workers
+        if Path("/shared/storage").exists():
+            storage_path = "/shared/storage"
 
     logger.info(f"Storage path: {storage_path}")
 
     # Connect to Ray cluster
-    logger.info("Connecting to Ray cluster...")
+    cluster_config = effective.get("cluster", {})
+    ray_address = cluster_config.get("ray_address", "auto")
+
+    logger.info(f"Connecting to Ray cluster ({ray_address})...")
     try:
-        ray.init(address="auto", ignore_reinit_error=True, logging_level=logging.INFO)
+        ray.init(address=ray_address, ignore_reinit_error=True, logging_level=logging.INFO)
         resources = ray.cluster_resources()
         logger.info(f"Connected: {resources.get('CPU', 0):.0f} CPUs, {resources.get('memory', 0) / 1e9:.1f} GB")
     except Exception as e:
-        logger.error(f"Failed to connect to Ray cluster: {e}")
-        logger.info("Falling back to local execution...")
-        ray.init(ignore_reinit_error=True)
+        if cluster_config.get("fallback_to_local", True):
+            logger.warning(f"Failed to connect to cluster: {e}")
+            logger.info("Falling back to local execution...")
+            ray.init(ignore_reinit_error=True)
+        else:
+            logger.error(f"Failed to connect to Ray cluster: {e}")
+            return 1
 
-    # Load pipeline config to show rate limits
+    # Show configuration
     av_config = load_pipeline_config("alpha_vantage")
     rate_limit = av_config.get("rate_limit_per_sec", 1.0)
 
+    dry_run = effective.get("dry_run", False)
+    max_tickers = effective.get("max_tickers")
+
     logger.info(f"Configuration:")
     logger.info(f"  Alpha Vantage rate limit: {rate_limit} req/sec ({rate_limit * 60:.0f}/min)")
-    logger.info(f"  Dry run: {args.dry_run}")
-    logger.info(f"  Endpoints: {args.endpoints}")
+    logger.info(f"  Dry run: {dry_run}")
+
+    # Get endpoints from config
+    provider_config = effective.get("providers", {}).get("alpha_vantage", {})
+    endpoints = provider_config.get("endpoints", ["time_series_daily", "company_overview"])
+    logger.info(f"  Endpoints: {', '.join(endpoints)}")
 
     # Get tickers
-    tickers = get_ticker_list(storage_path, args.max_tickers)
+    ticker_source = effective.get("ticker_source", {})
+    tickers = get_ticker_list(storage_path, ticker_source, max_tickers)
 
     if not tickers:
-        logger.warning("No tickers found in storage. Using sample list for testing.")
-        # Small sample for testing only
-        tickers = ["AAPL", "MSFT", "GOOGL", "AMZN", "META"][:args.max_tickers or 5]
+        logger.error(
+            "No tickers found in storage. Run ingestion first:\n"
+            "  python -m scripts.ingest.run_full_pipeline --max-tickers 100"
+        )
+        return 1
 
     logger.info(f"  Tickers: {len(tickers)}")
 
-    # Parse endpoints
-    endpoints = [e.strip() for e in args.endpoints.split(",")]
+    # Create distributed key manager with retry config
+    retry_config = effective.get("retry", {})
+    enabled_providers = [
+        name for name, cfg in effective.get("providers", {}).items()
+        if isinstance(cfg, dict) and cfg.get("enabled", False)
+    ]
+    if not enabled_providers:
+        enabled_providers = ["alpha_vantage"]  # Default
 
-    # Create distributed key manager
     logger.info("Initializing distributed key manager...")
-    key_manager = DistributedKeyManager.remote(["alpha_vantage", "bls"])
+    key_manager = DistributedKeyManager.remote(enabled_providers, retry_config)
 
     results = {}
 
     # Run bronze ingestion
-    if not args.skip_bronze:
+    skip_bronze = effective.get("skip_bronze", False)
+    if not skip_bronze:
         logger.info("\n" + "-" * 50)
         logger.info("PHASE 1: Bronze Layer Ingestion")
         logger.info("-" * 50)
@@ -529,7 +809,7 @@ Examples:
         # Submit all tasks
         futures = [
             ingest_ticker_data.remote(
-                ticker, key_manager, progress, endpoints, storage_path, args.dry_run
+                ticker, key_manager, progress, endpoints, storage_path, dry_run
             )
             for ticker in tickers
         ]
@@ -562,8 +842,18 @@ Examples:
             "distribution": by_host,
         }
 
-    # Run silver build (if not dry run and not skipped)
-    if not args.skip_silver and not args.dry_run:
+    # Run silver build
+    skip_silver = effective.get("skip_silver", False)
+    silver_config = effective.get("silver_models", {})
+    skip_on_dry_run = silver_config.get("skip_on_dry_run", True)
+
+    should_build_silver = (
+        not skip_silver and
+        silver_config.get("enabled", True) and
+        not (dry_run and skip_on_dry_run)
+    )
+
+    if should_build_silver:
         logger.info("\n" + "-" * 50)
         logger.info("PHASE 2: Silver Layer Build")
         logger.info("-" * 50)
@@ -572,7 +862,9 @@ Examples:
             from models.api.registry import get_model_registry
 
             registry = get_model_registry()
-            for model_name in ["core", "company", "stocks"]:
+            models_to_build = silver_config.get("models", ["core", "company", "stocks"])
+
+            for model_name in models_to_build:
                 try:
                     logger.info(f"Building model: {model_name}")
                     model = registry.get_model(model_name)
@@ -599,6 +891,7 @@ Examples:
             print(f"\n  {provider}:")
             print(f"    Requests: {stats['total_requests']}")
             print(f"    Success rate: {stats['success_rate']*100:.1f}%")
+            print(f"    Retries: {stats['retried_requests']}")
             print(f"    Avg wait: {stats['avg_wait_time']:.3f}s")
             print(f"    Rate limit: {stats['rate_limit_per_sec']} req/sec")
 

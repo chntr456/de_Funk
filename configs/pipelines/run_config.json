@@ -1,0 +1,108 @@
+{
+  "_description": "Default configuration for distributed pipeline runs. CLI arguments override these values.",
+
+  "defaults": {
+    "max_tickers": null,
+    "_max_tickers_comment": "null = all available tickers. Set to integer to limit.",
+
+    "days": 30,
+    "_days_comment": "Number of days of historical data to fetch",
+
+    "dry_run": false,
+    "_dry_run_comment": "If true, simulate API calls without making real requests",
+
+    "skip_bronze": false,
+    "_skip_bronze_comment": "If true, skip bronze layer ingestion",
+
+    "skip_silver": false,
+    "_skip_silver_comment": "If true, skip silver layer model building",
+
+    "log_level": "INFO",
+    "_log_level_comment": "Logging level: DEBUG, INFO, WARNING, ERROR",
+
+    "storage_path": null,
+    "_storage_path_comment": "null = auto-detect (local or /shared/storage for NFS)"
+  },
+
+  "providers": {
+    "alpha_vantage": {
+      "enabled": true,
+      "endpoints": ["time_series_daily", "company_overview"],
+      "_endpoints_comment": "Endpoints to ingest. Available: time_series_daily, time_series_daily_adjusted, company_overview, global_quote, income_statement, balance_sheet, cash_flow, earnings"
+    },
+    "bls": {
+      "enabled": false,
+      "series": ["unemployment", "cpi", "employment"],
+      "_series_comment": "BLS series to ingest. See bls_endpoints.json for available series codes."
+    },
+    "chicago": {
+      "enabled": false,
+      "datasets": [],
+      "_datasets_comment": "Chicago Data Portal datasets to ingest"
+    }
+  },
+
+  "silver_models": {
+    "enabled": true,
+    "models": ["core", "company", "stocks"],
+    "_models_comment": "Models to build after bronze ingestion. Order matters (dependencies).",
+    "skip_on_dry_run": true,
+    "_skip_on_dry_run_comment": "If true, skip silver build during dry runs"
+  },
+
+  "cluster": {
+    "ray_address": "auto",
+    "_ray_address_comment": "Ray cluster address. 'auto' = discover from environment",
+
+    "fallback_to_local": true,
+    "_fallback_to_local_comment": "If cluster connection fails, run locally",
+
+    "task_batch_size": 50,
+    "_task_batch_size_comment": "Number of tasks to submit in each batch for better progress tracking"
+  },
+
+  "ticker_source": {
+    "priority": ["bronze_reference", "listing_status", "top_gainers"],
+    "_priority_comment": "Order of sources to try for ticker discovery",
+
+    "bronze_reference_path": "bronze/alpha_vantage/company_overview",
+    "listing_status_path": "bronze/alpha_vantage/listing_status",
+
+    "filter_us_exchanges": true,
+    "_filter_us_exchanges_comment": "Only include tickers from US exchanges (NYSE, NASDAQ, etc.)"
+  },
+
+  "retry": {
+    "max_retries": 3,
+    "retry_delay_seconds": 2.0,
+    "exponential_backoff": true,
+    "_comment": "Retry configuration for failed API calls"
+  },
+
+  "profiles": {
+    "_comment": "Named profiles for common run scenarios. Use --profile to activate.",
+
+    "quick_test": {
+      "max_tickers": 10,
+      "dry_run": true,
+      "skip_silver": true,
+      "log_level": "DEBUG"
+    },
+    "dev": {
+      "max_tickers": 50,
+      "dry_run": false,
+      "skip_silver": false
+    },
+    "staging": {
+      "max_tickers": 500,
+      "dry_run": false,
+      "skip_silver": false
+    },
+    "production": {
+      "max_tickers": null,
+      "dry_run": false,
+      "skip_silver": false,
+      "log_level": "WARNING"
+    }
+  }
+}
