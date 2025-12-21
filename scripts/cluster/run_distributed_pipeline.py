@@ -870,24 +870,41 @@ Examples:
         logger.info("PHASE 2: Silver Layer Build")
         logger.info("-" * 50)
 
-        try:
-            from models.api.registry import get_model_registry
+        import subprocess
 
-            registry = get_model_registry()
-            models_to_build = silver_config.get("models", ["core", "company", "stocks"])
+        models_to_build = silver_config.get("models", ["core", "company", "stocks"])
 
-            for model_name in models_to_build:
-                try:
-                    logger.info(f"Building model: {model_name}")
-                    model = registry.get_model(model_name)
-                    model.build()
+        for model_name in models_to_build:
+            try:
+                logger.info(f"Building model: {model_name}")
+
+                # Use build_silver_duckdb.py which handles all model types
+                result = subprocess.run(
+                    [sys.executable, "-m", "scripts.build_silver_duckdb", "--model", model_name],
+                    cwd=str(project_root),
+                    capture_output=True,
+                    text=True,
+                    timeout=300  # 5 minute timeout per model
+                )
+
+                if result.returncode == 0:
                     logger.info(f"  Built: {model_name}")
-                except Exception as e:
-                    logger.error(f"  Failed {model_name}: {e}")
+                    # Show any important output
+                    if result.stdout:
+                        for line in result.stdout.split('\n'):
+                            if '✓' in line or 'success' in line.lower():
+                                logger.info(f"    {line.strip()}")
+                else:
+                    logger.error(f"  Failed {model_name}:")
+                    if result.stderr:
+                        logger.error(f"    {result.stderr[:500]}")
+                    elif result.stdout:
+                        logger.error(f"    {result.stdout[:500]}")
 
-        except ImportError as e:
-            logger.warning(f"Could not import model registry: {e}")
-            logger.info("Run silver build manually: python scripts/build_all_models.py")
+            except subprocess.TimeoutExpired:
+                logger.error(f"  Timeout building {model_name}")
+            except Exception as e:
+                logger.error(f"  Failed {model_name}: {e}")
 
     # Get final key manager stats
     key_stats = ray.get(key_manager.get_stats.remote())
