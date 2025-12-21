@@ -775,11 +775,23 @@ Examples:
     tickers = get_ticker_list(storage_path, ticker_source, max_tickers)
 
     if not tickers:
-        logger.error(
-            "No tickers found in storage. Run ingestion first:\n"
-            "  python -m scripts.ingest.run_full_pipeline --max-tickers 100"
-        )
-        return 1
+        if dry_run:
+            # Use test tickers from config for dry-run testing
+            test_tickers = ticker_source.get("test_tickers", [])
+            if test_tickers:
+                tickers = test_tickers[:max_tickers] if max_tickers else test_tickers
+                logger.warning(
+                    f"No tickers in storage. Using {len(tickers)} test tickers for dry-run."
+                )
+            else:
+                logger.error("No tickers found and no test_tickers configured.")
+                return 1
+        else:
+            logger.error(
+                "No tickers found in storage. Run ingestion first:\n"
+                "  python -m scripts.ingest.run_full_pipeline --max-tickers 100"
+            )
+            return 1
 
     logger.info(f"  Tickers: {len(tickers)}")
 

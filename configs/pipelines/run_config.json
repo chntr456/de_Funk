@@ -69,7 +69,11 @@
     "listing_status_path": "bronze/alpha_vantage/listing_status",
 
     "filter_us_exchanges": true,
-    "_filter_us_exchanges_comment": "Only include tickers from US exchanges (NYSE, NASDAQ, etc.)"
+    "_filter_us_exchanges_comment": "Only include tickers from US exchanges (NYSE, NASDAQ, etc.)",
+
+    "test_tickers": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "NVDA", "JPM", "V", "UNH",
+                     "JNJ", "WMT", "PG", "MA", "HD", "CVX", "MRK", "ABBV", "PEP", "KO"],
+    "_test_tickers_comment": "Sample tickers for dry-run testing when no bronze data exists. Only used in dry_run mode."
   },
 
   "retry": {
