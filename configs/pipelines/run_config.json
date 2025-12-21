@@ -46,7 +46,7 @@
     "enabled": true,
     "models": ["core", "company", "stocks"],
     "_models_comment": "Models to build after bronze ingestion. Order matters (dependencies).",
-    "skip_on_dry_run": true,
+    "skip_on_dry_run": false,
     "_skip_on_dry_run_comment": "If true, skip silver build during dry runs"
   },
 
@@ -89,7 +89,7 @@
     "quick_test": {
       "max_tickers": 10,
       "dry_run": true,
-      "skip_silver": true,
+      "skip_silver": false,
       "log_level": "DEBUG"
     },
     "dev": {
