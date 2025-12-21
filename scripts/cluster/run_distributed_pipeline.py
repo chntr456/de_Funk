@@ -465,12 +465,12 @@ def load_api_keys() -> dict:
     config = {
         "alpha_vantage": {
             "keys": [],
-            "rate_limit": 5,  # Free tier: 5/min
+            "rate_limit": 75,  # Premium tier: 75/min
             "period": 60,
         },
         "bls": {
             "keys": [],
-            "rate_limit": 10,
+            "rate_limit": 500,  # BLS is generous
             "period": 60,
         },
     }
@@ -479,9 +479,6 @@ def load_api_keys() -> dict:
     av_keys = os.getenv("ALPHA_VANTAGE_API_KEYS", "")
     if av_keys:
         config["alpha_vantage"]["keys"] = [k.strip() for k in av_keys.split(",") if k.strip()]
-        # Adjust rate limit based on key tier
-        if os.getenv("ALPHA_VANTAGE_PREMIUM"):
-            config["alpha_vantage"]["rate_limit"] = 75
 
     # Load BLS keys
     bls_keys = os.getenv("BLS_API_KEYS", "")
