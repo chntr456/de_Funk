@@ -867,44 +867,53 @@ Examples:
 
     if should_build_silver:
         logger.info("\n" + "-" * 50)
-        logger.info("PHASE 2: Silver Layer Build")
+        logger.info("PHASE 2: Silver Layer Build (Spark)")
         logger.info("-" * 50)
 
         import subprocess
 
-        models_to_build = silver_config.get("models", ["core", "company", "stocks"])
+        models_to_build = silver_config.get("models", ["company", "stocks"])
 
-        for model_name in models_to_build:
-            try:
-                logger.info(f"Building model: {model_name}")
+        try:
+            logger.info(f"Building models: {', '.join(models_to_build)}")
 
-                # Use build_silver_duckdb.py which handles all model types
-                result = subprocess.run(
-                    [sys.executable, "-m", "scripts.build_silver_duckdb", "--model", model_name],
-                    cwd=str(project_root),
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5 minute timeout per model
-                )
+            # Use build_all_models.py with Spark
+            cmd = [
+                sys.executable, "-m", "scripts.build.build_all_models",
+                "--models", *models_to_build,
+                "--verbose"
+            ]
 
-                if result.returncode == 0:
-                    logger.info(f"  Built: {model_name}")
-                    # Show any important output
-                    if result.stdout:
-                        for line in result.stdout.split('\n'):
-                            if '✓' in line or 'success' in line.lower():
-                                logger.info(f"    {line.strip()}")
-                else:
-                    logger.error(f"  Failed {model_name}:")
-                    if result.stderr:
-                        logger.error(f"    {result.stderr[:500]}")
-                    elif result.stdout:
-                        logger.error(f"    {result.stdout[:500]}")
+            result = subprocess.run(
+                cmd,
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 minute timeout for all models
+            )
 
-            except subprocess.TimeoutExpired:
-                logger.error(f"  Timeout building {model_name}")
-            except Exception as e:
-                logger.error(f"  Failed {model_name}: {e}")
+            if result.returncode == 0:
+                logger.info("Silver layer build complete")
+                # Show important output lines
+                if result.stdout:
+                    for line in result.stdout.split('\n'):
+                        if any(x in line for x in ['✓', 'Built', 'Success', 'Complete']):
+                            logger.info(f"  {line.strip()}")
+            else:
+                logger.error("Silver layer build failed:")
+                if result.stderr:
+                    for line in result.stderr.split('\n')[:10]:
+                        if line.strip():
+                            logger.error(f"  {line.strip()}")
+                elif result.stdout:
+                    for line in result.stdout.split('\n')[-10:]:
+                        if line.strip():
+                            logger.error(f"  {line.strip()}")
+
+        except subprocess.TimeoutExpired:
+            logger.error("Silver layer build timed out (10 min)")
+        except Exception as e:
+            logger.error(f"Silver layer build failed: {e}")
 
     # Get final key manager stats
     key_stats = ray.get(key_manager.get_stats.remote())
