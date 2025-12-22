@@ -154,7 +154,24 @@ apt install -y \
     nfs-common \
     openssh-server \
     netcat-openbsd \
-    software-properties-common
+    software-properties-common \
+    default-jdk
+
+# Set JAVA_HOME for PySpark
+JAVA_HOME_PATH=$(dirname $(dirname $(readlink -f $(which java))))
+log "Java installed at: $JAVA_HOME_PATH"
+
+# Add JAVA_HOME to system environment
+cat >> /etc/environment << EOF
+JAVA_HOME=$JAVA_HOME_PATH
+EOF
+
+# Also add to profile for interactive shells
+cat >> /etc/profile.d/java.sh << EOF
+export JAVA_HOME=$JAVA_HOME_PATH
+export PATH=\$JAVA_HOME/bin:\$PATH
+EOF
+chmod +x /etc/profile.d/java.sh
 
 # =============================================================================
 # Step 2: Python 3.13 (must match head node)
@@ -291,6 +308,7 @@ User=$DE_FUNK_USER
 Group=$DE_FUNK_USER
 WorkingDirectory=/home/$DE_FUNK_USER
 Environment="PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin"
+Environment="JAVA_HOME=$JAVA_HOME_PATH"
 ExecStartPre=/bin/bash -c 'until nc -z head-node $HEAD_PORT; do echo "Waiting for head-node..."; sleep 5; done'
 ExecStart=$VENV_PATH/bin/ray start --address='head-node:$HEAD_PORT' --num-cpus=$WORKER_CPUS --memory=$WORKER_MEM_BYTES --block
 ExecStop=$VENV_PATH/bin/ray stop
