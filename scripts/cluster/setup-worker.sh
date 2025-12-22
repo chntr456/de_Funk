@@ -245,7 +245,7 @@ sudo -u $DE_FUNK_USER bash << EOF
 python3.13 -m venv $VENV_PATH
 source $VENV_PATH/bin/activate
 pip install --upgrade pip setuptools wheel
-pip install 'ray[default]>=2.9.0' pandas numpy pyarrow deltalake statsmodels requests
+pip install 'ray[default]>=2.9.0' pandas numpy pyarrow deltalake statsmodels requests pyspark
 EOF
 
 log "Python environment ready"
