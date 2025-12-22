@@ -447,11 +447,29 @@ def create_build_model_task():
             Dict with build results
         """
         import sys
+        import socket
         from pathlib import Path
         from datetime import datetime, date, timedelta
 
+        # Determine repo path - use NFS share on workers, local path on head
+        # Workers mount repo at /shared/de_Funk via NFS from head node
+        SHARED_REPO_PATH = "/shared/de_Funk"
+        HEAD_NODE_HOSTNAME = "bigbark"
+
+        hostname = socket.gethostname()
+        if hostname == HEAD_NODE_HOSTNAME:
+            # Running on head node - use local path
+            repo_path = Path(repo_root)
+        else:
+            # Running on worker - use NFS-mounted path
+            shared_path = Path(SHARED_REPO_PATH)
+            if shared_path.exists():
+                repo_path = shared_path
+            else:
+                # Fallback to passed path (may fail if not accessible)
+                repo_path = Path(repo_root)
+
         # Add repo to path for imports
-        repo_path = Path(repo_root)
         if str(repo_path) not in sys.path:
             sys.path.insert(0, str(repo_path))
 

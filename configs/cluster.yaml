@@ -87,6 +87,15 @@ storage:
       host: "192.168.1.100"
       export_path: "/home/de_funk/storage"
 
+  # Repo code sharing (for distributed Ray tasks)
+  # Setup: scripts/cluster/setup_repo_nfs.sh
+  repo_nfs:
+    # Head node exports the repo for workers to access
+    enabled: true
+    head_node: "192.168.1.212"
+    export_path: "/home/ms_trixie/PycharmProjects/de_Funk"
+    mount_point: "/shared/de_Funk"
+
 # =============================================================================
 # SCHEDULER SETTINGS
 # =============================================================================
