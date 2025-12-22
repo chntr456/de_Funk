@@ -862,101 +862,50 @@ def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logge
             continue
 
         logger.info(f"  Processing {len(all_data)} responses for {len(tickers)} tickers")
+        raw_batches = [[data] for data in all_data]
 
-        # Process based on endpoint type
+        # Endpoint -> (facet_module, facet_class, bronze_table) registry
+        # This avoids hardcoded if/elif chains
+        ENDPOINT_REGISTRY = {
+            "time_series_daily": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily"),
+            "time_series_daily_adjusted": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily"),
+            "income_statement": ("income_statement_facet", "IncomeStatementFacet", "income_statements"),
+            "balance_sheet": ("balance_sheet_facet", "BalanceSheetFacet", "balance_sheets"),
+            "cash_flow": ("cash_flow_facet", "CashFlowFacet", "cash_flows"),
+            "earnings": ("earnings_facet", "EarningsFacet", "earnings"),
+        }
+
+        # company_overview is special - produces 2 tables
         if endpoint == "company_overview":
-            # company_overview response is a single dict per ticker
-            # Facet.normalize() expects: List[List[dict]] (batches of rows)
-            # Each batch is a list of dict rows, we have one response per ticker
-            raw_batches = [[data] for data in all_data]  # Each response is a batch
-
-            # Transform to company_reference
             from datapipelines.providers.alpha_vantage.facets.company_reference_facet import CompanyReferenceFacet
-            company_facet = CompanyReferenceFacet(spark, tickers=tickers)
-            company_df = company_facet.normalize(raw_batches)
-
-            if company_df is not None and company_df.count() > 0:
-                path = sink.smart_write(company_df, "company_reference")
-                logger.info(f"  ✓ company_reference: {company_df.count()} rows -> {path}")
-            else:
-                logger.warning(f"  ⚠ company_reference: no data after transformation")
-
-            # Transform to securities_reference
             from datapipelines.providers.alpha_vantage.facets.securities_reference_facet import SecuritiesReferenceFacetAV
-            securities_facet = SecuritiesReferenceFacetAV(spark, tickers=tickers)
-            securities_df = securities_facet.normalize(raw_batches)
 
-            if securities_df is not None and securities_df.count() > 0:
-                path = sink.smart_write(securities_df, "securities_reference")
-                logger.info(f"  ✓ securities_reference: {securities_df.count()} rows -> {path}")
-            else:
-                logger.warning(f"  ⚠ securities_reference: no data after transformation")
+            for facet_class, table_name in [
+                (CompanyReferenceFacet, "company_reference"),
+                (SecuritiesReferenceFacetAV, "securities_reference"),
+            ]:
+                facet = facet_class(spark, tickers=tickers)
+                df = facet.normalize(raw_batches)
+                if df is not None and df.count() > 0:
+                    path = sink.smart_write(df, table_name)
+                    logger.info(f"  ✓ {table_name}: {df.count()} rows -> {path}")
+                else:
+                    logger.warning(f"  ⚠ {table_name}: no data after transformation")
 
-        elif endpoint in ("time_series_daily", "time_series_daily_adjusted"):
-            # time_series_daily response contains nested time series data
-            # SecuritiesPricesFacetAV.normalize() handles the nested structure
-            from datapipelines.providers.alpha_vantage.facets.securities_prices_facet import SecuritiesPricesFacetAV
+        elif endpoint in ENDPOINT_REGISTRY:
+            module_name, class_name, table_name = ENDPOINT_REGISTRY[endpoint]
+            # Dynamic import from facets package
+            import importlib
+            module = importlib.import_module(f"datapipelines.providers.alpha_vantage.facets.{module_name}")
+            facet_class = getattr(module, class_name)
 
-            # Create facet with ticker list for context injection
-            prices_facet = SecuritiesPricesFacetAV(spark, tickers=tickers)
-
-            # Each response is a batch containing the full time series
-            raw_batches = [[data] for data in all_data]
-            prices_df = prices_facet.normalize(raw_batches)
-
-            if prices_df is not None and prices_df.count() > 0:
-                path = sink.smart_write(prices_df, "securities_prices_daily")
-                logger.info(f"  ✓ securities_prices_daily: {prices_df.count()} rows -> {path}")
-            else:
-                logger.warning(f"  ⚠ securities_prices_daily: no data after transformation")
-
-        elif endpoint == "income_statement":
-            from datapipelines.providers.alpha_vantage.facets.income_statement_facet import IncomeStatementFacet
-            facet = IncomeStatementFacet(spark, tickers=tickers)
-            raw_batches = [[data] for data in all_data]
+            facet = facet_class(spark, tickers=tickers)
             df = facet.normalize(raw_batches)
-
             if df is not None and df.count() > 0:
-                path = sink.smart_write(df, "income_statements")
-                logger.info(f"  ✓ income_statements: {df.count()} rows -> {path}")
+                path = sink.smart_write(df, table_name)
+                logger.info(f"  ✓ {table_name}: {df.count()} rows -> {path}")
             else:
-                logger.warning(f"  ⚠ income_statements: no data after transformation")
-
-        elif endpoint == "balance_sheet":
-            from datapipelines.providers.alpha_vantage.facets.balance_sheet_facet import BalanceSheetFacet
-            facet = BalanceSheetFacet(spark, tickers=tickers)
-            raw_batches = [[data] for data in all_data]
-            df = facet.normalize(raw_batches)
-
-            if df is not None and df.count() > 0:
-                path = sink.smart_write(df, "balance_sheets")
-                logger.info(f"  ✓ balance_sheets: {df.count()} rows -> {path}")
-            else:
-                logger.warning(f"  ⚠ balance_sheets: no data after transformation")
-
-        elif endpoint == "cash_flow":
-            from datapipelines.providers.alpha_vantage.facets.cash_flow_facet import CashFlowFacet
-            facet = CashFlowFacet(spark, tickers=tickers)
-            raw_batches = [[data] for data in all_data]
-            df = facet.normalize(raw_batches)
-
-            if df is not None and df.count() > 0:
-                path = sink.smart_write(df, "cash_flows")
-                logger.info(f"  ✓ cash_flows: {df.count()} rows -> {path}")
-            else:
-                logger.warning(f"  ⚠ cash_flows: no data after transformation")
-
-        elif endpoint == "earnings":
-            from datapipelines.providers.alpha_vantage.facets.earnings_facet import EarningsFacet
-            facet = EarningsFacet(spark, tickers=tickers)
-            raw_batches = [[data] for data in all_data]
-            df = facet.normalize(raw_batches)
-
-            if df is not None and df.count() > 0:
-                path = sink.smart_write(df, "earnings")
-                logger.info(f"  ✓ earnings: {df.count()} rows -> {path}")
-            else:
-                logger.warning(f"  ⚠ earnings: no data after transformation")
+                logger.warning(f"  ⚠ {table_name}: no data after transformation")
 
         else:
             logger.warning(f"  Unknown endpoint: {endpoint} - skipping")
