@@ -910,6 +910,54 @@ def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logge
             else:
                 logger.warning(f"  ⚠ securities_prices_daily: no data after transformation")
 
+        elif endpoint == "income_statement":
+            from datapipelines.providers.alpha_vantage.facets.income_statement_facet import IncomeStatementFacet
+            facet = IncomeStatementFacet(spark, tickers=tickers)
+            raw_batches = [[data] for data in all_data]
+            df = facet.normalize(raw_batches)
+
+            if df is not None and df.count() > 0:
+                path = sink.smart_write(df, "income_statements")
+                logger.info(f"  ✓ income_statements: {df.count()} rows -> {path}")
+            else:
+                logger.warning(f"  ⚠ income_statements: no data after transformation")
+
+        elif endpoint == "balance_sheet":
+            from datapipelines.providers.alpha_vantage.facets.balance_sheet_facet import BalanceSheetFacet
+            facet = BalanceSheetFacet(spark, tickers=tickers)
+            raw_batches = [[data] for data in all_data]
+            df = facet.normalize(raw_batches)
+
+            if df is not None and df.count() > 0:
+                path = sink.smart_write(df, "balance_sheets")
+                logger.info(f"  ✓ balance_sheets: {df.count()} rows -> {path}")
+            else:
+                logger.warning(f"  ⚠ balance_sheets: no data after transformation")
+
+        elif endpoint == "cash_flow":
+            from datapipelines.providers.alpha_vantage.facets.cash_flow_facet import CashFlowFacet
+            facet = CashFlowFacet(spark, tickers=tickers)
+            raw_batches = [[data] for data in all_data]
+            df = facet.normalize(raw_batches)
+
+            if df is not None and df.count() > 0:
+                path = sink.smart_write(df, "cash_flows")
+                logger.info(f"  ✓ cash_flows: {df.count()} rows -> {path}")
+            else:
+                logger.warning(f"  ⚠ cash_flows: no data after transformation")
+
+        elif endpoint == "earnings":
+            from datapipelines.providers.alpha_vantage.facets.earnings_facet import EarningsFacet
+            facet = EarningsFacet(spark, tickers=tickers)
+            raw_batches = [[data] for data in all_data]
+            df = facet.normalize(raw_batches)
+
+            if df is not None and df.count() > 0:
+                path = sink.smart_write(df, "earnings")
+                logger.info(f"  ✓ earnings: {df.count()} rows -> {path}")
+            else:
+                logger.warning(f"  ⚠ earnings: no data after transformation")
+
         else:
             logger.warning(f"  Unknown endpoint: {endpoint} - skipping")
             continue

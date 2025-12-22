@@ -21,7 +21,11 @@
       "enabled": true,
       "endpoints": [
         "time_series_daily",
-        "company_overview"
+        "company_overview",
+        "income_statement",
+        "balance_sheet",
+        "cash_flow",
+        "earnings"
       ],
       "_endpoints_comment": "Endpoints to ingest. Available: time_series_daily, time_series_daily_adjusted, company_overview, global_quote, income_statement, balance_sheet, cash_flow, earnings"
     },
