@@ -46,9 +46,9 @@ def create_forecast_task():
     @ray.remote
     def forecast_ticker(
         ticker: str,
+        storage_path: str,
         models: List[str] = None,
         horizon: int = 30,
-        storage_path: str = "/shared/storage",
         min_data_points: int = 60
     ) -> Dict[str, Any]:
         """
@@ -59,9 +59,9 @@ def create_forecast_task():
 
         Args:
             ticker: Ticker symbol to forecast
+            storage_path: Path to shared storage (from run_config.json)
             models: List of forecast models to run ('arima', 'prophet', 'ets')
             horizon: Forecast horizon in days
-            storage_path: Path to shared storage
             min_data_points: Minimum data points required
 
         Returns:
@@ -222,8 +222,8 @@ def create_ingest_task():
     def ingest_ticker(
         ticker: str,
         key_manager_handle: Any,
-        data_types: List[str] = None,
-        storage_path: str = "/shared/storage"
+        storage_path: str,
+        data_types: List[str] = None
     ) -> Dict[str, Any]:
         """
         Ingest data for a single ticker on a Ray worker.
@@ -233,8 +233,8 @@ def create_ingest_task():
         Args:
             ticker: Ticker symbol
             key_manager_handle: Ray Actor handle to DistributedKeyManager
+            storage_path: Path to shared storage (from run_config.json)
             data_types: Data types to fetch ('prices', 'overview', 'technicals')
-            storage_path: Path to shared storage
 
         Returns:
             Dict with ingestion results
@@ -336,8 +336,8 @@ def create_batch_ingest_task():
     def batch_ingest(
         tickers: List[str],
         key_manager_handle: Any,
-        data_types: List[str] = None,
-        storage_path: str = "/shared/storage"
+        storage_path: str,
+        data_types: List[str] = None
     ) -> Dict[str, Any]:
         """
         Ingest data for multiple tickers sequentially on one worker.
@@ -345,8 +345,8 @@ def create_batch_ingest_task():
         Args:
             tickers: List of ticker symbols
             key_manager_handle: Ray Actor handle to DistributedKeyManager
+            storage_path: Path to shared storage (from run_config.json)
             data_types: Data types to fetch
-            storage_path: Path to shared storage
 
         Returns:
             Dict with batch results
@@ -430,7 +430,7 @@ def create_build_model_task():
     @ray.remote
     def build_model_task(
         model_name: str,
-        storage_path: str = "/shared/storage",
+        storage_path: str,
         config_path: str = None
     ) -> Dict[str, Any]:
         """
@@ -438,7 +438,7 @@ def create_build_model_task():
 
         Args:
             model_name: Name of model to build
-            storage_path: Path to shared storage
+            storage_path: Path to shared storage (from run_config.json)
             config_path: Path to config directory
 
         Returns:

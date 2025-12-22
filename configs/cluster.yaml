@@ -63,19 +63,24 @@ ray:
 # =============================================================================
 # SHARED STORAGE SETTINGS
 # =============================================================================
+# NOTE: The actual storage path is defined in configs/pipelines/run_config.json
+# as the single source of truth. This section provides NFS server details for
+# setup scripts only.
 storage:
   # Storage type: "local" or "nfs"
-  type: local
+  # For distributed cluster, use "nfs" with shared storage
+  type: nfs
 
-  # Local storage paths (relative to repo root)
+  # Local storage paths (relative to repo root) - for local development only
   local:
     bronze: "storage/bronze"
     silver: "storage/silver"
     forecasts: "storage/forecasts"
 
   # NFS settings (for cluster mode)
+  # NOTE: mount_point should match run_config.json storage_path
   nfs:
-    # NFS mount point on workers
+    # NFS mount point on workers (matches run_config.json storage_path)
     mount_point: "/shared/storage"
     # NFS server settings (for setup reference)
     server:

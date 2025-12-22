@@ -279,13 +279,31 @@ class ConfigLoader:
         """
         return StorageConfig.from_dict(storage_json, self._repo_root)
 
+    def _get_run_config_storage_path(self) -> Optional[str]:
+        """
+        Get storage_path from run_config.json (single source of truth for distributed setups).
+
+        Returns:
+            Storage path string or None if not set
+        """
+        config_path = self._repo_root / "configs" / "pipelines" / "run_config.json"
+        if config_path.exists():
+            try:
+                with open(config_path) as f:
+                    run_config = json.load(f)
+                return run_config.get("defaults", {}).get("storage_path")
+            except Exception as e:
+                logger.debug(f"Could not read run_config.json: {e}")
+        return None
+
     def _resolve_storage_paths(self, storage_json: Dict[str, Any]) -> Dict[str, Any]:
         """
         Resolve all storage paths to absolute paths.
 
         This is the SINGLE SOURCE OF TRUTH for path resolution.
-        All relative paths in storage.json are converted to absolute paths
-        based on repo_root.
+        Priority:
+        1. run_config.json storage_path (for distributed/NFS setups)
+        2. storage.json relative paths resolved to repo_root
 
         Args:
             storage_json: Raw storage.json data with relative paths
@@ -294,6 +312,9 @@ class ConfigLoader:
             Storage config with all paths resolved to absolute
         """
         resolved = dict(storage_json)  # Shallow copy
+
+        # Check run_config.json for storage_path override (single source of truth)
+        run_config_storage = self._get_run_config_storage_path()
 
         # Resolve all root paths
         if "roots" in resolved:
@@ -304,8 +325,13 @@ class ConfigLoader:
                     resolved["roots"][key] = rel_path
                     continue
 
-                # Convert relative path to absolute
-                if rel_path and not Path(rel_path).is_absolute():
+                # If run_config.json has storage_path, use it for bronze/silver
+                if run_config_storage and key in ("bronze", "silver"):
+                    abs_path = Path(run_config_storage) / key
+                    resolved["roots"][key] = str(abs_path)
+                    logger.debug(f"Using run_config.json storage_path for {key}: {abs_path}")
+                # Otherwise convert relative path to absolute based on repo_root
+                elif rel_path and not Path(rel_path).is_absolute():
                     abs_path = self._repo_root / rel_path
                     resolved["roots"][key] = str(abs_path)
                 else:
