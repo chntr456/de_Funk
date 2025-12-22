@@ -288,7 +288,29 @@ else
 fi
 
 # =============================================================================
-# Step 8: Ray Worker Service
+# Step 8: Sync Spark/Delta Dependencies from Head Node
+# =============================================================================
+
+log "Syncing Spark/Delta Ivy cache from head node..."
+
+# Workers don't have internet access to download Maven dependencies
+# Sync the ivy cache from head node which has Delta Lake jars pre-cached
+IVY_CACHE_DIR="/home/$DE_FUNK_USER/.ivy2.5.2"
+
+# Create ivy cache directory
+sudo -u $DE_FUNK_USER mkdir -p "$IVY_CACHE_DIR"
+
+# Rsync ivy cache from head node
+if rsync -az --timeout=30 head-node:/home/ms_trixie/.ivy2.5.2/ "$IVY_CACHE_DIR/" 2>/dev/null; then
+    log "Ivy cache synced successfully"
+else
+    warn "Ivy cache sync failed - Spark may need to download Delta Lake jars"
+    warn "If workers lack internet access, manually run:"
+    warn "  rsync -az head-node:/home/ms_trixie/.ivy2.5.2/ $IVY_CACHE_DIR/"
+fi
+
+# =============================================================================
+# Step 9: Ray Worker Service
 # =============================================================================
 
 log "Creating Ray worker systemd service..."
@@ -325,7 +347,7 @@ systemctl enable ray-worker
 log "Ray worker service created (CPUs: $WORKER_CPUS, Memory: ${WORKER_MEM}GB)"
 
 # =============================================================================
-# Step 9: Performance Tuning
+# Step 10: Performance Tuning
 # =============================================================================
 
 log "Applying performance tuning..."
@@ -344,7 +366,7 @@ EOF
 sysctl -p
 
 # =============================================================================
-# Step 10: Verification Script
+# Step 11: Verification Script
 # =============================================================================
 
 log "Creating verification script..."
@@ -373,6 +395,14 @@ if nc -z head-node 6379 2>/dev/null; then
     echo "Head node: Reachable"
 else
     echo "Head node: Not reachable (may not be running)"
+fi
+echo ""
+
+# Check Ivy cache for Delta Lake jars
+if [ -d ~/.ivy2.5.2/cache/io.delta ]; then
+    echo "Delta Ivy cache: Present"
+else
+    echo "Delta Ivy cache: MISSING - run: rsync -az head-node:/home/ms_trixie/.ivy2.5.2/ ~/.ivy2.5.2/"
 fi
 echo ""
 
