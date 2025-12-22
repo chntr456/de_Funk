@@ -735,37 +735,25 @@ def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logge
     from datapipelines.ingestors.bronze_sink import BronzeSink
     from config import ConfigLoader
 
-    # Load storage config
+    # Load storage config - paths are already resolved to absolute by ConfigLoader
     config_loader = ConfigLoader()
     app_config = config_loader.load()
     storage_cfg = app_config.storage
 
-    # IMPORTANT: Update roots to use absolute paths based on storage_path
-    # BronzeSink expects roots to be absolute paths for writes
-    storage_cfg = dict(storage_cfg)  # Make a copy
-    storage_cfg["roots"] = dict(storage_cfg.get("roots", {}))
+    # Check if we need to override for custom storage_path (e.g., NFS mount)
+    # ConfigLoader resolves based on repo_root, but we may have a different storage location
+    default_storage = str(app_config.repo_root / "storage")
+    if storage_path != default_storage:
+        # Custom storage path provided (e.g., /shared/storage for NFS)
+        # Override the roots to use the custom path
+        logger.info(f"Using custom storage path: {storage_path} (default would be: {default_storage})")
+        storage_cfg = dict(storage_cfg)
+        storage_cfg["roots"] = dict(storage_cfg.get("roots", {}))
+        storage_cfg["roots"]["bronze"] = str(Path(storage_path) / "bronze")
+        storage_cfg["roots"]["silver"] = str(Path(storage_path) / "silver")
 
-    # Build absolute bronze/silver paths, avoiding double-nesting
-    # storage_path should be like /home/.../storage (NOT /home/.../storage/bronze)
-    bronze_path = Path(storage_path) / "bronze"
-    silver_path = Path(storage_path) / "silver"
-
-    # Defensive: Check if storage_path already ends with bronze/silver
-    storage_parts = Path(storage_path).parts
-    if storage_parts and storage_parts[-1] == "bronze":
-        logger.warning(f"storage_path already ends with 'bronze': {storage_path}")
-        bronze_path = Path(storage_path)  # Don't add bronze again
-        silver_path = Path(storage_path).parent / "silver"
-    elif storage_parts and storage_parts[-1] == "silver":
-        logger.warning(f"storage_path already ends with 'silver': {storage_path}")
-        bronze_path = Path(storage_path).parent / "bronze"
-        silver_path = Path(storage_path)
-
-    storage_cfg["roots"]["bronze"] = str(bronze_path)
-    storage_cfg["roots"]["silver"] = str(silver_path)
-
-    logger.info(f"Bronze path: {bronze_path}")
-    logger.info(f"Silver path: {silver_path}")
+    logger.info(f"Bronze path: {storage_cfg['roots']['bronze']}")
+    logger.info(f"Silver path: {storage_cfg['roots']['silver']}")
 
     # Initialize Spark
     logger.info("Initializing Spark for consolidation...")

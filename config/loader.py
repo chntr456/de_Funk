@@ -266,6 +266,41 @@ class ConfigLoader:
         """
         return StorageConfig.from_dict(storage_json, self._repo_root)
 
+    def _resolve_storage_paths(self, storage_json: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Resolve all storage paths to absolute paths.
+
+        This is the SINGLE SOURCE OF TRUTH for path resolution.
+        All relative paths in storage.json are converted to absolute paths
+        based on repo_root.
+
+        Args:
+            storage_json: Raw storage.json data with relative paths
+
+        Returns:
+            Storage config with all paths resolved to absolute
+        """
+        resolved = dict(storage_json)  # Shallow copy
+
+        # Resolve all root paths
+        if "roots" in resolved:
+            resolved["roots"] = {}
+            for key, rel_path in storage_json.get("roots", {}).items():
+                # Skip comment keys
+                if key.startswith("_"):
+                    resolved["roots"][key] = rel_path
+                    continue
+
+                # Convert relative path to absolute
+                if rel_path and not Path(rel_path).is_absolute():
+                    abs_path = self._repo_root / rel_path
+                    resolved["roots"][key] = str(abs_path)
+                else:
+                    resolved["roots"][key] = rel_path
+
+        logger.debug(f"Resolved storage roots: {resolved.get('roots', {})}")
+        return resolved
+
     def _inject_api_keys(self, provider: str, endpoint_json: Dict[str, Any]) -> Dict[str, Any]:
         """
         Inject API keys into raw endpoint config.
@@ -325,8 +360,9 @@ class ConfigLoader:
         # Build connection config
         connection = self._build_connection_config(connection_type, storage_json)
 
-        # Keep storage as raw JSON dict (no transformation needed)
-        storage = storage_json
+        # Resolve all storage paths to absolute paths
+        # This ensures ALL code uses consistent absolute paths
+        storage = self._resolve_storage_paths(storage_json)
 
         # Auto-discover API configs (any *_endpoints.json file in pipelines/)
         apis = {}

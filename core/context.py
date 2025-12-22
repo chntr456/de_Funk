@@ -75,8 +75,8 @@ class RepoContext:
             connection = ConnectionFactory.create("spark", spark_session=spark)
             logger.info("Created Spark connection")
 
-        # Pass through storage config as-is (raw JSON from storage.json)
-        # ConfigLoader already loaded it - no transformation needed
+        # Storage config with all paths resolved to absolute by ConfigLoader
+        # This is the single source of truth for storage paths
         storage_dict = config.storage
 
         return cls(
