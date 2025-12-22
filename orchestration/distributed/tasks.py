@@ -427,30 +427,113 @@ def create_build_model_task():
     """
     ray = _get_ray()
 
-    @ray.remote
+    @ray.remote(num_cpus=2, memory=8 * 1024 * 1024 * 1024)  # 2 CPUs, 8GB RAM
     def build_model_task(
         model_name: str,
         storage_path: str,
-        config_path: str = None
+        repo_root: str,
+        verbose: bool = False
     ) -> Dict[str, Any]:
         """
-        Build a model on a Ray worker.
+        Build a model on a Ray worker using Spark.
 
         Args:
             model_name: Name of model to build
             storage_path: Path to shared storage (from run_config.json)
-            config_path: Path to config directory
+            repo_root: Path to repository root
+            verbose: Enable verbose output
 
         Returns:
             Dict with build results
         """
-        # This would initialize Spark and run model build
-        # For now, return placeholder
-        return {
-            'model': model_name,
-            'status': 'not_implemented',
-            'note': 'Model building on workers requires Spark setup'
-        }
+        import sys
+        from pathlib import Path
+        from datetime import datetime, date, timedelta
+
+        # Add repo to path for imports
+        repo_path = Path(repo_root)
+        if str(repo_path) not in sys.path:
+            sys.path.insert(0, str(repo_path))
+
+        try:
+            from config.logging import setup_logging, get_logger
+            setup_logging()
+            logger = get_logger(f"build_{model_name}")
+
+            from orchestration.common.spark_session import get_spark
+            from models.base.builder import BuilderRegistry, BuildContext
+
+            logger.info(f"Building model: {model_name}")
+            logger.info(f"Storage path: {storage_path}")
+
+            # Discover builders
+            models_path = repo_path / "models" / "domain"
+            if models_path.exists():
+                BuilderRegistry.discover(models_path)
+
+            available_builders = BuilderRegistry.all()
+            if model_name not in available_builders:
+                return {
+                    'model': model_name,
+                    'status': 'error',
+                    'error': f"No builder found for model '{model_name}'",
+                    'available': list(available_builders.keys())
+                }
+
+            # Initialize Spark
+            spark = get_spark(f"ModelBuilder_{model_name}")
+
+            # Build storage config
+            storage_config = {
+                "roots": {
+                    "bronze": str(Path(storage_path) / "bronze"),
+                    "silver": str(Path(storage_path) / "silver"),
+                }
+            }
+
+            # Set date range
+            date_to = date.today().strftime("%Y-%m-%d")
+            date_from = (date.today() - timedelta(days=365)).strftime("%Y-%m-%d")
+
+            # Create build context
+            context = BuildContext(
+                spark=spark,
+                storage_config=storage_config,
+                repo_root=repo_path,
+                date_from=date_from,
+                date_to=date_to,
+                max_tickers=None,
+                dry_run=False,
+                verbose=verbose
+            )
+
+            # Build the model
+            start_time = datetime.now()
+            builder_class = available_builders[model_name]
+            builder = builder_class(context)
+            result = builder.build()
+            duration = (datetime.now() - start_time).total_seconds()
+
+            # Cleanup Spark
+            spark.stop()
+
+            return {
+                'model': model_name,
+                'status': 'success' if result.success else 'error',
+                'dimensions': result.dimensions,
+                'facts': result.facts,
+                'duration_seconds': duration,
+                'error': result.error if not result.success else None
+            }
+
+        except Exception as e:
+            import traceback
+            return {
+                'model': model_name,
+                'status': 'error',
+                'error': str(e),
+                'traceback': traceback.format_exc()
+            }
 
     return build_model_task
 
