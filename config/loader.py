@@ -244,6 +244,19 @@ class ConfigLoader:
             if not db_path.is_absolute():
                 db_path = self._repo_root / db_path
 
+            # Defensive validation: Detect and prevent nested duckdb paths
+            # e.g., /path/storage/duckdb/storage/duckdb/analytics.db
+            path_str = str(db_path)
+            if "duckdb/storage/duckdb" in path_str or "duckdb\\storage\\duckdb" in path_str:
+                logger.warning(f"Detected nested duckdb path: {db_path}")
+                # Fix by extracting the correct path
+                parts = path_str.split("duckdb")
+                if len(parts) >= 2:
+                    # Take the repo root up to first 'duckdb' + 'duckdb/analytics.db'
+                    fixed_path = parts[0] + "duckdb" + parts[-1]
+                    db_path = Path(fixed_path)
+                    logger.info(f"Corrected duckdb path: {db_path}")
+
             duckdb_config = DuckDBConfig(
                 database_path=db_path,
                 memory_limit=os.getenv("DUCKDB_MEMORY_LIMIT", DEFAULT_DUCKDB_MEMORY_LIMIT),
@@ -297,6 +310,20 @@ class ConfigLoader:
                     resolved["roots"][key] = str(abs_path)
                 else:
                     resolved["roots"][key] = rel_path
+
+                # Defensive validation: Detect nested paths like bronze/bronze or silver/silver
+                path_str = resolved["roots"][key]
+                for layer in ["bronze", "silver"]:
+                    nested_pattern = f"{layer}/{layer}"
+                    nested_pattern_win = f"{layer}\\{layer}"
+                    if nested_pattern in path_str or nested_pattern_win in path_str:
+                        logger.warning(f"Detected nested {layer} path for '{key}': {path_str}")
+                        # Fix by extracting the correct path
+                        parts = path_str.split(layer)
+                        if len(parts) >= 2:
+                            fixed_path = parts[0] + layer + parts[-1]
+                            resolved["roots"][key] = fixed_path
+                            logger.info(f"Corrected {layer} path: {fixed_path}")
 
         logger.debug(f"Resolved storage roots: {resolved.get('roots', {})}")
         return resolved

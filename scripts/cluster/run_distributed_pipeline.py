@@ -704,6 +704,68 @@ def _read_tickers_from_delta_table(table_path: Path, ticker_column: str = "ticke
 
 
 # =============================================================================
+# Bronze Data Verification (Failsafe)
+# =============================================================================
+
+def verify_bronze_data_exists(storage_path: str, logger) -> bool:
+    """
+    Verify that Bronze data exists before attempting Silver build.
+
+    This is a critical failsafe - we should NOT attempt to build Silver layer
+    if there's no Bronze data to build from. This prevents confusing errors
+    and aligns behavior with the original run_full_pipeline.py.
+
+    Args:
+        storage_path: Base storage path
+        logger: Logger instance
+
+    Returns:
+        True if Bronze data exists and is valid, False otherwise
+    """
+    from pathlib import Path
+
+    bronze_path = Path(storage_path) / "bronze"
+
+    if not bronze_path.exists():
+        logger.warning(f"Bronze directory does not exist: {bronze_path}")
+        return False
+
+    # Check for key v2.0 tables that Silver models depend on
+    required_tables = [
+        "securities_reference",
+        "company_reference",
+        "securities_prices_daily",
+    ]
+
+    found_tables = []
+    for table in required_tables:
+        table_path = bronze_path / table
+        if table_path.exists():
+            # Check if it's a valid Delta table or has parquet files
+            delta_log = table_path / "_delta_log"
+            parquet_files = list(table_path.glob("**/*.parquet"))
+
+            if delta_log.exists() or parquet_files:
+                found_tables.append(table)
+                logger.debug(f"  ✓ Found: {table}")
+            else:
+                logger.debug(f"  ⚠ Empty: {table}")
+        else:
+            logger.debug(f"  ✗ Missing: {table}")
+
+    if not found_tables:
+        logger.warning(
+            f"No valid Bronze tables found in {bronze_path}.\n"
+            "Cannot build Silver layer without Bronze data.\n"
+            "Run ingestion first: python -m scripts.run_full_pipeline --max-tickers 100"
+        )
+        return False
+
+    logger.info(f"Bronze data verified: {len(found_tables)}/{len(required_tables)} tables found")
+    return True
+
+
+# =============================================================================
 # Main Pipeline
 # =============================================================================
 
@@ -1094,11 +1156,20 @@ Examples:
     silver_config = effective.get("silver_models", {})
     skip_on_dry_run = silver_config.get("skip_on_dry_run", True)
 
+    # Determine if we should build silver
+    # Key failsafe: Don't build if dry_run (no data) or if Bronze data doesn't exist
     should_build_silver = (
         not skip_silver and
         silver_config.get("enabled", True) and
         not (dry_run and skip_on_dry_run)
     )
+
+    # Critical failsafe: Verify Bronze data exists before attempting Silver build
+    # This aligns with original run_full_pipeline.py behavior
+    if should_build_silver:
+        if not verify_bronze_data_exists(storage_path, logger):
+            logger.warning("Skipping Silver build - no valid Bronze data found")
+            should_build_silver = False
 
     if should_build_silver:
         logger.info("\n" + "-" * 50)
