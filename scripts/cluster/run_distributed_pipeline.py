@@ -1170,61 +1170,85 @@ Examples:
 
     if should_build_silver:
         logger.info("\n" + "-" * 50)
-        logger.info("PHASE 2: Silver Layer Build (Ray + Spark)")
+        logger.info("PHASE 2: Silver Layer Build (Spark)")
         logger.info("-" * 50)
 
-        from orchestration.distributed.tasks import build_model_task
+        import subprocess
 
         models_to_build = silver_config.get("models", ["company", "stocks"])
 
-        logger.info(f"Building models: {', '.join(models_to_build)}")
-        logger.info(f"Using storage root: {storage_path}")
+        try:
+            logger.info(f"Building models: {', '.join(models_to_build)}")
+            logger.info(f"Using storage root: {storage_path}")
 
-        # Submit model builds as Ray tasks (runs on worker with PySpark)
-        # Build in dependency order: company first, then stocks
-        build_results = {}
+            # Run build_models.py on head node (which has Spark from consolidation phase)
+            cmd = [
+                sys.executable, "-m", "scripts.build.build_models",
+                "--models", *models_to_build,
+                "--storage-root", storage_path,
+                "--verbose"
+            ]
 
-        for model_name in models_to_build:
-            try:
-                logger.info(f"Submitting build task for: {model_name}")
+            result = subprocess.run(
+                cmd,
+                cwd=str(project_root),
+                capture_output=True,
+                text=True,
+                timeout=600  # 10 minute timeout for all models
+            )
 
-                # Submit to Ray cluster
-                future = build_model_task.remote(
-                    model_name=model_name,
-                    storage_path=storage_path,
-                    repo_root=str(project_root),
-                    verbose=True
-                )
+            if result.returncode == 0:
+                logger.info("Silver layer build complete")
+                # Show important output lines
+                if result.stdout:
+                    for line in result.stdout.split('\n'):
+                        if any(x in line for x in ['✓', 'Built', 'Success', 'Complete', 'dim_', 'fact_']):
+                            logger.info(f"  {line.strip()}")
+            else:
+                logger.error("Silver layer build failed:")
+                # Filter out Spark/Ivy noise, show actual errors
+                noise_patterns = [
+                    "WARNING: Using incubator",
+                    ":: loading settings ::",
+                    ":: resolving dependencies",
+                    ":: resolution report",
+                    "confs: [default]",
+                    "downloading https://",
+                    "artifacts:",
+                    "evicted:",
+                    ":: retrieving",
+                    "WARN NativeCodeLoader",
+                    "log4j",
+                ]
 
-                # Wait for this model to complete before next (dependencies)
-                result = ray.get(future, timeout=600)  # 10 min timeout per model
+                # Show last 30 lines of stderr (actual errors at end)
+                if result.stderr:
+                    stderr_lines = [
+                        line.strip() for line in result.stderr.split('\n')
+                        if line.strip() and not any(p in line for p in noise_patterns)
+                    ]
+                    for line in stderr_lines[-30:]:
+                        logger.error(f"  {line}")
 
-                build_results[model_name] = result
-
-                if result.get('status') == 'success':
-                    dims = result.get('dimensions', 0)
-                    facts = result.get('facts', 0)
-                    duration = result.get('duration_seconds', 0)
-                    logger.info(f"  ✓ {model_name}: {dims} dims, {facts} facts ({duration:.1f}s)")
-                else:
-                    error = result.get('error', 'Unknown error')
-                    logger.error(f"  ✗ {model_name}: {error}")
-                    if result.get('traceback'):
-                        # Show last few lines of traceback
-                        tb_lines = result['traceback'].strip().split('\n')[-10:]
-                        for line in tb_lines:
+                # Also show stdout errors
+                if result.stdout:
+                    stdout_lines = [
+                        line.strip() for line in result.stdout.split('\n')
+                        if line.strip() and not any(p in line for p in noise_patterns)
+                    ]
+                    error_lines = [
+                        line for line in stdout_lines
+                        if any(x in line.lower() for x in ['error', 'exception', 'traceback', 'failed', '✗'])
+                    ]
+                    if error_lines:
+                        logger.error("  stdout errors:")
+                        for line in error_lines[-20:]:
                             logger.error(f"    {line}")
 
-            except ray.exceptions.GetTimeoutError:
-                logger.error(f"  ✗ {model_name}: Build timed out (10 min)")
-                build_results[model_name] = {'status': 'timeout', 'error': 'Timed out'}
-            except Exception as e:
-                logger.error(f"  ✗ {model_name}: {e}")
-                build_results[model_name] = {'status': 'error', 'error': str(e)}
-
-        # Summary
-        successful = sum(1 for r in build_results.values() if r.get('status') == 'success')
-        logger.info(f"Silver build complete: {successful}/{len(models_to_build)} models built")
+        except subprocess.TimeoutExpired:
+            logger.error("Silver layer build timed out (10 min)")
+        except Exception as e:
+            logger.error(f"Silver layer build failed: {e}")
 
     # Get final key manager stats
     key_stats = ray.get(key_manager.get_stats.remote())
