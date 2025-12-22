@@ -639,10 +639,17 @@ def get_ticker_list(
                 logger.info(f"Found {len(tickers)} tickers in company_reference")
 
         elif source == "test_tickers":
-            # Fallback: Use configured test tickers (only in dry_run mode)
-            if dry_run:
-                tickers = ticker_source_config.get("test_tickers", [])
-                logger.info(f"Using test_tickers fallback: {len(tickers)} tickers")
+            # Fallback: Use configured test tickers for initial bootstrap
+            # This is used when Bronze layer is empty (first run)
+            tickers = ticker_source_config.get("test_tickers", [])
+            if tickers:
+                if dry_run:
+                    logger.info(f"Using test_tickers (dry-run mode): {len(tickers)} tickers")
+                else:
+                    logger.warning(
+                        f"Bronze layer empty - using test_tickers for bootstrap: {len(tickers)} tickers. "
+                        "Subsequent runs will use Bronze data."
+                    )
 
         if tickers:
             tickers = sorted(set(tickers))
