@@ -155,7 +155,7 @@ class BaseModelBuilder(ABC):
             storage_cfg=self.storage_config,
             model_cfg=model_config,
             params=params,
-            repo_root=str(self.repo_root)
+            repo_root=self.repo_root  # Pass as Path, not string
         )
 
         return self._model_instance
