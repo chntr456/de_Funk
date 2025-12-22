@@ -542,17 +542,19 @@ def ingest_ticker_data(
                         }
                         result["errors"].append(f"{endpoint}: {error_msg}")
                     else:
-                        # Write to storage
-                        output_dir = Path(storage_path) / "bronze" / "alpha_vantage" / endpoint
-                        output_dir.mkdir(parents=True, exist_ok=True)
+                        # Write to staging area for later consolidation
+                        # v2.0: Raw JSON goes to staging, then consolidated to Delta tables
+                        staging_dir = Path(storage_path) / "staging" / "alpha_vantage" / endpoint
+                        staging_dir.mkdir(parents=True, exist_ok=True)
 
-                        output_file = output_dir / f"{ticker}.json"
-                        with open(output_file, "w") as f:
+                        staging_file = staging_dir / f"{ticker}.json"
+                        with open(staging_file, "w") as f:
                             json.dump(data, f)
 
                         result["endpoints"][endpoint] = {
                             "success": True,
-                            "file": str(output_file),
+                            "file": str(staging_file),
+                            "needs_consolidation": True,
                         }
 
                     success = True
@@ -704,6 +706,160 @@ def _read_tickers_from_delta_table(table_path: Path, ticker_column: str = "ticke
 # =============================================================================
 # Main Pipeline
 # =============================================================================
+
+def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logger) -> None:
+    """
+    Consolidate staging JSON files to proper v2.0 Bronze Delta tables.
+
+    Uses Spark, facets, and BronzeSink to transform raw API responses
+    into properly structured Delta Lake tables per storage.json config.
+
+    v2.0 Architecture:
+    - Raw JSON files are collected in staging/alpha_vantage/{endpoint}/
+    - Facets transform JSON to properly typed Spark DataFrames
+    - BronzeSink writes to Delta tables using storage.json config:
+        - company_reference: from company_overview (upsert by CIK)
+        - securities_reference: from company_overview (upsert by ticker)
+        - securities_prices_daily: from time_series_daily (append immutable)
+
+    Args:
+        storage_path: Base storage path (e.g., /home/user/de_Funk/storage)
+        endpoints: List of endpoints that were ingested
+        logger: Logger instance
+    """
+    import json
+    from pathlib import Path
+
+    # Import Spark and de_Funk infrastructure
+    from orchestration.common.spark_session import get_spark
+    from datapipelines.ingestors.bronze_sink import BronzeSink
+    from config import ConfigLoader
+
+    # Load storage config
+    config_loader = ConfigLoader()
+    app_config = config_loader.load()
+    storage_cfg = app_config.storage
+
+    # IMPORTANT: Update roots to use absolute paths based on storage_path
+    # BronzeSink expects roots to be absolute paths for writes
+    storage_cfg = dict(storage_cfg)  # Make a copy
+    storage_cfg["roots"] = dict(storage_cfg.get("roots", {}))
+    storage_cfg["roots"]["bronze"] = str(Path(storage_path) / "bronze")
+    storage_cfg["roots"]["silver"] = str(Path(storage_path) / "silver")
+
+    # Initialize Spark
+    logger.info("Initializing Spark for consolidation...")
+    spark = get_spark()
+
+    # Initialize BronzeSink with updated storage config
+    sink = BronzeSink(storage_cfg)
+
+    staging_root = Path(storage_path) / "staging" / "alpha_vantage"
+
+    for endpoint in endpoints:
+        endpoint_dir = staging_root / endpoint
+        if not endpoint_dir.exists():
+            logger.warning(f"No staging data for {endpoint}")
+            continue
+
+        json_files = list(endpoint_dir.glob("*.json"))
+        if not json_files:
+            logger.warning(f"No JSON files in {endpoint_dir}")
+            continue
+
+        logger.info(f"Consolidating {len(json_files)} files from {endpoint}...")
+
+        # Read all JSON files and collect ticker names
+        all_data = []
+        tickers = []
+        for json_file in json_files:
+            try:
+                with open(json_file) as f:
+                    data = json.load(f)
+                    # Add ticker from filename for context
+                    ticker = json_file.stem
+                    tickers.append(ticker)
+                    all_data.append(data)
+            except Exception as e:
+                logger.warning(f"Failed to read {json_file}: {e}")
+
+        if not all_data:
+            continue
+
+        logger.info(f"  Processing {len(all_data)} responses for {len(tickers)} tickers")
+
+        # Process based on endpoint type
+        if endpoint == "company_overview":
+            # company_overview response is a single dict per ticker
+            # Facet.normalize() expects: List[List[dict]] (batches of rows)
+            # Each batch is a list of dict rows, we have one response per ticker
+            raw_batches = [[data] for data in all_data]  # Each response is a batch
+
+            # Transform to company_reference
+            from datapipelines.providers.alpha_vantage.facets.company_reference_facet import CompanyReferenceFacet
+            company_facet = CompanyReferenceFacet(spark, tickers=tickers)
+            company_df = company_facet.normalize(raw_batches)
+
+            if company_df is not None and company_df.count() > 0:
+                path = sink.smart_write(company_df, "company_reference")
+                logger.info(f"  ✓ company_reference: {company_df.count()} rows -> {path}")
+            else:
+                logger.warning(f"  ⚠ company_reference: no data after transformation")
+
+            # Transform to securities_reference
+            from datapipelines.providers.alpha_vantage.facets.securities_reference_facet import SecuritiesReferenceFacetAV
+            securities_facet = SecuritiesReferenceFacetAV(spark, tickers=tickers)
+            securities_df = securities_facet.normalize(raw_batches)
+
+            if securities_df is not None and securities_df.count() > 0:
+                path = sink.smart_write(securities_df, "securities_reference")
+                logger.info(f"  ✓ securities_reference: {securities_df.count()} rows -> {path}")
+            else:
+                logger.warning(f"  ⚠ securities_reference: no data after transformation")
+
+        elif endpoint in ("time_series_daily", "time_series_daily_adjusted"):
+            # time_series_daily response contains nested time series data
+            # SecuritiesPricesFacetAV.normalize() handles the nested structure
+            from datapipelines.providers.alpha_vantage.facets.securities_prices_facet import SecuritiesPricesFacetAV
+
+            # Create facet with ticker list for context injection
+            prices_facet = SecuritiesPricesFacetAV(spark, tickers=tickers)
+
+            # Each response is a batch containing the full time series
+            raw_batches = [[data] for data in all_data]
+            prices_df = prices_facet.normalize(raw_batches)
+
+            if prices_df is not None and prices_df.count() > 0:
+                path = sink.smart_write(prices_df, "securities_prices_daily")
+                logger.info(f"  ✓ securities_prices_daily: {prices_df.count()} rows -> {path}")
+            else:
+                logger.warning(f"  ⚠ securities_prices_daily: no data after transformation")
+
+        else:
+            logger.warning(f"  Unknown endpoint: {endpoint} - skipping")
+            continue
+
+        # Clean up staging files after successful consolidation
+        for json_file in json_files:
+            try:
+                json_file.unlink()
+            except Exception:
+                pass
+
+        # Remove empty staging directory
+        try:
+            endpoint_dir.rmdir()
+        except Exception:
+            pass
+
+    # Try to clean up the staging/alpha_vantage directory if empty
+    try:
+        staging_root.rmdir()
+    except Exception:
+        pass
+
+    logger.info("Consolidation complete")
+
 
 def main():
     """Main pipeline entry point."""
@@ -916,6 +1072,14 @@ Examples:
             "elapsed": status["elapsed"],
             "distribution": by_host,
         }
+
+        # Consolidate staging to proper Delta tables (if not dry run)
+        if not dry_run and successful > 0:
+            logger.info("\n" + "-" * 50)
+            logger.info("PHASE 1.5: Consolidate Staging to Bronze (Delta)")
+            logger.info("-" * 50)
+
+            consolidate_staging_to_bronze(storage_path, endpoints, logger)
 
     # Run silver build
     skip_silver = effective.get("skip_silver", False)

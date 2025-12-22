@@ -125,12 +125,22 @@ DIRS_TO_CREATE=(
     "bronze"
     "silver"
     "duckdb"
-    "bronze/alpha_vantage"
+    "staging"
+    # v2.0 unified bronze tables (per storage.json)
+    "bronze/securities_reference"
+    "bronze/company_reference"
+    "bronze/securities_prices_daily"
+    # Provider-specific staging areas (raw JSON before consolidation)
+    "staging/alpha_vantage"
     "bronze/bls"
     "bronze/chicago"
+    # v2.0 silver models
     "silver/core"
     "silver/company"
     "silver/stocks"
+    "silver/options"
+    "silver/etfs"
+    "silver/futures"
 )
 
 for dir in "${DIRS_TO_CREATE[@]}"; do
