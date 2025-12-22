@@ -307,8 +307,8 @@ Type=simple
 User=$DE_FUNK_USER
 Group=$DE_FUNK_USER
 WorkingDirectory=/home/$DE_FUNK_USER
-Environment="PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin"
-Environment="JAVA_HOME=$JAVA_HOME_PATH"
+EnvironmentFile=/etc/environment
+Environment="PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin:\$JAVA_HOME/bin"
 ExecStartPre=/bin/bash -c 'until nc -z head-node $HEAD_PORT; do echo "Waiting for head-node..."; sleep 5; done'
 ExecStart=$VENV_PATH/bin/ray start --address='head-node:$HEAD_PORT' --num-cpus=$WORKER_CPUS --memory=$WORKER_MEM_BYTES --block
 ExecStop=$VENV_PATH/bin/ray stop
