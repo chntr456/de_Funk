@@ -1182,11 +1182,14 @@ Examples:
 
         try:
             logger.info(f"Building models: {', '.join(models_to_build)}")
+            logger.info(f"Using storage root: {storage_path}")
 
             # Use new builder-based build_models.py with Spark
+            # Pass storage-root so it reads Bronze from the same location we wrote to
             cmd = [
                 sys.executable, "-m", "scripts.build.build_models",
                 "--models", *models_to_build,
+                "--storage-root", storage_path,
                 "--verbose"
             ]
 

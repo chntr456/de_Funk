@@ -24,7 +24,8 @@ if TYPE_CHECKING:
 else:
     SparkDataFrame = Any
 
-# Import StorageRouter separately to avoid pyspark dependency
+# Import StorageRouter from canonical location (models/api/dal.py)
+# Fallback only exists for DuckDB-only environments without pyspark
 try:
     from models.api.dal import StorageRouter, BronzeTable
 except ImportError:
@@ -33,16 +34,25 @@ except ImportError:
 
     @dataclass(frozen=True)
     class StorageRouter:
+        """Fallback StorageRouter for DuckDB-only environments."""
         storage_cfg: Dict[DictAny, DictAny]
+        repo_root: Optional[Path] = None  # Added for consistency with dal.py
 
         def bronze_path(self, logical_table: str) -> str:
             root = self.storage_cfg["roots"]["bronze"].rstrip("/")
             rel = self.storage_cfg["tables"][logical_table]["rel"]
-            return f"{root}/{rel}"
+            path = f"{root}/{rel}"
+            # ConfigLoader should resolve paths to absolute, but handle relative just in case
+            if self.repo_root and not Path(path).is_absolute():
+                return str(self.repo_root / path)
+            return path
 
         def silver_path(self, logical_rel: str) -> str:
             root = self.storage_cfg["roots"]["silver"].rstrip("/")
-            return f"{root}/{logical_rel}"
+            path = f"{root}/{logical_rel}"
+            if self.repo_root and not Path(path).is_absolute():
+                return str(self.repo_root / path)
+            return path
 
     BronzeTable = None
 

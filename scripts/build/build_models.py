@@ -61,18 +61,37 @@ def get_spark_session(app_name: str = "ModelBuilder"):
     )
 
 
-def load_storage_config(repo_root: Path) -> Dict:
+def load_storage_config(repo_root: Path, storage_root: Optional[Path] = None) -> Dict:
     """
     Load storage configuration with resolved paths.
 
     Uses ConfigLoader as the single source of truth for path resolution.
     All relative paths are resolved to absolute based on repo_root.
+
+    Args:
+        repo_root: Repository root path
+        storage_root: Optional custom storage root (e.g., /shared/storage for NFS).
+                     If provided, overrides bronze/silver paths.
+
+    Returns:
+        Storage configuration dict with resolved paths
     """
     from config import ConfigLoader
 
     loader = ConfigLoader(repo_root=repo_root)
     config = loader.load()
-    return config.storage  # Already has resolved absolute paths
+    storage_cfg = config.storage  # Already has resolved absolute paths
+
+    # Override paths if custom storage_root is provided
+    # This is critical for distributed pipelines using NFS or shared storage
+    if storage_root and storage_root != repo_root / "storage":
+        logger.info(f"Using custom storage root: {storage_root}")
+        storage_cfg = dict(storage_cfg)
+        storage_cfg["roots"] = dict(storage_cfg.get("roots", {}))
+        storage_cfg["roots"]["bronze"] = str(storage_root / "bronze")
+        storage_cfg["roots"]["silver"] = str(storage_root / "silver")
+
+    return storage_cfg
 
 
 def discover_builders(repo_root: Path) -> None:
@@ -92,7 +111,8 @@ def build_models(
     verbose: bool = False,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
-    max_tickers: Optional[int] = None
+    max_tickers: Optional[int] = None,
+    storage_root: Optional[Path] = None
 ) -> Dict[str, BuildResult]:
     """
     Build specified models (or all) using the builder registry.
@@ -104,6 +124,7 @@ def build_models(
         date_from: Start date for data
         date_to: End date for data
         max_tickers: Max tickers to process
+        storage_root: Optional custom storage root (e.g., /shared/storage for NFS)
 
     Returns:
         Dict mapping model name to BuildResult
@@ -152,8 +173,8 @@ def build_models(
         spark = None
         logger.info("[DRY RUN] Skipping Spark initialization")
 
-    # Load storage config
-    storage_config = load_storage_config(repo_root_path)
+    # Load storage config (with optional custom storage root for NFS/shared storage)
+    storage_config = load_storage_config(repo_root_path, storage_root=storage_root)
 
     # Create build context
     context = BuildContext(
@@ -261,6 +282,12 @@ Examples:
         type=int,
         help='Maximum tickers to process'
     )
+    parser.add_argument(
+        '--storage-root',
+        type=str,
+        help='Custom storage root path (e.g., /shared/storage for NFS). '
+             'Overrides default repo-local storage paths.'
+    )
 
     args = parser.parse_args()
 
@@ -268,13 +295,17 @@ Examples:
     setup_logging()
 
     try:
+        # Convert storage-root to Path if provided
+        storage_root = Path(args.storage_root) if args.storage_root else None
+
         results = build_models(
             models=args.models,
             dry_run=args.dry_run,
             verbose=args.verbose,
             date_from=args.date_from,
             date_to=args.date_to,
-            max_tickers=args.max_tickers
+            max_tickers=args.max_tickers,
+            storage_root=storage_root
         )
 
         # Exit with error if any builds failed
