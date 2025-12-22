@@ -281,7 +281,7 @@ class ConfigLoader:
 
     def _get_run_config_storage_path(self) -> Optional[str]:
         """
-        Get storage_path from run_config.json (single source of truth for distributed setups).
+        Get storage_path from run_config.json (single source of truth).
 
         Returns:
             Storage path string or None if not set
@@ -300,23 +300,34 @@ class ConfigLoader:
         """
         Resolve all storage paths to absolute paths.
 
-        This is the SINGLE SOURCE OF TRUTH for path resolution.
-        Priority:
-        1. run_config.json storage_path (for distributed/NFS setups)
-        2. storage.json relative paths resolved to repo_root
+        SINGLE SOURCE OF TRUTH: run_config.json storage_path
+        No fallbacks - if not configured, raise error.
 
         Args:
-            storage_json: Raw storage.json data with relative paths
+            storage_json: Raw storage.json data with table definitions
 
         Returns:
             Storage config with all paths resolved to absolute
+
+        Raises:
+            ValueError: If storage_path not configured in run_config.json
         """
         resolved = dict(storage_json)  # Shallow copy
 
-        # Check run_config.json for storage_path override (single source of truth)
+        # Get storage_path from run_config.json (REQUIRED - no fallback)
         run_config_storage = self._get_run_config_storage_path()
 
-        # Resolve all root paths
+        if not run_config_storage:
+            raise ValueError(
+                "Storage path not configured.\n"
+                "Set 'storage_path' in configs/pipelines/run_config.json:\n"
+                '  "defaults": {\n'
+                '    "storage_path": "/shared/storage"\n'
+                '  }\n'
+                "This is the single source of truth for Bronze/Silver data location."
+            )
+
+        # Resolve all root paths using run_config.json storage_path
         if "roots" in resolved:
             resolved["roots"] = {}
             for key, rel_path in storage_json.get("roots", {}).items():
@@ -325,31 +336,16 @@ class ConfigLoader:
                     resolved["roots"][key] = rel_path
                     continue
 
-                # If run_config.json has storage_path, use it for bronze/silver
-                if run_config_storage and key in ("bronze", "silver"):
+                # Use run_config.json storage_path for bronze/silver
+                if key in ("bronze", "silver"):
                     abs_path = Path(run_config_storage) / key
                     resolved["roots"][key] = str(abs_path)
-                    logger.debug(f"Using run_config.json storage_path for {key}: {abs_path}")
-                # Otherwise convert relative path to absolute based on repo_root
+                # Other paths (e.g., duckdb) resolve relative to storage_path
                 elif rel_path and not Path(rel_path).is_absolute():
-                    abs_path = self._repo_root / rel_path
+                    abs_path = Path(run_config_storage) / Path(rel_path).name
                     resolved["roots"][key] = str(abs_path)
                 else:
                     resolved["roots"][key] = rel_path
-
-                # Defensive validation: Detect nested paths like bronze/bronze or silver/silver
-                path_str = resolved["roots"][key]
-                for layer in ["bronze", "silver"]:
-                    nested_pattern = f"{layer}/{layer}"
-                    nested_pattern_win = f"{layer}\\{layer}"
-                    if nested_pattern in path_str or nested_pattern_win in path_str:
-                        logger.warning(f"Detected nested {layer} path for '{key}': {path_str}")
-                        # Fix by extracting the correct path
-                        parts = path_str.split(layer)
-                        if len(parts) >= 2:
-                            fixed_path = parts[0] + layer + parts[-1]
-                            resolved["roots"][key] = fixed_path
-                            logger.info(f"Corrected {layer} path: {fixed_path}")
 
         logger.debug(f"Resolved storage roots: {resolved.get('roots', {})}")
         return resolved
