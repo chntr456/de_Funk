@@ -41,8 +41,9 @@ class StocksBuilder(BaseModelBuilder):
         if self.context.verbose:
             logger.info(f"  Checking bronze data for {self.model_name}...")
 
-        # Check for required bronze tables (paths from storage.json)
-        bronze_root = self.repo_root / "storage" / "bronze"
+        # Check for required bronze tables (use storage_config from context)
+        from pathlib import Path
+        bronze_root = Path(self.context.storage_config["roots"]["bronze"])
 
         required_paths = [
             bronze_root / "securities_prices_daily",  # Daily OHLCV

@@ -501,13 +501,21 @@ def create_build_model_task():
             # Initialize Spark
             spark = get_spark(f"ModelBuilder_{model_name}")
 
-            # Build storage config
-            storage_config = {
-                "roots": {
-                    "bronze": str(Path(storage_path) / "bronze"),
-                    "silver": str(Path(storage_path) / "silver"),
-                }
-            }
+            # Load full storage config from repo (models need 'tables' mappings)
+            import json
+            storage_json_path = repo_path / "configs" / "storage.json"
+            with open(storage_json_path) as f:
+                storage_config = json.load(f)
+
+            # Override roots with absolute paths to shared storage
+            storage_config["roots"]["bronze"] = str(Path(storage_path) / "bronze")
+            storage_config["roots"]["silver"] = str(Path(storage_path) / "silver")
+
+            # Also update model-specific roots
+            for key in list(storage_config["roots"].keys()):
+                if key.endswith("_silver"):
+                    model_name_key = key.replace("_silver", "")
+                    storage_config["roots"][key] = str(Path(storage_path) / "silver" / model_name_key)
 
             # Set date range
             date_to = date.today().strftime("%Y-%m-%d")
