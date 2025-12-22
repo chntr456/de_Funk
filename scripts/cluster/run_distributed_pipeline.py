@@ -877,9 +877,9 @@ Examples:
         try:
             logger.info(f"Building models: {', '.join(models_to_build)}")
 
-            # Use build_all_models.py with Spark
+            # Use new builder-based build_models.py with Spark
             cmd = [
-                sys.executable, "-m", "scripts.build.build_all_models",
+                sys.executable, "-m", "scripts.build.build_models",
                 "--models", *models_to_build,
                 "--verbose"
             ]
