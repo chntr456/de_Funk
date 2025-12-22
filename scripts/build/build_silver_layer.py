@@ -140,10 +140,11 @@ def main():
     # Initialize - use repo_root from setup_repo_imports() (already set at module level)
     spark = get_spark("SilverLayerBuilder")
 
-    # Load storage config
-    storage_cfg_path = repo_root / "configs" / "storage.json"
-    with open(storage_cfg_path) as f:
-        storage_cfg = json.load(f)
+    # Load storage config using ConfigLoader (single source of truth for paths)
+    from config import ConfigLoader
+    loader = ConfigLoader(repo_root=repo_root)
+    app_config = loader.load()
+    storage_cfg = app_config.storage  # Paths already resolved to absolute
 
     # Create UniversalSession
     session = UniversalSession(

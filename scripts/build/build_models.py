@@ -62,10 +62,17 @@ def get_spark_session(app_name: str = "ModelBuilder"):
 
 
 def load_storage_config(repo_root: Path) -> Dict:
-    """Load storage configuration."""
-    storage_path = repo_root / "configs" / "storage.json"
-    with open(storage_path) as f:
-        return json.load(f)
+    """
+    Load storage configuration with resolved paths.
+
+    Uses ConfigLoader as the single source of truth for path resolution.
+    All relative paths are resolved to absolute based on repo_root.
+    """
+    from config import ConfigLoader
+
+    loader = ConfigLoader(repo_root=repo_root)
+    config = loader.load()
+    return config.storage  # Already has resolved absolute paths
 
 
 def discover_builders(repo_root: Path) -> None:
