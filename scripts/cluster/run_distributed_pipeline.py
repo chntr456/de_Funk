@@ -54,6 +54,9 @@ import ray
 from config import ConfigLoader
 from config.logging import setup_logging, get_logger
 
+# Module-level logger
+logger = get_logger(__name__)
+
 
 # =============================================================================
 # Configuration Loading
