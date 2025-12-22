@@ -237,6 +237,12 @@ class BaseModelBuilder(ABC):
 
             dims, facts = model.build()
 
+            # Write to Silver layer
+            if self.context.verbose:
+                logger.info(f"Writing {self.model_name} to Silver layer...")
+
+            model.write_tables(use_optimized_writer=True, quiet=not self.context.verbose)
+
             # Calculate duration
             duration = (datetime.now() - start_time).total_seconds()
 
