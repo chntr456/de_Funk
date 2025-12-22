@@ -41,12 +41,12 @@ class StocksBuilder(BaseModelBuilder):
         if self.context.verbose:
             logger.info(f"  Checking bronze data for {self.model_name}...")
 
-        # Check for required bronze tables
-        bronze_root = self.repo_root / "storage" / "bronze" / "alpha_vantage"
+        # Check for required bronze tables (paths from storage.json)
+        bronze_root = self.repo_root / "storage" / "bronze"
 
         required_paths = [
-            bronze_root / "time_series_daily",
-            bronze_root / "company_overview",
+            bronze_root / "securities_prices_daily",  # Daily OHLCV
+            bronze_root / "company_reference",        # Company data for linkage
         ]
 
         missing = [p for p in required_paths if not p.exists()]

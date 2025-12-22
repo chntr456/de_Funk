@@ -592,42 +592,52 @@ def ingest_ticker_data(
 def get_ticker_list(
     storage_path: str,
     ticker_source_config: dict,
-    max_tickers: Optional[int] = None
+    max_tickers: Optional[int] = None,
+    dry_run: bool = False
 ) -> List[str]:
     """
     Get list of tickers based on configured sources.
+
+    Uses v2.0 Delta/Parquet tables with fallback to test_tickers for dry-run.
 
     Args:
         storage_path: Path to storage directory
         ticker_source_config: Ticker source configuration
         max_tickers: Optional limit
+        dry_run: If true, allows test_tickers fallback
 
     Returns:
         List of ticker symbols
     """
-    priority = ticker_source_config.get("priority", ["bronze_reference", "listing_status"])
+    priority = ticker_source_config.get(
+        "priority",
+        ["securities_reference", "company_reference", "test_tickers"]
+    )
 
     for source in priority:
         tickers = []
 
-        if source == "bronze_reference":
+        if source == "securities_reference":
             ref_path = Path(storage_path) / ticker_source_config.get(
-                "bronze_reference_path", "bronze/alpha_vantage/company_overview"
+                "securities_reference_path", "bronze/securities_reference"
             )
-            if ref_path.exists():
-                tickers = [f.stem for f in ref_path.glob("*.json")]
+            tickers = _read_tickers_from_delta_table(ref_path, "ticker")
+            if tickers:
+                logger.info(f"Found {len(tickers)} tickers in securities_reference")
 
-        elif source == "listing_status":
-            listing_path = Path(storage_path) / ticker_source_config.get(
-                "listing_status_path", "bronze/alpha_vantage/listing_status"
+        elif source == "company_reference":
+            ref_path = Path(storage_path) / ticker_source_config.get(
+                "company_reference_path", "bronze/company_reference"
             )
-            if listing_path.exists():
-                import csv
-                for csv_file in listing_path.glob("*.csv"):
-                    with open(csv_file) as f:
-                        reader = csv.DictReader(f)
-                        tickers = [row["symbol"] for row in reader if row.get("symbol")]
-                    break
+            tickers = _read_tickers_from_delta_table(ref_path, "ticker")
+            if tickers:
+                logger.info(f"Found {len(tickers)} tickers in company_reference")
+
+        elif source == "test_tickers":
+            # Fallback: Use configured test tickers (only in dry_run mode)
+            if dry_run:
+                tickers = ticker_source_config.get("test_tickers", [])
+                logger.info(f"Using test_tickers fallback: {len(tickers)} tickers")
 
         if tickers:
             tickers = sorted(set(tickers))
@@ -637,6 +647,55 @@ def get_ticker_list(
 
     # No tickers found from any source
     return []
+
+
+def _read_tickers_from_delta_table(table_path: Path, ticker_column: str = "ticker") -> List[str]:
+    """
+    Read unique ticker values from a Delta/Parquet table.
+
+    Args:
+        table_path: Path to Delta or Parquet table
+        ticker_column: Column name containing ticker symbols
+
+    Returns:
+        List of unique ticker symbols
+    """
+    if not table_path.exists():
+        return []
+
+    try:
+        import pyarrow.parquet as pq
+        import pyarrow.dataset as ds
+
+        # Check if it's a Delta table (has _delta_log)
+        delta_log = table_path / "_delta_log"
+        if delta_log.exists():
+            # Delta table - read using dataset API
+            # Delta tables store data in Parquet files, we can read them directly
+            parquet_files = list(table_path.glob("**/*.parquet"))
+            if not parquet_files:
+                return []
+
+            # Read just the ticker column for efficiency
+            dataset = ds.dataset(table_path, format="parquet")
+            table = dataset.to_table(columns=[ticker_column])
+            tickers = table.column(ticker_column).to_pylist()
+            return [t for t in set(tickers) if t]  # Unique, non-null
+
+        else:
+            # Plain Parquet directory
+            parquet_files = list(table_path.glob("**/*.parquet"))
+            if not parquet_files:
+                return []
+
+            dataset = ds.dataset(table_path, format="parquet")
+            table = dataset.to_table(columns=[ticker_column])
+            tickers = table.column(ticker_column).to_pylist()
+            return [t for t in set(tickers) if t]
+
+    except Exception as e:
+        logger.warning(f"Failed to read tickers from {table_path}: {e}")
+        return []
 
 
 # =============================================================================
@@ -772,26 +831,15 @@ Examples:
 
     # Get tickers
     ticker_source = effective.get("ticker_source", {})
-    tickers = get_ticker_list(storage_path, ticker_source, max_tickers)
+    tickers = get_ticker_list(storage_path, ticker_source, max_tickers, dry_run=dry_run)
 
     if not tickers:
-        if dry_run:
-            # Use test tickers from config for dry-run testing
-            test_tickers = ticker_source.get("test_tickers", [])
-            if test_tickers:
-                tickers = test_tickers[:max_tickers] if max_tickers else test_tickers
-                logger.warning(
-                    f"No tickers in storage. Using {len(tickers)} test tickers for dry-run."
-                )
-            else:
-                logger.error("No tickers found and no test_tickers configured.")
-                return 1
-        else:
-            logger.error(
-                "No tickers found in storage. Run ingestion first:\n"
-                "  python -m scripts.ingest.run_full_pipeline --max-tickers 100"
-            )
-            return 1
+        logger.error(
+            "No tickers found. Either:\n"
+            "  1. Run ingestion first: python -m scripts.ingest.run_full_pipeline --max-tickers 100\n"
+            "  2. Use --dry-run to use test_tickers from config"
+        )
+        return 1
 
     logger.info(f"  Tickers: {len(tickers)}")
 

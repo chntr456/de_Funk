@@ -138,8 +138,8 @@ class BaseModelBuilder(ABC):
         model_config = self.get_model_config()
 
         # Create connection wrapper for Spark
-        from core.connection import ConnectionFactory
-        connection = ConnectionFactory.create_spark(self.spark)
+        from core.connection import get_spark_connection
+        connection = get_spark_connection(self.spark)
 
         # Build params dict
         params = {
