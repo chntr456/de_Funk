@@ -744,8 +744,28 @@ def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logge
     # BronzeSink expects roots to be absolute paths for writes
     storage_cfg = dict(storage_cfg)  # Make a copy
     storage_cfg["roots"] = dict(storage_cfg.get("roots", {}))
-    storage_cfg["roots"]["bronze"] = str(Path(storage_path) / "bronze")
-    storage_cfg["roots"]["silver"] = str(Path(storage_path) / "silver")
+
+    # Build absolute bronze/silver paths, avoiding double-nesting
+    # storage_path should be like /home/.../storage (NOT /home/.../storage/bronze)
+    bronze_path = Path(storage_path) / "bronze"
+    silver_path = Path(storage_path) / "silver"
+
+    # Defensive: Check if storage_path already ends with bronze/silver
+    storage_parts = Path(storage_path).parts
+    if storage_parts and storage_parts[-1] == "bronze":
+        logger.warning(f"storage_path already ends with 'bronze': {storage_path}")
+        bronze_path = Path(storage_path)  # Don't add bronze again
+        silver_path = Path(storage_path).parent / "silver"
+    elif storage_parts and storage_parts[-1] == "silver":
+        logger.warning(f"storage_path already ends with 'silver': {storage_path}")
+        bronze_path = Path(storage_path).parent / "bronze"
+        silver_path = Path(storage_path)
+
+    storage_cfg["roots"]["bronze"] = str(bronze_path)
+    storage_cfg["roots"]["silver"] = str(silver_path)
+
+    logger.info(f"Bronze path: {bronze_path}")
+    logger.info(f"Silver path: {silver_path}")
 
     # Initialize Spark
     logger.info("Initializing Spark for consolidation...")
