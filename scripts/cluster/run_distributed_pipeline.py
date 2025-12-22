@@ -254,15 +254,15 @@ class DistributedKeyManager:
     """
     Ray Actor for coordinated API key management across workers.
 
-    Reads rate limits from existing config files - does NOT hardcode values.
+    Configs are passed in from head node (not loaded on workers).
     """
 
-    def __init__(self, providers: List[str], retry_config: dict = None):
+    def __init__(self, provider_configs: Dict[str, dict], retry_config: dict = None):
         """
-        Initialize key manager from existing config files.
+        Initialize key manager with pre-loaded configs.
 
         Args:
-            providers: List of provider names to initialize
+            provider_configs: Dict of {provider_name: {config, keys}} loaded on head node
             retry_config: Retry configuration from run_config
         """
         import logging
@@ -270,12 +270,12 @@ class DistributedKeyManager:
         self.providers = {}
         self.retry_config = retry_config or {"max_retries": 3, "retry_delay_seconds": 2.0}
 
-        for provider in providers:
+        for provider, provider_data in provider_configs.items():
             try:
-                config = load_pipeline_config(provider)
-                keys = load_api_keys(provider)
+                config = provider_data.get("config", {})
+                keys = provider_data.get("keys", [])
 
-                # Read rate limit from config file
+                # Read rate limit from config
                 rate_limit_per_sec = config.get("rate_limit_per_sec", 1.0)
 
                 self.providers[provider] = {
@@ -298,7 +298,7 @@ class DistributedKeyManager:
                 )
 
             except Exception as e:
-                self.logger.error(f"Failed to load config for {provider}: {e}")
+                self.logger.error(f"Failed to init provider {provider}: {e}")
 
     def _refill_tokens(self, provider: str):
         """Refill tokens based on elapsed time (token bucket algorithm)."""
@@ -796,6 +796,7 @@ Examples:
     logger.info(f"  Tickers: {len(tickers)}")
 
     # Create distributed key manager with retry config
+    # IMPORTANT: Load configs on HEAD NODE, then pass to workers
     retry_config = effective.get("retry", {})
     enabled_providers = [
         name for name, cfg in effective.get("providers", {}).items()
@@ -804,8 +805,19 @@ Examples:
     if not enabled_providers:
         enabled_providers = ["alpha_vantage"]  # Default
 
+    # Load provider configs on head node (workers can't access config files)
+    provider_configs = {}
+    for provider in enabled_providers:
+        try:
+            config = load_pipeline_config(provider)
+            keys = load_api_keys(provider)
+            provider_configs[provider] = {"config": config, "keys": keys}
+            logger.info(f"  Loaded {provider} config: {config.get('rate_limit_per_sec', 1.0)} req/sec")
+        except Exception as e:
+            logger.error(f"  Failed to load {provider} config: {e}")
+
     logger.info("Initializing distributed key manager...")
-    key_manager = DistributedKeyManager.remote(enabled_providers, retry_config)
+    key_manager = DistributedKeyManager.remote(provider_configs, retry_config)
 
     results = {}
 
