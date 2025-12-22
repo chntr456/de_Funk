@@ -2,9 +2,9 @@
 """
 de_Funk Distributed Pipeline Runner
 
-Runs the full data ingestion pipeline distributed across the Ray cluster.
+Runs the full data pipeline distributed across the Ray cluster.
+Both Bronze ingestion and Silver layer builds run on Ray workers by default.
 All parameters are configurable via configs/pipelines/run_config.json.
-CLI arguments override config file defaults.
 
 Usage:
     python scripts/cluster/run_distributed_pipeline.py [options]
@@ -16,16 +16,20 @@ Options:
     --dry-run           Simulate without API calls
     --skip-bronze       Skip bronze layer ingestion
     --skip-silver       Skip silver layer build
+    --local-silver      Run Silver build on head node only (default is distributed)
     --log-level LEVEL   Logging level (DEBUG, INFO, WARNING, ERROR)
     --endpoints LIST    Comma-separated endpoints to ingest
     --show-config       Show effective configuration and exit
 
 Examples:
+    # Full distributed pipeline (default)
+    python scripts/cluster/run_distributed_pipeline.py --max-tickers 100
+
     # Quick test with profile
     python scripts/cluster/run_distributed_pipeline.py --profile quick_test
 
-    # Override profile settings
-    python scripts/cluster/run_distributed_pipeline.py --profile dev --max-tickers 100
+    # Run Silver build on head node only
+    python scripts/cluster/run_distributed_pipeline.py --local-silver
 
     # Show what would run
     python scripts/cluster/run_distributed_pipeline.py --profile staging --show-config
@@ -175,7 +179,7 @@ def build_effective_config(run_config: dict, args: argparse.Namespace) -> dict:
         "dry_run": args.dry_run if args.dry_run else None,  # Only if flag set
         "skip_bronze": args.skip_bronze if args.skip_bronze else None,
         "skip_silver": args.skip_silver if args.skip_silver else None,
-        "distributed_silver": args.distributed_silver if args.distributed_silver else None,
+        "local_silver": args.local_silver if args.local_silver else None,
         "log_level": args.log_level if args.log_level != "INFO" else None,
         "storage_path": args.storage_path,
     }
@@ -968,8 +972,8 @@ Examples:
                        help="Skip bronze ingestion")
     parser.add_argument("--skip-silver", action="store_true",
                        help="Skip silver build")
-    parser.add_argument("--distributed-silver", action="store_true",
-                       help="Run Silver build on Ray workers (requires NFS repo share)")
+    parser.add_argument("--local-silver", action="store_true",
+                       help="Run Silver build on head node only (default is distributed on Ray workers)")
     parser.add_argument("--log-level", default="INFO",
                        help="Logging level")
     parser.add_argument("--storage-path", default=None,
@@ -1155,7 +1159,7 @@ Examples:
     skip_silver = effective.get("skip_silver", False)
     silver_config = effective.get("silver_models", {})
     skip_on_dry_run = silver_config.get("skip_on_dry_run", True)
-    distributed_silver = effective.get("distributed_silver", False)
+    local_silver = effective.get("local_silver", False)  # Default is distributed
 
     # Determine if we should build silver
     # Key failsafe: Don't build if dry_run (no data) or if Bronze data doesn't exist
@@ -1175,8 +1179,8 @@ Examples:
     if should_build_silver:
         models_to_build = silver_config.get("models", ["company", "stocks"])
 
-        if distributed_silver:
-            # Run Silver build on Ray workers (requires NFS repo share)
+        if not local_silver:
+            # Default: Run Silver build distributed on Ray workers
             logger.info("\n" + "-" * 50)
             logger.info("PHASE 2: Silver Layer Build (Distributed Ray + Spark)")
             logger.info("-" * 50)
