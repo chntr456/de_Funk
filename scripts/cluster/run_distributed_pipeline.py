@@ -864,15 +864,16 @@ def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logge
         logger.info(f"  Processing {len(all_data)} responses for {len(tickers)} tickers")
         raw_batches = [[data] for data in all_data]
 
-        # Endpoint -> (facet_module, facet_class, bronze_table) registry
-        # This avoids hardcoded if/elif chains
+        # Endpoint -> (facet_module, facet_class, bronze_table, is_batched) registry
+        # is_batched=True: facet.normalize(List[List[dict]]) - for prices
+        # is_batched=False: facet.normalize(dict) - for financial statements
         ENDPOINT_REGISTRY = {
-            "time_series_daily": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily"),
-            "time_series_daily_adjusted": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily"),
-            "income_statement": ("income_statement_facet", "IncomeStatementFacet", "income_statements"),
-            "balance_sheet": ("balance_sheet_facet", "BalanceSheetFacet", "balance_sheets"),
-            "cash_flow": ("cash_flow_facet", "CashFlowFacet", "cash_flows"),
-            "earnings": ("earnings_facet", "EarningsFacet", "earnings"),
+            "time_series_daily": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily", True),
+            "time_series_daily_adjusted": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily", True),
+            "income_statement": ("income_statement_facet", "IncomeStatementFacet", "income_statements", False),
+            "balance_sheet": ("balance_sheet_facet", "BalanceSheetFacet", "balance_sheets", False),
+            "cash_flow": ("cash_flow_facet", "CashFlowFacet", "cash_flows", False),
+            "earnings": ("earnings_facet", "EarningsFacet", "earnings", False),
         }
 
         # company_overview is special - produces 2 tables
@@ -893,14 +894,31 @@ def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logge
                     logger.warning(f"  ⚠ {table_name}: no data after transformation")
 
         elif endpoint in ENDPOINT_REGISTRY:
-            module_name, class_name, table_name = ENDPOINT_REGISTRY[endpoint]
+            module_name, class_name, table_name, is_batched = ENDPOINT_REGISTRY[endpoint]
             # Dynamic import from facets package
             import importlib
             module = importlib.import_module(f"datapipelines.providers.alpha_vantage.facets.{module_name}")
             facet_class = getattr(module, class_name)
-
             facet = facet_class(spark, tickers=tickers)
-            df = facet.normalize(raw_batches)
+
+            if is_batched:
+                # Prices facet expects List[List[dict]]
+                df = facet.normalize(raw_batches)
+            else:
+                # Financial statement facets expect single dict per ticker
+                # Process each response and union results
+                from functools import reduce
+                dfs = []
+                for response in all_data:
+                    if response:
+                        result_df = facet.normalize(response)
+                        if result_df is not None and result_df.count() > 0:
+                            dfs.append(result_df)
+                if dfs:
+                    df = reduce(lambda a, b: a.unionByName(b, allowMissingColumns=True), dfs)
+                else:
+                    df = None
+
             if df is not None and df.count() > 0:
                 path = sink.smart_write(df, table_name)
                 logger.info(f"  ✓ {table_name}: {df.count()} rows -> {path}")
