@@ -20,8 +20,8 @@
     "log_level": "INFO",
     "_log_level_comment": "Logging level: DEBUG, INFO, WARNING, ERROR",
 
-    "storage_path": null,
-    "_storage_path_comment": "null = auto-detect (local or /shared/storage for NFS)"
+    "storage_path": "/shared/storage",
+    "_storage_path_comment": "Absolute path to storage root. Contains bronze/ and silver/ subdirectories."
   },
 
   "providers": {

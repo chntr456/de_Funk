@@ -61,35 +61,67 @@ def get_spark_session(app_name: str = "ModelBuilder"):
     )
 
 
+def get_storage_path_from_run_config(repo_root: Path) -> Optional[str]:
+    """
+    Get storage_path from run_config.json (single source of truth).
+
+    Args:
+        repo_root: Repository root path
+
+    Returns:
+        Storage path string or None if not set
+    """
+    config_path = repo_root / "configs" / "pipelines" / "run_config.json"
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                run_config = json.load(f)
+            return run_config.get("defaults", {}).get("storage_path")
+        except Exception as e:
+            logger.warning(f"Failed to read run_config.json: {e}")
+    return None
+
+
 def load_storage_config(repo_root: Path, storage_root: Optional[Path] = None) -> Dict:
     """
     Load storage configuration with resolved paths.
 
-    Uses ConfigLoader as the single source of truth for path resolution.
-    All relative paths are resolved to absolute based on repo_root.
+    Storage path priority:
+    1. CLI --storage-root argument (if provided)
+    2. run_config.json storage_path (single source of truth)
+    3. ConfigLoader defaults (repo-local) as fallback
 
     Args:
         repo_root: Repository root path
-        storage_root: Optional custom storage root (e.g., /shared/storage for NFS).
-                     If provided, overrides bronze/silver paths.
+        storage_root: Optional custom storage root from CLI
 
     Returns:
         Storage configuration dict with resolved paths
     """
     from config import ConfigLoader
 
+    # Determine effective storage root
+    effective_storage_root = storage_root
+
+    # If not passed via CLI, check run_config.json
+    if not effective_storage_root:
+        config_storage_path = get_storage_path_from_run_config(repo_root)
+        if config_storage_path:
+            effective_storage_root = Path(config_storage_path)
+            logger.info(f"Using storage path from run_config.json: {effective_storage_root}")
+
+    # Load base config from ConfigLoader
     loader = ConfigLoader(repo_root=repo_root)
     config = loader.load()
-    storage_cfg = config.storage  # Already has resolved absolute paths
+    storage_cfg = config.storage  # Has resolved absolute paths
 
     # Override paths if custom storage_root is provided
-    # This is critical for distributed pipelines using NFS or shared storage
-    if storage_root and storage_root != repo_root / "storage":
-        logger.info(f"Using custom storage root: {storage_root}")
+    if effective_storage_root and effective_storage_root != repo_root / "storage":
+        logger.info(f"Using custom storage root: {effective_storage_root}")
         storage_cfg = dict(storage_cfg)
         storage_cfg["roots"] = dict(storage_cfg.get("roots", {}))
-        storage_cfg["roots"]["bronze"] = str(storage_root / "bronze")
-        storage_cfg["roots"]["silver"] = str(storage_root / "silver")
+        storage_cfg["roots"]["bronze"] = str(effective_storage_root / "bronze")
+        storage_cfg["roots"]["silver"] = str(effective_storage_root / "silver")
 
     return storage_cfg
 

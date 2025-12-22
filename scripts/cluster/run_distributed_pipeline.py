@@ -797,22 +797,15 @@ def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logge
     from datapipelines.ingestors.bronze_sink import BronzeSink
     from config import ConfigLoader
 
-    # Load storage config - paths are already resolved to absolute by ConfigLoader
+    # Build storage config using storage_path from run_config.json (single source of truth)
+    # We load the base table definitions but override the root paths
     config_loader = ConfigLoader()
     app_config = config_loader.load()
-    storage_cfg = app_config.storage
-
-    # Check if we need to override for custom storage_path (e.g., NFS mount)
-    # ConfigLoader resolves based on repo_root, but we may have a different storage location
-    default_storage = str(app_config.repo_root / "storage")
-    if storage_path != default_storage:
-        # Custom storage path provided (e.g., /shared/storage for NFS)
-        # Override the roots to use the custom path
-        logger.info(f"Using custom storage path: {storage_path} (default would be: {default_storage})")
-        storage_cfg = dict(storage_cfg)
-        storage_cfg["roots"] = dict(storage_cfg.get("roots", {}))
-        storage_cfg["roots"]["bronze"] = str(Path(storage_path) / "bronze")
-        storage_cfg["roots"]["silver"] = str(Path(storage_path) / "silver")
+    storage_cfg = dict(app_config.storage)
+    storage_cfg["roots"] = {
+        "bronze": str(Path(storage_path) / "bronze"),
+        "silver": str(Path(storage_path) / "silver"),
+    }
 
     logger.info(f"Bronze path: {storage_cfg['roots']['bronze']}")
     logger.info(f"Silver path: {storage_cfg['roots']['silver']}")
@@ -1010,17 +1003,14 @@ Examples:
     if args.profile:
         print(f"  Profile: {args.profile}")
 
-    # Load app config for storage path
-    config_loader = ConfigLoader()
-    app_config = config_loader.load()
-
-    # Determine storage path
+    # Get storage path from config (single source of truth: run_config.json)
     storage_path = effective.get("storage_path")
     if not storage_path:
-        storage_path = str(app_config.repo_root / "storage")
-        # Check for NFS mount on workers
-        if Path("/shared/storage").exists():
-            storage_path = "/shared/storage"
+        raise ValueError(
+            "storage_path not configured.\n"
+            "Set 'storage_path' in configs/pipelines/run_config.json\n"
+            "Example: \"storage_path\": \"/shared/storage\""
+        )
 
     logger.info(f"Storage path: {storage_path}")
 
