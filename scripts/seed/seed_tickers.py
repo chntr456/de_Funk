@@ -97,13 +97,13 @@ def seed_tickers(storage_path: Path = None, force: bool = False) -> int:
     print("3. Fetching ALL tickers from LISTING_STATUS (1 API call)...")
     print("-" * 70)
 
-    # Call the bulk listing method
-    df, all_tickers, ticker_exchanges = ingestor.ingest_bulk_listing(
+    # Call the bulk listing method - returns (path, tickers, ticker_exchanges, ticker_asset_types)
+    table_path, all_tickers, ticker_exchanges, ticker_asset_types = ingestor.ingest_bulk_listing(
         table_name="securities_reference",
         state="active"
     )
 
-    if df is None or len(all_tickers) == 0:
+    if table_path is None or len(all_tickers) == 0:
         print("ERROR: No tickers returned from LISTING_STATUS")
         spark.stop()
         return 0
@@ -118,19 +118,8 @@ def seed_tickers(storage_path: Path = None, force: bool = False) -> int:
     print(f"   Foreign exchange tickers (excluded): {len(all_tickers) - len(us_tickers):,}")
     print()
 
-    # Write to Bronze (the ingestor already wrote it, but let's verify path)
+    # Verify Bronze data (ingest_bulk_listing already wrote it)
     print("4. Verifying Bronze data...")
-
-    # Re-read to verify and get count
-    from datapipelines.ingestors.bronze_sink import BronzeSink
-    sink = BronzeSink(spark, str(storage_path / "bronze"))
-
-    # Filter the dataframe to US exchanges and write
-    from pyspark.sql.functions import col
-    df_us = df.filter(col("exchange_code").isin(us_exchanges))
-
-    # Write to the correct path
-    sink.smart_write(df_us, "securities_reference")
 
     # Verify
     verify_df = spark.read.format("delta").load(str(bronze_path))
