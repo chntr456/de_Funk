@@ -1,13 +1,30 @@
 # CLAUDE.md - AI Assistant Guide for de_Funk
 
-**Last Updated**: 2025-12-04
-**Version**: 2.4
+**Last Updated**: 2025-12-23
+**Version**: 2.5
 
 This document provides comprehensive guidance for AI assistants (like Claude) working with the de_Funk codebase. It covers project structure, architecture patterns, development workflows, and key conventions.
 
 **Architecture Diagram**: See `docs/architecture-diagram.drawio` for visual representation of the system architecture.
 
-**Recent Updates (v2.4)** - Hardcoded Defaults Prevention:
+**Recent Updates (v2.5)** - Distributed Pipeline & Model Standardization:
+- **✅ Ray-Based Distributed Pipeline**: Full end-to-end distributed ingestion and Silver builds
+  - Head node + 3 workers on Ray cluster
+  - NFS shared storage at `/shared/storage`
+  - Workers sync Ivy cache (no internet required after setup)
+- **✅ Production Run Script**: `./scripts/cluster/run_production.sh` orchestrates full pipeline
+  - Seeds tickers from LISTING_STATUS (1 API call → 12,499 tickers)
+  - Seeds calendar dimension (2000-2050)
+  - Runs distributed Bronze ingestion + Silver builds
+- **✅ Foundation vs Domain Models**: `models/foundation/` for base models (temporal), `models/domain/` for domain-specific
+  - BuilderRegistry discovers from both directories
+  - TemporalBuilder moved from domain/ to foundation/
+- **✅ Financial Statement Endpoints**: Added income_statement, balance_sheet, cash_flow, earnings
+  - Registry pattern for endpoint consolidation (no hardcoded if/elif chains)
+- **✅ Ray Scheduler Optimization**: `num_cpus=0` for API-bound tasks, batched task submission
+- **Session Summary**: See `docs/vault/13-proposals/draft/010-session-summary-dec-2025.md`
+
+**Previous Updates (v2.4)** - Hardcoded Defaults Prevention:
 - **⚠️ CRITICAL: No Hardcoded Default Data** - Major anti-pattern documentation added
   - Never hardcode default ticker lists (e.g., `['AAPL', 'MSFT', ...]`)
   - Never silently fallback to demo data
@@ -185,25 +202,23 @@ de_Funk/
 │   │   └── aggregation.py   # Data aggregation (v2.2)
 │   ├── base/                # BaseModel class framework (v2.2: modular)
 │   │   ├── model.py         # Core BaseModel (composition pattern)
+│   │   ├── builder.py       # BaseModelBuilder with BuilderRegistry
 │   │   ├── graph_builder.py # Graph building and node loading
 │   │   ├── table_accessor.py # Table access and schema inspection
 │   │   ├── measure_calculator.py # Measure calculations
 │   │   └── model_writer.py  # Persistence to storage
 │   ├── builders/            # Model building utilities
 │   ├── measures/            # Measure framework (simple, computed, weighted, Python)
-│   └── implemented/         # Domain models
-│       ├── core/            # Calendar dimension (foundation)
-│       │
-│       ├── _v2.0 Models:_
-│       ├── company/         # Corporate entities (model.py, measures.py)
-│       ├── stocks/          # Stock securities (model.py, measures.py with 6 Python measures)
-│       ├── options/         # Options contracts [PARTIAL - needs model.py]
+│   ├── foundation/          # Foundational models (no dependencies) - v2.5
+│   │   └── temporal/        # Calendar dimension
+│   │       ├── model.py     # TemporalModel
+│   │       └── builder.py   # TemporalBuilder (registered with BuilderRegistry)
+│   └── domain/              # Domain-specific models - v2.5
+│       ├── company/         # Corporate entities (model.py, builder.py)
+│       ├── stocks/          # Stock securities (model.py, builder.py, measures.py)
+│       ├── options/         # Options contracts [PARTIAL]
 │       ├── etfs/            # Exchange-traded funds [SKELETON]
 │       ├── futures/         # Futures contracts [SKELETON]
-│       │
-│       ├── _v1.x Legacy:_
-│       ├── equity/          # [DEPRECATED] → use stocks
-│       ├── corporate/       # [DEPRECATED] → use company
 │       ├── macro/           # Economic indicators
 │       ├── city_finance/    # Municipal finance
 │       └── forecast/        # Time series predictions
@@ -215,23 +230,32 @@ de_Funk/
 │   ├── fixtures/            # Test data generators
 │   ├── integration/         # Integration tests
 │   └── unit/                # Unit tests
-├── scripts/                 # Operational scripts (27 scripts)
-├── storage/
-│   ├── bronze/              # Raw ingested data (Parquet)
-│   │   ├── _v2.0:_
-│   │   ├── securities_reference/  # Unified reference data with CIK (partitioned by snapshot_dt, asset_type)
-│   │   ├── securities_prices_daily/  # Unified OHLCV for all securities (partitioned by trade_date, asset_type)
-│   │   ├── _v1.x (deprecated):_
-│   │   ├── ref_ticker/      # → use securities_reference
-│   │   ├── prices_daily/    # → use securities_prices_daily
-│   │   └── [other providers]  # bls/, chicago/, etc.
-│   ├── silver/              # Dimensional models (Parquet)
-│   │   ├── company/         # Company dimension & facts (v2.0)
-│   │   ├── stocks/          # Stock securities with prices/technicals (v2.0)
-│   │   ├── options/         # Options contracts [planned]
-│   │   ├── etfs/            # ETFs [planned]
-│   │   ├── futures/         # Futures [planned]
-│   │   └── [legacy]/        # equity/, corporate/ (deprecated)
+├── scripts/                 # Operational scripts
+│   ├── cluster/             # Distributed pipeline (Ray) - v2.5
+│   │   ├── run_production.sh        # Full production pipeline script
+│   │   ├── run_distributed_pipeline.py  # Core distributed pipeline logic
+│   │   └── setup-worker.sh          # Worker node setup (pyspark, ivy cache)
+│   ├── seed/                # Data seeding scripts - v2.5
+│   │   ├── seed_tickers.py          # Seed from LISTING_STATUS (12,499 tickers)
+│   │   └── seed_calendar.py         # Seed calendar dimension (2000-2050)
+│   ├── build/               # Model building scripts
+│   ├── maintenance/         # Cleanup and migration scripts
+│   ├── ingest/              # Data ingestion scripts
+│   └── test/                # Test scripts
+├── storage/                 # Data storage (or /shared/storage on cluster)
+│   ├── bronze/              # Raw ingested data (Delta Lake)
+│   │   ├── securities_reference/    # All tickers from LISTING_STATUS
+│   │   ├── securities_prices_daily/ # OHLCV for all securities
+│   │   ├── income_statements/       # Alpha Vantage INCOME_STATEMENT
+│   │   ├── balance_sheets/          # Alpha Vantage BALANCE_SHEET
+│   │   ├── cash_flows/              # Alpha Vantage CASH_FLOW
+│   │   ├── earnings/                # Alpha Vantage EARNINGS
+│   │   ├── calendar_seed/           # Calendar seed data (2000-2050)
+│   │   └── [other providers]/       # bls/, chicago/, etc.
+│   ├── silver/              # Dimensional models (Delta Lake)
+│   │   ├── temporal/        # Calendar dimension (foundation)
+│   │   ├── company/         # Company dimension & facts
+│   │   └── stocks/          # Stock securities with prices/technicals
 │   └── duckdb/              # DuckDB catalog (analytics.db)
 ├── docs/
 │   └── guide/               # Comprehensive documentation
@@ -1074,17 +1098,45 @@ python run_app.py
 streamlit run app/ui/notebook_app_duckdb.py
 ```
 
-### Running Full Pipeline
+### Running Full Pipeline (Distributed)
 
+**Production Pipeline** (Ray cluster with NFS storage):
 ```bash
-# Ingest data and build all models
-python run_full_pipeline.py --top-n 100
+# Full production run: seed tickers, seed calendar, run distributed pipeline
+./scripts/cluster/run_production.sh
 
-# Build only silver layer models
-python scripts/build_all_models.py
+# Limited run for testing
+./scripts/cluster/run_production.sh --max-tickers 100
 
-# Build specific silver layer
-python scripts/build_silver_layer.py
+# Skip seeding (if already done)
+./scripts/cluster/run_production.sh --skip-seed
+
+# Force re-seed tickers
+./scripts/cluster/run_production.sh --force-seed
+```
+
+**Seeding Data** (run before pipeline):
+```bash
+# Seed all US tickers from Alpha Vantage LISTING_STATUS (1 API call → 12,499 tickers)
+python -m scripts.seed.seed_tickers --storage-path /shared/storage
+
+# Seed calendar dimension (2000-2050)
+python -m scripts.seed.seed_calendar --storage-path /shared/storage
+```
+
+**Distributed Pipeline Only** (after seeding):
+```bash
+# Run distributed Bronze ingestion + Silver builds
+python -m scripts.cluster.run_distributed_pipeline --max-tickers 100
+```
+
+**Local Development** (single node, DuckDB):
+```bash
+# Build all silver layer models
+python -m scripts.build.build_all_models
+
+# Build specific model
+python -m scripts.build.rebuild_model --model stocks
 ```
 
 ### Model Operations
@@ -1092,14 +1144,14 @@ python scripts/build_silver_layer.py
 **Note**: Scripts now use the `python -m` pattern for better import handling:
 
 ```bash
-# Rebuild specific model
-python -m scripts.rebuild_model --model equity
+# Rebuild specific model (v2.0 models: temporal, company, stocks)
+python -m scripts.build.rebuild_model --model stocks
 
 # Reset model state
-python -m scripts.reset_model --model equity
+python -m scripts.maintenance.reset_model --model stocks
 
 # Test all models
-python -m scripts.test_all_models
+python -m scripts.test.test_all_models
 ```
 
 ### Data Operations
