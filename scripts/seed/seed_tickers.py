@@ -80,7 +80,17 @@ def seed_tickers(storage_path: Path = None, force: bool = False) -> int:
     from datapipelines.providers.alpha_vantage.alpha_vantage_ingestor import AlphaVantageIngestor
 
     ctx = RepoContext.from_repo_root(connection_type="spark")
-    ingestor = AlphaVantageIngestor(ctx)
+
+    # Get Alpha Vantage config
+    alpha_vantage_cfg = ctx.get_api_config("alpha_vantage")
+
+    # Build storage config with correct paths
+    storage_cfg = ctx.storage.copy() if ctx.storage else {}
+    storage_cfg["roots"] = storage_cfg.get("roots", {}).copy()
+    storage_cfg["roots"]["bronze"] = str(storage_path / "bronze")
+    storage_cfg["roots"]["silver"] = str(storage_path / "silver")
+
+    ingestor = AlphaVantageIngestor(alpha_vantage_cfg, storage_cfg, spark)
     print()
 
     # Fetch bulk listing
