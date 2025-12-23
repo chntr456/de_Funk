@@ -457,7 +457,7 @@ class ProgressTracker:
 # Distributed Ingestion Tasks
 # =============================================================================
 
-@ray.remote
+@ray.remote(num_cpus=0)  # No CPU needed - just waiting on rate-limited API calls
 def ingest_ticker_data(
     ticker: str,
     key_manager,
@@ -1126,16 +1126,22 @@ Examples:
 
         progress = ProgressTracker.remote(len(tickers), "Bronze Ingestion")
 
-        # Submit all tasks
-        futures = [
-            ingest_ticker_data.remote(
-                ticker, key_manager, progress, endpoints, storage_path, dry_run
-            )
-            for ticker in tickers
-        ]
+        # Batch task submission to avoid overwhelming Ray scheduler
+        # At 1 req/sec rate limit, no benefit to having thousands of pending tasks
+        batch_size = run_config.get("cluster", {}).get("task_batch_size", 50)
+        ingestion_results = []
 
-        # Wait for completion
-        ingestion_results = ray.get(futures)
+        for i in range(0, len(tickers), batch_size):
+            batch = tickers[i:i + batch_size]
+            futures = [
+                ingest_ticker_data.remote(
+                    ticker, key_manager, progress, endpoints, storage_path, dry_run
+                )
+                for ticker in batch
+            ]
+            # Wait for batch to complete before submitting next
+            batch_results = ray.get(futures)
+            ingestion_results.extend(batch_results)
 
         # Get final status
         status = ray.get(progress.get_status.remote())
