@@ -484,10 +484,11 @@ def create_build_model_task():
             logger.info(f"Building model: {model_name}")
             logger.info(f"Storage path: {storage_path}")
 
-            # Discover builders
-            models_path = repo_path / "models" / "domain"
-            if models_path.exists():
-                BuilderRegistry.discover(models_path)
+            # Discover builders from both domain and foundation
+            for subdir in ["domain", "foundation"]:
+                models_path = repo_path / "models" / subdir
+                if models_path.exists():
+                    BuilderRegistry.discover(models_path)
 
             available_builders = BuilderRegistry.all()
             if model_name not in available_builders:
