@@ -47,10 +47,11 @@
   "silver_models": {
     "enabled": true,
     "models": [
+      "temporal",
       "company",
       "stocks"
     ],
-    "_models_comment": "Models to build after bronze ingestion. Order matters (dependencies). Supported: company, stocks",
+    "_models_comment": "Models to build after bronze ingestion. Order matters (dependencies). Supported: temporal, company, stocks",
     "skip_on_dry_run": true,
     "_skip_on_dry_run_comment": "If true, skip silver build during dry runs (default: true - no data to build from)"
   },
