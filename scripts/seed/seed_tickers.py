@@ -79,7 +79,7 @@ def seed_tickers(storage_path: Path = None, force: bool = False) -> int:
     from core.context import RepoContext
     from datapipelines.providers.alpha_vantage.alpha_vantage_ingestor import AlphaVantageIngestor
 
-    ctx = RepoContext.from_repo_root()  # Auto-discovers repo root
+    ctx = RepoContext.from_repo_root(connection_type="spark")
     ingestor = AlphaVantageIngestor(ctx)
     print()
 
