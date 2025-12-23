@@ -3,13 +3,15 @@
 # Production Pipeline Run Script
 #
 # This script runs the full de_Funk data pipeline:
-# 1. Seeds calendar dimension (if needed)
-# 2. Runs distributed pipeline with all tickers
+# 1. Seeds tickers from Alpha Vantage LISTING_STATUS (1 API call for ALL tickers)
+# 2. Seeds calendar dimension (if needed)
+# 3. Runs distributed pipeline with all tickers
 #
 # Usage:
 #   ./scripts/cluster/run_production.sh                    # Full production run
 #   ./scripts/cluster/run_production.sh --max-tickers 100  # Limited run
-#   ./scripts/cluster/run_production.sh --skip-calendar    # Skip calendar seed
+#   ./scripts/cluster/run_production.sh --skip-seed        # Skip ticker/calendar seed
+#   ./scripts/cluster/run_production.sh --force-seed       # Force re-seed tickers
 #
 # Prerequisites:
 #   - Ray cluster running (ray start --head on bigbark)
@@ -24,13 +26,18 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 STORAGE_PATH="${STORAGE_PATH:-/shared/storage}"
 
 # Parse arguments
-SKIP_CALENDAR=false
+SKIP_SEED=false
+FORCE_SEED=false
 PIPELINE_ARGS=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --skip-calendar)
-            SKIP_CALENDAR=true
+        --skip-seed|--skip-calendar)
+            SKIP_SEED=true
+            shift
+            ;;
+        --force-seed)
+            FORCE_SEED=true
             shift
             ;;
         *)
@@ -47,24 +54,36 @@ echo ""
 echo "Configuration:"
 echo "  Repository: $REPO_ROOT"
 echo "  Storage: $STORAGE_PATH"
-echo "  Skip Calendar: $SKIP_CALENDAR"
+echo "  Skip Seed: $SKIP_SEED"
+echo "  Force Seed: $FORCE_SEED"
 echo "  Pipeline Args: $PIPELINE_ARGS"
 echo ""
 
 cd "$REPO_ROOT"
 
-# Step 1: Seed calendar (if needed)
-if [ "$SKIP_CALENDAR" = false ]; then
+# Step 1: Seed tickers from LISTING_STATUS (if needed)
+if [ "$SKIP_SEED" = false ]; then
     echo "----------------------------------------------------------------------"
-    echo "Step 1: Seeding Calendar Dimension"
+    echo "Step 1: Seeding Tickers from Alpha Vantage LISTING_STATUS"
+    echo "----------------------------------------------------------------------"
+    if [ "$FORCE_SEED" = true ]; then
+        python -m scripts.seed.seed_tickers --storage-path "$STORAGE_PATH" --force
+    else
+        python -m scripts.seed.seed_tickers --storage-path "$STORAGE_PATH"
+    fi
+    echo ""
+
+    # Step 2: Seed calendar (if needed)
+    echo "----------------------------------------------------------------------"
+    echo "Step 2: Seeding Calendar Dimension"
     echo "----------------------------------------------------------------------"
     python -m scripts.seed.seed_calendar --storage-path "$STORAGE_PATH"
     echo ""
 fi
 
-# Step 2: Run distributed pipeline
+# Step 3: Run distributed pipeline
 echo "----------------------------------------------------------------------"
-echo "Step 2: Running Distributed Pipeline"
+echo "Step 3: Running Distributed Pipeline"
 echo "----------------------------------------------------------------------"
 python -m scripts.cluster.run_distributed_pipeline $PIPELINE_ARGS
 
