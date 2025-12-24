@@ -171,31 +171,27 @@ nodes:
     unique_key: [cik, fiscal_date_ending, report_type]
 
   # Earnings Facts (EPS actual vs estimate)
-  # NOTE: Commented out until bronze.earnings table exists
-  # Uncomment after running ingestion with earnings endpoint
-  # fact_earnings:
-  #   from: bronze.earnings
-  #   join:
-  #     - table: _ticker_cik_lookup
-  #       "on": ["ticker=ticker"]
-  #       type: inner
-  #   select:
-  #     cik: _ticker_cik_lookup__cik
-  #     ticker: ticker
-  #     fiscal_date_ending: fiscal_date_ending
-  #     report_type: report_type
-  #     reported_date: reported_date
-  #     reported_eps: reported_eps
-  #     estimated_eps: estimated_eps
-  #     surprise: surprise
-  #     surprise_percentage: surprise_percentage
-  #     beat_estimate: beat_estimate
-  #     reported_currency: reported_currency
-  #   derive:
-  #     company_id: "CONCAT('COMPANY_', cik)"
-  #     report_date: "fiscal_date_ending"
-  #   tags: [fact, financials, earnings]
-  #   unique_key: [cik, fiscal_date_ending, report_type]
+  fact_earnings:
+    from: bronze.earnings
+    join:
+      - table: _ticker_cik_lookup
+        "on": ["ticker=ticker"]
+        type: inner
+    select:
+      cik: _ticker_cik_lookup__cik
+      ticker: ticker
+      fiscal_date_ending: fiscal_date_ending
+      report_type: report_type
+      reported_date: reported_date
+      reported_eps: reported_eps
+      estimated_eps: estimated_eps
+      surprise: surprise
+      surprise_percentage: surprise_percentage
+    derive:
+      company_id: "CONCAT('COMPANY_', cik)"
+      report_date: "fiscal_date_ending"
+    tags: [fact, financials, earnings]
+    unique_key: [cik, fiscal_date_ending, report_type]
 
 edges:
   # Cross-model edge to stocks for ticker-based filtering
@@ -228,12 +224,12 @@ edges:
     type: left
     description: "Link cash flows to company"
 
-  # earnings_to_company:
-  #   from: fact_earnings
-  #   to: dim_company
-  #   "on": ["cik=cik"]
-  #   type: left
-  #   description: "Link earnings to company"
+  earnings_to_company:
+    from: fact_earnings
+    to: dim_company
+    "on": ["cik=cik"]
+    type: left
+    description: "Link earnings to company"
 
   # Link to calendar for time-series analysis
   income_statement_to_calendar:
@@ -257,9 +253,9 @@ edges:
     type: left
     description: "Link cash flows to calendar"
 
-  # earnings_to_calendar:
-  #   from: fact_earnings
-  #   to: temporal.dim_calendar
-  #   "on": ["report_date=date"]
-  #   type: left
-  #   description: "Link earnings to calendar"
+  earnings_to_calendar:
+    from: fact_earnings
+    to: temporal.dim_calendar
+    "on": ["report_date=date"]
+    type: left
+    description: "Link earnings to calendar"
