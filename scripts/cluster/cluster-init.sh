@@ -16,6 +16,7 @@
 #   --worker N        Set up specific worker only (0, 1, or 2)
 #   --skip-storage    Skip LVM/storage setup on head
 #   --restart-ray     Just restart Ray (no setup), useful after reboot
+#   --clear-staging   Clear old staging files (v3.0 no longer uses staging)
 #
 # Prerequisites:
 #   - SSH key-based access to workers (ssh-copy-id to each worker)
@@ -90,6 +91,7 @@ WORKERS_ONLY=false
 SPECIFIC_WORKER=""
 SKIP_STORAGE=false
 RESTART_RAY_ONLY=false
+CLEAR_STAGING=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -111,6 +113,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --restart-ray)
             RESTART_RAY_ONLY=true
+            shift
+            ;;
+        --clear-staging)
+            CLEAR_STAGING=true
             shift
             ;;
         *)
@@ -306,10 +312,45 @@ restart_all_ray() {
 }
 
 # =============================================================================
+# Clear Staging (v3.0 no longer uses staging, this cleans up old files)
+# =============================================================================
+
+clear_staging() {
+    log "Clearing staging directories..."
+
+    # Check common staging locations
+    STAGING_PATHS=(
+        "/shared/storage/staging"
+        "/shared/storage/bronze_staging"
+        "$PROJECT_PATH/storage/staging"
+    )
+
+    for path in "${STAGING_PATHS[@]}"; do
+        if [ -d "$path" ]; then
+            size=$(du -sh "$path" 2>/dev/null | cut -f1)
+            log "Removing $path ($size)..."
+            rm -rf "$path"
+        fi
+    done
+
+    # Also clear any temp Ray files that might be using space
+    if [ -d "/tmp/ray" ]; then
+        size=$(du -sh /tmp/ray 2>/dev/null | cut -f1)
+        log "Clearing /tmp/ray ($size)..."
+        rm -rf /tmp/ray/*
+    fi
+
+    log "Staging cleared"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
-if [ "$RESTART_RAY_ONLY" = true ]; then
+if [ "$CLEAR_STAGING" = true ]; then
+    clear_staging
+    exit 0
+elif [ "$RESTART_RAY_ONLY" = true ]; then
     log "Quick Ray restart mode (no setup)"
     restart_all_ray
 elif [ "$WORKERS_ONLY" = true ]; then
