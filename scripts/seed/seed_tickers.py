@@ -46,6 +46,14 @@ def seed_tickers(storage_path: Path = None, force: bool = False) -> int:
 
     bronze_path = storage_path / "bronze" / "securities_reference"
 
+    # If force, delete existing table to avoid schema conflicts
+    if force and bronze_path.exists():
+        import shutil
+        print(f"Force mode: Deleting existing table at {bronze_path}")
+        shutil.rmtree(bronze_path)
+        print("  ✓ Deleted existing table")
+        print()
+
     # Check if already exists (unless force)
     if not force and bronze_path.exists() and (bronze_path / "_delta_log").exists():
         spark = get_spark("TickerSeedCheck")
