@@ -53,7 +53,7 @@ DE_FUNK_USER="ms_trixie"
 
 # Python environment configuration
 # Set to "conda" to use Anaconda, or "venv" for virtualenv
-PYTHON_ENV_TYPE="conda"
+PYTHON_ENV_TYPE="venv"
 CONDA_ENV="base"  # conda environment name
 CONDA_PATH="/home/$DE_FUNK_USER/anaconda3"  # path to anaconda installation
 VENV_PATH="/home/$DE_FUNK_USER/venv"  # path to venv (if using venv)
