@@ -105,7 +105,7 @@ nodes:
       # Assets
       total_assets: total_assets
       total_current_assets: total_current_assets
-      cash_and_equivalents: cash_and_equivalents
+      cash_and_equivalents: cash_and_cash_equivalents_at_carrying_value
       inventory: inventory
       current_net_receivables: current_net_receivables
       total_non_current_assets: total_non_current_assets
@@ -118,12 +118,12 @@ nodes:
       current_accounts_payable: current_accounts_payable
       total_non_current_liabilities: total_non_current_liabilities
       long_term_debt: long_term_debt
-      total_debt: total_debt
+      short_term_debt: short_term_debt
       # Equity
       total_shareholder_equity: total_shareholder_equity
       retained_earnings: retained_earnings
       common_stock: common_stock
-      shares_outstanding: shares_outstanding
+      common_stock_shares_outstanding: common_stock_shares_outstanding
       # Metadata
       reported_currency: reported_currency
       snapshot_date: snapshot_date
