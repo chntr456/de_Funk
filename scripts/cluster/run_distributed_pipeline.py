@@ -457,6 +457,42 @@ class ProgressTracker:
 # Distributed Ingestion Tasks
 # =============================================================================
 
+# =============================================================================
+# Endpoint Registry - Maps endpoints to facets and Delta tables
+# =============================================================================
+
+# Endpoint -> (facet_module, facet_class, bronze_table, is_batched)
+# is_batched=True: facet.normalize(List[List[dict]]) - for prices
+# is_batched=False: facet.normalize(dict) - for financial statements
+ENDPOINT_REGISTRY = {
+    "time_series_daily": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily", True),
+    "time_series_daily_adjusted": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily", True),
+    "income_statement": ("income_statement_facet", "IncomeStatementFacet", "income_statements", False),
+    "balance_sheet": ("balance_sheet_facet", "BalanceSheetFacet", "balance_sheets", False),
+    "cash_flow": ("cash_flow_facet", "CashFlowFacet", "cash_flows", False),
+    "earnings": ("earnings_facet", "EarningsFacet", "earnings", False),
+}
+
+
+# Worker-local Spark session cache
+_worker_spark_session = None
+
+
+def get_worker_spark():
+    """Get or create a Spark session for this worker (cached per worker process)."""
+    global _worker_spark_session
+    if _worker_spark_session is None:
+        from orchestration.common.spark_session import get_spark
+        _worker_spark_session = get_spark(
+            app_name=f"DeFunkWorker",
+            config={
+                "spark.driver.memory": "2g",
+                "spark.sql.shuffle.partitions": "8",
+            }
+        )
+    return _worker_spark_session
+
+
 @ray.remote(num_cpus=0)  # No CPU needed - just waiting on rate-limited API calls
 def ingest_ticker_data(
     ticker: str,
@@ -467,12 +503,15 @@ def ingest_ticker_data(
     dry_run: bool = False
 ) -> dict:
     """
-    Ingest all data for a single ticker using existing infrastructure patterns.
+    Ingest all data for a single ticker and write directly to Delta tables.
+
+    v3.0: Workers write directly to Bronze Delta tables (no staging files).
+    Uses ACID transactions for concurrent writes from multiple workers.
     """
     import socket
     import logging
-    import json
     import requests
+    import importlib
     from pathlib import Path
 
     logger = logging.getLogger("ray.ingest")
@@ -485,6 +524,7 @@ def ingest_ticker_data(
         "endpoints": {},
         "success": True,
         "errors": [],
+        "rows_written": 0,
     }
 
     # Get config and retry settings from key manager
@@ -495,6 +535,10 @@ def ingest_ticker_data(
     max_retries = retry_config.get("max_retries", 3)
     retry_delay = retry_config.get("retry_delay_seconds", 2.0)
     exponential_backoff = retry_config.get("exponential_backoff", True)
+
+    # Initialize Spark and BronzeSink once per ticker (lazy init on first real write)
+    spark = None
+    sink = None
 
     for endpoint in endpoints:
         endpoint_config = config.get("endpoints", {}).get(endpoint, {})
@@ -517,6 +561,7 @@ def ingest_ticker_data(
                     result["endpoints"][endpoint] = {
                         "success": random.random() > 0.02,
                         "simulated": True,
+                        "rows": 0,
                     }
                     success = True
                 else:
@@ -544,23 +589,67 @@ def ingest_ticker_data(
                         result["endpoints"][endpoint] = {
                             "success": False,
                             "error": error_msg,
+                            "rows": 0,
                         }
                         result["errors"].append(f"{endpoint}: {error_msg}")
                     else:
-                        # Write to staging area for later consolidation
-                        # v2.0: Raw JSON goes to staging, then consolidated to Delta tables
-                        staging_dir = Path(storage_path) / "staging" / "alpha_vantage" / endpoint
-                        staging_dir.mkdir(parents=True, exist_ok=True)
+                        # =====================================================
+                        # v3.0: Write directly to Delta (no staging)
+                        # =====================================================
+                        rows_written = 0
 
-                        staging_file = staging_dir / f"{ticker}.json"
-                        with open(staging_file, "w") as f:
-                            json.dump(data, f)
+                        # Lazy init Spark and BronzeSink
+                        if spark is None:
+                            spark = get_worker_spark()
+                            from datapipelines.ingestors.bronze_sink import BronzeSink
+                            storage_cfg = {
+                                "roots": {
+                                    "bronze": str(Path(storage_path) / "bronze"),
+                                    "silver": str(Path(storage_path) / "silver"),
+                                }
+                            }
+                            sink = BronzeSink(storage_cfg)
+
+                        # company_overview is special - produces 2 tables
+                        if endpoint == "company_overview":
+                            from datapipelines.providers.alpha_vantage.facets.company_reference_facet import CompanyReferenceFacet
+                            from datapipelines.providers.alpha_vantage.facets.securities_reference_facet import SecuritiesReferenceFacetAV
+
+                            raw_batches = [[data]]
+                            for facet_class, table_name in [
+                                (CompanyReferenceFacet, "company_reference"),
+                                (SecuritiesReferenceFacetAV, "securities_reference"),
+                            ]:
+                                facet = facet_class(spark, tickers=[ticker])
+                                df = facet.normalize(raw_batches)
+                                if df is not None and df.count() > 0:
+                                    sink.smart_write(df, table_name)
+                                    rows_written += df.count()
+
+                        elif endpoint in ENDPOINT_REGISTRY:
+                            module_name, class_name, table_name, is_batched = ENDPOINT_REGISTRY[endpoint]
+                            module = importlib.import_module(f"datapipelines.providers.alpha_vantage.facets.{module_name}")
+                            facet_class = getattr(module, class_name)
+                            facet = facet_class(spark, tickers=[ticker])
+
+                            if is_batched:
+                                # Prices facet expects List[List[dict]]
+                                df = facet.normalize([[data]])
+                            else:
+                                # Financial statement facets expect single dict
+                                df = facet.normalize(data)
+
+                            if df is not None and df.count() > 0:
+                                sink.smart_write(df, table_name)
+                                rows_written = df.count()
+                        else:
+                            logger.warning(f"Unknown endpoint {endpoint} - skipping Delta write")
 
                         result["endpoints"][endpoint] = {
                             "success": True,
-                            "file": str(staging_file),
-                            "needs_consolidation": True,
+                            "rows": rows_written,
                         }
+                        result["rows_written"] += rows_written
 
                     success = True
 
@@ -574,11 +663,11 @@ def ingest_ticker_data(
                     delay = retry_delay * (2 ** (retries - 1)) if exponential_backoff else retry_delay
                     time.sleep(delay)
                 else:
-                    result["endpoints"][endpoint] = {"success": False, "error": "Timeout after retries"}
+                    result["endpoints"][endpoint] = {"success": False, "error": "Timeout after retries", "rows": 0}
                     result["errors"].append(f"{endpoint}: Timeout")
 
             except Exception as e:
-                result["endpoints"][endpoint] = {"success": False, "error": str(e)}
+                result["endpoints"][endpoint] = {"success": False, "error": str(e), "rows": 0}
                 result["errors"].append(f"{endpoint}: {str(e)}")
                 logger.error(f"Error ingesting {ticker}/{endpoint}: {e}")
                 success = True  # Don't retry on unknown errors
@@ -781,192 +870,9 @@ def verify_bronze_data_exists(storage_path: str, logger) -> bool:
 # Main Pipeline
 # =============================================================================
 
-def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logger) -> None:
-    """
-    Consolidate staging JSON files to proper v2.0 Bronze Delta tables.
-
-    Uses Spark, facets, and BronzeSink to transform raw API responses
-    into properly structured Delta Lake tables per storage.json config.
-
-    v2.0 Architecture:
-    - Raw JSON files are collected in staging/alpha_vantage/{endpoint}/
-    - Facets transform JSON to properly typed Spark DataFrames
-    - BronzeSink writes to Delta tables using storage.json config:
-        - company_reference: from company_overview (upsert by CIK)
-        - securities_reference: from company_overview (upsert by ticker)
-        - securities_prices_daily: from time_series_daily (append immutable)
-
-    Args:
-        storage_path: Base storage path (e.g., /home/user/de_Funk/storage)
-        endpoints: List of endpoints that were ingested
-        logger: Logger instance
-    """
-    import json
-    from pathlib import Path
-
-    # Import Spark and de_Funk infrastructure
-    from orchestration.common.spark_session import get_spark
-    from datapipelines.ingestors.bronze_sink import BronzeSink
-    from config import ConfigLoader
-
-    # Build storage config using storage_path from run_config.json (single source of truth)
-    # We load the base table definitions but override the root paths
-    config_loader = ConfigLoader()
-    app_config = config_loader.load()
-    storage_cfg = dict(app_config.storage)
-    storage_cfg["roots"] = {
-        "bronze": str(Path(storage_path) / "bronze"),
-        "silver": str(Path(storage_path) / "silver"),
-    }
-
-    logger.info(f"Bronze path: {storage_cfg['roots']['bronze']}")
-    logger.info(f"Silver path: {storage_cfg['roots']['silver']}")
-
-    # Initialize Spark
-    logger.info("Initializing Spark for consolidation...")
-    spark = get_spark()
-
-    # Initialize BronzeSink with updated storage config
-    sink = BronzeSink(storage_cfg)
-
-    staging_root = Path(storage_path) / "staging" / "alpha_vantage"
-
-    # Endpoint -> (facet_module, facet_class, bronze_table, is_batched) registry
-    # is_batched=True: facet.normalize(List[List[dict]]) - for prices
-    # is_batched=False: facet.normalize(dict) - for financial statements
-    ENDPOINT_REGISTRY = {
-        "time_series_daily": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily", True),
-        "time_series_daily_adjusted": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily", True),
-        "income_statement": ("income_statement_facet", "IncomeStatementFacet", "income_statements", False),
-        "balance_sheet": ("balance_sheet_facet", "BalanceSheetFacet", "balance_sheets", False),
-        "cash_flow": ("cash_flow_facet", "CashFlowFacet", "cash_flows", False),
-        "earnings": ("earnings_facet", "EarningsFacet", "earnings", False),
-    }
-
-    # Batch size for memory-efficient consolidation
-    # Process files in chunks to avoid loading all 12,499+ files into memory
-    CONSOLIDATION_BATCH_SIZE = 500
-
-    for endpoint in endpoints:
-        endpoint_dir = staging_root / endpoint
-        if not endpoint_dir.exists():
-            logger.warning(f"No staging data for {endpoint}")
-            continue
-
-        json_files = list(endpoint_dir.glob("*.json"))
-        if not json_files:
-            logger.warning(f"No JSON files in {endpoint_dir}")
-            continue
-
-        total_files = len(json_files)
-        logger.info(f"Consolidating {total_files} files from {endpoint} (batch size: {CONSOLIDATION_BATCH_SIZE})...")
-
-        # Process in batches to avoid memory exhaustion
-        total_rows = 0
-        for batch_start in range(0, total_files, CONSOLIDATION_BATCH_SIZE):
-            batch_end = min(batch_start + CONSOLIDATION_BATCH_SIZE, total_files)
-            batch_files = json_files[batch_start:batch_end]
-            batch_num = (batch_start // CONSOLIDATION_BATCH_SIZE) + 1
-            total_batches = (total_files + CONSOLIDATION_BATCH_SIZE - 1) // CONSOLIDATION_BATCH_SIZE
-
-            logger.info(f"  Batch {batch_num}/{total_batches}: processing {len(batch_files)} files...")
-
-            # Read batch of JSON files
-            batch_data = []
-            batch_tickers = []
-            for json_file in batch_files:
-                try:
-                    with open(json_file) as f:
-                        data = json.load(f)
-                        ticker = json_file.stem
-                        batch_tickers.append(ticker)
-                        batch_data.append(data)
-                except Exception as e:
-                    logger.warning(f"Failed to read {json_file}: {e}")
-
-            if not batch_data:
-                continue
-
-            raw_batches = [[data] for data in batch_data]
-
-            # company_overview is special - produces 2 tables
-            if endpoint == "company_overview":
-                from datapipelines.providers.alpha_vantage.facets.company_reference_facet import CompanyReferenceFacet
-                from datapipelines.providers.alpha_vantage.facets.securities_reference_facet import SecuritiesReferenceFacetAV
-
-                for facet_class, table_name in [
-                    (CompanyReferenceFacet, "company_reference"),
-                    (SecuritiesReferenceFacetAV, "securities_reference"),
-                ]:
-                    facet = facet_class(spark, tickers=batch_tickers)
-                    df = facet.normalize(raw_batches)
-                    if df is not None and df.count() > 0:
-                        row_count = df.count()
-                        path = sink.smart_write(df, table_name)
-                        total_rows += row_count
-                        logger.debug(f"    {table_name}: {row_count} rows")
-
-            elif endpoint in ENDPOINT_REGISTRY:
-                module_name, class_name, table_name, is_batched = ENDPOINT_REGISTRY[endpoint]
-                import importlib
-                module = importlib.import_module(f"datapipelines.providers.alpha_vantage.facets.{module_name}")
-                facet_class = getattr(module, class_name)
-                facet = facet_class(spark, tickers=batch_tickers)
-
-                if is_batched:
-                    df = facet.normalize(raw_batches)
-                else:
-                    # Financial statement facets - process each response
-                    from functools import reduce
-                    dfs = []
-                    for response in batch_data:
-                        if response:
-                            result_df = facet.normalize(response)
-                            if result_df is not None and result_df.count() > 0:
-                                dfs.append(result_df)
-                    if dfs:
-                        df = reduce(lambda a, b: a.unionByName(b, allowMissingColumns=True), dfs)
-                    else:
-                        df = None
-
-                if df is not None and df.count() > 0:
-                    row_count = df.count()
-                    path = sink.smart_write(df, table_name)
-                    total_rows += row_count
-                    logger.debug(f"    {table_name}: {row_count} rows")
-
-            else:
-                logger.warning(f"  Unknown endpoint: {endpoint} - skipping")
-                continue
-
-            # Clean up batch files immediately after processing to free disk space
-            for json_file in batch_files:
-                try:
-                    json_file.unlink()
-                except Exception:
-                    pass
-
-            # Force garbage collection after each batch
-            batch_data.clear()
-            batch_tickers.clear()
-            import gc
-            gc.collect()
-
-        logger.info(f"  ✓ {endpoint}: {total_rows} total rows consolidated")
-
-        # Remove empty staging directory after all batches processed
-        try:
-            endpoint_dir.rmdir()
-        except Exception:
-            pass
-
-    # Try to clean up the staging/alpha_vantage directory if empty
-    try:
-        staging_root.rmdir()
-    except Exception:
-        pass
-
-    logger.info("Consolidation complete")
+# NOTE: consolidate_staging_to_bronze() removed in v3.0
+# Workers now write directly to Delta tables using ACID transactions.
+# No staging files or consolidation phase needed.
 
 
 def main():
@@ -1151,6 +1057,7 @@ Examples:
         # Memory optimization: Only keep counters, not full result dicts
         # With 12,499 tickers, accumulating full results causes memory issues
         successful = 0
+        total_rows = 0
         by_host = {}
 
         for i in range(0, len(tickers), batch_size):
@@ -1168,6 +1075,7 @@ Examples:
             for r in batch_results:
                 if r["success"]:
                     successful += 1
+                total_rows += r.get("rows_written", 0)
                 host = r.get("hostname", "unknown")
                 by_host[host] = by_host.get(host, 0) + 1
 
@@ -1177,8 +1085,9 @@ Examples:
         # Get final status
         status = ray.get(progress.get_status.remote())
 
-        logger.info(f"\nBronze Ingestion Complete:")
+        logger.info(f"\nBronze Ingestion Complete (v3.0 - Direct Delta Write):")
         logger.info(f"  Successful: {successful}/{len(tickers)}")
+        logger.info(f"  Rows Written: {total_rows:,}")
         logger.info(f"  Time: {status['elapsed']:.1f}s")
         logger.info(f"  Rate: {status['rate']:.2f} tickers/sec")
         logger.info(f"  Distribution: {by_host}")
@@ -1188,15 +1097,11 @@ Examples:
             "successful": successful,
             "elapsed": status["elapsed"],
             "distribution": by_host,
+            "rows_written": total_rows,
         }
 
-        # Consolidate staging to proper Delta tables (if not dry run)
-        if not dry_run and successful > 0:
-            logger.info("\n" + "-" * 50)
-            logger.info("PHASE 1.5: Consolidate Staging to Bronze (Delta)")
-            logger.info("-" * 50)
-
-            consolidate_staging_to_bronze(storage_path, endpoints, logger)
+        # v3.0: No consolidation phase needed - workers write directly to Delta
+        # Data is already in Bronze tables via ACID transactions
 
     # Run silver build
     skip_silver = effective.get("skip_silver", False)
