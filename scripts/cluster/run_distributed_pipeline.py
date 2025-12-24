@@ -831,6 +831,22 @@ def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logge
 
     staging_root = Path(storage_path) / "staging" / "alpha_vantage"
 
+    # Endpoint -> (facet_module, facet_class, bronze_table, is_batched) registry
+    # is_batched=True: facet.normalize(List[List[dict]]) - for prices
+    # is_batched=False: facet.normalize(dict) - for financial statements
+    ENDPOINT_REGISTRY = {
+        "time_series_daily": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily", True),
+        "time_series_daily_adjusted": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily", True),
+        "income_statement": ("income_statement_facet", "IncomeStatementFacet", "income_statements", False),
+        "balance_sheet": ("balance_sheet_facet", "BalanceSheetFacet", "balance_sheets", False),
+        "cash_flow": ("cash_flow_facet", "CashFlowFacet", "cash_flows", False),
+        "earnings": ("earnings_facet", "EarningsFacet", "earnings", False),
+    }
+
+    # Batch size for memory-efficient consolidation
+    # Process files in chunks to avoid loading all 12,499+ files into memory
+    CONSOLIDATION_BATCH_SIZE = 500
+
     for endpoint in endpoints:
         endpoint_dir = staging_root / endpoint
         if not endpoint_dir.exists():
@@ -842,101 +858,103 @@ def consolidate_staging_to_bronze(storage_path: str, endpoints: List[str], logge
             logger.warning(f"No JSON files in {endpoint_dir}")
             continue
 
-        logger.info(f"Consolidating {len(json_files)} files from {endpoint}...")
+        total_files = len(json_files)
+        logger.info(f"Consolidating {total_files} files from {endpoint} (batch size: {CONSOLIDATION_BATCH_SIZE})...")
 
-        # Read all JSON files and collect ticker names
-        all_data = []
-        tickers = []
-        for json_file in json_files:
-            try:
-                with open(json_file) as f:
-                    data = json.load(f)
-                    # Add ticker from filename for context
-                    ticker = json_file.stem
-                    tickers.append(ticker)
-                    all_data.append(data)
-            except Exception as e:
-                logger.warning(f"Failed to read {json_file}: {e}")
+        # Process in batches to avoid memory exhaustion
+        total_rows = 0
+        for batch_start in range(0, total_files, CONSOLIDATION_BATCH_SIZE):
+            batch_end = min(batch_start + CONSOLIDATION_BATCH_SIZE, total_files)
+            batch_files = json_files[batch_start:batch_end]
+            batch_num = (batch_start // CONSOLIDATION_BATCH_SIZE) + 1
+            total_batches = (total_files + CONSOLIDATION_BATCH_SIZE - 1) // CONSOLIDATION_BATCH_SIZE
 
-        if not all_data:
-            continue
+            logger.info(f"  Batch {batch_num}/{total_batches}: processing {len(batch_files)} files...")
 
-        logger.info(f"  Processing {len(all_data)} responses for {len(tickers)} tickers")
-        raw_batches = [[data] for data in all_data]
+            # Read batch of JSON files
+            batch_data = []
+            batch_tickers = []
+            for json_file in batch_files:
+                try:
+                    with open(json_file) as f:
+                        data = json.load(f)
+                        ticker = json_file.stem
+                        batch_tickers.append(ticker)
+                        batch_data.append(data)
+                except Exception as e:
+                    logger.warning(f"Failed to read {json_file}: {e}")
 
-        # Endpoint -> (facet_module, facet_class, bronze_table, is_batched) registry
-        # is_batched=True: facet.normalize(List[List[dict]]) - for prices
-        # is_batched=False: facet.normalize(dict) - for financial statements
-        ENDPOINT_REGISTRY = {
-            "time_series_daily": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily", True),
-            "time_series_daily_adjusted": ("securities_prices_facet", "SecuritiesPricesFacetAV", "securities_prices_daily", True),
-            "income_statement": ("income_statement_facet", "IncomeStatementFacet", "income_statements", False),
-            "balance_sheet": ("balance_sheet_facet", "BalanceSheetFacet", "balance_sheets", False),
-            "cash_flow": ("cash_flow_facet", "CashFlowFacet", "cash_flows", False),
-            "earnings": ("earnings_facet", "EarningsFacet", "earnings", False),
-        }
+            if not batch_data:
+                continue
 
-        # company_overview is special - produces 2 tables
-        if endpoint == "company_overview":
-            from datapipelines.providers.alpha_vantage.facets.company_reference_facet import CompanyReferenceFacet
-            from datapipelines.providers.alpha_vantage.facets.securities_reference_facet import SecuritiesReferenceFacetAV
+            raw_batches = [[data] for data in batch_data]
 
-            for facet_class, table_name in [
-                (CompanyReferenceFacet, "company_reference"),
-                (SecuritiesReferenceFacetAV, "securities_reference"),
-            ]:
-                facet = facet_class(spark, tickers=tickers)
-                df = facet.normalize(raw_batches)
+            # company_overview is special - produces 2 tables
+            if endpoint == "company_overview":
+                from datapipelines.providers.alpha_vantage.facets.company_reference_facet import CompanyReferenceFacet
+                from datapipelines.providers.alpha_vantage.facets.securities_reference_facet import SecuritiesReferenceFacetAV
+
+                for facet_class, table_name in [
+                    (CompanyReferenceFacet, "company_reference"),
+                    (SecuritiesReferenceFacetAV, "securities_reference"),
+                ]:
+                    facet = facet_class(spark, tickers=batch_tickers)
+                    df = facet.normalize(raw_batches)
+                    if df is not None and df.count() > 0:
+                        row_count = df.count()
+                        path = sink.smart_write(df, table_name)
+                        total_rows += row_count
+                        logger.debug(f"    {table_name}: {row_count} rows")
+
+            elif endpoint in ENDPOINT_REGISTRY:
+                module_name, class_name, table_name, is_batched = ENDPOINT_REGISTRY[endpoint]
+                import importlib
+                module = importlib.import_module(f"datapipelines.providers.alpha_vantage.facets.{module_name}")
+                facet_class = getattr(module, class_name)
+                facet = facet_class(spark, tickers=batch_tickers)
+
+                if is_batched:
+                    df = facet.normalize(raw_batches)
+                else:
+                    # Financial statement facets - process each response
+                    from functools import reduce
+                    dfs = []
+                    for response in batch_data:
+                        if response:
+                            result_df = facet.normalize(response)
+                            if result_df is not None and result_df.count() > 0:
+                                dfs.append(result_df)
+                    if dfs:
+                        df = reduce(lambda a, b: a.unionByName(b, allowMissingColumns=True), dfs)
+                    else:
+                        df = None
+
                 if df is not None and df.count() > 0:
+                    row_count = df.count()
                     path = sink.smart_write(df, table_name)
-                    logger.info(f"  ✓ {table_name}: {df.count()} rows -> {path}")
-                else:
-                    logger.warning(f"  ⚠ {table_name}: no data after transformation")
+                    total_rows += row_count
+                    logger.debug(f"    {table_name}: {row_count} rows")
 
-        elif endpoint in ENDPOINT_REGISTRY:
-            module_name, class_name, table_name, is_batched = ENDPOINT_REGISTRY[endpoint]
-            # Dynamic import from facets package
-            import importlib
-            module = importlib.import_module(f"datapipelines.providers.alpha_vantage.facets.{module_name}")
-            facet_class = getattr(module, class_name)
-            facet = facet_class(spark, tickers=tickers)
-
-            if is_batched:
-                # Prices facet expects List[List[dict]]
-                df = facet.normalize(raw_batches)
             else:
-                # Financial statement facets expect single dict per ticker
-                # Process each response and union results
-                from functools import reduce
-                dfs = []
-                for response in all_data:
-                    if response:
-                        result_df = facet.normalize(response)
-                        if result_df is not None and result_df.count() > 0:
-                            dfs.append(result_df)
-                if dfs:
-                    df = reduce(lambda a, b: a.unionByName(b, allowMissingColumns=True), dfs)
-                else:
-                    df = None
+                logger.warning(f"  Unknown endpoint: {endpoint} - skipping")
+                continue
 
-            if df is not None and df.count() > 0:
-                path = sink.smart_write(df, table_name)
-                logger.info(f"  ✓ {table_name}: {df.count()} rows -> {path}")
-            else:
-                logger.warning(f"  ⚠ {table_name}: no data after transformation")
+            # Clean up batch files immediately after processing to free disk space
+            for json_file in batch_files:
+                try:
+                    json_file.unlink()
+                except Exception:
+                    pass
 
-        else:
-            logger.warning(f"  Unknown endpoint: {endpoint} - skipping")
-            continue
+            # Force garbage collection after each batch
+            batch_data.clear()
+            batch_tickers.clear()
+            import gc
+            gc.collect()
 
-        # Clean up staging files after successful consolidation
-        for json_file in json_files:
-            try:
-                json_file.unlink()
-            except Exception:
-                pass
+        logger.info(f"  ✓ {endpoint}: {total_rows} total rows consolidated")
 
-        # Remove empty staging directory
+        # Remove empty staging directory after all batches processed
         try:
             endpoint_dir.rmdir()
         except Exception:
@@ -1129,7 +1147,11 @@ Examples:
         # Batch task submission to avoid overwhelming Ray scheduler
         # At 1 req/sec rate limit, no benefit to having thousands of pending tasks
         batch_size = run_config.get("cluster", {}).get("task_batch_size", 50)
-        ingestion_results = []
+
+        # Memory optimization: Only keep counters, not full result dicts
+        # With 12,499 tickers, accumulating full results causes memory issues
+        successful = 0
+        by_host = {}
 
         for i in range(0, len(tickers), batch_size):
             batch = tickers[i:i + batch_size]
@@ -1141,24 +1163,24 @@ Examples:
             ]
             # Wait for batch to complete before submitting next
             batch_results = ray.get(futures)
-            ingestion_results.extend(batch_results)
+
+            # Extract only what we need, then discard full results
+            for r in batch_results:
+                if r["success"]:
+                    successful += 1
+                host = r.get("hostname", "unknown")
+                by_host[host] = by_host.get(host, 0) + 1
+
+            # Clear batch results immediately
+            del batch_results
 
         # Get final status
         status = ray.get(progress.get_status.remote())
-
-        # Summarize
-        successful = sum(1 for r in ingestion_results if r["success"])
 
         logger.info(f"\nBronze Ingestion Complete:")
         logger.info(f"  Successful: {successful}/{len(tickers)}")
         logger.info(f"  Time: {status['elapsed']:.1f}s")
         logger.info(f"  Rate: {status['rate']:.2f} tickers/sec")
-
-        # Distribution by host
-        by_host = {}
-        for r in ingestion_results:
-            host = r.get("hostname", "unknown")
-            by_host[host] = by_host.get(host, 0) + 1
         logger.info(f"  Distribution: {by_host}")
 
         results["bronze"] = {
