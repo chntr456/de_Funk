@@ -32,7 +32,6 @@ nodes:
       days_in_month: days_in_month
       year_month: year_month
       year_quarter: year_quarter
-      date_str: date_str
     tags: [dim, calendar, shared]
     unique_key: [date]
 

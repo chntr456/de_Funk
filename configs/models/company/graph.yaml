@@ -183,8 +183,8 @@ nodes:
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
       reported_date: reported_date
-      reported_eps: reported_eps
-      estimated_eps: estimated_eps
+      reported_eps: reported_e_p_s
+      estimated_eps: estimated_e_p_s
       surprise: surprise
       surprise_percentage: surprise_percentage
     derive:
