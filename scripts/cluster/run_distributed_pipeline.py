@@ -474,31 +474,137 @@ ENDPOINT_REGISTRY = {
 }
 
 
-# Worker-local Spark session cache
-_worker_spark_session = None
-
-
-def get_worker_spark():
+def write_to_delta_rs(table_path: str, data: list, schema: dict, mode: str = "append"):
     """
-    Get or create a Spark session for this worker (cached per worker process).
+    Write data to Delta table using delta-rs (no JVM required).
 
-    Note: Uses minimal memory (512m) to allow multiple concurrent workers.
-    Each Ray worker process gets its own Spark session; with 3 workers per node
-    and multiple Ray processes, we need to keep memory low.
+    Args:
+        table_path: Path to Delta table
+        data: List of dicts to write
+        schema: PyArrow schema dict
+        mode: "append" or "overwrite"
     """
-    global _worker_spark_session
-    if _worker_spark_session is None:
-        from orchestration.common.spark_session import get_spark
-        _worker_spark_session = get_spark(
-            app_name=f"DeFunkWorker",
-            config={
-                "spark.driver.memory": "512m",  # Minimal memory for concurrent workers
-                "spark.executor.memory": "512m",
-                "spark.sql.shuffle.partitions": "4",  # Small partitions for small writes
-                "spark.driver.maxResultSize": "256m",
+    import pyarrow as pa
+    from deltalake import write_deltalake, DeltaTable
+    from pathlib import Path
+
+    if not data:
+        return 0
+
+    # Convert to PyArrow table
+    df = pa.Table.from_pylist(data)
+
+    # Ensure directory exists
+    Path(table_path).mkdir(parents=True, exist_ok=True)
+
+    # Write to Delta
+    write_deltalake(
+        table_path,
+        df,
+        mode=mode,
+        schema_mode="merge",  # Allow schema evolution
+    )
+
+    return len(data)
+
+
+def transform_time_series(ticker: str, data: dict) -> list:
+    """Transform TIME_SERIES_DAILY response to list of dicts."""
+    from datetime import datetime
+
+    # Find the time series key
+    ts_key = None
+    for key in data.keys():
+        if "Time Series" in key:
+            ts_key = key
+            break
+
+    if not ts_key or ts_key not in data:
+        return []
+
+    records = []
+    snapshot_dt = datetime.now().strftime("%Y-%m-%d")
+
+    for date_str, values in data[ts_key].items():
+        records.append({
+            "ticker": ticker,
+            "trade_date": date_str,
+            "open": float(values.get("1. open", 0)),
+            "high": float(values.get("2. high", 0)),
+            "low": float(values.get("3. low", 0)),
+            "close": float(values.get("4. close", 0)),
+            "volume": int(float(values.get("5. volume", 0))),
+            "adjusted_close": float(values.get("5. adjusted close", values.get("4. close", 0))),
+            "snapshot_dt": snapshot_dt,
+            "year": int(date_str[:4]),
+        })
+
+    return records
+
+
+def transform_financial_statement(ticker: str, data: dict, report_key: str) -> list:
+    """Transform financial statement response (income, balance, cash_flow, earnings)."""
+    from datetime import datetime
+
+    records = []
+    snapshot_date = datetime.now().strftime("%Y-%m-%d")
+
+    # Handle both annual and quarterly reports
+    for report_type in ["annualReports", "quarterlyReports"]:
+        if report_type not in data:
+            continue
+
+        for report in data[report_type]:
+            record = {
+                "ticker": ticker,
+                "report_type": "annual" if report_type == "annualReports" else "quarterly",
+                "snapshot_date": snapshot_date,
             }
-        )
-    return _worker_spark_session
+            # Copy all fields from the report
+            for key, value in report.items():
+                # Convert camelCase to snake_case
+                snake_key = ''.join(['_' + c.lower() if c.isupper() else c for c in key]).lstrip('_')
+                record[snake_key] = value
+
+            records.append(record)
+
+    return records
+
+
+def transform_company_overview(ticker: str, data: dict) -> tuple:
+    """Transform OVERVIEW response to company_reference and securities_reference records."""
+    from datetime import datetime
+
+    snapshot_dt = datetime.now().strftime("%Y-%m-%d")
+
+    # Extract CIK (pad to 10 digits)
+    cik = data.get("CIK", "")
+    if cik:
+        cik = cik.zfill(10)
+
+    company_record = {
+        "cik": cik,
+        "company_name": data.get("Name", ""),
+        "sector": data.get("Sector", ""),
+        "industry": data.get("Industry", ""),
+        "description": data.get("Description", ""),
+        "address": data.get("Address", ""),
+        "fiscal_year_end": data.get("FiscalYearEnd", ""),
+        "snapshot_dt": snapshot_dt,
+    }
+
+    securities_record = {
+        "ticker": ticker,
+        "name": data.get("Name", ""),
+        "asset_type": data.get("AssetType", "Common Stock"),
+        "exchange_code": data.get("Exchange", ""),
+        "cik": cik,
+        "country": data.get("Country", ""),
+        "currency": data.get("Currency", ""),
+        "snapshot_dt": snapshot_dt,
+    }
+
+    return [company_record], [securities_record]
 
 
 @ray.remote(num_cpus=0)  # No CPU needed - just waiting on rate-limited API calls
@@ -543,10 +649,6 @@ def ingest_ticker_data(
     max_retries = retry_config.get("max_retries", 3)
     retry_delay = retry_config.get("retry_delay_seconds", 2.0)
     exponential_backoff = retry_config.get("exponential_backoff", True)
-
-    # Initialize Spark and BronzeSink once per ticker (lazy init on first real write)
-    spark = None
-    sink = None
 
     for endpoint in endpoints:
         endpoint_config = config.get("endpoints", {}).get(endpoint, {})
@@ -602,65 +704,60 @@ def ingest_ticker_data(
                         result["errors"].append(f"{endpoint}: {error_msg}")
                     else:
                         # =====================================================
-                        # v3.0: Write directly to Delta (no staging)
+                        # v3.1: Write directly to Delta using delta-rs (NO JVM)
                         # =====================================================
                         rows_written = 0
+                        bronze_path = Path(storage_path) / "bronze"
 
-                        # Lazy init Spark and BronzeSink
-                        if spark is None:
-                            spark = get_worker_spark()
-                            from datapipelines.ingestors.bronze_sink import BronzeSink
+                        try:
+                            # company_overview is special - produces 2 tables
+                            if endpoint == "company_overview":
+                                company_records, securities_records = transform_company_overview(ticker, data)
 
-                            # Load full storage config (needs 'tables' key for BronzeSink)
-                            # Try project root first (most reliable via __file__)
-                            storage_json_path = Path(__file__).parent.parent.parent / "configs" / "storage.json"
-                            if not storage_json_path.exists():
-                                # Fallback: check NFS shared location
-                                storage_json_path = Path(storage_path).parent / "de_Funk" / "configs" / "storage.json"
+                                if company_records:
+                                    table_path = str(bronze_path / "company_reference")
+                                    rows_written += write_to_delta_rs(table_path, company_records, {})
 
-                            with open(storage_json_path) as f:
-                                storage_cfg = json.load(f)
+                                if securities_records:
+                                    table_path = str(bronze_path / "securities_reference")
+                                    rows_written += write_to_delta_rs(table_path, securities_records, {})
 
-                            # Override roots to use custom storage_path
-                            storage_cfg["roots"]["bronze"] = str(Path(storage_path) / "bronze")
-                            storage_cfg["roots"]["silver"] = str(Path(storage_path) / "silver")
+                            elif endpoint in ["time_series_daily", "time_series_daily_adjusted"]:
+                                records = transform_time_series(ticker, data)
+                                if records:
+                                    table_path = str(bronze_path / "securities_prices_daily")
+                                    rows_written = write_to_delta_rs(table_path, records, {})
 
-                            sink = BronzeSink(storage_cfg)
+                            elif endpoint == "income_statement":
+                                records = transform_financial_statement(ticker, data, "income")
+                                if records:
+                                    table_path = str(bronze_path / "income_statements")
+                                    rows_written = write_to_delta_rs(table_path, records, {})
 
-                        # company_overview is special - produces 2 tables
-                        if endpoint == "company_overview":
-                            from datapipelines.providers.alpha_vantage.facets.company_reference_facet import CompanyReferenceFacet
-                            from datapipelines.providers.alpha_vantage.facets.securities_reference_facet import SecuritiesReferenceFacetAV
+                            elif endpoint == "balance_sheet":
+                                records = transform_financial_statement(ticker, data, "balance")
+                                if records:
+                                    table_path = str(bronze_path / "balance_sheets")
+                                    rows_written = write_to_delta_rs(table_path, records, {})
 
-                            raw_batches = [[data]]
-                            for facet_class, table_name in [
-                                (CompanyReferenceFacet, "company_reference"),
-                                (SecuritiesReferenceFacetAV, "securities_reference"),
-                            ]:
-                                facet = facet_class(spark, tickers=[ticker])
-                                df = facet.normalize(raw_batches)
-                                if df is not None and df.count() > 0:
-                                    sink.smart_write(df, table_name)
-                                    rows_written += df.count()
+                            elif endpoint == "cash_flow":
+                                records = transform_financial_statement(ticker, data, "cashflow")
+                                if records:
+                                    table_path = str(bronze_path / "cash_flows")
+                                    rows_written = write_to_delta_rs(table_path, records, {})
 
-                        elif endpoint in ENDPOINT_REGISTRY:
-                            module_name, class_name, table_name, is_batched = ENDPOINT_REGISTRY[endpoint]
-                            module = importlib.import_module(f"datapipelines.providers.alpha_vantage.facets.{module_name}")
-                            facet_class = getattr(module, class_name)
-                            facet = facet_class(spark, tickers=[ticker])
+                            elif endpoint == "earnings":
+                                records = transform_financial_statement(ticker, data, "earnings")
+                                if records:
+                                    table_path = str(bronze_path / "earnings")
+                                    rows_written = write_to_delta_rs(table_path, records, {})
 
-                            if is_batched:
-                                # Prices facet expects List[List[dict]]
-                                df = facet.normalize([[data]])
                             else:
-                                # Financial statement facets expect single dict
-                                df = facet.normalize(data)
+                                logger.warning(f"Unknown endpoint {endpoint} - skipping Delta write")
 
-                            if df is not None and df.count() > 0:
-                                sink.smart_write(df, table_name)
-                                rows_written = df.count()
-                        else:
-                            logger.warning(f"Unknown endpoint {endpoint} - skipping Delta write")
+                        except Exception as write_err:
+                            logger.error(f"Delta write error for {ticker}/{endpoint}: {write_err}")
+                            raise
 
                         result["endpoints"][endpoint] = {
                             "success": True,
