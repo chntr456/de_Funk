@@ -560,11 +560,12 @@ def transform_financial_statement(ticker: str, data: dict, report_key: str) -> l
                 "report_type": "annual" if report_type == "annualReports" else "quarterly",
                 "snapshot_date": snapshot_date,
             }
-            # Copy all fields from the report
+            # Copy all fields from the report - keep as strings to avoid type issues
             for key, value in report.items():
                 # Convert camelCase to snake_case
                 snake_key = ''.join(['_' + c.lower() if c.isupper() else c for c in key]).lstrip('_')
-                record[snake_key] = value
+                # Keep as string to avoid Int64 cast errors with "None" and decimal values
+                record[snake_key] = str(value) if value is not None else None
 
             records.append(record)
 
