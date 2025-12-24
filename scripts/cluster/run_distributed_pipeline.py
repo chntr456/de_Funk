@@ -479,15 +479,23 @@ _worker_spark_session = None
 
 
 def get_worker_spark():
-    """Get or create a Spark session for this worker (cached per worker process)."""
+    """
+    Get or create a Spark session for this worker (cached per worker process).
+
+    Note: Uses minimal memory (512m) to allow multiple concurrent workers.
+    Each Ray worker process gets its own Spark session; with 3 workers per node
+    and multiple Ray processes, we need to keep memory low.
+    """
     global _worker_spark_session
     if _worker_spark_session is None:
         from orchestration.common.spark_session import get_spark
         _worker_spark_session = get_spark(
             app_name=f"DeFunkWorker",
             config={
-                "spark.driver.memory": "2g",
-                "spark.sql.shuffle.partitions": "8",
+                "spark.driver.memory": "512m",  # Minimal memory for concurrent workers
+                "spark.executor.memory": "512m",
+                "spark.sql.shuffle.partitions": "4",  # Small partitions for small writes
+                "spark.driver.maxResultSize": "256m",
             }
         )
     return _worker_spark_session
@@ -602,12 +610,21 @@ def ingest_ticker_data(
                         if spark is None:
                             spark = get_worker_spark()
                             from datapipelines.ingestors.bronze_sink import BronzeSink
-                            storage_cfg = {
-                                "roots": {
-                                    "bronze": str(Path(storage_path) / "bronze"),
-                                    "silver": str(Path(storage_path) / "silver"),
-                                }
-                            }
+
+                            # Load full storage config (needs 'tables' key for BronzeSink)
+                            # Try project root first (most reliable via __file__)
+                            storage_json_path = Path(__file__).parent.parent.parent / "configs" / "storage.json"
+                            if not storage_json_path.exists():
+                                # Fallback: check NFS shared location
+                                storage_json_path = Path(storage_path).parent / "de_Funk" / "configs" / "storage.json"
+
+                            with open(storage_json_path) as f:
+                                storage_cfg = json.load(f)
+
+                            # Override roots to use custom storage_path
+                            storage_cfg["roots"]["bronze"] = str(Path(storage_path) / "bronze")
+                            storage_cfg["roots"]["silver"] = str(Path(storage_path) / "silver")
+
                             sink = BronzeSink(storage_cfg)
 
                         # company_overview is special - produces 2 tables
