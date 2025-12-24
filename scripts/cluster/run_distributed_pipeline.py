@@ -523,7 +523,6 @@ def transform_time_series(ticker: str, data: dict) -> list:
         return []
 
     records = []
-    snapshot_dt = datetime.now().strftime("%Y-%m-%d")
 
     for date_str, values in data[ts_key].items():
         records.append({
@@ -535,7 +534,6 @@ def transform_time_series(ticker: str, data: dict) -> list:
             "close": float(values.get("4. close", 0)),
             "volume": int(float(values.get("5. volume", 0))),
             "adjusted_close": float(values.get("5. adjusted close", values.get("4. close", 0))),
-            "snapshot_dt": snapshot_dt,
             "year": int(date_str[:4]),
         })
 
@@ -544,10 +542,7 @@ def transform_time_series(ticker: str, data: dict) -> list:
 
 def transform_financial_statement(ticker: str, data: dict, report_key: str) -> list:
     """Transform financial statement response (income, balance, cash_flow, earnings)."""
-    from datetime import datetime
-
     records = []
-    snapshot_date = datetime.now().strftime("%Y-%m-%d")
 
     # Handle both annual and quarterly reports
     for report_type in ["annualReports", "quarterlyReports"]:
@@ -558,7 +553,6 @@ def transform_financial_statement(ticker: str, data: dict, report_key: str) -> l
             record = {
                 "ticker": ticker,
                 "report_type": "annual" if report_type == "annualReports" else "quarterly",
-                "snapshot_date": snapshot_date,
             }
             # Copy all fields from the report - keep as strings to avoid type issues
             for key, value in report.items():
@@ -574,10 +568,6 @@ def transform_financial_statement(ticker: str, data: dict, report_key: str) -> l
 
 def transform_company_overview(ticker: str, data: dict) -> tuple:
     """Transform OVERVIEW response to company_reference and securities_reference records."""
-    from datetime import datetime
-
-    snapshot_dt = datetime.now().strftime("%Y-%m-%d")
-
     # Extract CIK (pad to 10 digits)
     cik = data.get("CIK", "")
     if cik:
@@ -591,7 +581,6 @@ def transform_company_overview(ticker: str, data: dict) -> tuple:
         "description": data.get("Description", ""),
         "address": data.get("Address", ""),
         "fiscal_year_end": data.get("FiscalYearEnd", ""),
-        "snapshot_dt": snapshot_dt,
     }
 
     securities_record = {
@@ -602,7 +591,6 @@ def transform_company_overview(ticker: str, data: dict) -> tuple:
         "cik": cik,
         "country": data.get("Country", ""),
         "currency": data.get("Currency", ""),
-        "snapshot_dt": snapshot_dt,
     }
 
     return [company_record], [securities_record]
