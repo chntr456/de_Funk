@@ -35,8 +35,7 @@ nodes:
       low: low
       close: close
       volume: volume
-      volume_weighted: volume_weighted
-      transactions: transactions
+      adjusted_close: adjusted_close
     unique_key: [ticker, trade_date]  # Dedup by ticker+date - ignores snapshot_dt
     tags: [fact, prices]
 

@@ -517,6 +517,7 @@ def ensure_calendar_seed(storage_path: str) -> bool:
     """
     from pathlib import Path
     from datetime import datetime, timedelta
+    import calendar
 
     calendar_path = Path(storage_path) / "bronze" / "calendar_seed"
 
@@ -526,6 +527,14 @@ def ensure_calendar_seed(storage_path: str) -> bool:
 
     logger.info("Seeding calendar dimension (2000-2050)...")
 
+    # Month and day names
+    month_names = ["", "January", "February", "March", "April", "May", "June",
+                   "July", "August", "September", "October", "November", "December"]
+    month_abbrs = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    day_names = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    day_abbrs = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
     # Generate calendar data
     start_date = datetime(2000, 1, 1)
     end_date = datetime(2050, 12, 31)
@@ -533,22 +542,40 @@ def ensure_calendar_seed(storage_path: str) -> bool:
     records = []
     current = start_date
     while current <= end_date:
+        month = current.month
+        year = current.year
+        dow = current.weekday()
+        quarter = (month - 1) // 3 + 1
+        days_in_month = calendar.monthrange(year, month)[1]
+
         records.append({
             "date": current.strftime("%Y-%m-%d"),
-            "year": current.year,
-            "month": current.month,
-            "day": current.day,
-            "day_of_week": current.weekday(),
-            "day_of_year": current.timetuple().tm_yday,
+            "year": year,
+            "quarter": quarter,
+            "month": month,
+            "month_name": month_names[month],
+            "month_abbr": month_abbrs[month],
             "week_of_year": current.isocalendar()[1],
-            "quarter": (current.month - 1) // 3 + 1,
-            "is_weekend": current.weekday() >= 5,
+            "day": current.day,
+            "day_of_month": current.day,
+            "day_of_week": dow,
+            "day_of_week_name": day_names[dow],
+            "day_of_week_abbr": day_abbrs[dow],
+            "day_of_year": current.timetuple().tm_yday,
+            "is_weekend": dow >= 5,
+            "is_weekday": dow < 5,
             "is_month_start": current.day == 1,
-            "is_month_end": (current + timedelta(days=1)).day == 1,
-            "is_quarter_start": current.month in [1, 4, 7, 10] and current.day == 1,
-            "is_quarter_end": current.month in [3, 6, 9, 12] and (current + timedelta(days=1)).day == 1,
-            "is_year_start": current.month == 1 and current.day == 1,
-            "is_year_end": current.month == 12 and current.day == 31,
+            "is_month_end": current.day == days_in_month,
+            "is_quarter_start": month in [1, 4, 7, 10] and current.day == 1,
+            "is_quarter_end": month in [3, 6, 9, 12] and current.day == days_in_month,
+            "is_year_start": month == 1 and current.day == 1,
+            "is_year_end": month == 12 and current.day == 31,
+            "fiscal_year": year,  # Calendar year = fiscal year
+            "fiscal_quarter": quarter,
+            "fiscal_month": month,
+            "days_in_month": days_in_month,
+            "year_month": f"{year}-{month:02d}",
+            "year_quarter": f"{year}Q{quarter}",
         })
         current += timedelta(days=1)
 
@@ -592,7 +619,7 @@ def transform_time_series(ticker: str, data: dict) -> list:
 
 
 def transform_financial_statement(ticker: str, data: dict, report_key: str) -> list:
-    """Transform financial statement response (income, balance, cash_flow, earnings)."""
+    """Transform financial statement response (income, balance, cash_flow)."""
     records = []
 
     # Handle both annual and quarterly reports
@@ -610,6 +637,31 @@ def transform_financial_statement(ticker: str, data: dict, report_key: str) -> l
                 # Convert camelCase to snake_case
                 snake_key = ''.join(['_' + c.lower() if c.isupper() else c for c in key]).lstrip('_')
                 # Keep as string to avoid Int64 cast errors with "None" and decimal values
+                record[snake_key] = str(value) if value is not None else None
+
+            records.append(record)
+
+    return records
+
+
+def transform_earnings(ticker: str, data: dict) -> list:
+    """Transform EARNINGS response (different format from other financial statements)."""
+    records = []
+
+    # Alpha Vantage EARNINGS uses annualEarnings and quarterlyEarnings keys
+    for report_type in ["annualEarnings", "quarterlyEarnings"]:
+        if report_type not in data:
+            continue
+
+        for report in data[report_type]:
+            record = {
+                "ticker": ticker,
+                "report_type": "annual" if report_type == "annualEarnings" else "quarterly",
+            }
+            # Copy all fields from the report
+            for key, value in report.items():
+                # Convert camelCase to snake_case
+                snake_key = ''.join(['_' + c.lower() if c.isupper() else c for c in key]).lstrip('_')
                 record[snake_key] = str(value) if value is not None else None
 
             records.append(record)
@@ -812,7 +864,7 @@ def ingest_ticker_data(
                                     rows_written = write_to_delta_rs(table_path, records, {})
 
                             elif endpoint == "earnings":
-                                records = transform_financial_statement(ticker, data, "earnings")
+                                records = transform_earnings(ticker, data)
                                 if records:
                                     table_path = str(bronze_path / "earnings")
                                     rows_written = write_to_delta_rs(table_path, records, {})
