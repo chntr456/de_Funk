@@ -18,6 +18,7 @@ nodes:
       is_active: is_active  # Bronze column name (already boolean)
     derive:
       security_id: "sha1(ticker)"
+    unique_key: [ticker]  # Dedup by ticker - ignores snapshot_dt
     tags: [dim, entity]
 
   _fact_prices_base:
@@ -36,6 +37,7 @@ nodes:
       volume: volume
       volume_weighted: volume_weighted
       transactions: transactions
+    unique_key: [ticker, trade_date]  # Dedup by ticker+date - ignores snapshot_dt
     tags: [fact, prices]
 
 edges:

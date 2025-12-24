@@ -69,6 +69,7 @@ nodes:
       volume_sma_20: "AVG(volume) OVER (PARTITION BY ticker ORDER BY trade_date ROWS BETWEEN 19 PRECEDING AND CURRENT ROW)"
       volume_ratio: "volume / NULLIF(volume_sma_20, 0)"
 
+    unique_key: [ticker, trade_date]  # Dedup by ticker+date to prevent row growth
     tags: [fact, prices, stocks, technical]
 
 edges:
