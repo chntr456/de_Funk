@@ -326,9 +326,12 @@ class BuilderRegistry:
         Discover and register builders from model directories.
 
         Args:
-            models_path: Path to models/domain directory
+            models_path: Path to models/domain or models/foundation directory
         """
         import importlib
+
+        # Get the parent directory name (domain, foundation, etc.)
+        parent_name = models_path.name  # 'domain' or 'foundation'
 
         for model_dir in models_path.iterdir():
             if not model_dir.is_dir() or model_dir.name.startswith('_'):
@@ -337,7 +340,7 @@ class BuilderRegistry:
             builder_file = model_dir / "builder.py"
             if builder_file.exists():
                 try:
-                    module_name = f"models.domain.{model_dir.name}.builder"
+                    module_name = f"models.{parent_name}.{model_dir.name}.builder"
                     module = importlib.import_module(module_name)
 
                     # Find builder classes in the module

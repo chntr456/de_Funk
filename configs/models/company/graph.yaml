@@ -74,7 +74,7 @@ nodes:
       ebitda: ebitda
       # Expenses
       operating_expenses: operating_expenses
-      sg_and_a: sg_and_a
+      sg_and_a: selling_general_and_administrative
       research_and_development: research_and_development
       depreciation_and_amortization: depreciation_and_amortization
       interest_expense: interest_expense
