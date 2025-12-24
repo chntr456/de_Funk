@@ -269,21 +269,43 @@ EOF
 log "Python environment ready"
 
 # =============================================================================
-# Step 7: NFS Mount
+# Step 7: NFS Mounts (Storage + Repo Code)
 # =============================================================================
 
 if [ "$SKIP_NFS" = false ]; then
-    log "Setting up NFS mount..."
+    log "Setting up NFS mounts..."
 
+    # Mount 1: Shared storage for data (/shared/storage)
     mkdir -p $NFS_MOUNT
     chown $DE_FUNK_USER:$DE_FUNK_USER $NFS_MOUNT
 
-    # Add to fstab - mount from head node's dedicated storage
     if ! grep -q "$NFS_MOUNT" /etc/fstab; then
         echo "head-node:$HEAD_STORAGE_PATH $NFS_MOUNT nfs defaults,_netdev,nofail 0 0" >> /etc/fstab
     fi
 
+    # Mount 2: Repo code for Silver builds (/shared/de_Funk)
+    REPO_MOUNT="/shared/de_Funk"
+    mkdir -p $REPO_MOUNT
+    chown $DE_FUNK_USER:$DE_FUNK_USER $REPO_MOUNT
+
+    if ! grep -q "$REPO_MOUNT" /etc/fstab; then
+        echo "head-node:$HEAD_PROJECT_PATH $REPO_MOUNT nfs ro,defaults,_netdev,nofail 0 0" >> /etc/fstab
+    fi
+
     mount -a 2>/dev/null || warn "NFS mount failed - will retry on boot"
+
+    # Verify mounts
+    if mountpoint -q $NFS_MOUNT; then
+        log "Storage mount OK: $NFS_MOUNT"
+    else
+        warn "Storage mount not active: $NFS_MOUNT"
+    fi
+
+    if mountpoint -q $REPO_MOUNT; then
+        log "Repo mount OK: $REPO_MOUNT"
+    else
+        warn "Repo mount not active: $REPO_MOUNT"
+    fi
 else
     warn "Skipping NFS setup"
 fi
@@ -384,11 +406,18 @@ echo "Python: $(python --version)"
 python -c "import ray; print(f'Ray: {ray.__version__}')"
 echo ""
 
-if mount | grep -q nfs; then
-    echo "NFS: Mounted"
-    ls /shared/storage 2>/dev/null || echo "  (empty)"
+# Check NFS mounts
+echo "NFS Mounts:"
+if mountpoint -q /shared/storage 2>/dev/null; then
+    echo "  /shared/storage: OK"
 else
-    echo "NFS: Not mounted"
+    echo "  /shared/storage: NOT MOUNTED"
+fi
+if mountpoint -q /shared/de_Funk 2>/dev/null; then
+    echo "  /shared/de_Funk: OK"
+    ls /shared/de_Funk/CLAUDE.md >/dev/null 2>&1 && echo "    (repo accessible)" || echo "    (repo NOT accessible)"
+else
+    echo "  /shared/de_Funk: NOT MOUNTED"
 fi
 echo ""
 

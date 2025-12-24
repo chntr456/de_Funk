@@ -169,8 +169,11 @@ apt install -y nfs-kernel-server
 
 # Configure exports
 cat > /etc/exports << EOF
-# de_Funk cluster storage
+# de_Funk cluster storage (read-write for data)
 $STORAGE_MOUNT 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash)
+
+# de_Funk repo code (read-only for Silver builds on workers)
+$PROJECT_PATH 192.168.1.0/24(ro,sync,no_subtree_check,no_root_squash)
 EOF
 
 exportfs -ra
