@@ -608,7 +608,7 @@ def transform_company_overview(ticker: str, data: dict) -> tuple:
     return [company_record], [securities_record]
 
 
-@ray.remote(num_cpus=0)  # No CPU needed - just waiting on rate-limited API calls
+@ray.remote(num_cpus=0.25)  # Small CPU cost limits concurrent workers to ~4x cluster CPUs
 def ingest_ticker_data(
     ticker: str,
     key_manager,
@@ -1166,8 +1166,9 @@ Examples:
         progress = ProgressTracker.remote(len(tickers), "Bronze Ingestion")
 
         # Batch task submission to avoid overwhelming Ray scheduler
-        # At 1 req/sec rate limit, no benefit to having thousands of pending tasks
-        batch_size = run_config.get("cluster", {}).get("task_batch_size", 50)
+        # With num_cpus=0.25 and ~44 CPUs, max ~176 concurrent tasks
+        # Smaller batches prevent memory spikes from too many Python workers
+        batch_size = run_config.get("cluster", {}).get("task_batch_size", 15)
 
         # Memory optimization: Only keep counters, not full result dicts
         # With 12,499 tickers, accumulating full results causes memory issues
