@@ -508,6 +508,57 @@ def write_to_delta_rs(table_path: str, data: list, schema: dict, mode: str = "ap
     return len(data)
 
 
+def ensure_calendar_seed(storage_path: str) -> bool:
+    """
+    Ensure calendar_seed exists in Bronze layer.
+
+    Calendar is static data (2000-2050) that temporal model needs.
+    Generate it if missing.
+    """
+    from pathlib import Path
+    from datetime import datetime, timedelta
+
+    calendar_path = Path(storage_path) / "bronze" / "calendar_seed"
+
+    # Check if already exists
+    if (calendar_path / "_delta_log").exists():
+        return True
+
+    logger.info("Seeding calendar dimension (2000-2050)...")
+
+    # Generate calendar data
+    start_date = datetime(2000, 1, 1)
+    end_date = datetime(2050, 12, 31)
+
+    records = []
+    current = start_date
+    while current <= end_date:
+        records.append({
+            "date": current.strftime("%Y-%m-%d"),
+            "year": current.year,
+            "month": current.month,
+            "day": current.day,
+            "day_of_week": current.weekday(),
+            "day_of_year": current.timetuple().tm_yday,
+            "week_of_year": current.isocalendar()[1],
+            "quarter": (current.month - 1) // 3 + 1,
+            "is_weekend": current.weekday() >= 5,
+            "is_month_start": current.day == 1,
+            "is_month_end": (current + timedelta(days=1)).day == 1,
+            "is_quarter_start": current.month in [1, 4, 7, 10] and current.day == 1,
+            "is_quarter_end": current.month in [3, 6, 9, 12] and (current + timedelta(days=1)).day == 1,
+            "is_year_start": current.month == 1 and current.day == 1,
+            "is_year_end": current.month == 12 and current.day == 31,
+        })
+        current += timedelta(days=1)
+
+    # Write to Delta
+    rows = write_to_delta_rs(str(calendar_path), records, {}, mode="overwrite")
+    logger.info(f"  Calendar seeded: {rows:,} days")
+
+    return True
+
+
 def transform_time_series(ticker: str, data: dict) -> list:
     """Transform TIME_SERIES_DAILY response to list of dicts."""
     from datetime import datetime
@@ -573,24 +624,49 @@ def transform_company_overview(ticker: str, data: dict) -> tuple:
     if cik:
         cik = cik.zfill(10)
 
+    # Company reference - for company model dim_company
     company_record = {
         "cik": cik,
+        "ticker": ticker,
         "company_name": data.get("Name", ""),
         "sector": data.get("Sector", ""),
         "industry": data.get("Industry", ""),
         "description": data.get("Description", ""),
         "address": data.get("Address", ""),
         "fiscal_year_end": data.get("FiscalYearEnd", ""),
+        "exchange_code": data.get("Exchange", ""),
+        "country": data.get("Country", ""),
+        "currency": data.get("Currency", ""),
+        "is_active": True,  # If we got data, it's active
+        # Numeric fields from Alpha Vantage
+        "shares_outstanding": data.get("SharesOutstanding", ""),
+        "market_cap": data.get("MarketCapitalization", ""),
+        "pe_ratio": data.get("PERatio", ""),
+        "peg_ratio": data.get("PEGRatio", ""),
+        "book_value": data.get("BookValue", ""),
+        "dividend_per_share": data.get("DividendPerShare", ""),
+        "dividend_yield": data.get("DividendYield", ""),
+        "eps": data.get("EPS", ""),
+        "ebitda": data.get("EBITDA", ""),
+        "revenue_ttm": data.get("RevenueTTM", ""),
+        "profit_margin": data.get("ProfitMargin", ""),
     }
 
+    # Securities reference - for stocks model dim_stock
     securities_record = {
         "ticker": ticker,
-        "name": data.get("Name", ""),
-        "asset_type": data.get("AssetType", "Common Stock"),
-        "exchange_code": data.get("Exchange", ""),
+        "security_name": data.get("Name", ""),
+        "type": data.get("AssetType", "Common Stock"),  # Raw AV type
+        "primary_exchange": data.get("Exchange", ""),
         "cik": cik,
         "country": data.get("Country", ""),
         "currency": data.get("Currency", ""),
+        "is_active": True,
+        # Additional fields for stocks model
+        "shares_outstanding": data.get("SharesOutstanding", ""),
+        "market_cap": data.get("MarketCapitalization", ""),
+        "sector": data.get("Sector", ""),
+        "industry": data.get("Industry", ""),
     }
 
     return [company_record], [securities_record]
@@ -1152,6 +1228,9 @@ Examples:
     key_manager = DistributedKeyManager.remote(provider_configs, retry_config)
 
     results = {}
+
+    # Ensure calendar seed exists (needed by temporal model)
+    ensure_calendar_seed(storage_path)
 
     # Run bronze ingestion
     skip_bronze = effective.get("skip_bronze", False)
