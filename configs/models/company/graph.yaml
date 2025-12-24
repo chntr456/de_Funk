@@ -148,7 +148,7 @@ nodes:
       report_type: report_type
       # Operating
       operating_cashflow: operating_cashflow
-      depreciation_depletion_amortization: depreciation_depletion_amortization
+      depreciation_depletion_amortization: depreciation_depletion_and_amortization
       change_in_receivables: change_in_receivables
       change_in_inventory: change_in_inventory
       profit_loss: profit_loss
@@ -160,11 +160,10 @@ nodes:
       cashflow_from_financing: cashflow_from_financing
       dividend_payout: dividend_payout
       dividend_payout_common_stock: dividend_payout_common_stock
-      payments_repurchase_common_stock: payments_repurchase_common_stock
-      proceeds_issuance_long_term_debt: proceeds_issuance_long_term_debt
+      payments_repurchase_common_stock: payments_for_repurchase_of_common_stock
+      proceeds_issuance_common_stock: proceeds_from_issuance_of_common_stock
       # Summary
-      change_in_cash: change_in_cash
-      free_cash_flow: free_cash_flow
+      change_in_cash: change_in_cash_and_cash_equivalents
       # Metadata
       reported_currency: reported_currency
       snapshot_date: snapshot_date
