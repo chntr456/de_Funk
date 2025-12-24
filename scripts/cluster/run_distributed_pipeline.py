@@ -1113,7 +1113,16 @@ Examples:
 
     # Get endpoints from config
     provider_config = effective.get("providers", {}).get("alpha_vantage", {})
-    endpoints = provider_config.get("endpoints", ["time_series_daily", "company_overview"])
+    # Default includes all endpoints needed for company model (financial statements)
+    default_endpoints = [
+        "time_series_daily",
+        "company_overview",
+        "income_statement",
+        "balance_sheet",
+        "cash_flow",
+        "earnings"
+    ]
+    endpoints = provider_config.get("endpoints", default_endpoints)
     logger.info(f"  Endpoints: {', '.join(endpoints)}")
 
     # Get tickers
