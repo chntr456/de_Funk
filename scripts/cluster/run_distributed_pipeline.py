@@ -669,6 +669,26 @@ def transform_earnings(ticker: str, data: dict) -> list:
     return records
 
 
+def safe_int(value) -> int:
+    """Safely convert value to int, returning None if not possible."""
+    if value is None or value == "" or value == "None":
+        return None
+    try:
+        return int(float(value))  # Handle "123.0" strings
+    except (ValueError, TypeError):
+        return None
+
+
+def safe_float(value) -> float:
+    """Safely convert value to float, returning None if not possible."""
+    if value is None or value == "" or value == "None":
+        return None
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return None
+
+
 def transform_company_overview(ticker: str, data: dict) -> tuple:
     """Transform OVERVIEW response to company_reference and securities_reference records."""
     # Extract CIK (pad to 10 digits)
@@ -690,18 +710,18 @@ def transform_company_overview(ticker: str, data: dict) -> tuple:
         "country": data.get("Country", ""),
         "currency": data.get("Currency", ""),
         "is_active": True,  # If we got data, it's active
-        # Numeric fields from Alpha Vantage
-        "shares_outstanding": data.get("SharesOutstanding", ""),
-        "market_cap": data.get("MarketCapitalization", ""),
-        "pe_ratio": data.get("PERatio", ""),
-        "peg_ratio": data.get("PEGRatio", ""),
-        "book_value": data.get("BookValue", ""),
-        "dividend_per_share": data.get("DividendPerShare", ""),
-        "dividend_yield": data.get("DividendYield", ""),
-        "eps": data.get("EPS", ""),
-        "ebitda": data.get("EBITDA", ""),
-        "revenue_ttm": data.get("RevenueTTM", ""),
-        "profit_margin": data.get("ProfitMargin", ""),
+        # Numeric fields from Alpha Vantage (properly typed)
+        "shares_outstanding": safe_int(data.get("SharesOutstanding")),
+        "market_cap": safe_int(data.get("MarketCapitalization")),
+        "pe_ratio": safe_float(data.get("PERatio")),
+        "peg_ratio": safe_float(data.get("PEGRatio")),
+        "book_value": safe_float(data.get("BookValue")),
+        "dividend_per_share": safe_float(data.get("DividendPerShare")),
+        "dividend_yield": safe_float(data.get("DividendYield")),
+        "eps": safe_float(data.get("EPS")),
+        "ebitda": safe_int(data.get("EBITDA")),
+        "revenue_ttm": safe_int(data.get("RevenueTTM")),
+        "profit_margin": safe_float(data.get("ProfitMargin")),
     }
 
     # Securities reference - for stocks model dim_stock
@@ -714,9 +734,9 @@ def transform_company_overview(ticker: str, data: dict) -> tuple:
         "country": data.get("Country", ""),
         "currency": data.get("Currency", ""),
         "is_active": True,
-        # Additional fields for stocks model
-        "shares_outstanding": data.get("SharesOutstanding", ""),
-        "market_cap": data.get("MarketCapitalization", ""),
+        # Additional fields for stocks model (properly typed)
+        "shares_outstanding": safe_int(data.get("SharesOutstanding")),
+        "market_cap": safe_int(data.get("MarketCapitalization")),
         "sector": data.get("Sector", ""),
         "industry": data.get("Industry", ""),
     }
