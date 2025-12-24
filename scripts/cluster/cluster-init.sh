@@ -15,6 +15,7 @@
 #   --workers-only    Only set up workers (assumes head is ready)
 #   --worker N        Set up specific worker only (0, 1, or 2)
 #   --skip-storage    Skip LVM/storage setup on head
+#   --restart-ray     Just restart Ray (no setup), useful after reboot
 #
 # Prerequisites:
 #   - SSH key-based access to workers (ssh-copy-id to each worker)
@@ -49,6 +50,22 @@ WORKER_NAMES=(
 
 DE_FUNK_USER="ms_trixie"
 
+# Python environment configuration
+# Set to "conda" to use Anaconda, or "venv" for virtualenv
+PYTHON_ENV_TYPE="conda"
+CONDA_ENV="base"  # conda environment name
+CONDA_PATH="/home/$DE_FUNK_USER/anaconda3"  # path to anaconda installation
+VENV_PATH="/home/$DE_FUNK_USER/venv"  # path to venv (if using venv)
+
+# Helper function to activate the correct Python environment
+activate_python_env() {
+    if [ "$PYTHON_ENV_TYPE" = "conda" ]; then
+        echo "source $CONDA_PATH/etc/profile.d/conda.sh && conda activate $CONDA_ENV"
+    else
+        echo "source $VENV_PATH/bin/activate"
+    fi
+}
+
 # =============================================================================
 # Colors
 # =============================================================================
@@ -72,6 +89,7 @@ HEAD_ONLY=false
 WORKERS_ONLY=false
 SPECIFIC_WORKER=""
 SKIP_STORAGE=false
+RESTART_RAY_ONLY=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -89,6 +107,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-storage)
             SKIP_STORAGE=true
+            shift
+            ;;
+        --restart-ray)
+            RESTART_RAY_ONLY=true
             shift
             ;;
         *)
@@ -133,7 +155,8 @@ setup_head() {
 
     # Clean up any existing Ray processes
     log "Cleaning up existing Ray processes..."
-    sudo -u $DE_FUNK_USER bash -c "source /home/$DE_FUNK_USER/venv/bin/activate && ray stop --force" 2>/dev/null || true
+    ACTIVATE_CMD=$(activate_python_env)
+    sudo -u $DE_FUNK_USER bash -c "$ACTIVATE_CMD && ray stop --force" 2>/dev/null || true
     pkill -9 -f "ray::" 2>/dev/null || true
     pkill -9 -f "gcs_server" 2>/dev/null || true
     pkill -9 -f "raylet" 2>/dev/null || true
@@ -142,7 +165,8 @@ setup_head() {
 
     # Start Ray head
     log "Starting Ray head node..."
-    sudo -u $DE_FUNK_USER bash -c "source /home/$DE_FUNK_USER/venv/bin/activate && ray start --head --port=$HEAD_PORT --dashboard-host=0.0.0.0 --dashboard-port=8265 --num-cpus=12"
+    log "Using Python environment: $PYTHON_ENV_TYPE ($CONDA_ENV)"
+    sudo -u $DE_FUNK_USER bash -c "$ACTIVATE_CMD && python --version && ray start --head --port=$HEAD_PORT --dashboard-host=0.0.0.0 --dashboard-port=8265 --num-cpus=12"
 
     log "Ray head started"
 }
@@ -213,10 +237,82 @@ setup_all_workers() {
 }
 
 # =============================================================================
+# Quick Ray Restart (no setup, just restart Ray processes)
+# =============================================================================
+
+restart_ray_head() {
+    log "Restarting Ray on head node..."
+    ACTIVATE_CMD=$(activate_python_env)
+
+    # Stop Ray
+    sudo -u $DE_FUNK_USER bash -c "$ACTIVATE_CMD && ray stop --force" 2>/dev/null || true
+    pkill -9 -f "ray::" 2>/dev/null || true
+    pkill -9 -f "gcs_server" 2>/dev/null || true
+    pkill -9 -f "raylet" 2>/dev/null || true
+    rm -rf /tmp/ray/* 2>/dev/null || true
+    sleep 2
+
+    # Start Ray head
+    log "Starting Ray head with Python environment: $PYTHON_ENV_TYPE ($CONDA_ENV)"
+    sudo -u $DE_FUNK_USER bash -c "$ACTIVATE_CMD && python --version && ray start --head --port=$HEAD_PORT --dashboard-host=0.0.0.0 --dashboard-port=8265 --num-cpus=12"
+    log "Ray head started"
+}
+
+restart_ray_worker() {
+    local worker_id=$1
+    IFS=':' read -r worker_ip worker_cpus worker_mem <<< "${WORKERS[$worker_id]}"
+    local worker_name="${WORKER_NAMES[$worker_id]}"
+
+    info "Restarting Ray on worker $worker_id: $worker_name ($worker_ip)"
+
+    # Determine SSH user
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes root@$worker_ip "echo 'SSH OK'" 2>/dev/null; then
+        SSH_USER="root"
+        SSH_PREFIX=""
+    else
+        SSH_USER=$DE_FUNK_USER
+        SSH_PREFIX="sudo"
+    fi
+
+    # Stop and start Ray worker
+    ssh $SSH_USER@$worker_ip "$SSH_PREFIX systemctl restart ray-worker" 2>/dev/null || {
+        # Fallback: manual restart if systemd fails
+        warn "systemd restart failed, trying manual restart..."
+        ssh $SSH_USER@$worker_ip "$SSH_PREFIX pkill -9 -f 'ray::' 2>/dev/null; pkill -9 -f 'raylet' 2>/dev/null" || true
+        sleep 2
+        # For conda on workers, we need a different approach - use the systemd service
+        ssh $SSH_USER@$worker_ip "$SSH_PREFIX systemctl start ray-worker"
+    }
+
+    sleep 3
+    if ssh $SSH_USER@$worker_ip "$SSH_PREFIX systemctl is-active ray-worker" 2>/dev/null | grep -q "active"; then
+        log "Ray worker on $worker_name is running"
+    else
+        warn "Ray worker on $worker_name may not be running"
+    fi
+}
+
+restart_all_ray() {
+    restart_ray_head
+
+    log "Waiting for head node to be ready..."
+    sleep 5
+
+    for i in "${!WORKERS[@]}"; do
+        restart_ray_worker $i
+    done
+
+    log "All Ray processes restarted"
+}
+
+# =============================================================================
 # Main
 # =============================================================================
 
-if [ "$WORKERS_ONLY" = true ]; then
+if [ "$RESTART_RAY_ONLY" = true ]; then
+    log "Quick Ray restart mode (no setup)"
+    restart_all_ray
+elif [ "$WORKERS_ONLY" = true ]; then
     if [ -n "$SPECIFIC_WORKER" ]; then
         setup_worker "$SPECIFIC_WORKER"
     else
@@ -249,7 +345,8 @@ echo "=============================================="
 echo ""
 
 log "Checking cluster status..."
-sudo -u $DE_FUNK_USER bash -c "source /home/$DE_FUNK_USER/venv/bin/activate && ray status"
+ACTIVATE_CMD=$(activate_python_env)
+sudo -u $DE_FUNK_USER bash -c "$ACTIVATE_CMD && ray status"
 
 echo ""
 echo "  Dashboard:    http://$HEAD_IP:8265"
