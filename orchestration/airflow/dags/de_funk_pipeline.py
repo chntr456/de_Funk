@@ -226,9 +226,44 @@ with DAG(
     )
 
     # -------------------------------------------------------------------------
+    # Step 5: Forecasting (Distributed)
+    # -------------------------------------------------------------------------
+    with TaskGroup(group_id='forecasting') as forecast_group:
+        # ARIMA via Spark distributed (pandas_udf)
+        # Runs on Spark cluster - distributes across all workers
+        forecast_arima = BashOperator(
+            task_id='forecast_arima',
+            bash_command=f"""
+                cd {PROJECT_ROOT} && \
+                source {VENV_PATH}/bin/activate && \
+                ./scripts/spark-cluster/submit-job.sh \
+                    scripts/forecast/run_distributed_forecast.py \
+                    --storage-path {STORAGE_PATH} \
+                    --horizon 30
+            """,
+        )
+
+        # Prophet via multiprocessing (doesn't serialize well for Spark)
+        # Runs on head node with parallel workers
+        forecast_prophet = BashOperator(
+            task_id='forecast_prophet',
+            bash_command=f"""
+                cd {PROJECT_ROOT} && \
+                source {VENV_PATH}/bin/activate && \
+                python -m scripts.forecast.run_batched_prophet \
+                    --storage-path {STORAGE_PATH} \
+                    --horizon 30 \
+                    --workers 8
+            """,
+        )
+
+        # ARIMA and Prophet can run in parallel
+        [forecast_arima, forecast_prophet]
+
+    # -------------------------------------------------------------------------
     # DAG Flow
     # -------------------------------------------------------------------------
-    seed_group >> ingest_group >> silver_group >> compute_technicals
+    seed_group >> ingest_group >> silver_group >> compute_technicals >> forecast_group
 
 
 # =============================================================================
@@ -239,3 +274,4 @@ with DAG(
 # - Hourly price updates (intraday)
 # - Weekly full refresh
 # - Monthly data quality checks
+# - GPU forecasting (when ready): add forecast_gpu task using Chronos
