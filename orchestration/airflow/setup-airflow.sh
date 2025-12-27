@@ -138,8 +138,8 @@ echo "----------------------------------------------------------------------"
 export AIRFLOW_HOME="$AIRFLOW_HOME"
 mkdir -p "$AIRFLOW_HOME/dags" "$AIRFLOW_HOME/logs" "$AIRFLOW_HOME/plugins"
 
-# Initialize database
-airflow db init
+# Initialize database (Airflow 3.x uses 'migrate' instead of 'init')
+airflow db migrate
 
 echo "  ✓ Airflow database initialized"
 
