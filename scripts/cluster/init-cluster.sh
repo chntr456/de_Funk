@@ -271,6 +271,15 @@ done
 
 section "Step 5: Start Spark Master"
 
+# Ensure firewall allows Spark Master port from workers
+if command -v ufw &> /dev/null && sudo ufw status | grep -q "Status: active"; then
+    if ! sudo ufw status | grep -q "7077.*ALLOW.*192.168.1.0/24"; then
+        log "Adding firewall rule for Spark Master port 7077..."
+        sudo ufw allow from 192.168.1.0/24 to any port 7077 > /dev/null
+        log "  ✓ Firewall rule added"
+    fi
+fi
+
 log "Starting Spark Master..."
 
 source "$SPARK_VENV/bin/activate"
