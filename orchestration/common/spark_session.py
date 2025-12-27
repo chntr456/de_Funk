@@ -1,4 +1,5 @@
 from __future__ import annotations
+import os
 from typing import Dict, Optional, TYPE_CHECKING
 from pyspark.sql import SparkSession
 
@@ -9,20 +10,31 @@ def get_spark(
     app_name: str = "App",
     config: Optional[Dict[str, str]] = None,
     spark_config: Optional["SparkConfig"] = None,
+    master: Optional[str] = None,
 ):
     """
     Get or create a Spark session with standard configurations.
 
     Now supports SparkConfig objects for centralized configuration management.
 
+    Master URL resolution order:
+    1. Explicit `master` parameter
+    2. SPARK_MASTER_URL environment variable
+    3. Local mode (no master set)
+
     Args:
         app_name: Name of the Spark application
         config: Optional dictionary of additional Spark configuration options (legacy)
         spark_config: Optional SparkConfig object with typed configuration
+        master: Optional Spark master URL (e.g., "spark://192.168.1.212:7077")
+                If None, checks SPARK_MASTER_URL env var, else runs in local mode.
 
     Returns:
         SparkSession instance
     """
+    # Resolve master URL
+    if master is None:
+        master = os.environ.get("SPARK_MASTER_URL")
     # Use SparkConfig if provided, otherwise use defaults
     if spark_config:
         base_config = spark_config.to_spark_conf_dict()
@@ -38,6 +50,10 @@ def get_spark(
 
     # Build Spark session with config
     builder = SparkSession.builder.appName(app_name)
+
+    # Set master if provided (cluster mode)
+    if master:
+        builder = builder.master(master)
 
     # Apply base configuration
     for key, value in base_config.items():
