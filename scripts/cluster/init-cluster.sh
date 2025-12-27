@@ -189,29 +189,8 @@ for w in "${WORKERS[@]}"; do
 
     log "Setting up $name ($ip) - $cores cores, ${mem}GB RAM..."
 
-    # Create worker setup script locally, then execute remotely
-    WORKER_SERVICE="[Unit]
-Description=Apache Spark Worker
-After=network.target
-
-[Service]
-Type=simple
-User=$DE_FUNK_USER
-Environment=\"JAVA_HOME=\\\$JAVA_HOME\"
-Environment=\"SPARK_HOME=\\\$SPARK_HOME\"
-ExecStart=\\\$JAVA_HOME/bin/java -cp \"\\\$SPARK_HOME/jars/*\" -Xmx${mem}g org.apache.spark.deploy.worker.Worker --cores $cores --memory ${mem}g spark://$HEAD_IP:$SPARK_MASTER_PORT
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target"
-
-    if ! ssh -o ConnectTimeout=30 "$DE_FUNK_USER@$ip" bash -s "$HEAD_IP" "$NFS_ROOT" "$name" "$WORKER_SERVICE" <<'WORKER_SCRIPT'
+    if ! ssh -o ConnectTimeout=30 "$DE_FUNK_USER@$ip" bash -s "$HEAD_IP" "$NFS_ROOT" "$name" <<WORKER_SCRIPT
 set -e
-HEAD_IP="$1"
-NFS_ROOT="$2"
-WORKER_NAME="$3"
-WORKER_SERVICE="$4"
 
 echo "  Installing packages..."
 sudo apt-get update -qq
@@ -220,7 +199,7 @@ sudo apt-get install -y -qq openjdk-17-jdk python3-pip python3-venv nfs-common
 echo "  Mounting NFS..."
 sudo mkdir -p /shared
 sudo umount /shared 2>/dev/null || true
-sudo mount -t nfs "$HEAD_IP:$NFS_ROOT" /shared
+sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
 
 # Persist mount
 grep -q "/shared" /etc/fstab || echo "$HEAD_IP:$NFS_ROOT /shared nfs defaults,_netdev 0 0" | sudo tee -a /etc/fstab
@@ -233,34 +212,33 @@ source ~/venv/bin/activate
 pip install --upgrade pip -q
 pip install -q 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow
 
-JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
-SPARK_HOME=$(python -c "import pyspark; print(pyspark.__path__[0])")
+JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
+SPARK_HOME=\$(python -c "import pyspark; print(pyspark.__path__[0])")
 
 echo "  Creating systemd service..."
-# Create service file with actual paths
-cat > /tmp/spark-worker.service << EOF
-[Unit]
-Description=Apache Spark Worker
-After=network.target
+# Use printf to avoid heredoc nesting issues
+printf '%s\n' \
+    "[Unit]" \
+    "Description=Apache Spark Worker" \
+    "After=network.target" \
+    "" \
+    "[Service]" \
+    "Type=simple" \
+    "User=\$(whoami)" \
+    "Environment=\"JAVA_HOME=\$JAVA_HOME\"" \
+    "Environment=\"SPARK_HOME=\$SPARK_HOME\"" \
+    "ExecStart=\$JAVA_HOME/bin/java -cp \"\$SPARK_HOME/jars/*\" -Xmx${mem}g org.apache.spark.deploy.worker.Worker --cores $cores --memory ${mem}g spark://$HEAD_IP:$SPARK_MASTER_PORT" \
+    "Restart=on-failure" \
+    "RestartSec=5" \
+    "" \
+    "[Install]" \
+    "WantedBy=multi-user.target" \
+    | sudo tee /etc/systemd/system/spark-worker.service > /dev/null
 
-[Service]
-Type=simple
-User=$(whoami)
-Environment="JAVA_HOME=$JAVA_HOME"
-Environment="SPARK_HOME=$SPARK_HOME"
-ExecStart=$JAVA_HOME/bin/java -cp "$SPARK_HOME/jars/*" -Xmx8g org.apache.spark.deploy.worker.Worker --cores 10 --memory 8g spark://$HEAD_IP:7077
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo mv /tmp/spark-worker.service /etc/systemd/system/spark-worker.service
 sudo systemctl daemon-reload
 sudo systemctl enable spark-worker
 
-echo "  ✓ $WORKER_NAME configured"
+echo "  ✓ $name configured"
 WORKER_SCRIPT
     then
         warn "Failed to setup $name - continuing with next worker"
