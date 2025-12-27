@@ -1,324 +1,201 @@
 #!/bin/bash
 #
-# Spark + Airflow Cluster Initialization
+# Spark + Airflow Cluster - Full Setup
 #
-# Single script to initialize the entire cluster from the head node.
-# Handles cleanup, NFS setup, worker deployment, and service startup.
+# Sequential setup with connection validation. Run from head node.
 #
 # Usage:
-#   ./init-cluster.sh              # Full cluster init
-#   ./init-cluster.sh --head-only  # Only setup head node
-#   ./init-cluster.sh --workers-only  # Only setup workers
-#   ./init-cluster.sh --cleanup    # Just cleanup, no start
-#   ./init-cluster.sh --status     # Show cluster status
-#
-# This script is idempotent - safe to run multiple times.
+#   ./init-cluster.sh
 #
 
 set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-# Network
 HEAD_IP="192.168.1.212"
-HEAD_HOSTNAME="bigbark"
+DE_FUNK_USER="ms_trixie"
 
-# Workers: hostname:ip:cores:memory_gb
 WORKERS=(
     "bark-1:192.168.1.207:10:8"
     "bark-2:192.168.1.202:10:8"
     "bark-3:192.168.1.203:10:8"
 )
 
-# User
-DE_FUNK_USER="ms_trixie"
 SPARK_VENV="/home/$DE_FUNK_USER/venv"
 AIRFLOW_VENV="/home/$DE_FUNK_USER/airflow-venv"
-
-# Storage
 LOCAL_PROJECT="/home/$DE_FUNK_USER/PycharmProjects/de_Funk"
 LOCAL_STORAGE="/data/de_funk"
 NFS_ROOT="/shared"
 
-# Ports
 SPARK_MASTER_PORT=7077
 SPARK_UI_PORT=8080
 AIRFLOW_PORT=8081
-WORKER_UI_START_PORT=8082
 
-# Flags
-SETUP_HEAD=true
-SETUP_WORKERS=true
-START_SERVICES=true
-CLEANUP_FIRST=true
+# =============================================================================
+# Helpers
+# =============================================================================
 
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-# =============================================================================
-# Parse Arguments
-# =============================================================================
-
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --head-only)
-            SETUP_WORKERS=false
-            shift
-            ;;
-        --workers-only)
-            SETUP_HEAD=false
-            shift
-            ;;
-        --cleanup)
-            START_SERVICES=false
-            shift
-            ;;
-        --no-cleanup)
-            CLEANUP_FIRST=false
-            shift
-            ;;
-        --status)
-            # Jump to status check
-            source "$SCRIPT_DIR/../spark-cluster/spark-env.sh" 2>/dev/null || true
-            exec "$SCRIPT_DIR/../spark-cluster/status.sh"
-            ;;
-        -h|--help)
-            echo "Usage: $0 [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --head-only      Only setup head node"
-            echo "  --workers-only   Only setup workers (head must be ready)"
-            echo "  --cleanup        Cleanup only, don't start services"
-            echo "  --no-cleanup     Skip cleanup step"
-            echo "  --status         Show cluster status and exit"
-            echo "  -h, --help       Show this help"
-            echo ""
-            echo "Workers:"
-            for w in "${WORKERS[@]}"; do
-                IFS=':' read -r name ip cores mem <<< "$w"
-                echo "  $name ($ip) - $cores cores, ${mem}GB RAM"
-            done
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
-    esac
-done
-
-log() {
-    echo -e "${GREEN}[$(date '+%H:%M:%S')]${NC} $1"
-}
-
-warn() {
-    echo -e "${YELLOW}[$(date '+%H:%M:%S')] WARNING:${NC} $1"
-}
-
-error() {
-    echo -e "${RED}[$(date '+%H:%M:%S')] ERROR:${NC} $1"
-}
+log() { echo -e "${GREEN}[$(date '+%H:%M:%S')]${NC} $1"; }
+warn() { echo -e "${YELLOW}[$(date '+%H:%M:%S')] WARN:${NC} $1"; }
+fail() { echo -e "${RED}[$(date '+%H:%M:%S')] FAIL:${NC} $1"; exit 1; }
 
 section() {
     echo ""
-    echo -e "${BLUE}======================================================================${NC}"
-    echo -e "${BLUE}  $1${NC}"
-    echo -e "${BLUE}======================================================================${NC}"
+    echo "======================================================================"
+    echo "  $1"
+    echo "======================================================================"
     echo ""
 }
 
 # =============================================================================
-# Cleanup Functions
+# Step 0: Validate Connections
 # =============================================================================
 
-cleanup_local_spark() {
-    log "Cleaning up local Spark processes..."
+section "Step 0: Validating SSH Connections"
 
-    # Stop systemd services if they exist
-    sudo systemctl stop spark-master 2>/dev/null || true
-    sudo systemctl stop spark-worker 2>/dev/null || true
+log "Checking head node..."
+if [[ "$(hostname -I)" != *"$HEAD_IP"* ]]; then
+    fail "This script must run on head node ($HEAD_IP)"
+fi
+log "  ✓ Running on head node"
 
-    # Kill any remaining Spark processes
-    pkill -f "org.apache.spark.deploy.master.Master" 2>/dev/null || true
-    pkill -f "org.apache.spark.deploy.worker.Worker" 2>/dev/null || true
-    pkill -f "org.apache.spark.deploy.history.HistoryServer" 2>/dev/null || true
+for w in "${WORKERS[@]}"; do
+    IFS=':' read -r name ip cores mem <<< "$w"
+    log "Checking $name ($ip)..."
 
-    # Clean PID files
-    rm -f /tmp/spark-*.pid 2>/dev/null || true
-    rm -f "$LOCAL_STORAGE/spark-history"/*.pid 2>/dev/null || true
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "echo ok" &>/dev/null; then
+        log "  ✓ $name reachable"
+    else
+        fail "$name ($ip) not reachable via SSH. Check SSH keys."
+    fi
+done
 
-    log "  ✓ Local Spark processes cleaned"
-}
-
-cleanup_local_airflow() {
-    log "Cleaning up local Airflow processes..."
-
-    # Stop systemd services
-    sudo systemctl stop airflow-webserver 2>/dev/null || true
-    sudo systemctl stop airflow-scheduler 2>/dev/null || true
-
-    # Kill any remaining
-    pkill -f "airflow webserver" 2>/dev/null || true
-    pkill -f "airflow scheduler" 2>/dev/null || true
-
-    # Clean PID files
-    rm -f ~/airflow/*.pid 2>/dev/null || true
-
-    log "  ✓ Local Airflow processes cleaned"
-}
-
-cleanup_worker() {
-    local hostname=$1
-    local ip=$2
-
-    log "Cleaning up $hostname ($ip)..."
-
-    ssh -o ConnectTimeout=5 -o StrictHostKeyChecking=no "$DE_FUNK_USER@$ip" bash <<'REMOTE_CLEANUP' 2>/dev/null || warn "Could not clean $hostname"
-        sudo systemctl stop spark-worker 2>/dev/null || true
-        pkill -f "org.apache.spark.deploy.worker.Worker" 2>/dev/null || true
-        rm -f /tmp/spark-*.pid 2>/dev/null || true
-REMOTE_CLEANUP
-
-    log "  ✓ $hostname cleaned"
-}
+log "All nodes reachable!"
 
 # =============================================================================
-# Setup Functions
+# Step 1: Cleanup Everything
 # =============================================================================
 
-setup_nfs_head() {
-    log "Setting up NFS on head node..."
+section "Step 1: Cleanup Existing Processes"
 
-    # Install NFS server if needed
-    if ! command -v exportfs &> /dev/null; then
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq nfs-kernel-server
-    fi
+log "Stopping local Spark..."
+sudo systemctl stop spark-master 2>/dev/null || true
+pkill -9 -f "org.apache.spark.deploy" 2>/dev/null || true
+rm -f /tmp/spark-*.pid 2>/dev/null || true
 
-    # Create NFS root
-    sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk"
+log "Stopping local Airflow..."
+sudo systemctl stop airflow-webserver airflow-scheduler 2>/dev/null || true
+pkill -9 -f "airflow" 2>/dev/null || true
+rm -f ~/airflow/*.pid 2>/dev/null || true
 
-    # Create storage directory
-    sudo mkdir -p "$LOCAL_STORAGE"
-    sudo chown -R $DE_FUNK_USER:$DE_FUNK_USER "$LOCAL_STORAGE"
+for w in "${WORKERS[@]}"; do
+    IFS=':' read -r name ip cores mem <<< "$w"
+    log "Stopping Spark on $name..."
+    ssh "$DE_FUNK_USER@$ip" "sudo systemctl stop spark-worker 2>/dev/null; pkill -9 -f 'org.apache.spark' 2>/dev/null; true"
+done
 
-    # Setup bind mounts (not symlinks - they don't work over NFS)
-    if ! mountpoint -q "$NFS_ROOT/storage" 2>/dev/null; then
-        sudo mount --bind "$LOCAL_STORAGE" "$NFS_ROOT/storage"
-    fi
+sleep 2
+log "  ✓ All processes stopped"
 
-    if ! mountpoint -q "$NFS_ROOT/de_Funk" 2>/dev/null; then
-        sudo mount --bind "$LOCAL_PROJECT" "$NFS_ROOT/de_Funk"
-    fi
+# =============================================================================
+# Step 2: Setup NFS on Head
+# =============================================================================
 
-    # Add to fstab if not present
-    if ! grep -q "$NFS_ROOT/storage" /etc/fstab 2>/dev/null; then
-        echo "$LOCAL_STORAGE $NFS_ROOT/storage none bind 0 0" | sudo tee -a /etc/fstab
-    fi
-    if ! grep -q "$NFS_ROOT/de_Funk" /etc/fstab 2>/dev/null; then
-        echo "$LOCAL_PROJECT $NFS_ROOT/de_Funk none bind 0 0" | sudo tee -a /etc/fstab
-    fi
+section "Step 2: NFS Setup (Head Node)"
 
-    # Configure NFS exports
-    if ! grep -q "^$NFS_ROOT " /etc/exports 2>/dev/null; then
-        echo "$NFS_ROOT 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,crossmnt)" | sudo tee -a /etc/exports
-    fi
-
-    # Restart NFS
-    sudo exportfs -ra
-    sudo systemctl restart nfs-kernel-server
-
-    log "  ✓ NFS configured: $NFS_ROOT"
-}
-
-setup_storage_dirs() {
-    log "Creating storage directories..."
-
-    mkdir -p "$LOCAL_STORAGE/bronze"
-    mkdir -p "$LOCAL_STORAGE/silver"
-    mkdir -p "$LOCAL_STORAGE/spark-history"
-    mkdir -p "$LOCAL_STORAGE/checkpoints"
-    mkdir -p "$LOCAL_STORAGE/logs"
-
-    log "  ✓ Storage directories ready"
-}
-
-setup_python_env() {
-    log "Setting up Python environment..."
-
-    # Main venv for Spark (Python 3.13 OK)
-    if [ ! -d "$SPARK_VENV" ]; then
-        python3 -m venv "$SPARK_VENV"
-    fi
-
-    source "$SPARK_VENV/bin/activate"
-    pip install --upgrade pip setuptools wheel -q
-    pip install -q \
-        'pyspark==4.0.1' \
-        'delta-spark==4.0.0' \
-        'deltalake>=0.14.0' \
-        pandas numpy pyarrow requests python-dotenv
-
-    log "  ✓ Spark venv ready: $SPARK_VENV"
-}
-
-deploy_worker() {
-    local hostname=$1
-    local ip=$2
-    local cores=$3
-    local memory=$4
-    local worker_idx=$5
-
-    log "Deploying to $hostname ($ip)..."
-
-    # Copy setup script and run remotely
-    ssh -o ConnectTimeout=10 -o StrictHostKeyChecking=no "$DE_FUNK_USER@$ip" bash <<REMOTE_SETUP
-set -e
-
-echo "  Setting up $hostname..."
-
-# Install packages
+log "Installing NFS server..."
 sudo apt-get update -qq
-sudo apt-get install -y -qq openjdk-17-jdk python3-pip python3-venv nfs-common
+sudo apt-get install -y -qq nfs-kernel-server nfs-common
 
-# Set hostname
-sudo hostnamectl set-hostname "$hostname"
+log "Creating directories..."
+sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk"
+sudo mkdir -p "$LOCAL_STORAGE"/{bronze,silver,logs,checkpoints}
+sudo chown -R $DE_FUNK_USER:$DE_FUNK_USER "$LOCAL_STORAGE"
 
-# Mount NFS
-sudo mkdir -p /shared
-if ! mountpoint -q /shared 2>/dev/null; then
-    sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
-fi
+log "Setting up bind mounts..."
+sudo umount "$NFS_ROOT/storage" 2>/dev/null || true
+sudo umount "$NFS_ROOT/de_Funk" 2>/dev/null || true
+sudo mount --bind "$LOCAL_STORAGE" "$NFS_ROOT/storage"
+sudo mount --bind "$LOCAL_PROJECT" "$NFS_ROOT/de_Funk"
 
-# Add to fstab
-if ! grep -q "/shared" /etc/fstab 2>/dev/null; then
-    echo "$HEAD_IP:$NFS_ROOT /shared nfs defaults,_netdev 0 0" | sudo tee -a /etc/fstab
-fi
+log "Configuring NFS exports..."
+sudo tee /etc/exports > /dev/null <<EOF
+$NFS_ROOT 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,crossmnt)
+EOF
 
-# Create venv
+sudo exportfs -ra
+sudo systemctl restart nfs-kernel-server
+
+log "  ✓ NFS ready: $NFS_ROOT"
+
+# =============================================================================
+# Step 3: Setup Python on Head
+# =============================================================================
+
+section "Step 3: Python Environment (Head Node)"
+
+log "Setting up Spark venv..."
 if [ ! -d "$SPARK_VENV" ]; then
     python3 -m venv "$SPARK_VENV"
 fi
 
 source "$SPARK_VENV/bin/activate"
 pip install --upgrade pip -q
-pip install -q 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow
+pip install -q 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow requests python-dotenv
 
-# Get JAVA_HOME
+JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+SPARK_HOME=$(python -c "import pyspark; print(pyspark.__path__[0])")
+
+log "  ✓ JAVA_HOME: $JAVA_HOME"
+log "  ✓ SPARK_HOME: $SPARK_HOME"
+
+# =============================================================================
+# Step 4: Setup Each Worker (Sequential)
+# =============================================================================
+
+section "Step 4: Worker Setup"
+
+worker_idx=0
+for w in "${WORKERS[@]}"; do
+    IFS=':' read -r name ip cores mem <<< "$w"
+
+    log "Setting up $name ($ip) - $cores cores, ${mem}GB RAM..."
+
+    ssh "$DE_FUNK_USER@$ip" bash <<WORKER_SCRIPT
+set -e
+
+echo "  Installing packages..."
+sudo apt-get update -qq
+sudo apt-get install -y -qq openjdk-17-jdk python3-pip python3-venv nfs-common
+
+echo "  Mounting NFS..."
+sudo mkdir -p /shared
+sudo umount /shared 2>/dev/null || true
+sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
+
+# Persist mount
+grep -q "/shared" /etc/fstab || echo "$HEAD_IP:$NFS_ROOT /shared nfs defaults,_netdev 0 0" | sudo tee -a /etc/fstab
+
+echo "  Setting up Python..."
+if [ ! -d ~/venv ]; then
+    python3 -m venv ~/venv
+fi
+source ~/venv/bin/activate
+pip install --upgrade pip -q
+pip install -q 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow
+
 JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
-SPARK_HOME=\$($SPARK_VENV/bin/python -c "import pyspark; print(pyspark.__path__[0])")
+SPARK_HOME=\$(python -c "import pyspark; print(pyspark.__path__[0])")
 
-# Create systemd service
-sudo tee /etc/systemd/system/spark-worker.service > /dev/null <<EOF
+echo "  Creating systemd service..."
+sudo tee /etc/systemd/system/spark-worker.service > /dev/null <<SERVICE
 [Unit]
 Description=Apache Spark Worker
 After=network.target
@@ -328,179 +205,131 @@ Type=simple
 User=$DE_FUNK_USER
 Environment="JAVA_HOME=\$JAVA_HOME"
 Environment="SPARK_HOME=\$SPARK_HOME"
-ExecStart=\$JAVA_HOME/bin/java -cp "\$SPARK_HOME/jars/*" -Xmx${memory}g org.apache.spark.deploy.worker.Worker --cores $cores --memory ${memory}g --webui-port $((WORKER_UI_START_PORT + worker_idx)) spark://$HEAD_IP:$SPARK_MASTER_PORT
+ExecStart=\$JAVA_HOME/bin/java -cp "\$SPARK_HOME/jars/*" -Xmx${mem}g org.apache.spark.deploy.worker.Worker --cores $cores --memory ${mem}g spark://$HEAD_IP:$SPARK_MASTER_PORT
 Restart=on-failure
-RestartSec=10
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-EOF
+SERVICE
 
 sudo systemctl daemon-reload
 sudo systemctl enable spark-worker
-sudo systemctl start spark-worker
 
-echo "  ✓ $hostname ready"
-REMOTE_SETUP
+echo "  ✓ $name configured"
+WORKER_SCRIPT
 
-    log "  ✓ $hostname deployed and started"
-}
+    log "  ✓ $name ready"
+    ((worker_idx++))
+done
 
-start_spark_master() {
-    log "Starting Spark Master..."
+# =============================================================================
+# Step 5: Start Spark Master
+# =============================================================================
 
-    source "$SPARK_VENV/bin/activate"
+section "Step 5: Start Spark Master"
 
-    JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
-    SPARK_HOME=$($SPARK_VENV/bin/python -c "import pyspark; print(pyspark.__path__[0])")
+log "Starting Spark Master..."
 
-    # Create log directory
-    mkdir -p "$LOCAL_STORAGE/logs"
+source "$SPARK_VENV/bin/activate"
+JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+SPARK_HOME=$(python -c "import pyspark; print(pyspark.__path__[0])")
 
-    # Start master
-    nohup "$JAVA_HOME/bin/java" \
-        -cp "$SPARK_HOME/jars/*" \
-        -Xmx1g \
-        org.apache.spark.deploy.master.Master \
-        --host $HEAD_IP \
-        --port $SPARK_MASTER_PORT \
-        --webui-port $SPARK_UI_PORT \
-        > "$LOCAL_STORAGE/logs/spark-master.out" 2>&1 &
+mkdir -p "$LOCAL_STORAGE/logs"
 
-    MASTER_PID=$!
-    echo $MASTER_PID > "$LOCAL_STORAGE/logs/spark-master.pid"
+nohup "$JAVA_HOME/bin/java" \
+    -cp "$SPARK_HOME/jars/*" \
+    -Xmx1g \
+    org.apache.spark.deploy.master.Master \
+    --host $HEAD_IP \
+    --port $SPARK_MASTER_PORT \
+    --webui-port $SPARK_UI_PORT \
+    > "$LOCAL_STORAGE/logs/spark-master.out" 2>&1 &
 
-    sleep 3
+echo $! > "$LOCAL_STORAGE/logs/spark-master.pid"
 
-    if ps -p $MASTER_PID > /dev/null; then
-        log "  ✓ Spark Master started (PID: $MASTER_PID)"
-        log "    URL: spark://$HEAD_IP:$SPARK_MASTER_PORT"
-        log "    UI:  http://$HEAD_IP:$SPARK_UI_PORT"
-    else
-        error "Failed to start Spark Master"
-        cat "$LOCAL_STORAGE/logs/spark-master.out"
-        exit 1
-    fi
-}
+sleep 3
 
-start_airflow() {
-    log "Starting Airflow..."
+if curl -s "http://$HEAD_IP:$SPARK_UI_PORT" > /dev/null; then
+    log "  ✓ Spark Master running at spark://$HEAD_IP:$SPARK_MASTER_PORT"
+    log "  ✓ Web UI: http://$HEAD_IP:$SPARK_UI_PORT"
+else
+    fail "Spark Master failed to start. Check: $LOCAL_STORAGE/logs/spark-master.out"
+fi
 
-    if [ ! -d "$AIRFLOW_VENV" ]; then
-        warn "Airflow venv not found. Run setup-airflow.sh first."
-        return
-    fi
+# =============================================================================
+# Step 6: Start Workers
+# =============================================================================
 
+section "Step 6: Start Spark Workers"
+
+for w in "${WORKERS[@]}"; do
+    IFS=':' read -r name ip cores mem <<< "$w"
+    log "Starting worker on $name..."
+    ssh "$DE_FUNK_USER@$ip" "sudo systemctl start spark-worker"
+done
+
+sleep 3
+
+# Verify workers connected
+log "Verifying workers..."
+WORKER_COUNT=$(curl -s "http://$HEAD_IP:$SPARK_UI_PORT/json/" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('workers',[])))" 2>/dev/null || echo "0")
+
+log "  ✓ $WORKER_COUNT workers connected"
+
+if [ "$WORKER_COUNT" -lt "${#WORKERS[@]}" ]; then
+    warn "Expected ${#WORKERS[@]} workers, got $WORKER_COUNT. Some may still be connecting..."
+fi
+
+# =============================================================================
+# Step 7: Start Airflow (if configured)
+# =============================================================================
+
+section "Step 7: Start Airflow"
+
+if [ -d "$AIRFLOW_VENV" ]; then
     source "$AIRFLOW_VENV/bin/activate"
     export AIRFLOW_HOME="/home/$DE_FUNK_USER/airflow"
 
-    # Start scheduler
-    airflow scheduler &
+    log "Starting Airflow scheduler..."
+    nohup airflow scheduler > "$AIRFLOW_HOME/logs/scheduler.log" 2>&1 &
     echo $! > "$AIRFLOW_HOME/scheduler.pid"
 
-    # Start webserver
-    airflow webserver --port $AIRFLOW_PORT &
+    log "Starting Airflow webserver..."
+    nohup airflow webserver --port $AIRFLOW_PORT > "$AIRFLOW_HOME/logs/webserver.log" 2>&1 &
     echo $! > "$AIRFLOW_HOME/webserver.pid"
 
     sleep 2
-
-    log "  ✓ Airflow started"
-    log "    UI: http://$HEAD_IP:$AIRFLOW_PORT (admin/admin123)"
-}
+    log "  ✓ Airflow running at http://$HEAD_IP:$AIRFLOW_PORT"
+else
+    warn "Airflow not installed. Run: ./orchestration/airflow/setup-airflow.sh"
+fi
 
 # =============================================================================
-# Main
-# =============================================================================
-
-section "Spark + Airflow Cluster Initialization"
-
-echo "Configuration:"
-echo "  Head: $HEAD_HOSTNAME ($HEAD_IP)"
-echo "  Workers: ${#WORKERS[@]}"
-echo "  Project: $LOCAL_PROJECT"
-echo "  Storage: $LOCAL_STORAGE"
-echo "  NFS: $NFS_ROOT"
-echo ""
-
-# Step 1: Cleanup
-if [ "$CLEANUP_FIRST" = true ]; then
-    section "Step 1: Cleanup"
-
-    cleanup_local_spark
-    cleanup_local_airflow
-
-    if [ "$SETUP_WORKERS" = true ]; then
-        for w in "${WORKERS[@]}"; do
-            IFS=':' read -r hostname ip cores mem <<< "$w"
-            cleanup_worker "$hostname" "$ip" &
-        done
-        wait
-    fi
-
-    log "Cleanup complete"
-fi
-
-# Step 2: Setup Head
-if [ "$SETUP_HEAD" = true ]; then
-    section "Step 2: Head Node Setup"
-
-    setup_nfs_head
-    setup_storage_dirs
-    setup_python_env
-
-    log "Head node ready"
-fi
-
-# Step 3: Deploy Workers
-if [ "$SETUP_WORKERS" = true ]; then
-    section "Step 3: Worker Deployment"
-
-    # Wait for NFS to be ready
-    sleep 2
-
-    idx=0
-    for w in "${WORKERS[@]}"; do
-        IFS=':' read -r hostname ip cores mem <<< "$w"
-        deploy_worker "$hostname" "$ip" "$cores" "$mem" "$idx" &
-        ((idx++))
-    done
-    wait
-
-    log "All workers deployed"
-fi
-
-# Step 4: Start Services
-if [ "$START_SERVICES" = true ]; then
-    section "Step 4: Starting Services"
-
-    if [ "$SETUP_HEAD" = true ]; then
-        start_spark_master
-        start_airflow
-    fi
-
-    log "Services started"
-fi
-
 # Summary
-section "Cluster Ready"
+# =============================================================================
+
+section "Cluster Ready!"
 
 echo "Services:"
-echo "  Spark Master: spark://$HEAD_IP:$SPARK_MASTER_PORT"
-echo "  Spark UI:     http://$HEAD_IP:$SPARK_UI_PORT"
-echo "  Airflow UI:   http://$HEAD_IP:$AIRFLOW_PORT"
+echo "  Spark Master:  spark://$HEAD_IP:$SPARK_MASTER_PORT"
+echo "  Spark UI:      http://$HEAD_IP:$SPARK_UI_PORT"
+if [ -d "$AIRFLOW_VENV" ]; then
+echo "  Airflow UI:    http://$HEAD_IP:$AIRFLOW_PORT (admin/admin123)"
+fi
 echo ""
-echo "Workers:"
+echo "Workers: $WORKER_COUNT connected"
 for w in "${WORKERS[@]}"; do
-    IFS=':' read -r hostname ip cores mem <<< "$w"
-    echo "  $hostname ($ip) - $cores cores, ${mem}GB"
+    IFS=':' read -r name ip cores mem <<< "$w"
+    echo "  - $name ($ip): $cores cores, ${mem}GB"
 done
 echo ""
 echo "Storage:"
 echo "  Local:  $LOCAL_STORAGE"
-echo "  NFS:    $NFS_ROOT (mounted on workers as /shared)"
+echo "  NFS:    $NFS_ROOT -> /shared on workers"
 echo ""
 echo "Commands:"
-echo "  Status:  $SCRIPT_DIR/init-cluster.sh --status"
-echo "  Submit:  $PROJECT_ROOT/scripts/spark-cluster/submit-job.sh <script.py>"
-echo "  Stop:    $SCRIPT_DIR/stop-cluster.sh"
+echo "  Status:  curl -s http://$HEAD_IP:$SPARK_UI_PORT/json/ | python3 -m json.tool"
+echo "  Stop:    ./scripts/cluster/stop-cluster.sh"
+echo "  Submit:  ./scripts/spark-cluster/submit-job.sh <script.py>"
 echo ""
