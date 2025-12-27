@@ -3,6 +3,7 @@
 # Stop Spark + Airflow Cluster
 #
 # Gracefully stops all cluster services across head and workers.
+# Reads configuration from configs/cluster.yaml
 #
 # Usage:
 #   ./stop-cluster.sh           # Stop everything
@@ -13,17 +14,37 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CONFIG_FILE="$REPO_ROOT/configs/cluster.yaml"
 
-# Configuration
-HEAD_IP="192.168.1.212"
-DE_FUNK_USER="ms_trixie"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "ERROR: Config file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+# Parse YAML config using Python
+read_config() {
+    python3 -c "
+import yaml
+with open('$CONFIG_FILE') as f:
+    cfg = yaml.safe_load(f)
+$1
+"
+}
+
+# Configuration from cluster.yaml
+HEAD_IP=$(read_config "print(cfg['cluster']['head']['ip'])")
+DE_FUNK_USER=$(read_config "print(cfg['cluster']['head']['user'])")
 LOCAL_STORAGE="/data/de_funk"
 
-WORKERS=(
-    "bark-1:192.168.1.207"
-    "bark-2:192.168.1.202"
-    "bark-3:192.168.1.203"
-)
+# Build workers array: "name:ip"
+WORKERS=()
+while IFS= read -r line; do
+    WORKERS+=("$line")
+done < <(read_config "
+for w in cfg['cluster']['workers']:
+    print(f\"{w['name']}:{w['ip']}\")
+")
 
 STOP_SPARK=true
 STOP_AIRFLOW=true

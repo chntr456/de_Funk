@@ -3,6 +3,7 @@
 # Diagnose Spark Cluster Issues
 #
 # Run this on the head node to check why workers aren't connecting.
+# Reads configuration from configs/cluster.yaml
 #
 # Usage:
 #   ./diagnose-cluster.sh
@@ -10,16 +11,42 @@
 
 set -e
 
-HEAD_IP="192.168.1.212"
-DE_FUNK_USER="ms_trixie"
-SPARK_MASTER_PORT=7077
-SPARK_UI_PORT=8080
+# =============================================================================
+# Configuration - Read from cluster.yaml
+# =============================================================================
 
-WORKERS=(
-    "bark-1:192.168.1.207"
-    "bark-2:192.168.1.202"
-    "bark-3:192.168.1.203"
-)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CONFIG_FILE="$REPO_ROOT/configs/cluster.yaml"
+
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "ERROR: Config file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+# Parse YAML config using Python
+read_config() {
+    python3 -c "
+import yaml
+with open('$CONFIG_FILE') as f:
+    cfg = yaml.safe_load(f)
+$1
+"
+}
+
+HEAD_IP=$(read_config "print(cfg['cluster']['head']['ip'])")
+DE_FUNK_USER=$(read_config "print(cfg['cluster']['head']['user'])")
+SPARK_MASTER_PORT=$(read_config "print(cfg['spark']['master']['port'])")
+SPARK_UI_PORT=$(read_config "print(cfg['spark']['master']['ui_port'])")
+
+# Build workers array: "name:ip"
+WORKERS=()
+while IFS= read -r line; do
+    WORKERS+=("$line")
+done < <(read_config "
+for w in cfg['cluster']['workers']:
+    print(f\"{w['name']}:{w['ip']}\")
+")
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'

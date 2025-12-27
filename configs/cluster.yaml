@@ -1,63 +1,94 @@
 # Cluster Configuration for de_Funk
-# Version: 1.0
+# Version: 2.0
 #
-# This configuration defines settings for distributed computing with Ray
-# and scheduled jobs with APScheduler.
+# This configuration defines settings for distributed computing with Spark
+# and scheduled jobs with Airflow.
 #
 # Usage:
 #   - Copy to ~/.de_funk/cluster.yaml for user-specific settings
 #   - Or set DEFUNK_CLUSTER_CONFIG env var to point to custom location
 
 # =============================================================================
-# RAY CLUSTER SETTINGS
+# CLUSTER TOPOLOGY
+# =============================================================================
+# Shared by both Spark and legacy Ray configurations
+
+cluster:
+  # Head node configuration
+  head:
+    hostname: bigbark
+    ip: "192.168.1.212"
+    user: ms_trixie
+
+  # Worker nodes
+  # Note: Leave ~2 cores and ~4-6GB RAM for OS overhead
+  workers:
+    - name: bark-1
+      ip: "192.168.1.207"
+      cores: 10        # Machine has 12 cores total
+      memory_gb: 10    # Machine has 16GB total
+
+    - name: bark-2
+      ip: "192.168.1.202"
+      cores: 10
+      memory_gb: 10
+
+    - name: bark-3
+      ip: "192.168.1.203"
+      cores: 10
+      memory_gb: 10
+
+# =============================================================================
+# SPARK CLUSTER SETTINGS
+# =============================================================================
+spark:
+  # Master configuration
+  master:
+    port: 7077
+    ui_port: 8080
+    # Memory for Spark Master JVM
+    memory: 1g
+
+  # Default Spark session configuration
+  session:
+    driver_memory: 4g
+    executor_memory: 4g
+    shuffle_partitions: 200
+
+  # Packages (loaded via Ivy)
+  packages:
+    - "io.delta:delta-spark_2.13:4.0.0"
+
+# =============================================================================
+# AIRFLOW SETTINGS
+# =============================================================================
+airflow:
+  port: 8081
+  # Uses separate Python 3.12 venv (Airflow doesn't support 3.13 yet)
+  venv_path: ~/airflow-venv
+
+# =============================================================================
+# RAY CLUSTER SETTINGS (Legacy - kept for reference)
 # =============================================================================
 ray:
   # Cluster mode: "local", "auto", or "address"
-  # - local: Start local Ray instance (all cores on this machine)
-  # - auto: Connect to existing cluster (ray start --head must be running)
-  # - address: Connect to specific cluster address
   mode: local
-
-  # Address for "address" mode (ray://host:port)
   address: null
 
-  # Local mode settings
   local:
-    # Limit CPUs (null = use all available)
     num_cpus: 12
-    # Limit memory in GB (null = use all available)
     memory_gb: 8
 
-  # Cluster mode settings (for multi-node setup)
+  # Legacy cluster settings (now use cluster.workers above)
   cluster:
-    # Head node configuration
     head:
       host: "192.168.1.212"
       port: 6379
       dashboard_port: 8265
 
-    # Worker nodes (for documentation/setup scripts)
-    workers:
-      # Node name: bark_1
-      - host: "192.168.1.207"
-        cpus: 11
-        memory_gb: 10
-      # Node name: bark_2
-      - host: "192.168.1.202"
-        cpus: 11
-        memory_gb: 10
-      # Node name: bark_3
-      - host: "192.168.1.203"
-        cpus: 11
-        memory_gb: 10
-
-  # Runtime environment for Ray workers
   runtime_env:
-    # Working directory (synced to workers)
     working_dir: null
-    # Python packages to install on workers
     pip: []
-    # Environment variables
     env_vars: {}
 
 # =============================================================================

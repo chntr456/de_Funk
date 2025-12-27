@@ -3,6 +3,7 @@
 # Spark + Airflow Cluster - Full Setup
 #
 # Sequential setup with connection validation. Run from head node.
+# Reads configuration from configs/cluster.yaml
 #
 # Usage:
 #   ./init-cluster.sh
@@ -11,27 +12,56 @@
 set -e
 
 # =============================================================================
-# Configuration
+# Configuration - Read from cluster.yaml
 # =============================================================================
 
-HEAD_IP="192.168.1.212"
-DE_FUNK_USER="ms_trixie"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CONFIG_FILE="$REPO_ROOT/configs/cluster.yaml"
 
-WORKERS=(
-    "bark-1:192.168.1.207:10:8"
-    "bark-2:192.168.1.202:10:8"
-    "bark-3:192.168.1.203:10:8"
-)
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "ERROR: Config file not found: $CONFIG_FILE"
+    exit 1
+fi
 
+# Parse YAML config using Python
+read_config() {
+    python3 -c "
+import yaml
+with open('$CONFIG_FILE') as f:
+    cfg = yaml.safe_load(f)
+$1
+"
+}
+
+# Extract cluster configuration
+HEAD_IP=$(read_config "print(cfg['cluster']['head']['ip'])")
+DE_FUNK_USER=$(read_config "print(cfg['cluster']['head']['user'])")
+SPARK_MASTER_PORT=$(read_config "print(cfg['spark']['master']['port'])")
+SPARK_UI_PORT=$(read_config "print(cfg['spark']['master']['ui_port'])")
+AIRFLOW_PORT=$(read_config "print(cfg['airflow']['port'])")
+
+# Build workers array from config: "name:ip:cores:memory"
+WORKERS=()
+while IFS= read -r line; do
+    WORKERS+=("$line")
+done < <(read_config "
+for w in cfg['cluster']['workers']:
+    print(f\"{w['name']}:{w['ip']}:{w['cores']}:{w['memory_gb']}\")
+")
+
+# Derived paths
 SPARK_VENV="/home/$DE_FUNK_USER/venv"
 AIRFLOW_VENV="/home/$DE_FUNK_USER/airflow-venv"
 LOCAL_PROJECT="/home/$DE_FUNK_USER/PycharmProjects/de_Funk"
 LOCAL_STORAGE="/data/de_funk"
 NFS_ROOT="/shared"
 
-SPARK_MASTER_PORT=7077
-SPARK_UI_PORT=8080
-AIRFLOW_PORT=8081
+echo "Loaded configuration from: $CONFIG_FILE"
+echo "  Head: $HEAD_IP (user: $DE_FUNK_USER)"
+echo "  Workers: ${#WORKERS[@]}"
+echo "  Spark Master: port $SPARK_MASTER_PORT, UI port $SPARK_UI_PORT"
+echo "  Airflow: port $AIRFLOW_PORT"
 
 # =============================================================================
 # Helpers
