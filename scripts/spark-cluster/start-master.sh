@@ -107,7 +107,7 @@ nohup "$JAVA_HOME/bin/java" \
     org.apache.spark.deploy.worker.Worker \
     --cores $SPARK_WORKER_CORES \
     --memory $SPARK_WORKER_MEMORY \
-    --webui-port 8081 \
+    --webui-port 8082 \
     $SPARK_MASTER_URL \
     > "$SPARK_LOG_DIR/spark-worker-local.out" 2>&1 &
 

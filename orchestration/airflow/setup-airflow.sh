@@ -28,7 +28,7 @@ PROJECT_ROOT="${PROJECT_ROOT:-/shared/de_Funk}"
 AIRFLOW_HOME="${AIRFLOW_HOME:-/home/$DE_FUNK_USER/airflow}"
 
 # Airflow config
-AIRFLOW_PORT=8080
+AIRFLOW_PORT=8081  # 8080 is used by Spark Master UI
 AIRFLOW_VERSION="2.8.1"
 PYTHON_VERSION="3.11"
 
