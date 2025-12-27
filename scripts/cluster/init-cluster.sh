@@ -132,8 +132,8 @@ log "  ✓ All processes stopped"
 section "Step 2: NFS Setup (Head Node)"
 
 log "Installing NFS server..."
-sudo apt-get update -qq
-sudo apt-get install -y -qq nfs-kernel-server nfs-common
+sudo apt-get update
+sudo apt-get install -y nfs-kernel-server nfs-common
 
 log "Creating directories..."
 sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk"
@@ -168,8 +168,8 @@ if [ ! -d "$SPARK_VENV" ]; then
 fi
 
 source "$SPARK_VENV/bin/activate"
-pip install --upgrade pip -q
-pip install -q 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow requests python-dotenv
+pip install --upgrade pip
+pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow requests python-dotenv
 
 JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
 SPARK_HOME=$(python -c "import pyspark; print(pyspark.__path__[0])")
@@ -193,13 +193,15 @@ for w in "${WORKERS[@]}"; do
 set -e
 
 echo "  Installing packages..."
-sudo apt-get update -qq
-sudo apt-get install -y -qq openjdk-17-jdk python3-pip python3-venv nfs-common
+sudo apt-get update
+sudo apt-get install -y openjdk-17-jdk python3-pip python3-venv nfs-common
 
 echo "  Mounting NFS..."
 sudo mkdir -p /shared
 sudo umount /shared 2>/dev/null || true
 sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
+echo "  NFS mounted"
+ls -la /shared/
 
 # Persist mount
 grep -q "/shared" /etc/fstab || echo "$HEAD_IP:$NFS_ROOT /shared nfs defaults,_netdev 0 0" | sudo tee -a /etc/fstab
@@ -209,11 +211,13 @@ if [ ! -d ~/venv ]; then
     python3 -m venv ~/venv
 fi
 source ~/venv/bin/activate
-pip install --upgrade pip -q
-pip install -q 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow
+pip install --upgrade pip
+pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow
 
 JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
 SPARK_HOME=\$(python -c "import pyspark; print(pyspark.__path__[0])")
+echo "  JAVA_HOME=\$JAVA_HOME"
+echo "  SPARK_HOME=\$SPARK_HOME"
 
 echo "  Creating systemd service..."
 # Use printf to avoid heredoc nesting issues
@@ -233,7 +237,7 @@ printf '%s\n' \
     "" \
     "[Install]" \
     "WantedBy=multi-user.target" \
-    | sudo tee /etc/systemd/system/spark-worker.service > /dev/null
+    | sudo tee /etc/systemd/system/spark-worker.service
 
 sudo systemctl daemon-reload
 sudo systemctl enable spark-worker
