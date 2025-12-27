@@ -220,7 +220,21 @@ echo "  JAVA_HOME=\$JAVA_HOME"
 echo "  SPARK_HOME=\$SPARK_HOME"
 
 echo "  Creating systemd service..."
-# Use printf to avoid heredoc nesting issues
+# Create a wrapper script that handles classpath glob expansion
+# Note: \$ escaping preserves $ for the worker's heredoc processing
+cat > ~/start-spark-worker.sh << 'STARTWRAPPER'
+#!/bin/bash
+source ~/venv/bin/activate
+JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
+SPARK_HOME=\$(python -c "import pyspark; print(pyspark.__path__[0])")
+exec "\$JAVA_HOME/bin/java" -cp "\$SPARK_HOME/jars/*" -Xmx${mem}g \
+    org.apache.spark.deploy.worker.Worker \
+    --cores $cores --memory ${mem}g \
+    spark://$HEAD_IP:$SPARK_MASTER_PORT
+STARTWRAPPER
+chmod +x ~/start-spark-worker.sh
+
+# Systemd service calls the wrapper script (which handles glob expansion via bash)
 printf '%s\n' \
     "[Unit]" \
     "Description=Apache Spark Worker" \
@@ -229,9 +243,8 @@ printf '%s\n' \
     "[Service]" \
     "Type=simple" \
     "User=\$(whoami)" \
-    "Environment=\"JAVA_HOME=\$JAVA_HOME\"" \
-    "Environment=\"SPARK_HOME=\$SPARK_HOME\"" \
-    "ExecStart=\$JAVA_HOME/bin/java -cp \"\$SPARK_HOME/jars/*\" -Xmx${mem}g org.apache.spark.deploy.worker.Worker --cores $cores --memory ${mem}g spark://$HEAD_IP:$SPARK_MASTER_PORT" \
+    "WorkingDirectory=/home/\$(whoami)" \
+    "ExecStart=/home/\$(whoami)/start-spark-worker.sh" \
     "Restart=on-failure" \
     "RestartSec=5" \
     "" \
