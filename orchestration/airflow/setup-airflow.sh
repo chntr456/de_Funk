@@ -23,14 +23,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # =============================================================================
 
 DE_FUNK_USER="${DE_FUNK_USER:-ms_trixie}"
-VENV_PATH="${VENV_PATH:-/home/$DE_FUNK_USER/venv}"
+SPARK_VENV_PATH="${VENV_PATH:-/home/$DE_FUNK_USER/venv}"
 PROJECT_ROOT="${PROJECT_ROOT:-/shared/de_Funk}"
 AIRFLOW_HOME="${AIRFLOW_HOME:-/home/$DE_FUNK_USER/airflow}"
 
-# Airflow config
+# Airflow needs its own venv (Python 3.12 max, main venv may be 3.13)
+AIRFLOW_VENV_PATH="/home/$DE_FUNK_USER/airflow-venv"
+
+# Airflow config - use latest 3.x that supports Python 3.12
 AIRFLOW_PORT=8081  # 8080 is used by Spark Master UI
-AIRFLOW_VERSION="2.8.1"
-PYTHON_VERSION="3.11"
+AIRFLOW_VERSION="3.0.4"
+PYTHON_VERSION="3.12"
+
+# Find Python 3.12 (required for Airflow)
+PYTHON_BIN=""
+for py in python3.12 python3.11; do
+    if command -v $py &> /dev/null; then
+        PYTHON_BIN=$(command -v $py)
+        PYTHON_VERSION=$(echo $py | sed 's/python//')
+        break
+    fi
+done
+
+if [ -z "$PYTHON_BIN" ]; then
+    echo "ERROR: Python 3.11 or 3.12 required for Airflow (found Python 3.13+ only)"
+    echo "Install with: sudo apt install python3.12 python3.12-venv"
+    exit 1
+fi
 
 WITH_SYSTEMD=false
 
@@ -65,8 +84,10 @@ echo "  Airflow Setup for de_Funk"
 echo "======================================================================"
 echo ""
 echo "User: $DE_FUNK_USER"
-echo "Venv: $VENV_PATH"
+echo "Python: $PYTHON_BIN (v$PYTHON_VERSION)"
+echo "Airflow Venv: $AIRFLOW_VENV_PATH"
 echo "Airflow Home: $AIRFLOW_HOME"
+echo "Airflow Version: $AIRFLOW_VERSION"
 echo "Project Root: $PROJECT_ROOT"
 echo "Install systemd: $WITH_SYSTEMD"
 echo ""
@@ -76,14 +97,30 @@ echo ""
 # =============================================================================
 
 echo "----------------------------------------------------------------------"
-echo "Step 1: Installing Apache Airflow"
+echo "Step 1: Creating Airflow Python Environment"
 echo "----------------------------------------------------------------------"
 
-source "$VENV_PATH/bin/activate"
+# Create separate venv for Airflow (uses Python 3.12, not 3.13)
+if [ ! -d "$AIRFLOW_VENV_PATH" ]; then
+    echo "  Creating venv with $PYTHON_BIN..."
+    $PYTHON_BIN -m venv "$AIRFLOW_VENV_PATH"
+fi
+
+source "$AIRFLOW_VENV_PATH/bin/activate"
+
+echo "  ✓ Airflow venv activated"
+
+echo ""
+echo "----------------------------------------------------------------------"
+echo "Step 2: Installing Apache Airflow"
+echo "----------------------------------------------------------------------"
+
+pip install --upgrade pip setuptools wheel -q
 
 # Install Airflow with constraints (recommended way)
 CONSTRAINT_URL="https://raw.githubusercontent.com/apache/airflow/constraints-${AIRFLOW_VERSION}/constraints-${PYTHON_VERSION}.txt"
 
+echo "  Installing Airflow ${AIRFLOW_VERSION} with constraints..."
 pip install "apache-airflow==${AIRFLOW_VERSION}" --constraint "${CONSTRAINT_URL}"
 pip install apache-airflow-providers-apache-spark
 
@@ -95,7 +132,7 @@ echo "  ✓ Airflow installed"
 
 echo ""
 echo "----------------------------------------------------------------------"
-echo "Step 2: Initializing Airflow"
+echo "Step 3: Initializing Airflow"
 echo "----------------------------------------------------------------------"
 
 export AIRFLOW_HOME="$AIRFLOW_HOME"
@@ -112,7 +149,7 @@ echo "  ✓ Airflow database initialized"
 
 echo ""
 echo "----------------------------------------------------------------------"
-echo "Step 3: Configuring Airflow"
+echo "Step 4: Configuring Airflow"
 echo "----------------------------------------------------------------------"
 
 # Update airflow.cfg for local development
@@ -142,7 +179,7 @@ echo "  ✓ Airflow configured"
 
 echo ""
 echo "----------------------------------------------------------------------"
-echo "Step 4: Creating Admin User"
+echo "Step 5: Creating Admin User"
 echo "----------------------------------------------------------------------"
 
 airflow users create \
@@ -162,7 +199,7 @@ echo "  ✓ Admin user created (admin / admin123)"
 
 echo ""
 echo "----------------------------------------------------------------------"
-echo "Step 5: Installing DAGs"
+echo "Step 6: Installing DAGs"
 echo "----------------------------------------------------------------------"
 
 # Copy de_funk DAG
@@ -179,7 +216,7 @@ ls -la "$AIRFLOW_HOME/dags/"
 
 echo ""
 echo "----------------------------------------------------------------------"
-echo "Step 6: Configuring Spark Connection"
+echo "Step 7: Configuring Spark Connection"
 echo "----------------------------------------------------------------------"
 
 # Add Spark connection via CLI
@@ -198,7 +235,7 @@ echo "  ✓ Spark connection configured"
 if [ "$WITH_SYSTEMD" = true ]; then
     echo ""
     echo "----------------------------------------------------------------------"
-    echo "Step 7: Installing Systemd Services"
+    echo "Step 8: Installing Systemd Services"
     echo "----------------------------------------------------------------------"
 
     # Airflow Webserver Service
@@ -211,8 +248,8 @@ After=network.target
 Type=simple
 User=$DE_FUNK_USER
 Environment="AIRFLOW_HOME=$AIRFLOW_HOME"
-Environment="PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin"
-ExecStart=$VENV_PATH/bin/airflow webserver --port $AIRFLOW_PORT
+Environment="PATH=$AIRFLOW_VENV_PATH/bin:/usr/local/bin:/usr/bin"
+ExecStart=$AIRFLOW_VENV_PATH/bin/airflow webserver --port $AIRFLOW_PORT
 Restart=on-failure
 RestartSec=10
 
@@ -230,8 +267,8 @@ After=network.target
 Type=simple
 User=$DE_FUNK_USER
 Environment="AIRFLOW_HOME=$AIRFLOW_HOME"
-Environment="PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin"
-ExecStart=$VENV_PATH/bin/airflow scheduler
+Environment="PATH=$AIRFLOW_VENV_PATH/bin:/usr/local/bin:/usr/bin"
+ExecStart=$AIRFLOW_VENV_PATH/bin/airflow scheduler
 Restart=on-failure
 RestartSec=10
 
@@ -255,14 +292,14 @@ fi
 
 echo ""
 echo "----------------------------------------------------------------------"
-echo "Step 8: Creating Management Scripts"
+echo "Step 9: Creating Management Scripts"
 echo "----------------------------------------------------------------------"
 
 # Start script
 cat > "$AIRFLOW_HOME/start-airflow.sh" <<EOF
 #!/bin/bash
 export AIRFLOW_HOME="$AIRFLOW_HOME"
-source "$VENV_PATH/bin/activate"
+source "$AIRFLOW_VENV_PATH/bin/activate"
 
 echo "Starting Airflow..."
 
