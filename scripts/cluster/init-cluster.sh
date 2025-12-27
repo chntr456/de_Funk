@@ -249,7 +249,7 @@ WORKER_SCRIPT
     else
         log "  ✓ $name ready"
     fi
-    ((worker_idx++))
+    ((worker_idx++)) || true  # Prevent set -e exit when idx was 0
 done
 
 # =============================================================================
