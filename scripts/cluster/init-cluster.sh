@@ -55,10 +55,10 @@ section() {
 }
 
 # =============================================================================
-# Step 0: Validate Connections
+# Step 0: Validate Connections & Setup Sudo
 # =============================================================================
 
-section "Step 0: Validating SSH Connections"
+section "Step 0: Validating Connections & Sudo Access"
 
 log "Checking head node..."
 if [[ "$(hostname -I)" != *"$HEAD_IP"* ]]; then
@@ -66,18 +66,39 @@ if [[ "$(hostname -I)" != *"$HEAD_IP"* ]]; then
 fi
 log "  ✓ Running on head node"
 
+# Cache sudo credentials locally
+log "Caching sudo credentials (enter password once)..."
+sudo -v || fail "Sudo access required"
+
+# Keep sudo alive in background
+(while true; do sudo -n true; sleep 50; done) &
+SUDO_KEEPER=$!
+trap "kill $SUDO_KEEPER 2>/dev/null" EXIT
+
+log "  ✓ Local sudo cached"
+
+# Check workers and setup passwordless sudo if needed
 for w in "${WORKERS[@]}"; do
     IFS=':' read -r name ip cores mem <<< "$w"
     log "Checking $name ($ip)..."
 
-    if ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "echo ok" &>/dev/null; then
-        log "  ✓ $name reachable"
-    else
+    if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "echo ok" &>/dev/null; then
         fail "$name ($ip) not reachable via SSH. Check SSH keys."
+    fi
+    log "  ✓ $name SSH ok"
+
+    # Check if passwordless sudo works
+    if ! ssh -o ConnectTimeout=5 "$DE_FUNK_USER@$ip" "sudo -n true" &>/dev/null; then
+        log "  Setting up passwordless sudo on $name..."
+        # Use ssh -t for interactive sudo, then set up NOPASSWD
+        ssh -t "$DE_FUNK_USER@$ip" "echo '$DE_FUNK_USER ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/$DE_FUNK_USER > /dev/null"
+        log "  ✓ $name passwordless sudo configured"
+    else
+        log "  ✓ $name sudo ok"
     fi
 done
 
-log "All nodes reachable!"
+log "All nodes ready!"
 
 # =============================================================================
 # Step 1: Cleanup Everything
