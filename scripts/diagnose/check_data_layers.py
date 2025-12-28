@@ -46,6 +46,40 @@ def check_parquet_table(spark, path: Path, name: str) -> dict:
     return result
 
 
+def scan_silver_model(spark, model_path: Path, model_name: str) -> list:
+    """Scan a Silver model directory with dims/facts structure."""
+    results = []
+
+    if not model_path.exists():
+        return results
+
+    # Check dims/ subdirectory
+    dims_path = model_path / "dims"
+    if dims_path.exists():
+        for item in sorted(dims_path.iterdir()):
+            if item.is_dir():
+                result = check_parquet_table(spark, item, f"{model_name}/dims/{item.name}")
+                results.append(result)
+
+    # Check facts/ subdirectory
+    facts_path = model_path / "facts"
+    if facts_path.exists():
+        for item in sorted(facts_path.iterdir()):
+            if item.is_dir():
+                result = check_parquet_table(spark, item, f"{model_name}/facts/{item.name}")
+                results.append(result)
+
+    # Also check for direct tables (legacy structure)
+    for item in sorted(model_path.iterdir()):
+        if item.is_dir() and item.name not in ("dims", "facts", "_delta_log"):
+            has_parquet = bool(list(item.glob("*.parquet")) or list(item.glob("**/*.parquet")))
+            if has_parquet:
+                result = check_parquet_table(spark, item, f"{model_name}/{item.name}")
+                results.append(result)
+
+    return results
+
+
 def scan_directory(spark, base_path: Path, layer_name: str) -> list:
     """Scan a directory for tables."""
     results = []
@@ -139,8 +173,13 @@ def main():
         print("=" * 70)
         silver_path = storage_path / "silver"
 
-        # Check standard silver path
-        silver_tables = scan_directory(spark, silver_path, "Silver")
+        # Silver layer uses model directories with dims/facts structure
+        silver_tables = []
+        if silver_path.exists():
+            for model_dir in sorted(silver_path.iterdir()):
+                if model_dir.is_dir():
+                    model_tables = scan_silver_model(spark, model_dir, model_dir.name)
+                    silver_tables.extend(model_tables)
 
         if silver_tables:
             total_rows = 0
@@ -169,7 +208,8 @@ def main():
         for model in model_names:
             model_path = storage_path / model
             if model_path.exists() and model_path.is_dir():
-                tables = scan_directory(spark, model_path, model)
+                # Use silver model scanner for proper dims/facts handling
+                tables = scan_silver_model(spark, model_path, model)
                 if tables:
                     misplaced.append((model, tables))
 
