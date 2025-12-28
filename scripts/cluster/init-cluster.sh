@@ -382,6 +382,31 @@ else
     fail "Spark Master failed to start. Check: $LOCAL_STORAGE/logs/spark-master.out"
 fi
 
+# Start History Server for viewing completed job logs
+log "Starting Spark History Server..."
+mkdir -p "$LOCAL_STORAGE/spark-events"
+
+# Kill existing history server if running
+pkill -f "org.apache.spark.deploy.history.HistoryServer" 2>/dev/null || true
+sleep 1
+
+nohup "$JAVA_HOME/bin/java" \
+    -cp "$SPARK_HOME/jars/*" \
+    -Xmx512m \
+    -Dspark.history.fs.logDirectory="$LOCAL_STORAGE/spark-events" \
+    -Dspark.history.ui.port=18080 \
+    org.apache.spark.deploy.history.HistoryServer \
+    > "$LOCAL_STORAGE/logs/spark-history.out" 2>&1 &
+
+echo $! > "$LOCAL_STORAGE/logs/spark-history.pid"
+sleep 2
+
+if curl -s "http://$HEAD_IP:18080" > /dev/null; then
+    log "  ✓ History Server: http://$HEAD_IP:18080"
+else
+    warn "History Server may not have started. Check: $LOCAL_STORAGE/logs/spark-history.out"
+fi
+
 # =============================================================================
 # Step 6: Start Workers
 # =============================================================================

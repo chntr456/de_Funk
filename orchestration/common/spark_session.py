@@ -59,6 +59,13 @@ def get_spark(
     for key, value in base_config.items():
         builder = builder.config(key, value)
 
+    # Determine event log directory (shared storage for cluster, local otherwise)
+    event_log_dir = os.environ.get("SPARK_EVENT_LOG_DIR", "/shared/storage/spark-events")
+    # Fall back to local if shared storage doesn't exist
+    if not os.path.exists("/shared/storage"):
+        event_log_dir = os.path.expanduser("~/storage/spark-events")
+    os.makedirs(event_log_dir, exist_ok=True)
+
     # Standard configs not in SparkConfig
     builder = (builder
         .config("spark.sql.caseSensitive", "true")
@@ -73,6 +80,15 @@ def get_spark(
         # Dynamic partition overwrite: only replace partitions being written, not entire table
         # This enables incremental ingestion without losing previously ingested data
         .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
+        # Event logging for History Server (view completed jobs at :18080)
+        .config("spark.eventLog.enabled", "true")
+        .config("spark.eventLog.dir", f"file://{event_log_dir}")
+        .config("spark.eventLog.compress", "true")
+        # UI and metrics
+        .config("spark.ui.showConsoleProgress", "true")
+        .config("spark.ui.retainedJobs", "100")
+        .config("spark.ui.retainedStages", "100")
+        .config("spark.ui.retainedTasks", "1000")
     )
 
     # Apply additional legacy config if provided (overrides SparkConfig)
