@@ -655,23 +655,35 @@ class AllModelBuilder:
             # Get model class (v2.0 models)
             model_class = None
             if model_name == 'company':
-                from models.implemented.company.model import CompanyModel
+                from models.domain.company.model import CompanyModel
                 model_class = CompanyModel
             elif model_name == 'stocks':
-                from models.implemented.stocks.model import StocksModel
+                from models.domain.stocks.model import StocksModel
                 model_class = StocksModel
             elif model_name == 'options':
-                from models.implemented.options.model import OptionsModel
+                from models.domain.options.model import OptionsModel
                 model_class = OptionsModel
-            elif model_name == 'etfs':
-                from models.implemented.etfs.model import ETFsModel
-                model_class = ETFsModel
-            elif model_name == 'futures':
-                from models.implemented.futures.model import FuturesModel
-                model_class = FuturesModel
-            elif model_name == 'core':
-                from models.implemented.core.model import CoreModel
-                model_class = CoreModel
+            elif model_name == 'etf' or model_name == 'etfs':
+                from models.domain.etf.model import ETFModel
+                model_class = ETFModel
+            elif model_name == 'forecast':
+                # Forecast model has different structure - use BaseModel
+                if not minimal_progress:
+                    logger.warning(f"  Forecast model uses legacy structure, using BaseModel")
+                from models.base.model import BaseModel
+                model_class = BaseModel
+            elif model_name == 'temporal' or model_name == 'core':
+                from models.foundation.temporal.model import TemporalModel
+                model_class = TemporalModel
+            elif model_name == 'geography':
+                from models.foundation.geography.model import GeographyModel
+                model_class = GeographyModel
+            elif model_name == 'macro':
+                from models.domain.macro.model import MacroModel
+                model_class = MacroModel
+            elif model_name == 'city_finance':
+                from models.domain.city_finance.model import CityFinanceModel
+                model_class = CityFinanceModel
             else:
                 # Fall back to BaseModel for other models
                 if not minimal_progress:
