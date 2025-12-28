@@ -44,7 +44,7 @@ def load_config(config_path: str) -> dict:
             return yaml.safe_load(f)
 
 
-def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
+def get_active_tickers(storage_cfg: dict, spark_session, limit: int = None) -> list:
     """
     Get list of tickers that have price data for forecasting.
 
@@ -57,13 +57,15 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
 
     Args:
         storage_cfg: Storage configuration
+        spark_session: Active Spark session
         limit: Optional limit on number of tickers (returns top by market cap)
 
     Returns:
         List of ticker symbols with price data, sorted by market cap if limit specified
     """
     from pathlib import Path
-    import pyarrow.dataset as ds
+    from pyspark.sql import functions as F
+    from pyspark.sql.window import Window
 
     # Try stocks Silver fact_stock_prices first (tickers with actual price data)
     # Paths are already resolved by ConfigLoader - no fallback needed
@@ -75,68 +77,29 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
 
     if fact_prices_path.exists():
         try:
-            # If limit is specified, sort by market cap proxy (close × volume)
+            df = spark_session.read.parquet(str(fact_prices_path))
+
             if limit:
-                # Try DuckDB first (fast), fall back to PyArrow/Pandas if not installed
-                try:
-                    import duckdb
-                    con = duckdb.connect(database=':memory:')
-                    query = f"""
-                    WITH latest_prices AS (
-                        SELECT
-                            ticker,
-                            close,
-                            volume,
-                            ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY trade_date DESC) as rn
-                        FROM read_parquet('{fact_prices_path}/**/*.parquet')
-                        WHERE close IS NOT NULL AND volume IS NOT NULL AND volume > 0
-                    ),
-                    market_caps AS (
-                        SELECT ticker, (close * volume) as market_cap_proxy
-                        FROM latest_prices WHERE rn = 1
-                    )
-                    SELECT ticker FROM market_caps
-                    ORDER BY market_cap_proxy DESC
-                    LIMIT {limit}
-                    """
-                    result = con.execute(query).fetchall()
-                    tickers = [row[0] for row in result]
-                    con.close()
-                    logger.info(f"Loaded top {len(tickers)} tickers by market cap from stocks Silver (DuckDB)")
-                    return tickers
-                except ImportError:
-                    # DuckDB not installed - use PyArrow/Pandas fallback
-                    logger.info("DuckDB not available, using PyArrow/Pandas for market cap sorting")
-                    import pandas as pd
+                # Sort by market cap proxy (close × volume) using Spark SQL
+                # Get latest price per ticker, then sort by market cap proxy
+                window = Window.partitionBy("ticker").orderBy(F.col("trade_date").desc())
 
-                    # Load price data using PyArrow
-                    dataset = ds.dataset(fact_prices_path, format='parquet')
-                    table = dataset.to_table(columns=['ticker', 'trade_date', 'close', 'volume'])
-                    df = table.to_pandas()
-
-                    # Filter out null/zero values
-                    df = df.dropna(subset=['close', 'volume'])
-                    df = df[df['volume'] > 0]
-
-                    # Get latest price for each ticker
-                    df['trade_date'] = pd.to_datetime(df['trade_date'])
-                    latest = df.sort_values('trade_date').groupby('ticker').tail(1).copy()
-
-                    # Calculate market cap proxy and sort
-                    latest['market_cap_proxy'] = latest['close'] * latest['volume']
-                    latest = latest.sort_values('market_cap_proxy', ascending=False)
-
-                    # Get top N tickers
-                    tickers = latest['ticker'].head(limit).tolist()
-                    logger.info(f"Loaded top {len(tickers)} tickers by market cap from stocks Silver (PyArrow)")
-                    return tickers
+                tickers_df = (
+                    df.filter(F.col("close").isNotNull() & F.col("volume").isNotNull() & (F.col("volume") > 0))
+                    .withColumn("rn", F.row_number().over(window))
+                    .filter(F.col("rn") == 1)
+                    .withColumn("market_cap_proxy", F.col("close") * F.col("volume"))
+                    .orderBy(F.col("market_cap_proxy").desc())
+                    .select("ticker")
+                    .limit(limit)
+                )
+                tickers = [row.ticker for row in tickers_df.collect()]
+                logger.info(f"Loaded top {len(tickers)} tickers by market cap from stocks Silver")
             else:
                 # No limit - just get all unique tickers
-                dataset = ds.dataset(fact_prices_path, format='parquet')
-                table = dataset.to_table(columns=['ticker'])
-                tickers = table.column('ticker').unique().to_pylist()
+                tickers = [row.ticker for row in df.select("ticker").distinct().collect()]
                 logger.info(f"Loaded {len(tickers)} tickers with price data from stocks Silver")
-                return tickers
+            return tickers
         except Exception as e:
             logger.warning(f"Could not load tickers from stocks Silver fact_stock_prices: {e}")
 
@@ -146,28 +109,25 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
 
     if prices_path.exists():
         try:
+            df = spark_session.read.parquet(str(prices_path))
+
             if limit:
-                # Sort by market cap proxy using Pandas
-                import pandas as pd
-                dataset = ds.dataset(prices_path, format='parquet')
-                table = dataset.to_table(columns=['ticker', 'trade_date', 'close', 'volume'])
-                df = table.to_pandas()
+                # Sort by market cap proxy using Spark SQL
+                window = Window.partitionBy("ticker").orderBy(F.col("trade_date").desc())
 
-                # Filter and get latest prices
-                df = df.dropna(subset=['close', 'volume'])
-                df = df[df['volume'] > 0]
-                df['trade_date'] = pd.to_datetime(df['trade_date'])
-                latest = df.sort_values('trade_date').groupby('ticker').tail(1).copy()
-
-                # Sort by market cap proxy
-                latest['market_cap_proxy'] = latest['close'] * latest['volume']
-                latest = latest.sort_values('market_cap_proxy', ascending=False)
-                tickers = latest['ticker'].head(limit).tolist()
+                tickers_df = (
+                    df.filter(F.col("close").isNotNull() & F.col("volume").isNotNull() & (F.col("volume") > 0))
+                    .withColumn("rn", F.row_number().over(window))
+                    .filter(F.col("rn") == 1)
+                    .withColumn("market_cap_proxy", F.col("close") * F.col("volume"))
+                    .orderBy(F.col("market_cap_proxy").desc())
+                    .select("ticker")
+                    .limit(limit)
+                )
+                tickers = [row.ticker for row in tickers_df.collect()]
                 logger.info(f"Loaded top {len(tickers)} tickers by market cap from v2.0 Bronze layer")
             else:
-                dataset = ds.dataset(prices_path, format='parquet')
-                table = dataset.to_table(columns=['ticker'])
-                tickers = table.column('ticker').unique().to_pylist()
+                tickers = [row.ticker for row in df.select("ticker").distinct().collect()]
                 logger.info(f"Loaded {len(tickers)} tickers from v2.0 Bronze layer")
             return tickers
         except Exception as e:
@@ -177,26 +137,24 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
     legacy_prices_path = Path(bronze_root) / "prices_daily"
     if legacy_prices_path.exists():
         try:
+            df = spark_session.read.parquet(str(legacy_prices_path))
+
             if limit:
-                # Sort by market cap proxy using Pandas
-                import pandas as pd
-                dataset = ds.dataset(legacy_prices_path, format='parquet')
-                table = dataset.to_table(columns=['ticker', 'trade_date', 'close', 'volume'])
-                df = table.to_pandas()
+                window = Window.partitionBy("ticker").orderBy(F.col("trade_date").desc())
 
-                df = df.dropna(subset=['close', 'volume'])
-                df = df[df['volume'] > 0]
-                df['trade_date'] = pd.to_datetime(df['trade_date'])
-                latest = df.sort_values('trade_date').groupby('ticker').tail(1).copy()
-
-                latest['market_cap_proxy'] = latest['close'] * latest['volume']
-                latest = latest.sort_values('market_cap_proxy', ascending=False)
-                tickers = latest['ticker'].head(limit).tolist()
+                tickers_df = (
+                    df.filter(F.col("close").isNotNull() & F.col("volume").isNotNull() & (F.col("volume") > 0))
+                    .withColumn("rn", F.row_number().over(window))
+                    .filter(F.col("rn") == 1)
+                    .withColumn("market_cap_proxy", F.col("close") * F.col("volume"))
+                    .orderBy(F.col("market_cap_proxy").desc())
+                    .select("ticker")
+                    .limit(limit)
+                )
+                tickers = [row.ticker for row in tickers_df.collect()]
                 logger.info(f"Loaded top {len(tickers)} tickers by market cap from legacy Bronze layer")
             else:
-                dataset = ds.dataset(legacy_prices_path, format='parquet')
-                table = dataset.to_table(columns=['ticker'])
-                tickers = table.column('ticker').unique().to_pylist()
+                tickers = [row.ticker for row in df.select("ticker").distinct().collect()]
                 logger.info(f"Loaded {len(tickers)} tickers from legacy Bronze layer")
             return tickers
         except Exception as e:
@@ -296,7 +254,7 @@ def run_forecast_pipeline(
         print("-" * 80)
 
     if tickers is None:
-        tickers = get_active_tickers(storage_cfg, limit=max_tickers)
+        tickers = get_active_tickers(storage_cfg, spark_session, limit=max_tickers)
 
     logger.info(f"Processing {len(tickers)} tickers")
     if not minimal_progress:
