@@ -173,7 +173,8 @@ def run_forecast_pipeline(
     config_root = get_repo_root() / "configs"
 
     storage_cfg = load_config(config_root / "storage.json")
-    forecast_cfg = load_config(config_root / "models" / "forecast.yaml")
+    # v2.0 modular config structure: configs/models/forecast/model.yaml
+    forecast_cfg = load_config(config_root / "models" / "forecast" / "model.yaml")
 
     logger.debug("Configurations loaded")
     if not minimal_progress:
