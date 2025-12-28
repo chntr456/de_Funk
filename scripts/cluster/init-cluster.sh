@@ -199,7 +199,7 @@ fi
 
 source "$SPARK_VENV/bin/activate"
 pip install --upgrade pip
-pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow requests python-dotenv
+pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow requests python-dotenv networkx
 
 JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
 SPARK_HOME=$(python -c "import pyspark; print(pyspark.__path__[0])")
@@ -242,7 +242,7 @@ if [ ! -d ~/venv ]; then
 fi
 source ~/venv/bin/activate
 pip install --upgrade pip
-pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow
+pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow networkx
 
 JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
 SPARK_HOME=\$(python -c "import pyspark; print(pyspark.__path__[0])")
