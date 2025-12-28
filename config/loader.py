@@ -340,9 +340,19 @@ class ConfigLoader:
                 if key in ("bronze", "silver"):
                     abs_path = Path(run_config_storage) / key
                     resolved["roots"][key] = str(abs_path)
-                # Other paths (e.g., duckdb) resolve relative to storage_path
+                # Other paths (e.g., stocks_silver, company_silver) resolve relative to storage_path
+                # Strip the leading "storage/" prefix if present and join with run_config_storage
                 elif rel_path and not Path(rel_path).is_absolute():
-                    abs_path = Path(run_config_storage) / Path(rel_path).name
+                    rel_path_obj = Path(rel_path)
+                    # If path starts with "storage/", strip it and use the rest
+                    # e.g., "storage/silver/stocks" -> "silver/stocks"
+                    if rel_path_obj.parts and rel_path_obj.parts[0] == "storage":
+                        # Join all parts after "storage/"
+                        sub_path = Path(*rel_path_obj.parts[1:])
+                        abs_path = Path(run_config_storage) / sub_path
+                    else:
+                        # Path doesn't start with storage/, use as-is relative to storage root
+                        abs_path = Path(run_config_storage) / rel_path_obj
                     resolved["roots"][key] = str(abs_path)
                 else:
                     resolved["roots"][key] = rel_path
