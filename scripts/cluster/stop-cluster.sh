@@ -91,10 +91,14 @@ fi
 if [ "$STOP_AIRFLOW" = true ]; then
     log "Stopping Airflow..."
 
-    sudo systemctl stop airflow-webserver 2>/dev/null || true
+    # Airflow 3.x uses api-server instead of webserver
+    sudo systemctl stop airflow-apiserver 2>/dev/null || true
+    sudo systemctl stop airflow-webserver 2>/dev/null || true  # Legacy cleanup
     sudo systemctl stop airflow-scheduler 2>/dev/null || true
-    pkill -f "airflow webserver" 2>/dev/null || true
+    pkill -f "airflow api-server" 2>/dev/null || true
+    pkill -f "airflow webserver" 2>/dev/null || true  # Legacy cleanup
     pkill -f "airflow scheduler" 2>/dev/null || true
+    pkill -f "airflow standalone" 2>/dev/null || true
 
     log "  ✓ Airflow stopped"
 fi

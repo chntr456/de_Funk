@@ -445,12 +445,14 @@ if [ -d "$AIRFLOW_VENV" ]; then
     nohup airflow scheduler > "$AIRFLOW_HOME/logs/scheduler.log" 2>&1 &
     echo $! > "$AIRFLOW_HOME/scheduler.pid"
 
-    log "Starting Airflow webserver..."
-    nohup airflow webserver --port $AIRFLOW_PORT > "$AIRFLOW_HOME/logs/webserver.log" 2>&1 &
-    echo $! > "$AIRFLOW_HOME/webserver.pid"
+    # Airflow 3.x uses api-server instead of webserver
+    log "Starting Airflow API server..."
+    nohup airflow api-server --port $AIRFLOW_PORT > "$AIRFLOW_HOME/logs/apiserver.log" 2>&1 &
+    echo $! > "$AIRFLOW_HOME/apiserver.pid"
 
-    sleep 2
+    sleep 5
     log "  ✓ Airflow running at http://$HEAD_IP:$AIRFLOW_PORT"
+    log "  ✓ Check password: cat $AIRFLOW_HOME/simple_auth_manager_passwords.json.generated"
 else
     warn "Airflow not installed. Run: ./orchestration/airflow/setup-airflow.sh"
 fi

@@ -117,7 +117,7 @@ with DAG(
     dag_id='de_funk_pipeline',
     default_args=default_args,
     description='de_Funk Bronze → Silver data pipeline',
-    schedule_interval='0 6 * * *',  # Daily at 6 AM UTC
+    schedule='0 6 * * *',  # Daily at 6 AM UTC (Airflow 3.x uses 'schedule' not 'schedule_interval')
     start_date=datetime(2025, 1, 1),
     catchup=False,
     max_active_runs=1,

@@ -182,6 +182,7 @@ echo "----------------------------------------------------------------------"
 echo "Step 5: Creating Admin User"
 echo "----------------------------------------------------------------------"
 
+# Airflow 3.x uses different user creation syntax
 airflow users create \
     --username admin \
     --firstname Admin \
@@ -189,9 +190,14 @@ airflow users create \
     --role Admin \
     --email admin@defunk.local \
     --password admin123 \
-    2>/dev/null || echo "  (User may already exist)"
+    2>/dev/null || true
 
-echo "  ✓ Admin user created (admin / admin123)"
+# Verify user exists
+if airflow users list 2>/dev/null | grep -q admin; then
+    echo "  ✓ Admin user created/exists (admin / admin123)"
+else
+    echo "  ⚠ User creation may have failed - check manually"
+fi
 
 # =============================================================================
 # Copy DAGs
@@ -238,10 +244,10 @@ if [ "$WITH_SYSTEMD" = true ]; then
     echo "Step 8: Installing Systemd Services"
     echo "----------------------------------------------------------------------"
 
-    # Airflow Webserver Service
-    sudo tee /etc/systemd/system/airflow-webserver.service > /dev/null <<EOF
+    # Airflow API Server Service (Airflow 3.x replaces webserver with api-server)
+    sudo tee /etc/systemd/system/airflow-apiserver.service > /dev/null <<EOF
 [Unit]
-Description=Airflow Webserver
+Description=Airflow API Server
 After=network.target
 
 [Service]
@@ -249,7 +255,7 @@ Type=simple
 User=$DE_FUNK_USER
 Environment="AIRFLOW_HOME=$AIRFLOW_HOME"
 Environment="PATH=$AIRFLOW_VENV_PATH/bin:/usr/local/bin:/usr/bin"
-ExecStart=$AIRFLOW_VENV_PATH/bin/airflow webserver --port $AIRFLOW_PORT
+ExecStart=$AIRFLOW_VENV_PATH/bin/airflow api-server --port $AIRFLOW_PORT
 Restart=on-failure
 RestartSec=10
 
@@ -277,12 +283,12 @@ WantedBy=multi-user.target
 EOF
 
     sudo systemctl daemon-reload
-    sudo systemctl enable airflow-webserver airflow-scheduler
+    sudo systemctl enable airflow-apiserver airflow-scheduler
 
     echo "  ✓ Systemd services installed"
     echo ""
     echo "  Start with:"
-    echo "    sudo systemctl start airflow-webserver"
+    echo "    sudo systemctl start airflow-apiserver"
     echo "    sudo systemctl start airflow-scheduler"
 fi
 
@@ -295,7 +301,7 @@ echo "----------------------------------------------------------------------"
 echo "Step 9: Creating Management Scripts"
 echo "----------------------------------------------------------------------"
 
-# Start script
+# Start script (Airflow 3.x uses api-server instead of webserver)
 cat > "$AIRFLOW_HOME/start-airflow.sh" <<EOF
 #!/bin/bash
 export AIRFLOW_HOME="$AIRFLOW_HOME"
@@ -308,22 +314,22 @@ airflow scheduler &
 SCHEDULER_PID=\$!
 echo \$SCHEDULER_PID > "$AIRFLOW_HOME/scheduler.pid"
 
-# Start webserver in background
-airflow webserver --port $AIRFLOW_PORT &
-WEBSERVER_PID=\$!
-echo \$WEBSERVER_PID > "$AIRFLOW_HOME/webserver.pid"
+# Start api-server in background (Airflow 3.x)
+airflow api-server --port $AIRFLOW_PORT &
+APISERVER_PID=\$!
+echo \$APISERVER_PID > "$AIRFLOW_HOME/apiserver.pid"
 
 echo ""
 echo "Airflow started!"
 echo "  Scheduler PID: \$SCHEDULER_PID"
-echo "  Webserver PID: \$WEBSERVER_PID"
+echo "  API Server PID: \$APISERVER_PID"
 echo "  Web UI: http://\$(hostname -I | awk '{print \$1}'):$AIRFLOW_PORT"
 echo ""
 echo "Stop with: $AIRFLOW_HOME/stop-airflow.sh"
 EOF
 chmod +x "$AIRFLOW_HOME/start-airflow.sh"
 
-# Stop script
+# Stop script (Airflow 3.x uses api-server)
 cat > "$AIRFLOW_HOME/stop-airflow.sh" <<EOF
 #!/bin/bash
 echo "Stopping Airflow..."
@@ -333,6 +339,12 @@ if [ -f "$AIRFLOW_HOME/scheduler.pid" ]; then
     rm "$AIRFLOW_HOME/scheduler.pid"
 fi
 
+if [ -f "$AIRFLOW_HOME/apiserver.pid" ]; then
+    kill \$(cat "$AIRFLOW_HOME/apiserver.pid") 2>/dev/null
+    rm "$AIRFLOW_HOME/apiserver.pid"
+fi
+
+# Legacy cleanup (in case old webserver.pid exists)
 if [ -f "$AIRFLOW_HOME/webserver.pid" ]; then
     kill \$(cat "$AIRFLOW_HOME/webserver.pid") 2>/dev/null
     rm "$AIRFLOW_HOME/webserver.pid"
@@ -340,6 +352,7 @@ fi
 
 # Kill any remaining
 pkill -f "airflow scheduler" 2>/dev/null
+pkill -f "airflow api-server" 2>/dev/null
 pkill -f "airflow webserver" 2>/dev/null
 
 echo "  ✓ Airflow stopped"
@@ -373,7 +386,7 @@ echo "  airflow dags trigger de_funk_pipeline"
 echo ""
 if [ "$WITH_SYSTEMD" = true ]; then
 echo "Systemd:"
-echo "  sudo systemctl start airflow-webserver airflow-scheduler"
-echo "  sudo systemctl status airflow-webserver"
+echo "  sudo systemctl start airflow-apiserver airflow-scheduler"
+echo "  sudo systemctl status airflow-apiserver"
 echo ""
 fi
