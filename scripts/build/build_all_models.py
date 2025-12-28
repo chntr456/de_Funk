@@ -945,13 +945,21 @@ def main():
 
     args = parser.parse_args()
 
+    # Handle comma-separated models (e.g., --models temporal,company)
+    models_to_build = None
+    if args.models:
+        models_to_build = []
+        for m in args.models:
+            # Split by comma in case user provided comma-separated list
+            models_to_build.extend([x.strip() for x in m.split(',') if x.strip()])
+
     try:
         # Initialize builder
         builder = AllModelBuilder(config_dir=args.config_dir)
 
         # Build all models
         success = builder.build_all_models(
-            models=args.models,
+            models=models_to_build,
             date_from=args.date_from,
             date_to=args.date_to,
             days=args.days,

@@ -21,23 +21,32 @@ from utils.repo import setup_repo_imports
 setup_repo_imports()
 
 
-def check_parquet_table(spark, path: Path, name: str) -> dict:
-    """Check a parquet table and return stats."""
-    result = {"name": name, "path": str(path), "exists": False, "rows": 0, "columns": [], "error": None}
+def check_table(spark, path: Path, name: str) -> dict:
+    """Check a parquet or delta table and return stats."""
+    result = {"name": name, "path": str(path), "exists": False, "rows": 0, "columns": [], "error": None, "format": None}
 
     if not path.exists():
         return result
 
+    result["exists"] = True
+
+    # Check if Delta table
+    is_delta = (path / "_delta_log").exists()
+
     # Check for parquet files
     parquet_files = list(path.glob("*.parquet")) + list(path.glob("**/*.parquet"))
-    if not parquet_files:
+
+    if not is_delta and not parquet_files:
         result["error"] = "No parquet files found"
         return result
 
-    result["exists"] = True
-
     try:
-        df = spark.read.parquet(str(path))
+        if is_delta:
+            result["format"] = "delta"
+            df = spark.read.format("delta").load(str(path))
+        else:
+            result["format"] = "parquet"
+            df = spark.read.parquet(str(path))
         result["rows"] = df.count()
         result["columns"] = df.columns
     except Exception as e:
@@ -55,55 +64,66 @@ def scan_silver_model(spark, model_path: Path, model_name: str) -> list:
 
     # Check dims/ subdirectory
     dims_path = model_path / "dims"
-    if dims_path.exists():
+    if dims_path.exists() and dims_path.is_dir():
         for item in sorted(dims_path.iterdir()):
             if item.is_dir():
-                result = check_parquet_table(spark, item, f"{model_name}/dims/{item.name}")
+                result = check_table(spark, item, f"{model_name}/dims/{item.name}")
                 results.append(result)
 
     # Check facts/ subdirectory
     facts_path = model_path / "facts"
-    if facts_path.exists():
+    if facts_path.exists() and facts_path.is_dir():
         for item in sorted(facts_path.iterdir()):
             if item.is_dir():
-                result = check_parquet_table(spark, item, f"{model_name}/facts/{item.name}")
+                result = check_table(spark, item, f"{model_name}/facts/{item.name}")
                 results.append(result)
 
     # Also check for direct tables (legacy structure)
     for item in sorted(model_path.iterdir()):
         if item.is_dir() and item.name not in ("dims", "facts", "_delta_log"):
             has_parquet = bool(list(item.glob("*.parquet")) or list(item.glob("**/*.parquet")))
-            if has_parquet:
-                result = check_parquet_table(spark, item, f"{model_name}/{item.name}")
+            has_delta = (item / "_delta_log").exists()
+            if has_parquet or has_delta:
+                result = check_table(spark, item, f"{model_name}/{item.name}")
                 results.append(result)
+
+    # If nothing found in dims/facts/legacy, try reading model directory itself as a table
+    if not results:
+        has_parquet = bool(list(model_path.glob("*.parquet")) or list(model_path.rglob("*.parquet")))
+        has_delta = (model_path / "_delta_log").exists()
+        if has_parquet or has_delta:
+            result = check_table(spark, model_path, model_name)
+            results.append(result)
 
     return results
 
 
 def scan_directory(spark, base_path: Path, layer_name: str) -> list:
-    """Scan a directory for tables."""
+    """Scan a directory for tables (Bronze layer)."""
     results = []
 
     if not base_path.exists():
         print(f"  ⚠ {layer_name} path does not exist: {base_path}")
         return results
 
-    # Look for tables (directories with parquet files)
+    # Look for tables (directories with parquet/delta files)
     for item in sorted(base_path.iterdir()):
         if item.is_dir():
-            # Check if it's a table (has parquet files)
+            # Check if it's a table (has parquet files or delta log)
             has_parquet = bool(list(item.glob("*.parquet")) or list(item.glob("**/*.parquet")))
+            has_delta = (item / "_delta_log").exists()
 
-            if has_parquet:
-                result = check_parquet_table(spark, item, item.name)
+            if has_parquet or has_delta:
+                result = check_table(spark, item, item.name)
                 results.append(result)
             else:
                 # Recurse into subdirectory
                 for subitem in sorted(item.iterdir()):
                     if subitem.is_dir():
                         has_parquet = bool(list(subitem.glob("*.parquet")) or list(subitem.glob("**/*.parquet")))
-                        if has_parquet:
-                            result = check_parquet_table(spark, subitem, f"{item.name}/{subitem.name}")
+                        has_delta = (subitem / "_delta_log").exists()
+                        if has_parquet or has_delta:
+                            result = check_table(spark, subitem, f"{item.name}/{subitem.name}")
                             results.append(result)
 
     return results

@@ -327,7 +327,8 @@ class TimeSeriesForecastModel(BaseModel):
         Returns:
             Dictionary of model configs (ARIMA, Prophet, etc.)
         """
-        return self.model_cfg.get('models', {})
+        # Support both 'ml_models' (v2.0 config) and 'models' (legacy) keys
+        return self.model_cfg.get('ml_models', self.model_cfg.get('models', {}))
 
     def get_model_config(self, model_name: str) -> Dict:
         """
