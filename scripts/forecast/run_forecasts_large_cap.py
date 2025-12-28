@@ -39,8 +39,9 @@ import traceback
 from utils.repo import setup_repo_imports, get_repo_root
 repo_root = setup_repo_imports()
 
+from config import ConfigLoader
 from config.logging import get_logger, setup_logging
-from models.implemented.forecast import ForecastModel
+from models.domain.forecast.company_forecast_model import CompanyForecastModel as ForecastModel
 from models.api.session import UniversalSession
 
 logger = get_logger(__name__)
@@ -78,7 +79,10 @@ def get_large_cap_tickers(
     """
     import duckdb
 
-    company_root = storage_cfg["roots"].get("company_silver", "storage/silver/company")
+    # Paths are resolved by ConfigLoader - no fallback needed
+    company_root = storage_cfg["roots"].get("company_silver")
+    if not company_root:
+        company_root = storage_cfg["roots"]["silver"] + "/company"
     fact_prices_path = f"{company_root}/facts/fact_prices"
 
     try:
@@ -201,8 +205,11 @@ def run_forecast_pipeline(
     print("Loading configurations...")
     config_root = get_repo_root() / "configs"
 
-    storage_cfg = load_config(config_root / "storage.json")
-    forecast_cfg = load_config(config_root / "models" / "forecast.yaml")
+    # Use ConfigLoader for properly resolved storage paths
+    config = ConfigLoader().load()
+    storage_cfg = config.storage
+    # v2.0 modular config structure: configs/models/forecast/model.yaml
+    forecast_cfg = load_config(config_root / "models" / "forecast" / "model.yaml")
 
     logger.debug("Configurations loaded")
     print(f"  Loaded storage config")
@@ -289,8 +296,10 @@ def run_forecast_pipeline(
     # Set session for cross-model data access
     forecast_model.set_session(session)
 
-    # Get output directory from storage config
-    forecast_root = storage_cfg['roots'].get('forecast_silver', 'storage/silver/forecast')
+    # Get output directory from storage config (resolved by ConfigLoader)
+    forecast_root = storage_cfg['roots'].get('forecast_silver')
+    if not forecast_root:
+        forecast_root = storage_cfg['roots']['silver'] + "/forecast"
 
     logger.info(f"Forecast model initialized, output: {forecast_root}")
     print(f"  Forecast model initialized")

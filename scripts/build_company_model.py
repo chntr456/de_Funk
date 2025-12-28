@@ -14,6 +14,7 @@ from pathlib import Path
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
+from config import ConfigLoader
 from config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
@@ -45,10 +46,9 @@ def main():
 
     # Load configuration
     try:
-        # Load storage config
-        storage_path = repo_root / "configs" / "storage.json"
-        with open(storage_path) as f:
-            storage_cfg = json.load(f)
+        # Use ConfigLoader for properly resolved storage paths
+        config = ConfigLoader().load()
+        storage_cfg = config.storage
         print("✓ Storage config loaded")
 
         # Load model config using ModelConfigLoader (handles modular YAMLs)
@@ -65,7 +65,7 @@ def main():
 
     # Load model with correct initialization
     try:
-        from models.implemented.company.model import CompanyModel
+        from models.domain.company.model import CompanyModel
 
         print("\nInitializing company model...")
         model = CompanyModel(
@@ -112,11 +112,12 @@ def main():
         print("\nWriting to silver layer...")
         print("-" * 70)
 
-        # Determine output root from storage config
-        silver_root = storage_cfg.get("roots", {}).get("company_silver", "storage/silver/company")
-        output_path = repo_root / silver_root
+        # Paths are already absolute from ConfigLoader
+        output_path = storage_cfg["roots"].get("company_silver")
+        if not output_path:
+            output_path = storage_cfg["roots"]["silver"] + "/company"
 
-        model.write_tables(output_root=str(output_path), quiet=True)
+        model.write_tables(output_root=output_path, quiet=True)
         print(f"✓ Written to silver layer: {output_path}")
 
     except Exception as e:

@@ -35,6 +35,7 @@ from typing import List, Dict, Tuple
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
+from config import ConfigLoader
 from config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
@@ -235,20 +236,19 @@ def main():
     print(f"Using: {'Spark' if args.use_spark else 'delta-rs (faster)'}")
     print()
 
-    # Load storage config
-    storage_path = repo_root / "configs" / "storage.json"
-    with open(storage_path) as f:
-        storage_cfg = json.load(f)
+    # Use ConfigLoader for properly resolved storage paths
+    config = ConfigLoader().load()
+    storage_cfg = config.storage
 
-    # Determine paths to migrate
+    # Determine paths to migrate (paths are already absolute from ConfigLoader)
     paths_to_scan = []
 
     if args.layer in ("bronze", "all"):
-        bronze_root = repo_root / storage_cfg["roots"]["bronze"]
+        bronze_root = Path(storage_cfg["roots"]["bronze"])
         paths_to_scan.append(("Bronze", bronze_root))
 
     if args.layer in ("silver", "all"):
-        silver_root = repo_root / storage_cfg["roots"]["silver"]
+        silver_root = Path(storage_cfg["roots"]["silver"])
         paths_to_scan.append(("Silver", silver_root))
 
     # Find all Parquet tables

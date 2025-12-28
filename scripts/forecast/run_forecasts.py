@@ -24,6 +24,7 @@ import traceback
 from utils.repo import setup_repo_imports, get_repo_root
 repo_root = setup_repo_imports()
 
+from config import ConfigLoader
 from config.logging import get_logger, setup_logging
 from models.domain.forecast.company_forecast_model import CompanyForecastModel as ForecastModel
 from models.api.session import UniversalSession
@@ -62,7 +63,11 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
     import pyarrow.dataset as ds
 
     # Try stocks Silver fact_stock_prices first (tickers with actual price data)
-    stocks_root = storage_cfg["roots"].get("stocks_silver", "storage/silver/stocks")
+    # Paths are already resolved by ConfigLoader - no fallback needed
+    stocks_root = storage_cfg["roots"].get("stocks_silver")
+    if not stocks_root:
+        logger.warning("stocks_silver not configured in storage roots")
+        stocks_root = storage_cfg["roots"]["silver"] + "/stocks"
     fact_prices_path = Path(stocks_root) / "facts" / "fact_stock_prices"
 
     if fact_prices_path.exists():
@@ -80,7 +85,7 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
             logger.warning(f"Could not load tickers from stocks Silver fact_stock_prices: {e}")
 
     # Fallback: v2.0 Bronze securities_prices_daily
-    bronze_root = storage_cfg["roots"].get("bronze", "storage/bronze")
+    bronze_root = storage_cfg["roots"]["bronze"]  # Always resolved by ConfigLoader
     prices_path = Path(bronze_root) / "securities_prices_daily"
 
     if prices_path.exists():
@@ -172,7 +177,9 @@ def run_forecast_pipeline(
         print("Loading configurations...")
     config_root = get_repo_root() / "configs"
 
-    storage_cfg = load_config(config_root / "storage.json")
+    # Use ConfigLoader for properly resolved storage paths
+    config = ConfigLoader().load()
+    storage_cfg = config.storage
     # v2.0 modular config structure: configs/models/forecast/model.yaml
     forecast_cfg = load_config(config_root / "models" / "forecast" / "model.yaml")
 
@@ -238,8 +245,10 @@ def run_forecast_pipeline(
     # Set session for cross-model data access
     forecast_model.set_session(session)
 
-    # Get output directory from storage config
-    forecast_root = storage_cfg['roots'].get('forecast_silver', 'storage/silver/forecast')
+    # Get output directory from storage config (resolved by ConfigLoader)
+    forecast_root = storage_cfg['roots'].get('forecast_silver')
+    if not forecast_root:
+        forecast_root = storage_cfg['roots']['silver'] + "/forecast"
 
     logger.info(f"Forecast model initialized, output: {forecast_root}")
     if not minimal_progress:

@@ -155,10 +155,10 @@ def main():
         print(f"✗ Failed to create Spark session: {e}")
         return 1
 
-    # Get bronze root
+    # Get bronze root (already resolved by ConfigLoader)
     from config import ConfigLoader
     config = ConfigLoader().load()
-    bronze_root = Path(config.storage.get("roots", {}).get("bronze", "storage/bronze"))
+    bronze_root = Path(config.storage["roots"]["bronze"])
 
     print(f"Bronze root: {bronze_root}")
     print()
