@@ -88,6 +88,10 @@ class AllModelBuilder:
         self.ctx = None  # Lazy init
         self.session = None  # Lazy init UniversalSession for cross-model refs
 
+        # Load cluster config for pipeline settings
+        self.cluster_config = self._load_cluster_config()
+        self.pipeline_config = self.cluster_config.get('pipeline', {})
+
         # Track ingestion state (avoid re-ingesting same data source)
         self.ingestion_completed = set()
 
@@ -102,6 +106,36 @@ class AllModelBuilder:
         }
 
         logger.info("Initialized all models builder (v2.0 - ModelConfigLoader)")
+
+    def _load_cluster_config(self) -> dict:
+        """Load cluster configuration from cluster.yaml."""
+        import yaml
+        cluster_yaml = Path(repo_root) / "configs" / "cluster.yaml"
+        if cluster_yaml.exists():
+            with open(cluster_yaml) as f:
+                return yaml.safe_load(f) or {}
+        return {}
+
+    def get_max_tickers_for_model(self, model_name: str, override: Optional[int] = None) -> Optional[int]:
+        """
+        Get max_tickers for a specific model.
+
+        Priority:
+        1. Command-line override (if provided)
+        2. Model-specific setting in cluster.yaml pipeline.model_defaults
+        3. Default pipeline.max_tickers
+        4. None (no limit)
+        """
+        if override is not None:
+            return override
+
+        model_defaults = self.pipeline_config.get('model_defaults', {})
+        if model_name in model_defaults:
+            model_max = model_defaults[model_name].get('max_tickers')
+            if model_max is not None:
+                return model_max
+
+        return self.pipeline_config.get('max_tickers')
 
     def _init_context(self):
         """Lazy initialize RepoContext and UniversalSession."""
@@ -639,7 +673,7 @@ class AllModelBuilder:
             model_name: Model to build
             date_from: Start date
             date_to: End date
-            max_tickers: Max tickers limit
+            max_tickers: Max tickers limit (command-line override, None uses config defaults)
             minimal_progress: If True, suppress verbose logging
 
         Returns:
@@ -647,6 +681,11 @@ class AllModelBuilder:
         """
         # Initialize context if needed
         self._init_context()
+
+        # Get model-specific max_tickers (uses cluster.yaml defaults if no override)
+        effective_max_tickers = self.get_max_tickers_for_model(model_name, max_tickers)
+        if effective_max_tickers and not minimal_progress:
+            logger.info(f"  Using max_tickers={effective_max_tickers} for {model_name}")
 
         try:
             # Get model configuration using ModelConfigLoader
@@ -667,11 +706,9 @@ class AllModelBuilder:
                 from models.domain.etf.model import ETFModel
                 model_class = ETFModel
             elif model_name == 'forecast':
-                # Forecast model has different structure - use BaseModel
-                if not minimal_progress:
-                    logger.warning(f"  Forecast model uses legacy structure, using BaseModel")
-                from models.base.model import BaseModel
-                model_class = BaseModel
+                # Forecast model reads from Silver (stocks) and generates predictions
+                from models.domain.forecast.company_forecast_model import CompanyForecastModel
+                model_class = CompanyForecastModel
             elif model_name == 'temporal' or model_name == 'core':
                 from models.foundation.temporal.model import TemporalModel
                 model_class = TemporalModel
@@ -699,7 +736,7 @@ class AllModelBuilder:
                 params={
                     "DATE_FROM": date_from,
                     "DATE_TO": date_to,
-                    "UNIVERSE_SIZE": max_tickers or 0
+                    "UNIVERSE_SIZE": effective_max_tickers or 0
                 }
             )
 

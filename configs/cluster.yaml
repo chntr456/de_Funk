@@ -199,6 +199,25 @@ ingestion:
   retry_delay_seconds: 2.0
 
 # =============================================================================
+# PIPELINE SETTINGS
+# =============================================================================
+pipeline:
+  # Default max tickers for pipeline runs (use top N by market cap)
+  max_tickers: 100
+
+  # Model-specific overrides
+  model_defaults:
+    forecast:
+      max_tickers: 30      # Forecasting is expensive, limit to top 30
+    stocks:
+      max_tickers: 500     # Stocks can handle more
+    company:
+      max_tickers: 500
+
+  # Use market cap ranking to select tickers
+  use_market_cap_ranking: true
+
+# =============================================================================
 # FORECASTING SETTINGS
 # =============================================================================
 forecasting:
@@ -207,6 +226,9 @@ forecasting:
 
   # Default forecast horizon (days)
   default_horizon: 30
+
+  # Max tickers for forecast runs (can override pipeline.model_defaults.forecast)
+  max_tickers: 30
 
   # Available models
   models:
