@@ -32,10 +32,12 @@ from airflow.utils.task_group import TaskGroup
 # Configuration
 # =============================================================================
 
-# Paths
-PROJECT_ROOT = "/shared/de_Funk"
-STORAGE_PATH = "/shared/storage"
-VENV_PATH = "/home/ms_trixie/venv"
+# Paths - Update these for your environment
+# For local dev: use local paths
+# For cluster: use /shared/de_Funk and /shared/storage
+PROJECT_ROOT = "/home/ms_trixie/PycharmProjects/de_Funk"
+STORAGE_PATH = "/home/ms_trixie/PycharmProjects/de_Funk/storage"
+VENV_PATH = "/home/ms_trixie/venv"  # Venv with project dependencies (not airflow-venv)
 SPARK_HOME = f"{VENV_PATH}/lib/python3.11/site-packages/pyspark"
 
 # Spark cluster
