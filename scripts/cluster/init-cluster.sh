@@ -201,7 +201,16 @@ fi
 
 source "$SPARK_VENV/bin/activate"
 pip install --upgrade pip
+
+# Core data processing
 pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow requests python-dotenv networkx
+
+# Machine learning libraries
+pip install scikit-learn statsmodels prophet xgboost lightgbm
+
+# Deep learning (CPU versions for compatibility - use GPU versions if needed)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+pip install tensorflow
 
 JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
 SPARK_HOME=$(python -c "import pyspark; print(pyspark.__path__[0])")
@@ -271,7 +280,11 @@ if [ ! -d ~/venv ]; then
 fi
 source ~/venv/bin/activate
 pip install --upgrade pip
+# Core data processing
 pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow networkx
+
+# Machine learning (for Spark UDFs)
+pip install scikit-learn statsmodels xgboost lightgbm
 
 JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
 SPARK_HOME=\$(python -c "import pyspark; print(pyspark.__path__[0])")
