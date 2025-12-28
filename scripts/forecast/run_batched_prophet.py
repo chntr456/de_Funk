@@ -114,6 +114,9 @@ def load_price_data(storage_path: Path, max_tickers: int = None) -> Dict[str, pd
     """
     Load price data from Silver/Bronze layer.
 
+    When max_tickers is specified, returns top N tickers sorted by market cap
+    proxy (close × volume from most recent trade date).
+
     Returns:
         Dict mapping ticker -> DataFrame
     """
@@ -132,15 +135,28 @@ def load_price_data(storage_path: Path, max_tickers: int = None) -> Dict[str, pd
 
     # Filter to recent data
     cutoff_date = (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')
+    df['trade_date'] = pd.to_datetime(df['trade_date'])
     df = df[df['trade_date'] >= cutoff_date]
 
-    # Get unique tickers
-    tickers = df['ticker'].unique().tolist()
-
+    # Select tickers - sort by market cap proxy if max_tickers specified
     if max_tickers:
-        tickers = tickers[:max_tickers]
+        # Filter valid data for market cap calculation
+        valid_df = df.dropna(subset=['close', 'volume'])
+        valid_df = valid_df[valid_df['volume'] > 0]
 
-    logger.info(f"Loaded {len(tickers)} tickers")
+        # Get latest price per ticker
+        latest = valid_df.sort_values('trade_date').groupby('ticker').tail(1).copy()
+
+        # Calculate market cap proxy and sort
+        latest['market_cap_proxy'] = latest['close'] * latest['volume']
+        latest = latest.sort_values('market_cap_proxy', ascending=False)
+
+        # Get top N tickers
+        tickers = latest['ticker'].head(max_tickers).tolist()
+        logger.info(f"Selected top {len(tickers)} tickers by market cap")
+    else:
+        tickers = df['ticker'].unique().tolist()
+        logger.info(f"Loaded {len(tickers)} tickers")
 
     # Group by ticker
     ticker_data = {}

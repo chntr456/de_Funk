@@ -42,6 +42,11 @@ SPARK_HOME = f"{VENV_PATH}/lib/python3.11/site-packages/pyspark"
 SPARK_MASTER = "spark://192.168.1.212:7077"
 SPARK_CONN_ID = "spark_default"  # Configure in Airflow UI
 
+# Forecast configuration
+# Set via Airflow Variables or override here
+FORECAST_MAX_TICKERS = 100  # Top N by market cap
+FORECAST_HORIZON = 30  # Days to forecast
+
 # Default args for all tasks
 default_args = {
     'owner': 'de_funk',
@@ -231,6 +236,7 @@ with DAG(
     with TaskGroup(group_id='forecasting') as forecast_group:
         # ARIMA via Spark distributed (pandas_udf)
         # Runs on Spark cluster - distributes across all workers
+        # Uses top N tickers by market cap for efficiency
         forecast_arima = BashOperator(
             task_id='forecast_arima',
             bash_command=f"""
@@ -239,12 +245,14 @@ with DAG(
                 ./scripts/spark-cluster/submit-job.sh \
                     scripts/forecast/run_distributed_forecast.py \
                     --storage-path {STORAGE_PATH} \
-                    --horizon 30
+                    --horizon {FORECAST_HORIZON} \
+                    --max-tickers {FORECAST_MAX_TICKERS}
             """,
         )
 
         # Prophet via multiprocessing (doesn't serialize well for Spark)
         # Runs on head node with parallel workers
+        # Uses top N tickers by market cap for efficiency
         forecast_prophet = BashOperator(
             task_id='forecast_prophet',
             bash_command=f"""
@@ -252,7 +260,8 @@ with DAG(
                 source {VENV_PATH}/bin/activate && \
                 python -m scripts.forecast.run_batched_prophet \
                     --storage-path {STORAGE_PATH} \
-                    --horizon 30 \
+                    --horizon {FORECAST_HORIZON} \
+                    --max-tickers {FORECAST_MAX_TICKERS} \
                     --workers 8
             """,
         )

@@ -165,6 +165,7 @@ def run_distributed_forecast(
         horizon: Days to forecast
         max_tickers: Limit number of tickers (for testing)
     """
+    from pyspark.sql import functions as F
     from pyspark.sql.functions import col
 
     spark = get_spark()
@@ -184,12 +185,27 @@ def run_distributed_forecast(
     cutoff_date = (datetime.now() - timedelta(days=730)).strftime('%Y-%m-%d')
     prices_df = prices_df.filter(col("trade_date") >= cutoff_date)
 
-    # Limit tickers if specified
+    # Limit tickers if specified - sort by market cap proxy (close × volume)
     if max_tickers:
-        tickers = prices_df.select("ticker").distinct().limit(max_tickers).collect()
-        ticker_list = [row.ticker for row in tickers]
+        from pyspark.sql.window import Window
+
+        # Get latest price per ticker and calculate market cap proxy
+        window = Window.partitionBy("ticker").orderBy(col("trade_date").desc())
+
+        top_tickers_df = (
+            prices_df
+            .filter(col("close").isNotNull() & col("volume").isNotNull() & (col("volume") > 0))
+            .withColumn("rn", F.row_number().over(window))
+            .filter(col("rn") == 1)
+            .withColumn("market_cap_proxy", col("close") * col("volume"))
+            .orderBy(col("market_cap_proxy").desc())
+            .select("ticker")
+            .limit(max_tickers)
+        )
+
+        ticker_list = [row.ticker for row in top_tickers_df.collect()]
         prices_df = prices_df.filter(col("ticker").isin(ticker_list))
-        logger.info(f"Limited to {len(ticker_list)} tickers")
+        logger.info(f"Selected top {len(ticker_list)} tickers by market cap")
 
     # Get ticker count
     ticker_count = prices_df.select("ticker").distinct().count()
