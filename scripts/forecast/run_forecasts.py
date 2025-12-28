@@ -52,12 +52,15 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
     NOT just reference data. This prevents forecast errors for tickers
     without price history.
 
+    When limit is specified, returns top N tickers sorted by market cap proxy
+    (close × volume from most recent trade date).
+
     Args:
         storage_cfg: Storage configuration
-        limit: Optional limit on number of tickers
+        limit: Optional limit on number of tickers (returns top by market cap)
 
     Returns:
-        List of ticker symbols with price data
+        List of ticker symbols with price data, sorted by market cap if limit specified
     """
     from pathlib import Path
     import pyarrow.dataset as ds
@@ -72,15 +75,40 @@ def get_active_tickers(storage_cfg: dict, limit: int = None) -> list:
 
     if fact_prices_path.exists():
         try:
-            dataset = ds.dataset(fact_prices_path, format='parquet')
-            table = dataset.to_table(columns=['ticker'])
-            tickers = table.column('ticker').unique().to_pylist()
-
+            # If limit is specified, use DuckDB to sort by market cap proxy
             if limit:
-                tickers = tickers[:limit]
-
-            logger.info(f"Loaded {len(tickers)} tickers with price data from stocks Silver")
-            return tickers
+                import duckdb
+                con = duckdb.connect(database=':memory:')
+                query = f"""
+                WITH latest_prices AS (
+                    SELECT
+                        ticker,
+                        close,
+                        volume,
+                        ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY trade_date DESC) as rn
+                    FROM read_parquet('{fact_prices_path}/**/*.parquet')
+                    WHERE close IS NOT NULL AND volume IS NOT NULL AND volume > 0
+                ),
+                market_caps AS (
+                    SELECT ticker, (close * volume) as market_cap_proxy
+                    FROM latest_prices WHERE rn = 1
+                )
+                SELECT ticker FROM market_caps
+                ORDER BY market_cap_proxy DESC
+                LIMIT {limit}
+                """
+                result = con.execute(query).fetchall()
+                tickers = [row[0] for row in result]
+                con.close()
+                logger.info(f"Loaded top {len(tickers)} tickers by market cap from stocks Silver")
+                return tickers
+            else:
+                # No limit - just get all unique tickers
+                dataset = ds.dataset(fact_prices_path, format='parquet')
+                table = dataset.to_table(columns=['ticker'])
+                tickers = table.column('ticker').unique().to_pylist()
+                logger.info(f"Loaded {len(tickers)} tickers with price data from stocks Silver")
+                return tickers
         except Exception as e:
             logger.warning(f"Could not load tickers from stocks Silver fact_stock_prices: {e}")
 
