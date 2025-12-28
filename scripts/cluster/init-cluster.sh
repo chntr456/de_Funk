@@ -166,15 +166,17 @@ sudo apt-get update
 sudo apt-get install -y nfs-kernel-server nfs-common
 
 log "Creating directories..."
-sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk"
+sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk" "$NFS_ROOT/spark"
 sudo mkdir -p "$LOCAL_STORAGE"/{bronze,silver,logs,checkpoints}
 sudo chown -R $DE_FUNK_USER:$DE_FUNK_USER "$LOCAL_STORAGE"
 
 log "Setting up bind mounts..."
 sudo umount "$NFS_ROOT/storage" 2>/dev/null || true
 sudo umount "$NFS_ROOT/de_Funk" 2>/dev/null || true
+sudo umount "$NFS_ROOT/spark" 2>/dev/null || true
 sudo mount --bind "$LOCAL_STORAGE" "$NFS_ROOT/storage"
 sudo mount --bind "$LOCAL_PROJECT" "$NFS_ROOT/de_Funk"
+# Spark distribution will be mounted after download in Step 3
 
 log "Configuring NFS exports..."
 sudo tee /etc/exports > /dev/null <<EOF
@@ -206,6 +208,33 @@ SPARK_HOME=$(python -c "import pyspark; print(pyspark.__path__[0])")
 
 log "  ✓ JAVA_HOME: $JAVA_HOME"
 log "  ✓ SPARK_HOME: $SPARK_HOME"
+
+# Download and setup Spark distribution for workers
+SPARK_VERSION="4.0.1"
+SPARK_DIST_DIR="/home/$DE_FUNK_USER/spark-dist"
+SPARK_TGZ="spark-${SPARK_VERSION}-bin-hadoop3.tgz"
+SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/${SPARK_TGZ}"
+
+log "Setting up Spark distribution for workers..."
+if [ ! -d "$SPARK_DIST_DIR/spark-${SPARK_VERSION}-bin-hadoop3" ]; then
+    log "  Downloading Spark ${SPARK_VERSION}..."
+    mkdir -p "$SPARK_DIST_DIR"
+    cd "$SPARK_DIST_DIR"
+    if [ ! -f "$SPARK_TGZ" ]; then
+        wget -q "$SPARK_URL" || curl -sLO "$SPARK_URL"
+    fi
+    tar xzf "$SPARK_TGZ"
+    rm -f "$SPARK_TGZ"
+    cd "$REPO_ROOT"
+    log "  ✓ Spark distribution extracted"
+else
+    log "  ✓ Spark distribution already exists"
+fi
+
+# Mount Spark distribution to NFS
+log "  Mounting Spark distribution to NFS..."
+sudo mount --bind "$SPARK_DIST_DIR/spark-${SPARK_VERSION}-bin-hadoop3" "$NFS_ROOT/spark"
+log "  ✓ Spark available at /shared/spark on workers"
 
 # =============================================================================
 # Step 4: Setup Each Worker (Sequential)
@@ -251,12 +280,13 @@ echo "  SPARK_HOME=\$SPARK_HOME"
 
 echo "  Creating systemd service..."
 # Create a wrapper script that handles classpath glob expansion
-# Note: \$ escaping preserves $ for the worker's heredoc processing
+# Uses shared Spark distribution from NFS at /shared/spark
 cat > ~/start-spark-worker.sh << 'STARTWRAPPER'
 #!/bin/bash
 source ~/venv/bin/activate
 JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
-SPARK_HOME=\$(python -c "import pyspark; print(pyspark.__path__[0])")
+SPARK_HOME=/shared/spark
+export SPARK_HOME
 exec "\$JAVA_HOME/bin/java" -cp "\$SPARK_HOME/jars/*" -Xmx${mem}g \
     org.apache.spark.deploy.worker.Worker \
     --cores $cores --memory ${mem}g \
@@ -314,7 +344,8 @@ log "Starting Spark Master..."
 
 source "$SPARK_VENV/bin/activate"
 JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
-SPARK_HOME=$(python -c "import pyspark; print(pyspark.__path__[0])")
+# Use shared Spark distribution for consistency with workers
+SPARK_HOME="$NFS_ROOT/spark"
 
 mkdir -p "$LOCAL_STORAGE/logs"
 
