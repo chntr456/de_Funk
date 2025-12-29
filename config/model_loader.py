@@ -407,9 +407,9 @@ class ModelConfigLoader:
         if 'measures' in config and '_python_module' in config['measures']:
             module_path = config['measures']['_python_module']
 
-            # Convert path to module name: 'stocks/measures.py' -> 'models.implemented.stocks.measures'
+            # Convert path to module name: 'stocks/measures.py' -> 'models.domain.stocks.measures'
             module_path = module_path.replace('/', '.').replace('.py', '')
-            full_module = f'models.implemented.{module_path}'
+            full_module = f'models.domain.{module_path}'
 
             try:
                 module = importlib.import_module(full_module)

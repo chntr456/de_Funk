@@ -157,8 +157,8 @@ def reingest_bronze(ctx, date_from: str, date_to: str, max_tickers: int = None):
 def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
     """Rebuild silver layer models using v2.0 modular architecture."""
     from config.model_loader import ModelConfigLoader
-    from models.implemented.company.model import CompanyModel
-    from models.implemented.stocks.model import StocksModel
+    from models.domain.company.model import CompanyModel
+    from models.domain.stocks.model import StocksModel
     from models.api.session import UniversalSession
 
     print("=" * 80)

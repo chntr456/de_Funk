@@ -98,14 +98,19 @@ def load_storage_config(repo_root: Path, storage_root: Optional[Path] = None) ->
 
 
 def discover_builders(repo_root: Path) -> None:
-    """Discover and register all model builders."""
-    models_path = repo_root / "models" / "domain"
+    """Discover and register all model builders from foundation and domain."""
+    # Discover from both foundation (temporal) and domain (company, stocks, etc.)
+    for subdir in ["foundation", "domain"]:
+        models_path = repo_root / "models" / subdir
+        if models_path.exists():
+            BuilderRegistry.discover(models_path)
+            logger.debug(f"Discovered builders from models/{subdir}")
 
-    if models_path.exists():
-        BuilderRegistry.discover(models_path)
-        logger.info(f"Discovered {len(BuilderRegistry.all())} builders")
+    total = len(BuilderRegistry.all())
+    if total > 0:
+        logger.info(f"Discovered {total} builders: {', '.join(BuilderRegistry.all().keys())}")
     else:
-        logger.warning(f"Models path not found: {models_path}")
+        logger.warning("No builders discovered. Check models/foundation/*/builder.py and models/domain/*/builder.py")
 
 
 def build_models(

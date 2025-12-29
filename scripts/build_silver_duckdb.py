@@ -63,7 +63,7 @@ def main():
     print(f"\nInstantiating {args.model} model...")
 
     if args.model == 'stocks':
-        from models.implemented.stocks.model import StocksModel
+        from models.domain.stocks.model import StocksModel
         model = StocksModel(
             connection=connection,
             storage_cfg=storage_cfg,
@@ -72,7 +72,7 @@ def main():
             repo_root=repo_root
         )
     elif args.model == 'company':
-        from models.implemented.company.model import CompanyModel
+        from models.domain.company.model import CompanyModel
         model = CompanyModel(
             connection=connection,
             storage_cfg=storage_cfg,
