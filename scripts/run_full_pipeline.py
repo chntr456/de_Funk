@@ -343,8 +343,8 @@ def run_full_pipeline(
 
         try:
             from config.model_loader import ModelConfigLoader
-            from models.implemented.stocks.model import StocksModel
-            from models.implemented.company.model import CompanyModel
+            from models.domain.stocks.model import StocksModel
+            from models.domain.company.model import CompanyModel
             from orchestration.common.spark_session import get_spark
             from core.connection import ConnectionFactory
 
