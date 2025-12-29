@@ -230,6 +230,16 @@ class BronzeSink:
             # Read-Merge-Overwrite: Read existing, union with new, deduplicate, overwrite
             existing_df = spark.read.format("delta").load(str(base_path))
 
+            # Cast new df columns to match existing schema to avoid type conflicts
+            # (e.g., shares_outstanding: string vs long)
+            existing_schema = {f.name: f.dataType for f in existing_df.schema.fields}
+            for field in df.schema.fields:
+                if field.name in existing_schema:
+                    existing_type = existing_schema[field.name]
+                    if field.dataType != existing_type:
+                        # Cast to existing type to maintain schema consistency
+                        df = df.withColumn(field.name, col(field.name).cast(existing_type))
+
             # Add a source marker to handle update_existing logic
             existing_df = existing_df.withColumn("_source", lit(0))  # 0 = existing
             new_df = df.withColumn("_source", lit(1))  # 1 = new
@@ -258,8 +268,9 @@ class BronzeSink:
             if partitions:
                 writer = writer.partitionBy(*partitions)
 
-            # Enable schema evolution (mergeSchema is compatible with dynamic partition mode)
-            writer = writer.option("mergeSchema", "true")
+            # Use overwriteSchema to handle type changes (e.g., string → long)
+            # This is safe because we're doing a full table overwrite anyway
+            writer = writer.option("overwriteSchema", "true")
             writer.save(str(base_path))
 
             logger.info(f"Upsert complete for {table}: read-merge-overwrite strategy")
