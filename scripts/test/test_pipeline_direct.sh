@@ -8,7 +8,8 @@
 # Usage:
 #   ./scripts/test/test_pipeline_direct.sh                    # Full pipeline (100 tickers)
 #   ./scripts/test/test_pipeline_direct.sh --max-tickers 20   # Limited test
-#   ./scripts/test/test_pipeline_direct.sh --skip-seed        # Skip seeding
+#   ./scripts/test/test_pipeline_direct.sh --profile dev      # Use 'dev' profile (50 tickers)
+#   ./scripts/test/test_pipeline_direct.sh --profile quick_test  # Quick test (10 tickers)
 #   ./scripts/test/test_pipeline_direct.sh --silver-only      # Only build Silver
 #
 
@@ -32,8 +33,8 @@ log_step() { echo -e "\n${GREEN}=== $1 ===${NC}"; }
 # Default settings
 MAX_TICKERS=100
 DAYS=30
-SKIP_SEED=false
 SILVER_ONLY=false
+PROFILE=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -46,9 +47,9 @@ while [[ $# -gt 0 ]]; do
             DAYS="$2"
             shift 2
             ;;
-        --skip-seed)
-            SKIP_SEED=true
-            shift
+        --profile)
+            PROFILE="$2"
+            shift 2
             ;;
         --silver-only)
             SILVER_ONLY=true
@@ -72,7 +73,7 @@ echo "  Project Root:  $PROJECT_ROOT"
 echo "  Storage Path:  $STORAGE_PATH"
 echo "  Max Tickers:   $MAX_TICKERS"
 echo "  Days:          $DAYS"
-echo "  Skip Seed:     $SKIP_SEED"
+echo "  Profile:       ${PROFILE:-none}"
 echo "  Silver Only:   $SILVER_ONLY"
 echo ""
 
@@ -94,11 +95,16 @@ if [ "$SILVER_ONLY" = false ]; then
     # 1. AlphaVantageIngestor for Bronze ingestion (with rate limiting)
     # 2. Spark-based Silver layer build (company, stocks models)
     # 3. Forecasting (optional)
-    python -m scripts.run_full_pipeline \
-        --max-tickers "$MAX_TICKERS" \
-        --days "$DAYS" \
-        --use-bulk-listing \
-        --skip-forecasts || {
+
+    # Build command with optional profile
+    CMD="python -m scripts.run_full_pipeline --use-bulk-listing --skip-forecasts"
+    if [ -n "$PROFILE" ]; then
+        CMD="$CMD --profile $PROFILE"
+    else
+        CMD="$CMD --max-tickers $MAX_TICKERS --days $DAYS"
+    fi
+
+    eval $CMD || {
         log_warn "Pipeline had some issues, check output above"
     }
 else
