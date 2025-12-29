@@ -264,13 +264,13 @@ class BronzeSink:
             combined = combined.coalesce(4)
 
             # Overwrite the entire table
+            # Note: We cast new data columns to match existing schema types (above)
+            # so we don't need overwriteSchema. mergeSchema handles new columns.
+            # overwriteSchema is NOT compatible with dynamic partition overwrite mode.
             writer = combined.write.format("delta").mode("overwrite")
             if partitions:
                 writer = writer.partitionBy(*partitions)
-
-            # Use overwriteSchema to handle type changes (e.g., string → long)
-            # This is safe because we're doing a full table overwrite anyway
-            writer = writer.option("overwriteSchema", "true")
+            writer = writer.option("mergeSchema", "true")
             writer.save(str(base_path))
 
             logger.info(f"Upsert complete for {table}: read-merge-overwrite strategy")
