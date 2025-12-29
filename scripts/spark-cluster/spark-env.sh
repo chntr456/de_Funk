@@ -47,11 +47,16 @@ SPARK_USER="ms_trixie"
 # Virtual environment with PySpark
 VENV_PATH="/home/$SPARK_USER/venv"
 
-# Shared storage (NFS mount)
-SHARED_STORAGE="/shared/storage"
-
-# Project root (NFS mount)
-PROJECT_ROOT="/shared/de_Funk"
+# Detect if NFS is mounted, otherwise use local paths
+if [ -d "/shared/storage" ]; then
+    # Cluster mode with NFS
+    SHARED_STORAGE="/shared/storage"
+    PROJECT_ROOT="/shared/de_Funk"
+else
+    # Local development mode
+    SHARED_STORAGE="/home/$SPARK_USER/PycharmProjects/de_Funk/storage"
+    PROJECT_ROOT="/home/$SPARK_USER/PycharmProjects/de_Funk"
+fi
 
 # Log directory
 SPARK_LOG_DIR="/tmp/spark-logs"
