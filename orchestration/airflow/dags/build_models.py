@@ -10,7 +10,7 @@ This DAG uses the existing infrastructure:
 - models/domain/company/builder.py - CompanyBuilder
 - models/domain/stocks/builder.py - StocksBuilder
 
-Schedule: Daily at 5 AM UTC (after market data settles)
+Schedule: Manual trigger only (set schedule for automation)
 """
 
 from datetime import datetime, timedelta
@@ -58,7 +58,7 @@ with DAG(
     dag_id='build_models',
     default_args=default_args,
     description='Build Silver layer models using Spark cluster',
-    schedule='0 5 * * *',  # Daily at 5 AM UTC
+    schedule=None,  # Manual trigger only (set cron for automation: '0 5 * * *')
     start_date=datetime(2025, 1, 1),
     catchup=False,
     max_active_runs=1,

@@ -4,7 +4,7 @@ Alpha Vantage Ingestion DAG.
 Triggers the existing AlphaVantageIngestor to fetch data from the API.
 Handles rate limiting and prioritization internally.
 
-Schedule: Daily after market close (4:30 PM ET)
+Schedule: Manual trigger only (set schedule for automation)
 """
 
 from datetime import datetime, timedelta
@@ -45,7 +45,7 @@ with DAG(
     dag_id='ingest_alpha_vantage',
     default_args=default_args,
     description='Ingest securities data from Alpha Vantage API',
-    schedule='30 21 * * 1-5',  # 4:30 PM ET (21:30 UTC) Mon-Fri
+    schedule=None,  # Manual trigger only (set cron for automation: '30 21 * * 1-5')
     start_date=datetime(2025, 1, 1),
     catchup=False,
     max_active_runs=1,

@@ -6,7 +6,7 @@ Uses existing forecast infrastructure:
 - scripts/forecast/run_distributed_forecast.py (ARIMA via Spark pandas_udf)
 - scripts/forecast/run_batched_prophet.py (Prophet via multiprocessing)
 
-Schedule: Weekly on Sunday at 2 AM UTC
+Schedule: Manual trigger only (set schedule for automation)
 """
 
 from datetime import datetime, timedelta
@@ -52,7 +52,7 @@ with DAG(
     dag_id='forecast_stocks',
     default_args=default_args,
     description='Distributed stock price forecasting',
-    schedule='0 2 * * 0',  # Weekly on Sunday at 2 AM UTC
+    schedule=None,  # Manual trigger only (set cron for automation: '0 2 * * 0')
     start_date=datetime(2025, 1, 1),
     catchup=False,
     max_active_runs=1,
