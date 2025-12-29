@@ -38,6 +38,7 @@ Examples:
 from __future__ import annotations
 
 import sys
+import json
 import traceback
 from pathlib import Path
 import argparse
@@ -45,6 +46,58 @@ from datetime import datetime, timedelta
 
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
+
+
+# =============================================================================
+# Profile Support - Load from run_config.json
+# =============================================================================
+
+def load_profiles() -> dict:
+    """Load profiles from configs/pipelines/run_config.json."""
+    config_path = Path(repo_root) / "configs" / "pipelines" / "run_config.json"
+    if not config_path.exists():
+        return {}
+
+    with open(config_path) as f:
+        config = json.load(f)
+
+    return config.get("profiles", {})
+
+
+def apply_profile(args: argparse.Namespace, profile_name: str) -> argparse.Namespace:
+    """Apply profile settings to args (CLI args take precedence)."""
+    profiles = load_profiles()
+
+    if profile_name not in profiles:
+        available = [k for k in profiles.keys() if not k.startswith("_")]
+        raise ValueError(f"Unknown profile: {profile_name}. Available: {', '.join(available)}")
+
+    profile = profiles[profile_name]
+
+    # Map profile keys to arg names
+    profile_mapping = {
+        "max_tickers": "max_tickers",
+        "days": "days",
+        "dry_run": "skip_data_refresh",  # dry_run maps to skip_data_refresh
+        "skip_bronze": "skip_data_refresh",
+        "skip_silver": "skip_silver_build",
+        "skip_forecasts": "skip_forecasts",
+        "log_level": None,  # Not used in this script
+    }
+
+    for profile_key, arg_name in profile_mapping.items():
+        if arg_name is None:
+            continue
+        if profile_key in profile:
+            # Only apply if CLI didn't explicitly set it
+            current_value = getattr(args, arg_name, None)
+            # For max_tickers/days, None means not set
+            # For booleans, False means not set via CLI flag
+            if current_value is None or (isinstance(current_value, bool) and not current_value):
+                setattr(args, arg_name, profile[profile_key])
+
+    print(f"Applied profile: {profile_name}")
+    return args
 
 
 def run_full_pipeline(
@@ -566,7 +619,21 @@ Examples:
 
 Note: --max-tickers automatically enables market cap sorting (top N by market cap).
       --use-bulk-listing fetches ticker list from Alpha Vantage (required for first-time setup).
+
+Profiles (from configs/pipelines/run_config.json):
+  --profile quick_test   10 tickers, dry run, debug logging
+  --profile dev          50 tickers, full pipeline
+  --profile staging      500 tickers, full pipeline
+  --profile production   All tickers, minimal logging
         """
+    )
+
+    # Profile selection
+    parser.add_argument(
+        '--profile',
+        type=str,
+        default=None,
+        help='Load named profile from run_config.json (quick_test, dev, staging, production)'
     )
 
     # Date range options
@@ -695,6 +762,14 @@ Note: --max-tickers automatically enables market cap sorting (top N by market ca
     )
 
     args = parser.parse_args()
+
+    # Apply profile if specified (CLI args take precedence)
+    if args.profile:
+        try:
+            args = apply_profile(args, args.profile)
+        except ValueError as e:
+            print(f"Error: {e}")
+            sys.exit(1)
 
     # Parse models
     models = args.models.split(',') if args.models else None
