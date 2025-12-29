@@ -85,51 +85,36 @@ if [ -z "$VIRTUAL_ENV" ]; then
 fi
 
 # =============================================================================
-# Step 1: Seed Tickers (if not skipping)
-# =============================================================================
-if [ "$SILVER_ONLY" = false ] && [ "$SKIP_SEED" = false ]; then
-    log_step "Step 1: Seeding Tickers from LISTING_STATUS"
-    python -m scripts.seed.seed_tickers --storage-path "$STORAGE_PATH" || {
-        log_warn "Seeding failed or tickers already exist, continuing..."
-    }
-fi
-
-# =============================================================================
-# Step 2: Bronze Ingestion (using distributed pipeline)
+# Run the full Spark-based pipeline
 # =============================================================================
 if [ "$SILVER_ONLY" = false ]; then
-    log_step "Step 2: Bronze Ingestion (Ray Distributed Pipeline)"
+    log_step "Running Full Pipeline (Spark-based: Bronze → Silver → Forecast)"
 
-    # Use the distributed pipeline which handles rate limiting, retries, etc.
-    python -m scripts.cluster.run_distributed_pipeline \
+    # Use the main full pipeline script which handles everything:
+    # 1. AlphaVantageIngestor for Bronze ingestion (with rate limiting)
+    # 2. Spark-based Silver layer build (company, stocks models)
+    # 3. Forecasting (optional)
+    python -m scripts.run_full_pipeline \
         --max-tickers "$MAX_TICKERS" \
-        --skip-silver \
-        --storage-path "$STORAGE_PATH" \
-        --endpoints time_series_daily,company_overview,income_statement,balance_sheet,cash_flow,earnings || {
-        log_warn "Distributed ingestion had some failures, checking if we can continue..."
+        --days "$DAYS" \
+        --use-bulk-listing \
+        --skip-forecasts || {
+        log_warn "Pipeline had some issues, check output above"
+    }
+else
+    # Silver only - just build models
+    log_step "Building Silver Layer Models Only"
+
+    log_info "Building company model..."
+    python -m scripts.build.rebuild_model --model company || {
+        log_warn "Company build failed"
+    }
+
+    log_info "Building stocks model..."
+    python -m scripts.build.rebuild_model --model stocks || {
+        log_warn "Stocks build failed"
     }
 fi
-
-# =============================================================================
-# Step 5: Build Silver Layer
-# =============================================================================
-log_step "Step 5: Building Silver Layer Models"
-
-# Build in dependency order: temporal → company → stocks
-log_info "Building temporal (calendar) model..."
-python -m scripts.build.rebuild_model --model temporal --storage-path "$STORAGE_PATH" || {
-    log_warn "Temporal build failed, may already exist"
-}
-
-log_info "Building company model..."
-python -m scripts.build.rebuild_model --model company --storage-path "$STORAGE_PATH" || {
-    log_warn "Company build failed"
-}
-
-log_info "Building stocks model..."
-python -m scripts.build.rebuild_model --model stocks --storage-path "$STORAGE_PATH" || {
-    log_warn "Stocks build failed"
-}
 
 # =============================================================================
 # Summary
