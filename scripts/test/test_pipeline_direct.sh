@@ -95,28 +95,18 @@ if [ "$SILVER_ONLY" = false ] && [ "$SKIP_SEED" = false ]; then
 fi
 
 # =============================================================================
-# Step 2: Bronze Ingestion
+# Step 2: Bronze Ingestion (using distributed pipeline)
 # =============================================================================
 if [ "$SILVER_ONLY" = false ]; then
-    log_step "Step 2: Bronze Ingestion - Prices"
-    python -m scripts.ingest.run_bronze_ingestion \
-        --storage-path "$STORAGE_PATH" \
-        --endpoints time_series_daily \
+    log_step "Step 2: Bronze Ingestion (Ray Distributed Pipeline)"
+
+    # Use the distributed pipeline which handles rate limiting, retries, etc.
+    python -m scripts.cluster.run_distributed_pipeline \
         --max-tickers "$MAX_TICKERS" \
-        --days "$DAYS"
-
-    log_step "Step 3: Bronze Ingestion - Company Overview"
-    python -m scripts.ingest.run_bronze_ingestion \
+        --skip-silver \
         --storage-path "$STORAGE_PATH" \
-        --endpoints company_overview \
-        --max-tickers "$MAX_TICKERS"
-
-    log_step "Step 4: Bronze Ingestion - Financials"
-    python -m scripts.ingest.run_bronze_ingestion \
-        --storage-path "$STORAGE_PATH" \
-        --endpoints income_statement,balance_sheet,cash_flow,earnings \
-        --max-tickers "$MAX_TICKERS" || {
-        log_warn "Some financial endpoints may have failed, continuing..."
+        --endpoints time_series_daily,company_overview,income_statement,balance_sheet,cash_flow,earnings || {
+        log_warn "Distributed ingestion had some failures, checking if we can continue..."
     }
 fi
 
