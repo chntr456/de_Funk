@@ -89,7 +89,7 @@ with DAG(
                 export SPARK_MASTER_URL="{SPARK_MASTER}" && \
                 python -m scripts.build.build_models \
                     --models {model_name} \
-                    --storage-path {STORAGE_PATH}
+                    --storage-root {STORAGE_PATH}
             """,
         )
         build_tasks[model_name] = task
