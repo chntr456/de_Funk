@@ -14,8 +14,8 @@
 
 set -e
 
-AIRFLOW_VENV="${AIRFLOW_VENV:-$HOME/airflow-venv}"
-AIRFLOW_HOME="${AIRFLOW_HOME:-$HOME/airflow}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+AIRFLOW_CMD="$SCRIPT_DIR/airflow.sh"
 
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <dag_id> [--conf '{...}']"
@@ -34,7 +34,5 @@ fi
 DAG_ID="$1"
 shift
 
-export AIRFLOW_HOME
-
 echo "Triggering DAG: $DAG_ID"
-exec "$AIRFLOW_VENV/bin/airflow" dags trigger "$DAG_ID" "$@"
+exec "$AIRFLOW_CMD" dags trigger "$DAG_ID" "$@"
