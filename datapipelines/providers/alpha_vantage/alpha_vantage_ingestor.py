@@ -994,12 +994,15 @@ class AlphaVantageIngestor(Ingestor):
         """
         from pyspark.sql.functions import col, desc
         from pathlib import Path
+        from utils.repo import get_repo_root
 
         print("Loading market cap rankings from existing data...")
 
         # Check multiple data sources in order of preference
-        bronze_path = Path(self.sink.cfg["roots"]["bronze"])
-        silver_path = Path(self.sink.cfg["roots"]["silver"])
+        # Use repo root to make paths absolute (fixes path resolution issues)
+        repo_root = get_repo_root()
+        bronze_path = repo_root / Path(self.sink.cfg["roots"]["bronze"])
+        silver_path = repo_root / Path(self.sink.cfg["roots"]["silver"])
 
         ref_path = bronze_path / "securities_reference"
         silver_dim_path = silver_path / "stocks" / "dims" / "dim_stock"
