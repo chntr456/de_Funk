@@ -137,24 +137,14 @@ log "All nodes ready!"
 section "Step 1: Cleanup Existing Processes"
 
 log "Stopping local Spark..."
-sudo systemctl stop spark-master 2>/dev/null || true
 pkill -9 -f "org.apache.spark.deploy" 2>/dev/null || true
 rm -f /tmp/spark-*.pid 2>/dev/null || true
 
 log "Stopping local Airflow..."
-sudo systemctl stop airflow-webserver airflow-scheduler 2>/dev/null || true
 pkill -9 -f "airflow" 2>/dev/null || true
 rm -f ~/airflow/*.pid 2>/dev/null || true
 
-for w in "${WORKERS[@]}"; do
-    IFS=':' read -r name ip cores mem <<< "$w"
-    log "Stopping Spark on $name..."
-    timeout 10 ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" \
-        "sudo -n systemctl stop spark-worker 2>/dev/null; pkill -f 'org.apache.spark' 2>/dev/null; true" \
-        </dev/null 2>/dev/null &
-done
-sleep 5  # Give background cleanup time to finish
-log "  ✓ All processes stopped"
+log "  ✓ Local processes stopped (workers will be restarted in Step 6)"
 
 # =============================================================================
 # Step 2: Setup NFS on Head
