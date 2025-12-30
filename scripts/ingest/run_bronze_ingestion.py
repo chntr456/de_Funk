@@ -1,227 +1,52 @@
 #!/usr/bin/env python3
 """
-Simple Bronze Ingestion Script.
+Bronze Ingestion Script.
 
 Fetches data from Alpha Vantage APIs and writes to Bronze layer.
-Designed to run standalone (no Ray/Spark needed) since API rate limits
-are the bottleneck, not compute.
+Uses AlphaVantageIngestor for proper API handling and Delta Lake writes.
 
 Usage:
     python -m scripts.ingest.run_bronze_ingestion
     python -m scripts.ingest.run_bronze_ingestion --max-tickers 100
-    python -m scripts.ingest.run_bronze_ingestion --endpoints prices,overview
+    python -m scripts.ingest.run_bronze_ingestion --endpoints time_series_daily
+    python -m scripts.ingest.run_bronze_ingestion --endpoints company_overview,income_statement
 
 Endpoints:
-    prices     - Daily OHLCV (TIME_SERIES_DAILY)
-    overview   - Company overview (OVERVIEW)
-    income     - Income statements (INCOME_STATEMENT)
-    balance    - Balance sheets (BALANCE_SHEET)
-    cashflow   - Cash flow statements (CASH_FLOW)
-    earnings   - Earnings reports (EARNINGS)
+    time_series_daily  - Daily OHLCV prices
+    company_overview   - Company overview data
+    income_statement   - Income statements
+    balance_sheet      - Balance sheets
+    cash_flow          - Cash flow statements
+    earnings           - Earnings reports
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-import time
 from pathlib import Path
-from typing import List, Optional, Dict, Any
-from datetime import datetime
 
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 from config.logging import setup_logging, get_logger
-from config import ConfigLoader
 
 logger = get_logger(__name__)
 
-# Rate limiting
-CALLS_PER_MINUTE = 5  # Free tier: 5, Premium: 75
-CALL_DELAY = 60.0 / CALLS_PER_MINUTE + 0.5  # Add buffer
-
-
-def get_tickers_from_bronze(storage_path: Path, max_tickers: Optional[int] = None) -> List[str]:
-    """Get list of tickers from seeded Bronze reference data."""
-    from deltalake import DeltaTable
-
-    ref_path = storage_path / "bronze" / "securities_reference"
-
-    if not ref_path.exists():
-        raise ValueError(
-            f"No securities_reference table at {ref_path}. "
-            "Run: python -m scripts.seed.seed_tickers first"
-        )
-
-    dt = DeltaTable(str(ref_path))
-    df = dt.to_pandas()
-
-    # Filter to stocks only
-    tickers = df[df['asset_type'] == 'Stock']['ticker'].unique().tolist()
-
-    if max_tickers:
-        tickers = tickers[:max_tickers]
-
-    logger.info(f"Found {len(tickers)} tickers to process")
-    return tickers
-
-
-def fetch_with_rate_limit(api_func, *args, **kwargs) -> Optional[Dict]:
-    """Call API function with rate limiting and error handling."""
-    try:
-        result = api_func(*args, **kwargs)
-        time.sleep(CALL_DELAY)
-        return result
-    except Exception as e:
-        logger.warning(f"API call failed: {e}")
-        time.sleep(CALL_DELAY)
-        return None
-
-
-def ingest_prices(
-    tickers: List[str],
-    storage_path: Path,
-    api_key: str
-) -> int:
-    """Ingest daily prices for tickers."""
-    from datapipelines.providers.alpha_vantage.client import AlphaVantageClient
-    from deltalake import write_deltalake
-    import pandas as pd
-
-    client = AlphaVantageClient(api_key=api_key)
-    bronze_path = storage_path / "bronze" / "securities_prices_daily"
-
-    records = []
-    success_count = 0
-
-    for i, ticker in enumerate(tickers):
-        logger.info(f"[{i+1}/{len(tickers)}] Fetching prices for {ticker}")
-
-        try:
-            data = client.get_daily_prices(ticker)
-            if data:
-                for date_str, values in data.items():
-                    records.append({
-                        'ticker': ticker,
-                        'trade_date': date_str,
-                        'open': float(values.get('1. open', 0)),
-                        'high': float(values.get('2. high', 0)),
-                        'low': float(values.get('3. low', 0)),
-                        'close': float(values.get('4. close', 0)),
-                        'volume': int(values.get('5. volume', 0)),
-                        'asset_type': 'stocks',
-                        'snapshot_dt': datetime.now().strftime('%Y-%m-%d'),
-                    })
-                success_count += 1
-
-            time.sleep(CALL_DELAY)
-
-            # Write in batches
-            if len(records) >= 10000:
-                df = pd.DataFrame(records)
-                write_deltalake(
-                    str(bronze_path),
-                    df,
-                    mode='append',
-                    schema_mode='merge'
-                )
-                records = []
-                logger.info(f"  Wrote batch to Bronze")
-
-        except Exception as e:
-            logger.warning(f"  Failed: {e}")
-            time.sleep(CALL_DELAY)
-
-    # Write remaining records
-    if records:
-        df = pd.DataFrame(records)
-        write_deltalake(
-            str(bronze_path),
-            df,
-            mode='append',
-            schema_mode='merge'
-        )
-
-    return success_count
-
-
-def ingest_company_data(
-    tickers: List[str],
-    storage_path: Path,
-    api_key: str,
-    endpoint: str
-) -> int:
-    """Ingest company data (overview, income, balance, cashflow, earnings)."""
-    from datapipelines.providers.alpha_vantage.client import AlphaVantageClient
-    from deltalake import write_deltalake
-    import pandas as pd
-
-    client = AlphaVantageClient(api_key=api_key)
-
-    # Map endpoint to table and client method
-    endpoint_config = {
-        'overview': ('company_overview', 'get_company_overview'),
-        'income': ('income_statements', 'get_income_statement'),
-        'balance': ('balance_sheets', 'get_balance_sheet'),
-        'cashflow': ('cash_flows', 'get_cash_flow'),
-        'earnings': ('earnings', 'get_earnings'),
-    }
-
-    table_name, method_name = endpoint_config[endpoint]
-    bronze_path = storage_path / "bronze" / table_name
-
-    records = []
-    success_count = 0
-
-    for i, ticker in enumerate(tickers):
-        logger.info(f"[{i+1}/{len(tickers)}] Fetching {endpoint} for {ticker}")
-
-        try:
-            method = getattr(client, method_name)
-            data = method(ticker)
-
-            if data:
-                if isinstance(data, list):
-                    for item in data:
-                        item['ticker'] = ticker
-                        item['snapshot_dt'] = datetime.now().strftime('%Y-%m-%d')
-                        records.append(item)
-                else:
-                    data['ticker'] = ticker
-                    data['snapshot_dt'] = datetime.now().strftime('%Y-%m-%d')
-                    records.append(data)
-                success_count += 1
-
-            time.sleep(CALL_DELAY)
-
-            # Write in batches
-            if len(records) >= 100:
-                df = pd.DataFrame(records)
-                write_deltalake(
-                    str(bronze_path),
-                    df,
-                    mode='append',
-                    schema_mode='merge'
-                )
-                records = []
-                logger.info(f"  Wrote batch to Bronze")
-
-        except Exception as e:
-            logger.warning(f"  Failed: {e}")
-            time.sleep(CALL_DELAY)
-
-    # Write remaining
-    if records:
-        df = pd.DataFrame(records)
-        write_deltalake(
-            str(bronze_path),
-            df,
-            mode='append',
-            schema_mode='merge'
-        )
-
-    return success_count
+# Endpoint mapping to ingestor methods
+ENDPOINT_METHODS = {
+    'time_series_daily': 'ingest_prices',
+    'prices': 'ingest_prices',
+    'company_overview': 'ingest_reference_data',
+    'overview': 'ingest_reference_data',
+    'income_statement': 'ingest_income_statements',
+    'income': 'ingest_income_statements',
+    'balance_sheet': 'ingest_balance_sheets',
+    'balance': 'ingest_balance_sheets',
+    'cash_flow': 'ingest_cash_flows',
+    'cashflow': 'ingest_cash_flows',
+    'earnings': 'ingest_earnings',
+}
 
 
 def main():
@@ -229,60 +54,101 @@ def main():
     parser.add_argument('--storage-path', type=str, default='/shared/storage',
                         help='Storage path')
     parser.add_argument('--max-tickers', type=int, help='Max tickers to process')
-    parser.add_argument('--endpoints', type=str, default='prices,overview',
-                        help='Comma-separated endpoints: prices,overview,income,balance,cashflow,earnings')
+    parser.add_argument('--endpoints', type=str, default='time_series_daily',
+                        help='Comma-separated endpoints')
+    parser.add_argument('--days', type=int, default=None,
+                        help='Days of historical data (not currently used - AV returns full history)')
 
     args = parser.parse_args()
     setup_logging()
 
     storage_path = Path(args.storage_path)
-    endpoints = [e.strip() for e in args.endpoints.split(',')]
+    endpoints = [e.strip().lower() for e in args.endpoints.split(',')]
 
-    # Load API key
-    import os
-    from dotenv import load_dotenv
-    load_dotenv()
-
-    api_key = os.getenv('ALPHA_VANTAGE_API_KEY') or os.getenv('ALPHA_VANTAGE_API_KEYS', '').split(',')[0]
-    if not api_key:
-        logger.error("No ALPHA_VANTAGE_API_KEY in environment")
-        return 1
-
-    # Get tickers
-    tickers = get_tickers_from_bronze(storage_path, args.max_tickers)
-
-    logger.info(f"Starting ingestion for {len(tickers)} tickers")
+    logger.info(f"Starting Bronze ingestion")
+    logger.info(f"Storage path: {storage_path}")
     logger.info(f"Endpoints: {endpoints}")
-    logger.info(f"Rate limit: {CALLS_PER_MINUTE} calls/min")
+    if args.max_tickers:
+        logger.info(f"Max tickers: {args.max_tickers}")
 
-    # Estimate time
-    total_calls = len(tickers) * len(endpoints)
-    est_minutes = (total_calls * CALL_DELAY) / 60
-    logger.info(f"Estimated time: {est_minutes:.0f} minutes")
+    try:
+        # Initialize context and ingestor
+        from core.context import RepoContext
+        from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
 
-    results = {}
+        ctx = RepoContext.from_repo_root(connection_type='spark')
 
-    for endpoint in endpoints:
-        logger.info(f"\n{'='*60}")
-        logger.info(f"Ingesting: {endpoint}")
-        logger.info(f"{'='*60}\n")
+        # Override storage path if provided
+        ctx.storage['roots']['bronze'] = str(storage_path / 'bronze')
+        ctx.storage['roots']['silver'] = str(storage_path / 'silver')
 
-        if endpoint == 'prices':
-            count = ingest_prices(tickers, storage_path, api_key)
-        else:
-            count = ingest_company_data(tickers, storage_path, api_key, endpoint)
+        ingestor = AlphaVantageIngestor(
+            alpha_vantage_cfg=ctx.get_api_config('alpha_vantage'),
+            storage_cfg=ctx.storage,
+            spark=ctx.spark
+        )
 
-        results[endpoint] = count
-        logger.info(f"\n{endpoint}: {count}/{len(tickers)} successful\n")
+        # Get tickers from Bronze securities_reference
+        logger.info("Fetching ticker list from securities_reference...")
+        from deltalake import DeltaTable
+        ref_path = storage_path / 'bronze' / 'securities_reference'
 
-    # Summary
-    logger.info("\n" + "="*60)
-    logger.info("Ingestion Complete")
-    logger.info("="*60)
-    for endpoint, count in results.items():
-        logger.info(f"  {endpoint}: {count}/{len(tickers)}")
+        if not ref_path.exists():
+            logger.error(f"No securities_reference at {ref_path}")
+            logger.error("Run: python -m scripts.seed.seed_tickers first")
+            return 1
 
-    return 0
+        dt = DeltaTable(str(ref_path))
+        df = dt.to_pandas()
+        tickers = df[df['asset_type'] == 'Stock']['ticker'].unique().tolist()
+
+        if args.max_tickers:
+            tickers = tickers[:args.max_tickers]
+
+        logger.info(f"Processing {len(tickers)} tickers")
+
+        # Process each endpoint
+        results = {}
+        for endpoint in endpoints:
+            if endpoint not in ENDPOINT_METHODS:
+                logger.warning(f"Unknown endpoint: {endpoint}, skipping")
+                continue
+
+            method_name = ENDPOINT_METHODS[endpoint]
+            logger.info(f"\n{'='*60}")
+            logger.info(f"Ingesting: {endpoint} ({method_name})")
+            logger.info(f"{'='*60}")
+
+            try:
+                method = getattr(ingestor, method_name)
+
+                if method_name == 'ingest_prices':
+                    method(tickers=tickers, date_from=None, date_to=None)
+                else:
+                    method(tickers=tickers)
+
+                results[endpoint] = 'success'
+                logger.info(f"{endpoint}: completed")
+
+            except Exception as e:
+                logger.error(f"{endpoint} failed: {e}")
+                results[endpoint] = f'error: {e}'
+
+        # Stop Spark
+        ctx.spark.stop()
+
+        # Summary
+        logger.info("\n" + "="*60)
+        logger.info("Ingestion Complete")
+        logger.info("="*60)
+        for endpoint, status in results.items():
+            logger.info(f"  {endpoint}: {status}")
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Ingestion failed: {e}", exc_info=True)
+        return 1
 
 
 if __name__ == "__main__":

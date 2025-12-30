@@ -223,35 +223,76 @@ run_bronze_ingestion() {
         return 0
     fi
 
-    log_step "Running Bronze ingestion (max $MAX_TICKERS tickers, $DAYS days)..."
+    log_step "Running Bronze ingestion (max $MAX_TICKERS tickers)..."
 
     cd "$PROJECT_ROOT"
 
-    # Ingest prices
-    log_info "Ingesting daily prices..."
-    python -m scripts.ingest.run_bronze_ingestion \
-        --storage-path "$STORAGE_PATH" \
-        --endpoints time_series_daily \
-        --max-tickers "$MAX_TICKERS" \
-        --days "$DAYS"
-
-    if [ $? -ne 0 ]; then
-        log_warn "Price ingestion had issues (may be rate limited)"
+    # Check if Bronze data already exists
+    local price_path="$STORAGE_PATH/bronze/securities_prices_daily"
+    if [ -d "$price_path/_delta_log" ]; then
+        local count=$(python3 -c "
+from deltalake import DeltaTable
+try:
+    dt = DeltaTable('$price_path')
+    print(len(dt.to_pandas()))
+except:
+    print('0')
+" 2>/dev/null || echo "0")
+        if [ "$count" -gt 1000000 ]; then
+            log_info "Bronze prices already populated ($count rows). Skipping ingestion."
+            log_info "Use --force-ingest to re-ingest anyway."
+            return 0
+        fi
     fi
 
-    # Ingest company overview
-    log_info "Ingesting company overview..."
-    python -m scripts.ingest.run_bronze_ingestion \
-        --storage-path "$STORAGE_PATH" \
-        --endpoints company_overview \
-        --max-tickers "$MAX_TICKERS"
+    # Use the Spark-based ingestor (AlphaVantageIngestor)
+    log_info "Using AlphaVantageIngestor for Bronze ingestion..."
+    python3 -c "
+import sys
+sys.path.insert(0, '$PROJECT_ROOT')
+from pathlib import Path
+from utils.repo import setup_repo_imports
+setup_repo_imports()
 
-    if [ $? -ne 0 ]; then
-        log_warn "Overview ingestion had issues"
+from core.context import RepoContext
+from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
+
+print('Initializing context...')
+ctx = RepoContext.from_repo_root(connection_type='spark')
+
+# Override storage path
+ctx.storage['roots']['bronze'] = '$STORAGE_PATH/bronze'
+ctx.storage['roots']['silver'] = '$STORAGE_PATH/silver'
+
+print('Initializing ingestor...')
+ingestor = AlphaVantageIngestor(
+    alpha_vantage_cfg=ctx.get_api_config('alpha_vantage'),
+    storage_cfg=ctx.storage,
+    spark=ctx.spark
+)
+
+print('Fetching ticker list...')
+_, tickers, _, _ = ingestor.ingest_bulk_listing(table_name='securities_reference', state='active')
+tickers = tickers[:$MAX_TICKERS]
+print(f'Processing {len(tickers)} tickers...')
+
+print('Ingesting prices...')
+ingestor.ingest_prices(tickers=tickers, date_from=None, date_to=None)
+
+print('Ingesting company overview...')
+ingestor.ingest_reference_data(tickers=tickers)
+
+print('Done!')
+ctx.spark.stop()
+"
+
+    if [ $? -eq 0 ]; then
+        log_success "Bronze ingestion complete"
+        return 0
+    else
+        log_warn "Bronze ingestion had issues"
+        return 0  # Don't fail the pipeline if Bronze already has data
     fi
-
-    log_success "Bronze ingestion complete"
-    return 0
 }
 
 run_silver_build() {
@@ -311,12 +352,40 @@ except:
     echo ""
     echo -e "${BOLD}Silver Layer:${NC}"
 
-    # Check Silver directories
+    # Check Silver directories - look for Delta tables recursively
     for model in temporal company stocks; do
         local path="$STORAGE_PATH/silver/$model"
         if [ -d "$path" ]; then
+            # Count Delta tables (directories with _delta_log)
             local tables=$(find "$path" -name "_delta_log" -type d 2>/dev/null | wc -l)
-            echo -e "  ${GREEN}✓${NC} $model: $tables tables"
+            if [ "$tables" -gt 0 ]; then
+                # Get total rows across all tables
+                local total_rows=$(python3 -c "
+from pathlib import Path
+from deltalake import DeltaTable
+total = 0
+for delta_log in Path('$path').rglob('_delta_log'):
+    try:
+        dt = DeltaTable(str(delta_log.parent))
+        total += len(dt.to_pandas())
+    except:
+        pass
+print(total)
+" 2>/dev/null || echo "0")
+                echo -e "  ${GREEN}✓${NC} $model: $tables tables, $total_rows rows"
+            else
+                # Check if it's a single Delta table at root
+                if [ -d "$path/_delta_log" ]; then
+                    local rows=$(python3 -c "
+from deltalake import DeltaTable
+dt = DeltaTable('$path')
+print(len(dt.to_pandas()))
+" 2>/dev/null || echo "0")
+                    echo -e "  ${GREEN}✓${NC} $model: 1 table, $rows rows"
+                else
+                    echo -e "  ${YELLOW}○${NC} $model: directory exists but no Delta tables"
+                fi
+            fi
         else
             echo -e "  ${YELLOW}○${NC} $model: not found"
         fi
