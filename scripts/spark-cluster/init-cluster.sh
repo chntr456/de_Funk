@@ -1,454 +1,487 @@
 #!/bin/bash
 #
-# Initialize Spark Cluster
+# Spark + Airflow Cluster - Full Setup
 #
-# Comprehensive cluster initialization that:
-# 1. Validates/mounts NFS shared storage
-# 2. Starts Spark master and connects workers
-# 3. Validates all worker nodes are connected
-# 4. Starts Airflow scheduler and webserver
+# Sequential setup with connection validation. Run from head node.
+# Reads configuration from configs/cluster.yaml
 #
 # Usage:
-#   ./scripts/spark-cluster/init-cluster.sh              # Full init
-#   ./scripts/spark-cluster/init-cluster.sh --skip-nfs   # Skip NFS check
-#   ./scripts/spark-cluster/init-cluster.sh --skip-airflow  # Skip Airflow
-#   ./scripts/spark-cluster/init-cluster.sh --workers-only  # Only start workers
-#
-# Prerequisites:
-#   - Run setup-head.sh once on master node
-#   - Run setup-worker.sh once on each worker node
-#   - NFS configured and exported from master
+#   ./init-cluster.sh
 #
 
 set -e
 
+# =============================================================================
+# Configuration - Read from cluster.yaml
+# =============================================================================
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+CONFIG_FILE="$REPO_ROOT/configs/cluster.yaml"
 
-# Source spark environment
-source "$SCRIPT_DIR/spark-env.sh" 2>/dev/null || true
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo "ERROR: Config file not found: $CONFIG_FILE"
+    exit 1
+fi
+
+# Parse YAML config using Python
+read_config() {
+    python3 -c "
+import yaml
+with open('$CONFIG_FILE') as f:
+    cfg = yaml.safe_load(f)
+$1
+"
+}
+
+# Extract cluster configuration
+HEAD_IP=$(read_config "print(cfg['cluster']['head']['ip'])")
+DE_FUNK_USER=$(read_config "print(cfg['cluster']['head']['user'])")
+SPARK_MASTER_PORT=$(read_config "print(cfg['spark']['master']['port'])")
+SPARK_UI_PORT=$(read_config "print(cfg['spark']['master']['ui_port'])")
+AIRFLOW_PORT=$(read_config "print(cfg['airflow']['port'])")
+
+# Build workers array from config: "name:ip:cores:memory"
+WORKERS=()
+while IFS= read -r line; do
+    WORKERS+=("$line")
+done < <(read_config "
+for w in cfg['cluster']['workers']:
+    print(f\"{w['name']}:{w['ip']}:{w['cores']}:{w['memory_gb']}\")
+")
+
+# Derived paths
+SPARK_VENV="/home/$DE_FUNK_USER/venv"
+AIRFLOW_VENV="/home/$DE_FUNK_USER/airflow-venv"
+LOCAL_PROJECT="/home/$DE_FUNK_USER/PycharmProjects/de_Funk"
+LOCAL_STORAGE="/data/de_funk"
+NFS_ROOT="/shared"
+
+echo "Loaded configuration from: $CONFIG_FILE"
+echo "  Head: $HEAD_IP (user: $DE_FUNK_USER)"
+echo "  Workers: ${#WORKERS[@]}"
+echo "  Spark Master: port $SPARK_MASTER_PORT, UI port $SPARK_UI_PORT"
+echo "  Airflow: port $AIRFLOW_PORT"
 
 # =============================================================================
-# Configuration
+# Helpers
 # =============================================================================
 
-# Network - adjust these for your cluster
-MASTER_HOST="${SPARK_MASTER_HOST:-192.168.1.212}"
-WORKER_HOSTS="${WORKER_HOSTS:-192.168.1.207 192.168.1.202 192.168.1.203}"
-
-# Storage
-NFS_SERVER="${NFS_SERVER:-$MASTER_HOST}"
-NFS_EXPORT="${NFS_EXPORT:-/shared}"
-NFS_MOUNT_POINT="${NFS_MOUNT_POINT:-/shared}"
-STORAGE_PATH="${STORAGE_PATH:-$NFS_MOUNT_POINT/storage}"
-
-# User
-DE_FUNK_USER="${DE_FUNK_USER:-ms_trixie}"
-VENV_PATH="${VENV_PATH:-/home/$DE_FUNK_USER/venv}"
-
-# Spark
-SPARK_MASTER_PORT="${SPARK_MASTER_PORT:-7077}"
-SPARK_WEBUI_PORT="${SPARK_WEBUI_PORT:-8080}"
-SPARK_MASTER_URL="spark://$MASTER_HOST:$SPARK_MASTER_PORT"
-
-# Airflow
-AIRFLOW_HOME="${AIRFLOW_HOME:-/home/$DE_FUNK_USER/airflow}"
-AIRFLOW_VENV="${AIRFLOW_VENV:-/home/$DE_FUNK_USER/airflow-venv}"
-AIRFLOW_PORT="${AIRFLOW_PORT:-8081}"
-
-# Flags
-SKIP_NFS=false
-SKIP_AIRFLOW=false
-SKIP_SPARK=false
-WORKERS_ONLY=false
-LOCAL_ONLY=false
-VERBOSE=false
-
-# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
 NC='\033[0m'
-BOLD='\033[1m'
+
+log() { echo -e "${GREEN}[$(date '+%H:%M:%S')]${NC} $1"; }
+warn() { echo -e "${YELLOW}[$(date '+%H:%M:%S')] WARN:${NC} $1"; }
+fail() { echo -e "${RED}[$(date '+%H:%M:%S')] FAIL:${NC} $1"; exit 1; }
+
+section() {
+    echo ""
+    echo "======================================================================"
+    echo "  $1"
+    echo "======================================================================"
+    echo ""
+}
 
 # =============================================================================
-# Parse Arguments
+# Step 0: Validate Connections & Setup Sudo
 # =============================================================================
 
-while [[ $# -gt 0 ]]; do
-    case $1 in
-        --skip-nfs)
-            SKIP_NFS=true
-            shift
-            ;;
-        --skip-airflow)
-            SKIP_AIRFLOW=true
-            shift
-            ;;
-        --skip-spark)
-            SKIP_SPARK=true
-            shift
-            ;;
-        --workers-only)
-            WORKERS_ONLY=true
-            shift
-            ;;
-        --local-only)
-            LOCAL_ONLY=true
-            shift
-            ;;
-        --master-host)
-            MASTER_HOST="$2"
-            SPARK_MASTER_URL="spark://$MASTER_HOST:$SPARK_MASTER_PORT"
-            shift 2
-            ;;
-        --storage-path)
-            STORAGE_PATH="$2"
-            shift 2
-            ;;
-        --verbose|-v)
-            VERBOSE=true
-            shift
-            ;;
-        --help|-h)
-            echo "Usage: $0 [OPTIONS]"
-            echo ""
-            echo "Options:"
-            echo "  --skip-nfs        Skip NFS validation"
-            echo "  --skip-airflow    Skip Airflow startup"
-            echo "  --skip-spark      Skip Spark startup (only validate NFS)"
-            echo "  --workers-only    Only start workers (master already running)"
-            echo "  --local-only      Only start local services (no SSH to workers)"
-            echo "  --master-host IP  Override master host IP"
-            echo "  --storage-path P  Override storage path"
-            echo "  --verbose         Show detailed output"
-            echo ""
-            echo "Environment Variables:"
-            echo "  MASTER_HOST       Master node IP (default: 192.168.1.212)"
-            echo "  WORKER_HOSTS      Space-separated worker IPs"
-            echo "  STORAGE_PATH      Shared storage path (default: /shared/storage)"
-            exit 0
-            ;;
-        *)
-            echo "Unknown option: $1"
-            exit 1
-            ;;
-    esac
+section "Step 0: Validating Connections & Sudo Access"
+
+log "Checking head node..."
+if [[ "$(hostname -I)" != *"$HEAD_IP"* ]]; then
+    fail "This script must run on head node ($HEAD_IP)"
+fi
+log "  ✓ Running on head node"
+
+# Cache sudo credentials locally
+log "Caching sudo credentials (enter password once)..."
+sudo -v || fail "Sudo access required"
+
+# Keep sudo alive in background
+(while true; do sudo -n true; sleep 50; done) &
+SUDO_KEEPER=$!
+trap "kill $SUDO_KEEPER 2>/dev/null" EXIT
+
+log "  ✓ Local sudo cached"
+
+# Check workers and setup passwordless sudo if needed
+for w in "${WORKERS[@]}"; do
+    IFS=':' read -r name ip cores mem <<< "$w"
+    log "Checking $name ($ip)..."
+
+    if ! ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "echo ok" &>/dev/null; then
+        fail "$name ($ip) not reachable via SSH. Check SSH keys."
+    fi
+    log "  ✓ $name SSH ok"
+
+    # Check if passwordless sudo works
+    if ! ssh -o ConnectTimeout=5 "$DE_FUNK_USER@$ip" "sudo -n true" &>/dev/null; then
+        log "  Setting up passwordless sudo on $name..."
+        # Use ssh -t for interactive sudo, then set up NOPASSWD
+        ssh -t "$DE_FUNK_USER@$ip" "echo '$DE_FUNK_USER ALL=(ALL) NOPASSWD:ALL' | sudo tee /etc/sudoers.d/$DE_FUNK_USER > /dev/null"
+        log "  ✓ $name passwordless sudo configured"
+    else
+        log "  ✓ $name sudo ok"
+    fi
+done
+
+log "All nodes ready!"
+
+# =============================================================================
+# Step 1: Cleanup Everything
+# =============================================================================
+
+section "Step 1: Cleanup Existing Processes"
+
+log "Stopping local Spark..."
+sudo systemctl stop spark-master 2>/dev/null || true
+pkill -9 -f "org.apache.spark.deploy" 2>/dev/null || true
+rm -f /tmp/spark-*.pid 2>/dev/null || true
+
+log "Stopping local Airflow..."
+sudo systemctl stop airflow-webserver airflow-scheduler 2>/dev/null || true
+pkill -9 -f "airflow" 2>/dev/null || true
+rm -f ~/airflow/*.pid 2>/dev/null || true
+
+for w in "${WORKERS[@]}"; do
+    IFS=':' read -r name ip cores mem <<< "$w"
+    log "Stopping Spark on $name..."
+    ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "sudo systemctl stop spark-worker 2>/dev/null; pkill -9 -f 'org.apache.spark' 2>/dev/null; exit 0" || true
+done
+
+sleep 2
+log "  ✓ All processes stopped"
+
+# =============================================================================
+# Step 2: Setup NFS on Head
+# =============================================================================
+
+section "Step 2: NFS Setup (Head Node)"
+
+log "Installing NFS server..."
+sudo apt-get update
+sudo apt-get install -y nfs-kernel-server nfs-common
+
+log "Creating directories..."
+sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk" "$NFS_ROOT/spark"
+sudo mkdir -p "$LOCAL_STORAGE"/{bronze,silver,logs,checkpoints}
+sudo chown -R $DE_FUNK_USER:$DE_FUNK_USER "$LOCAL_STORAGE"
+
+log "Setting up bind mounts..."
+sudo umount "$NFS_ROOT/storage" 2>/dev/null || true
+sudo umount "$NFS_ROOT/de_Funk" 2>/dev/null || true
+sudo umount "$NFS_ROOT/spark" 2>/dev/null || true
+sudo mount --bind "$LOCAL_STORAGE" "$NFS_ROOT/storage"
+sudo mount --bind "$LOCAL_PROJECT" "$NFS_ROOT/de_Funk"
+# Spark distribution will be mounted after download in Step 3
+
+log "Configuring NFS exports..."
+sudo tee /etc/exports > /dev/null <<EOF
+$NFS_ROOT 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,crossmnt)
+EOF
+
+sudo exportfs -ra
+sudo systemctl restart nfs-kernel-server
+
+log "  ✓ NFS ready: $NFS_ROOT"
+
+# =============================================================================
+# Step 3: Setup Python on Head
+# =============================================================================
+
+section "Step 3: Python Environment (Head Node)"
+
+log "Setting up Spark venv..."
+if [ ! -d "$SPARK_VENV" ]; then
+    python3 -m venv "$SPARK_VENV"
+fi
+
+source "$SPARK_VENV/bin/activate"
+pip install --upgrade pip
+
+# Core data processing
+pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow requests python-dotenv networkx
+
+# Machine learning libraries
+pip install scikit-learn statsmodels prophet xgboost lightgbm
+
+# Deep learning (CPU versions for compatibility - use GPU versions if needed)
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+pip install tensorflow
+
+JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+SPARK_HOME=$(python -c "import pyspark; print(pyspark.__path__[0])")
+
+log "  ✓ JAVA_HOME: $JAVA_HOME"
+log "  ✓ SPARK_HOME: $SPARK_HOME"
+
+# Download and setup Spark distribution for workers
+SPARK_VERSION="4.0.1"
+SPARK_DIST_DIR="/home/$DE_FUNK_USER/spark-dist"
+SPARK_TGZ="spark-${SPARK_VERSION}-bin-hadoop3.tgz"
+SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/${SPARK_TGZ}"
+
+log "Setting up Spark distribution for workers..."
+if [ ! -d "$SPARK_DIST_DIR/spark-${SPARK_VERSION}-bin-hadoop3" ]; then
+    log "  Downloading Spark ${SPARK_VERSION}..."
+    mkdir -p "$SPARK_DIST_DIR"
+    cd "$SPARK_DIST_DIR"
+    if [ ! -f "$SPARK_TGZ" ]; then
+        wget -q "$SPARK_URL" || curl -sLO "$SPARK_URL"
+    fi
+    tar xzf "$SPARK_TGZ"
+    rm -f "$SPARK_TGZ"
+    cd "$REPO_ROOT"
+    log "  ✓ Spark distribution extracted"
+else
+    log "  ✓ Spark distribution already exists"
+fi
+
+# Mount Spark distribution to NFS
+log "  Mounting Spark distribution to NFS..."
+sudo mount --bind "$SPARK_DIST_DIR/spark-${SPARK_VERSION}-bin-hadoop3" "$NFS_ROOT/spark"
+log "  ✓ Spark available at /shared/spark on workers"
+
+# =============================================================================
+# Step 4: Setup Each Worker (Sequential)
+# =============================================================================
+
+section "Step 4: Worker Setup"
+
+worker_idx=0
+for w in "${WORKERS[@]}"; do
+    IFS=':' read -r name ip cores mem <<< "$w"
+
+    log "Setting up $name ($ip) - $cores cores, ${mem}GB RAM..."
+
+    if ! ssh -o ConnectTimeout=30 "$DE_FUNK_USER@$ip" bash -s "$HEAD_IP" "$NFS_ROOT" "$name" <<WORKER_SCRIPT
+set -e
+
+echo "  Installing packages..."
+sudo apt-get update
+sudo apt-get install -y openjdk-17-jdk python3-pip python3-venv nfs-common
+
+echo "  Mounting NFS..."
+sudo mkdir -p /shared
+sudo umount /shared 2>/dev/null || true
+sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
+echo "  NFS mounted"
+ls -la /shared/
+
+# Persist mount
+grep -q "/shared" /etc/fstab || echo "$HEAD_IP:$NFS_ROOT /shared nfs defaults,_netdev 0 0" | sudo tee -a /etc/fstab
+
+echo "  Setting up Python..."
+if [ ! -d ~/venv ]; then
+    python3 -m venv ~/venv
+fi
+source ~/venv/bin/activate
+pip install --upgrade pip
+# Core data processing
+pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow networkx
+
+# Machine learning (for Spark UDFs)
+pip install scikit-learn statsmodels xgboost lightgbm
+
+JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
+SPARK_HOME=\$(python -c "import pyspark; print(pyspark.__path__[0])")
+echo "  JAVA_HOME=\$JAVA_HOME"
+echo "  SPARK_HOME=\$SPARK_HOME"
+
+echo "  Creating systemd service..."
+# Create a wrapper script that handles classpath glob expansion
+# Uses shared Spark distribution from NFS at /shared/spark
+cat > ~/start-spark-worker.sh << 'STARTWRAPPER'
+#!/bin/bash
+source ~/venv/bin/activate
+JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
+SPARK_HOME=/shared/spark
+export SPARK_HOME
+exec "\$JAVA_HOME/bin/java" -cp "\$SPARK_HOME/jars/*" -Xmx${mem}g \
+    org.apache.spark.deploy.worker.Worker \
+    --cores $cores --memory ${mem}g \
+    spark://$HEAD_IP:$SPARK_MASTER_PORT
+STARTWRAPPER
+chmod +x ~/start-spark-worker.sh
+
+# Systemd service calls the wrapper script (which handles glob expansion via bash)
+printf '%s\n' \
+    "[Unit]" \
+    "Description=Apache Spark Worker" \
+    "After=network.target" \
+    "" \
+    "[Service]" \
+    "Type=simple" \
+    "User=\$(whoami)" \
+    "WorkingDirectory=/home/\$(whoami)" \
+    "ExecStart=/home/\$(whoami)/start-spark-worker.sh" \
+    "Restart=on-failure" \
+    "RestartSec=5" \
+    "" \
+    "[Install]" \
+    "WantedBy=multi-user.target" \
+    | sudo tee /etc/systemd/system/spark-worker.service
+
+sudo systemctl daemon-reload
+sudo systemctl enable spark-worker
+
+echo "  ✓ $name configured"
+WORKER_SCRIPT
+    then
+        warn "Failed to setup $name - continuing with next worker"
+    else
+        log "  ✓ $name ready"
+    fi
+    ((worker_idx++)) || true  # Prevent set -e exit when idx was 0
 done
 
 # =============================================================================
-# Logging Functions
+# Step 5: Start Spark Master
 # =============================================================================
 
-log_info()    { echo -e "${GREEN}[INFO]${NC} $(date '+%H:%M:%S') $1"; }
-log_warn()    { echo -e "${YELLOW}[WARN]${NC} $(date '+%H:%M:%S') $1"; }
-log_error()   { echo -e "${RED}[ERROR]${NC} $(date '+%H:%M:%S') $1"; }
-log_step()    { echo -e "${BLUE}[STEP]${NC} $(date '+%H:%M:%S') $1"; }
-log_success() { echo -e "${GREEN}${BOLD}[OK]${NC} $1"; }
-log_fail()    { echo -e "${RED}${BOLD}[FAIL]${NC} $1"; }
+section "Step 5: Start Spark Master"
 
-print_header() {
-    echo ""
-    echo -e "${BOLD}======================================================================"
-    echo "  de_Funk Cluster Initialization"
-    echo "======================================================================${NC}"
-    echo ""
-    echo "Configuration:"
-    echo "  Master Host:    $MASTER_HOST"
-    echo "  Worker Hosts:   $WORKER_HOSTS"
-    echo "  Storage Path:   $STORAGE_PATH"
-    echo "  Spark URL:      $SPARK_MASTER_URL"
-    echo "  Airflow Port:   $AIRFLOW_PORT"
-    echo ""
-}
+# Ensure firewall allows Spark Master port from workers
+if command -v ufw &> /dev/null && sudo ufw status | grep -q "Status: active"; then
+    if ! sudo ufw status | grep -q "7077.*ALLOW.*192.168.1.0/24"; then
+        log "Adding firewall rule for Spark Master port 7077..."
+        sudo ufw allow from 192.168.1.0/24 to any port 7077 > /dev/null
+        log "  ✓ Firewall rule added"
+    fi
+fi
+
+log "Starting Spark Master..."
+
+source "$SPARK_VENV/bin/activate"
+JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
+# Use shared Spark distribution for consistency with workers
+SPARK_HOME="$NFS_ROOT/spark"
+
+mkdir -p "$LOCAL_STORAGE/logs"
+
+nohup "$JAVA_HOME/bin/java" \
+    -cp "$SPARK_HOME/jars/*" \
+    -Xmx1g \
+    org.apache.spark.deploy.master.Master \
+    --host $HEAD_IP \
+    --port $SPARK_MASTER_PORT \
+    --webui-port $SPARK_UI_PORT \
+    > "$LOCAL_STORAGE/logs/spark-master.out" 2>&1 &
+
+echo $! > "$LOCAL_STORAGE/logs/spark-master.pid"
+
+sleep 3
+
+if curl -s "http://$HEAD_IP:$SPARK_UI_PORT" > /dev/null; then
+    log "  ✓ Spark Master running at spark://$HEAD_IP:$SPARK_MASTER_PORT"
+    log "  ✓ Web UI: http://$HEAD_IP:$SPARK_UI_PORT"
+else
+    fail "Spark Master failed to start. Check: $LOCAL_STORAGE/logs/spark-master.out"
+fi
+
+# Start History Server for viewing completed job logs
+log "Starting Spark History Server..."
+mkdir -p "$LOCAL_STORAGE/spark-events"
+
+# Kill existing history server if running
+pkill -f "org.apache.spark.deploy.history.HistoryServer" 2>/dev/null || true
+sleep 1
+
+nohup "$JAVA_HOME/bin/java" \
+    -cp "$SPARK_HOME/jars/*" \
+    -Xmx512m \
+    -Dspark.history.fs.logDirectory="$LOCAL_STORAGE/spark-events" \
+    -Dspark.history.ui.port=18080 \
+    org.apache.spark.deploy.history.HistoryServer \
+    > "$LOCAL_STORAGE/logs/spark-history.out" 2>&1 &
+
+echo $! > "$LOCAL_STORAGE/logs/spark-history.pid"
+sleep 2
+
+if curl -s "http://$HEAD_IP:18080" > /dev/null; then
+    log "  ✓ History Server: http://$HEAD_IP:18080"
+else
+    warn "History Server may not have started. Check: $LOCAL_STORAGE/logs/spark-history.out"
+fi
 
 # =============================================================================
-# NFS Validation
+# Step 6: Start Workers
 # =============================================================================
 
-validate_nfs() {
-    if [ "$SKIP_NFS" = true ]; then
-        log_info "Skipping NFS validation (--skip-nfs)"
-        return 0
-    fi
+section "Step 6: Start Spark Workers"
 
-    log_step "Validating NFS shared storage..."
+for w in "${WORKERS[@]}"; do
+    IFS=':' read -r name ip cores mem <<< "$w"
+    log "Starting worker on $name..."
+    ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "sudo systemctl start spark-worker" || warn "Failed to start $name"
+done
 
-    # Check if storage path exists and is writable
-    if [ -d "$STORAGE_PATH" ]; then
-        local test_file="$STORAGE_PATH/.cluster_init_test_$$"
-        if touch "$test_file" 2>/dev/null; then
-            rm -f "$test_file"
-            log_success "Storage validated: $STORAGE_PATH"
-        else
-            log_error "Cannot write to $STORAGE_PATH"
-            echo "  Check permissions or run: sudo chown -R $DE_FUNK_USER $STORAGE_PATH"
-            return 1
-        fi
-    else
-        log_error "Storage path $STORAGE_PATH does not exist"
-        echo "  Create with: mkdir -p $STORAGE_PATH/bronze $STORAGE_PATH/silver"
-        return 1
-    fi
+sleep 3
 
-    # Validate on workers (skip if local-only)
-    if [ "$LOCAL_ONLY" = true ]; then
-        log_info "Skipping remote worker validation (--local-only)"
-    else
-        for worker in $WORKER_HOSTS; do
-            if ssh -o ConnectTimeout=5 -o BatchMode=yes "$worker" "test -d $STORAGE_PATH" 2>/dev/null; then
-                log_success "Worker $worker can access storage"
-            else
-                log_warn "Worker $worker cannot access $STORAGE_PATH (SSH failed or path missing)"
-            fi
-        done
-    fi
+# Verify workers connected
+log "Verifying workers..."
+WORKER_COUNT=$(curl -s "http://$HEAD_IP:$SPARK_UI_PORT/json/" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('workers',[])))" 2>/dev/null || echo "0")
 
-    return 0
-}
+log "  ✓ $WORKER_COUNT workers connected"
+
+if [ "$WORKER_COUNT" -lt "${#WORKERS[@]}" ]; then
+    warn "Expected ${#WORKERS[@]} workers, got $WORKER_COUNT. Some may still be connecting..."
+fi
 
 # =============================================================================
-# Spark Cluster
+# Step 7: Start Airflow (if configured)
 # =============================================================================
 
-start_spark_master() {
-    log_step "Starting Spark Master..."
+section "Step 7: Start Airflow"
 
-    # Check if already running
-    if pgrep -f "spark.*Master" > /dev/null; then
-        log_info "Spark Master already running"
-        return 0
-    fi
+if [ -d "$AIRFLOW_VENV" ]; then
+    source "$AIRFLOW_VENV/bin/activate"
+    export AIRFLOW_HOME="/home/$DE_FUNK_USER/airflow"
 
-    "$SCRIPT_DIR/start-master.sh" || {
-        log_error "Failed to start Spark Master"
-        return 1
-    }
+    log "Starting Airflow scheduler..."
+    nohup airflow scheduler > "$AIRFLOW_HOME/logs/scheduler.log" 2>&1 &
+    echo $! > "$AIRFLOW_HOME/scheduler.pid"
 
-    # Wait for master to be ready
-    local retries=10
-    while [ $retries -gt 0 ]; do
-        if curl -s "http://$MASTER_HOST:$SPARK_WEBUI_PORT" > /dev/null 2>&1; then
-            log_success "Spark Master running at $SPARK_MASTER_URL"
-            return 0
-        fi
-        sleep 1
-        retries=$((retries - 1))
-    done
+    # Airflow 3.x uses api-server instead of webserver
+    log "Starting Airflow API server..."
+    nohup airflow api-server --port $AIRFLOW_PORT > "$AIRFLOW_HOME/logs/apiserver.log" 2>&1 &
+    echo $! > "$AIRFLOW_HOME/apiserver.pid"
 
-    log_error "Spark Master did not start within timeout"
-    return 1
-}
-
-start_spark_workers() {
-    log_step "Starting Spark Workers..."
-
-    local workers_started=0
-    local workers_failed=0
-
-    # Start remote workers (skip if local-only)
-    if [ "$LOCAL_ONLY" = true ]; then
-        log_info "Skipping remote workers (--local-only)"
-    else
-        for worker in $WORKER_HOSTS; do
-            log_info "Starting worker on $worker..."
-
-            # SSH to worker and start
-            if ssh -o ConnectTimeout=10 -o BatchMode=yes "$worker" "
-                source $VENV_PATH/bin/activate 2>/dev/null || true
-                cd $PROJECT_ROOT/scripts/spark-cluster
-                ./start-worker.sh --master $SPARK_MASTER_URL
-            " 2>/dev/null; then
-                log_success "Worker started on $worker"
-                workers_started=$((workers_started + 1))
-            else
-                log_warn "Failed to start worker on $worker"
-                workers_failed=$((workers_failed + 1))
-            fi
-        done
-    fi
-
-    # Also start local worker on master
-    log_info "Starting local worker on master..."
-    "$SCRIPT_DIR/start-worker.sh" --master "$SPARK_MASTER_URL" 2>/dev/null || true
-    workers_started=$((workers_started + 1))
-
-    log_info "Workers started: $workers_started, failed: $workers_failed"
-    return 0
-}
-
-validate_spark_cluster() {
-    log_step "Validating Spark cluster..."
-
-    # Give workers time to register
-    sleep 3
-
-    # Check master UI for worker count
-    local worker_count=$(curl -s "http://$MASTER_HOST:$SPARK_WEBUI_PORT/json" 2>/dev/null | \
-        python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('workers',[])))" 2>/dev/null || echo "0")
-
-    if [ "$worker_count" -gt 0 ]; then
-        log_success "Spark cluster ready: $worker_count workers connected"
-
-        # Show worker details if verbose
-        if [ "$VERBOSE" = true ]; then
-            curl -s "http://$MASTER_HOST:$SPARK_WEBUI_PORT/json" 2>/dev/null | \
-                python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-for w in d.get('workers', []):
-    print(f\"  - {w['host']}: {w['cores']} cores, {w['memory']//1024//1024}MB\")
-"
-        fi
-        return 0
-    else
-        log_warn "No workers connected to master"
-        echo "  Check: http://$MASTER_HOST:$SPARK_WEBUI_PORT"
-        return 1
-    fi
-}
-
-# =============================================================================
-# Airflow
-# =============================================================================
-
-start_airflow() {
-    if [ "$SKIP_AIRFLOW" = true ]; then
-        log_info "Skipping Airflow (--skip-airflow)"
-        return 0
-    fi
-
-    log_step "Starting Airflow..."
-
-    # Check if Airflow is installed
-    if [ ! -f "$AIRFLOW_VENV/bin/airflow" ]; then
-        log_warn "Airflow not installed at $AIRFLOW_VENV"
-        log_info "Install with: ./orchestration/airflow/setup-airflow.sh"
-        return 0
-    fi
-
-    # Export environment
-    export AIRFLOW_HOME="$AIRFLOW_HOME"
-
-    # Check if already running
-    if pgrep -f "airflow scheduler" > /dev/null && pgrep -f "airflow webserver" > /dev/null; then
-        log_info "Airflow already running"
-        return 0
-    fi
-
-    # Start scheduler
-    if ! pgrep -f "airflow scheduler" > /dev/null; then
-        log_info "Starting Airflow scheduler..."
-        nohup "$AIRFLOW_VENV/bin/airflow" scheduler > "$AIRFLOW_HOME/logs/scheduler.log" 2>&1 &
-        sleep 2
-    fi
-
-    # Start webserver (Airflow 3.x uses api-server instead for REST API)
-    if ! pgrep -f "airflow webserver" > /dev/null; then
-        log_info "Starting Airflow webserver on port $AIRFLOW_PORT..."
-        nohup "$AIRFLOW_VENV/bin/airflow" webserver --port "$AIRFLOW_PORT" > "$AIRFLOW_HOME/logs/webserver.log" 2>&1 &
-        sleep 3
-    fi
-
-    # Validate
-    if curl -s "http://localhost:$AIRFLOW_PORT/health" > /dev/null 2>&1; then
-        log_success "Airflow running at http://$MASTER_HOST:$AIRFLOW_PORT"
-    else
-        log_warn "Airflow may still be starting..."
-        echo "  Check logs: tail -f $AIRFLOW_HOME/logs/*.log"
-    fi
-
-    return 0
-}
+    sleep 5
+    log "  ✓ Airflow running at http://$HEAD_IP:$AIRFLOW_PORT"
+    log "  ✓ Check password: cat $AIRFLOW_HOME/simple_auth_manager_passwords.json.generated"
+else
+    warn "Airflow not installed. Run: ./orchestration/airflow/setup-airflow.sh"
+fi
 
 # =============================================================================
 # Summary
 # =============================================================================
 
-print_summary() {
-    echo ""
-    echo -e "${BOLD}======================================================================"
-    echo "  Cluster Status"
-    echo "======================================================================${NC}"
-    echo ""
+section "Cluster Ready!"
 
-    # NFS
-    if mountpoint -q "$NFS_MOUNT_POINT" 2>/dev/null; then
-        echo -e "  NFS Storage:     ${GREEN}✓${NC} $STORAGE_PATH"
-    else
-        echo -e "  NFS Storage:     ${RED}✗${NC} Not mounted"
-    fi
-
-    # Spark Master
-    if pgrep -f "spark.*Master" > /dev/null; then
-        echo -e "  Spark Master:    ${GREEN}✓${NC} $SPARK_MASTER_URL"
-    else
-        echo -e "  Spark Master:    ${RED}✗${NC} Not running"
-    fi
-
-    # Spark Workers
-    local worker_count=$(curl -s "http://$MASTER_HOST:$SPARK_WEBUI_PORT/json" 2>/dev/null | \
-        python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d.get('workers',[])))" 2>/dev/null || echo "0")
-    if [ "$worker_count" -gt 0 ]; then
-        echo -e "  Spark Workers:   ${GREEN}✓${NC} $worker_count connected"
-    else
-        echo -e "  Spark Workers:   ${YELLOW}○${NC} None connected"
-    fi
-
-    # Airflow
-    if pgrep -f "airflow scheduler" > /dev/null; then
-        echo -e "  Airflow:         ${GREEN}✓${NC} http://$MASTER_HOST:$AIRFLOW_PORT"
-    else
-        echo -e "  Airflow:         ${YELLOW}○${NC} Not running"
-    fi
-
-    echo ""
-    echo "Web UIs:"
-    echo "  Spark Master:  http://$MASTER_HOST:$SPARK_WEBUI_PORT"
-    echo "  Airflow:       http://$MASTER_HOST:$AIRFLOW_PORT"
-    echo ""
-    echo "Next steps:"
-    echo "  # Run pipeline test"
-    echo "  ./scripts/test/test_full_pipeline_spark.sh --profile dev"
-    echo ""
-}
-
-# =============================================================================
-# Main
-# =============================================================================
-
-main() {
-    print_header
-
-    # Step 1: Validate NFS
-    validate_nfs || {
-        log_error "NFS validation failed"
-        exit 1
-    }
-
-    if [ "$SKIP_SPARK" = true ]; then
-        log_info "Skipping Spark (--skip-spark)"
-        print_summary
-        exit 0
-    fi
-
-    # Step 2: Start Spark
-    if [ "$WORKERS_ONLY" = true ]; then
-        start_spark_workers
-    else
-        start_spark_master || exit 1
-        start_spark_workers
-    fi
-
-    # Step 3: Validate Spark cluster
-    validate_spark_cluster
-
-    # Step 4: Start Airflow
-    start_airflow
-
-    # Summary
-    print_summary
-}
-
-main "$@"
+echo "Services:"
+echo "  Spark Master:  spark://$HEAD_IP:$SPARK_MASTER_PORT"
+echo "  Spark UI:      http://$HEAD_IP:$SPARK_UI_PORT"
+if [ -d "$AIRFLOW_VENV" ]; then
+echo "  Airflow UI:    http://$HEAD_IP:$AIRFLOW_PORT (admin/admin123)"
+fi
+echo ""
+echo "Workers: $WORKER_COUNT connected"
+for w in "${WORKERS[@]}"; do
+    IFS=':' read -r name ip cores mem <<< "$w"
+    echo "  - $name ($ip): $cores cores, ${mem}GB"
+done
+echo ""
+echo "Storage:"
+echo "  Local:  $LOCAL_STORAGE"
+echo "  NFS:    $NFS_ROOT -> /shared on workers"
+echo ""
+echo "Commands:"
+echo "  Status:  curl -s http://$HEAD_IP:$SPARK_UI_PORT/json/ | python3 -m json.tool"
+echo "  Stop:    ./scripts/cluster/stop-cluster.sh"
+echo "  Submit:  ./scripts/spark-cluster/submit-job.sh <script.py>"
+echo ""
