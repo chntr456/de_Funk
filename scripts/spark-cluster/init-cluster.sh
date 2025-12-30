@@ -269,7 +269,10 @@ sudo apt-get install -y openjdk-17-jdk python3-pip python3-venv nfs-common
 
 echo "  Mounting NFS..."
 sudo mkdir -p /shared
-sudo umount /shared 2>/dev/null || true
+# Force unmount any stale mounts
+sudo fuser -km /shared 2>/dev/null || true
+sudo umount -f -l /shared 2>/dev/null || true
+sleep 1
 sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
 echo "  NFS mounted"
 ls -la /shared/
