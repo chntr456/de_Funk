@@ -61,6 +61,7 @@ SKIP_NFS=false
 SKIP_AIRFLOW=false
 SKIP_SPARK=false
 WORKERS_ONLY=false
+LOCAL_ONLY=false
 VERBOSE=false
 
 # Colors
@@ -93,6 +94,10 @@ while [[ $# -gt 0 ]]; do
             WORKERS_ONLY=true
             shift
             ;;
+        --local-only)
+            LOCAL_ONLY=true
+            shift
+            ;;
         --master-host)
             MASTER_HOST="$2"
             SPARK_MASTER_URL="spark://$MASTER_HOST:$SPARK_MASTER_PORT"
@@ -114,6 +119,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-airflow    Skip Airflow startup"
             echo "  --skip-spark      Skip Spark startup (only validate NFS)"
             echo "  --workers-only    Only start workers (master already running)"
+            echo "  --local-only      Only start local services (no SSH to workers)"
             echo "  --master-host IP  Override master host IP"
             echo "  --storage-path P  Override storage path"
             echo "  --verbose         Show detailed output"
@@ -203,14 +209,18 @@ validate_nfs() {
         return 1
     fi
 
-    # Validate on workers
-    for worker in $WORKER_HOSTS; do
-        if ssh -o ConnectTimeout=5 "$worker" "test -d $STORAGE_PATH" 2>/dev/null; then
-            log_success "Worker $worker can access storage"
-        else
-            log_warn "Worker $worker cannot access $STORAGE_PATH"
-        fi
-    done
+    # Validate on workers (skip if local-only)
+    if [ "$LOCAL_ONLY" = true ]; then
+        log_info "Skipping remote worker validation (--local-only)"
+    else
+        for worker in $WORKER_HOSTS; do
+            if ssh -o ConnectTimeout=5 -o BatchMode=yes "$worker" "test -d $STORAGE_PATH" 2>/dev/null; then
+                log_success "Worker $worker can access storage"
+            else
+                log_warn "Worker $worker cannot access $STORAGE_PATH (SSH failed or path missing)"
+            fi
+        done
+    fi
 
     return 0
 }
@@ -254,26 +264,32 @@ start_spark_workers() {
     local workers_started=0
     local workers_failed=0
 
-    for worker in $WORKER_HOSTS; do
-        log_info "Starting worker on $worker..."
+    # Start remote workers (skip if local-only)
+    if [ "$LOCAL_ONLY" = true ]; then
+        log_info "Skipping remote workers (--local-only)"
+    else
+        for worker in $WORKER_HOSTS; do
+            log_info "Starting worker on $worker..."
 
-        # SSH to worker and start
-        if ssh -o ConnectTimeout=10 "$worker" "
-            source $VENV_PATH/bin/activate 2>/dev/null || true
-            cd $PROJECT_ROOT/scripts/spark-cluster
-            ./start-worker.sh --master $SPARK_MASTER_URL
-        " 2>/dev/null; then
-            log_success "Worker started on $worker"
-            workers_started=$((workers_started + 1))
-        else
-            log_warn "Failed to start worker on $worker"
-            workers_failed=$((workers_failed + 1))
-        fi
-    done
+            # SSH to worker and start
+            if ssh -o ConnectTimeout=10 -o BatchMode=yes "$worker" "
+                source $VENV_PATH/bin/activate 2>/dev/null || true
+                cd $PROJECT_ROOT/scripts/spark-cluster
+                ./start-worker.sh --master $SPARK_MASTER_URL
+            " 2>/dev/null; then
+                log_success "Worker started on $worker"
+                workers_started=$((workers_started + 1))
+            else
+                log_warn "Failed to start worker on $worker"
+                workers_failed=$((workers_failed + 1))
+            fi
+        done
+    fi
 
     # Also start local worker on master
     log_info "Starting local worker on master..."
     "$SCRIPT_DIR/start-worker.sh" --master "$SPARK_MASTER_URL" 2>/dev/null || true
+    workers_started=$((workers_started + 1))
 
     log_info "Workers started: $workers_started, failed: $workers_failed"
     return 0
