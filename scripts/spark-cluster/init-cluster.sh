@@ -175,37 +175,20 @@ validate_nfs() {
 
     log_step "Validating NFS shared storage..."
 
-    # Check if mount point exists
-    if [ ! -d "$NFS_MOUNT_POINT" ]; then
-        log_error "NFS mount point $NFS_MOUNT_POINT does not exist"
-        echo "  Create with: sudo mkdir -p $NFS_MOUNT_POINT"
-        return 1
-    fi
-
-    # Check if mounted
-    if ! mountpoint -q "$NFS_MOUNT_POINT" 2>/dev/null; then
-        log_warn "NFS not mounted at $NFS_MOUNT_POINT, attempting to mount..."
-        sudo mount -t nfs "$NFS_SERVER:$NFS_EXPORT" "$NFS_MOUNT_POINT" || {
-            log_error "Failed to mount NFS"
-            echo "  Check NFS server: showmount -e $NFS_SERVER"
+    # Check if storage path exists and is writable
+    if [ -d "$STORAGE_PATH" ]; then
+        local test_file="$STORAGE_PATH/.cluster_init_test_$$"
+        if touch "$test_file" 2>/dev/null; then
+            rm -f "$test_file"
+            log_success "Storage validated: $STORAGE_PATH"
+        else
+            log_error "Cannot write to $STORAGE_PATH"
+            echo "  Check permissions or run: sudo chown -R $DE_FUNK_USER $STORAGE_PATH"
             return 1
-        }
-    fi
-
-    # Check storage directory exists
-    if [ ! -d "$STORAGE_PATH" ]; then
-        log_warn "Storage directory $STORAGE_PATH does not exist, creating..."
-        sudo mkdir -p "$STORAGE_PATH/bronze" "$STORAGE_PATH/silver"
-        sudo chown -R "$DE_FUNK_USER:$DE_FUNK_USER" "$STORAGE_PATH"
-    fi
-
-    # Check write access
-    local test_file="$STORAGE_PATH/.cluster_init_test_$$"
-    if touch "$test_file" 2>/dev/null; then
-        rm -f "$test_file"
-        log_success "NFS storage validated: $STORAGE_PATH"
+        fi
     else
-        log_error "Cannot write to $STORAGE_PATH"
+        log_error "Storage path $STORAGE_PATH does not exist"
+        echo "  Create with: mkdir -p $STORAGE_PATH/bronze $STORAGE_PATH/silver"
         return 1
     fi
 
