@@ -35,6 +35,7 @@ VENV_PATH="${VENV_PATH:-$HOME/venv}"
 SKIP_SEED=false
 SKIP_INGEST=false
 SKIP_BUILD=false
+FORCE_INGEST=false
 VERBOSE=false
 
 # Colors
@@ -84,6 +85,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
+        --force-ingest)
+            FORCE_INGEST=true
+            shift
+            ;;
         --verbose|-v)
             VERBOSE=true
             shift
@@ -99,6 +104,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-seed        Skip ticker seeding"
             echo "  --skip-ingest      Skip Bronze ingestion"
             echo "  --skip-build       Skip Silver build"
+            echo "  --force-ingest     Force re-ingest even if Bronze data exists"
             echo "  --verbose          Show detailed output"
             echo "  --help             Show this help"
             exit 0
@@ -227,10 +233,11 @@ run_bronze_ingestion() {
 
     cd "$PROJECT_ROOT"
 
-    # Check if Bronze data already exists
-    local price_path="$STORAGE_PATH/bronze/securities_prices_daily"
-    if [ -d "$price_path/_delta_log" ]; then
-        local count=$(python3 -c "
+    # Check if Bronze data already exists (skip only if not forcing)
+    if [ "$FORCE_INGEST" != true ]; then
+        local price_path="$STORAGE_PATH/bronze/securities_prices_daily"
+        if [ -d "$price_path/_delta_log" ]; then
+            local count=$(python3 -c "
 from deltalake import DeltaTable
 try:
     dt = DeltaTable('$price_path')
@@ -238,11 +245,14 @@ try:
 except:
     print('0')
 " 2>/dev/null || echo "0")
-        if [ "$count" -gt 1000000 ]; then
-            log_info "Bronze prices already populated ($count rows). Skipping ingestion."
-            log_info "Use --force-ingest to re-ingest anyway."
-            return 0
+            if [ "$count" -gt 1000000 ]; then
+                log_info "Bronze prices already populated ($count rows). Skipping ingestion."
+                log_info "Use --force-ingest to re-ingest anyway."
+                return 0
+            fi
         fi
+    else
+        log_info "Force ingest enabled, will update Bronze data..."
     fi
 
     # Use the Spark-based ingestor (AlphaVantageIngestor)
