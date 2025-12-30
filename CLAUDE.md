@@ -7,22 +7,20 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
 
 **Architecture Diagram**: See `docs/architecture-diagram.drawio` for visual representation of the system architecture.
 
-**Recent Updates (v2.5)** - Distributed Pipeline & Model Standardization:
-- **✅ Ray-Based Distributed Pipeline**: Full end-to-end distributed ingestion and Silver builds
-  - Head node + 3 workers on Ray cluster
+**Recent Updates (v2.6)** - Script Consolidation & Spark Pipeline:
+- **✅ Spark-Based Pipeline**: Direct Spark execution for Bronze ingestion and Silver builds
   - NFS shared storage at `/shared/storage`
-  - Workers sync Ivy cache (no internet required after setup)
-- **✅ Production Run Script**: `./scripts/cluster/run_production.sh` orchestrates full pipeline
-  - Seeds tickers from LISTING_STATUS (1 API call → 12,499 tickers)
-  - Seeds calendar dimension (2000-2050)
-  - Runs distributed Bronze ingestion + Silver builds
+  - Profile-based configuration via `run_config.json`
+- **✅ Script Consolidation**: Removed duplicate/obsolete scripts
+  - Removed Ray-based cluster scripts (migrated to pure Spark)
+  - Consolidated build scripts to `build_models.py`
+  - Consolidated ingest scripts to `run_bronze_ingestion.py`
+  - Main test script: `test_full_pipeline_spark.sh`
 - **✅ Foundation vs Domain Models**: `models/foundation/` for base models (temporal), `models/domain/` for domain-specific
   - BuilderRegistry discovers from both directories
   - TemporalBuilder moved from domain/ to foundation/
 - **✅ Financial Statement Endpoints**: Added income_statement, balance_sheet, cash_flow, earnings
   - Registry pattern for endpoint consolidation (no hardcoded if/elif chains)
-- **✅ Ray Scheduler Optimization**: `num_cpus=0` for API-bound tasks, batched task submission
-- **Session Summary**: See `docs/vault/13-proposals/draft/010-session-summary-dec-2025.md`
 
 **Previous Updates (v2.4)** - Hardcoded Defaults Prevention:
 - **⚠️ CRITICAL: No Hardcoded Default Data** - Major anti-pattern documentation added
@@ -231,17 +229,18 @@ de_Funk/
 │   ├── integration/         # Integration tests
 │   └── unit/                # Unit tests
 ├── scripts/                 # Operational scripts
-│   ├── cluster/             # Distributed pipeline (Ray) - v2.5
-│   │   ├── run_production.sh        # Full production pipeline script
-│   │   ├── run_distributed_pipeline.py  # Core distributed pipeline logic
-│   │   └── setup-worker.sh          # Worker node setup (pyspark, ivy cache)
-│   ├── seed/                # Data seeding scripts - v2.5
+│   ├── build/               # Model building scripts
+│   │   ├── build_models.py          # Main Silver build script (v2.6)
+│   │   └── rebuild_model.py         # Single model rebuild
+│   ├── ingest/              # Data ingestion scripts
+│   │   └── run_bronze_ingestion.py  # Bronze ingestion script (v2.6)
+│   ├── seed/                # Data seeding scripts
 │   │   ├── seed_tickers.py          # Seed from LISTING_STATUS (12,499 tickers)
 │   │   └── seed_calendar.py         # Seed calendar dimension (2000-2050)
-│   ├── build/               # Model building scripts
+│   ├── spark-cluster/       # Spark cluster management
 │   ├── maintenance/         # Cleanup and migration scripts
-│   ├── ingest/              # Data ingestion scripts
 │   └── test/                # Test scripts
+│       └── test_full_pipeline_spark.sh  # Main pipeline test script (v2.6)
 ├── storage/                 # Data storage (or /shared/storage on cluster)
 │   ├── bronze/              # Raw ingested data (Delta Lake)
 │   │   ├── securities_reference/    # All tickers from LISTING_STATUS
@@ -1098,24 +1097,24 @@ python run_app.py
 streamlit run app/ui/notebook_app_duckdb.py
 ```
 
-### Running Full Pipeline (Distributed)
+### Running Full Pipeline (Spark)
 
-**Production Pipeline** (Ray cluster with NFS storage):
+**Full Pipeline Test** (recommended - tests ingestion + build):
 ```bash
-# Full production run: seed tickers, seed calendar, run distributed pipeline
-./scripts/cluster/run_production.sh
+# Run full pipeline with dev profile (50 tickers)
+./scripts/test/test_full_pipeline_spark.sh --profile dev
 
-# Limited run for testing
-./scripts/cluster/run_production.sh --max-tickers 100
+# Quick test (10 tickers)
+./scripts/test/test_full_pipeline_spark.sh --profile quick_test
 
-# Skip seeding (if already done)
-./scripts/cluster/run_production.sh --skip-seed
+# Production (all tickers)
+./scripts/test/test_full_pipeline_spark.sh --profile production
 
-# Force re-seed tickers
-./scripts/cluster/run_production.sh --force-seed
+# Override ticker count
+./scripts/test/test_full_pipeline_spark.sh --max-tickers 100
 ```
 
-**Seeding Data** (run before pipeline):
+**Seeding Data** (run before pipeline if needed):
 ```bash
 # Seed all US tickers from Alpha Vantage LISTING_STATUS (1 API call → 12,499 tickers)
 python -m scripts.seed.seed_tickers --storage-path /shared/storage
@@ -1124,19 +1123,19 @@ python -m scripts.seed.seed_tickers --storage-path /shared/storage
 python -m scripts.seed.seed_calendar --storage-path /shared/storage
 ```
 
-**Distributed Pipeline Only** (after seeding):
+**Bronze Ingestion Only**:
 ```bash
-# Run distributed Bronze ingestion + Silver builds
-python -m scripts.cluster.run_distributed_pipeline --max-tickers 100
+# Run Bronze ingestion for specific endpoints
+python -m scripts.ingest.run_bronze_ingestion --max-tickers 100 --endpoints time_series_daily
 ```
 
-**Local Development** (single node, DuckDB):
+**Silver Build Only**:
 ```bash
 # Build all silver layer models
-python -m scripts.build.build_all_models
+python -m scripts.build.build_models
 
-# Build specific model
-python -m scripts.build.rebuild_model --model stocks
+# Build specific models
+python -m scripts.build.build_models --models stocks company
 ```
 
 ### Model Operations
@@ -1390,12 +1389,11 @@ If queries are slow:
 | Script | Purpose |
 |--------|---------|
 | `run_app.py` / `run_app.sh` | Launch Streamlit UI |
-| `run_full_pipeline.py` | Run complete ETL pipeline |
-| `scripts/build_all_models.py` | Build all models |
-| `scripts/rebuild_model.py` | Rebuild specific model |
-| `scripts/test_all_models.py` | Test all models |
-| `scripts/run_forecasts.py` | Generate forecasts |
-| `scripts/clear_and_refresh.py` | Clear cache and refresh |
+| `scripts/test/test_full_pipeline_spark.sh` | **Main pipeline test** - ingestion + build (v2.6) |
+| `scripts/build/build_models.py` | Build Silver layer models (v2.6) |
+| `scripts/build/rebuild_model.py` | Rebuild specific model |
+| `scripts/ingest/run_bronze_ingestion.py` | Bronze ingestion (v2.6) |
+| `run_full_pipeline.py` | Legacy orchestrator (use test_full_pipeline_spark.sh instead) |
 
 ---
 
