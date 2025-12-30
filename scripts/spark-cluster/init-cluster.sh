@@ -149,11 +149,11 @@ rm -f ~/airflow/*.pid 2>/dev/null || true
 for w in "${WORKERS[@]}"; do
     IFS=':' read -r name ip cores mem <<< "$w"
     log "Stopping Spark on $name..."
-    ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "sudo -n systemctl stop spark-worker 2>/dev/null; pkill -f 'org.apache.spark' 2>/dev/null; exit 0" &
+    timeout 10 ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" \
+        "sudo -n systemctl stop spark-worker 2>/dev/null; pkill -f 'org.apache.spark' 2>/dev/null; true" \
+        </dev/null 2>/dev/null &
 done
-wait  # Wait for all background SSH processes
-
-sleep 2
+sleep 5  # Give background cleanup time to finish
 log "  ✓ All processes stopped"
 
 # =============================================================================
