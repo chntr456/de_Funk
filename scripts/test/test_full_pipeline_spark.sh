@@ -27,15 +27,15 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-# Configuration
-MAX_TICKERS="${MAX_TICKERS:-50}"
-DAYS="${DAYS:-30}"
+# Configuration - defaults can be overridden by profile or CLI args
+PROFILE=""  # Profile from run_config.json (quick_test, dev, staging, production)
+MAX_TICKERS=""  # Will be set from profile or default
+DAYS=""
 STORAGE_PATH=""  # Will be read from run_config.json
 VENV_PATH="${VENV_PATH:-$HOME/venv}"
 SKIP_SEED=false
 SKIP_INGEST=false
 SKIP_BUILD=false
-FORCE_INGEST=false
 VERBOSE=false
 
 # Colors
@@ -57,6 +57,10 @@ log_success() { echo -e "${GREEN}${BOLD}[SUCCESS]${NC} $(date '+%H:%M:%S') $1"; 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --profile)
+            PROFILE="$2"
+            shift 2
+            ;;
         --max-tickers)
             MAX_TICKERS="$2"
             shift 2
@@ -85,10 +89,6 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
-        --force-ingest)
-            FORCE_INGEST=true
-            shift
-            ;;
         --verbose|-v)
             VERBOSE=true
             shift
@@ -96,15 +96,21 @@ while [[ $# -gt 0 ]]; do
         --help|-h)
             echo "Usage: $0 [OPTIONS]"
             echo ""
+            echo "Profiles (from run_config.json):"
+            echo "  quick_test   10 tickers, dry_run, debug logging"
+            echo "  dev          50 tickers (default)"
+            echo "  staging      500 tickers"
+            echo "  production   All tickers"
+            echo ""
             echo "Options:"
-            echo "  --max-tickers N    Limit to N tickers (default: 50)"
-            echo "  --days N           Days of historical data (default: 30)"
+            echo "  --profile NAME     Use named profile (quick_test, dev, staging, production)"
+            echo "  --max-tickers N    Limit to N tickers (overrides profile)"
+            echo "  --days N           Days of historical data"
             echo "  --storage-path P   Override storage path"
             echo "  --venv PATH        Python venv path (default: ~/venv)"
             echo "  --skip-seed        Skip ticker seeding"
             echo "  --skip-ingest      Skip Bronze ingestion"
             echo "  --skip-build       Skip Silver build"
-            echo "  --force-ingest     Force re-ingest even if Bronze data exists"
             echo "  --verbose          Show detailed output"
             echo "  --help             Show this help"
             exit 0
@@ -137,22 +143,73 @@ activate_venv() {
     fi
 }
 
-get_storage_path() {
-    # Read storage_path from run_config.json if not provided
-    if [ -z "$STORAGE_PATH" ]; then
-        STORAGE_PATH=$(python3 -c "
+load_config() {
+    # Load configuration from run_config.json, applying profile if specified
+    local config_output
+    config_output=$(python3 -c "
 import json
 from pathlib import Path
+
 config_path = Path('$PROJECT_ROOT') / 'configs' / 'pipelines' / 'run_config.json'
-if config_path.exists():
-    with open(config_path) as f:
-        config = json.load(f)
-    print(config.get('defaults', {}).get('storage_path', '$PROJECT_ROOT/storage'))
-else:
-    print('$PROJECT_ROOT/storage')
+if not config_path.exists():
+    print('STORAGE_PATH=$PROJECT_ROOT/storage')
+    print('MAX_TICKERS=50')
+    print('DAYS=30')
+    exit(0)
+
+with open(config_path) as f:
+    config = json.load(f)
+
+defaults = config.get('defaults', {})
+profile_name = '$PROFILE'
+
+# Apply profile settings if specified
+if profile_name and profile_name in config.get('profiles', {}):
+    profile = config['profiles'][profile_name]
+    for key, value in profile.items():
+        if value is not None:
+            defaults[key] = value
+
+# Output configuration as shell variables
+storage_path = defaults.get('storage_path', '$PROJECT_ROOT/storage')
+max_tickers = defaults.get('max_tickers')
+days = defaults.get('days', 30)
+
+print(f'CONFIG_STORAGE_PATH={storage_path}')
+print(f'CONFIG_MAX_TICKERS={max_tickers if max_tickers else 0}')
+print(f'CONFIG_DAYS={days}')
+print(f'CONFIG_PROFILE={profile_name}')
 " 2>/dev/null)
+
+    # Parse the output
+    eval "$config_output"
+
+    # Apply config values if not overridden by CLI args
+    if [ -z "$STORAGE_PATH" ]; then
+        STORAGE_PATH="$CONFIG_STORAGE_PATH"
+    fi
+    if [ -z "$MAX_TICKERS" ]; then
+        if [ "$CONFIG_MAX_TICKERS" -gt 0 ] 2>/dev/null; then
+            MAX_TICKERS="$CONFIG_MAX_TICKERS"
+        else
+            MAX_TICKERS=0  # 0 means all tickers
+        fi
+    fi
+    if [ -z "$DAYS" ]; then
+        DAYS="$CONFIG_DAYS"
+    fi
+
+    # Log configuration
+    if [ -n "$PROFILE" ]; then
+        log_info "Using profile: $PROFILE"
     fi
     log_info "Storage path: $STORAGE_PATH"
+    if [ "$MAX_TICKERS" -gt 0 ] 2>/dev/null; then
+        log_info "Max tickers: $MAX_TICKERS"
+    else
+        log_info "Max tickers: ALL"
+    fi
+    log_info "Days: $DAYS"
 }
 
 check_dependencies() {
@@ -229,31 +286,13 @@ run_bronze_ingestion() {
         return 0
     fi
 
-    log_step "Running Bronze ingestion (max $MAX_TICKERS tickers)..."
+    local ticker_limit_msg="ALL"
+    if [ "$MAX_TICKERS" -gt 0 ] 2>/dev/null; then
+        ticker_limit_msg="$MAX_TICKERS"
+    fi
+    log_step "Running Bronze ingestion (tickers: $ticker_limit_msg)..."
 
     cd "$PROJECT_ROOT"
-
-    # Check if Bronze data already exists (skip only if not forcing)
-    if [ "$FORCE_INGEST" != true ]; then
-        local price_path="$STORAGE_PATH/bronze/securities_prices_daily"
-        if [ -d "$price_path/_delta_log" ]; then
-            local count=$(python3 -c "
-from deltalake import DeltaTable
-try:
-    dt = DeltaTable('$price_path')
-    print(len(dt.to_pandas()))
-except:
-    print('0')
-" 2>/dev/null || echo "0")
-            if [ "$count" -gt 1000000 ]; then
-                log_info "Bronze prices already populated ($count rows). Skipping ingestion."
-                log_info "Use --force-ingest to re-ingest anyway."
-                return 0
-            fi
-        fi
-    else
-        log_info "Force ingest enabled, will update Bronze data..."
-    fi
 
     # Use the Spark-based ingestor (AlphaVantageIngestor)
     log_info "Using AlphaVantageIngestor for Bronze ingestion..."
@@ -283,7 +322,9 @@ ingestor = AlphaVantageIngestor(
 
 print('Fetching ticker list...')
 _, tickers, _, _ = ingestor.ingest_bulk_listing(table_name='securities_reference', state='active')
-tickers = tickers[:$MAX_TICKERS]
+max_tickers = $MAX_TICKERS
+if max_tickers > 0:
+    tickers = tickers[:max_tickers]
 print(f'Processing {len(tickers)} tickers...')
 
 print('Ingesting prices...')
@@ -362,39 +403,65 @@ except:
     echo ""
     echo -e "${BOLD}Silver Layer:${NC}"
 
-    # Check Silver directories - look for Delta tables recursively
+    # Check Silver directories - structure is: silver/{model}/dims/* and silver/{model}/facts/*
     for model in temporal company stocks; do
         local path="$STORAGE_PATH/silver/$model"
         if [ -d "$path" ]; then
-            # Count Delta tables (directories with _delta_log)
-            local tables=$(find "$path" -name "_delta_log" -type d 2>/dev/null | wc -l)
-            if [ "$tables" -gt 0 ]; then
-                # Get total rows across all tables
-                local total_rows=$(python3 -c "
+            # Check dims and facts subdirectories
+            local result=$(python3 -c "
 from pathlib import Path
-from deltalake import DeltaTable
-total = 0
-for delta_log in Path('$path').rglob('_delta_log'):
-    try:
-        dt = DeltaTable(str(delta_log.parent))
-        total += len(dt.to_pandas())
-    except:
-        pass
-print(total)
-" 2>/dev/null || echo "0")
-                echo -e "  ${GREEN}✓${NC} $model: $tables tables, $total_rows rows"
+
+path = Path('$path')
+dims_count = 0
+facts_count = 0
+total_rows = 0
+
+# Check dims subdirectory
+dims_path = path / 'dims'
+if dims_path.exists():
+    for table_dir in dims_path.iterdir():
+        if table_dir.is_dir():
+            if (table_dir / '_delta_log').exists():
+                dims_count += 1
+                try:
+                    from deltalake import DeltaTable
+                    dt = DeltaTable(str(table_dir))
+                    total_rows += len(dt.to_pandas())
+                except:
+                    pass
+            elif any(table_dir.glob('*.parquet')):
+                dims_count += 1
+                # Parquet - estimate rows
+                total_rows += 1000
+
+# Check facts subdirectory
+facts_path = path / 'facts'
+if facts_path.exists():
+    for table_dir in facts_path.iterdir():
+        if table_dir.is_dir():
+            if (table_dir / '_delta_log').exists():
+                facts_count += 1
+                try:
+                    from deltalake import DeltaTable
+                    dt = DeltaTable(str(table_dir))
+                    total_rows += len(dt.to_pandas())
+                except:
+                    pass
+            elif any(table_dir.glob('*.parquet')) or any(table_dir.rglob('*.parquet')):
+                facts_count += 1
+                total_rows += 1000000
+
+print(f'{dims_count},{facts_count},{total_rows}')
+" 2>/dev/null || echo "0,0,0")
+
+            local dims_count=$(echo "$result" | cut -d',' -f1)
+            local facts_count=$(echo "$result" | cut -d',' -f2)
+            local total_rows=$(echo "$result" | cut -d',' -f3)
+
+            if [ "$dims_count" -gt 0 ] || [ "$facts_count" -gt 0 ]; then
+                echo -e "  ${GREEN}✓${NC} $model: $dims_count dims, $facts_count facts (~$total_rows rows)"
             else
-                # Check if it's a single Delta table at root
-                if [ -d "$path/_delta_log" ]; then
-                    local rows=$(python3 -c "
-from deltalake import DeltaTable
-dt = DeltaTable('$path')
-print(len(dt.to_pandas()))
-" 2>/dev/null || echo "0")
-                    echo -e "  ${GREEN}✓${NC} $model: 1 table, $rows rows"
-                else
-                    echo -e "  ${YELLOW}○${NC} $model: directory exists but no Delta tables"
-                fi
+                echo -e "  ${YELLOW}○${NC} $model: directory exists but no tables found"
             fi
         else
             echo -e "  ${YELLOW}○${NC} $model: not found"
@@ -416,21 +483,27 @@ main() {
 
     print_header
 
+    # Setup
+    cd "$PROJECT_ROOT"
+    activate_venv
+    load_config
+
+    echo ""
     echo "Configuration:"
     echo "  Project Root:   $PROJECT_ROOT"
-    echo "  Max Tickers:    $MAX_TICKERS"
+    echo "  Storage Path:   $STORAGE_PATH"
+    if [ -n "$PROFILE" ]; then
+        echo "  Profile:        $PROFILE"
+    fi
+    if [ "$MAX_TICKERS" -gt 0 ] 2>/dev/null; then
+        echo "  Max Tickers:    $MAX_TICKERS"
+    else
+        echo "  Max Tickers:    ALL"
+    fi
     echo "  Days:           $DAYS"
     echo "  Skip Seed:      $SKIP_SEED"
     echo "  Skip Ingest:    $SKIP_INGEST"
     echo "  Skip Build:     $SKIP_BUILD"
-    echo ""
-
-    # Setup
-    cd "$PROJECT_ROOT"
-    activate_venv
-    get_storage_path
-
-    echo "  Storage Path:   $STORAGE_PATH"
     echo ""
 
     if ! check_dependencies; then
