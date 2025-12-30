@@ -117,7 +117,7 @@
       "log_level": "DEBUG"
     },
     "dev": {
-      "max_tickers": 50,
+      "max_tickers": 10,
       "dry_run": false,
       "skip_silver": false
     },
