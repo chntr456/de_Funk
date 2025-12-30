@@ -149,8 +149,9 @@ rm -f ~/airflow/*.pid 2>/dev/null || true
 for w in "${WORKERS[@]}"; do
     IFS=':' read -r name ip cores mem <<< "$w"
     log "Stopping Spark on $name..."
-    ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "sudo systemctl stop spark-worker 2>/dev/null; pkill -9 -f 'org.apache.spark' 2>/dev/null; exit 0" || true
+    ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "sudo -n systemctl stop spark-worker 2>/dev/null; pkill -f 'org.apache.spark' 2>/dev/null; exit 0" &
 done
+wait  # Wait for all background SSH processes
 
 sleep 2
 log "  ✓ All processes stopped"
@@ -416,7 +417,7 @@ section "Step 6: Start Spark Workers"
 for w in "${WORKERS[@]}"; do
     IFS=':' read -r name ip cores mem <<< "$w"
     log "Starting worker on $name..."
-    ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "sudo systemctl start spark-worker" || warn "Failed to start $name"
+    ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "sudo -n systemctl start spark-worker" || warn "Failed to start $name"
 done
 
 sleep 3
