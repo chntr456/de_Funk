@@ -152,37 +152,42 @@ log "  ✓ Local processes stopped (workers will be restarted in Step 6)"
 
 section "Step 2: NFS Setup (Head Node)"
 
-# Check if NFS is already set up and working
-if mountpoint -q "$NFS_ROOT/storage" 2>/dev/null && [ -d "$NFS_ROOT/storage/bronze" ]; then
-    log "NFS already configured at $NFS_ROOT - skipping setup"
+# First, clean up any stale mounts that could cause hangs
+log "Cleaning up any stale mounts..."
+sudo fuser -km "$NFS_ROOT" 2>/dev/null || true
+sudo umount -f -l "$NFS_ROOT/storage" 2>/dev/null || true
+sudo umount -f -l "$NFS_ROOT/de_Funk" 2>/dev/null || true
+sudo umount -f -l "$NFS_ROOT/spark" 2>/dev/null || true
+sudo umount -f -l "$NFS_ROOT" 2>/dev/null || true
+sleep 1
+
+# Check if storage directories exist (NFS already set up)
+if [ -d "$LOCAL_STORAGE/bronze" ] && [ -d "$LOCAL_STORAGE/silver" ]; then
+    log "Storage directories exist at $LOCAL_STORAGE - quick setup"
 else
     log "Installing NFS server..."
     sudo apt-get update
     sudo apt-get install -y nfs-kernel-server nfs-common
 
     log "Creating directories..."
-    # Force unmount any stale mounts first
-    sudo umount -f -l "$NFS_ROOT/storage" 2>/dev/null || true
-    sudo umount -f -l "$NFS_ROOT/de_Funk" 2>/dev/null || true
-    sudo umount -f -l "$NFS_ROOT/spark" 2>/dev/null || true
-
     sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk" "$NFS_ROOT/spark"
     sudo mkdir -p "$LOCAL_STORAGE"/{bronze,silver,logs,checkpoints}
     sudo chown -R $DE_FUNK_USER:$DE_FUNK_USER "$LOCAL_STORAGE"
+fi
 
-    log "Setting up bind mounts..."
-    sudo mount --bind "$LOCAL_STORAGE" "$NFS_ROOT/storage"
-    sudo mount --bind "$LOCAL_PROJECT" "$NFS_ROOT/de_Funk"
-    # Spark distribution will be mounted after download in Step 3
+log "Setting up bind mounts..."
+sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk" "$NFS_ROOT/spark"
+sudo mount --bind "$LOCAL_STORAGE" "$NFS_ROOT/storage"
+sudo mount --bind "$LOCAL_PROJECT" "$NFS_ROOT/de_Funk"
+# Spark distribution will be mounted after download in Step 3
 
-    log "Configuring NFS exports..."
-    sudo tee /etc/exports > /dev/null <<EOF
+log "Configuring NFS exports..."
+sudo tee /etc/exports > /dev/null <<EOF
 $NFS_ROOT 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,crossmnt)
 EOF
 
-    sudo exportfs -ra
-    sudo systemctl restart nfs-kernel-server
-fi
+sudo exportfs -ra
+sudo systemctl restart nfs-kernel-server
 
 log "  ✓ NFS ready: $NFS_ROOT"
 
