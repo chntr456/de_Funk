@@ -346,54 +346,76 @@ use_market_cap = '$USE_MARKET_CAP' == 'true'
 if use_market_cap and max_tickers > 0:
     from deltalake import DeltaTable
     import pandas as pd
-    company_ref_path = Path('$STORAGE_PATH/bronze/company_reference')
 
-    # Known large-cap tickers (avoids 100 API calls for bootstrap)
-    # These are the largest US stocks by market cap - stable list
+    # Known large-cap tickers (fallback if no Bronze data)
     SEED_LARGE_CAPS = [
         'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'GOOG', 'AMZN', 'META', 'BRK.B', 'BRK.A',
         'LLY', 'AVGO', 'JPM', 'TSLA', 'WMT', 'V', 'XOM', 'UNH', 'MA', 'PG', 'JNJ',
         'COST', 'HD', 'ORCL', 'MRK', 'ABBV', 'CVX', 'BAC', 'KO', 'CRM', 'PEP',
-        'AMD', 'NFLX', 'TMO', 'MCD', 'LIN', 'CSCO', 'ADBE', 'WFC', 'ABT', 'ACN',
-        'DHR', 'GE', 'INTU', 'CAT', 'IBM', 'VZ', 'TXN', 'QCOM', 'CMCSA', 'AXP'
+        'AMD', 'NFLX', 'TMO', 'MCD', 'LIN', 'CSCO', 'ADBE', 'WFC', 'ABT', 'ACN'
     ]
 
-    # Check if we have VALID market cap data
-    have_valid_data = False
-    if company_ref_path.exists():
-        company_dt = DeltaTable(str(company_ref_path))
-        company_df = company_dt.to_pandas()
-        # Check if we have any stocks with >100B market cap (real large caps)
-        large_caps = company_df[company_df['market_cap'] > 100_000_000_000]
-        if len(large_caps) >= max_tickers:
-            have_valid_data = True
-            print(f'Found {len(large_caps)} large-cap tickers (>\$100B market cap)')
+    company_ref_path = Path('$STORAGE_PATH/bronze/company_reference')
+    prices_path = Path('$STORAGE_PATH/bronze/securities_prices_daily')
+    rankings_path = Path('$STORAGE_PATH/bronze/market_cap_rankings')
 
-    if have_valid_data:
-        # Use actual market cap data
-        print('Selecting tickers by market cap (largest first)...')
-        ticker_df = pd.DataFrame({'ticker': all_tickers})
-        merged = ticker_df.merge(
-            company_df[['ticker', 'market_cap']],
-            on='ticker',
-            how='left'
+    tickers = None
+
+    # Option 1: Use pre-seeded market_cap_rankings table if exists
+    if rankings_path.exists():
+        print('Using pre-seeded market_cap_rankings table...')
+        rankings_dt = DeltaTable(str(rankings_path))
+        rankings_df = rankings_dt.to_pandas()
+        tickers = rankings_df.nsmallest(max_tickers, 'market_cap_rank')['ticker'].tolist()
+        print(f'Selected top {len(tickers)} from market_cap_rankings')
+
+    # Option 2: Calculate market cap from Bronze data using Spark SQL
+    elif company_ref_path.exists() and prices_path.exists():
+        print('Calculating market cap from Bronze data (price x shares_outstanding)...')
+
+        # Register as Spark temp views
+        ctx.spark.read.format('delta').load(str(prices_path)).createOrReplaceTempView('prices')
+        ctx.spark.read.format('delta').load(str(company_ref_path)).createOrReplaceTempView('company')
+
+        # SQL with window function to get latest price and calculate market cap
+        query = f'''
+        WITH latest_prices AS (
+            SELECT ticker, close, trade_date,
+                   ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY trade_date DESC) as rn
+            FROM prices
+            WHERE close IS NOT NULL AND close > 0
+        ),
+        market_caps AS (
+            SELECT
+                c.ticker,
+                c.sector,
+                COALESCE(c.market_cap, CAST(lp.close AS DOUBLE) * CAST(c.shares_outstanding AS DOUBLE)) as market_cap
+            FROM company c
+            INNER JOIN latest_prices lp ON c.ticker = lp.ticker AND lp.rn = 1
+            WHERE c.shares_outstanding IS NOT NULL AND c.shares_outstanding > 0
         )
-        merged = merged.sort_values('market_cap', ascending=False, na_position='last')
-        tickers = merged['ticker'].tolist()[:max_tickers]
+        SELECT ticker, sector, market_cap,
+               ROW_NUMBER() OVER (ORDER BY market_cap DESC) as rank
+        FROM market_caps
+        ORDER BY market_cap DESC
+        LIMIT {max_tickers}
+        '''
 
-        # Show which tickers were selected
-        top_caps = merged.head(max_tickers)[['ticker', 'market_cap']].to_dict('records')
-        print(f'Selected top {len(tickers)} by market cap:')
-        for t in top_caps[:5]:
-            cap = t['market_cap']
-            cap_str = f'\${cap/1e9:.1f}B' if cap and cap > 1e9 else (f'\${cap/1e6:.0f}M' if cap else 'N/A')
-            print(f'  {t[\"ticker\"]}: {cap_str}')
-        if len(top_caps) > 5:
-            print(f'  ... and {len(top_caps) - 5} more')
-    else:
-        # Use seed list of known large caps (no API calls needed!)
+        result = ctx.spark.sql(query).toPandas()
+
+        if len(result) >= max_tickers:
+            tickers = result['ticker'].tolist()
+            print(f'Selected top {len(tickers)} by calculated market cap:')
+            for _, row in result.head(5).iterrows():
+                cap = row['market_cap']
+                cap_str = f'\${cap/1e9:.1f}B' if cap and cap > 1e9 else (f'\${cap/1e6:.0f}M' if cap else 'N/A')
+                print(f'  {int(row[\"rank\"]):3}. {row[\"ticker\"]:6} {cap_str} [{row[\"sector\"]}]')
+            if len(result) > 5:
+                print(f'  ... and {len(result) - 5} more')
+
+    # Option 3: Fallback to seed list
+    if tickers is None or len(tickers) < max_tickers:
         print('Using seed list of known large-cap tickers (no market cap data yet)...')
-        # Filter to tickers that exist in our securities_reference
         available_large_caps = [t for t in SEED_LARGE_CAPS if t in all_tickers]
         tickers = available_large_caps[:max_tickers]
         print(f'Selected {len(tickers)} from seed large-cap list:')
