@@ -188,6 +188,15 @@ EOF
     sudo systemctl restart nfs-kernel-server
 fi
 
+# Ensure firewall allows NFS ports
+if command -v ufw &> /dev/null && sudo ufw status | grep -q "Status: active"; then
+    log "Configuring firewall for NFS..."
+    sudo ufw allow from 192.168.1.0/24 to any port 111 > /dev/null 2>&1 || true    # rpcbind
+    sudo ufw allow from 192.168.1.0/24 to any port 2049 > /dev/null 2>&1 || true   # nfs
+    sudo ufw allow from 192.168.1.0/24 to any port 20048 > /dev/null 2>&1 || true  # mountd
+    log "  ✓ Firewall configured for NFS"
+fi
+
 log "  ✓ NFS ready: $NFS_ROOT"
 
 # =============================================================================
@@ -243,10 +252,18 @@ else
 fi
 
 # Mount Spark distribution to NFS (only if not already mounted)
-if mountpoint -q "$NFS_ROOT/spark" 2>/dev/null; then
+# Check for duplicate mounts and fix them
+SPARK_MOUNT_COUNT=$(mount | grep -c "$NFS_ROOT/spark" || echo "0")
+if [ "$SPARK_MOUNT_COUNT" -gt 1 ]; then
+    log "  WARNING: Multiple mounts detected for $NFS_ROOT/spark, fixing..."
+    sudo umount "$NFS_ROOT/spark" 2>/dev/null || true
+fi
+
+if mountpoint -q "$NFS_ROOT/spark" 2>/dev/null && ls "$NFS_ROOT/spark/jars" >/dev/null 2>&1; then
     log "  ✓ Spark already mounted at $NFS_ROOT/spark"
 else
     log "  Mounting Spark distribution to NFS..."
+    sudo mkdir -p "$NFS_ROOT/spark"
     sudo mount --bind "$SPARK_DIST_DIR/spark-${SPARK_VERSION}-bin-hadoop3" "$NFS_ROOT/spark"
     log "  ✓ Spark available at /shared/spark on workers"
 fi
