@@ -54,8 +54,8 @@ def main():
     parser.add_argument('--storage-path', type=str, default='/shared/storage',
                         help='Storage path')
     parser.add_argument('--max-tickers', type=int, help='Max tickers to process')
-    parser.add_argument('--endpoints', type=str, default='time_series_daily',
-                        help='Comma-separated endpoints')
+    parser.add_argument('--endpoints', type=str, default='time_series_daily,company_overview',
+                        help='Comma-separated endpoints (default: time_series_daily,company_overview)')
     parser.add_argument('--days', type=int, default=None,
                         help='Days of historical data (not currently used - AV returns full history)')
     parser.add_argument('--use-market-cap', action='store_true',
