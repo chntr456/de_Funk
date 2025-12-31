@@ -537,9 +537,29 @@ class TimeSeriesForecastModel(BaseModel):
                 }, index=dates)
 
             # Generate forecast
-            forecast_obj = model.get_forecast(steps=forecast_horizon, exog=exog_forecast)
-            predictions = forecast_obj.predicted_mean
-            conf_int = forecast_obj.conf_int()
+            # Handle both pmdarima (auto_arima) and statsmodels ARIMA
+            try:
+                # Try statsmodels API first (get_forecast)
+                if hasattr(model, 'get_forecast'):
+                    forecast_obj = model.get_forecast(steps=forecast_horizon, exog=exog_forecast)
+                    predictions = forecast_obj.predicted_mean
+                    conf_int = forecast_obj.conf_int()
+                    lower = conf_int.iloc[:, 0].values
+                    upper = conf_int.iloc[:, 1].values
+                elif hasattr(model, 'predict'):
+                    # pmdarima auto_arima uses predict()
+                    predictions, conf_int = model.predict(
+                        n_periods=forecast_horizon,
+                        exogenous=exog_forecast.values if exog_forecast is not None else None,
+                        return_conf_int=True
+                    )
+                    lower = conf_int[:, 0]
+                    upper = conf_int[:, 1]
+                else:
+                    raise AttributeError(f"Model has no forecast method: {type(model)}")
+            except Exception as e:
+                self._print(f"  Warning: ARIMA forecast failed: {e}")
+                return None
 
             results = pd.DataFrame({
                 self.get_entity_column(): entity_id,
@@ -547,9 +567,9 @@ class TimeSeriesForecastModel(BaseModel):
                 'prediction_date': dates.date,
                 'horizon': range(1, forecast_horizon + 1),
                 'model_name': metadata.get('model_name', f"ARIMA_{metadata['lookback_days']}d"),
-                'predicted_value': predictions.values,
-                'lower_bound': conf_int.iloc[:, 0].values,
-                'upper_bound': conf_int.iloc[:, 1].values,
+                'predicted_value': predictions if isinstance(predictions, np.ndarray) else predictions.values,
+                'lower_bound': lower,
+                'upper_bound': upper,
                 'target': target,
                 'confidence': 0.95
             })
