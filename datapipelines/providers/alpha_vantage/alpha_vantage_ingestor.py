@@ -456,7 +456,8 @@ class AlphaVantageIngestor(Ingestor):
                     # This prevents bulk listing from overwriting company data
                     try:
                         company_facet = CompanyReferenceFacet(self.spark, tickers=batch_tickers)
-                        company_df = company_facet.postprocess(df)  # Reuse the already-fetched data
+                        # Use raw_batches, not normalized df - postprocess expects raw API data with 'Symbol'
+                        company_df = company_facet.normalize(raw_batches)
                         company_count = company_df.count()
 
                         if company_count > 0:

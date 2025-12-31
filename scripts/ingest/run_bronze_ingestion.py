@@ -58,6 +58,8 @@ def main():
                         help='Comma-separated endpoints')
     parser.add_argument('--days', type=int, default=None,
                         help='Days of historical data (not currently used - AV returns full history)')
+    parser.add_argument('--use-market-cap', action='store_true',
+                        help='Select tickers by market cap instead of alphabetically')
 
     args = parser.parse_args()
     setup_logging()
@@ -100,10 +102,34 @@ def main():
 
         dt = DeltaTable(str(ref_path))
         df = dt.to_pandas()
-        tickers = df[df['asset_type'] == 'Stock']['ticker'].unique().tolist()
+        stock_df = df[df['asset_type'] == 'Stock'].copy()
 
-        if args.max_tickers:
-            tickers = tickers[:args.max_tickers]
+        # Select tickers by market cap or alphabetically
+        if args.use_market_cap and args.max_tickers:
+            company_ref_path = storage_path / 'bronze' / 'company_reference'
+            if company_ref_path.exists():
+                logger.info("Selecting tickers by market cap (largest first)...")
+                company_dt = DeltaTable(str(company_ref_path))
+                company_df = company_dt.to_pandas()
+
+                # Merge to get market cap for each stock
+                merged = stock_df.merge(
+                    company_df[['ticker', 'market_cap']],
+                    on='ticker',
+                    how='left'
+                )
+                # Sort by market cap descending, put nulls at end
+                merged = merged.sort_values('market_cap', ascending=False, na_position='last')
+                tickers = merged['ticker'].tolist()[:args.max_tickers]
+                logger.info(f"Selected top {len(tickers)} tickers by market cap")
+            else:
+                logger.warning("No company_reference for market cap ranking - using alphabetical")
+                logger.warning("Run with company_overview endpoint first, then re-run with --use-market-cap")
+                tickers = stock_df['ticker'].unique().tolist()[:args.max_tickers]
+        else:
+            tickers = stock_df['ticker'].unique().tolist()
+            if args.max_tickers:
+                tickers = tickers[:args.max_tickers]
 
         logger.info(f"Processing {len(tickers)} tickers")
 

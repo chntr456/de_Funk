@@ -33,6 +33,7 @@ MAX_TICKERS=""  # Will be set from profile or default
 DAYS=""
 STORAGE_PATH=""  # Will be read from run_config.json
 VENV_PATH="${VENV_PATH:-$HOME/venv}"
+USE_MARKET_CAP=false  # Select tickers by market cap instead of alphabetically
 SKIP_SEED=false
 SKIP_INGEST=false
 SKIP_BUILD=false
@@ -89,6 +90,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
+        --use-market-cap)
+            USE_MARKET_CAP=true
+            shift
+            ;;
         --verbose|-v)
             VERBOSE=true
             shift
@@ -111,6 +116,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-seed        Skip ticker seeding"
             echo "  --skip-ingest      Skip Bronze ingestion"
             echo "  --skip-build       Skip Silver build"
+            echo "  --use-market-cap   Select tickers by market cap (requires company_reference)"
             echo "  --verbose          Show detailed output"
             echo "  --help             Show this help"
             exit 0
@@ -174,10 +180,12 @@ if profile_name and profile_name in config.get('profiles', {}):
 storage_path = defaults.get('storage_path', '$PROJECT_ROOT/storage')
 max_tickers = defaults.get('max_tickers')
 days = defaults.get('days', 30)
+use_market_cap = defaults.get('use_market_cap', False)
 
 print(f'CONFIG_STORAGE_PATH={storage_path}')
 print(f'CONFIG_MAX_TICKERS={max_tickers if max_tickers else 0}')
 print(f'CONFIG_DAYS={days}')
+print(f'CONFIG_USE_MARKET_CAP={str(use_market_cap).lower()}')
 print(f'CONFIG_PROFILE={profile_name}')
 " 2>/dev/null)
 
@@ -197,6 +205,10 @@ print(f'CONFIG_PROFILE={profile_name}')
     fi
     if [ -z "$DAYS" ]; then
         DAYS="$CONFIG_DAYS"
+    fi
+    # Only set USE_MARKET_CAP from config if not already set via CLI
+    if [ "$USE_MARKET_CAP" = false ] && [ "$CONFIG_USE_MARKET_CAP" = "true" ]; then
+        USE_MARKET_CAP=true
     fi
 
     # Log configuration
@@ -290,7 +302,11 @@ run_bronze_ingestion() {
     if [ "$MAX_TICKERS" -gt 0 ] 2>/dev/null; then
         ticker_limit_msg="$MAX_TICKERS"
     fi
-    log_step "Running Bronze ingestion (tickers: $ticker_limit_msg)..."
+    local market_cap_msg=""
+    if [ "$USE_MARKET_CAP" = true ]; then
+        market_cap_msg=" (by market cap)"
+    fi
+    log_step "Running Bronze ingestion (tickers: ${ticker_limit_msg}${market_cap_msg})..."
 
     cd "$PROJECT_ROOT"
 
@@ -321,10 +337,40 @@ ingestor = AlphaVantageIngestor(
 )
 
 print('Fetching ticker list...')
-_, tickers, _, _ = ingestor.ingest_bulk_listing(table_name='securities_reference', state='active')
+_, all_tickers, _, _ = ingestor.ingest_bulk_listing(table_name='securities_reference', state='active')
+
 max_tickers = $MAX_TICKERS
-if max_tickers > 0:
-    tickers = tickers[:max_tickers]
+use_market_cap = '$USE_MARKET_CAP' == 'true'
+
+# Select tickers by market cap or alphabetically
+if use_market_cap and max_tickers > 0:
+    from deltalake import DeltaTable
+    company_ref_path = Path('$STORAGE_PATH/bronze/company_reference')
+    if company_ref_path.exists():
+        print('Selecting tickers by market cap (largest first)...')
+        import pandas as pd
+        company_dt = DeltaTable(str(company_ref_path))
+        company_df = company_dt.to_pandas()
+
+        # Create DataFrame from ticker list and merge with market cap
+        ticker_df = pd.DataFrame({'ticker': all_tickers})
+        merged = ticker_df.merge(
+            company_df[['ticker', 'market_cap']],
+            on='ticker',
+            how='left'
+        )
+        # Sort by market cap descending, nulls at end
+        merged = merged.sort_values('market_cap', ascending=False, na_position='last')
+        tickers = merged['ticker'].tolist()[:max_tickers]
+        print(f'Selected top {len(tickers)} tickers by market cap')
+    else:
+        print('No company_reference for market cap ranking - using alphabetical')
+        tickers = all_tickers[:max_tickers]
+elif max_tickers > 0:
+    tickers = all_tickers[:max_tickers]
+else:
+    tickers = all_tickers
+
 print(f'Processing {len(tickers)} tickers...')
 
 print('Ingesting prices...')
@@ -500,6 +546,7 @@ main() {
     else
         echo "  Max Tickers:    ALL"
     fi
+    echo "  Use Market Cap: $USE_MARKET_CAP"
     echo "  Days:           $DAYS"
     echo "  Skip Seed:      $SKIP_SEED"
     echo "  Skip Ingest:    $SKIP_INGEST"
