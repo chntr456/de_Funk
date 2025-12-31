@@ -242,10 +242,14 @@ else
     log "  ✓ Spark distribution already exists"
 fi
 
-# Mount Spark distribution to NFS
-log "  Mounting Spark distribution to NFS..."
-sudo mount --bind "$SPARK_DIST_DIR/spark-${SPARK_VERSION}-bin-hadoop3" "$NFS_ROOT/spark"
-log "  ✓ Spark available at /shared/spark on workers"
+# Mount Spark distribution to NFS (only if not already mounted)
+if mountpoint -q "$NFS_ROOT/spark" 2>/dev/null; then
+    log "  ✓ Spark already mounted at $NFS_ROOT/spark"
+else
+    log "  Mounting Spark distribution to NFS..."
+    sudo mount --bind "$SPARK_DIST_DIR/spark-${SPARK_VERSION}-bin-hadoop3" "$NFS_ROOT/spark"
+    log "  ✓ Spark available at /shared/spark on workers"
+fi
 
 # =============================================================================
 # Step 4: Setup Each Worker (Sequential)
@@ -272,14 +276,22 @@ sudo mkdir -p /shared
 if mountpoint -q /shared && ls /shared/storage >/dev/null 2>&1 && ls /shared/spark >/dev/null 2>&1; then
     echo "  NFS already mounted and working"
 else
-    # Unmount if stale and remount
+    # Force unmount stale mount and remount fresh
     echo "  Remounting NFS (stale or missing)..."
-    sudo umount -f -l /shared 2>/dev/null || true
-    sleep 1
-    sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
+    sudo umount -f /shared 2>/dev/null || true
+    sudo umount -l /shared 2>/dev/null || true
+    sleep 2
+    sudo mount -t nfs -o vers=3 $HEAD_IP:$NFS_ROOT /shared
     echo "  NFS mounted"
+    # Verify /shared/spark is accessible
+    if ! ls /shared/spark >/dev/null 2>&1; then
+        echo "  WARNING: /shared/spark still not accessible, retrying mount..."
+        sudo umount -l /shared 2>/dev/null || true
+        sleep 2
+        sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
+    fi
 fi
-ls -la /shared/
+ls /shared/
 
 # Persist mount
 grep -q "/shared" /etc/fstab || echo "$HEAD_IP:$NFS_ROOT /shared nfs defaults,_netdev 0 0" | sudo tee -a /etc/fstab
