@@ -494,9 +494,23 @@ run_silver_build() {
         verbose_flag="--verbose"
     fi
 
+    # Determine which models to build
+    local models_to_build="temporal company stocks"
+
+    # Add forecast if not skipped and dependencies available
+    if [ "$SKIP_FORECAST" = true ]; then
+        log_info "Forecast will be skipped (--skip-forecast)"
+    elif timeout 10 python3 -c "import statsmodels; import sklearn" 2>/dev/null; then
+        models_to_build="temporal company stocks forecast"
+        log_info "Including forecast in build"
+    else
+        log_info "Forecast skipped (statsmodels/sklearn not installed)"
+    fi
+
     python -m scripts.build.build_models \
-        --models temporal company stocks \
+        --models $models_to_build \
         --storage-root "$STORAGE_PATH" \
+        --max-tickers "$MAX_TICKERS" \
         $verbose_flag
 
     local build_status=$?
@@ -506,31 +520,6 @@ run_silver_build() {
     else
         log_error "Silver build failed"
         return 1
-    fi
-
-    # Run forecast if not skipped and ML dependencies are available
-    if [ "$SKIP_FORECAST" = true ]; then
-        log_info "Skipping forecast (--skip-forecast)"
-    elif timeout 10 python3 -c "import statsmodels; import sklearn" 2>/dev/null; then
-        log_step "Building forecast models..."
-
-        # Run with timeout to prevent hangs (10 min max)
-        timeout 600 python -m scripts.build.build_models \
-            --models forecast \
-            --storage-root "$STORAGE_PATH" \
-            --max-tickers "$MAX_TICKERS" \
-            $verbose_flag
-
-        local forecast_status=$?
-        if [ $forecast_status -eq 124 ]; then
-            log_warn "Forecast build timed out (10 min limit)"
-        elif [ $forecast_status -ne 0 ]; then
-            log_warn "Forecast build failed (non-critical)"
-        else
-            log_success "Forecast build complete"
-        fi
-    else
-        log_info "Skipping forecast (statsmodels/sklearn not installed)"
     fi
 
     return 0
