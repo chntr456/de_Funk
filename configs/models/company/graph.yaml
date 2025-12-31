@@ -74,7 +74,7 @@ nodes:
       ebitda: ebitda
       # Expenses
       operating_expenses: operating_expenses
-      sg_and_a: selling_general_and_administrative
+      sg_and_a: sg_and_a
       research_and_development: research_and_development
       depreciation_and_amortization: depreciation_and_amortization
       interest_expense: interest_expense
@@ -104,7 +104,7 @@ nodes:
       # Assets
       total_assets: total_assets
       total_current_assets: total_current_assets
-      cash_and_equivalents: cash_and_cash_equivalents_at_carrying_value
+      cash_and_equivalents: cash_and_equivalents
       inventory: inventory
       current_net_receivables: current_net_receivables
       total_non_current_assets: total_non_current_assets
@@ -122,7 +122,7 @@ nodes:
       total_shareholder_equity: total_shareholder_equity
       retained_earnings: retained_earnings
       common_stock: common_stock
-      common_stock_shares_outstanding: common_stock_shares_outstanding
+      common_stock_shares_outstanding: shares_outstanding
       # Metadata
       reported_currency: reported_currency
     derive:
@@ -146,7 +146,7 @@ nodes:
       report_type: report_type
       # Operating
       operating_cashflow: operating_cashflow
-      depreciation_depletion_amortization: depreciation_depletion_and_amortization
+      depreciation_depletion_amortization: depreciation_depletion_amortization
       change_in_receivables: change_in_receivables
       change_in_inventory: change_in_inventory
       profit_loss: profit_loss
@@ -158,10 +158,10 @@ nodes:
       cashflow_from_financing: cashflow_from_financing
       dividend_payout: dividend_payout
       dividend_payout_common_stock: dividend_payout_common_stock
-      payments_repurchase_common_stock: payments_for_repurchase_of_common_stock
-      proceeds_issuance_common_stock: proceeds_from_issuance_of_common_stock
+      payments_repurchase_common_stock: payments_repurchase_common_stock
+      proceeds_issuance_common_stock: proceeds_issuance_common_stock
       # Summary
-      change_in_cash: change_in_cash_and_cash_equivalents
+      change_in_cash: change_in_cash
       # Metadata
       reported_currency: reported_currency
     derive:
