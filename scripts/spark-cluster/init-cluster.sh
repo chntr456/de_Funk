@@ -217,7 +217,7 @@ pip install -q --upgrade pip
 pip install -q 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow requests python-dotenv networkx
 
 # Machine learning libraries
-pip install -q scikit-learn statsmodels prophet xgboost lightgbm
+pip install -q scikit-learn statsmodels pmdarima prophet xgboost lightgbm
 
 # Deep learning (CPU versions for compatibility - use GPU versions if needed)
 pip install -q torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
@@ -323,7 +323,7 @@ pip install -q --upgrade pip
 pip install -q 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow networkx
 
 # Machine learning (for Spark UDFs)
-pip install -q scikit-learn statsmodels xgboost lightgbm
+pip install -q scikit-learn statsmodels pmdarima xgboost lightgbm
 
 JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
 SPARK_HOME=\$(python -c "import pyspark; print(pyspark.__path__[0])")
