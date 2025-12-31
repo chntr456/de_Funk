@@ -345,29 +345,57 @@ use_market_cap = '$USE_MARKET_CAP' == 'true'
 # Select tickers by market cap or alphabetically
 if use_market_cap and max_tickers > 0:
     from deltalake import DeltaTable
+    import pandas as pd
     company_ref_path = Path('$STORAGE_PATH/bronze/company_reference')
+
+    # Check if we have enough market cap data
+    need_bootstrap = True
     if company_ref_path.exists():
-        print('Selecting tickers by market cap (largest first)...')
-        import pandas as pd
+        company_dt = DeltaTable(str(company_ref_path))
+        company_df = company_dt.to_pandas()
+        # Need at least 2x the requested tickers with market cap data
+        has_market_cap = company_df[company_df['market_cap'].notna()]
+        if len(has_market_cap) >= max_tickers * 2:
+            need_bootstrap = False
+            print(f'Found {len(has_market_cap)} tickers with market cap data')
+
+    if need_bootstrap:
+        # Bootstrap: fetch company overview for top 100 alphabetical tickers to get market cap
+        bootstrap_size = max(100, max_tickers * 5)
+        bootstrap_tickers = sorted(all_tickers)[:bootstrap_size]
+        print(f'Bootstrapping market cap data for {len(bootstrap_tickers)} tickers...')
+        print('(This is needed to select by market cap - subsequent runs will be faster)')
+        ingestor.ingest_reference_data(tickers=bootstrap_tickers)
+
+        # Reload company_reference
         company_dt = DeltaTable(str(company_ref_path))
         company_df = company_dt.to_pandas()
 
-        # Create DataFrame from ticker list and merge with market cap
-        ticker_df = pd.DataFrame({'ticker': all_tickers})
-        merged = ticker_df.merge(
-            company_df[['ticker', 'market_cap']],
-            on='ticker',
-            how='left'
-        )
-        # Sort by market cap descending, nulls at end
-        merged = merged.sort_values('market_cap', ascending=False, na_position='last')
-        tickers = merged['ticker'].tolist()[:max_tickers]
-        print(f'Selected top {len(tickers)} tickers by market cap')
-    else:
-        print('No company_reference for market cap ranking - using alphabetical')
-        tickers = all_tickers[:max_tickers]
+    # Now select by market cap
+    print('Selecting tickers by market cap (largest first)...')
+    ticker_df = pd.DataFrame({'ticker': all_tickers})
+    merged = ticker_df.merge(
+        company_df[['ticker', 'market_cap']],
+        on='ticker',
+        how='left'
+    )
+    # Sort by market cap descending, nulls at end
+    merged = merged.sort_values('market_cap', ascending=False, na_position='last')
+    tickers = merged['ticker'].tolist()[:max_tickers]
+
+    # Show which tickers were selected
+    top_caps = merged.head(max_tickers)[['ticker', 'market_cap']].to_dict('records')
+    print(f'Selected top {len(tickers)} by market cap:')
+    for t in top_caps[:5]:
+        cap = t['market_cap']
+        cap_str = f'\${cap/1e9:.1f}B' if cap and cap > 1e9 else (f'\${cap/1e6:.0f}M' if cap else 'N/A')
+        print(f'  {t[\"ticker\"]}: {cap_str}')
+    if len(top_caps) > 5:
+        print(f'  ... and {len(top_caps) - 5} more')
+
 elif max_tickers > 0:
-    tickers = all_tickers[:max_tickers]
+    tickers = sorted(all_tickers)[:max_tickers]
+    print(f'Selected {len(tickers)} tickers alphabetically')
 else:
     tickers = all_tickers
 
