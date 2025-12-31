@@ -202,17 +202,17 @@ if [ ! -d "$SPARK_VENV" ]; then
 fi
 
 source "$SPARK_VENV/bin/activate"
-pip install --upgrade pip
+pip install -q --upgrade pip
 
 # Core data processing
-pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow requests python-dotenv networkx
+pip install -q 'pyspark==4.0.1' 'delta-spark==4.0.0' 'deltalake>=0.14.0' pandas numpy pyarrow requests python-dotenv networkx
 
 # Machine learning libraries
-pip install scikit-learn statsmodels prophet xgboost lightgbm
+pip install -q scikit-learn statsmodels prophet xgboost lightgbm
 
 # Deep learning (CPU versions for compatibility - use GPU versions if needed)
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-pip install tensorflow
+pip install -q torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+pip install -q tensorflow
 
 JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
 SPARK_HOME=$(python -c "import pyspark; print(pyspark.__path__[0])")
@@ -263,16 +263,17 @@ for w in "${WORKERS[@]}"; do
 set -e
 
 echo "  Installing packages..."
-sudo apt-get update
-sudo apt-get install -y openjdk-17-jdk python3-pip python3-venv nfs-common
+sudo apt-get update -qq
+sudo apt-get install -y -qq openjdk-17-jdk python3-pip python3-venv nfs-common
 
 echo "  Mounting NFS..."
 sudo mkdir -p /shared
-# Only remount if not already mounted or stale
-if mountpoint -q /shared && ls /shared/storage >/dev/null 2>&1; then
+# Check if mount is working including /shared/spark (which can go stale)
+if mountpoint -q /shared && ls /shared/storage >/dev/null 2>&1 && ls /shared/spark >/dev/null 2>&1; then
     echo "  NFS already mounted and working"
 else
-    # Unmount if stale
+    # Unmount if stale and remount
+    echo "  Remounting NFS (stale or missing)..."
     sudo umount -f -l /shared 2>/dev/null || true
     sleep 1
     sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
@@ -288,12 +289,12 @@ if [ ! -d ~/venv ]; then
     python3 -m venv ~/venv
 fi
 source ~/venv/bin/activate
-pip install --upgrade pip
+pip install -q --upgrade pip
 # Core data processing
-pip install 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow networkx
+pip install -q 'pyspark==4.0.1' 'delta-spark==4.0.0' pandas numpy pyarrow networkx
 
 # Machine learning (for Spark UDFs)
-pip install scikit-learn statsmodels xgboost lightgbm
+pip install -q scikit-learn statsmodels xgboost lightgbm
 
 JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
 SPARK_HOME=\$(python -c "import pyspark; print(pyspark.__path__[0])")
