@@ -348,51 +348,59 @@ if use_market_cap and max_tickers > 0:
     import pandas as pd
     company_ref_path = Path('$STORAGE_PATH/bronze/company_reference')
 
-    # Check if we have VALID market cap data (top stocks should have >100B market cap)
-    need_bootstrap = True
+    # Known large-cap tickers (avoids 100 API calls for bootstrap)
+    # These are the largest US stocks by market cap - stable list
+    SEED_LARGE_CAPS = [
+        'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'GOOG', 'AMZN', 'META', 'BRK.B', 'BRK.A',
+        'LLY', 'AVGO', 'JPM', 'TSLA', 'WMT', 'V', 'XOM', 'UNH', 'MA', 'PG', 'JNJ',
+        'COST', 'HD', 'ORCL', 'MRK', 'ABBV', 'CVX', 'BAC', 'KO', 'CRM', 'PEP',
+        'AMD', 'NFLX', 'TMO', 'MCD', 'LIN', 'CSCO', 'ADBE', 'WFC', 'ABT', 'ACN',
+        'DHR', 'GE', 'INTU', 'CAT', 'IBM', 'VZ', 'TXN', 'QCOM', 'CMCSA', 'AXP'
+    ]
+
+    # Check if we have VALID market cap data
+    have_valid_data = False
     if company_ref_path.exists():
         company_dt = DeltaTable(str(company_ref_path))
         company_df = company_dt.to_pandas()
         # Check if we have any stocks with >100B market cap (real large caps)
         large_caps = company_df[company_df['market_cap'] > 100_000_000_000]
         if len(large_caps) >= max_tickers:
-            need_bootstrap = False
+            have_valid_data = True
             print(f'Found {len(large_caps)} large-cap tickers (>\$100B market cap)')
 
-    if need_bootstrap:
-        # Bootstrap: fetch company overview for 100 alphabetical tickers to get market cap
-        # Use sorted list to get consistent, predictable tickers
-        bootstrap_size = max(100, max_tickers * 5)
-        bootstrap_tickers = sorted(all_tickers)[:bootstrap_size]
-        print(f'Bootstrapping market cap data for {len(bootstrap_tickers)} tickers...')
-        print('(This is needed to select by market cap - subsequent runs will be faster)')
-        ingestor.ingest_reference_data(tickers=bootstrap_tickers)
+    if have_valid_data:
+        # Use actual market cap data
+        print('Selecting tickers by market cap (largest first)...')
+        ticker_df = pd.DataFrame({'ticker': all_tickers})
+        merged = ticker_df.merge(
+            company_df[['ticker', 'market_cap']],
+            on='ticker',
+            how='left'
+        )
+        merged = merged.sort_values('market_cap', ascending=False, na_position='last')
+        tickers = merged['ticker'].tolist()[:max_tickers]
 
-        # Reload company_reference
-        company_dt = DeltaTable(str(company_ref_path))
-        company_df = company_dt.to_pandas()
-
-    # Now select by market cap
-    print('Selecting tickers by market cap (largest first)...')
-    ticker_df = pd.DataFrame({'ticker': all_tickers})
-    merged = ticker_df.merge(
-        company_df[['ticker', 'market_cap']],
-        on='ticker',
-        how='left'
-    )
-    # Sort by market cap descending, nulls at end
-    merged = merged.sort_values('market_cap', ascending=False, na_position='last')
-    tickers = merged['ticker'].tolist()[:max_tickers]
-
-    # Show which tickers were selected
-    top_caps = merged.head(max_tickers)[['ticker', 'market_cap']].to_dict('records')
-    print(f'Selected top {len(tickers)} by market cap:')
-    for t in top_caps[:5]:
-        cap = t['market_cap']
-        cap_str = f'\${cap/1e9:.1f}B' if cap and cap > 1e9 else (f'\${cap/1e6:.0f}M' if cap else 'N/A')
-        print(f'  {t[\"ticker\"]}: {cap_str}')
-    if len(top_caps) > 5:
-        print(f'  ... and {len(top_caps) - 5} more')
+        # Show which tickers were selected
+        top_caps = merged.head(max_tickers)[['ticker', 'market_cap']].to_dict('records')
+        print(f'Selected top {len(tickers)} by market cap:')
+        for t in top_caps[:5]:
+            cap = t['market_cap']
+            cap_str = f'\${cap/1e9:.1f}B' if cap and cap > 1e9 else (f'\${cap/1e6:.0f}M' if cap else 'N/A')
+            print(f'  {t[\"ticker\"]}: {cap_str}')
+        if len(top_caps) > 5:
+            print(f'  ... and {len(top_caps) - 5} more')
+    else:
+        # Use seed list of known large caps (no API calls needed!)
+        print('Using seed list of known large-cap tickers (no market cap data yet)...')
+        # Filter to tickers that exist in our securities_reference
+        available_large_caps = [t for t in SEED_LARGE_CAPS if t in all_tickers]
+        tickers = available_large_caps[:max_tickers]
+        print(f'Selected {len(tickers)} from seed large-cap list:')
+        for t in tickers[:5]:
+            print(f'  {t}')
+        if len(tickers) > 5:
+            print(f'  ... and {len(tickers) - 5} more')
 
 elif max_tickers > 0:
     tickers = sorted(all_tickers)[:max_tickers]
