@@ -258,7 +258,9 @@ class BaseModel:
         if self._graph_builder is None:
             from models.base.graph_builder import GraphBuilder
             self._graph_builder = GraphBuilder(self)
-        return self._graph_builder.build()
+        self._dims, self._facts = self._graph_builder.build()
+        self._is_built = True
+        return self._dims, self._facts
 
     def ensure_built(self):
         """Lazy build pattern - only build when needed."""
