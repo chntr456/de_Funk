@@ -493,7 +493,25 @@ run_silver_build() {
         --storage-root "$STORAGE_PATH" \
         $verbose_flag
 
-    if [ $? -eq 0 ]; then
+    local build_status=$?
+
+    # Run forecast if ML dependencies are available
+    if python3 -c "import pmdarima; import sklearn" 2>/dev/null; then
+        log_step "Building forecast models..."
+        python -m scripts.build.build_models \
+            --models forecast \
+            --storage-root "$STORAGE_PATH" \
+            --max-tickers "$MAX_TICKERS" \
+            $verbose_flag
+
+        if [ $? -ne 0 ]; then
+            log_warn "Forecast build failed (non-critical)"
+        fi
+    else
+        log_info "Skipping forecast (pmdarima/sklearn not installed)"
+    fi
+
+    if [ $build_status -eq 0 ]; then
         log_success "Silver build complete"
         return 0
     else
@@ -530,7 +548,7 @@ except:
     echo -e "${BOLD}Silver Layer:${NC}"
 
     # Check Silver directories - structure is: silver/{model}/dims/* and silver/{model}/facts/*
-    for model in temporal company stocks; do
+    for model in temporal company stocks forecast; do
         local path="$STORAGE_PATH/silver/$model"
         if [ -d "$path" ]; then
             # Check dims and facts subdirectories
