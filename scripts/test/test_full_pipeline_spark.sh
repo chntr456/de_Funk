@@ -348,19 +348,20 @@ if use_market_cap and max_tickers > 0:
     import pandas as pd
     company_ref_path = Path('$STORAGE_PATH/bronze/company_reference')
 
-    # Check if we have enough market cap data
+    # Check if we have VALID market cap data (top stocks should have >100B market cap)
     need_bootstrap = True
     if company_ref_path.exists():
         company_dt = DeltaTable(str(company_ref_path))
         company_df = company_dt.to_pandas()
-        # Need at least 2x the requested tickers with market cap data
-        has_market_cap = company_df[company_df['market_cap'].notna()]
-        if len(has_market_cap) >= max_tickers * 2:
+        # Check if we have any stocks with >100B market cap (real large caps)
+        large_caps = company_df[company_df['market_cap'] > 100_000_000_000]
+        if len(large_caps) >= max_tickers:
             need_bootstrap = False
-            print(f'Found {len(has_market_cap)} tickers with market cap data')
+            print(f'Found {len(large_caps)} large-cap tickers (>\$100B market cap)')
 
     if need_bootstrap:
-        # Bootstrap: fetch company overview for top 100 alphabetical tickers to get market cap
+        # Bootstrap: fetch company overview for 100 alphabetical tickers to get market cap
+        # Use sorted list to get consistent, predictable tickers
         bootstrap_size = max(100, max_tickers * 5)
         bootstrap_tickers = sorted(all_tickers)[:bootstrap_size]
         print(f'Bootstrapping market cap data for {len(bootstrap_tickers)} tickers...')
@@ -406,6 +407,27 @@ ingestor.ingest_prices(tickers=tickers, date_from=None, date_to=None)
 
 print('Ingesting company overview...')
 ingestor.ingest_reference_data(tickers=tickers)
+
+print('Ingesting financial statements...')
+try:
+    ingestor.ingest_income_statements(tickers=tickers)
+except Exception as e:
+    print(f'  Warning: income_statement failed: {e}')
+
+try:
+    ingestor.ingest_balance_sheets(tickers=tickers)
+except Exception as e:
+    print(f'  Warning: balance_sheet failed: {e}')
+
+try:
+    ingestor.ingest_cash_flows(tickers=tickers)
+except Exception as e:
+    print(f'  Warning: cash_flow failed: {e}')
+
+try:
+    ingestor.ingest_earnings(tickers=tickers)
+except Exception as e:
+    print(f'  Warning: earnings failed: {e}')
 
 print('Done!')
 ctx.spark.stop()
