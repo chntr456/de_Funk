@@ -37,6 +37,7 @@ USE_MARKET_CAP=false  # Select tickers by market cap instead of alphabetically
 SKIP_SEED=false
 SKIP_INGEST=false
 SKIP_BUILD=false
+SKIP_FORECAST=false
 VERBOSE=false
 
 # Colors
@@ -90,6 +91,10 @@ while [[ $# -gt 0 ]]; do
             SKIP_BUILD=true
             shift
             ;;
+        --skip-forecast)
+            SKIP_FORECAST=true
+            shift
+            ;;
         --use-market-cap)
             USE_MARKET_CAP=true
             shift
@@ -116,6 +121,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-seed        Skip ticker seeding"
             echo "  --skip-ingest      Skip Bronze ingestion"
             echo "  --skip-build       Skip Silver build"
+            echo "  --skip-forecast    Skip forecast model build"
             echo "  --use-market-cap   Select tickers by market cap (requires company_reference)"
             echo "  --verbose          Show detailed output"
             echo "  --help             Show this help"
@@ -495,29 +501,39 @@ run_silver_build() {
 
     local build_status=$?
 
-    # Run forecast if ML dependencies are available
-    if python3 -c "import pmdarima; import sklearn" 2>/dev/null; then
+    if [ $build_status -eq 0 ]; then
+        log_success "Silver build complete"
+    else
+        log_error "Silver build failed"
+        return 1
+    fi
+
+    # Run forecast if not skipped and ML dependencies are available
+    if [ "$SKIP_FORECAST" = true ]; then
+        log_info "Skipping forecast (--skip-forecast)"
+    elif python3 -c "import pmdarima; import sklearn" 2>/dev/null; then
         log_step "Building forecast models..."
-        python -m scripts.build.build_models \
+
+        # Run with timeout to prevent hangs (10 min max)
+        timeout 600 python -m scripts.build.build_models \
             --models forecast \
             --storage-root "$STORAGE_PATH" \
             --max-tickers "$MAX_TICKERS" \
             $verbose_flag
 
-        if [ $? -ne 0 ]; then
+        local forecast_status=$?
+        if [ $forecast_status -eq 124 ]; then
+            log_warn "Forecast build timed out (10 min limit)"
+        elif [ $forecast_status -ne 0 ]; then
             log_warn "Forecast build failed (non-critical)"
+        else
+            log_success "Forecast build complete"
         fi
     else
         log_info "Skipping forecast (pmdarima/sklearn not installed)"
     fi
 
-    if [ $build_status -eq 0 ]; then
-        log_success "Silver build complete"
-        return 0
-    else
-        log_error "Silver build failed"
-        return 1
-    fi
+    return 0
 }
 
 verify_data() {
@@ -649,6 +665,7 @@ main() {
     echo "  Skip Seed:      $SKIP_SEED"
     echo "  Skip Ingest:    $SKIP_INGEST"
     echo "  Skip Build:     $SKIP_BUILD"
+    echo "  Skip Forecast:  $SKIP_FORECAST"
     echo ""
 
     if ! check_dependencies; then
