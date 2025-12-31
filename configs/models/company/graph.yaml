@@ -171,8 +171,8 @@ nodes:
     unique_key: [cik, fiscal_date_ending, report_type]
 
   # Earnings Facts (EPS actual vs estimate)
-  # Note: Annual earnings only have fiscal_date_ending and reported_e_p_s
-  # Quarterly earnings have additional fields (reported_date, estimated_e_p_s, surprise)
+  # Note: Annual earnings only have fiscal_date_ending and reported_eps
+  # Quarterly earnings have additional fields (reported_date, estimated_eps, surprise)
   # but these may not be present if only annual data was ingested
   fact_earnings:
     from: bronze.earnings
@@ -185,7 +185,7 @@ nodes:
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
-      reported_eps: reported_e_p_s
+      reported_eps: reported_eps
     derive:
       company_id: "CONCAT('COMPANY_', cik)"
       report_date: "fiscal_date_ending"
