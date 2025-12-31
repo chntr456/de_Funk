@@ -152,42 +152,41 @@ log "  ✓ Local processes stopped (workers will be restarted in Step 6)"
 
 section "Step 2: NFS Setup (Head Node)"
 
-# First, clean up any stale mounts that could cause hangs
-log "Cleaning up any stale mounts..."
-sudo fuser -km "$NFS_ROOT" 2>/dev/null || true
-sudo umount -f -l "$NFS_ROOT/storage" 2>/dev/null || true
-sudo umount -f -l "$NFS_ROOT/de_Funk" 2>/dev/null || true
-sudo umount -f -l "$NFS_ROOT/spark" 2>/dev/null || true
-sudo umount -f -l "$NFS_ROOT" 2>/dev/null || true
-sleep 1
-
-# Check if storage directories exist (NFS already set up)
-if [ -d "$LOCAL_STORAGE/bronze" ] && [ -d "$LOCAL_STORAGE/silver" ]; then
-    log "Storage directories exist at $LOCAL_STORAGE - quick setup"
+# Check if NFS is already properly set up and working
+if mountpoint -q "$NFS_ROOT/storage" 2>/dev/null && [ -d "$NFS_ROOT/storage/bronze" ]; then
+    log "NFS already configured at $NFS_ROOT - skipping setup"
 else
-    log "Installing NFS server..."
-    sudo apt-get update
-    sudo apt-get install -y nfs-kernel-server nfs-common
+    # Only clean up mounts if they exist but aren't working
+    log "Setting up NFS mounts..."
 
-    log "Creating directories..."
+    # Check if storage directories exist (from previous setup)
+    if [ -d "$LOCAL_STORAGE/bronze" ] && [ -d "$LOCAL_STORAGE/silver" ]; then
+        log "Storage directories exist at $LOCAL_STORAGE - quick setup"
+    else
+        log "Installing NFS server..."
+        sudo apt-get update
+        sudo apt-get install -y nfs-kernel-server nfs-common
+
+        log "Creating directories..."
+        sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk" "$NFS_ROOT/spark"
+        sudo mkdir -p "$LOCAL_STORAGE"/{bronze,silver,logs,checkpoints}
+        sudo chown -R $DE_FUNK_USER:$DE_FUNK_USER "$LOCAL_STORAGE"
+    fi
+
+    log "Setting up bind mounts..."
     sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk" "$NFS_ROOT/spark"
-    sudo mkdir -p "$LOCAL_STORAGE"/{bronze,silver,logs,checkpoints}
-    sudo chown -R $DE_FUNK_USER:$DE_FUNK_USER "$LOCAL_STORAGE"
-fi
+    # Only mount if not already mounted
+    mountpoint -q "$NFS_ROOT/storage" || sudo mount --bind "$LOCAL_STORAGE" "$NFS_ROOT/storage"
+    mountpoint -q "$NFS_ROOT/de_Funk" || sudo mount --bind "$LOCAL_PROJECT" "$NFS_ROOT/de_Funk"
 
-log "Setting up bind mounts..."
-sudo mkdir -p "$NFS_ROOT/storage" "$NFS_ROOT/de_Funk" "$NFS_ROOT/spark"
-sudo mount --bind "$LOCAL_STORAGE" "$NFS_ROOT/storage"
-sudo mount --bind "$LOCAL_PROJECT" "$NFS_ROOT/de_Funk"
-# Spark distribution will be mounted after download in Step 3
-
-log "Configuring NFS exports..."
-sudo tee /etc/exports > /dev/null <<EOF
+    log "Configuring NFS exports..."
+    sudo tee /etc/exports > /dev/null <<EOF
 $NFS_ROOT 192.168.1.0/24(rw,sync,no_subtree_check,no_root_squash,crossmnt)
 EOF
 
-sudo exportfs -ra
-sudo systemctl restart nfs-kernel-server
+    sudo exportfs -ra
+    sudo systemctl restart nfs-kernel-server
+fi
 
 log "  ✓ NFS ready: $NFS_ROOT"
 
@@ -269,12 +268,16 @@ sudo apt-get install -y openjdk-17-jdk python3-pip python3-venv nfs-common
 
 echo "  Mounting NFS..."
 sudo mkdir -p /shared
-# Force unmount any stale mounts
-sudo fuser -km /shared 2>/dev/null || true
-sudo umount -f -l /shared 2>/dev/null || true
-sleep 1
-sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
-echo "  NFS mounted"
+# Only remount if not already mounted or stale
+if mountpoint -q /shared && ls /shared/storage >/dev/null 2>&1; then
+    echo "  NFS already mounted and working"
+else
+    # Unmount if stale
+    sudo umount -f -l /shared 2>/dev/null || true
+    sleep 1
+    sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
+    echo "  NFS mounted"
+fi
 ls -la /shared/
 
 # Persist mount
