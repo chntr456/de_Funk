@@ -511,7 +511,7 @@ run_silver_build() {
     # Run forecast if not skipped and ML dependencies are available
     if [ "$SKIP_FORECAST" = true ]; then
         log_info "Skipping forecast (--skip-forecast)"
-    elif timeout 10 python3 -c "import pmdarima; import sklearn" 2>/dev/null; then
+    elif timeout 10 python3 -c "import statsmodels; import sklearn" 2>/dev/null; then
         log_step "Building forecast models..."
 
         # Run with timeout to prevent hangs (10 min max)
@@ -530,7 +530,7 @@ run_silver_build() {
             log_success "Forecast build complete"
         fi
     else
-        log_info "Skipping forecast (pmdarima/sklearn not installed)"
+        log_info "Skipping forecast (statsmodels/sklearn not installed)"
     fi
 
     return 0
