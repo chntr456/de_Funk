@@ -336,9 +336,9 @@ echo "  Creating systemd service..."
 cat > ~/start-spark-worker.sh << 'STARTWRAPPER'
 #!/bin/bash
 source ~/venv/bin/activate
-JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
-SPARK_HOME=/shared/spark
-export SPARK_HOME
+export JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
+export SPARK_HOME=/shared/spark
+export PYSPARK_PYTHON=\$(which python3)
 exec "\$JAVA_HOME/bin/java" -cp "\$SPARK_HOME/jars/*" -Xmx${mem}g \
     org.apache.spark.deploy.worker.Worker \
     --cores $cores --memory ${mem}g \
@@ -346,7 +346,7 @@ exec "\$JAVA_HOME/bin/java" -cp "\$SPARK_HOME/jars/*" -Xmx${mem}g \
 STARTWRAPPER
 chmod +x ~/start-spark-worker.sh
 
-# Systemd service calls the wrapper script (which handles glob expansion via bash)
+# Systemd service with environment variables for executor spawning
 printf '%s\n' \
     "[Unit]" \
     "Description=Apache Spark Worker" \
@@ -356,6 +356,9 @@ printf '%s\n' \
     "Type=simple" \
     "User=\$(whoami)" \
     "WorkingDirectory=/home/\$(whoami)" \
+    "Environment=SPARK_HOME=/shared/spark" \
+    "Environment=JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))" \
+    "Environment=PYSPARK_PYTHON=/home/\$(whoami)/venv/bin/python3" \
     "ExecStart=/home/\$(whoami)/start-spark-worker.sh" \
     "Restart=on-failure" \
     "RestartSec=5" \
