@@ -212,7 +212,15 @@ log "  ✓ Python environment ready"
 
 log "Step 5: Installing Spark Worker service..."
 
-SPARK_HOME=$($VENV_PATH/bin/python -c "import pyspark; print(pyspark.__path__[0])")
+# Use NFS-mounted Spark distribution (has full jars and build info for executor spawning)
+SPARK_HOME="/shared/spark"
+
+# Verify Spark is accessible via NFS
+if [ ! -d "$SPARK_HOME/jars" ]; then
+    log "  ERROR: Spark not found at $SPARK_HOME"
+    log "  Make sure NFS is mounted and head node has Spark distribution"
+    exit 1
+fi
 
 sudo tee /etc/systemd/system/spark-worker.service > /dev/null <<EOF
 [Unit]
@@ -222,8 +230,10 @@ After=network.target
 [Service]
 Type=simple
 User=$DE_FUNK_USER
+WorkingDirectory=/home/$DE_FUNK_USER
 Environment="JAVA_HOME=$JAVA_HOME"
 Environment="SPARK_HOME=$SPARK_HOME"
+Environment="PYSPARK_PYTHON=$VENV_PATH/bin/python3"
 Environment="PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin"
 ExecStart=$JAVA_HOME/bin/java -cp "$SPARK_HOME/jars/*" -Xmx${WORKER_MEM}g org.apache.spark.deploy.worker.Worker --cores $WORKER_CORES --memory ${WORKER_MEM}g spark://$HEAD_IP:$HEAD_PORT
 Restart=on-failure
