@@ -232,9 +232,13 @@ print(f'CONFIG_PROFILE={profile_name}')
 
 detect_cluster_mode() {
     # Auto-detect if we should use cluster mode
-    # Only if SPARK_MASTER_URL is not already set
+    # If SPARK_MASTER_URL is already set, just ensure memory is appropriate
     if [ -n "$SPARK_MASTER_URL" ]; then
         log_info "Using existing SPARK_MASTER_URL: $SPARK_MASTER_URL"
+        # Ensure cluster-appropriate memory settings (workers have 10GB, need headroom)
+        export SPARK_EXECUTOR_MEMORY="${SPARK_EXECUTOR_MEMORY:-4g}"
+        export SPARK_DRIVER_MEMORY="${SPARK_DRIVER_MEMORY:-2g}"
+        log_info "Memory: executor=${SPARK_EXECUTOR_MEMORY}, driver=${SPARK_DRIVER_MEMORY}"
         return 0
     fi
 
