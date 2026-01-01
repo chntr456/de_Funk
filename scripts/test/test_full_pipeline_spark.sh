@@ -230,6 +230,79 @@ print(f'CONFIG_PROFILE={profile_name}')
     log_info "Days: $DAYS"
 }
 
+detect_cluster_mode() {
+    # Auto-detect if we should use cluster mode
+    # Only if SPARK_MASTER_URL is not already set
+    if [ -n "$SPARK_MASTER_URL" ]; then
+        log_info "Using existing SPARK_MASTER_URL: $SPARK_MASTER_URL"
+        return 0
+    fi
+
+    local cluster_config="$PROJECT_ROOT/configs/cluster.yaml"
+    if [ ! -f "$cluster_config" ]; then
+        log_info "No cluster config found, using local Spark mode"
+        return 0
+    fi
+
+    # Read cluster config
+    local head_ip
+    local spark_port
+    head_ip=$(python3 -c "
+import yaml
+with open('$cluster_config') as f:
+    cfg = yaml.safe_load(f)
+print(cfg['cluster']['head']['ip'])
+" 2>/dev/null)
+
+    spark_port=$(python3 -c "
+import yaml
+with open('$cluster_config') as f:
+    cfg = yaml.safe_load(f)
+print(cfg['spark']['master']['port'])
+" 2>/dev/null)
+
+    if [ -z "$head_ip" ] || [ -z "$spark_port" ]; then
+        log_info "Could not read cluster config, using local Spark mode"
+        return 0
+    fi
+
+    # Check if we're on the head node
+    local local_ips
+    local_ips=$(hostname -I 2>/dev/null || echo "")
+
+    if [[ "$local_ips" != *"$head_ip"* ]]; then
+        log_info "Not on cluster head node, using local Spark mode"
+        return 0
+    fi
+
+    # Check if Spark master is running
+    if ! curl -s "http://$head_ip:8080/json/" > /dev/null 2>&1; then
+        log_warn "Spark master not responding at $head_ip:8080, using local Spark mode"
+        return 0
+    fi
+
+    # Check if workers are connected
+    local worker_count
+    worker_count=$(curl -s "http://$head_ip:8080/json/" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(len(data.get('workers', [])))
+except:
+    print(0)
+" 2>/dev/null)
+
+    if [ "$worker_count" -gt 0 ]; then
+        export SPARK_MASTER_URL="spark://$head_ip:$spark_port"
+        # Set cluster-appropriate memory (workers have 10GB, leave room for OS)
+        export SPARK_EXECUTOR_MEMORY="6g"
+        export SPARK_DRIVER_MEMORY="4g"
+        log_info "Cluster mode enabled: $SPARK_MASTER_URL ($worker_count workers)"
+    else
+        log_warn "No workers connected to master, using local Spark mode"
+    fi
+}
+
 check_dependencies() {
     log_step "Checking dependencies..."
 
@@ -636,6 +709,7 @@ main() {
     cd "$PROJECT_ROOT"
     activate_venv
     load_config
+    detect_cluster_mode
 
     echo ""
     echo "Configuration:"
@@ -651,6 +725,11 @@ main() {
     fi
     echo "  Use Market Cap: $USE_MARKET_CAP"
     echo "  Days:           $DAYS"
+    if [ -n "$SPARK_MASTER_URL" ]; then
+        echo "  Spark Mode:     CLUSTER ($SPARK_MASTER_URL)"
+    else
+        echo "  Spark Mode:     LOCAL"
+    fi
     echo "  Skip Seed:      $SKIP_SEED"
     echo "  Skip Ingest:    $SKIP_INGEST"
     echo "  Skip Build:     $SKIP_BUILD"

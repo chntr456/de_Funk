@@ -39,13 +39,16 @@ def get_spark(
     if spark_config:
         base_config = spark_config.to_spark_conf_dict()
     else:
-        # Legacy default configuration
-        # Increased memory for long-running batch jobs (e.g., 400+ ticker ingestion)
+        # Memory configuration (can be overridden by environment variables for cluster mode)
+        # Cluster workers may have less memory than local machine
+        driver_memory = os.environ.get("SPARK_DRIVER_MEMORY", "8g")
+        executor_memory = os.environ.get("SPARK_EXECUTOR_MEMORY", "8g")
+
         base_config = {
             "spark.sql.session.timeZone": "UTC",
             "spark.sql.shuffle.partitions": "200",
-            "spark.driver.memory": "8g",  # Increased from 4g for batch jobs
-            "spark.executor.memory": "8g",  # Increased from 4g for batch jobs
+            "spark.driver.memory": driver_memory,
+            "spark.executor.memory": executor_memory,
         }
 
     # Build Spark session with config
