@@ -64,6 +64,24 @@ echo "======================================================================"
 echo ""
 
 # =============================================================================
+# Stop Monitoring Dashboard
+# =============================================================================
+
+log "Stopping Monitoring Dashboard..."
+
+if [ -f "$LOCAL_STORAGE/logs/cluster-monitor.pid" ]; then
+    pid=$(cat "$LOCAL_STORAGE/logs/cluster-monitor.pid")
+    if kill -0 "$pid" 2>/dev/null; then
+        kill "$pid" 2>/dev/null || true
+        log "  Stopped Monitoring Dashboard process $pid"
+    fi
+    rm -f "$LOCAL_STORAGE/logs/cluster-monitor.pid"
+fi
+
+pkill -f "dashboard_server.py" 2>/dev/null || true
+log "  Monitoring Dashboard stopped"
+
+# =============================================================================
 # Stop Airflow
 # =============================================================================
 

@@ -497,6 +497,39 @@ else
 fi
 
 # =============================================================================
+# Step 8: Start Cluster Monitoring Dashboard
+# =============================================================================
+
+section "Step 8: Start Cluster Monitoring"
+
+MONITOR_PORT=8082
+MONITOR_SCRIPT="$SCRIPT_DIR/monitoring/dashboard_server.py"
+
+if [ -f "$MONITOR_SCRIPT" ]; then
+    log "Starting Cluster Monitoring Dashboard..."
+
+    # Kill existing monitor if running
+    pkill -f "dashboard_server.py" 2>/dev/null || true
+
+    # Start the monitor
+    source "$SPARK_VENV/bin/activate"
+    cd "$SCRIPT_DIR/monitoring"
+    nohup python3 dashboard_server.py --port $MONITOR_PORT > "$LOCAL_STORAGE/logs/cluster-monitor.out" 2>&1 &
+    echo $! > "$LOCAL_STORAGE/logs/cluster-monitor.pid"
+    cd "$REPO_ROOT"
+
+    sleep 2
+
+    if curl -s "http://$HEAD_IP:$MONITOR_PORT" > /dev/null; then
+        log "  ✓ Monitoring Dashboard: http://$HEAD_IP:$MONITOR_PORT"
+    else
+        warn "Monitoring dashboard may not have started. Check: $LOCAL_STORAGE/logs/cluster-monitor.out"
+    fi
+else
+    warn "Monitoring script not found: $MONITOR_SCRIPT"
+fi
+
+# =============================================================================
 # Summary
 # =============================================================================
 
@@ -505,8 +538,10 @@ section "Cluster Ready!"
 echo "Services:"
 echo "  Spark Master:  spark://$HEAD_IP:$SPARK_MASTER_PORT"
 echo "  Spark UI:      http://$HEAD_IP:$SPARK_UI_PORT"
+echo "  History Server: http://$HEAD_IP:18080"
+echo "  Monitoring:    http://$HEAD_IP:$MONITOR_PORT"
 if [ -d "$AIRFLOW_VENV" ]; then
-echo "  Airflow UI:    http://$HEAD_IP:$AIRFLOW_PORT (admin/admin123)"
+echo "  Airflow UI:    http://$HEAD_IP:$AIRFLOW_PORT"
 fi
 echo ""
 echo "Workers: $WORKER_COUNT connected"
@@ -521,6 +556,7 @@ echo "  NFS:    $NFS_ROOT -> /shared on workers"
 echo ""
 echo "Commands:"
 echo "  Status:  curl -s http://$HEAD_IP:$SPARK_UI_PORT/json/ | python3 -m json.tool"
+echo "  Monitor: http://$HEAD_IP:$MONITOR_PORT"
 echo "  Stop:    ./scripts/cluster/stop-cluster.sh"
 echo "  Submit:  ./scripts/spark-cluster/submit-job.sh <script.py>"
 echo ""
