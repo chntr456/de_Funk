@@ -115,22 +115,41 @@ class NodeCollector:
 
         # Build the metrics collection command
         # This runs on the remote node and outputs JSON
+        # Uses two /proc/stat samples for accurate CPU measurement
         collect_cmd = """
 python3 -c '
 import json
 import os
+import time
 
 result = {}
 
-# CPU info
+# CPU info - sample twice for accurate measurement
 try:
-    with open("/proc/stat") as f:
-        cpu_line = f.readline()
-        cpu_times = list(map(int, cpu_line.split()[1:]))
-        idle = cpu_times[3]
-        total = sum(cpu_times)
+    def read_cpu_times():
+        with open("/proc/stat") as f:
+            cpu_line = f.readline()
+            times = list(map(int, cpu_line.split()[1:8]))
+            # user, nice, system, idle, iowait, irq, softirq
+            idle = times[3] + times[4]  # idle + iowait
+            total = sum(times)
+            return idle, total
 
-    # Calculate CPU usage (requires two samples, use load average instead)
+    # First sample
+    idle1, total1 = read_cpu_times()
+    time.sleep(0.5)  # Wait 500ms
+    # Second sample
+    idle2, total2 = read_cpu_times()
+
+    # Calculate CPU usage
+    idle_delta = idle2 - idle1
+    total_delta = total2 - total1
+    if total_delta > 0:
+        result["cpu_percent"] = round((1.0 - idle_delta / total_delta) * 100, 1)
+    else:
+        result["cpu_percent"] = 0.0
+
+    # Load average
     with open("/proc/loadavg") as f:
         load = f.read().split()
         result["load_1m"] = float(load[0])
@@ -138,10 +157,9 @@ try:
         result["load_15m"] = float(load[2])
 
     result["cpu_cores"] = os.cpu_count()
-    # Estimate CPU% from load average
-    result["cpu_percent"] = min(100, (result["load_1m"] / result["cpu_cores"]) * 100)
 except Exception as e:
     result["cpu_error"] = str(e)
+    result["cpu_percent"] = 0.0
 
 # Memory info
 try:
@@ -194,6 +212,13 @@ print(json.dumps(result))
 '
 """
 
+        # Extract the Python script from the command template
+        python_script = collect_cmd.strip()
+        if python_script.startswith("python3 -c '"):
+            python_script = python_script[12:]  # Remove "python3 -c '"
+        if python_script.endswith("'"):
+            python_script = python_script[:-1]  # Remove trailing "'"
+
         try:
             # Check if this is the local node
             local_ips_result = subprocess.run(
@@ -205,21 +230,21 @@ print(json.dumps(result))
             local_ips = local_ips_result.stdout.strip()
 
             if ip in local_ips:
-                # Run locally
+                # Run locally - use the extracted Python script
                 result = subprocess.run(
-                    ["python3", "-c", collect_cmd.strip().split("python3 -c '")[1].rsplit("'", 1)[0]],
+                    ["python3", "-c", python_script],
                     capture_output=True,
                     text=True,
-                    timeout=10
+                    timeout=15  # Increased for CPU sampling delay
                 )
             else:
-                # Run via SSH
+                # Run via SSH - use full command with python3 -c wrapper
                 result = subprocess.run(
                     ["ssh", "-o", "ConnectTimeout=5", "-o", "BatchMode=yes",
                      f"{user}@{ip}", collect_cmd],
                     capture_output=True,
                     text=True,
-                    timeout=15
+                    timeout=20  # Increased for SSH + CPU sampling
                 )
 
             if result.returncode == 0:
