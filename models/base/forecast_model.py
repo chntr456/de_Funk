@@ -598,7 +598,7 @@ class TimeSeriesForecastModel(BaseModel):
 
         elif model_type == 'RandomForest':
             # RandomForest - iterative multi-step forecasting using lag features
-            import numpy as np
+            # Note: numpy already imported at module level (line 16)
 
             # Get feature columns and training data from metadata
             feature_cols = metadata.get('feature_cols', [])
