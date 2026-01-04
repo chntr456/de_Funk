@@ -79,8 +79,12 @@ def get_spark(
         # binary distributions where auto-detection fails
         .config("spark.executorEnv.SPARK_SCALA_VERSION", "2.13")
         # Python environment - ensure workers use correct Python path
+        # spark.pyspark.python affects both driver and executor Python binary selection
         .config("spark.pyspark.python", "/home/ms_trixie/venv/bin/python3")
         .config("spark.pyspark.driver.python", os.environ.get("PYSPARK_DRIVER_PYTHON", "/home/ms_trixie/venv/bin/python3"))
+        # CRITICAL: spark.executorEnv.PYSPARK_PYTHON sets PYSPARK_PYTHON env var on executors
+        # Without this, executors inherit the driver's PYSPARK_PYTHON which may point to anaconda
+        .config("spark.executorEnv.PYSPARK_PYTHON", "/home/ms_trixie/venv/bin/python3")
         # Network configuration - use local IP for cluster communication
         # This prevents Spark from using hostnames (like Tailscale) that workers can't resolve
         .config("spark.driver.host", os.environ.get("SPARK_DRIVER_HOST", "192.168.1.212"))

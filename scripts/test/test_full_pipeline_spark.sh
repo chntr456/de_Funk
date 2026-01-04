@@ -546,12 +546,13 @@ print('Done!')
 ctx.spark.stop()
 "
 
-    if [ $? -eq 0 ]; then
+    local ingest_status=$?
+    if [ $ingest_status -eq 0 ]; then
         log_success "Bronze ingestion complete"
         return 0
     else
-        log_warn "Bronze ingestion had issues"
-        return 0  # Don't fail the pipeline if Bronze already has data
+        log_error "Bronze ingestion failed (exit code: $ingest_status)"
+        return 1  # Properly propagate failure
     fi
 }
 
@@ -796,7 +797,7 @@ main() {
         if [ "$ingest_ok" = true ]; then
             echo -e "  Ingest:    ${GREEN}✓ SUCCESS${NC}"
         else
-            echo -e "  Ingest:    ${YELLOW}⚠ PARTIAL${NC} (rate limits expected)"
+            echo -e "  Ingest:    ${RED}✗ FAILED${NC}"
         fi
     else
         echo -e "  Ingest:    ${YELLOW}○ SKIPPED${NC}"
@@ -815,7 +816,19 @@ main() {
     echo ""
     echo -e "${BOLD}======================================================================${NC}"
 
-    if [ "$build_ok" = true ]; then
+    # Overall success requires all enabled phases to succeed
+    local overall_ok=true
+    if [ "$seed_ok" = false ]; then
+        overall_ok=false
+    fi
+    if [ "$SKIP_INGEST" = false ] && [ "$ingest_ok" = false ]; then
+        overall_ok=false
+    fi
+    if [ "$SKIP_BUILD" = false ] && [ "$build_ok" = false ]; then
+        overall_ok=false
+    fi
+
+    if [ "$overall_ok" = true ]; then
         log_success "Pipeline test completed successfully!"
         echo ""
         echo "Next steps:"
