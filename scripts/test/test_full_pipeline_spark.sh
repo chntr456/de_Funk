@@ -610,16 +610,23 @@ verify_data() {
     echo ""
     echo -e "${BOLD}Bronze Layer:${NC}"
 
-    # Check Bronze tables
+    # Check Bronze tables - use metadata for row counts (don't load data!)
     for table in securities_reference securities_prices_daily company_reference; do
         local path="$STORAGE_PATH/bronze/$table"
         if [ -d "$path/_delta_log" ]; then
             local count=$(python3 -c "
 from deltalake import DeltaTable
+import pyarrow.parquet as pq
 try:
     dt = DeltaTable('$path')
-    print(len(dt.to_pandas()))
-except:
+    # Use PyArrow metadata to count rows without loading data
+    total_rows = 0
+    for f in dt.file_uris():
+        # Handle both file:// URIs and plain paths
+        path = f.replace('file://', '') if f.startswith('file://') else f
+        total_rows += pq.read_metadata(path).num_rows
+    print(total_rows)
+except Exception as e:
     print('error')
 " 2>/dev/null || echo "error")
             echo -e "  ${GREEN}✓${NC} $table: $count rows"
@@ -635,9 +642,20 @@ except:
     for model in temporal company stocks forecast; do
         local path="$STORAGE_PATH/silver/$model"
         if [ -d "$path" ]; then
-            # Check dims and facts subdirectories
+            # Check dims and facts subdirectories - use metadata for row counts (don't load data!)
             local result=$(python3 -c "
 from pathlib import Path
+import pyarrow.parquet as pq
+
+def count_delta_rows(table_path):
+    '''Count rows using PyArrow metadata without loading data'''
+    from deltalake import DeltaTable
+    dt = DeltaTable(str(table_path))
+    total = 0
+    for f in dt.file_uris():
+        path = f.replace('file://', '') if f.startswith('file://') else f
+        total += pq.read_metadata(path).num_rows
+    return total
 
 path = Path('$path')
 dims_count = 0
@@ -652,15 +670,12 @@ if dims_path.exists():
             if (table_dir / '_delta_log').exists():
                 dims_count += 1
                 try:
-                    from deltalake import DeltaTable
-                    dt = DeltaTable(str(table_dir))
-                    total_rows += len(dt.to_pandas())
+                    total_rows += count_delta_rows(table_dir)
                 except:
                     pass
             elif any(table_dir.glob('*.parquet')):
                 dims_count += 1
-                # Parquet - estimate rows
-                total_rows += 1000
+                total_rows += 1000  # Estimate for non-Delta
 
 # Check facts subdirectory
 facts_path = path / 'facts'
@@ -670,14 +685,12 @@ if facts_path.exists():
             if (table_dir / '_delta_log').exists():
                 facts_count += 1
                 try:
-                    from deltalake import DeltaTable
-                    dt = DeltaTable(str(table_dir))
-                    total_rows += len(dt.to_pandas())
+                    total_rows += count_delta_rows(table_dir)
                 except:
                     pass
             elif any(table_dir.glob('*.parquet')) or any(table_dir.rglob('*.parquet')):
                 facts_count += 1
-                total_rows += 1000000
+                total_rows += 1000000  # Estimate for non-Delta
 
 print(f'{dims_count},{facts_count},{total_rows}')
 " 2>/dev/null || echo "0,0,0")
