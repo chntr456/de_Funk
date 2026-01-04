@@ -1683,6 +1683,7 @@ Q11: Operational script?             → scripts/{category}/
 | **Direct Backend Import** | `import duckdb` in services | Use `UniversalSession(backend=...)` |
 | **Hardcoded Default Data** | `tickers = ['AAPL', 'MSFT', ...]` | Read from config or data layer |
 | **Unverified Fallback Data** | Using demo data without checking | Fail loudly if data layer empty |
+| **Pandas in Pipelines** | `df = dt.to_pandas()` for large tables | Use PyArrow/Spark for data processing |
 
 ### ⚠️ CRITICAL: No Hardcoded Default Data (ENFORCED)
 
@@ -1730,6 +1731,52 @@ else:
 3. **All defaults must be verifiable** - User should be able to trace where data came from
 4. **Demo mode must be explicit** - Require `--demo` flag, never automatic
 
+### ⚠️ Pandas Usage Guidelines (ENFORCED)
+
+**Pandas is memory-inefficient for large datasets.** Loading a 30M row table with `.to_pandas()` will hang or OOM.
+
+```python
+# ❌ NEVER DO THIS in pipelines/scripts - loads entire table into memory
+from deltalake import DeltaTable
+dt = DeltaTable(path)
+df = dt.to_pandas()  # 30M rows = hang/OOM
+count = len(df)
+
+# ❌ NEVER DO THIS - even for "quick" row counts
+df = dt.to_pandas()
+print(len(df))
+
+# ✅ CORRECT - Use PyArrow metadata for row counts (reads file footers only)
+import pyarrow.parquet as pq
+dt = DeltaTable(path)
+total_rows = sum(pq.read_metadata(f.replace('file://', '')).num_rows for f in dt.file_uris())
+
+# ✅ CORRECT - Use PyArrow for filtering/sorting
+import pyarrow.compute as pc
+table = dt.to_pyarrow_table()
+sorted_indices = pc.sort_indices(table, sort_keys=[('column', 'ascending')])
+top_n = table.take(sorted_indices[:10])
+
+# ✅ CORRECT - Use Spark for large transformations
+df = spark.read.format('delta').load(path)
+result = df.filter(...).select(...).collect()
+
+# ✅ ACCEPTABLE - Pandas ONLY in UI layer for small exhibit data
+# After Spark/PyArrow has filtered to small result set
+small_result = spark_df.limit(1000).toPandas()  # For Plotly chart
+```
+
+**Where Pandas IS Allowed:**
+| Layer | Pandas Usage | Reason |
+|-------|--------------|--------|
+| **UI/Notebooks** | ✅ Yes | Small filtered results for Plotly/exhibits |
+| **Unit Tests** | ✅ Yes | Test fixtures are small |
+| **Scripts** | ❌ No | Use PyArrow/Spark |
+| **Pipelines** | ❌ No | Use Spark DataFrames |
+| **Verification** | ❌ No | Use PyArrow metadata |
+
+**Key Rule:** Pandas is only for the **final mile** - converting small, pre-filtered results to a format that visualization libraries expect.
+
 ### Pre-Commit Checklist
 
 Before committing ANY code change:
@@ -1743,6 +1790,7 @@ Before committing ANY code change:
 - [ ] Correct backend selected (Spark for batch, DuckDB for interactive)
 - [ ] **No hardcoded default data** (tickers, IDs, etc.) - read from config/data layer
 - [ ] **Defaults are verifiable** - user can trace data source, fails loudly if missing
+- [ ] **No `.to_pandas()` on large tables** - use PyArrow metadata or Spark
 - [ ] Added/updated tests if behavior changed
 - [ ] Updated CLAUDE.md if new patterns introduced
 
