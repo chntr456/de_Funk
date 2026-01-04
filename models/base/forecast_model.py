@@ -13,6 +13,7 @@ from typing import Dict, Optional, Tuple, List, TYPE_CHECKING
 from abc import abstractmethod
 from pathlib import Path
 import pandas as pd
+import numpy as np
 
 # Optional PySpark import - allows DuckDB-only usage
 if TYPE_CHECKING:
