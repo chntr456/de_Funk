@@ -8,9 +8,9 @@ nodes:
     extends: _base.securities._dim_security_base
     filters:
       # Use 'type' column (raw Alpha Vantage value) instead of derived 'asset_type'
-      # 'type' is populated from securities_reference and is more reliable than
-      # the inferred asset_type in prices table (which may be NULL)
-      - "type = 'Common Stock'"
+      # LISTING_STATUS returns 'Stock', OVERVIEW returns 'Common Stock'
+      # Accept both for compatibility with bulk listing and individual OVERVIEW calls
+      - "type IN ('Stock', 'Common Stock')"
       - "is_active = true"
     select:
       # Inherited from base: ticker, security_name, exchange_code, currency, is_active

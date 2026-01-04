@@ -122,7 +122,7 @@ while [[ $# -gt 0 ]]; do
             echo "  --skip-ingest      Skip Bronze ingestion"
             echo "  --skip-build       Skip Silver build"
             echo "  --skip-forecast    Skip forecast model build"
-            echo "  --use-market-cap   Select tickers by market cap (requires company_reference)"
+            echo "  --use-market-cap   Select tickers by market cap (requires price data)"
             echo "  --verbose          Show detailed output"
             echo "  --help             Show this help"
             exit 0
@@ -528,9 +528,8 @@ print(f'Processing {len(tickers)} tickers...')
 print('Ingesting prices...')
 ingestor.ingest_prices(tickers=tickers, date_from=None, date_to=None)
 
-print('Ingesting company overview...')
-# skip_securities=True because ingest_bulk_listing already populated securities_reference
-ingestor.ingest_reference_data(tickers=tickers, skip_securities=True)
+# Note: Bulk listing (LISTING_STATUS) already populated securities_reference
+# Individual COMPANY_OVERVIEW calls are not needed for stocks model
 
 print('Ingesting financial statements...')
 try:
