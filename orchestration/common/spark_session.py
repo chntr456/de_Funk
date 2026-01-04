@@ -75,6 +75,9 @@ def get_spark(
         .config("spark.driver.maxResultSize", "2g")
         .config("spark.python.worker.faulthandler.enabled", "true")
         .config("spark.sql.execution.pyspark.udf.faulthandler.enabled", "true")
+        # Executor environment - SPARK_SCALA_VERSION is required for Spark 4.x
+        # binary distributions where auto-detection fails
+        .config("spark.executorEnv.SPARK_SCALA_VERSION", "2.13")
         # Delta Lake support (v2.3 migration)
         # Note: Use delta-spark_2.13:4.0.0 for Spark 4.x, delta-spark_2.12:3.1.0 for Spark 3.x
         .config("spark.jars.packages", "io.delta:delta-spark_2.13:4.0.0")
