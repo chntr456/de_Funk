@@ -1733,49 +1733,58 @@ else:
 
 ### ⚠️ Pandas Usage Guidelines (ENFORCED)
 
-**Pandas is memory-inefficient for large datasets.** Loading a 30M row table with `.to_pandas()` will hang or OOM.
+**Default: NO PANDAS.** Use PyArrow or Spark for all data operations.
+
+Pandas is only acceptable as the **final conversion step** in the UI layer (`app/ui/`) when a visualization library (Plotly/Streamlit) requires a DataFrame.
 
 ```python
-# ❌ NEVER DO THIS in pipelines/scripts - loads entire table into memory
-from deltalake import DeltaTable
+# ❌ NEVER - Loading Delta tables to pandas
 dt = DeltaTable(path)
-df = dt.to_pandas()  # 30M rows = hang/OOM
-count = len(df)
-
-# ❌ NEVER DO THIS - even for "quick" row counts
 df = dt.to_pandas()
-print(len(df))
 
-# ✅ CORRECT - Use PyArrow metadata for row counts (reads file footers only)
+# ❌ NEVER - Row counts via pandas
+count = len(dt.to_pandas())
+
+# ❌ NEVER - Filtering/sorting via pandas
+df = dt.to_pandas()
+top_10 = df.nsmallest(10, 'column')
+
+# ✅ ALWAYS - PyArrow for row counts (metadata only, no data loaded)
 import pyarrow.parquet as pq
-dt = DeltaTable(path)
-total_rows = sum(pq.read_metadata(f.replace('file://', '')).num_rows for f in dt.file_uris())
+total = sum(pq.read_metadata(f.replace('file://', '')).num_rows for f in dt.file_uris())
 
-# ✅ CORRECT - Use PyArrow for filtering/sorting
+# ✅ ALWAYS - PyArrow for filtering/sorting
 import pyarrow.compute as pc
 table = dt.to_pyarrow_table()
-sorted_indices = pc.sort_indices(table, sort_keys=[('column', 'ascending')])
-top_n = table.take(sorted_indices[:10])
+indices = pc.sort_indices(table, sort_keys=[('column', 'ascending')])
+result = table.take(indices[:10])
+values = result.column('ticker').to_pylist()
 
-# ✅ CORRECT - Use Spark for large transformations
+# ✅ ALWAYS - Spark for transformations
 df = spark.read.format('delta').load(path)
-result = df.filter(...).select(...).collect()
+result = df.filter(...).select(...)
 
-# ✅ ACCEPTABLE - Pandas ONLY in UI layer for small exhibit data
-# After Spark/PyArrow has filtered to small result set
-small_result = spark_df.limit(1000).toPandas()  # For Plotly chart
+# ✅ ONLY IN app/ui/ - Final conversion for Plotly/Streamlit exhibits
+# Requirements: (1) in app/ui/ layer, (2) MUST use .limit() or .slice() first
+chart_data = spark_df.limit(1000).toPandas()  # For Plotly
+arrow_slice = table.slice(0, 100).to_pandas()  # For Streamlit display
 ```
 
-**Where Pandas IS Allowed:**
-| Layer | Pandas Usage | Reason |
-|-------|--------------|--------|
-| **UI/Notebooks** | ✅ Yes | Small filtered results for Plotly/exhibits |
-| **Unit Tests** | ✅ Yes | Test fixtures are small |
-| **Scripts** | ❌ No | Use PyArrow/Spark |
-| **Pipelines** | ❌ No | Use Spark DataFrames |
-| **Verification** | ❌ No | Use PyArrow metadata |
+**Pandas Allowed ONLY in `app/ui/`:**
+| Condition | Example |
+|-----------|---------|
+| After Spark `.limit(N)` | `spark_df.limit(500).toPandas()` |
+| After PyArrow `.slice(0, N)` | `table.slice(0, 100).to_pandas()` |
 
-**Key Rule:** Pandas is only for the **final mile** - converting small, pre-filtered results to a format that visualization libraries expect.
+**Pandas NOT Allowed:**
+| Location | Use Instead |
+|----------|-------------|
+| `scripts/` | PyArrow or Spark |
+| `datapipelines/` | Spark DataFrames |
+| `models/` | Spark or PyArrow |
+| `tests/` | PyArrow tables/fixtures |
+| `orchestration/` | Spark |
+| Row counts anywhere | `pq.read_metadata().num_rows` |
 
 ### Pre-Commit Checklist
 
