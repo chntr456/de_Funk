@@ -349,12 +349,17 @@ run_seed_tickers() {
 
     log_step "Seeding tickers from Alpha Vantage LISTING_STATUS..."
 
-    # Check if already seeded
+    # Check if already seeded - use metadata for row count (efficient)
     if [ -d "$STORAGE_PATH/bronze/securities_reference/_delta_log" ]; then
         local ticker_count=$(python3 -c "
 from deltalake import DeltaTable
+import pyarrow.parquet as pq
 dt = DeltaTable('$STORAGE_PATH/bronze/securities_reference')
-print(len(dt.to_pandas()))
+total = 0
+for f in dt.file_uris():
+    path = f.replace('file://', '') if f.startswith('file://') else f
+    total += pq.read_metadata(path).num_rows
+print(total)
 " 2>/dev/null || echo "0")
 
         if [ "$ticker_count" -gt 0 ]; then
@@ -448,8 +453,13 @@ if use_market_cap and max_tickers > 0:
     if rankings_path.exists():
         print('Using pre-seeded market_cap_rankings table...')
         rankings_dt = DeltaTable(str(rankings_path))
-        rankings_df = rankings_dt.to_pandas()
-        tickers = rankings_df.nsmallest(max_tickers, 'market_cap_rank')['ticker'].tolist()
+        # Use PyArrow for efficient filtering (no pandas)
+        table = rankings_dt.to_pyarrow_table()
+        # Sort by market_cap_rank and take top N
+        import pyarrow.compute as pc
+        sorted_indices = pc.sort_indices(table, sort_keys=[('market_cap_rank', 'ascending')])
+        top_n = table.take(sorted_indices[:max_tickers])
+        tickers = top_n.column('ticker').to_pylist()
         print(f'Selected top {len(tickers)} from market_cap_rankings')
 
     # Option 2: Calculate market cap from Bronze data using Spark SQL
@@ -846,7 +856,7 @@ main() {
         log_success "Pipeline test completed successfully!"
         echo ""
         echo "Next steps:"
-        echo "  - View data: python -c \"from deltalake import DeltaTable; print(DeltaTable('$STORAGE_PATH/silver/stocks/dim_stock').to_pandas().head())\""
+        echo "  - View data: python -c \"from deltalake import DeltaTable; t=DeltaTable('$STORAGE_PATH/silver/stocks/dims/dim_stock'); print(t.to_pyarrow_table().slice(0,5).to_pandas())\""
         echo "  - Run app:   python run_app.py"
         echo ""
         exit 0
