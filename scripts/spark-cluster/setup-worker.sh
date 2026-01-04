@@ -233,6 +233,7 @@ User=$DE_FUNK_USER
 WorkingDirectory=/home/$DE_FUNK_USER
 Environment="JAVA_HOME=$JAVA_HOME"
 Environment="SPARK_HOME=$SPARK_HOME"
+Environment="SPARK_SCALA_VERSION=2.13"
 Environment="PYSPARK_PYTHON=$VENV_PATH/bin/python3"
 Environment="PATH=$VENV_PATH/bin:/usr/local/bin:/usr/bin"
 ExecStart=$JAVA_HOME/bin/java -cp "$SPARK_HOME/jars/*" -Xmx${WORKER_MEM}g org.apache.spark.deploy.worker.Worker --cores $WORKER_CORES --memory ${WORKER_MEM}g spark://$HEAD_IP:$HEAD_PORT

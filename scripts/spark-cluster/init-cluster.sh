@@ -338,6 +338,7 @@ cat > ~/start-spark-worker.sh << 'STARTWRAPPER'
 source ~/venv/bin/activate
 export JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
 export SPARK_HOME=/shared/spark
+export SPARK_SCALA_VERSION=2.13
 export PYSPARK_PYTHON=\$(which python3)
 exec "\$JAVA_HOME/bin/java" -cp "\$SPARK_HOME/jars/*" -Xmx${mem}g \
     org.apache.spark.deploy.worker.Worker \
@@ -357,6 +358,7 @@ printf '%s\n' \
     "User=\$(whoami)" \
     "WorkingDirectory=/home/\$(whoami)" \
     "Environment=SPARK_HOME=/shared/spark" \
+    "Environment=SPARK_SCALA_VERSION=2.13" \
     "Environment=JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))" \
     "Environment=PYSPARK_PYTHON=/home/\$(whoami)/venv/bin/python3" \
     "ExecStart=/home/\$(whoami)/start-spark-worker.sh" \
