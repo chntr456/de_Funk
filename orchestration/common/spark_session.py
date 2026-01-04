@@ -78,6 +78,9 @@ def get_spark(
         # Executor environment - SPARK_SCALA_VERSION is required for Spark 4.x
         # binary distributions where auto-detection fails
         .config("spark.executorEnv.SPARK_SCALA_VERSION", "2.13")
+        # Python environment - ensure workers use correct Python path
+        .config("spark.pyspark.python", "/home/ms_trixie/venv/bin/python3")
+        .config("spark.pyspark.driver.python", os.environ.get("PYSPARK_DRIVER_PYTHON", "/home/ms_trixie/venv/bin/python3"))
         # Network configuration - use local IP for cluster communication
         # This prevents Spark from using hostnames (like Tailscale) that workers can't resolve
         .config("spark.driver.host", os.environ.get("SPARK_DRIVER_HOST", "192.168.1.212"))
