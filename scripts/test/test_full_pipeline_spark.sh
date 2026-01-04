@@ -519,7 +519,8 @@ print('Ingesting prices...')
 ingestor.ingest_prices(tickers=tickers, date_from=None, date_to=None)
 
 print('Ingesting company overview...')
-ingestor.ingest_reference_data(tickers=tickers)
+# skip_securities=True because ingest_bulk_listing already populated securities_reference
+ingestor.ingest_reference_data(tickers=tickers, skip_securities=True)
 
 print('Ingesting financial statements...')
 try:

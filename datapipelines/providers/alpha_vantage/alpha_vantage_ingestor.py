@@ -338,14 +338,15 @@ class AlphaVantageIngestor(Ingestor):
     def ingest_reference_data(self, tickers, table_name="securities_reference",
                               use_concurrent=False, show_progress=True,
                               progress_callback: Optional[ProgressCallback] = None,
-                              batch_size: int = 500):
+                              batch_size: int = 500,
+                              skip_securities: bool = False):
         """
         Ingest reference data (company overview) for given tickers.
 
         Uses Alpha Vantage OVERVIEW endpoint to get company fundamentals.
         Writes data in batches to minimize memory usage.
 
-        Writes to TWO tables:
+        Writes to TWO tables (unless skip_securities=True):
         1. securities_reference - ticker info for stocks model
         2. company_reference - company data (CIK, sector, etc.) for company model
 
@@ -357,6 +358,8 @@ class AlphaVantageIngestor(Ingestor):
             progress_callback: Custom progress callback (if None, uses default)
             batch_size: Number of tickers to process before writing to disk (default: 500)
                        Lower values use less memory but may be slightly slower.
+            skip_securities: If True, skip writing to securities_reference table
+                            (use when ingest_bulk_listing already populated it)
 
         Returns:
             Path to written bronze table
@@ -437,20 +440,23 @@ class AlphaVantageIngestor(Ingestor):
                 batch_count = df.count()
 
                 if batch_count > 0:
-                    # Use upsert (Delta MERGE) to accumulate data across runs
-                    # Key on ticker - updates existing, inserts new
-                    # Get partitions from storage.json config (not hardcoded!)
-                    table_cfg = self.sink._table_cfg(table_name)
-                    table_partitions = table_cfg.get("partitions", []) or None
-                    table_path = self.sink.upsert(
-                        df,
-                        table_name,
-                        key_columns=["ticker"],
-                        partitions=table_partitions
-                    )
+                    # Write to securities_reference unless skip_securities is set
+                    # (skip when ingest_bulk_listing already populated the table)
+                    if not skip_securities:
+                        # Use upsert (Delta MERGE) to accumulate data across runs
+                        # Key on ticker - updates existing, inserts new
+                        # Get partitions from storage.json config (not hardcoded!)
+                        table_cfg = self.sink._table_cfg(table_name)
+                        table_partitions = table_cfg.get("partitions", []) or None
+                        table_path = self.sink.upsert(
+                            df,
+                            table_name,
+                            key_columns=["ticker"],
+                            partitions=table_partitions
+                        )
 
-                    total_rows_written += batch_count
-                    print(f"  ✓ Written {batch_count} securities rows (total: {total_rows_written})")
+                        total_rows_written += batch_count
+                        print(f"  ✓ Written {batch_count} securities rows (total: {total_rows_written})")
 
                     # ALSO write to company_reference table (separate from securities)
                     # This prevents bulk listing from overwriting company data
