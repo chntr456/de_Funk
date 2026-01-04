@@ -78,6 +78,10 @@ def get_spark(
         # Executor environment - SPARK_SCALA_VERSION is required for Spark 4.x
         # binary distributions where auto-detection fails
         .config("spark.executorEnv.SPARK_SCALA_VERSION", "2.13")
+        # Network configuration - use local IP for cluster communication
+        # This prevents Spark from using hostnames (like Tailscale) that workers can't resolve
+        .config("spark.driver.host", os.environ.get("SPARK_DRIVER_HOST", "192.168.1.212"))
+        .config("spark.driver.bindAddress", "0.0.0.0")
         # Delta Lake support (v2.3 migration)
         # Note: Use delta-spark_2.13:4.0.0 for Spark 4.x, delta-spark_2.12:3.1.0 for Spark 3.x
         .config("spark.jars.packages", "io.delta:delta-spark_2.13:4.0.0")
