@@ -32,6 +32,13 @@ def get_spark(
     Returns:
         SparkSession instance
     """
+    # CRITICAL: Set Python path in environment BEFORE SparkSession creation
+    # This overrides conda's PYSPARK_PYTHON which may point to anaconda
+    # Without this, executors inherit the wrong Python path from driver environment
+    venv_python = "/home/ms_trixie/venv/bin/python3"
+    os.environ["PYSPARK_PYTHON"] = venv_python
+    os.environ["PYSPARK_DRIVER_PYTHON"] = venv_python
+
     # Resolve master URL
     if master is None:
         master = os.environ.get("SPARK_MASTER_URL")
