@@ -44,8 +44,10 @@ class CompanyBuilder(BaseModelBuilder):
         from pathlib import Path
         bronze_root = Path(self.context.storage_config["roots"]["bronze"])
 
+        # Now reads from securities_reference (populated by bulk listing)
+        # instead of company_reference (which required individual OVERVIEW calls)
         required_paths = [
-            bronze_root / "company_reference",  # Company data from OVERVIEW
+            bronze_root / "securities_reference",  # Stock data from LISTING_STATUS
         ]
 
         missing = [p for p in required_paths if not p.exists()]

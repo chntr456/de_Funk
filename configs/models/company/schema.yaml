@@ -1,24 +1,24 @@
 # Company schema - corporate legal entities
-# Updated to match graph.yaml table definitions
+# v2.2: Updated to use ticker as primary key (CIK optional from bulk listing)
 
 dimensions:
   dim_company:
-    description: "Corporate entity master (legal business entities)"
+    description: "Corporate entity master - from securities_reference (bulk listing)"
     columns:
       company_id:
         type: string
-        description: "PK - Internal ID (e.g., COMPANY_0000320193)"
+        description: "PK - Internal ID (e.g., COMPANY_AAPL or COMPANY_0000320193)"
         required: true
 
       cik:
         type: string
-        description: "SEC Central Index Key (10 digits, zero-padded)"
+        description: "SEC Central Index Key (10 digits) - may be NULL from bulk listing"
         pattern: "^[0-9]{10}$"
-        required: true
+        required: false  # Not available from LISTING_STATUS
 
       company_name:
         type: string
-        description: "DBA name (Doing Business As)"
+        description: "Company name (from security_name)"
         required: true
 
       legal_name:
@@ -27,11 +27,13 @@ dimensions:
 
       ticker_primary:
         type: string
-        description: "Primary trading symbol (most liquid)"
+        description: "Primary trading symbol"
+        required: true
 
       ticker:
         type: string
-        description: "Ticker symbol alias for filter compatibility"
+        description: "Ticker symbol - primary key for filtering"
+        required: true
 
       exchange_code:
         type: string
@@ -44,38 +46,38 @@ dimensions:
 
       sector:
         type: string
-        description: "GICS Sector (Level 1)"
+        description: "GICS Sector - may be NULL from bulk listing"
 
       industry:
         type: string
-        description: "GICS Industry (Level 3)"
+        description: "GICS Industry - may be NULL from bulk listing"
 
       market_cap:
         type: double
-        description: "Market capitalization"
+        description: "Market capitalization - may be NULL from bulk listing"
 
       shares_outstanding:
         type: long
-        description: "Shares outstanding"
+        description: "Shares outstanding - may be NULL from bulk listing"
 
       pe_ratio:
         type: double
-        description: "Price to earnings ratio"
+        description: "Price to earnings ratio - may be NULL from bulk listing"
 
       eps:
         type: double
-        description: "Earnings per share"
+        description: "Earnings per share - may be NULL from bulk listing"
 
       dividend_yield:
         type: double
-        description: "Dividend yield"
+        description: "Dividend yield - may be NULL from bulk listing"
 
       incorporation_country:
         type: string
         description: "Country of incorporation"
         default: "US"
 
-    primary_key: [cik]
+    primary_key: [ticker]  # Use ticker as PK (works with bulk listing)
     tags: [dim, entity, corporate, company]
 
 facts:
@@ -83,14 +85,15 @@ facts:
   fact_income_statement:
     description: "Income statement data from SEC filings"
     columns:
-      cik:
-        type: string
-        description: "FK to dim_company"
-        required: true
-
       ticker:
         type: string
-        description: "Trading symbol"
+        description: "Trading symbol - FK to dim_company"
+        required: true
+
+      cik:
+        type: string
+        description: "SEC CIK - may be NULL from bulk listing"
+        required: false
 
       fiscal_date_ending:
         type: date
@@ -167,7 +170,7 @@ facts:
         type: string
         description: "Reporting currency"
 
-    primary_key: [cik, fiscal_date_ending, report_type]
+    primary_key: [ticker, fiscal_date_ending, report_type]
     partitions: [fiscal_date_ending]
     tags: [fact, financials, income_statement]
 
@@ -175,14 +178,15 @@ facts:
   fact_balance_sheet:
     description: "Balance sheet data from SEC filings"
     columns:
-      cik:
-        type: string
-        description: "FK to dim_company"
-        required: true
-
       ticker:
         type: string
-        description: "Trading symbol"
+        description: "Trading symbol - FK to dim_company"
+        required: true
+
+      cik:
+        type: string
+        description: "SEC CIK - may be NULL from bulk listing"
+        required: false
 
       fiscal_date_ending:
         type: date
@@ -284,7 +288,7 @@ facts:
         type: string
         description: "Reporting currency"
 
-    primary_key: [cik, fiscal_date_ending, report_type]
+    primary_key: [ticker, fiscal_date_ending, report_type]
     partitions: [fiscal_date_ending]
     tags: [fact, financials, balance_sheet]
 
@@ -292,14 +296,15 @@ facts:
   fact_cash_flow:
     description: "Cash flow statement data from SEC filings"
     columns:
-      cik:
-        type: string
-        description: "FK to dim_company"
-        required: true
-
       ticker:
         type: string
-        description: "Trading symbol"
+        description: "Trading symbol - FK to dim_company"
+        required: true
+
+      cik:
+        type: string
+        description: "SEC CIK - may be NULL from bulk listing"
+        required: false
 
       fiscal_date_ending:
         type: date
@@ -386,7 +391,7 @@ facts:
         type: string
         description: "Reporting currency"
 
-    primary_key: [cik, fiscal_date_ending, report_type]
+    primary_key: [ticker, fiscal_date_ending, report_type]
     partitions: [fiscal_date_ending]
     tags: [fact, financials, cash_flow]
 
@@ -394,14 +399,15 @@ facts:
   fact_earnings:
     description: "Earnings data (EPS actual vs estimate)"
     columns:
-      cik:
-        type: string
-        description: "FK to dim_company"
-        required: true
-
       ticker:
         type: string
-        description: "Trading symbol"
+        description: "Trading symbol - FK to dim_company"
+        required: true
+
+      cik:
+        type: string
+        description: "SEC CIK - may be NULL from bulk listing"
+        required: false
 
       fiscal_date_ending:
         type: date
@@ -444,6 +450,6 @@ facts:
         type: boolean
         description: "Whether actual beat estimate"
 
-    primary_key: [cik, fiscal_date_ending, report_type]
+    primary_key: [ticker, fiscal_date_ending, report_type]
     partitions: [fiscal_date_ending]
     tags: [fact, financials, earnings]

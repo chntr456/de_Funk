@@ -1,49 +1,55 @@
 # Company graph definition
 #
-# Financial statements (income_statements, balance_sheets, cash_flows) are linked
-# via ticker → company_reference → cik. This allows company-level reporting
-# even when tickers change (CIK is permanent).
+# v2.2: Updated to read from securities_reference (bulk listing)
+# No longer requires CIK (bulk LISTING_STATUS doesn't provide it)
+# Financial statements link via ticker directly
 #
-# v2.1: Now reads from company_reference (separate from securities_reference)
-# This prevents bulk listing from overwriting company data
+# CIK-based linking is optional - when available, it enables company-level
+# reporting even when tickers change. Without CIK, we use ticker-based joins.
 
 nodes:
   # ===========================================================================
   # DIMENSIONS
   # ===========================================================================
   dim_company:
-    from: bronze.company_reference
+    from: bronze.securities_reference
     filters:
-      - "cik IS NOT NULL"  # Must have CIK (required for company identification)
+      # Only include active stocks (not ETFs, options, etc.)
+      # LISTING_STATUS returns 'Stock', OVERVIEW returns 'Common Stock'
+      - "type IN ('Stock', 'Common Stock')"
+      - "is_active = true"
     select:
-      cik: cik  # SEC Central Index Key (10-digit, permanent identifier)
-      company_name: company_name
-      legal_name: company_name    # Will be updated when we get proper SEC data
+      cik: cik  # May be NULL from bulk listing, populated from OVERVIEW calls
+      company_name: security_name
+      legal_name: security_name
       ticker_primary: ticker
-      ticker: ticker  # Alias for filter compatibility with fact tables
+      ticker: ticker  # Primary key for filter compatibility
       exchange_code: exchange_code
       is_active: is_active
-      sector: sector
-      industry: industry
-      market_cap: market_cap
-      shares_outstanding: shares_outstanding
-      pe_ratio: pe_ratio
-      eps: eps
-      dividend_yield: dividend_yield
+      sector: sector           # May be NULL from bulk listing
+      industry: industry       # May be NULL from bulk listing
+      market_cap: market_cap   # May be NULL from bulk listing
+      shares_outstanding: shares_outstanding  # May be NULL from bulk listing
+      pe_ratio: pe_ratio       # May be NULL from bulk listing
+      eps: eps                 # May be NULL from bulk listing
+      dividend_yield: dividend_yield  # May be NULL from bulk listing
     derive:
-      company_id: "CONCAT('COMPANY_', cik)"  # Use permanent CIK identifier
-      incorporation_country: "'US'"  # Default, update from SEC data later
+      # Use ticker as company_id since CIK may not be available
+      company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
+      incorporation_country: "'US'"
     tags: [dim, entity, corporate]
-    unique_key: [cik]  # CIK is permanent, survives ticker changes
+    unique_key: [ticker]  # Use ticker as primary key (works with bulk listing)
 
-  # Ticker-to-CIK lookup (used for joining financial statements)
-  _ticker_cik_lookup:
-    from: bronze.company_reference
+  # Ticker lookup for joining financial statements
+  # No longer requires CIK - joins on ticker directly
+  _ticker_lookup:
+    from: bronze.securities_reference
     filters:
-      - "cik IS NOT NULL"
+      - "type IN ('Stock', 'Common Stock')"
+      - "is_active = true"
     select:
       ticker: ticker
-      cik: cik
+      cik: cik  # May be NULL
     unique_key: [ticker]
     tags: [internal, lookup]
 
@@ -55,12 +61,12 @@ nodes:
   fact_income_statement:
     from: bronze.income_statements
     join:
-      - table: _ticker_cik_lookup
+      - table: _ticker_lookup
         "on": ["ticker=ticker"]
-        type: inner  # Only include tickers with CIK
+        type: left  # Left join - include all statements even without lookup match
     select:
-      # Keys
-      cik: _ticker_cik_lookup__cik
+      # Keys - use ticker as primary, CIK is optional
+      cik: _ticker_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
@@ -82,22 +88,22 @@ nodes:
       # Metadata
       reported_currency: reported_currency
     derive:
-      # Note: Use 'cik' here because derive runs AFTER select, which renamed the column
-      company_id: "CONCAT('COMPANY_', cik)"
-      report_date: "fiscal_date_ending"  # Alias for calendar joins
+      # Use ticker if CIK not available
+      company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
+      report_date: "fiscal_date_ending"
     tags: [fact, financials, income_statement]
-    unique_key: [cik, fiscal_date_ending, report_type]
+    unique_key: [ticker, fiscal_date_ending, report_type]
 
   # Balance Sheet Facts
   fact_balance_sheet:
     from: bronze.balance_sheets
     join:
-      - table: _ticker_cik_lookup
+      - table: _ticker_lookup
         "on": ["ticker=ticker"]
-        type: inner
+        type: left
     select:
       # Keys
-      cik: _ticker_cik_lookup__cik
+      cik: _ticker_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
@@ -126,21 +132,21 @@ nodes:
       # Metadata
       reported_currency: reported_currency
     derive:
-      company_id: "CONCAT('COMPANY_', cik)"
+      company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, balance_sheet]
-    unique_key: [cik, fiscal_date_ending, report_type]
+    unique_key: [ticker, fiscal_date_ending, report_type]
 
   # Cash Flow Facts
   fact_cash_flow:
     from: bronze.cash_flows
     join:
-      - table: _ticker_cik_lookup
+      - table: _ticker_lookup
         "on": ["ticker=ticker"]
-        type: inner
+        type: left
     select:
       # Keys
-      cik: _ticker_cik_lookup__cik
+      cik: _ticker_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
@@ -165,32 +171,29 @@ nodes:
       # Metadata
       reported_currency: reported_currency
     derive:
-      company_id: "CONCAT('COMPANY_', cik)"
+      company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, cash_flow]
-    unique_key: [cik, fiscal_date_ending, report_type]
+    unique_key: [ticker, fiscal_date_ending, report_type]
 
   # Earnings Facts (EPS actual vs estimate)
-  # Note: Annual earnings only have fiscal_date_ending and reported_eps
-  # Quarterly earnings have additional fields (reported_date, estimated_eps, surprise)
-  # but these may not be present if only annual data was ingested
   fact_earnings:
     from: bronze.earnings
     join:
-      - table: _ticker_cik_lookup
+      - table: _ticker_lookup
         "on": ["ticker=ticker"]
-        type: inner
+        type: left
     select:
-      cik: _ticker_cik_lookup__cik
+      cik: _ticker_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
       reported_eps: reported_eps
     derive:
-      company_id: "CONCAT('COMPANY_', cik)"
+      company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, earnings]
-    unique_key: [cik, fiscal_date_ending, report_type]
+    unique_key: [ticker, fiscal_date_ending, report_type]
 
 edges:
   # Cross-model edge to stocks for ticker-based filtering
@@ -201,34 +204,35 @@ edges:
     type: one_to_one
     description: "Company's primary stock listing - enables ticker filter to apply to stock prices"
 
-  # Link financial statements to company dimension
+  # Link financial statements to company dimension via ticker
+  # (CIK-based linking not available from bulk listing)
   income_statement_to_company:
     from: fact_income_statement
     to: dim_company
-    "on": ["cik=cik"]
+    "on": ["ticker=ticker"]
     type: left
-    description: "Link income statements to company"
+    description: "Link income statements to company via ticker"
 
   balance_sheet_to_company:
     from: fact_balance_sheet
     to: dim_company
-    "on": ["cik=cik"]
+    "on": ["ticker=ticker"]
     type: left
-    description: "Link balance sheets to company"
+    description: "Link balance sheets to company via ticker"
 
   cash_flow_to_company:
     from: fact_cash_flow
     to: dim_company
-    "on": ["cik=cik"]
+    "on": ["ticker=ticker"]
     type: left
-    description: "Link cash flows to company"
+    description: "Link cash flows to company via ticker"
 
   earnings_to_company:
     from: fact_earnings
     to: dim_company
-    "on": ["cik=cik"]
+    "on": ["ticker=ticker"]
     type: left
-    description: "Link earnings to company"
+    description: "Link earnings to company via ticker"
 
   # Link to calendar for time-series analysis
   income_statement_to_calendar:

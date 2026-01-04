@@ -145,6 +145,7 @@ $exhibits${
   title: Stock Price Explorer
   x: trade_date
   height: 300
+  limit: 1000
   measure_selector:
     available_measures: [close, open, high, low, volume]
     default_measures: [close]
