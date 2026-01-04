@@ -110,9 +110,15 @@ class ModelGraph:
         # Add edges from graph.edges in config
         for model_name, config in self._model_configs.items():
             graph_config = config.get('graph', {})
-            edges = graph_config.get('edges', [])
+            edges = graph_config.get('edges', {})
 
-            for edge in edges:
+            # Handle edges as dict (keyed by edge name) or list
+            if isinstance(edges, dict):
+                edge_list = list(edges.values())
+            else:
+                edge_list = edges if edges else []
+
+            for edge in edge_list:
                 from_node = edge.get('from', '')
                 to_node = edge.get('to', '')
 
