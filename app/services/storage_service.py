@@ -93,22 +93,29 @@ class SilverStorageService:
         # Build cache key
         cache_key = f"{model_name}.{table_name}"
 
-        # Check cache
-        if use_cache and cache_key in self._cache:
+        # IMPORTANT: Skip caching when filters are provided
+        # Caching large fact tables (like 22M row stock prices) before filtering
+        # causes memory issues. DuckDB's lazy evaluation handles this efficiently
+        # without caching - filters are pushed down to the query.
+        should_cache = use_cache and not filters
+
+        # Check cache (only for unfiltered requests)
+        if should_cache and cache_key in self._cache:
             df = self._cache[cache_key]
         else:
             # Get table path from model
             table_path = model.get_table_path(table_name)
 
-            # Read from storage
+            # Read from storage (lazy - doesn't load all data)
             df = self.connection.read_table(table_path, model.storage_format)
 
-            # Cache if requested
-            if use_cache:
+            # Cache only unfiltered dimension tables (small, frequently accessed)
+            # Don't cache fact tables or filtered queries
+            if should_cache:
                 df = self.connection.cache(df)
                 self._cache[cache_key] = df
 
-        # Apply filters if provided
+        # Apply filters if provided (DuckDB pushes these down to query)
         if filters:
             df = self.connection.apply_filters(df, filters)
 

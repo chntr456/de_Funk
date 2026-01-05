@@ -13,11 +13,14 @@ Key Features:
 
 from typing import Dict, List, Optional, Any
 from pathlib import Path
+import logging
 
 from ..schema import NotebookConfig, Exhibit, ExhibitType
 from ..parsers import NotebookParser, MarkdownNotebookParser
 from ..filters.context import FilterContext
 from models.registry import ModelRegistry
+
+logger = logging.getLogger(__name__)
 from app.services.storage_service import SilverStorageService
 import pandas as pd
 
@@ -200,7 +203,11 @@ class NotebookSession:
         # Build filters from filter context and exhibit filters
         filters = self._build_filters(exhibit)
 
+        logger.info(f"get_exhibit_data: {model_name}.{table_name}, filters={filters}")
+
         # Query data from storage service
+        # Note: Storage service skips caching when filters are provided,
+        # allowing DuckDB's lazy evaluation to handle large tables efficiently
         df = self.storage_service.get_table(model_name, table_name, filters)
 
         return df
