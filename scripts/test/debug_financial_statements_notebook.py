@@ -105,10 +105,24 @@ def check_bronze_layer(conn: duckdb.DuckDBPyConnection, storage_root: Path):
     return results
 
 
+def is_delta_table(path: Path) -> bool:
+    """Check if path is a Delta table (has _delta_log directory)."""
+    return (path / "_delta_log").exists()
+
+
+def get_table_query(path: Path, select: str = "*") -> str:
+    """Get appropriate query based on table format (Delta vs Parquet)."""
+    if is_delta_table(path):
+        return f"SELECT {select} FROM delta_scan('{path}')"
+    else:
+        # Plain Parquet - use glob pattern for partitioned tables
+        return f"SELECT {select} FROM read_parquet('{path}/*.parquet', union_by_name=true)"
+
+
 def check_silver_layer(conn: duckdb.DuckDBPyConnection, storage_root: Path):
-    """Check silver layer tables using delta_scan."""
+    """Check silver layer tables (auto-detects Delta vs Parquet format)."""
     print("\n" + "=" * 70)
-    print("SILVER LAYER (using delta_scan)")
+    print("SILVER LAYER (auto-detecting format)")
     print("=" * 70)
 
     silver_root = storage_root / "silver"
@@ -129,10 +143,11 @@ def check_silver_layer(conn: duckdb.DuckDBPyConnection, storage_root: Path):
     for table_path, desc, count_only in tables:
         full_path = silver_root / table_path
         if full_path.exists():
+            fmt = "Delta" if is_delta_table(full_path) else "Parquet"
             if count_only:
                 # For large tables, just count - don't load into memory
-                query = f"SELECT COUNT(*) as cnt FROM delta_scan('{full_path}')"
-                elapsed, _, result = time_query(conn, f"{table_path} ({desc}) - COUNT ONLY", query)
+                query = get_table_query(full_path, "COUNT(*) as cnt")
+                elapsed, _, result = time_query(conn, f"{table_path} ({desc}, {fmt}) - COUNT ONLY", query)
                 if result is not None:
                     _, rows = result
                     count = rows[0][0]  # First row, first column
@@ -141,14 +156,22 @@ def check_silver_layer(conn: duckdb.DuckDBPyConnection, storage_root: Path):
                 else:
                     results[table_path] = {"time": elapsed, "count": 0}
             else:
-                query = f"SELECT * FROM delta_scan('{full_path}')"
-                elapsed, count, _ = time_query(conn, f"{table_path} ({desc})", query)
+                query = get_table_query(full_path)
+                elapsed, count, _ = time_query(conn, f"{table_path} ({desc}, {fmt})", query)
                 results[table_path] = {"time": elapsed, "count": count}
         else:
             print(f"\n  {table_path}: NOT FOUND")
             results[table_path] = {"time": 0, "count": 0}
 
     return results
+
+
+def get_table_source(path: Path) -> str:
+    """Get the FROM clause for a table (Delta or Parquet)."""
+    if is_delta_table(path):
+        return f"delta_scan('{path}')"
+    else:
+        return f"read_parquet('{path}/*.parquet', union_by_name=true)"
 
 
 def simulate_notebook_filter(conn: duckdb.DuckDBPyConnection, storage_root: Path, ticker: str = "AAPL"):
@@ -162,10 +185,10 @@ def simulate_notebook_filter(conn: duckdb.DuckDBPyConnection, storage_root: Path
     # 1. Filter source for ticker dropdown (dim_company)
     dim_company_path = silver_root / "company/dims/dim_company"
     if dim_company_path.exists():
-        # This is what the filter dropdown does - gets all ticker options
+        source = get_table_source(dim_company_path)
         query = f"""
             SELECT DISTINCT ticker
-            FROM delta_scan('{dim_company_path}')
+            FROM {source}
             ORDER BY ticker
         """
         elapsed, count, _ = time_query(conn, "Filter dropdown: Get all tickers from dim_company", query)
@@ -175,6 +198,7 @@ def simulate_notebook_filter(conn: duckdb.DuckDBPyConnection, storage_root: Path
     # Income Statement exhibit
     income_path = silver_root / "company/facts/fact_income_statement"
     if income_path.exists():
+        source = get_table_source(income_path)
         query = f"""
             SELECT
                 fiscal_date_ending,
@@ -183,16 +207,17 @@ def simulate_notebook_filter(conn: duckdb.DuckDBPyConnection, storage_root: Path
                 operating_income,
                 net_income,
                 report_type
-            FROM delta_scan('{income_path}')
+            FROM {source}
             WHERE ticker = '{ticker}'
               AND report_type = 'annual'
             ORDER BY fiscal_date_ending DESC
         """
-        elapsed, count, df = time_query(conn, "Income Statement exhibit", query, show_sample=True)
+        elapsed, count, _ = time_query(conn, "Income Statement exhibit", query, show_sample=True)
 
     # Balance Sheet exhibit
     balance_path = silver_root / "company/facts/fact_balance_sheet"
     if balance_path.exists():
+        source = get_table_source(balance_path)
         query = f"""
             SELECT
                 fiscal_date_ending,
@@ -200,16 +225,17 @@ def simulate_notebook_filter(conn: duckdb.DuckDBPyConnection, storage_root: Path
                 total_liabilities,
                 total_shareholder_equity,
                 report_type
-            FROM delta_scan('{balance_path}')
+            FROM {source}
             WHERE ticker = '{ticker}'
               AND report_type = 'annual'
             ORDER BY fiscal_date_ending DESC
         """
-        elapsed, count, df = time_query(conn, "Balance Sheet exhibit", query, show_sample=True)
+        elapsed, count, _ = time_query(conn, "Balance Sheet exhibit", query, show_sample=True)
 
     # Cash Flow exhibit
     cashflow_path = silver_root / "company/facts/fact_cash_flow"
     if cashflow_path.exists():
+        source = get_table_source(cashflow_path)
         query = f"""
             SELECT
                 fiscal_date_ending,
@@ -218,16 +244,17 @@ def simulate_notebook_filter(conn: duckdb.DuckDBPyConnection, storage_root: Path
                 cashflow_from_financing,
                 free_cash_flow,
                 report_type
-            FROM delta_scan('{cashflow_path}')
+            FROM {source}
             WHERE ticker = '{ticker}'
               AND report_type = 'annual'
             ORDER BY fiscal_date_ending DESC
         """
-        elapsed, count, df = time_query(conn, "Cash Flow exhibit", query, show_sample=True)
+        elapsed, count, _ = time_query(conn, "Cash Flow exhibit", query, show_sample=True)
 
     # Earnings exhibit
     earnings_path = silver_root / "company/facts/fact_earnings"
     if earnings_path.exists():
+        source = get_table_source(earnings_path)
         query = f"""
             SELECT
                 fiscal_date_ending,
@@ -235,16 +262,17 @@ def simulate_notebook_filter(conn: duckdb.DuckDBPyConnection, storage_root: Path
                 estimated_eps,
                 surprise_percentage,
                 report_type
-            FROM delta_scan('{earnings_path}')
+            FROM {source}
             WHERE ticker = '{ticker}'
               AND report_type = 'annual'
             ORDER BY fiscal_date_ending DESC
         """
-        elapsed, count, df = time_query(conn, "Earnings exhibit", query, show_sample=True)
+        elapsed, count, _ = time_query(conn, "Earnings exhibit", query, show_sample=True)
 
     # Stock Prices exhibit (with LIMIT since notebook has limit: 1000)
     prices_path = silver_root / "stocks/facts/fact_stock_prices"
     if prices_path.exists():
+        source = get_table_source(prices_path)
         query = f"""
             SELECT
                 trade_date,
@@ -253,12 +281,12 @@ def simulate_notebook_filter(conn: duckdb.DuckDBPyConnection, storage_root: Path
                 low,
                 close,
                 volume
-            FROM delta_scan('{prices_path}')
+            FROM {source}
             WHERE ticker = '{ticker}'
             ORDER BY trade_date DESC
             LIMIT 1000
         """
-        elapsed, count, df = time_query(conn, "Stock Prices exhibit (LIMIT 1000)", query)
+        elapsed, count, _ = time_query(conn, "Stock Prices exhibit (LIMIT 1000)", query)
 
 
 def simulate_full_table_scan(conn: duckdb.DuckDBPyConnection, storage_root: Path):
@@ -272,8 +300,9 @@ def simulate_full_table_scan(conn: duckdb.DuckDBPyConnection, storage_root: Path
     # Test: What if the filter isn't applied?
     prices_path = silver_root / "stocks/facts/fact_stock_prices"
     if prices_path.exists():
+        source = get_table_source(prices_path)
         # Just count - don't fetch all data
-        query = f"SELECT COUNT(*) as cnt FROM delta_scan('{prices_path}')"
+        query = f"SELECT COUNT(*) as cnt FROM {source}"
         elapsed, _, result = time_query(conn, "Stock prices COUNT (no filter)", query)
         if result is not None:
             _, rows = result
@@ -284,7 +313,7 @@ def simulate_full_table_scan(conn: duckdb.DuckDBPyConnection, storage_root: Path
         print("  (This simulates what might happen if filter fails)")
         query = f"""
             SELECT ticker, trade_date, close
-            FROM delta_scan('{prices_path}')
+            FROM {source}
             LIMIT 10
         """
         time_query(conn, "Sample of unfiltered data (LIMIT 10)", query, show_sample=True)
@@ -329,8 +358,9 @@ def check_schema_mismatch(conn: duckdb.DuckDBPyConnection, storage_root: Path):
             continue
 
         try:
-            # Get actual columns
-            query = f"SELECT * FROM delta_scan('{full_path}') LIMIT 0"
+            # Get actual columns (auto-detect format)
+            source = get_table_source(full_path)
+            query = f"SELECT * FROM {source} LIMIT 0"
             result = conn.execute(query)
             actual_columns = [desc[0] for desc in result.description]
 
