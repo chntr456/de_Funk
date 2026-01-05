@@ -344,19 +344,42 @@ class UniversalSession:
         ]
 
         for silver_table_path in possible_paths:
+            # Check if Silver table exists (Delta or Parquet)
+            delta_log_path = silver_table_path / "_delta_log"
+            is_delta = delta_log_path.exists()
             parquet_pattern = str(silver_table_path / "**/*.parquet")
             parquet_files = glob.glob(parquet_pattern, recursive=True)
 
-            if parquet_files and hasattr(self.connection, 'conn'):
-                logger.debug(f"Reading Silver parquet directly from {silver_table_path}")
+            if not silver_table_path.exists():
+                continue
+
+            # Strategy 2a: DuckDB direct read
+            if hasattr(self.connection, 'conn'):
+                logger.debug(f"Reading Silver {'Delta' if is_delta else 'Parquet'} with DuckDB from {silver_table_path}")
                 try:
-                    # Read parquet files directly with DuckDB
-                    sql = f"SELECT * FROM read_parquet('{parquet_pattern}', hive_partitioning=true)"
+                    if is_delta:
+                        sql = f"SELECT * FROM delta_scan('{silver_table_path}')"
+                    else:
+                        sql = f"SELECT * FROM read_parquet('{parquet_pattern}', hive_partitioning=true)"
                     result = self.connection.conn.execute(sql)
                     return self.connection.conn.from_df(result.fetchdf())
                 except Exception as e:
-                    logger.debug(f"Failed to read parquet from {silver_table_path}: {e}")
+                    logger.debug(f"Failed to read from {silver_table_path}: {e}")
                     continue
+
+            # Strategy 2b: Spark direct read from Silver
+            if hasattr(self.connection, 'spark') or hasattr(self.connection, '_spark'):
+                spark = getattr(self.connection, 'spark', None) or getattr(self.connection, '_spark', None)
+                if spark:
+                    logger.debug(f"Reading Silver {'Delta' if is_delta else 'Parquet'} with Spark from {silver_table_path}")
+                    try:
+                        if is_delta:
+                            return spark.read.format("delta").load(str(silver_table_path))
+                        else:
+                            return spark.read.parquet(str(silver_table_path))
+                    except Exception as e:
+                        logger.debug(f"Failed to read from {silver_table_path}: {e}")
+                        continue
 
         # Strategy 3: Check if Silver root exists before expensive build
         if not allow_build:
