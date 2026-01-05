@@ -115,6 +115,20 @@ class DuckDBConnection(DataConnection):
             views_need_refresh = False
 
             # If schemas exist with tables, verify views actually work
+            # Test both dimension AND fact tables to ensure complete validation
+            validation_queries = {
+                'stocks': [
+                    'SELECT 1 FROM stocks.dim_stock LIMIT 1',
+                    'SELECT 1 FROM stocks.fact_stock_prices LIMIT 1',
+                ],
+                'company': [
+                    'SELECT 1 FROM company.dim_company LIMIT 1',
+                ],
+                'temporal': [
+                    'SELECT 1 FROM temporal.dim_calendar LIMIT 1',
+                ],
+            }
+
             if existing_schemas:
                 for schema_name in [s[0] for s in existing_schemas]:
                     tables = self.conn.execute(f"""
@@ -124,22 +138,22 @@ class DuckDBConnection(DataConnection):
                     """).fetchone()[0]
 
                     if tables > 0:
-                        # Views exist - but do they point to valid data?
-                        # Quick validation: try to query one view
-                        try:
-                            # Test if view can actually read data (LIMIT 1 is cheap)
-                            test_result = self.conn.execute(f"""
-                                SELECT 1 FROM {schema_name}.dim_stock LIMIT 1
-                            """).fetchone() if schema_name == 'stocks' else None
+                        # Views exist - validate ALL critical views can read data
+                        queries = validation_queries.get(schema_name, [])
+                        for query in queries:
+                            try:
+                                self.conn.execute(query).fetchone()
+                            except Exception as e:
+                                # View exists but can't read data - needs refresh
+                                logger.info(f"View in '{schema_name}' is stale ({e}), will refresh all views")
+                                views_need_refresh = True
+                                break
 
-                            if test_result is not None or schema_name != 'stocks':
-                                logger.debug(f"Views in '{schema_name}' are valid, skipping refresh")
-                                continue
-                        except Exception as e:
-                            # View exists but can't read data - needs refresh
-                            logger.info(f"View in '{schema_name}' is stale ({e}), will refresh")
-                            views_need_refresh = True
+                        if views_need_refresh:
                             break
+
+                        if queries:
+                            logger.debug(f"Views in '{schema_name}' are valid ({len(queries)} checked)")
 
                 if not views_need_refresh and existing_schemas:
                     logger.debug("All views valid, skipping initialization")

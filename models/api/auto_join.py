@@ -697,10 +697,14 @@ class AutoJoinHandler:
                     df_temp = self.session._get_table_from_view_or_build(
                         model, model_name, table_name, allow_build=False
                     )
-                except ValueError:
-                    # If Silver not available and build disabled, fall back to model
-                    logger.warning(f"AUTO-JOIN: Silver not available for {model_name}.{table_name}, falling back to Bronze build")
-                    df_temp = model.get_table(table_name)
+                except ValueError as e:
+                    # Silver not available - DO NOT fall back to Bronze!
+                    # For large tables (22M+ rows), reading from Bronze would crash the app.
+                    # Instead, raise a clear error so the user knows to build Silver layer.
+                    raise RuntimeError(
+                        f"AUTO-JOIN: Cannot load {model_name}.{table_name} - Silver layer not available. "
+                        f"Run: python -m scripts.build.build_models --models {model_name}"
+                    ) from e
                 t1 = time.time()
                 temp_name = f"_autojoin_{table_name}"
 
