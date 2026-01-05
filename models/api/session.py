@@ -337,10 +337,11 @@ class UniversalSession:
             table_path = table_name
 
         # Try multiple possible paths
+        # Model writer creates: facts/fact_xxx or dims/dim_xxx
         possible_paths = [
             base_silver_path / table_path,
-            base_silver_path / f"facts/{table_name.replace('fact_', '')}",
-            base_silver_path / f"dims/{table_name.replace('dim_', '')}",
+            base_silver_path / f"facts/{table_name}",  # facts/fact_stock_prices
+            base_silver_path / f"dims/{table_name}",   # dims/dim_stock
         ]
 
         for silver_table_path in possible_paths:
