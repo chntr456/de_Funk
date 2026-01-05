@@ -51,6 +51,18 @@ def test_storage_service():
 
     # ModelRegistry needs configs/models directory (YAML definitions)
     models_config_dir = repo_root / "configs" / "models"
+    print(f"  Models config dir: {models_config_dir}")
+    print(f"  Exists: {models_config_dir.exists()}")
+
+    if models_config_dir.exists():
+        subdirs = [d.name for d in models_config_dir.iterdir() if d.is_dir()]
+        print(f"  Subdirectories: {subdirs}")
+
+        # Check for model.yaml in each
+        for subdir in subdirs:
+            model_yaml = models_config_dir / subdir / "model.yaml"
+            print(f"    {subdir}/model.yaml exists: {model_yaml.exists()}")
+
     registry = ModelRegistry(models_config_dir)
     print(f"✓ Model registry initialized with models: {registry.list_models()}")
 
