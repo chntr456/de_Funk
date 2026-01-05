@@ -315,13 +315,18 @@ class UniversalSession:
             except Exception as e:
                 logger.debug(f"View {view_name} not available ({e})")
 
-        # Strategy 2: Try reading Silver parquet files directly
-        model_cfg = model.model_cfg if hasattr(model, 'model_cfg') else {}
-        storage_cfg = model_cfg.get('storage', {})
-        silver_root = storage_cfg.get('root', f'storage/silver/{model_name}')
-        base_silver_path = self.repo_root / silver_root if self.repo_root else Path(silver_root)
+        # Strategy 2: Try reading Silver files directly
+        # Use self.storage_cfg (resolved from run_config.json) for the absolute silver root
+        # This ensures we use /shared/storage/silver instead of repo-relative paths
+        silver_base = self.storage_cfg.get('roots', {}).get('silver', 'storage/silver')
+        if not Path(silver_base).is_absolute():
+            silver_base = self.repo_root / silver_base if self.repo_root else Path(silver_base)
+        else:
+            silver_base = Path(silver_base)
+        base_silver_path = silver_base / model_name
 
         # Get the table path from schema config
+        model_cfg = model.model_cfg if hasattr(model, 'model_cfg') else {}
         schema_cfg = model_cfg.get('schema', {})
         table_path = None
 
