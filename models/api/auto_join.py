@@ -688,16 +688,40 @@ class AutoJoinHandler:
         temp_tables = {}
 
         try:
-            # Register tables as temp views
+            # Register tables as temp views - use DuckDB relations directly (lazy, no pandas)
             for table_name in table_sequence:
                 t0 = time.time()
-                df_temp = model.get_table(table_name)
+                # Use session to get table from Silver layer (lazy DuckDB relation)
+                # This avoids triggering ensure_built() which would read from Bronze
+                try:
+                    df_temp = self.session._get_table_from_view_or_build(
+                        model, model_name, table_name, allow_build=False
+                    )
+                except ValueError:
+                    # If Silver not available and build disabled, fall back to model
+                    logger.warning(f"AUTO-JOIN: Silver not available for {model_name}.{table_name}, falling back to Bronze build")
+                    df_temp = model.get_table(table_name)
                 t1 = time.time()
                 temp_name = f"_autojoin_{table_name}"
-                temp_df = df_temp.df()  # Convert to pandas
-                t2 = time.time()
-                logger.debug(f"AUTO-JOIN DUCKDB: {table_name}: get_table={t1-t0:.2f}s, to_pandas={t2-t1:.2f}s, shape={temp_df.shape}")
-                self.connection.conn.register(temp_name, temp_df)
+
+                # Register directly as DuckDB view - DON'T convert to pandas!
+                # DuckDB can register relations directly, keeping lazy evaluation
+                if hasattr(df_temp, 'alias'):
+                    # It's a DuckDB relation - create view directly via SQL
+                    # Register the relation so we can reference it
+                    self.connection.conn.register(temp_name, df_temp)
+                    logger.debug(f"AUTO-JOIN DUCKDB: {table_name}: registered as lazy view in {t1-t0:.2f}s")
+                elif hasattr(df_temp, 'toPandas'):
+                    # Spark DataFrame - must convert (but should be rare in DuckDB path)
+                    temp_df = df_temp.toPandas()
+                    self.connection.conn.register(temp_name, temp_df)
+                    logger.debug(f"AUTO-JOIN DUCKDB: {table_name}: Spark->pandas in {time.time()-t0:.2f}s, shape={temp_df.shape}")
+                else:
+                    # Already pandas or other
+                    self.connection.conn.register(temp_name, df_temp)
+                    shape = df_temp.shape if hasattr(df_temp, 'shape') else 'unknown'
+                    logger.debug(f"AUTO-JOIN DUCKDB: {table_name}: registered in {t1-t0:.2f}s, shape={shape}")
+
                 temp_tables[table_name] = temp_name
 
             # Build SQL with proper qualified column names
