@@ -95,11 +95,14 @@ class ModelWriter:
         # Get format from model's YAML config first, then global storage config, then default
         if format is None:
             # Priority: model.yaml storage.format > storage.json defaults.format > DEFAULT_FORMAT
-            format = (
-                self.model.model_cfg.get("storage", {}).get("format")
-                or self.storage_cfg.get("defaults", {}).get("format")
-                or DEFAULT_FORMAT
-            )
+            model_format = self.model.model_cfg.get("storage", {}).get("format")
+            storage_default = self.storage_cfg.get("defaults", {}).get("format")
+            format = model_format or storage_default or DEFAULT_FORMAT
+
+            # Debug: trace format resolution (INFO level to ensure visibility)
+            logger.info(f"Format resolution: model_cfg.storage.format={model_format}, "
+                       f"storage_cfg.defaults.format={storage_default}, "
+                       f"DEFAULT_FORMAT={DEFAULT_FORMAT}, resolved={format}")
         # Ensure model is built
         self.model.ensure_built()
 
