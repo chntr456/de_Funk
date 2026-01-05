@@ -99,10 +99,12 @@ class ModelWriter:
             storage_default = self.storage_cfg.get("defaults", {}).get("format")
             format = model_format or storage_default or DEFAULT_FORMAT
 
-            # Debug: trace format resolution (INFO level to ensure visibility)
-            logger.info(f"Format resolution: model_cfg.storage.format={model_format}, "
-                       f"storage_cfg.defaults.format={storage_default}, "
-                       f"DEFAULT_FORMAT={DEFAULT_FORMAT}, resolved={format}")
+            # Debug: trace format resolution (print to ensure visibility)
+            print(f"  DEBUG Format resolution:")
+            print(f"    model_cfg.storage.format = {model_format}")
+            print(f"    storage_cfg.defaults.format = {storage_default}")
+            print(f"    DEFAULT_FORMAT = {DEFAULT_FORMAT}")
+            print(f"    resolved format = {format}")
         # Ensure model is built
         self.model.ensure_built()
 

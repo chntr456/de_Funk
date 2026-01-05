@@ -365,13 +365,18 @@ class BaseModel:
     def write_tables(
         self,
         output_root: Optional[str] = None,
-        format: str = "parquet",
+        format: Optional[str] = None,
         mode: str = "overwrite",
         use_optimized_writer: bool = True,
         partition_by: Optional[Dict[str, List[str]]] = None,
         quiet: bool = False
     ):
-        """Write all model tables to storage."""
+        """Write all model tables to storage.
+
+        Args:
+            format: Output format. If None, reads from model config (storage.format),
+                   then storage.json defaults, then falls back to "delta".
+        """
         if self._model_writer is None:
             from models.base.model_writer import ModelWriter
             self._model_writer = ModelWriter(self)
