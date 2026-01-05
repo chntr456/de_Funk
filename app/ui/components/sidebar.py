@@ -70,7 +70,7 @@ class SidebarNavigator:
 
                 # Show basic metrics
                 st.metric("Models", metrics['num_models'])
-                st.metric("Relationships", metrics['num_relationships'])
+                st.metric("Dependencies", metrics['num_dependencies'])
                 st.metric("Is DAG", "✓" if metrics['is_dag'] else "✗")
 
                 if st.button("View Full Graph", use_container_width=True):
