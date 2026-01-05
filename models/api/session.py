@@ -367,8 +367,9 @@ class UniversalSession:
                         sql = f"SELECT * FROM delta_scan('{silver_table_path}')"
                     else:
                         sql = f"SELECT * FROM read_parquet('{parquet_pattern}', hive_partitioning=true)"
-                    result = self.connection.conn.execute(sql)
-                    return self.connection.conn.from_df(result.fetchdf())
+                    # Return lazy DuckDB relation - DO NOT use fetchdf() which loads all data
+                    # DuckDB's lazy evaluation handles large tables efficiently
+                    return self.connection.conn.sql(sql)
                 except Exception as e:
                     logger.debug(f"Failed to read from {silver_table_path}: {e}")
                     continue
