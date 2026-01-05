@@ -169,13 +169,13 @@ class TimeSeriesForecastModel(BaseModel):
             from datetime import datetime, timedelta
             date_from = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
 
-        # Get source model
+        # Get source table from session (reads from Silver, avoids rebuild)
         source_model_name = self.get_source_model_name()
-        source_model = self.session.load_model(source_model_name)
-
-        # Get source table
         table_name = self.get_source_table_name()
-        df = source_model.get_table(table_name)
+
+        # Use session.get_table() which reads from Silver layer
+        # This avoids triggering ensure_built() which would rebuild from Bronze
+        df = self.session.get_table(source_model_name, table_name)
 
         # Filter by entity
         entity_col = self.get_entity_column()
