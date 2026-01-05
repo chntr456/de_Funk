@@ -23,14 +23,18 @@ class ModelGraph:
     Model dependency graph using NetworkX.
 
     Manages relationships between models and tables within the data platform.
-    Supports both:
-    - Model-level dependencies (e.g., forecast depends on company)
-    - Table-level edges (e.g., forecast.fact_forecasts → company.fact_prices)
+
+    Two separate graphs are maintained:
+    - dependency_graph: Build-time dependencies from 'depends_on' (must be DAG)
+    - join_graph: Query-time relationships from 'graph.edges' (can have cycles)
+
+    The main self.graph is the dependency graph used for build ordering.
     """
 
     def __init__(self):
-        """Initialize empty directed graph."""
-        self.graph = nx.DiGraph()
+        """Initialize empty directed graphs."""
+        self.graph = nx.DiGraph()  # Build dependency graph (DAG)
+        self.join_graph = nx.DiGraph()  # Query-time join graph (can have cycles)
         self._model_configs: Dict[str, Dict] = {}
 
     def build_from_registry(self, model_registry) -> None:
@@ -43,6 +47,7 @@ class ModelGraph:
             model_registry: ModelRegistry instance with loaded models
         """
         self.graph.clear()
+        self.join_graph.clear()
         self._model_configs.clear()
 
         # Get all model configs
@@ -70,6 +75,7 @@ class ModelGraph:
             config_dir: Path to configs/models/ directory
         """
         self.graph.clear()
+        self.join_graph.clear()
         self._model_configs.clear()
 
         # Load all model configs
@@ -91,12 +97,18 @@ class ModelGraph:
         self.validate_no_cycles()
 
     def _build_graph_from_configs(self) -> None:
-        """Build NetworkX graph from parsed model configs."""
-        # Add all models as nodes
+        """Build NetworkX graphs from parsed model configs.
+
+        Creates two separate graphs:
+        1. self.graph (dependency graph): Only from 'depends_on' - used for build order
+        2. self.join_graph: From 'graph.edges' - used for query-time joins
+        """
+        # Add all models as nodes to both graphs
         for model_name in self._model_configs.keys():
             self.graph.add_node(model_name, type='model')
+            self.join_graph.add_node(model_name, type='model')
 
-        # Add dependency edges from depends_on
+        # Add dependency edges from depends_on (BUILD ORDER - must be DAG)
         for model_name, config in self._model_configs.items():
             depends_on = config.get('depends_on', [])
             for dependency in depends_on:
@@ -107,7 +119,8 @@ class ModelGraph:
                     source='depends_on'
                 )
 
-        # Add edges from graph.edges in config
+        # Add edges from graph.edges (QUERY-TIME JOINS - can have cycles)
+        # These are NOT added to the build dependency graph
         for model_name, config in self._model_configs.items():
             graph_config = config.get('graph', {})
             edges = graph_config.get('edges', {})
@@ -127,8 +140,8 @@ class ModelGraph:
                 to_model = self._extract_model_from_node(to_node)
 
                 if to_model and to_model != model_name:
-                    # Cross-model edge
-                    self.graph.add_edge(
+                    # Cross-model edge - add to join_graph only (NOT dependency graph)
+                    self.join_graph.add_edge(
                         from_model,
                         to_model,
                         type='cross_model_edge',
@@ -162,18 +175,28 @@ class ModelGraph:
         """
         Check if two models are related (direct or transitive).
 
+        Checks both dependency graph and join graph for relationships.
+
         Args:
             model_a: Source model
             model_b: Target model
 
         Returns:
-            True if there's a path from model_a to model_b
+            True if there's a path from model_a to model_b in either graph
         """
         if model_a not in self.graph or model_b not in self.graph:
             return False
 
-        # Check if path exists (handles both direct and transitive)
-        return nx.has_path(self.graph, model_a, model_b)
+        # Check dependency graph first
+        if nx.has_path(self.graph, model_a, model_b):
+            return True
+
+        # Also check join graph (for query-time relationships)
+        if model_a in self.join_graph and model_b in self.join_graph:
+            if nx.has_path(self.join_graph, model_a, model_b):
+                return True
+
+        return False
 
     def get_dependencies(self, model_name: str, transitive: bool = False) -> Set[str]:
         """
@@ -219,9 +242,10 @@ class ModelGraph:
 
     def get_join_path(self, model_a: str, model_b: str) -> Optional[List[str]]:
         """
-        Find shortest path between two models.
+        Find shortest path between two models for joins.
 
-        Useful for determining how to join across models.
+        Uses the join_graph which contains cross-model edges from graph.edges.
+        Falls back to dependency graph if no path in join graph.
 
         Args:
             model_a: Source model
@@ -230,6 +254,14 @@ class ModelGraph:
         Returns:
             List of model names forming the path, or None if no path exists
         """
+        # First try join graph (has cross-model edges)
+        if model_a in self.join_graph and model_b in self.join_graph:
+            try:
+                return nx.shortest_path(self.join_graph, model_a, model_b)
+            except nx.NetworkXNoPath:
+                pass
+
+        # Fall back to dependency graph
         if model_a not in self.graph or model_b not in self.graph:
             return None
 
@@ -242,6 +274,9 @@ class ModelGraph:
         """
         Get metadata about the edge between two models.
 
+        Checks join_graph first (for cross-model edges with join info),
+        then falls back to dependency graph.
+
         Args:
             model_a: Source model
             model_b: Target model
@@ -249,10 +284,15 @@ class ModelGraph:
         Returns:
             Dictionary with edge attributes, or None if no edge exists
         """
-        if not self.graph.has_edge(model_a, model_b):
-            return None
+        # Check join graph first (has richer metadata for joins)
+        if self.join_graph.has_edge(model_a, model_b):
+            return dict(self.join_graph.edges[model_a, model_b])
 
-        return dict(self.graph.edges[model_a, model_b])
+        # Fall back to dependency graph
+        if self.graph.has_edge(model_a, model_b):
+            return dict(self.graph.edges[model_a, model_b])
+
+        return None
 
     # ============================================================
     # BUILD ORDER & VALIDATION
@@ -330,14 +370,15 @@ class ModelGraph:
         Get graph metrics for monitoring and debugging.
 
         Returns:
-            Dictionary with graph statistics
+            Dictionary with graph statistics for both dependency and join graphs
         """
         return {
             'num_models': self.graph.number_of_nodes(),
-            'num_relationships': self.graph.number_of_edges(),
+            'num_dependencies': self.graph.number_of_edges(),
+            'num_join_edges': self.join_graph.number_of_edges(),
             'is_dag': nx.is_directed_acyclic_graph(self.graph),
-            'is_connected': nx.is_weakly_connected(self.graph),
-            'num_components': nx.number_weakly_connected_components(self.graph),
+            'is_connected': nx.is_weakly_connected(self.graph) if self.graph.number_of_nodes() > 0 else True,
+            'num_components': nx.number_weakly_connected_components(self.graph) if self.graph.number_of_nodes() > 0 else 0,
             'density': nx.density(self.graph),
             'models': list(self.graph.nodes()),
         }
@@ -422,6 +463,7 @@ class ModelGraph:
         metrics = self.get_metrics()
         return (
             f"ModelGraph(models={metrics['num_models']}, "
-            f"relationships={metrics['num_relationships']}, "
+            f"dependencies={metrics['num_dependencies']}, "
+            f"join_edges={metrics['num_join_edges']}, "
             f"is_dag={metrics['is_dag']})"
         )
