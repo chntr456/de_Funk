@@ -102,6 +102,7 @@ class DuckDBConnection(DataConnection):
         - Views are available immediately on connection
         - Only runs for persistent databases (not :memory:)
         - Gracefully handles missing silver layer data
+        - Recreates stale views that point to wrong storage paths
         """
         try:
             # Check if any v2.0 model schemas exist (quick check to avoid unnecessary work)
@@ -111,7 +112,9 @@ class DuckDBConnection(DataConnection):
                 WHERE schema_name IN ('stocks', 'options', 'company', 'temporal', 'geography')
             """).fetchall()
 
-            # If schemas exist with tables, views likely already setup
+            views_need_refresh = False
+
+            # If schemas exist with tables, verify views actually work
             if existing_schemas:
                 for schema_name in [s[0] for s in existing_schemas]:
                     tables = self.conn.execute(f"""
@@ -121,10 +124,28 @@ class DuckDBConnection(DataConnection):
                     """).fetchone()[0]
 
                     if tables > 0:
-                        logger.debug(f"Views already exist in schema '{schema_name}', skipping initialization")
-                        return
+                        # Views exist - but do they point to valid data?
+                        # Quick validation: try to query one view
+                        try:
+                            # Test if view can actually read data (LIMIT 1 is cheap)
+                            test_result = self.conn.execute(f"""
+                                SELECT 1 FROM {schema_name}.dim_stock LIMIT 1
+                            """).fetchone() if schema_name == 'stocks' else None
 
-            # Views don't exist or are incomplete - initialize them
+                            if test_result is not None or schema_name != 'stocks':
+                                logger.debug(f"Views in '{schema_name}' are valid, skipping refresh")
+                                continue
+                        except Exception as e:
+                            # View exists but can't read data - needs refresh
+                            logger.info(f"View in '{schema_name}' is stale ({e}), will refresh")
+                            views_need_refresh = True
+                            break
+
+                if not views_need_refresh and existing_schemas:
+                    logger.debug("All views valid, skipping initialization")
+                    return
+
+            # Views don't exist, are incomplete, or are stale - initialize them
             logger.info("Initializing v2.0 model views...")
 
             # Import here to avoid circular dependency
