@@ -65,7 +65,7 @@ logger = logging.getLogger(__name__)
 class DuckDBViewSetup:
     """Setup DuckDB views for v2.0 models."""
 
-    def __init__(self, db_path: Path, config: ConfigLoader, repo_root: Path):
+    def __init__(self, db_path: Path, config: ConfigLoader, repo_root: Path, storage_root: Optional[Path] = None):
         """
         Initialize DuckDB view setup.
 
@@ -73,10 +73,13 @@ class DuckDBViewSetup:
             db_path: Path to DuckDB database file
             config: Application configuration
             repo_root: Repository root path for resolving relative paths
+            storage_root: Optional override for storage root (e.g., /shared/storage)
+                         If not provided, uses repo_root/storage
         """
         self.db_path = db_path
         self.config = config
         self.repo_root = repo_root
+        self.storage_root = storage_root  # Absolute path to storage (e.g., /shared/storage)
         self.conn = None
         self.created_views = []
         self.skipped_views = []
@@ -108,9 +111,18 @@ class DuckDBViewSetup:
             self.conn = None
 
     def get_silver_path(self, model: str) -> Path:
-        """Get Silver layer path for model (absolute path)."""
-        relative_path = self.config.storage.get(f'{model}_silver', f'storage/silver/{model}')
-        return self.repo_root / relative_path
+        """Get Silver layer path for model (absolute path).
+
+        If storage_root is set (e.g., /shared/storage), uses that.
+        Otherwise falls back to repo_root/storage.
+        """
+        if self.storage_root:
+            # Use explicit storage root (e.g., /shared/storage from run_config.json)
+            return self.storage_root / 'silver' / model
+        else:
+            # Fallback to repo-relative path
+            relative_path = self.config.storage.get(f'{model}_silver', f'storage/silver/{model}')
+            return self.repo_root / relative_path
 
     def create_view(self, schema: str, table: str, table_path: Path, dry_run: bool = False) -> bool:
         """
@@ -617,6 +629,12 @@ def main():
     )
 
     parser.add_argument(
+        '--storage-path',
+        type=Path,
+        help='Path to storage root (e.g., /shared/storage). Default: from run_config.json'
+    )
+
+    parser.add_argument(
         '--dry-run',
         action='store_true',
         help='Show SQL without executing'
@@ -633,6 +651,22 @@ def main():
     # Load configuration
     config = ConfigLoader().load()
 
+    # Get storage path from run_config.json if not provided
+    storage_root = None
+    if args.storage_path:
+        storage_root = args.storage_path
+    else:
+        # Try to load from run_config.json
+        run_config_path = repo_root / 'configs' / 'pipelines' / 'run_config.json'
+        if run_config_path.exists():
+            import json
+            with open(run_config_path) as f:
+                run_config = json.load(f)
+            storage_path_str = run_config.get('defaults', {}).get('storage_path')
+            if storage_path_str:
+                storage_root = Path(storage_path_str)
+                logger.info(f"Using storage_path from run_config.json: {storage_root}")
+
     # Get database path
     if args.db_path:
         db_path = args.db_path
@@ -646,6 +680,7 @@ def main():
     logger.info("DUCKDB VIEW SETUP (v2.0)")
     logger.info("="*80)
     logger.info(f"Database: {db_path}")
+    logger.info(f"Storage root: {storage_root or 'repo-relative'}")
     logger.info(f"Dry run: {args.dry_run}")
     logger.info(f"Mode: {'UPDATE' if args.update else 'CREATE'}")
     logger.info("")
@@ -660,7 +695,7 @@ def main():
             return
 
     # Setup views
-    setup = DuckDBViewSetup(db_path=db_path, config=config, repo_root=repo_root)
+    setup = DuckDBViewSetup(db_path=db_path, config=config, repo_root=repo_root, storage_root=storage_root)
     setup.setup_all(dry_run=args.dry_run)
 
 

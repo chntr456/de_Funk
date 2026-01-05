@@ -759,37 +759,37 @@ class AutoJoinHandler:
 
             logger.debug(f"AUTO-JOIN DUCKDB SQL: {sql[:500]}{'...' if len(sql) > 500 else ''}")
 
-            # Execute the join query
+            # Execute the join query - return LAZY relation, NOT fetchdf()!
+            # fetchdf() would load ALL rows into pandas memory (crashes on 22M rows)
+            # Use conn.sql() which returns a lazy DuckDB relation
             t0 = time.time()
-            result = self.connection.conn.execute(sql)
-            result_df = result.fetchdf()
-            logger.debug(f"AUTO-JOIN DUCKDB: SQL execution took {time.time() - t0:.2f}s, result shape={result_df.shape}")
+            result = self.connection.conn.sql(sql)
+            logger.debug(f"AUTO-JOIN DUCKDB: SQL prepared (lazy) in {time.time() - t0:.2f}s")
 
-            # Cleanup temp tables
-            for temp_name in temp_tables.values():
-                try:
-                    self.connection.conn.unregister(temp_name)
-                except Exception:
-                    pass
+            # NOTE: We intentionally DON'T clean up temp tables here because
+            # the lazy result still references them. They'll be cleaned up
+            # when the connection closes or when result is garbage collected.
+            # For a long-running app, we may want to track and clean them periodically.
 
-            # Convert to DuckDB relation
-            return self.connection.conn.from_df(result_df)
+            return result
 
         except Exception as e:
             logger.error(f"AUTO-JOIN DUCKDB FAILED: {e}", exc_info=True)
 
-            # Cleanup temp tables
+            # Cleanup temp tables on failure
             for temp_name in temp_tables.values():
                 try:
                     self.connection.conn.unregister(temp_name)
                 except Exception:
                     pass
 
-            # Fall back to base table
-            df = model.get_table(table_sequence[0])
-            if filters:
-                df = FilterEngine.apply_from_session(df, filters, self.session)
-            return df
+            # DON'T fall back to model.get_table() - that triggers Bronze reads!
+            # For large fact tables (22M+ rows), this would crash the app.
+            # Instead, re-raise the exception so the caller knows there's an issue.
+            raise RuntimeError(
+                f"AUTO-JOIN failed for {model_name}: {e}. "
+                f"Check that Silver layer exists at the configured storage path."
+            ) from e
 
     def _build_where_clause_for_views(
         self,

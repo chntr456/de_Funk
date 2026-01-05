@@ -130,11 +130,23 @@ class DuckDBConnection(DataConnection):
             # Import here to avoid circular dependency
             from utils.repo import get_repo_root
             from config import ConfigLoader
+            import json
 
             # Get repo root and config
             repo_root = get_repo_root()
             loader = ConfigLoader(repo_root=repo_root)
             config = loader.load()
+
+            # Get storage path from run_config.json
+            storage_root = None
+            run_config_path = repo_root / 'configs' / 'pipelines' / 'run_config.json'
+            if run_config_path.exists():
+                with open(run_config_path) as f:
+                    run_config = json.load(f)
+                storage_path_str = run_config.get('defaults', {}).get('storage_path')
+                if storage_path_str:
+                    storage_root = Path(storage_path_str)
+                    logger.debug(f"Using storage_path from run_config.json: {storage_root}")
 
             # Import and run view setup (but silently - don't spam logs)
             import sys
@@ -146,7 +158,7 @@ class DuckDBConnection(DataConnection):
             sys.stdout = StringIO()
 
             try:
-                setup = DuckDBViewSetup(db_path=Path(self.db_path), config=config, repo_root=repo_root)
+                setup = DuckDBViewSetup(db_path=Path(self.db_path), config=config, repo_root=repo_root, storage_root=storage_root)
                 setup.setup_all(dry_run=False)
                 logger.info("✓ Model views initialized successfully")
             finally:
