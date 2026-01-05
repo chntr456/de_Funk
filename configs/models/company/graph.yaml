@@ -139,6 +139,7 @@ nodes:
       proceeds_issuance_common_stock: proceeds_issuance_common_stock
       # Summary
       change_in_cash: change_in_cash
+      free_cash_flow: free_cash_flow
       # Metadata
       reported_currency: reported_currency
     derive:
@@ -155,6 +156,9 @@ nodes:
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
       reported_eps: reported_eps
+      estimated_eps: estimated_eps
+      surprise: surprise
+      surprise_percentage: surprise_percentage
     derive:
       company_id: "CONCAT('COMPANY_', ticker)"
       report_date: "fiscal_date_ending"
