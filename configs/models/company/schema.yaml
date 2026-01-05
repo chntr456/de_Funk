@@ -82,6 +82,7 @@ dimensions:
 
 facts:
   # Income Statement - matches graph.yaml fact_income_statement
+  # Note: Facts read directly from bronze, join to dim_company via ticker at query time
   fact_income_statement:
     description: "Income statement data from SEC filings"
     columns:
@@ -89,11 +90,6 @@ facts:
         type: string
         description: "Trading symbol - FK to dim_company"
         required: true
-
-      cik:
-        type: string
-        description: "SEC CIK - may be NULL from bulk listing"
-        required: false
 
       fiscal_date_ending:
         type: date
@@ -182,11 +178,6 @@ facts:
         type: string
         description: "Trading symbol - FK to dim_company"
         required: true
-
-      cik:
-        type: string
-        description: "SEC CIK - may be NULL from bulk listing"
-        required: false
 
       fiscal_date_ending:
         type: date
@@ -301,11 +292,6 @@ facts:
         description: "Trading symbol - FK to dim_company"
         required: true
 
-      cik:
-        type: string
-        description: "SEC CIK - may be NULL from bulk listing"
-        required: false
-
       fiscal_date_ending:
         type: date
         description: "Fiscal period end date"
@@ -403,11 +389,6 @@ facts:
         type: string
         description: "Trading symbol - FK to dim_company"
         required: true
-
-      cik:
-        type: string
-        description: "SEC CIK - may be NULL from bulk listing"
-        required: false
 
       fiscal_date_ending:
         type: date

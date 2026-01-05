@@ -40,33 +40,17 @@ nodes:
     tags: [dim, entity, corporate]
     unique_key: [ticker]  # Use ticker as primary key (works with bulk listing)
 
-  # Ticker lookup for joining financial statements
-  # No longer requires CIK - joins on ticker directly
-  _ticker_lookup:
-    from: bronze.securities_reference
-    filters:
-      - "type IN ('Stock', 'Common Stock')"
-      - "is_active = true"
-    select:
-      ticker: ticker
-      cik: cik  # May be NULL
-    unique_key: [ticker]
-    tags: [internal, lookup]
-
   # ===========================================================================
   # FACT TABLES - Financial Statements
   # ===========================================================================
+  # Note: Facts are read directly from bronze without lookup join.
+  # The ticker filter from notebook will be applied at query time.
+  # This avoids the expensive join during silver build.
 
   # Income Statement Facts
   fact_income_statement:
     from: bronze.income_statements
-    join:
-      - table: _ticker_lookup
-        "on": ["ticker=ticker"]
-        type: left  # Left join - include all statements even without lookup match
     select:
-      # Keys - use ticker as primary, CIK is optional
-      cik: _ticker_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
@@ -88,8 +72,7 @@ nodes:
       # Metadata
       reported_currency: reported_currency
     derive:
-      # Use ticker if CIK not available
-      company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
+      company_id: "CONCAT('COMPANY_', ticker)"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, income_statement]
     unique_key: [ticker, fiscal_date_ending, report_type]
@@ -97,13 +80,7 @@ nodes:
   # Balance Sheet Facts
   fact_balance_sheet:
     from: bronze.balance_sheets
-    join:
-      - table: _ticker_lookup
-        "on": ["ticker=ticker"]
-        type: left
     select:
-      # Keys
-      cik: _ticker_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
@@ -132,7 +109,7 @@ nodes:
       # Metadata
       reported_currency: reported_currency
     derive:
-      company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
+      company_id: "CONCAT('COMPANY_', ticker)"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, balance_sheet]
     unique_key: [ticker, fiscal_date_ending, report_type]
@@ -140,13 +117,7 @@ nodes:
   # Cash Flow Facts
   fact_cash_flow:
     from: bronze.cash_flows
-    join:
-      - table: _ticker_lookup
-        "on": ["ticker=ticker"]
-        type: left
     select:
-      # Keys
-      cik: _ticker_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
@@ -171,7 +142,7 @@ nodes:
       # Metadata
       reported_currency: reported_currency
     derive:
-      company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
+      company_id: "CONCAT('COMPANY_', ticker)"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, cash_flow]
     unique_key: [ticker, fiscal_date_ending, report_type]
@@ -179,18 +150,13 @@ nodes:
   # Earnings Facts (EPS actual vs estimate)
   fact_earnings:
     from: bronze.earnings
-    join:
-      - table: _ticker_lookup
-        "on": ["ticker=ticker"]
-        type: left
     select:
-      cik: _ticker_lookup__cik
       ticker: ticker
       fiscal_date_ending: fiscal_date_ending
       report_type: report_type
       reported_eps: reported_eps
     derive:
-      company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
+      company_id: "CONCAT('COMPANY_', ticker)"
       report_date: "fiscal_date_ending"
     tags: [fact, financials, earnings]
     unique_key: [ticker, fiscal_date_ending, report_type]
