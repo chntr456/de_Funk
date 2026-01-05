@@ -39,20 +39,25 @@ def setup_duckdb() -> duckdb.DuckDBPyConnection:
 
 
 def time_query(conn: duckdb.DuckDBPyConnection, name: str, query: str, show_sample: bool = False) -> tuple:
-    """Execute query and return timing + row count."""
+    """Execute query and return timing + row count.
+
+    Uses DuckDB native methods - NO PANDAS (per CLAUDE.md guidelines).
+    """
     print(f"\n  {name}...")
     start = time.time()
     try:
         result = conn.execute(query)
-        df = result.fetchdf()
+        columns = [desc[0] for desc in result.description]
+        rows = result.fetchall()
         elapsed = time.time() - start
-        row_count = len(df)
+        row_count = len(rows)
         print(f"    ✓ {row_count:,} rows in {elapsed:.2f}s")
         if show_sample and row_count > 0:
-            print(f"    Sample columns: {list(df.columns)[:8]}")
+            print(f"    Sample columns: {columns[:8]}")
             if row_count <= 10:
-                print(df.to_string(index=False))
-        return elapsed, row_count, df
+                for row in rows:
+                    print(f"    {row}")
+        return elapsed, row_count, (columns, rows)
     except Exception as e:
         elapsed = time.time() - start
         print(f"    ✗ ERROR after {elapsed:.2f}s: {e}")
@@ -82,17 +87,18 @@ def check_bronze_layer(conn: duckdb.DuckDBPyConnection, storage_root: Path):
             if count_only:
                 # For large tables, just count - don't load into memory
                 query = f"SELECT COUNT(*) as cnt FROM delta_scan('{table_path}')"
-                elapsed, _, df = time_query(conn, f"{table_name} ({desc}) - COUNT ONLY", query)
-                if df is not None:
-                    count = df['cnt'].iloc[0]
+                elapsed, _, result = time_query(conn, f"{table_name} ({desc}) - COUNT ONLY", query)
+                if result is not None:
+                    _, rows = result
+                    count = rows[0][0]  # First row, first column
                     print(f"    Total rows: {count:,}")
-                    results[table_name] = {"time": elapsed, "count": count, "df": None}
+                    results[table_name] = {"time": elapsed, "count": count}
                 else:
-                    results[table_name] = {"time": elapsed, "count": 0, "df": None}
+                    results[table_name] = {"time": elapsed, "count": 0}
             else:
                 query = f"SELECT * FROM delta_scan('{table_path}')"
-                elapsed, count, df = time_query(conn, f"{table_name} ({desc})", query)
-                results[table_name] = {"time": elapsed, "count": count, "df": df}
+                elapsed, count, _ = time_query(conn, f"{table_name} ({desc})", query)
+                results[table_name] = {"time": elapsed, "count": count}
         else:
             print(f"\n  {table_name}: NOT FOUND at {table_path}")
 
@@ -126,20 +132,21 @@ def check_silver_layer(conn: duckdb.DuckDBPyConnection, storage_root: Path):
             if count_only:
                 # For large tables, just count - don't load into memory
                 query = f"SELECT COUNT(*) as cnt FROM delta_scan('{full_path}')"
-                elapsed, _, df = time_query(conn, f"{table_path} ({desc}) - COUNT ONLY", query)
-                if df is not None:
-                    count = df['cnt'].iloc[0]
+                elapsed, _, result = time_query(conn, f"{table_path} ({desc}) - COUNT ONLY", query)
+                if result is not None:
+                    _, rows = result
+                    count = rows[0][0]  # First row, first column
                     print(f"    Total rows: {count:,}")
-                    results[table_path] = {"time": elapsed, "count": count, "df": None}
+                    results[table_path] = {"time": elapsed, "count": count}
                 else:
-                    results[table_path] = {"time": elapsed, "count": 0, "df": None}
+                    results[table_path] = {"time": elapsed, "count": 0}
             else:
                 query = f"SELECT * FROM delta_scan('{full_path}')"
-                elapsed, count, df = time_query(conn, f"{table_path} ({desc})", query)
-                results[table_path] = {"time": elapsed, "count": count, "df": df}
+                elapsed, count, _ = time_query(conn, f"{table_path} ({desc})", query)
+                results[table_path] = {"time": elapsed, "count": count}
         else:
             print(f"\n  {table_path}: NOT FOUND")
-            results[table_path] = {"time": 0, "count": 0, "df": None}
+            results[table_path] = {"time": 0, "count": 0}
 
     return results
 
@@ -267,9 +274,10 @@ def simulate_full_table_scan(conn: duckdb.DuckDBPyConnection, storage_root: Path
     if prices_path.exists():
         # Just count - don't fetch all data
         query = f"SELECT COUNT(*) as cnt FROM delta_scan('{prices_path}')"
-        elapsed, _, df = time_query(conn, "Stock prices COUNT (no filter)", query)
-        if df is not None:
-            print(f"    Total rows: {df['cnt'].iloc[0]:,}")
+        elapsed, _, result = time_query(conn, "Stock prices COUNT (no filter)", query)
+        if result is not None:
+            _, rows = result
+            print(f"    Total rows: {rows[0][0]:,}")
 
         # Test fetching without limit - this would crash
         print("\n  WARNING: Fetching ALL stock prices without filter/limit...")
