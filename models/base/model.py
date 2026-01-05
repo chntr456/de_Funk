@@ -367,7 +367,6 @@ class BaseModel:
         output_root: Optional[str] = None,
         format: Optional[str] = None,
         mode: str = "overwrite",
-        use_optimized_writer: bool = True,
         partition_by: Optional[Dict[str, List[str]]] = None,
         quiet: bool = False
     ):
@@ -381,7 +380,7 @@ class BaseModel:
             from models.base.model_writer import ModelWriter
             self._model_writer = ModelWriter(self)
         return self._model_writer.write_tables(
-            output_root, format, mode, use_optimized_writer, partition_by, quiet=quiet
+            output_root, format, mode, partition_by, quiet=quiet
         )
 
     # ============================================================
