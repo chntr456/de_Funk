@@ -2,310 +2,383 @@
 """
 Debug script for financial statements notebook.
 
-Simulates loading exhibits to identify join/data issues.
-Uses deltalake for reading delta tables.
+Simulates loading exhibits using DuckDB delta_scan (same as the app).
+Tests actual queries to identify performance bottlenecks.
 """
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 # Setup imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from deltalake import DeltaTable
-import pandas as pd
+import duckdb
 
 
-def read_table(table_path: Path):
-    """Read a delta table using deltalake."""
-    if not table_path.exists():
-        return None
-
-    try:
-        dt = DeltaTable(str(table_path))
-        return dt.to_pandas()
-    except Exception as e:
-        print(f"    Error reading {table_path}: {e}")
-        return None
-
-
-def check_bronze_tables(storage_root: Path):
-    """Check bronze table availability and row counts."""
-    print("\n" + "=" * 60)
-    print("BRONZE LAYER CHECK")
-    print("=" * 60)
-
-    bronze_root = storage_root / "bronze"
-    tables = [
-        "securities_reference",
-        "income_statements",
-        "balance_sheets",
-        "cash_flows",
-        "earnings",
-        "securities_prices_daily",
-    ]
-
-    for table in tables:
-        table_path = bronze_root / table
-        if table_path.exists():
-            try:
-                df = read_table(table_path)
-                if df is not None:
-                    count = len(df)
-                    print(f"  {table}: {count:,} rows")
-                    print(f"    Columns: {list(df.columns)[:8]}...")
-
-                    # Show type distribution for securities_reference
-                    if table == "securities_reference" and "type" in df.columns:
-                        type_counts = df.groupby("type").size()
-                        for type_val, count_val in type_counts.items():
-                            print(f"    type='{type_val}': {count_val:,}")
-            except Exception as e:
-                print(f"  {table}: ERROR - {e}")
-        else:
-            print(f"  {table}: NOT FOUND at {table_path}")
-
-
-def check_dim_company_simulation(storage_root: Path):
-    """Simulate dim_company as defined in graph.yaml."""
-    print("\n" + "=" * 60)
-    print("DIM_COMPANY SIMULATION (from graph.yaml)")
-    print("=" * 60)
-
-    bronze_path = storage_root / "bronze" / "securities_reference"
-
-    if not bronze_path.exists():
-        print("  ERROR: securities_reference not found")
-        return None
-
-    try:
-        df = read_table(bronze_path)
-        if df is None:
-            print("  ERROR: Could not read securities_reference")
-            return None
-
-        print(f"  Source rows: {len(df):,}")
-        print(f"  Columns: {list(df.columns)}")
-
-        # Check what type values exist
-        if "type" in df.columns:
-            print("\n  Type value distribution:")
-            type_counts = df.groupby("type").size()
-            for type_val, count_val in type_counts.items():
-                print(f"    '{type_val}': {count_val:,}")
-
-        # Check is_active values
-        if "is_active" in df.columns:
-            print("\n  is_active distribution:")
-            active_counts = df.groupby("is_active").size()
-            for val, count_val in active_counts.items():
-                print(f"    {val}: {count_val:,}")
-
-        # Apply filters from graph.yaml
-        # Filter: type IN ('Stock', 'Common Stock') AND is_active = true
-        if "type" in df.columns and "is_active" in df.columns:
-            filtered = df[
-                (df["type"].isin(["Stock", "Common Stock"])) &
-                (df["is_active"] == True)
-            ]
-            print(f"\n  After graph.yaml filters: {len(filtered):,}")
-
-            if len(filtered) > 0:
-                print("\n  Sample dim_company rows:")
-                cols = ["ticker", "security_name", "type", "is_active", "cik"]
-                cols = [c for c in cols if c in filtered.columns]
-                print(filtered[cols].head(10).to_string())
-
-            return filtered
-        else:
-            print("  WARNING: Missing 'type' or 'is_active' columns")
-            return df
-
-    except Exception as e:
-        print(f"  ERROR: {e}")
-        import traceback
-        traceback.print_exc()
-        return None
-
-
-def check_fact_tables(storage_root: Path, dim_company_df):
-    """Check fact tables and simulate joins."""
-    print("\n" + "=" * 60)
-    print("FACT TABLE CHECKS")
-    print("=" * 60)
-
-    fact_tables = {
-        "income_statements": "fact_income_statement",
-        "balance_sheets": "fact_balance_sheet",
-        "cash_flows": "fact_cash_flow",
-        "earnings": "fact_earnings",
-    }
-
-    for bronze_name, silver_name in fact_tables.items():
-        print(f"\n  {bronze_name} -> {silver_name}:")
-
-        bronze_path = storage_root / "bronze" / bronze_name
-
-        if not bronze_path.exists():
-            print(f"    NOT FOUND")
-            continue
-
-        try:
-            df = read_table(bronze_path)
-            if df is None:
-                print(f"    ERROR: Could not read table")
-                continue
-
-            print(f"    Raw rows: {len(df):,}")
-            print(f"    Columns: {list(df.columns)[:6]}...")
-
-            # Check ticker distribution
-            if "ticker" in df.columns:
-                distinct_tickers = df["ticker"].nunique()
-                print(f"    Distinct tickers: {distinct_tickers:,}")
-
-                # Show sample tickers
-                sample_tickers = df["ticker"].drop_duplicates().head(5).tolist()
-                print(f"    Sample tickers: {sample_tickers}")
-
-            # Simulate join with dim_company (via ticker)
-            if dim_company_df is not None and "ticker" in df.columns and "ticker" in dim_company_df.columns:
-                # Get lookup tickers
-                lookup_tickers = set(dim_company_df["ticker"].dropna().unique())
-                fact_tickers = set(df["ticker"].dropna().unique())
-
-                matched = lookup_tickers & fact_tickers
-                unmatched = fact_tickers - lookup_tickers
-
-                print(f"    Tickers matching dim_company: {len(matched):,}")
-                print(f"    Tickers NOT in dim_company: {len(unmatched):,}")
-
-                if len(unmatched) > 0 and len(unmatched) <= 10:
-                    print(f"    Unmatched tickers: {list(unmatched)[:10]}")
-
-        except Exception as e:
-            print(f"    ERROR: {e}")
-            import traceback
-            traceback.print_exc()
-
-
-def simulate_notebook_filter(storage_root: Path, ticker: str = "AAPL"):
-    """Simulate applying notebook filter for a specific ticker."""
-    print("\n" + "=" * 60)
-    print(f"NOTEBOOK FILTER SIMULATION (ticker={ticker})")
-    print("=" * 60)
-
-    # Check securities_reference
-    bronze_path = storage_root / "bronze" / "securities_reference"
-    try:
-        df = read_table(bronze_path)
-        if df is not None:
-            ticker_rows = df[df["ticker"] == ticker]
-
-            if len(ticker_rows) > 0:
-                row = ticker_rows.iloc[0]
-                print(f"  Found in securities_reference:")
-                print(f"    ticker: {row.get('ticker')}")
-                print(f"    type: {row.get('type')}")
-                print(f"    is_active: {row.get('is_active')}")
-                print(f"    cik: {row.get('cik')}")
-
-                # Check if it passes the filter
-                passes_filter = (
-                    row.get('type') in ['Stock', 'Common Stock'] and
-                    row.get('is_active') == True
-                )
-                print(f"    Passes dim_company filter: {passes_filter}")
-            else:
-                print(f"  NOT FOUND in securities_reference")
-    except Exception as e:
-        print(f"  ERROR checking securities_reference: {e}")
-
-    # Check fact tables
-    print(f"\n  Fact table rows for {ticker}:")
-    fact_tables = ["income_statements", "balance_sheets", "cash_flows", "earnings"]
-
-    for table in fact_tables:
-        table_path = storage_root / "bronze" / table
-        if table_path.exists():
-            try:
-                df = read_table(table_path)
-                if df is not None:
-                    count = len(df[df["ticker"] == ticker])
-                    print(f"    {table}: {count:,} rows")
-            except Exception as e:
-                print(f"    {table}: ERROR - {e}")
-
-    # Check stock prices
-    prices_path = storage_root / "bronze" / "securities_prices_daily"
-    if prices_path.exists():
-        try:
-            df = read_table(prices_path)
-            if df is not None:
-                count = len(df[df["ticker"] == ticker])
-                print(f"    securities_prices_daily: {count:,} rows")
-        except Exception as e:
-            print(f"    securities_prices_daily: ERROR - {e}")
-
-
-def check_silver_layer(storage_root: Path):
-    """Check silver layer tables."""
-    print("\n" + "=" * 60)
-    print("SILVER LAYER CHECK")
-    print("=" * 60)
-
-    silver_root = storage_root / "silver"
-
-    if not silver_root.exists():
-        print("  Silver layer not found at", silver_root)
-        print("  Run: python -m scripts.build.build_models")
-        return
-
-    for model_dir in sorted(silver_root.iterdir()):
-        if model_dir.is_dir():
-            print(f"\n  {model_dir.name}/")
-            for table_dir in sorted(model_dir.iterdir()):
-                if table_dir.is_dir():
-                    try:
-                        df = read_table(table_dir)
-                        if df is not None:
-                            count = len(df)
-                            print(f"    {table_dir.name}: {count:,} rows")
-                    except Exception as e:
-                        print(f"    {table_dir.name}: ERROR - {e}")
-
-
-def main():
-    print("=" * 60)
-    print("FINANCIAL STATEMENTS NOTEBOOK DEBUG")
-    print("=" * 60)
-
-    # Determine storage root
+def get_storage_root() -> Path:
+    """Get storage root path."""
     storage_root = Path("/shared/storage")
     if not storage_root.exists():
         storage_root = Path(__file__).parent.parent.parent / "storage"
+    return storage_root
 
+
+def setup_duckdb() -> duckdb.DuckDBPyConnection:
+    """Setup DuckDB with delta extension."""
+    conn = duckdb.connect(":memory:")
+    try:
+        conn.execute("INSTALL delta")
+        conn.execute("LOAD delta")
+        print("✓ Delta extension loaded")
+    except Exception as e:
+        print(f"✗ Could not load delta extension: {e}")
+        sys.exit(1)
+    return conn
+
+
+def time_query(conn: duckdb.DuckDBPyConnection, name: str, query: str, show_sample: bool = False) -> tuple:
+    """Execute query and return timing + row count."""
+    print(f"\n  {name}...")
+    start = time.time()
+    try:
+        result = conn.execute(query)
+        df = result.fetchdf()
+        elapsed = time.time() - start
+        row_count = len(df)
+        print(f"    ✓ {row_count:,} rows in {elapsed:.2f}s")
+        if show_sample and row_count > 0:
+            print(f"    Sample columns: {list(df.columns)[:8]}")
+            if row_count <= 10:
+                print(df.to_string(index=False))
+        return elapsed, row_count, df
+    except Exception as e:
+        elapsed = time.time() - start
+        print(f"    ✗ ERROR after {elapsed:.2f}s: {e}")
+        return elapsed, 0, None
+
+
+def check_bronze_layer(conn: duckdb.DuckDBPyConnection, storage_root: Path):
+    """Check bronze tables using delta_scan."""
+    print("\n" + "=" * 70)
+    print("BRONZE LAYER (using delta_scan)")
+    print("=" * 70)
+
+    bronze_root = storage_root / "bronze"
+    tables = [
+        ("securities_reference", "Ticker reference data"),
+        ("income_statements", "Income statement data"),
+        ("balance_sheets", "Balance sheet data"),
+        ("cash_flows", "Cash flow data"),
+        ("earnings", "Earnings data"),
+        ("securities_prices_daily", "Stock prices (large table)"),
+    ]
+
+    results = {}
+    for table_name, desc in tables:
+        table_path = bronze_root / table_name
+        if table_path.exists():
+            query = f"SELECT * FROM delta_scan('{table_path}')"
+            elapsed, count, df = time_query(conn, f"{table_name} ({desc})", query)
+            results[table_name] = {"time": elapsed, "count": count, "df": df}
+        else:
+            print(f"\n  {table_name}: NOT FOUND at {table_path}")
+
+    return results
+
+
+def check_silver_layer(conn: duckdb.DuckDBPyConnection, storage_root: Path):
+    """Check silver layer tables using delta_scan."""
+    print("\n" + "=" * 70)
+    print("SILVER LAYER (using delta_scan)")
+    print("=" * 70)
+
+    silver_root = storage_root / "silver"
+
+    # Check company model tables
+    tables = [
+        ("company/dims/dim_company", "Company dimension"),
+        ("company/facts/fact_income_statement", "Income statements"),
+        ("company/facts/fact_balance_sheet", "Balance sheets"),
+        ("company/facts/fact_cash_flow", "Cash flows"),
+        ("company/facts/fact_earnings", "Earnings"),
+        ("stocks/dims/dim_stock", "Stock dimension"),
+        ("stocks/facts/fact_stock_prices", "Stock prices"),
+    ]
+
+    results = {}
+    for table_path, desc in tables:
+        full_path = silver_root / table_path
+        if full_path.exists():
+            query = f"SELECT * FROM delta_scan('{full_path}')"
+            elapsed, count, df = time_query(conn, f"{table_path} ({desc})", query)
+            results[table_path] = {"time": elapsed, "count": count, "df": df}
+        else:
+            print(f"\n  {table_path}: NOT FOUND")
+            results[table_path] = {"time": 0, "count": 0, "df": None}
+
+    return results
+
+
+def simulate_notebook_filter(conn: duckdb.DuckDBPyConnection, storage_root: Path, ticker: str = "AAPL"):
+    """Simulate notebook filter for a specific ticker (what the app actually does)."""
+    print("\n" + "=" * 70)
+    print(f"NOTEBOOK SIMULATION (ticker={ticker}, report_type=annual)")
+    print("=" * 70)
+
+    silver_root = storage_root / "silver"
+
+    # 1. Filter source for ticker dropdown (dim_company)
+    dim_company_path = silver_root / "company/dims/dim_company"
+    if dim_company_path.exists():
+        # This is what the filter dropdown does - gets all ticker options
+        query = f"""
+            SELECT DISTINCT ticker
+            FROM delta_scan('{dim_company_path}')
+            ORDER BY ticker
+        """
+        elapsed, count, _ = time_query(conn, "Filter dropdown: Get all tickers from dim_company", query)
+
+    # 2. Simulate each exhibit query with filter applied
+
+    # Income Statement exhibit
+    income_path = silver_root / "company/facts/fact_income_statement"
+    if income_path.exists():
+        query = f"""
+            SELECT
+                fiscal_date_ending,
+                total_revenue,
+                gross_profit,
+                operating_income,
+                net_income,
+                report_type
+            FROM delta_scan('{income_path}')
+            WHERE ticker = '{ticker}'
+              AND report_type = 'annual'
+            ORDER BY fiscal_date_ending DESC
+        """
+        elapsed, count, df = time_query(conn, "Income Statement exhibit", query, show_sample=True)
+
+    # Balance Sheet exhibit
+    balance_path = silver_root / "company/facts/fact_balance_sheet"
+    if balance_path.exists():
+        query = f"""
+            SELECT
+                fiscal_date_ending,
+                total_assets,
+                total_liabilities,
+                total_shareholder_equity,
+                report_type
+            FROM delta_scan('{balance_path}')
+            WHERE ticker = '{ticker}'
+              AND report_type = 'annual'
+            ORDER BY fiscal_date_ending DESC
+        """
+        elapsed, count, df = time_query(conn, "Balance Sheet exhibit", query, show_sample=True)
+
+    # Cash Flow exhibit
+    cashflow_path = silver_root / "company/facts/fact_cash_flow"
+    if cashflow_path.exists():
+        query = f"""
+            SELECT
+                fiscal_date_ending,
+                operating_cashflow,
+                cashflow_from_investment,
+                cashflow_from_financing,
+                free_cash_flow,
+                report_type
+            FROM delta_scan('{cashflow_path}')
+            WHERE ticker = '{ticker}'
+              AND report_type = 'annual'
+            ORDER BY fiscal_date_ending DESC
+        """
+        elapsed, count, df = time_query(conn, "Cash Flow exhibit", query, show_sample=True)
+
+    # Earnings exhibit
+    earnings_path = silver_root / "company/facts/fact_earnings"
+    if earnings_path.exists():
+        query = f"""
+            SELECT
+                fiscal_date_ending,
+                reported_eps,
+                estimated_eps,
+                surprise_percentage,
+                report_type
+            FROM delta_scan('{earnings_path}')
+            WHERE ticker = '{ticker}'
+              AND report_type = 'annual'
+            ORDER BY fiscal_date_ending DESC
+        """
+        elapsed, count, df = time_query(conn, "Earnings exhibit", query, show_sample=True)
+
+    # Stock Prices exhibit (with LIMIT since notebook has limit: 1000)
+    prices_path = silver_root / "stocks/facts/fact_stock_prices"
+    if prices_path.exists():
+        query = f"""
+            SELECT
+                trade_date,
+                open,
+                high,
+                low,
+                close,
+                volume
+            FROM delta_scan('{prices_path}')
+            WHERE ticker = '{ticker}'
+            ORDER BY trade_date DESC
+            LIMIT 1000
+        """
+        elapsed, count, df = time_query(conn, "Stock Prices exhibit (LIMIT 1000)", query)
+
+
+def simulate_full_table_scan(conn: duckdb.DuckDBPyConnection, storage_root: Path):
+    """Simulate what happens if NO filter is applied (potential crash scenario)."""
+    print("\n" + "=" * 70)
+    print("FULL TABLE SCAN TEST (no filter - potential crash scenario)")
+    print("=" * 70)
+
+    silver_root = storage_root / "silver"
+
+    # Test: What if the filter isn't applied?
+    prices_path = silver_root / "stocks/facts/fact_stock_prices"
+    if prices_path.exists():
+        # Just count - don't fetch all data
+        query = f"SELECT COUNT(*) as cnt FROM delta_scan('{prices_path}')"
+        elapsed, _, df = time_query(conn, "Stock prices COUNT (no filter)", query)
+        if df is not None:
+            print(f"    Total rows: {df['cnt'].iloc[0]:,}")
+
+        # Test fetching without limit - this would crash
+        print("\n  WARNING: Fetching ALL stock prices without filter/limit...")
+        print("  (This simulates what might happen if filter fails)")
+        query = f"""
+            SELECT ticker, trade_date, close
+            FROM delta_scan('{prices_path}')
+            LIMIT 10
+        """
+        time_query(conn, "Sample of unfiltered data (LIMIT 10)", query, show_sample=True)
+
+
+def check_schema_mismatch(conn: duckdb.DuckDBPyConnection, storage_root: Path):
+    """Check if notebook expects columns that don't exist."""
+    print("\n" + "=" * 70)
+    print("SCHEMA CHECK (columns required by notebook)")
+    print("=" * 70)
+
+    silver_root = storage_root / "silver"
+
+    # Columns required by notebook exhibits
+    required = {
+        "company/facts/fact_income_statement": [
+            "fiscal_date_ending", "total_revenue", "gross_profit",
+            "operating_income", "net_income", "cost_of_revenue", "operating_expenses"
+        ],
+        "company/facts/fact_balance_sheet": [
+            "fiscal_date_ending", "total_assets", "total_liabilities",
+            "total_shareholder_equity", "cash_and_equivalents", "total_current_assets",
+            "total_current_liabilities", "long_term_debt"
+        ],
+        "company/facts/fact_cash_flow": [
+            "fiscal_date_ending", "operating_cashflow", "cashflow_from_investment",
+            "cashflow_from_financing", "free_cash_flow", "capital_expenditures",
+            "dividend_payout"
+        ],
+        "company/facts/fact_earnings": [
+            "fiscal_date_ending", "reported_eps", "estimated_eps",
+            "surprise", "surprise_percentage"
+        ],
+    }
+
+    for table_path, columns in required.items():
+        full_path = silver_root / table_path
+        print(f"\n  {table_path}:")
+
+        if not full_path.exists():
+            print(f"    ✗ TABLE NOT FOUND")
+            continue
+
+        try:
+            # Get actual columns
+            query = f"SELECT * FROM delta_scan('{full_path}') LIMIT 0"
+            result = conn.execute(query)
+            actual_columns = [desc[0] for desc in result.description]
+
+            # Check each required column
+            missing = []
+            present = []
+            for col in columns:
+                if col in actual_columns:
+                    present.append(col)
+                else:
+                    missing.append(col)
+
+            print(f"    ✓ Present: {len(present)}/{len(columns)}")
+            if missing:
+                print(f"    ✗ MISSING: {missing}")
+
+        except Exception as e:
+            print(f"    ✗ ERROR: {e}")
+
+
+def main():
+    print("=" * 70)
+    print("FINANCIAL STATEMENTS NOTEBOOK DEBUG (DuckDB delta_scan)")
+    print("=" * 70)
+
+    storage_root = get_storage_root()
     print(f"Storage root: {storage_root}")
 
     if not storage_root.exists():
         print(f"ERROR: Storage root not found at {storage_root}")
         sys.exit(1)
 
-    # Run checks
-    check_bronze_tables(storage_root)
+    conn = setup_duckdb()
 
-    dim_company = check_dim_company_simulation(storage_root)
+    try:
+        # Check bronze layer
+        bronze_results = check_bronze_layer(conn, storage_root)
 
-    check_fact_tables(storage_root, dim_company)
+        # Check silver layer
+        silver_results = check_silver_layer(conn, storage_root)
 
-    simulate_notebook_filter(storage_root, "AAPL")
+        # Check schema for missing columns
+        check_schema_mismatch(conn, storage_root)
 
-    check_silver_layer(storage_root)
+        # Simulate notebook with filter
+        simulate_notebook_filter(conn, storage_root, "AAPL")
 
-    print("\n" + "=" * 60)
+        # Test full table scan scenario
+        simulate_full_table_scan(conn, storage_root)
+
+        # Summary
+        print("\n" + "=" * 70)
+        print("SUMMARY")
+        print("=" * 70)
+
+        # Check if silver layer is populated
+        silver_ok = all(
+            silver_results.get(t, {}).get("count", 0) > 0
+            for t in [
+                "company/dims/dim_company",
+                "company/facts/fact_income_statement",
+                "company/facts/fact_balance_sheet",
+                "company/facts/fact_cash_flow",
+                "company/facts/fact_earnings",
+            ]
+        )
+
+        if silver_ok:
+            print("✓ Silver layer appears populated")
+        else:
+            print("✗ Silver layer has missing/empty tables!")
+            print("  Run: python -m scripts.build.build_models --models company stocks")
+
+    finally:
+        conn.close()
+
+    print("\n" + "=" * 70)
     print("DEBUG COMPLETE")
-    print("=" * 60)
+    print("=" * 70)
 
 
 if __name__ == "__main__":
