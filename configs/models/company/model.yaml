@@ -18,7 +18,7 @@ components:
 # Storage configuration
 storage:
   root: storage/silver/company
-  format: parquet
+  format: delta
 
 # Build configuration
 build:

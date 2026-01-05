@@ -20,7 +20,7 @@ components:
 # Storage configuration
 storage:
   root: storage/silver/city_finance
-  format: parquet
+  format: delta
 
 # Build configuration
 build:

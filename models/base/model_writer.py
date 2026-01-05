@@ -92,9 +92,14 @@ class ModelWriter:
             )
         """
         self._quiet = quiet
-        # Get format from storage config or use default
+        # Get format from model's YAML config first, then global storage config, then default
         if format is None:
-            format = self.storage_cfg.get("defaults", {}).get("format", DEFAULT_FORMAT)
+            # Priority: model.yaml storage.format > storage.json defaults.format > DEFAULT_FORMAT
+            format = (
+                self.model.model_cfg.get("storage", {}).get("format")
+                or self.storage_cfg.get("defaults", {}).get("format")
+                or DEFAULT_FORMAT
+            )
         # Ensure model is built
         self.model.ensure_built()
 

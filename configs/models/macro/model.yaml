@@ -19,7 +19,7 @@ components:
 # Storage configuration
 storage:
   root: storage/silver/macro
-  format: parquet
+  format: delta
 
 # Build configuration
 build:

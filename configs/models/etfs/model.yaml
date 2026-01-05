@@ -21,7 +21,7 @@ components:
 # Storage configuration
 storage:
   root: storage/silver/etfs
-  format: parquet
+  format: delta
 
 # Build configuration
 build:

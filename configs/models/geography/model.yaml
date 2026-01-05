@@ -18,7 +18,7 @@ components:
 # Storage configuration
 storage:
   root: storage/silver/geography
-  format: parquet
+  format: delta
 
 # Build configuration
 build:
