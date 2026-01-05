@@ -840,20 +840,30 @@ class AutoJoinHandler:
         temp_tables: Dict[str, str],
         required_columns: List[str]
     ) -> List[str]:
-        """Build qualified column names for SELECT clause."""
+        """Build qualified column names for SELECT clause.
+
+        Uses DESCRIBE on registered temp tables to find column locations.
+        Does NOT call model.get_table() which would trigger Bronze reads.
+        """
+        # Build column index from temp tables using DESCRIBE (no Bronze reads!)
+        table_columns = {}
+        for table_name, temp_name in temp_tables.items():
+            try:
+                cols = self.connection.conn.execute(f"DESCRIBE {temp_name}").fetchall()
+                table_columns[table_name] = {c[0] for c in cols}
+            except Exception:
+                table_columns[table_name] = set()
+
         select_cols = []
         for col in required_columns:
             found = False
             for table_name in table_sequence:
-                try:
-                    df = model.get_table(table_name)
-                    if col in df.columns:
-                        select_cols.append(f"{temp_tables[table_name]}.{col}")
-                        found = True
-                        break
-                except:
-                    continue
+                if col in table_columns.get(table_name, set()):
+                    select_cols.append(f"{temp_tables[table_name]}.{col}")
+                    found = True
+                    break
             if not found:
+                # Column not found in any table - add unqualified (will error if missing)
                 select_cols.append(col)
         return select_cols
 
