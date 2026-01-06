@@ -302,21 +302,15 @@ spark = get_spark(app_name='test_pipeline_ingest')
 # Create provider
 provider = create_alpha_vantage_provider(av_config, spark=spark)
 
-# Get tickers - try market cap ranking first, fall back to ticker_seed
-storage_cfg = {
-    'roots': {'bronze': f'{storage_path}/bronze', 'silver': f'{storage_path}/silver'},
-    'tables': {
-        'ticker_seed': {'rel': 'ticker_seed'},
-        'securities_reference': {'rel': 'securities_reference', 'partitions': ['asset_type']},
-        'securities_prices_daily': {'rel': 'securities_prices_daily', 'partitions': ['year', 'month']},
-        'company_reference': {'rel': 'company_reference'},
-        # Financial statement tables (used when --with-financials)
-        'income_statements': {'rel': 'income_statements', 'partitions': ['ticker']},
-        'balance_sheets': {'rel': 'balance_sheets', 'partitions': ['ticker']},
-        'cash_flows': {'rel': 'cash_flows', 'partitions': ['ticker']},
-        'earnings': {'rel': 'earnings', 'partitions': ['ticker']},
-    }
-}
+# Load storage config from storage.json (single source of truth for partitions, keys, etc.)
+with open('$REPO_ROOT/configs/storage.json') as f:
+    storage_cfg = json.load(f)
+
+# Override roots to use storage_path from CLI (replace 'storage/' prefix with custom path)
+storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in storage_cfg['roots'].items()}
+# Add ticker_seed table if not present (used for seeding)
+if 'ticker_seed' not in storage_cfg['tables']:
+    storage_cfg['tables']['ticker_seed'] = {'root': 'bronze', 'rel': 'ticker_seed', 'partitions': ['asset_type']}
 
 # Try to get tickers by market cap from securities_reference
 tickers = provider.get_tickers_by_market_cap(max_tickers=max_tickers, storage_cfg=storage_cfg)

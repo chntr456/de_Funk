@@ -122,6 +122,18 @@ class BronzeSink:
             # Table exists - filter out dates that already exist
             spark = df.sparkSession
 
+            # Read existing schema and align new data to match types
+            existing_df = spark.read.format("delta").load(str(base_path))
+            existing_schema = {f.name: f.dataType for f in existing_df.schema.fields}
+
+            # Cast new df columns to match existing schema types to avoid merge conflicts
+            for field in df.schema.fields:
+                if field.name in existing_schema:
+                    existing_type = existing_schema[field.name]
+                    if field.dataType != existing_type:
+                        logger.info(f"Casting {field.name} from {field.dataType} to {existing_type}")
+                        df = df.withColumn(field.name, col(field.name).cast(existing_type))
+
             # Get date range of incoming data
             date_stats = df.agg(
                 spark_min(col(date_column)).alias("min_date"),
@@ -133,8 +145,7 @@ class BronzeSink:
                 return str(base_path)
 
             # Read existing data for this date range to find what's new
-            existing_df = (spark.read.format("delta")
-                          .load(str(base_path))
+            existing_for_dedup = (existing_df
                           .filter(
                               (col(date_column) >= date_stats["min_date"]) &
                               (col(date_column) <= date_stats["max_date"])
@@ -143,7 +154,7 @@ class BronzeSink:
                           .distinct())
 
             # Anti-join to find only new records
-            new_records = df.join(existing_df, on=key_columns, how="left_anti")
+            new_records = df.join(existing_for_dedup, on=key_columns, how="left_anti")
 
             new_count = new_records.count()
             if new_count == 0:
