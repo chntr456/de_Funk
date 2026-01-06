@@ -1109,9 +1109,11 @@ if __name__ == "__main__":
 
 ## Part 8: Step-by-Step Implementation Tasks
 
-### Phase 1: Cleanup (Days 1-2)
+### Phase 1: Cleanup (Days 1-2) ✅ COMPLETE
 
 **Goal:** Remove deprecated files, fix naming inconsistencies, ensure consistent utilization of existing tools
+
+**Status:** ✅ Completed December 2025
 
 #### 1A: File Cleanup (Day 1)
 
@@ -1141,9 +1143,11 @@ Existing tools that MUST be consistently used - not recreated or bypassed:
 
 This audit informs Phase 2 - we need to know the full scope of inconsistent usage before refactoring.
 
-### Phase 2: Backend Abstraction via UniversalSession (Days 3-5)
+### Phase 2: Backend Abstraction via UniversalSession (Days 3-5) ✅ COMPLETE
 
 **Goal:** Models become backend-agnostic by using UniversalSession for all data operations
+
+**Status:** ✅ Completed December 2025
 
 **Principle:** Models should NEVER know or care what backend is running. All backend-specific logic lives in UniversalSession.
 
@@ -1386,9 +1390,11 @@ This means:
 - **Orchestration workers** create ONE session at startup, reuse for all tasks
 - **Interactive queries** can create sessions as needed (DuckDB is cheap)
 
-### Phase 3: Configuration Standardization (Days 5-7)
+### Phase 3: Configuration Standardization (Days 5-7) ✅ COMPLETE
 
 **Goal:** All configs use v2.0 modular YAML pattern + complete exhibit presets + context-aware model graph
+
+**Status:** ✅ Completed December 2025
 
 | # | Task | Files Affected |
 |---|------|----------------|
@@ -1729,15 +1735,26 @@ supplemental_crosswalks:
       overlap_pct: double
 ```
 
-### Phase 5: Ingestor & Orchestrator Standardization (Days 12-15)
+### Phase 5: Ingestor & Orchestrator Standardization (Days 12-15) ✅ COMPLETE
 
 **Goal:** Standardize ingestor interfaces and create unified Orchestrator class
 
+**Status:** ✅ Completed December 2025 - January 2026 (Implemented as Spark Cluster)
+
+**Actual Implementation:** Instead of the class-based Orchestrator pattern below, a pure Spark cluster approach was implemented:
+- `scripts/spark-cluster/` - Full cluster setup scripts (init, setup-head, setup-worker, etc.)
+- `run_config.json` - Profile-based configuration (quick_test, dev, production)
+- `test_full_pipeline_spark.sh` - Main pipeline execution script
+- NFS shared storage at `/shared/storage` for Bronze/Silver layers
+
+See **Appendix B: Phase 5: Spark Cluster Implementation** for full details.
+
+**Original Design** (partially implemented - class patterns may be added later):
 This phase creates a clean abstraction layer for data ingestion:
 - Standardizes ingestor interface via BaseIngestor class
 - Creates Orchestrator class to coordinate ingestors and model builds
 - Simplifies scripts to thin wrappers around the Orchestrator
-- Enables future queue-based distribution (Phase 6)
+- Enables future queue-based distribution (Phase 6 → now Phase 7 Airflow)
 
 | # | Task | Files Affected |
 |---|------|----------------|
@@ -2067,9 +2084,24 @@ def main():
 
 ---
 
-### Phase 6: Distributed Queue (Days 16-20)
+### Phase 6: New Endpoints & Model Builds (NEXT STEPS)
 
-**Goal:** Queue-based distributed processing for ingestion and model building across a cluster
+**Goal:** Add new Alpha Vantage endpoints and complete remaining model implementations
+
+**Status:** 🔜 Next milestone - See Appendix B for detailed task list
+
+This phase expands the data layer before implementing Airflow orchestration:
+- Add 7 new Alpha Vantage endpoints (OVERVIEW, EARNINGS, financial statements, etc.)
+- Complete skeleton models (options, etf, futures)
+- Provides realistic orchestration complexity for Phase 7 Airflow
+
+---
+
+### Original Phase 6 Design: Distributed Queue (Superseded)
+
+> **Note:** This Delta Lake queue design has been superseded. With the Spark cluster now operational (Phase 5), we will implement **Apache Airflow** in Phase 7 instead of a custom queue system. The content below is preserved for reference.
+
+**Original Goal:** Queue-based distributed processing for ingestion and model building across a cluster
 
 This phase adds production-grade distributed execution:
 - Queues all ingestion and model build tasks via Delta Lake
@@ -4164,32 +4196,36 @@ All commits during implementation will follow this naming convention:
 ```
 Phase N: [Phase Name] - [Brief Description]
 
-Example commits (Foundation phases):
-- "Phase 1: Cleanup - Delete deprecated v1.x YAML files"
-- "Phase 1: Cleanup - Rename etfs to etf directory"
-- "Phase 1: Cleanup - Audit tool utilization and add deprecation warnings"
-- "Phase 2: Backend Abstraction - Add query helper methods to UniversalSession"
-- "Phase 2: Backend Abstraction - Refactor StocksModel to use session methods"
-- "Phase 3: Config Standardization - Migrate core.yaml to modular structure"
-- "Phase 4: Core Geography - Create US geography model schema"
-- "Phase 5: Ingestor Standardization - Create BaseIngestor class"
-- "Phase 5: Orchestrator - Create Orchestrator class for coordinated builds"
-- "Phase 6: Distributed Queue - Add Delta Lake queue backend"
-- "Phase 7: Bronze Expansion - Test Alpha Vantage ingestor via orchestration"
+Example commits (Foundation phases - 1-3 ✅, 5 ✅ COMPLETE):
+- "Phase 1: Cleanup - Delete deprecated v1.x YAML files" ✅
+- "Phase 1: Cleanup - Rename etfs to etf directory" ✅
+- "Phase 2: Backend Abstraction - Add query helper methods to UniversalSession" ✅
+- "Phase 2: Backend Abstraction - Refactor StocksModel to use session methods" ✅
+- "Phase 3: Config Standardization - Migrate core.yaml to modular structure" ✅
+- "Phase 5: Spark Cluster - Implement cluster setup and pipeline scripts" ✅
+- "Phase 5: Spark Cluster - Add profile-based run_config.json" ✅
 
-Example commits (Enhancement phases):
-- "Phase 8: Economic Series Enhancement - Create FRED provider"
-- "Phase 9: Chart of Accounts Enhancement - Create _base/financial templates"
-- "Phase 10: City Services Enhancement - Add 311/911 data endpoints"
+Example commits (Foundation phases - NEXT STEPS):
+- "Phase 6: Endpoints - Add OVERVIEW endpoint to alpha_vantage_endpoints.json"
+- "Phase 6: Endpoints - Create IncomeStatementFacet for financial statements"
+- "Phase 6: Models - Complete OptionsModel with Black-Scholes implementation"
+- "Phase 7: Airflow - Create bronze_daily_ingest DAG"
+- "Phase 7: Airflow - Set up Airflow web UI on head node"
+- "Phase 8: Bronze Expansion - Validate all ingestors via Airflow"
 
-Example commits (Exhibits phase):
-- "Phase 15: Exhibits - Create ExhibitConfigLoader for preset loading"
-- "Phase 15: Exhibits - Wire line_chart.yaml into renderer"
+Example commits (Enhancement phases 9-15):
+- "Phase 9: Economic Series Enhancement - Create FRED provider"
+- "Phase 10: Chart of Accounts Enhancement - Create _base/financial templates"
+- "Phase 11: City Services Enhancement - Add 311/911 data endpoints"
 
-Example commits (Cleanup phase):
-- "Phase 16: Final Cleanup - Remove _backend from all models"
-- "Phase 16: Final Cleanup - Optimize rolling measures with Window Functions"
-- "Phase 16: Final Cleanup - Run integration tests across both backends"
+Example commits (Exhibits phase 16):
+- "Phase 16: Exhibits - Create ExhibitConfigLoader for preset loading"
+- "Phase 16: Exhibits - Wire line_chart.yaml into renderer"
+
+Example commits (Cleanup phase 17):
+- "Phase 17: Final Cleanup - Remove _backend from all models"
+- "Phase 17: Final Cleanup - Optimize rolling measures with Window Functions"
+- "Phase 17: Final Cleanup - Run integration tests across both backends"
 - "Phase 16: Final Cleanup - Remove deprecated scripts from Phase 1"
 ```
 
