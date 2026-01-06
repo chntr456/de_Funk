@@ -2,7 +2,7 @@
 
 **Status**: Draft
 **Created**: 2025-12-15
-**Updated**: 2025-12-15
+**Updated**: 2026-01-06
 **Author**: Claude (AI Assistant)
 **Priority**: High
 
@@ -4320,6 +4320,54 @@ All session abstraction verified working. Models use UniversalSession without di
 - [ ] Add click interactivity to model nodes
 - [ ] Create model profiling panel when node is clicked (show schema, measures, row counts)
 - [ ] Add edge click to show full join definition
+
+---
+
+### Session: DuckDB Query Path Fixes (January 2026)
+
+✅ **Completed 2026-01-06**
+
+**Problem**: Financial statements notebook was crashing/freezing when displaying stock prices exhibit (22M+ rows). Root causes identified:
+
+1. **Bronze reads during queries** - Session was falling back to `model.get_table()` which triggered `ensure_built()` → graph_builder → Bronze Delta reads
+2. **fetchdf() loading all data** - DuckDB queries were calling `.fetchdf()` which materialized entire result sets into pandas memory
+3. **Stale DuckDB views** - Views pointed to wrong storage paths and weren't auto-refreshed
+
+**Files Modified:**
+
+| File | Changes |
+|------|---------|
+| `models/api/auto_join.py` | Changed `fetchdf()` → `conn.sql()` for lazy evaluation; Removed Bronze fallbacks; Fixed `_build_select_cols()` to use DESCRIBE instead of `model.get_table()` |
+| `models/api/session.py` | Removed Strategy 4 Bronze fallback; Fixed materialized view lookup to use session method |
+| `core/duckdb_connection.py` | Added comprehensive view validation (dims AND facts); Added auto-refresh with correct storage paths |
+| `scripts/setup/setup_duckdb_views.py` | Now reads `storage_path` from `run_config.json`; Added `--storage-path` CLI argument |
+
+**Key Changes:**
+
+1. **`_execute_duckdb_joins_via_views()`**: Returns lazy DuckDB relation via `conn.sql()` instead of `result.fetchdf()`
+2. **`_execute_join_with_temp_tables()`**: Same lazy evaluation fix; Raises `RuntimeError` instead of Bronze fallback
+3. **`_build_select_cols()`**: Uses `DESCRIBE {temp_table}` on already-registered temp tables instead of `model.get_table()`
+4. **`_get_table_from_view_or_build()`**: Strategy 4 now raises `ValueError` with helpful error message instead of fallback
+5. **View validation**: Checks BOTH dimensions AND facts (e.g., `dim_stock` AND `fact_stock_prices`)
+
+**Query Path After Fixes:**
+```
+Query Request
+  → Check DuckDB View
+    → If valid: Return lazy DuckDB relation
+    → If invalid: Auto-refresh views, retry
+  → If no view: Read from Silver Delta files directly
+    → Use delta_scan('/shared/storage/silver/...')
+  → If no Silver: Raise ValueError with build instructions
+  → NEVER: Read from Bronze (removed entirely)
+```
+
+**Commits:**
+- `fix: Prevent memory crash and Bronze reads in auto-join`
+- `fix: Auto-refresh stale DuckDB views on app load`
+- `fix: Use DESCRIBE instead of model.get_table() in _build_select_cols`
+- `fix: Remove Bronze fallbacks and improve view validation`
+- `refactor: Remove all Bronze fallbacks from query paths`
 
 ---
 
