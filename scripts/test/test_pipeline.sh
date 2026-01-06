@@ -209,7 +209,7 @@ logger.info('Testing task: bronze ingestion')
 
 # Import components
 from datapipelines.providers.alpha_vantage.provider import create_alpha_vantage_provider
-from datapipelines.base.ingestor_engine import IngestorEngine, create_engine
+from datapipelines.base.ingestor_engine import IngestorEngine
 from datapipelines.base.provider import DataType
 from orchestration.common.spark_session import get_spark
 import json
@@ -274,17 +274,13 @@ if not tickers:
 logger.info(f'Found {len(tickers)} tickers for ingestion')
 
 # Create engine and run
-engine = create_engine(
-    provider=provider,
-    storage_cfg=storage_cfg,
-    spark=spark
-)
+engine = IngestorEngine(provider, storage_cfg)
 
 # Ingest prices and reference data
 data_types = [DataType.PRICES, DataType.REFERENCE]
 results = engine.run(tickers, data_types)
 
-logger.info(f'Ingestion complete. Success: {results.success_count}, Failed: {results.failure_count}')
+logger.info(f'Ingestion complete. Completed: {results.completed_tickers}, Errors: {results.total_errors}')
 spark.stop()
 "
 
