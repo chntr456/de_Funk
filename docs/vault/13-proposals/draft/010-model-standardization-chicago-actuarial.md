@@ -1,6 +1,6 @@
 # Proposal 010: Model Standardization & Chicago Economic Analysis
 
-**Status**: In Progress (Foundation 4/7 Complete)
+**Status**: In Progress (Foundation 4/8 Complete)
 **Created**: 2025-12-15
 **Updated**: 2026-01-06
 **Author**: Claude (AI Assistant)
@@ -12,9 +12,10 @@
 - ✅ Phase 3: Config Standardization - Complete
 - ⏸️ Phase 4: Core Geography - Pending
 - ✅ Phase 5: Spark Cluster - Complete
-- 🔜 **Phase 6: New Endpoints & Model Builds - NEXT STEPS**
-- ⏸️ Phase 7: Airflow Orchestration - After Phase 6
-- ⏸️ Phases 8-17: Pending
+- 🔜 **Phase 6: Bronze Ingestion - NEXT STEPS** (endpoints, facets, data collection)
+- ⏸️ Phase 7: Silver Model Builds - After Phase 6 (use Bronze data)
+- ⏸️ Phase 8: Airflow Orchestration - After Phase 7
+- ⏸️ Phases 9-17: Enhancement & Cleanup
 
 ---
 
@@ -2084,54 +2085,239 @@ def main():
 
 ---
 
-### Phase 6: New Endpoints & Model Builds (NEXT STEPS)
+### Phase 6: Bronze Ingestion - New Endpoints & Data Collection (NEXT STEPS)
 
-**Goal:** Add new Alpha Vantage endpoints and complete remaining model implementations
+**Goal:** Expand Bronze layer with all Alpha Vantage endpoints, creating facets and running ingestion scripts
 
-**Status:** 🔜 Next milestone - See Appendix B for detailed task list
+**Status:** 🔜 NEXT STEPS
 
-This phase expands the data layer before implementing Airflow orchestration:
-- Add 7 new Alpha Vantage endpoints (OVERVIEW, EARNINGS, financial statements, etc.)
-- Complete skeleton models (options, etf, futures)
-- Provides realistic orchestration complexity for Phase 7 Airflow
+This phase focuses on getting data INTO Bronze. Each endpoint needs a facet (schema transformation) and ingestion script execution.
+
+#### Available Alpha Vantage Endpoints
+
+| Endpoint | API Function | Bronze Table | Facet Status | Priority |
+|----------|--------------|--------------|--------------|----------|
+| `listing_status` | `LISTING_STATUS` | `securities_reference` | ✅ `securities_reference_facet.py` | Done |
+| `time_series_daily` | `TIME_SERIES_DAILY` | `securities_prices_daily` | ✅ `securities_prices_facet.py` | Done |
+| `company_overview` | `OVERVIEW` | `company_overview` | ✅ `company_reference_facet.py` | Done |
+| `income_statement` | `INCOME_STATEMENT` | `income_statements` | ✅ `income_statement_facet.py` | High |
+| `balance_sheet` | `BALANCE_SHEET` | `balance_sheets` | ✅ `balance_sheet_facet.py` | High |
+| `cash_flow` | `CASH_FLOW` | `cash_flows` | ✅ `cash_flow_facet.py` | High |
+| `earnings` | `EARNINGS` | `earnings` | ✅ `earnings_facet.py` | High |
+| `historical_options` | `HISTORICAL_OPTIONS` | `options_history` | ✅ `historical_options_facet.py` | Medium |
+| `etf_profile` | `ETF_PROFILE` | `etf_profiles` | ❌ Need to create | Medium |
+| `earnings_calendar` | `EARNINGS_CALENDAR` | `earnings_calendar` | ❌ Need to create | Low |
+| `top_gainers_losers` | `TOP_GAINERS_LOSERS` | `market_movers` | ❌ Need to create | Low |
+| `technical_sma` | `SMA` | `technical_indicators` | ❌ Need to create | Low |
+| `technical_rsi` | `RSI` | `technical_indicators` | ❌ Need to create | Low |
+| `technical_macd` | `MACD` | `technical_indicators` | ❌ Need to create | Low |
+
+#### Phase 6 Todo List
+
+**6.1 Verify Existing Facets & Ingestion**
+- [ ] Test `securities_reference` ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints listing_status`
+- [ ] Test `securities_prices_daily` ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints time_series_daily --max-tickers 10`
+- [ ] Test `company_overview` ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints company_overview --max-tickers 10`
+- [ ] Verify Bronze tables exist at `/shared/storage/bronze/alpha_vantage/`
+
+**6.2 Financial Statements Ingestion (High Priority)**
+- [ ] Test `income_statement` facet with sample ticker
+- [ ] Test `balance_sheet` facet with sample ticker
+- [ ] Test `cash_flow` facet with sample ticker
+- [ ] Test `earnings` facet with sample ticker
+- [ ] Run full ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints income_statement,balance_sheet,cash_flow,earnings --max-tickers 50`
+- [ ] Verify Bronze tables: `income_statements`, `balance_sheets`, `cash_flows`, `earnings`
+
+**6.3 Options Data Ingestion (Medium Priority)**
+- [ ] Test `historical_options` facet with sample ticker (e.g., AAPL)
+- [ ] Run options ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints historical_options --max-tickers 20`
+- [ ] Verify Bronze table: `options_history`
+
+**6.4 Create Missing Facets (Medium Priority)**
+- [ ] Create `etf_profile_facet.py` for ETF holdings and metadata
+- [ ] Add `etf_profile` endpoint to ingestor
+- [ ] Test with ETF tickers (SPY, QQQ, IWM)
+- [ ] Run ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints etf_profile --tickers SPY,QQQ,IWM`
+
+**6.5 Create Technical Indicators Facet (Low Priority)**
+- [ ] Create `technical_indicators_facet.py` for SMA, RSI, MACD
+- [ ] Schema: ticker, date, indicator_type, value, params
+- [ ] Test with sample ticker
+- [ ] Run ingestion for technical indicators
+
+**6.6 Bronze Validation**
+- [ ] Run `scripts/validate_bronze.py` on all new tables
+- [ ] Document row counts and date ranges
+- [ ] Fix any schema or data quality issues
+
+#### Files to Create/Modify
+
+| File | Action | Description |
+|------|--------|-------------|
+| `datapipelines/providers/alpha_vantage/facets/etf_profile_facet.py` | CREATE | ETF holdings and metadata transformation |
+| `datapipelines/providers/alpha_vantage/facets/technical_indicators_facet.py` | CREATE | SMA, RSI, MACD transformations |
+| `datapipelines/providers/alpha_vantage/facets/earnings_calendar_facet.py` | CREATE | Upcoming earnings dates |
+| `scripts/ingest/run_bronze_ingestion.py` | MODIFY | Add support for new endpoints |
+| `configs/storage.json` | MODIFY | Add new Bronze table paths |
 
 ---
 
-### Phase 7: Airflow Orchestration
+### Phase 7: Silver Model Builds
 
-**Goal:** Implement Apache Airflow for production-grade pipeline orchestration
+**Goal:** Build Silver layer models from Bronze data - create dimensional models for analytics
 
 **Status:** Pending - After Phase 6
 
-See **Appendix B: Phase 7: Airflow Orchestration** for detailed DAG definitions and implementation tasks.
+This phase transforms Bronze data into Silver dimensional models. Each model reads from Bronze and writes star/snowflake schemas to Silver.
 
-Key deliverables:
-- Install Airflow on head node
-- Create DAGs: `bronze_daily_ingest`, `bronze_weekly_reference`, `bronze_quarterly_financials`, `silver_model_build`
-- Integrate with existing `run_bronze_ingestion.py` and `build_models.py`
-- Set up monitoring and alerting
+#### Models to Build
+
+| Model | Bronze Sources | Silver Tables | Builder Status |
+|-------|---------------|---------------|----------------|
+| `temporal` | `calendar_seed` | `dim_calendar` | ✅ Working |
+| `company` | `company_overview`, `income_statements`, `balance_sheets`, `cash_flows` | `dim_company`, `fact_financials` | ⚠️ Partial |
+| `stocks` | `securities_reference`, `securities_prices_daily`, `earnings` | `dim_stock`, `fact_stock_prices`, `fact_earnings` | ⚠️ Partial |
+| `options` | `options_history` | `dim_option`, `fact_option_prices` | ❌ Skeleton |
+| `etf` | `etf_profiles`, `securities_prices_daily` | `dim_etf`, `fact_etf_prices`, `fact_holdings` | ❌ Skeleton |
+| `futures` | `securities_prices_daily` | `dim_future`, `fact_future_prices` | ❌ Skeleton |
+
+#### Phase 7 Todo List
+
+**7.1 Verify Existing Model Builds**
+- [ ] Build temporal model: `python -m scripts.build.build_models --models temporal`
+- [ ] Build company model: `python -m scripts.build.build_models --models company`
+- [ ] Build stocks model: `python -m scripts.build.build_models --models stocks`
+- [ ] Verify Silver tables at `/shared/storage/silver/`
+
+**7.2 Complete Company Model**
+- [ ] Update `company/graph.yaml` to include financial statement nodes
+- [ ] Add `fact_income_statement` node from Bronze `income_statements`
+- [ ] Add `fact_balance_sheet` node from Bronze `balance_sheets`
+- [ ] Add `fact_cash_flow` node from Bronze `cash_flows`
+- [ ] Update `CompanyBuilder` to build financial statement facts
+- [ ] Test: `python -m scripts.build.build_models --models company`
+
+**7.3 Complete Stocks Model**
+- [ ] Update `stocks/graph.yaml` to include earnings node
+- [ ] Add `fact_earnings` node from Bronze `earnings`
+- [ ] Update `StocksBuilder` to build earnings facts
+- [ ] Add earnings-related measures to `stocks/measures.yaml`
+- [ ] Test: `python -m scripts.build.build_models --models stocks`
+
+**7.4 Complete Options Model**
+- [ ] Create `options/schema.yaml` with option dimensions (strike, expiry, type)
+- [ ] Create `options/graph.yaml` with nodes from `options_history`
+- [ ] Create `options/measures.yaml` with Greeks, IV measures
+- [ ] Implement `OptionsBuilder` in `models/domain/options/builder.py`
+- [ ] Test: `python -m scripts.build.build_models --models options`
+
+**7.5 Complete ETF Model**
+- [ ] Create `etf/schema.yaml` with ETF dimensions (holdings, sectors)
+- [ ] Create `etf/graph.yaml` with nodes from `etf_profiles`
+- [ ] Create `etf/measures.yaml` with NAV, expense ratio measures
+- [ ] Implement `ETFBuilder` in `models/domain/etf/builder.py`
+- [ ] Test: `python -m scripts.build.build_models --models etf`
+
+**7.6 Complete Futures Model** (Lower Priority)
+- [ ] Create futures schema, graph, measures YAML files
+- [ ] Implement `FuturesBuilder`
+- [ ] Test futures model build
+
+**7.7 Full Pipeline Test**
+- [ ] Run full build: `python -m scripts.build.build_models`
+- [ ] Verify all Silver tables populated
+- [ ] Test queries via DuckDB views
+- [ ] Run `test_full_pipeline_spark.sh --profile dev`
+
+#### Files to Create/Modify
+
+| File | Action | Description |
+|------|--------|-------------|
+| `configs/models/company/graph.yaml` | MODIFY | Add financial statement nodes |
+| `configs/models/stocks/graph.yaml` | MODIFY | Add earnings node |
+| `configs/models/options/schema.yaml` | CREATE | Option dimensions and facts |
+| `configs/models/options/graph.yaml` | CREATE | Option graph structure |
+| `configs/models/options/measures.yaml` | CREATE | Greeks, IV, P&L measures |
+| `models/domain/options/builder.py` | CREATE | Options model builder |
+| `configs/models/etf/schema.yaml` | CREATE | ETF dimensions |
+| `configs/models/etf/graph.yaml` | CREATE | ETF graph structure |
+| `models/domain/etf/builder.py` | CREATE | ETF model builder |
 
 ---
 
-### Phase 8: Bronze Expansion & Ingestion Testing
+### Phase 8: Airflow Orchestration
 
-**Goal:** Test all ingestors through orchestration, expand Bronze layer with complete data
+**Goal:** Implement Apache Airflow to orchestrate Bronze ingestion and Silver model builds
 
-This phase validates the orchestration layer by running all ingestors and ensuring Bronze data is complete and correct. All ingestion testing flows through the new orchestration system.
+**Status:** Pending - After Phase 7
 
-| # | Task | Files Affected |
-|---|------|----------------|
-| 7.1 | Test Alpha Vantage ingestor via orchestration | `scripts/orchestrate.py ingest --provider alpha_vantage` |
-| 7.2 | Test BLS ingestor via orchestration | `scripts/orchestrate.py ingest --provider bls` |
-| 7.3 | Test Chicago ingestor via orchestration | `scripts/orchestrate.py ingest --provider chicago` |
-| 7.4 | Create generalized Bronze validation script | NEW: `scripts/validate_bronze.py` |
-| 7.5 | Run validation on all Bronze tables | Generate validation report |
-| 7.6 | Fix any ingestor issues discovered | Various provider files |
-| 7.7 | Document Bronze table inventory | UPDATE: `docs/bronze-inventory.md` |
+With multiple endpoints and models now available, Airflow provides scheduled, monitored pipeline execution.
 
-**Generalized Bronze Validation Script:**
+#### Proposed DAGs
 
-The validation script (`scripts/validate_bronze.py`) will provide comprehensive data quality metrics for ANY Bronze table:
+| DAG | Schedule | Tasks | Description |
+|-----|----------|-------|-------------|
+| `bronze_daily_ingest` | Daily 6 AM EST | `ingest_prices`, `ingest_quotes` | Daily price updates |
+| `bronze_weekly_reference` | Weekly Sunday | `ingest_listing_status`, `ingest_overview` | Reference data refresh |
+| `bronze_quarterly_financials` | Quarterly | `ingest_income`, `ingest_balance`, `ingest_cashflow`, `ingest_earnings` | Financial statements |
+| `silver_model_build` | After Bronze DAGs | `build_temporal`, `build_company`, `build_stocks`, `build_options`, `build_etf` | Model builds in dependency order |
+| `silver_incremental` | Hourly (market hours) | `incremental_prices` | Near-realtime price updates |
+
+#### Phase 8 Todo List
+
+**8.1 Airflow Setup**
+- [ ] Install Airflow on head node: `pip install apache-airflow`
+- [ ] Initialize Airflow DB: `airflow db init`
+- [ ] Create admin user: `airflow users create --role Admin ...`
+- [ ] Configure `airflow.cfg` for production
+- [ ] Start webserver and scheduler as services
+
+**8.2 Create DAG Directory Structure**
+- [ ] Create `dags/` directory in repo root
+- [ ] Create `dags/bronze/` for ingestion DAGs
+- [ ] Create `dags/silver/` for model build DAGs
+- [ ] Create `dags/utils/` for shared utilities
+
+**8.3 Implement Bronze DAGs**
+- [ ] Create `dags/bronze/daily_ingest.py` - daily price ingestion
+- [ ] Create `dags/bronze/weekly_reference.py` - reference data refresh
+- [ ] Create `dags/bronze/quarterly_financials.py` - financial statements
+- [ ] Test each DAG manually via Airflow UI
+
+**8.4 Implement Silver DAGs**
+- [ ] Create `dags/silver/model_build.py` - orchestrated model builds
+- [ ] Implement dependency chain: temporal → company → stocks → options → etf
+- [ ] Add failure alerting
+- [ ] Test model build DAG
+
+**8.5 Monitoring & Alerting**
+- [ ] Configure email alerts for failures
+- [ ] Set up Airflow web UI access
+- [ ] Create dashboard for pipeline health
+- [ ] Document runbook for common issues
+
+**8.6 Integration Testing**
+- [ ] Run full pipeline via Airflow (Bronze → Silver)
+- [ ] Verify data quality post-pipeline
+- [ ] Test failure recovery
+- [ ] Document operational procedures
+
+#### Files to Create
+
+| File | Description |
+|------|-------------|
+| `dags/bronze/daily_ingest.py` | Daily price ingestion DAG |
+| `dags/bronze/weekly_reference.py` | Weekly reference data DAG |
+| `dags/bronze/quarterly_financials.py` | Quarterly financials DAG |
+| `dags/silver/model_build.py` | Model build orchestration DAG |
+| `dags/utils/spark_utils.py` | Spark session helpers for DAGs |
+| `dags/utils/alerting.py` | Alert utilities |
+| `configs/airflow/airflow.cfg` | Airflow configuration |
+| `scripts/airflow/start_airflow.sh` | Airflow startup script |
+
+---
+
+### Phase 9: Validation & Testing
 
 ```python
 # Usage:
@@ -3532,11 +3718,11 @@ This phase is a catch-all for:
 | Phase 2: Backend Abstraction (UniversalSession) | 3 | High | Foundation | ✅ COMPLETE |
 | Phase 3: Config Standardization | 3 | High | Foundation | ✅ COMPLETE |
 | Phase 4: Core Geography (US-Agnostic) | 5 | High | Foundation | Pending |
-| Phase 5: Ingestor & Orchestrator (Spark Cluster) | 4 | High | Foundation | ✅ COMPLETE |
-| Phase 6: New Endpoints & Model Builds | 5 | High | Foundation | **NEXT STEPS** |
-| Phase 7: Airflow Orchestration | 5 | High | Foundation | Pending (after Phase 6) |
-| Phase 8: Bronze Expansion & Ingestion Testing | 4 | High | Foundation | Pending |
-| **Foundation Subtotal** | **31 days** | | | **4/8 Complete** |
+| Phase 5: Spark Cluster Implementation | 4 | High | Foundation | ✅ COMPLETE |
+| Phase 6: Bronze Ingestion (endpoints, facets) | 5 | High | Foundation | **NEXT STEPS** |
+| Phase 7: Silver Model Builds | 5 | High | Foundation | Pending (after Phase 6) |
+| Phase 8: Airflow Orchestration | 5 | High | Foundation | Pending (after Phase 7) |
+| **Foundation Subtotal** | **32 days** | | | **4/8 Complete** |
 | Phase 9: Economic Series Enhancement | 5 | High | Enhancement | |
 | Phase 10: Chart of Accounts Enhancement | 6 | High | Enhancement | |
 | Phase 11: City Services Enhancement | 7 | High | Enhancement | |
@@ -3831,122 +4017,16 @@ Query Request
 
 ---
 
-### Phase 4: Core Geography (Pending)
-
-*Not started*
-
 ---
 
-### Phase 5: Ingestor & Orchestrator Standardization ✅ COMPLETE
+## Pending Phases
 
-✅ **Completed December 2025 - January 2026**
+**See Part 8: Step-by-Step Implementation Tasks** for detailed todo lists for:
+- Phase 4: Core Geography
+- Phase 6: Bronze Ingestion (NEXT STEPS)
+- Phase 7: Silver Model Builds
+- Phase 8: Airflow Orchestration
+- Phases 9-17: Enhancement & Cleanup
 
-See **"Phase 5: Spark Cluster Implementation"** in Appendix B for full details.
-
-**Summary**: Implemented pure Spark-based pipeline with cluster support via `scripts/spark-cluster/`. Profile-based configuration via `run_config.json`. Main entry point: `test_full_pipeline_spark.sh`.
-
----
-
-### Phase 6: New Endpoints & Model Builds (NEXT STEPS)
-
-**Status**: Pending - Next major milestone
-
-**Goal**: Add new Alpha Vantage endpoints and build out remaining models to have more items to orchestrate before implementing Airflow.
-
-**New Endpoints to Add:**
-
-| Endpoint | Bronze Table | Model Impact |
-|----------|--------------|--------------|
-| `OVERVIEW` | `company_overview` | Company fundamentals (market cap, PE, etc.) |
-| `EARNINGS` | `earnings` | Quarterly earnings data |
-| `INCOME_STATEMENT` | `income_statements` | Annual/quarterly income statements |
-| `BALANCE_SHEET` | `balance_sheets` | Annual/quarterly balance sheets |
-| `CASH_FLOW` | `cash_flows` | Annual/quarterly cash flow statements |
-| `NEWS_SENTIMENT` | `news_sentiment` | News and sentiment analysis |
-| `INSIDER_TRANSACTIONS` | `insider_transactions` | Insider buying/selling |
-
-**Models to Complete:**
-
-| Model | Status | Tasks |
-|-------|--------|-------|
-| `company` | Partial | Add fundamentals from OVERVIEW, link financial statements |
-| `stocks` | Working | Add earnings, news sentiment |
-| `options` | Skeleton | Complete Black-Scholes, Greeks calculations |
-| `etf` | Skeleton | Add holdings, NAV tracking |
-| `futures` | Skeleton | Add roll-adjusted pricing |
-
-**Implementation Tasks:**
-- [ ] Add endpoint configurations to `alpha_vantage_endpoints.json`
-- [ ] Create facets for new endpoints
-- [ ] Update `run_bronze_ingestion.py` to handle new endpoints
-- [ ] Complete model builders for options, etf, futures
-- [ ] Add measures for new data (earnings growth, PE ratios, etc.)
-- [ ] Test full pipeline with expanded endpoints
-
-**Why Before Airflow**: Having 7+ endpoints and 5+ models provides realistic orchestration complexity for Airflow DAG design.
-
----
-
-### Phase 7: Airflow Orchestration (Pending)
-
-**Status**: Pending - After Phase 6
-
-**Goal**: Implement Apache Airflow for production-grade orchestration now that we have multiple endpoints and models to coordinate.
-
-**Why Airflow over Delta Lake Queue:**
-- Industry-standard workflow orchestration
-- Built-in scheduling, retries, and dependency management
-- DAG visualization and monitoring UI
-- Battle-tested for data pipeline orchestration
-- Better separation of concerns (Spark for compute, Airflow for orchestration)
-
-**Proposed Airflow DAGs:**
-
-| DAG | Schedule | Purpose |
-|-----|----------|---------|
-| `bronze_daily_ingest` | Daily 6 AM | Ingest daily prices for all tickers |
-| `bronze_weekly_reference` | Weekly Sunday | Refresh securities reference, company overview |
-| `bronze_quarterly_financials` | Quarterly | Ingest financial statements after earnings |
-| `silver_model_build` | After Bronze | Build/refresh Silver layer models |
-| `silver_incremental` | Hourly (market hours) | Incremental price updates |
-
-**Implementation Tasks:**
-- [ ] Install Airflow on head node
-- [ ] Create `dags/` directory with pipeline DAGs
-- [ ] Integrate with existing `run_bronze_ingestion.py` and `build_models.py`
-- [ ] Set up Airflow web UI for monitoring
-- [ ] Configure alerting for pipeline failures
-- [ ] Create DAG for each endpoint group (daily, weekly, quarterly)
-
-**Current Workaround**: Use `test_full_pipeline_spark.sh` for manual/cron-based execution until Airflow is implemented
-
----
-
-### Phase 8: Bronze Expansion & Ingestion Testing (Pending)
-
-*Not started - validates Phase 6 & 7 implementation*
-
----
-
-*Enhancement phases (9-15) will be logged as they are completed.*
-
----
-
-### Phase 16: Exhibit Enhancements (Pending)
-
-*This phase will address:*
-- Wire YAML presets into exhibit renderers (currently hardcoded)
-- Create ExhibitConfigLoader for preset loading
-- Research rendering methodology improvements
-- Standardize exhibit inheritance pattern
-
----
-
-### Phase 17: Final Cleanup & Validation (Pending)
-
-*This phase will address:*
-- Deferred items from earlier phases (e.g., _backend removal from Phase 2)
-- Scope creep items captured during implementation
-- Performance optimization (e.g., Window Functions for measures)
-- Final integration testing and documentation sync
+*Completion logs will be added here as phases are finished.*
 
