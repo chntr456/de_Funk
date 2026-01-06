@@ -10,9 +10,11 @@
 - ✅ Phase 1: Cleanup - Complete
 - ✅ Phase 2: Backend Abstraction - Complete
 - ✅ Phase 3: Config Standardization - Complete
-- ⏸️ Phase 4: Core Geography - Pending
+- ⏸️ Phase 4: Core Geography - Pending (geography model build)
 - ✅ Phase 5: Spark Cluster - Complete
-- 🔜 **Phase 6: Bronze Ingestion - NEXT STEPS** (endpoints, facets, data collection)
+- 🔜 **Phase 6: Bronze Ingestion - NEXT STEPS**
+  - 6.0: Seeding (calendar, geography states)
+  - 6.1-6.6: Alpha Vantage endpoint ingestion
 - ⏸️ Phase 7: Silver Model Builds - After Phase 6 (use Bronze data)
 - ⏸️ Phase 8: Airflow Orchestration - After Phase 7
 - ⏸️ Phases 9-17: Enhancement & Cleanup
@@ -2087,11 +2089,44 @@ def main():
 
 ### Phase 6: Bronze Ingestion - New Endpoints & Data Collection (NEXT STEPS)
 
-**Goal:** Expand Bronze layer with all Alpha Vantage endpoints, creating facets and running ingestion scripts
+**Goal:** Expand Bronze layer with seeding scripts and Alpha Vantage endpoints
 
 **Status:** 🔜 NEXT STEPS
 
-This phase focuses on getting data INTO Bronze. Each endpoint needs a facet (schema transformation) and ingestion script execution.
+This phase focuses on getting data INTO Bronze. This includes:
+1. **Seeding reference data** (calendar, geography) - static data generated locally
+2. **API ingestion** (Alpha Vantage endpoints) - dynamic data from external APIs
+
+Each API endpoint needs a facet (schema transformation) and ingestion script execution.
+
+---
+
+#### 6.0 Bronze Seeding (Reference Data)
+
+Reference data is generated locally (not from APIs) but follows Bronze → Silver architecture for consistency.
+
+| Seed Script | Bronze Table | Status | Description |
+|-------------|--------------|--------|-------------|
+| `seed_calendar.py` | `calendar_seed` | ✅ Working | Calendar dimension (2000-2050) |
+| `seed_geography.py` | `geography_states` | ✅ Script exists | US states + territories (56 records) |
+| `seed_geography.py` | `geography_counties` | ❌ Future Phase 2 | US counties from Census |
+| `seed_geography.py` | `geography_cities` | ❌ Future Phase 3 | US cities from Census |
+| `seed_geography.py` | `geography_zipcodes` | ❌ Future Phase 4 | ZIP codes from HUD/USPS |
+
+**6.0.1 Calendar Seeding**
+- [ ] Verify calendar seed: `python -m scripts.seed.seed_calendar --storage-path /shared/storage`
+- [ ] Verify Bronze table: `/shared/storage/bronze/calendar_seed/`
+- [ ] Expected: Date range 2000-01-01 to 2050-12-31
+
+**6.0.2 Geography Seeding**
+- [ ] Run geography seed: `python -m scripts.seed.seed_geography`
+- [ ] Verify Bronze table: `/shared/storage/bronze/geography_states/`
+- [ ] Expected: 56 records (50 states + DC + 5 territories)
+- [ ] Validate fields: `state_fips`, `state_code`, `state_name`, `region`, `division`, `is_state`
+
+**Note for next Claude session:** Geography seeding is prerequisites for the geography model (Phase 4). The `seed_geography.py` script currently seeds states only. Future phases will add counties, cities, and ZIP codes from Census Bureau data.
+
+---
 
 #### Available Alpha Vantage Endpoints
 
@@ -2154,6 +2189,10 @@ This phase focuses on getting data INTO Bronze. Each endpoint needs a facet (sch
 
 | File | Action | Description |
 |------|--------|-------------|
+| `scripts/seed/seed_calendar.py` | EXISTS | Calendar seeding (2000-2050) |
+| `scripts/seed/seed_geography.py` | EXISTS | Geography seeding - Phase 1 (states) complete |
+| `models/foundation/geography/builders/state_builder.py` | EXISTS | State data generation |
+| `models/foundation/geography/builders/county_builder.py` | CREATE | Future - Census county data |
 | `datapipelines/providers/alpha_vantage/facets/etf_profile_facet.py` | CREATE | ETF holdings and metadata transformation |
 | `datapipelines/providers/alpha_vantage/facets/technical_indicators_facet.py` | CREATE | SMA, RSI, MACD transformations |
 | `datapipelines/providers/alpha_vantage/facets/earnings_calendar_facet.py` | CREATE | Upcoming earnings dates |
