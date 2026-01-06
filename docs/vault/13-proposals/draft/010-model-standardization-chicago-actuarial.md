@@ -13,8 +13,8 @@
 - ⏸️ Phase 4: Core Geography - Pending (geography model build)
 - ✅ Phase 5: Spark Cluster - Complete
 - 🔜 **Phase 6: Multi-Source Data Expansion - NEXT STEPS**
-  - 6.1: Ore Layer (new concept for raw files: CSVs, PDFs, Access DBs)
-  - 6.2: Data Sources (Chicago, Cook County, FRED, BLS, Alpha Vantage)
+  - 6.1: Raw Layer (new concept for raw files: CSVs, PDFs, Access DBs)
+  - 6.2: Data Sources (Census Bureau, Chicago, Cook County, FRED, BLS, Alpha Vantage)
   - **First task:** Create exhaustive dataset inventories (including public safety)
 - ⏸️ Phase 7: Silver Model Builds - After Phase 6 (use multi-source Bronze data)
 - ⏸️ Phase 8: Airflow Orchestration - After Phase 7 (orchestrate multiple providers)
@@ -2090,7 +2090,7 @@ def main():
 
 ### Phase 6: Multi-Source Data Expansion (NEXT STEPS)
 
-**Goal:** Expand data sources and establish the Ore → Bronze → Silver pipeline architecture
+**Goal:** Expand data sources and establish the Raw → Bronze → Silver pipeline architecture
 
 **Status:** 🔜 NEXT STEPS
 
@@ -2100,29 +2100,29 @@ def main():
 
 ---
 
-#### 6.1 The Ore Layer (NEW CONCEPT)
+#### 6.1 The Raw Layer (NEW CONCEPT)
 
 **Problem:** We have Bronze for cleaned API data, but no place for raw file downloads that need processing:
 - CSV files from data portals
 - PDF documents (financial reports, municipal budgets)
 - Access databases (.mdb/.accdb)
 - Excel files (.xlsx)
-- Shapefiles and GIS data
+- Shapefiles and GIS data (TIGER/Line, etc.)
 
-**Solution:** Add an **Ore layer** before Bronze for raw, unprocessed files.
+**Solution:** Add a **Raw layer** (sometimes called "ore" - unprocessed material) before Bronze for raw, unprocessed files.
 
 **Data Flow:**
 ```
-Ore (raw files)  →  Bronze (processed/normalized)  →  Silver (dimensional models)
+Raw (ore files)  →  Bronze (processed/normalized)  →  Silver (dimensional models)
      ↓                        ↓                              ↓
   CSVs, PDFs,           Delta Lake tables              Star/snowflake
   Access DBs,           from API responses             schemas for
-  Excel files           OR processed Ore files         analytics
+  shapefiles            OR processed raw files         analytics
 ```
 
-**Ore Layer Architecture:**
+**Raw Layer Architecture:**
 ```
-/shared/storage/ore/
+/shared/storage/raw/
 ├── chicago/
 │   ├── budget_pdfs/           # Downloaded PDF budget documents
 │   ├── employee_salary_csv/   # CSV exports from portal
@@ -2131,30 +2131,22 @@ Ore (raw files)  →  Bronze (processed/normalized)  →  Silver (dimensional mo
 │   ├── property_tax_db/       # Access database exports
 │   ├── assessment_csv/        # CSV property assessments
 │   └── parcel_shapefiles/     # Parcel boundary GIS
-├── fred/
-│   └── bulk_downloads/        # FRED bulk data files
-└── census/
-    ├── tiger_shapefiles/      # TIGER/Line geographic files
-    └── acs_tables/            # ACS data tables
+├── census/                    # US Census Bureau data
+│   ├── tiger_shapefiles/      # TIGER/Line geographic boundaries
+│   ├── acs_tables/            # American Community Survey tables
+│   └── gazetteer/             # Place name files
+└── fred/
+    └── bulk_downloads/        # FRED bulk data files
 ```
 
-**Ore Processing Scripts:**
+**Raw Processing Scripts:**
 ```
-scripts/ore/
-├── download_ore.py           # Download raw files to Ore
-├── process_csv_to_bronze.py  # CSV → Bronze Delta table
-├── process_pdf_to_bronze.py  # PDF → extracted text/tables → Bronze
+scripts/raw/
+├── download_raw.py              # Download raw files to Raw layer
+├── process_csv_to_bronze.py     # CSV → Bronze Delta table
+├── process_pdf_to_bronze.py     # PDF → extracted text/tables → Bronze
 ├── process_access_to_bronze.py  # Access DB → Bronze Delta tables
 └── process_shapefile_to_bronze.py  # Shapefile → Bronze GIS table
-```
-
-**Example: Processing Access Database to Bronze**
-```python
-# scripts/ore/process_access_to_bronze.py
-# 1. Read Access DB from Ore layer
-# 2. Extract tables
-# 3. Normalize schema
-# 4. Write to Bronze as Delta tables
 ```
 
 ---
@@ -2162,6 +2154,47 @@ scripts/ore/
 #### 6.2 Data Sources Inventory
 
 **TODO for next session:** Create exhaustive endpoint/dataset lists for each source. The lists below are starting points, not complete.
+
+---
+
+##### US Census Bureau (Geography Source)
+
+**Portal:** https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.html
+**API:** https://www.census.gov/data/developers/guidance/api-user-guide.html
+**Current State:** States seeded from hardcoded data, need to pull from Census API/files
+
+This is the **authoritative source** for US geography data used in seeding.
+
+| Data Type | Source | Format | Notes |
+|-----------|--------|--------|-------|
+| **States** | FIPS codes | API/CSV | 50 states + DC + territories |
+| **Counties** | TIGER/Line | Shapefiles/API | ~3,200 counties |
+| **Places** (cities/towns) | TIGER/Line | Shapefiles/API | ~30,000 places |
+| **Census Tracts** | TIGER/Line | Shapefiles | Statistical areas |
+| **ZIP Code Tabulation Areas** | TIGER/Line | Shapefiles | ZCTA approximations |
+| **Congressional Districts** | TIGER/Line | Shapefiles | 118th Congress |
+
+**Key Census Resources:**
+- **TIGER/Line Shapefiles**: Geographic boundaries (download to Raw, process to Bronze)
+- **Gazetteer Files**: Place names with coordinates and FIPS codes
+- **FIPS Codes**: Federal Information Processing Standard identifiers
+- **GEOIDs**: Fully-qualified geographic identifiers (e.g., `050` prefix for counties)
+
+**Current Implementation:**
+- `models/foundation/geography/builders/state_builder.py` - Hardcoded 2020 Census data
+- Future: Pull from Census API or TIGER/Line files in Raw layer
+
+**Files to Create:**
+```
+configs/pipelines/census_endpoints.json      # Census API configuration
+datapipelines/providers/census/
+├── __init__.py
+├── census_ingestor.py                       # Download TIGER files to Raw
+└── facets/
+    ├── tiger_states_facet.py                # Process state boundaries
+    ├── tiger_counties_facet.py              # Process county boundaries
+    └── gazetteer_facet.py                   # Process place names
+```
 
 ---
 
@@ -2307,11 +2340,11 @@ datapipelines/providers/fred/
 
 #### 6.3 Phase 6 Deliverables
 
-**Part A: Ore Layer Setup**
-- [ ] Create `storage/ore/` directory structure
-- [ ] Create `scripts/ore/download_ore.py` base script
-- [ ] Create `scripts/ore/process_csv_to_bronze.py`
-- [ ] Document Ore → Bronze processing patterns
+**Part A: Raw Layer Setup**
+- [ ] Create `storage/raw/` directory structure
+- [ ] Create `scripts/raw/download_raw.py` base script
+- [ ] Create `scripts/raw/process_csv_to_bronze.py`
+- [ ] Document Raw → Bronze processing patterns
 
 **Part B: Data Source Expansion**
 - [ ] **Exhaustive inventory** of datasets for each source (including public safety)
@@ -2321,7 +2354,7 @@ datapipelines/providers/fred/
 - [ ] Expand BLS series coverage
 
 **Part C: Integration**
-- [ ] Update `configs/storage.json` with Ore paths
+- [ ] Update `configs/storage.json` with Raw paths
 - [ ] Test multi-provider ingestion
 - [ ] Document provider patterns for future sources
 
@@ -2331,11 +2364,11 @@ datapipelines/providers/fred/
 
 | File | Description |
 |------|-------------|
-| **Ore Layer** | |
-| `scripts/ore/download_ore.py` | Download raw files to Ore layer |
-| `scripts/ore/process_csv_to_bronze.py` | Process CSV files to Bronze |
-| `scripts/ore/process_pdf_to_bronze.py` | Extract data from PDFs |
-| `scripts/ore/process_access_to_bronze.py` | Process Access databases |
+| **Raw Layer** | |
+| `scripts/raw/download_raw.py` | Download raw files to Raw layer |
+| `scripts/raw/process_csv_to_bronze.py` | Process CSV files to Bronze |
+| `scripts/raw/process_pdf_to_bronze.py` | Extract data from PDFs |
+| `scripts/raw/process_access_to_bronze.py` | Process Access databases |
 | **Cook County Provider** | |
 | `configs/pipelines/cook_county_endpoints.json` | Endpoint configuration |
 | `datapipelines/providers/cook_county/*` | Provider implementation |
@@ -2343,7 +2376,7 @@ datapipelines/providers/fred/
 | `configs/pipelines/fred_endpoints.json` | Endpoint configuration |
 | `datapipelines/providers/fred/*` | Provider implementation |
 | **Infrastructure** | |
-| `configs/storage.json` | Add Ore and new Bronze paths |
+| `configs/storage.json` | Add Raw and new Bronze paths |
 
 ---
 
@@ -2354,7 +2387,7 @@ datapipelines/providers/fred/
    - Cook County: Property, finance, public safety categories
    - Review each portal and document ALL available datasets
 
-2. **Ore layer:** Start simple with CSV processing, expand to PDFs/Access DBs as needed
+2. **Raw layer:** Start simple with CSV processing, expand to PDFs/Access DBs as needed
 
 3. **Cook County:** Uses same Socrata API as Chicago - consider shared base classes
 
@@ -3919,7 +3952,7 @@ This phase is a catch-all for:
 | Phase 3: Config Standardization | 3 | High | Foundation | ✅ COMPLETE |
 | Phase 4: Core Geography (US-Agnostic) | 5 | High | Foundation | Pending |
 | Phase 5: Spark Cluster Implementation | 4 | High | Foundation | ✅ COMPLETE |
-| Phase 6: Multi-Source Data Expansion (Ore + providers) | 7 | High | Foundation | **NEXT STEPS** |
+| Phase 6: Multi-Source Data Expansion (Raw + providers) | 7 | High | Foundation | **NEXT STEPS** |
 | Phase 7: Silver Model Builds (multi-source) | 5 | High | Foundation | Pending (after Phase 6) |
 | Phase 8: Airflow Orchestration (4 providers) | 5 | High | Foundation | Pending (after Phase 7) |
 | **Foundation Subtotal** | **32 days** | | | **4/8 Complete** |
@@ -4226,8 +4259,8 @@ Query Request
 ### Phase 6: Multi-Source Data Expansion (NEXT STEPS)
 
 **Key Concepts:**
-- **Ore Layer**: New storage tier for raw files (CSVs, PDFs, Access DBs, shapefiles) before Bronze processing
-- **Data Sources**: Chicago, Cook County (NEW), FRED (NEW), BLS, Alpha Vantage
+- **Raw Layer**: New storage tier for raw files (CSVs, PDFs, Access DBs, shapefiles) before Bronze processing
+- **Data Sources**: Census Bureau, Chicago, Cook County (NEW), FRED (NEW), BLS, Alpha Vantage
 
 **First Task for Next Session:**
 Create exhaustive dataset inventories for each data source, including:
@@ -4237,7 +4270,7 @@ Create exhaustive dataset inventories for each data source, including:
 
 **Data Flow:**
 ```
-Ore (raw files) → Bronze (normalized) → Silver (dimensional)
+Raw (ore) → Bronze (normalized) → Silver (dimensional)
 ```
 
 ### Phase 7: Silver Model Builds
