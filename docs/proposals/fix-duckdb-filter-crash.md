@@ -1,225 +1,205 @@
 # Proposal: Fix DuckDB Filter System Crashes
 
 **Date**: 2025-12-07
-**Status**: Draft
+**Updated**: 2026-01-06
+**Status**: ✅ COMPLETED
 **Priority**: High
 **Author**: Claude (AI Assistant)
 
-## Executive Summary
+## ✅ Resolution Summary
 
-Three distinct issues are causing crashes when the UI tries to load filter options from DuckDB:
+All crash issues have been resolved. The root causes were:
 
-1. **Missing Silver Layer** → Falls back to building ALL model tables from Bronze → **HANGS**
-2. **Heavy Window Functions** → `fact_stock_prices` computes 15+ window functions over 10M rows → **HANGS**
-3. **Numeric Quoting Bug** → FilterEngine incorrectly quotes numbers → DuckDB type mismatch errors
+1. **Bronze reads during queries** - Session was falling back to `model.get_table()` which triggered `ensure_built()` → graph_builder → Bronze Delta reads for 22M+ rows
+2. **fetchdf() loading all data** - DuckDB queries were calling `.fetchdf()` which materialized entire result sets into pandas memory
+3. **Stale DuckDB views** - Views pointed to wrong storage paths and weren't auto-refreshed
 
-## ⚠️ ROOT CAUSE IDENTIFIED
+## Fixes Applied (January 2026)
 
-When `session.get_table('stocks', 'dim_stock')` is called:
-1. `ensure_built()` is triggered (line 263-270 in `models/base/model.py`)
-2. This builds **ALL** tables in the model, not just `dim_stock`
-3. `fact_stock_prices` has 15+ complex window functions (RSI, SMAs, Bollinger Bands, volatility)
-4. These window functions must process the **ENTIRE** 10M row prices table
-5. **Result**: Hangs for minutes or crashes due to memory/timeout
+### 1. Removed ALL Bronze Fallbacks from Query Paths
 
-## Issue 1: Ticker List Not Loading (Primary Crash)
+**Files Changed:**
+- `models/api/session.py`
+- `models/api/auto_join.py`
 
-### Root Cause
+**Changes:**
+- `_get_table_from_view_or_build()`: Strategy 4 (Bronze fallback) now raises `ValueError` instead of calling `model.get_table()`
+- `get_table()`: Removed try/except fallback to `model.get_table()`
+- `_execute_join_with_temp_tables()`: Changed exception handler to raise `RuntimeError` instead of falling back to Bronze
+- Materialized view lookup now uses `_get_table_from_view_or_build()` with `allow_build=False`
 
-When the UI calls `get_filter_options_from_db()`, it triggers this chain:
+### 2. Fixed fetchdf() Memory Issues
 
-```
-render_select_filter()
-  → get_filter_options_from_db(source)
-    → _storage_service.get_table('stocks', 'dim_stock')
-      → UniversalSession.get_table()
-        → _get_table_from_view_or_build()
-          → connection.table('stocks.dim_stock')  # FAILS - view doesn't exist
-          → model.get_table()  # FALLBACK - builds from Bronze
-            → BaseModel.build()
-              → GraphBuilder.build_node()
-                → connection.read_table(bronze_path)  # READS ENTIRE BRONZE DELTA TABLE
-```
+**Files Changed:**
+- `models/api/auto_join.py`
 
-### Why It Hangs/Crashes
+**Changes:**
+- `_execute_duckdb_joins_via_views()`: Changed from `result.fetchdf()` to `conn.sql(sql)` for lazy evaluation
+- `_execute_join_with_temp_tables()`: Changed from `result.fetchdf()` to `conn.sql(sql)` for lazy evaluation
 
-1. **No DuckDB views exist** - The `stocks.dim_stock` view was never created
-2. **Fallback to Bronze build** - Session tries to build the model on-the-fly
-3. **Large Delta tables** - Bronze `securities_reference` and `securities_prices_daily` are large
-4. **Multiple reads** - The logs show the same tables being read multiple times
-5. **Resource exhaustion** - DuckDB/PyCharm runs out of memory or hits other limits
+### 3. Fixed _build_select_cols() Bronze Trigger
 
-### Evidence from Logs
+**Files Changed:**
+- `models/api/auto_join.py`
 
-```
-Building stocks.dim_stock from source (may be slow)
-Auto-detected Delta table at .../bronze/securities_reference
-Auto-detected Delta table at .../bronze/securities_prices_daily
-Auto-detected Delta table at .../bronze/securities_reference  # AGAIN
-Auto-detected Delta table at .../bronze/securities_prices_daily  # AGAIN
-[HANG/CRASH]
-```
+**Changes:**
+- `_build_select_cols()`: Changed from calling `model.get_table()` to using `DESCRIBE {temp_table}` on already-registered temp tables
 
-### Solution
+### 4. DuckDB View Auto-Refresh
 
-**Prerequisite Steps** (run before using UI):
+**Files Changed:**
+- `core/duckdb_connection.py`
+- `scripts/setup/setup_duckdb_views.py`
 
-```bash
-# 1. Build Silver layer models (if not already done)
-python -m scripts.build_silver_layer
+**Changes:**
+- View validation now checks BOTH dimensions AND facts (e.g., `dim_stock` AND `fact_stock_prices`)
+- If any view fails validation, ALL views are recreated with correct storage paths
+- Setup script now reads `storage_path` from `run_config.json` (default: `/shared/storage`)
+- Added `--storage-path` CLI argument for manual override
 
-# 2. Setup DuckDB views pointing to Silver layer
-python -m scripts.setup.setup_duckdb_views --update
-```
+### 5. Storage Path Resolution
 
-**Code Fix** (optional safety improvement):
+**Files Changed:**
+- `models/api/session.py`
+- `scripts/setup/setup_duckdb_views.py`
+- `core/duckdb_connection.py`
 
-Add a check in `get_filter_options_from_db()` to fail fast if views don't exist:
+**Changes:**
+- `_get_table_from_view_or_build()`: Uses `self.storage_cfg['roots']['silver']` which resolves to `/shared/storage/silver`
+- Setup script reads from `run_config.json` defaults instead of repo-relative paths
 
-```python
-# app/ui/components/dynamic_filters.py - lines 366-389
-
-@st.cache_data(ttl=300)
-def get_filter_options_from_db(source, _connection, _storage_service):
-    try:
-        # Check if view exists before trying (prevents expensive fallback)
-        view_name = f"{source.model}.{source.table}"
-        if hasattr(_connection, 'has_view'):
-            if not _connection.has_view(view_name):
-                st.warning(f"View {view_name} not found. Run: python -m scripts.setup.setup_duckdb_views")
-                return []
-
-        # Existing code...
-        df = _storage_service.get_table(source.model, source.table, use_cache=True)
-        # ...
-```
-
-## Issue 2: Numeric Quoting Bug in FilterEngine
-
-### Root Cause
-
-`FilterEngine._apply_duckdb_filters()` incorrectly quotes numeric values as strings.
-
-**Location**: `core/session/filters.py` lines 209-220 and 312-323
-
-### Evidence
-
-```python
-# Current code (BUGGY):
-conditions.append(f"{col_name} >= '{value['min']}'")  # 'min' is quoted
-
-# Generated SQL:
-# volume >= '1000000'  ← WRONG - comparing number to string
-
-# Expected:
-# volume >= 1000000  ← CORRECT
-```
-
-### Validation Results
+## Query Path After Fixes
 
 ```
-Test 1.1: Numeric min/max filter - ❌ BUG CONFIRMED
-Test 1.4: Mixed filters - ❌ BUG CONFIRMED (volume, market_cap quoted)
-Test 1.5: Comparison operators - ❌ BUG CONFIRMED (gt, lt, gte, lte quoted)
+Query Request
+  → Check DuckDB View
+    → If valid: Return lazy DuckDB relation
+    → If invalid: Auto-refresh views, retry
+  → If no view: Read from Silver Delta files directly
+    → Use delta_scan('/shared/storage/silver/...')
+  → If no Silver: Raise ValueError with build instructions
+  → NEVER: Read from Bronze (removed entirely)
 ```
 
-### Affected Code Paths
+## Commits
 
-| File | Location | Impact |
-|------|----------|--------|
-| `models/api/session.py` | Lines 289, 308, 327, 347 | HIGH - All exhibit data retrieval |
-| `models/api/auto_join.py` | Lines 305, 393 | MEDIUM - Cross-model joins |
-| `app/notebook/managers/notebook_manager.py` | Line 840 | MEDIUM - Weighted aggregates |
+1. `fix: Prevent memory crash and Bronze reads in auto-join`
+2. `fix: Auto-refresh stale DuckDB views on app load`
+3. `fix: Use DESCRIBE instead of model.get_table() in _build_select_cols`
+4. `fix: Remove Bronze fallbacks and improve view validation`
+5. `refactor: Remove all Bronze fallbacks from query paths`
 
-### Solution
+---
 
-Fix `FilterEngine` to NOT quote numeric values:
+# Next Steps: Bronze Ingestion Expansion & Airflow
 
-```python
-# core/session/filters.py - _apply_duckdb_filters() and build_filter_sql()
+**Status**: Ready for Implementation
+**Priority**: Medium
+**Target**: Next Session
 
-def _format_value_for_sql(value):
-    """Format a value for SQL, quoting strings but not numbers."""
-    if isinstance(value, (int, float)):
-        return str(value)  # No quotes
-    elif isinstance(value, str):
-        return f"'{value}'"  # Quote strings
-    else:
-        return f"'{value}'"  # Default to quoted
+## Objective
 
-# Then use this in conditions:
-if 'min' in value:
-    formatted = _format_value_for_sql(value['min'])
-    conditions.append(f"{col_name} >= {formatted}")
+Expand the Bronze ingestion pipeline and integrate with Apache Airflow for orchestration.
+
+## Current State
+
+- Bronze ingestion works via `scripts/ingest/run_bronze_ingestion.py`
+- Uses Alpha Vantage as sole securities provider
+- Spark-based processing with Delta Lake storage at `/shared/storage/bronze/`
+- Profile-based configuration via `run_config.json`
+
+## Proposed Enhancements
+
+### 1. Additional Alpha Vantage Endpoints
+
+Currently supported:
+- `time_series_daily` - Daily OHLCV
+- `company_overview` - Company fundamentals
+- `income_statement` - Income statements
+- `balance_sheet` - Balance sheets
+- `cash_flow` - Cash flow statements
+- `earnings` - Earnings data
+
+Potential additions:
+- `global_quote` - Real-time quotes
+- `time_series_intraday` - Intraday data
+- `technical_indicators` - Pre-computed technicals (SMA, EMA, RSI, etc.)
+- `news_sentiment` - News and sentiment data
+- `economic_indicators` - Economic data (from Alpha Vantage)
+
+### 2. Airflow Integration
+
+**DAG Structure:**
+```
+bronze_ingestion_dag/
+├── seed_tickers_task       # Seed from LISTING_STATUS (daily)
+├── ingest_prices_task      # Daily OHLCV (hourly)
+├── ingest_fundamentals_task # Company overview (daily)
+├── ingest_financials_task  # Quarterly financials (weekly)
+└── build_silver_task       # Build Silver models (after ingestion)
 ```
 
-### Contrast with Working Implementation
+**Key Considerations:**
+- Rate limiting: Alpha Vantage free tier = 5 calls/min, premium = 75 calls/min
+- Incremental ingestion: Only fetch new/updated data
+- Error handling: Retry with exponential backoff
+- Monitoring: Track API usage and costs
 
-`DuckDBConnection.apply_filters()` (lines 553-556) does it correctly:
+### 3. Configuration Updates
 
-```python
-# CORRECT - no quotes:
-if 'min' in value and value['min'] is not None and value['min'] > 0:
-    conditions.append(f"{column} >= {value['min']}")  # NO QUOTES
+**run_config.json additions:**
+```json
+{
+  "airflow": {
+    "enabled": true,
+    "dag_schedule": "@hourly",
+    "max_concurrent_tasks": 5,
+    "retry_count": 3
+  },
+  "providers": {
+    "alpha_vantage": {
+      "endpoints": [
+        "time_series_daily",
+        "company_overview",
+        "technical_indicators"  // NEW
+      ],
+      "rate_limit_calls_per_min": 75,
+      "incremental": true
+    }
+  }
+}
 ```
 
-## Recommended Fix Order
+### 4. Files to Create/Modify
 
-### Quick Workaround (Immediate)
+| File | Action | Purpose |
+|------|--------|---------|
+| `orchestration/airflow/dags/bronze_dag.py` | CREATE | Main Bronze ingestion DAG |
+| `orchestration/airflow/dags/silver_dag.py` | CREATE | Silver model build DAG |
+| `orchestration/airflow/operators/alpha_vantage.py` | CREATE | Custom AV operator |
+| `datapipelines/providers/alpha_vantage/technical_indicators.py` | CREATE | Technical indicators facet |
+| `configs/pipelines/alpha_vantage_endpoints.json` | MODIFY | Add new endpoints |
+| `scripts/ingest/run_bronze_ingestion.py` | MODIFY | Add Airflow hooks |
 
-If you just need filter options working NOW:
-```bash
-python -m scripts.setup.quick_dim_stock_view
-```
-This creates a lightweight `stocks.dim_stock` view directly from Bronze, bypassing the heavy model build.
+### 5. Testing Strategy
 
-### Full Fix (Recommended for Production)
-
-1. **First**: Build Silver layer using Spark (handles window functions efficiently)
-   ```bash
-   python -m scripts.build_silver_layer
-   ```
-
-2. **Second**: Setup DuckDB views pointing to pre-built Silver tables
-   ```bash
-   python -m scripts.setup.setup_duckdb_views --update
-   ```
-
-3. **Third**: Verify ticker list loads after views are created
-
-4. **Fourth**: If numeric filter issues persist, fix the FilterEngine quoting bug
-
-## Validation Scripts
-
-Two diagnostic scripts have been created:
-
-1. **`scripts/test/validate_filter_system.py`** - Tests FilterEngine SQL generation
-2. **`scripts/test/diagnose_ticker_load.py`** - Isolates ticker loading crash point
-
-Run diagnostics:
-```bash
-python -m scripts.test.diagnose_ticker_load
-```
-
-## Summary
-
-| Issue | Root Cause | Fix |
-|-------|------------|-----|
-| Ticker list not loading | `ensure_built()` computes ALL tables including heavy window functions | Use quick_dim_stock_view.py or build Silver layer first |
-| PyCharm crashing | 15+ window functions over 10M rows in DuckDB | Build Silver layer with Spark instead |
-| Numeric filter errors | FilterEngine quotes numbers | Fix _format_value_for_sql() |
+1. Unit tests for new facets
+2. Integration tests with mock API responses
+3. End-to-end test with sample tickers
+4. Airflow DAG validation (dry run)
 
 ## Key Code Locations
 
-| File | Line | Issue |
-|------|------|-------|
-| `models/base/model.py` | 263-270 | `ensure_built()` builds ALL tables |
-| `configs/models/stocks/graph.yaml` | 42-70 | 15+ window functions in fact_stock_prices |
-| `core/session/filters.py` | 209-220 | Numeric quoting bug |
+| Component | Location |
+|-----------|----------|
+| Bronze ingestion | `scripts/ingest/run_bronze_ingestion.py` |
+| Alpha Vantage provider | `datapipelines/providers/alpha_vantage/` |
+| Pipeline config | `configs/pipelines/run_config.json` |
+| Endpoint config | `configs/pipelines/alpha_vantage_endpoints.json` |
+| Silver build | `scripts/build/build_models.py` |
 
-## Files to Review
+## References
 
-- `core/session/filters.py` - FilterEngine implementation
-- `app/ui/components/dynamic_filters.py` - Filter option loading
-- `models/api/session.py` - UniversalSession.get_table()
-- `scripts/setup/setup_duckdb_views.py` - View creation script
+- Alpha Vantage API docs: https://www.alphavantage.co/documentation/
+- Airflow docs: https://airflow.apache.org/docs/
+- Current ingestion guide: `docs/guide/PIPELINE_GUIDE.md`
