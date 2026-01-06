@@ -151,8 +151,8 @@ class IngestorEngine:
 
             # Process each ticker in batch
             for ticker in batch_tickers:
-                # Fetch all data for this ticker
-                with metrics.time(f"fetch_{ticker}"):
+                # Fetch all data for this ticker (aggregate by step type, not per-ticker)
+                with metrics.time("fetch"):
                     ticker_data = self.provider.fetch_ticker_data(
                         ticker=ticker,
                         data_types=data_types,
@@ -160,8 +160,8 @@ class IngestorEngine:
                         **kwargs
                     )
 
-                # Normalize and accumulate
-                with metrics.time(f"normalize_{ticker}"):
+                # Normalize and accumulate (aggregate by step type)
+                with metrics.time("normalize"):
                     self._normalize_and_accumulate(
                         ticker_data, data_types, accumulators, company_ref_dfs
                     )

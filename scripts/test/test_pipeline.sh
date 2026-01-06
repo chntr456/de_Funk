@@ -12,14 +12,16 @@
 #   --max-tickers N      Override max tickers to process
 #   --skip-seed          Skip ticker seeding (use existing Bronze data)
 #   --skip-ingest        Skip Bronze ingestion
-#   --skip-silver        Skip Silver model building
+#   --with-silver        Include Silver model building (skipped by default)
+#   --with-financials    Include company financials (income, balance, cash flow, earnings)
 #   --storage-path PATH  Override storage path (default: from run_config.json)
 #   --local              Run locally (ignore SPARK_MASTER_URL)
 #   --help               Show this help message
 #
 # Examples:
-#   ./scripts/test/test_pipeline.sh --profile dev
-#   ./scripts/test/test_pipeline.sh --max-tickers 50
+#   ./scripts/test/test_pipeline.sh --profile dev               # Bronze only (default)
+#   ./scripts/test/test_pipeline.sh --profile dev --with-silver # Bronze + Silver build
+#   ./scripts/test/test_pipeline.sh --with-financials           # Include financial statements
 #   ./scripts/test/test_pipeline.sh --profile production --skip-seed
 #
 # Author: de_Funk Team
@@ -40,7 +42,8 @@ PROFILE=""
 MAX_TICKERS=""
 SKIP_SEED=false
 SKIP_INGEST=false
-SKIP_SILVER=false
+SKIP_SILVER=true      # Skip silver by default during testing
+WITH_FINANCIALS=false  # Skip financials by default (saves API calls)
 STORAGE_PATH=""
 RUN_LOCAL=false
 
@@ -63,8 +66,12 @@ while [[ $# -gt 0 ]]; do
             SKIP_INGEST=true
             shift
             ;;
-        --skip-silver)
-            SKIP_SILVER=true
+        --with-silver)
+            SKIP_SILVER=false
+            shift
+            ;;
+        --with-financials)
+            WITH_FINANCIALS=true
             shift
             ;;
         --storage-path)
@@ -117,7 +124,8 @@ echo -e "${YELLOW}Configuration:${NC}"
 [ -n "$STORAGE_PATH" ] && echo "  Storage path: $STORAGE_PATH"
 echo "  Skip seed: $SKIP_SEED"
 echo "  Skip ingest: $SKIP_INGEST"
-echo "  Skip silver: $SKIP_SILVER"
+echo "  Build silver: $([ "$SKIP_SILVER" = false ] && echo 'yes' || echo 'no (use --with-silver to enable)')"
+echo "  With financials: $WITH_FINANCIALS"
 echo ""
 
 # Build Python arguments
@@ -153,7 +161,13 @@ import json
 # Load config
 with open('$REPO_ROOT/configs/pipelines/alpha_vantage_endpoints.json') as f:
     av_config = json.load(f)
-av_config['credentials'] = {'api_keys': []}  # Will use env var
+# Load API keys from environment variable
+import os
+api_keys_str = os.environ.get('ALPHA_VANTAGE_API_KEYS', '')
+api_keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
+if not api_keys:
+    logger.warning('No ALPHA_VANTAGE_API_KEYS environment variable set - API calls may fail')
+av_config['credentials'] = {'api_keys': api_keys}
 
 # Get storage path
 storage_path = '${STORAGE_PATH:-/shared/storage}'
@@ -220,14 +234,22 @@ with open('$REPO_ROOT/configs/pipelines/alpha_vantage_endpoints.json') as f:
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     run_config = json.load(f)
 
-av_config['credentials'] = {'api_keys': []}
+# Load API keys from environment variable
+import os
+api_keys_str = os.environ.get('ALPHA_VANTAGE_API_KEYS', '')
+api_keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
+if not api_keys:
+    logger.warning('No ALPHA_VANTAGE_API_KEYS environment variable set - API calls may fail')
+av_config['credentials'] = {'api_keys': api_keys}
 
 # Get settings
 storage_path = '${STORAGE_PATH:-/shared/storage}'
 max_tickers = ${MAX_TICKERS:-10}
+with_financials = True if '${WITH_FINANCIALS}' == 'true' else False
 
 logger.info(f'Storage path: {storage_path}')
 logger.info(f'Max tickers: {max_tickers}')
+logger.info(f'With financials: {with_financials}')
 
 # Initialize Spark
 spark = get_spark(app_name='test_pipeline_ingest')
@@ -240,8 +262,14 @@ storage_cfg = {
     'roots': {'bronze': f'{storage_path}/bronze', 'silver': f'{storage_path}/silver'},
     'tables': {
         'ticker_seed': {'rel': 'ticker_seed'},
-        'securities_reference': {'rel': 'securities_reference'},
-        'securities_prices_daily': {'rel': 'securities_prices_daily'}
+        'securities_reference': {'rel': 'securities_reference', 'partitions': ['asset_type']},
+        'securities_prices_daily': {'rel': 'securities_prices_daily', 'partitions': ['year', 'month']},
+        'company_reference': {'rel': 'company_reference'},
+        # Financial statement tables (used when --with-financials)
+        'income_statements': {'rel': 'income_statements', 'partitions': ['ticker']},
+        'balance_sheets': {'rel': 'balance_sheets', 'partitions': ['ticker']},
+        'cash_flows': {'rel': 'cash_flows', 'partitions': ['ticker']},
+        'earnings': {'rel': 'earnings', 'partitions': ['ticker']},
     }
 }
 
@@ -276,8 +304,20 @@ logger.info(f'Found {len(tickers)} tickers for ingestion')
 # Create engine and run
 engine = IngestorEngine(provider, storage_cfg)
 
-# Ingest prices and reference data
+# Build data types list
 data_types = [DataType.PRICES, DataType.REFERENCE]
+
+# Add financial statements if requested (uses ticker-based lookups, not CIK)
+if with_financials:
+    logger.info('Including financial statements (income, balance, cash flow, earnings)')
+    data_types.extend([
+        DataType.INCOME_STATEMENT,
+        DataType.BALANCE_SHEET,
+        DataType.CASH_FLOW,
+        DataType.EARNINGS,
+    ])
+
+logger.info(f'Data types: {[dt.value for dt in data_types]}')
 results = engine.run(tickers, data_types)
 
 logger.info(f'Ingestion complete. Completed: {results.completed_tickers}, Errors: {results.total_errors}')
@@ -324,6 +364,7 @@ echo -e "${BLUE}============================================================${NC
 echo ""
 echo "Results:"
 [ "$SKIP_SEED" = false ] && echo "  ✓ Tickers seeded"
-[ "$SKIP_INGEST" = false ] && echo "  ✓ Bronze data ingested"
+[ "$SKIP_INGEST" = false ] && echo "  ✓ Bronze data ingested (prices, reference$([ "$WITH_FINANCIALS" = true ] && echo ', financials'))"
 [ "$SKIP_SILVER" = false ] && echo "  ✓ Silver models built"
+[ "$SKIP_SILVER" = true ] && echo "  ○ Silver build skipped (use --with-silver to enable)"
 echo ""
