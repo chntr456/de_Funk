@@ -169,8 +169,9 @@ provider = create_alpha_vantage_provider(av_config, spark=spark)
 df = provider.seed_tickers(state='active', filter_us_exchanges=True)
 
 # Write to Bronze
-sink = BronzeSink(spark, {'roots': {'bronze': f'{storage_path}/bronze'}})
-sink.write(df, 'ticker_seed', mode='overwrite', partition_cols=['asset_type'])
+storage_cfg = {'roots': {'bronze': f'{storage_path}/bronze'}}
+sink = BronzeSink(storage_cfg)
+sink.write(df, 'ticker_seed', partitions=['asset_type'], mode='overwrite')
 
 logger.info(f'Seeded {df.count()} tickers to Bronze layer')
 spark.stop()
