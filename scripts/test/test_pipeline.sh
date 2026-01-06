@@ -169,7 +169,10 @@ provider = create_alpha_vantage_provider(av_config, spark=spark)
 df = provider.seed_tickers(state='active', filter_us_exchanges=True)
 
 # Write to Bronze
-storage_cfg = {'roots': {'bronze': f'{storage_path}/bronze'}}
+storage_cfg = {
+    'roots': {'bronze': f'{storage_path}/bronze'},
+    'tables': {'ticker_seed': {'rel': 'ticker_seed'}}
+}
 sink = BronzeSink(storage_cfg)
 sink.write(df, 'ticker_seed', partitions=['asset_type'], mode='overwrite')
 
@@ -232,12 +235,40 @@ spark = get_spark(app_name='test_pipeline_ingest')
 # Create provider
 provider = create_alpha_vantage_provider(av_config, spark=spark)
 
-# Get tickers by market cap
-storage_cfg = {'roots': {'bronze': f'{storage_path}/bronze', 'silver': f'{storage_path}/silver'}}
+# Get tickers - try market cap ranking first, fall back to ticker_seed
+storage_cfg = {
+    'roots': {'bronze': f'{storage_path}/bronze', 'silver': f'{storage_path}/silver'},
+    'tables': {
+        'ticker_seed': {'rel': 'ticker_seed'},
+        'securities_reference': {'rel': 'securities_reference'},
+        'securities_prices_daily': {'rel': 'securities_prices_daily'}
+    }
+}
+
+# Try to get tickers by market cap from securities_reference
 tickers = provider.get_tickers_by_market_cap(max_tickers=max_tickers, storage_cfg=storage_cfg)
 
+# Fall back to ticker_seed if no tickers with market cap
 if not tickers:
-    logger.error('No tickers found in Bronze layer. Run seed first.')
+    from pathlib import Path
+    ticker_seed_path = Path(storage_cfg['roots']['bronze']) / 'ticker_seed'
+
+    if ticker_seed_path.exists():
+        logger.info('No market cap data yet - reading from ticker_seed')
+        if (ticker_seed_path / '_delta_log').exists():
+            df = spark.read.format('delta').load(str(ticker_seed_path))
+        else:
+            df = spark.read.parquet(str(ticker_seed_path))
+
+        # Get unique tickers, limited to max_tickers
+        tickers = [row.ticker for row in df.select('ticker').distinct().limit(max_tickers).collect()]
+        logger.info(f'Loaded {len(tickers)} tickers from ticker_seed')
+    else:
+        logger.error('No tickers found. Run seed first.')
+        sys.exit(1)
+
+if not tickers:
+    logger.error('No tickers available for ingestion.')
     sys.exit(1)
 
 logger.info(f'Found {len(tickers)} tickers for ingestion')
