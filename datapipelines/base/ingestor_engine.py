@@ -84,33 +84,39 @@ class IngestionResults:
         if not self.errors:
             return
 
-        print(f"\n{'=' * 60}")
+        print(f"\n{'=' * 70}")
         print("ERROR SUMMARY")
-        print(f"{'=' * 60}")
+        print(f"{'=' * 70}")
         print(f"Total errors: {len(self.errors)}")
 
-        # Group by step
+        # Group by step first
         by_step = {}
         for err in self.errors:
             by_step.setdefault(err.step, []).append(err)
 
-        for step, errs in by_step.items():
-            print(f"\n  {step.upper()} errors ({len(errs)}):")
-            # Group by error type
-            by_type = {}
-            for err in errs:
-                by_type.setdefault(err.error_type, []).append(err)
+        for step, step_errs in by_step.items():
+            print(f"\n  {step.upper()} errors ({len(step_errs)}):")
 
-            for err_type, type_errs in by_type.items():
-                print(f"    - {err_type}: {len(type_errs)} occurrences")
-                # Show sample tickers
-                sample_tickers = [e.ticker for e in type_errs[:3]]
-                print(f"      Sample tickers: {', '.join(sample_tickers)}")
-                # Show sample message
-                if type_errs:
-                    print(f"      Sample error: {type_errs[0].error_message[:80]}...")
+            # Group by data type within step
+            by_data_type = {}
+            for err in step_errs:
+                by_data_type.setdefault(err.data_type, []).append(err)
 
-        print(f"{'=' * 60}\n")
+            for data_type, dt_errs in by_data_type.items():
+                # Group by error message (more useful than exception type)
+                by_message = {}
+                for err in dt_errs:
+                    # Use first 60 chars of message as key
+                    msg_key = err.error_message[:60]
+                    by_message.setdefault(msg_key, []).append(err)
+
+                print(f"    {data_type} ({len(dt_errs)} errors):")
+                for msg, msg_errs in by_message.items():
+                    sample_tickers = list(set(e.ticker for e in msg_errs))[:5]
+                    print(f"      - \"{msg}\"")
+                    print(f"        Tickers: {', '.join(sample_tickers)}")
+
+        print(f"\n{'=' * 70}")
 
 
 class IngestorEngine:
@@ -221,6 +227,15 @@ class IngestorEngine:
                         progress_callback=lambda t, dt, s, e: tracker.update(t, dt.value, s, e),
                         **kwargs
                     )
+
+                # Capture fetch errors from ticker_data
+                for error_msg in ticker_data.errors:
+                    # Parse error format "data_type: error_message"
+                    if ": " in error_msg:
+                        dt_str, err_str = error_msg.split(": ", 1)
+                        results.add_error(ticker, dt_str, "fetch", Exception(err_str))
+                    else:
+                        results.add_error(ticker, "unknown", "fetch", Exception(error_msg))
 
                 # Normalize and accumulate (aggregate by step type)
                 with metrics.time("normalize"):
