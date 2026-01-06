@@ -12,11 +12,15 @@
 - ✅ Phase 3: Config Standardization - Complete
 - ⏸️ Phase 4: Core Geography - Pending (geography model build)
 - ✅ Phase 5: Spark Cluster - Complete
-- 🔜 **Phase 6: Bronze Ingestion - NEXT STEPS**
-  - 6.0: Seeding (calendar, geography states)
-  - 6.1-6.6: Alpha Vantage endpoint ingestion
-- ⏸️ Phase 7: Silver Model Builds - After Phase 6 (use Bronze data)
-- ⏸️ Phase 8: Airflow Orchestration - After Phase 7
+- 🔜 **Phase 6: Multi-Source Bronze Ingestion - NEXT STEPS**
+  - 6.0: Seeding (calendar, geography) - LOW priority
+  - 6.1: Chicago Data Portal (expand 2→6 endpoints) - **HIGH priority**
+  - 6.2: FRED Provider (create new) - **HIGH priority**
+  - 6.3: BLS (expand 2→8 series) - MEDIUM priority
+  - 6.4: Alpha Vantage (verify only) - LOW priority
+  - **Goal: 4 providers, 20+ Bronze tables for Airflow to orchestrate**
+- ⏸️ Phase 7: Silver Model Builds - After Phase 6 (use multi-source Bronze data)
+- ⏸️ Phase 8: Airflow Orchestration - After Phase 7 (orchestrate 4 providers)
 - ⏸️ Phases 9-17: Enhancement & Cleanup
 
 ---
@@ -2087,117 +2091,434 @@ def main():
 
 ---
 
-### Phase 6: Bronze Ingestion - New Endpoints & Data Collection (NEXT STEPS)
+### Phase 6: Bronze Ingestion - Multi-Source Data Expansion (NEXT STEPS)
 
-**Goal:** Expand Bronze layer with seeding scripts and Alpha Vantage endpoints
+**Goal:** Expand Bronze layer with MULTIPLE data sources to enable meaningful Airflow orchestration in Phase 8
 
 **Status:** 🔜 NEXT STEPS
 
-This phase focuses on getting data INTO Bronze. This includes:
-1. **Seeding reference data** (calendar, geography) - static data generated locally
-2. **API ingestion** (Alpha Vantage endpoints) - dynamic data from external APIs
+**WHY MULTI-SOURCE MATTERS:** Phase 8 (Airflow) will orchestrate multiple ingestion pipelines. Having only Alpha Vantage working means Airflow has nothing interesting to coordinate. This phase prioritizes expanding to Chicago, BLS, and FRED data sources so Phase 8 can demonstrate real orchestration value with multiple parallel/sequential DAGs.
 
-Each API endpoint needs a facet (schema transformation) and ingestion script execution.
+**Priority Order:**
+1. 🔴 **HIGH**: Chicago Data Portal (6 endpoints defined, only 2 facets exist)
+2. 🔴 **HIGH**: FRED Provider (new - Federal Reserve Economic Data)
+3. 🟡 **MEDIUM**: BLS Expansion (8 series defined, only 2 facets exist)
+4. 🟢 **LOW**: Alpha Vantage (already functional, just verify)
+5. 🟢 **LOW**: Seeding (calendar, geography)
 
 ---
 
-#### 6.0 Bronze Seeding (Reference Data)
+#### 6.0 Reference Data Seeding (LOW PRIORITY - Quick Wins)
 
-Reference data is generated locally (not from APIs) but follows Bronze → Silver architecture for consistency.
+Reference data is generated locally (not from APIs) but follows Bronze → Silver architecture.
 
 | Seed Script | Bronze Table | Status | Description |
 |-------------|--------------|--------|-------------|
 | `seed_calendar.py` | `calendar_seed` | ✅ Working | Calendar dimension (2000-2050) |
 | `seed_geography.py` | `geography_states` | ✅ Script exists | US states + territories (56 records) |
-| `seed_geography.py` | `geography_counties` | ❌ Future Phase 2 | US counties from Census |
-| `seed_geography.py` | `geography_cities` | ❌ Future Phase 3 | US cities from Census |
-| `seed_geography.py` | `geography_zipcodes` | ❌ Future Phase 4 | ZIP codes from HUD/USPS |
 
-**6.0.1 Calendar Seeding**
-- [ ] Verify calendar seed: `python -m scripts.seed.seed_calendar --storage-path /shared/storage`
-- [ ] Verify Bronze table: `/shared/storage/bronze/calendar_seed/`
-- [ ] Expected: Date range 2000-01-01 to 2050-12-31
+**6.0.1 Verify Seeding (5 min)**
+```bash
+# Calendar
+python -m scripts.seed.seed_calendar --storage-path /shared/storage
+ls -la /shared/storage/bronze/calendar_seed/
 
-**6.0.2 Geography Seeding**
-- [ ] Run geography seed: `python -m scripts.seed.seed_geography`
-- [ ] Verify Bronze table: `/shared/storage/bronze/geography_states/`
-- [ ] Expected: 56 records (50 states + DC + 5 territories)
-- [ ] Validate fields: `state_fips`, `state_code`, `state_name`, `region`, `division`, `is_state`
-
-**Note for next Claude session:** Geography seeding is prerequisites for the geography model (Phase 4). The `seed_geography.py` script currently seeds states only. Future phases will add counties, cities, and ZIP codes from Census Bureau data.
+# Geography
+python -m scripts.seed.seed_geography
+ls -la /shared/storage/bronze/geography_states/
+```
 
 ---
 
-#### Available Alpha Vantage Endpoints
+#### 6.1 Chicago Data Portal Expansion (HIGH PRIORITY)
 
-| Endpoint | API Function | Bronze Table | Facet Status | Priority |
-|----------|--------------|--------------|--------------|----------|
-| `listing_status` | `LISTING_STATUS` | `securities_reference` | ✅ `securities_reference_facet.py` | Done |
-| `time_series_daily` | `TIME_SERIES_DAILY` | `securities_prices_daily` | ✅ `securities_prices_facet.py` | Done |
-| `company_overview` | `OVERVIEW` | `company_overview` | ✅ `company_reference_facet.py` | Done |
-| `income_statement` | `INCOME_STATEMENT` | `income_statements` | ✅ `income_statement_facet.py` | High |
-| `balance_sheet` | `BALANCE_SHEET` | `balance_sheets` | ✅ `balance_sheet_facet.py` | High |
-| `cash_flow` | `CASH_FLOW` | `cash_flows` | ✅ `cash_flow_facet.py` | High |
-| `earnings` | `EARNINGS` | `earnings` | ✅ `earnings_facet.py` | High |
-| `historical_options` | `HISTORICAL_OPTIONS` | `options_history` | ✅ `historical_options_facet.py` | Medium |
-| `etf_profile` | `ETF_PROFILE` | `etf_profiles` | ❌ Need to create | Medium |
-| `earnings_calendar` | `EARNINGS_CALENDAR` | `earnings_calendar` | ❌ Need to create | Low |
-| `top_gainers_losers` | `TOP_GAINERS_LOSERS` | `market_movers` | ❌ Need to create | Low |
-| `technical_sma` | `SMA` | `technical_indicators` | ❌ Need to create | Low |
-| `technical_rsi` | `RSI` | `technical_indicators` | ❌ Need to create | Low |
-| `technical_macd` | `MACD` | `technical_indicators` | ❌ Need to create | Low |
+**Current State:**
+- Config: `configs/pipelines/chicago_endpoints.json` has **6 endpoints** defined
+- Facets: Only **2 of 6** facets exist (`building_permits_facet.py`, `unemployment_rates_facet.py`)
+- Ingestor: `chicago_ingestor.py` exists but may need updates
 
-#### Phase 6 Todo List
+**Endpoint Inventory:**
 
-**6.1 Verify Existing Facets & Ingestion**
-- [ ] Test `securities_reference` ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints listing_status`
-- [ ] Test `securities_prices_daily` ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints time_series_daily --max-tickers 10`
-- [ ] Test `company_overview` ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints company_overview --max-tickers 10`
-- [ ] Verify Bronze tables exist at `/shared/storage/bronze/alpha_vantage/`
+| Endpoint | Socrata ID | Bronze Table | Facet Status | This Phase |
+|----------|------------|--------------|--------------|------------|
+| `building_permits` | `ydr8-5enu` | `chicago_building_permits` | ✅ EXISTS | Verify |
+| `unemployment_rates` | `ane4-dwhs` | `chicago_unemployment` | ✅ EXISTS | Verify |
+| `business_licenses` | `r5kz-chrr` | `chicago_business_licenses` | ❌ MISSING | **CREATE** |
+| `per_capita_income` | `qpxx-qyaw` | `chicago_income` | ❌ MISSING | **CREATE** |
+| `economic_indicators` | `nej5-8p3s` | `chicago_economic_indicators` | ❌ MISSING | **CREATE** |
+| `affordable_rental_housing` | `s6ha-ppgi` | `chicago_affordable_housing` | ❌ MISSING | **CREATE** |
 
-**6.2 Financial Statements Ingestion (High Priority)**
-- [ ] Test `income_statement` facet with sample ticker
-- [ ] Test `balance_sheet` facet with sample ticker
-- [ ] Test `cash_flow` facet with sample ticker
-- [ ] Test `earnings` facet with sample ticker
-- [ ] Run full ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints income_statement,balance_sheet,cash_flow,earnings --max-tickers 50`
-- [ ] Verify Bronze tables: `income_statements`, `balance_sheets`, `cash_flows`, `earnings`
+**6.1.1 Verify Existing Chicago Facets**
+```bash
+# Test building permits
+python -m scripts.ingest.run_bronze_ingestion --provider chicago --endpoints building_permits
+# Verify: /shared/storage/bronze/chicago/building_permits/
 
-**6.3 Options Data Ingestion (Medium Priority)**
-- [ ] Test `historical_options` facet with sample ticker (e.g., AAPL)
-- [ ] Run options ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints historical_options --max-tickers 20`
-- [ ] Verify Bronze table: `options_history`
+# Test unemployment rates
+python -m scripts.ingest.run_bronze_ingestion --provider chicago --endpoints unemployment_rates
+# Verify: /shared/storage/bronze/chicago/unemployment_rates/
+```
 
-**6.4 Create Missing Facets (Medium Priority)**
-- [ ] Create `etf_profile_facet.py` for ETF holdings and metadata
-- [ ] Add `etf_profile` endpoint to ingestor
-- [ ] Test with ETF tickers (SPY, QQQ, IWM)
-- [ ] Run ingestion: `python -m scripts.ingest.run_bronze_ingestion --endpoints etf_profile --tickers SPY,QQQ,IWM`
+**6.1.2 Create Missing Chicago Facets**
 
-**6.5 Create Technical Indicators Facet (Low Priority)**
-- [ ] Create `technical_indicators_facet.py` for SMA, RSI, MACD
-- [ ] Schema: ticker, date, indicator_type, value, params
-- [ ] Test with sample ticker
-- [ ] Run ingestion for technical indicators
+Each facet follows the pattern in `chicago_base_facet.py`. Steps for each:
 
-**6.6 Bronze Validation**
-- [ ] Run `scripts/validate_bronze.py` on all new tables
-- [ ] Document row counts and date ranges
-- [ ] Fix any schema or data quality issues
+1. **Create facet file** at `datapipelines/providers/chicago/facets/{endpoint}_facet.py`
+2. **Define schema** (columns, types) based on Socrata API response
+3. **Implement transform()** method to normalize API response
+4. **Register in facets/__init__.py**
+5. **Update chicago_ingestor.py** to use new facet
+6. **Test ingestion** and verify Bronze table
 
-#### Files to Create/Modify
+**business_licenses_facet.py:**
+```python
+# Key fields from Socrata API:
+# - license_id, account_number, legal_name, doing_business_as_name
+# - license_description, license_start_date, expiration_date
+# - address, city, state, zip_code, ward, precinct
+# - latitude, longitude, location
+```
 
-| File | Action | Description |
-|------|--------|-------------|
-| `scripts/seed/seed_calendar.py` | EXISTS | Calendar seeding (2000-2050) |
-| `scripts/seed/seed_geography.py` | EXISTS | Geography seeding - Phase 1 (states) complete |
-| `models/foundation/geography/builders/state_builder.py` | EXISTS | State data generation |
-| `models/foundation/geography/builders/county_builder.py` | CREATE | Future - Census county data |
-| `datapipelines/providers/alpha_vantage/facets/etf_profile_facet.py` | CREATE | ETF holdings and metadata transformation |
-| `datapipelines/providers/alpha_vantage/facets/technical_indicators_facet.py` | CREATE | SMA, RSI, MACD transformations |
-| `datapipelines/providers/alpha_vantage/facets/earnings_calendar_facet.py` | CREATE | Upcoming earnings dates |
-| `scripts/ingest/run_bronze_ingestion.py` | MODIFY | Add support for new endpoints |
-| `configs/storage.json` | MODIFY | Add new Bronze table paths |
+**per_capita_income_facet.py:**
+```python
+# Key fields:
+# - community_area_number, community_area_name
+# - per_capita_income, hardship_index
+# - percent_households_below_poverty, percent_aged_16_unemployed
+```
+
+**economic_indicators_facet.py:**
+```python
+# Key fields:
+# - date, indicator_name, indicator_value
+# - category (employment, housing, business, etc.)
+```
+
+**affordable_rental_housing_facet.py:**
+```python
+# Key fields:
+# - property_name, address, zip_code, community_area
+# - units, property_type, management_company
+# - latitude, longitude
+```
+
+**6.1.3 Chicago Integration Test**
+```bash
+# Run all Chicago endpoints
+python -m scripts.ingest.run_bronze_ingestion --provider chicago --all
+
+# Verify all 6 Bronze tables exist
+ls -la /shared/storage/bronze/chicago/
+```
+
+---
+
+#### 6.2 FRED Provider Creation (HIGH PRIORITY)
+
+**Current State:**
+- Provider: **DOES NOT EXIST** - must create from scratch
+- Config: Need to create `configs/pipelines/fred_endpoints.json`
+- No facets, no ingestor
+
+**Why FRED Matters:**
+- Federal Reserve Economic Data has 800,000+ time series
+- Key series for macro analysis: Fed Funds Rate, Treasury yields, housing indices
+- Free API with generous rate limits (120 requests/minute with API key)
+- Essential for the `macro` model and cross-model analysis
+
+**FRED Series to Ingest:**
+
+| Series ID | Name | Frequency | Bronze Table |
+|-----------|------|-----------|--------------|
+| `FEDFUNDS` | Federal Funds Effective Rate | Daily | `fred_interest_rates` |
+| `DGS10` | 10-Year Treasury Constant Maturity | Daily | `fred_interest_rates` |
+| `DGS2` | 2-Year Treasury Constant Maturity | Daily | `fred_interest_rates` |
+| `UNRATE` | Unemployment Rate | Monthly | `fred_employment` |
+| `CPIAUCSL` | Consumer Price Index | Monthly | `fred_inflation` |
+| `GDPC1` | Real GDP | Quarterly | `fred_gdp` |
+| `CHIURN` | Chicago Unemployment Rate | Monthly | `fred_chicago_metro` |
+| `CHXRSA` | Case-Shiller Chicago Home Price Index | Monthly | `fred_housing` |
+| `MORTGAGE30US` | 30-Year Fixed Mortgage Rate | Weekly | `fred_interest_rates` |
+| `SP500` | S&P 500 Index | Daily | `fred_market_indices` |
+
+**6.2.1 Create FRED Endpoint Config**
+
+Create `configs/pipelines/fred_endpoints.json`:
+```json
+{
+  "credentials": {
+    "api_keys": ["FRED_API_KEY"]
+  },
+  "base_urls": {
+    "core": "https://api.stlouisfed.org/fred"
+  },
+  "rate_limit_per_sec": 2.0,
+  "endpoints": {
+    "series_observations": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/series/observations",
+      "required_params": ["series_id", "api_key"],
+      "default_query": {
+        "file_type": "json",
+        "observation_start": "2000-01-01"
+      }
+    },
+    "series_info": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/series",
+      "required_params": ["series_id", "api_key"]
+    }
+  },
+  "series_catalog": {
+    "interest_rates": ["FEDFUNDS", "DGS10", "DGS2", "MORTGAGE30US"],
+    "employment": ["UNRATE", "CHIURN"],
+    "inflation": ["CPIAUCSL"],
+    "gdp": ["GDPC1"],
+    "housing": ["CHXRSA"],
+    "market_indices": ["SP500"]
+  }
+}
+```
+
+**6.2.2 Create FRED Provider Directory Structure**
+```
+datapipelines/providers/fred/
+├── __init__.py
+├── provider.yaml           # Provider metadata
+├── fred_registry.py        # Endpoint registry (extends BaseRegistry)
+├── fred_ingestor.py        # Main ingestor class
+└── facets/
+    ├── __init__.py
+    ├── fred_base_facet.py  # Base class for FRED facets
+    ├── observations_facet.py  # Transform series observations
+    └── series_info_facet.py   # Transform series metadata
+```
+
+**6.2.3 Implement FRED Ingestor**
+
+Key implementation steps:
+1. Create `fred_registry.py` extending `BaseRegistry`
+2. Create `fred_base_facet.py` with common FRED response handling
+3. Create `observations_facet.py`:
+   - Input: FRED API JSON response
+   - Output: DataFrame with `series_id`, `date`, `value`, `realtime_start`, `realtime_end`
+4. Create `fred_ingestor.py`:
+   - Loop through series catalog
+   - Call API for each series
+   - Apply facet transformation
+   - Write to Bronze via BronzeSink
+
+**6.2.4 FRED Integration Test**
+```bash
+# Test single series
+python -m scripts.ingest.run_bronze_ingestion --provider fred --series FEDFUNDS
+
+# Test all series
+python -m scripts.ingest.run_bronze_ingestion --provider fred --all
+
+# Verify Bronze tables
+ls -la /shared/storage/bronze/fred/
+```
+
+---
+
+#### 6.3 BLS Provider Expansion (MEDIUM PRIORITY)
+
+**Current State:**
+- Config: `configs/pipelines/bls_endpoints.json` has **8 series codes** defined
+- Facets: Only **2 facets** exist (`unemployment_facet.py`, `cpi_facet.py`)
+- Ingestor: `bls_ingestor.py` exists but only handles 2 series
+
+**BLS Series Inventory:**
+
+| Series ID | Name | Bronze Table | Facet Status | This Phase |
+|-----------|------|--------------|--------------|------------|
+| `LNS14000000` | Unemployment Rate | `bls_unemployment` | ✅ EXISTS | Verify |
+| `CUUR0000SA0` | CPI All Items | `bls_cpi` | ✅ EXISTS | Verify |
+| `CES0000000001` | Total Nonfarm Employment | `bls_employment` | ❌ MISSING | **CREATE** |
+| `WPUFD4` | PPI Final Demand | `bls_ppi` | ❌ MISSING | **CREATE** |
+| `PRS85006092` | Labor Productivity | `bls_productivity` | ❌ MISSING | **CREATE** |
+| `CES0500000003` | Avg Hourly Earnings | `bls_wages` | ❌ MISSING | **CREATE** |
+| `JTS00000000JOL` | Job Openings | `bls_jolts` | ❌ MISSING | **CREATE** |
+| `JTS00000000QUR` | Quits Rate | `bls_jolts` | ❌ MISSING | **CREATE** |
+
+**6.3.1 Verify Existing BLS Facets**
+```bash
+# Test unemployment
+python -m scripts.ingest.run_bronze_ingestion --provider bls --series LNS14000000
+
+# Test CPI
+python -m scripts.ingest.run_bronze_ingestion --provider bls --series CUUR0000SA0
+```
+
+**6.3.2 Create Missing BLS Facets**
+
+Each series needs a facet. Can create a unified `bls_timeseries_facet.py` that handles all series with configuration:
+
+```python
+# datapipelines/providers/bls/facets/bls_timeseries_facet.py
+class BLSTimeseriesFacet(BLSBaseFacet):
+    """Generic facet for BLS time series data."""
+
+    SERIES_CONFIG = {
+        'CES0000000001': {'table': 'bls_employment', 'name': 'Total Nonfarm Employment'},
+        'WPUFD4': {'table': 'bls_ppi', 'name': 'PPI Final Demand'},
+        'PRS85006092': {'table': 'bls_productivity', 'name': 'Labor Productivity'},
+        'CES0500000003': {'table': 'bls_wages', 'name': 'Avg Hourly Earnings'},
+        'JTS00000000JOL': {'table': 'bls_jolts', 'name': 'Job Openings'},
+        'JTS00000000QUR': {'table': 'bls_jolts', 'name': 'Quits Rate'},
+    }
+```
+
+**6.3.3 BLS Integration Test**
+```bash
+# Run all BLS series
+python -m scripts.ingest.run_bronze_ingestion --provider bls --all
+
+# Verify Bronze tables
+ls -la /shared/storage/bronze/bls/
+```
+
+---
+
+#### 6.4 Alpha Vantage Verification (LOW PRIORITY)
+
+**Current State:** Alpha Vantage is the most complete provider with 8+ facets working.
+
+**This phase:** Just verify existing functionality works. DO NOT expand Alpha Vantage in this phase.
+
+| Endpoint | Status | Verification Command |
+|----------|--------|---------------------|
+| `listing_status` | ✅ | `python -m scripts.ingest.run_bronze_ingestion --provider alpha_vantage --endpoints listing_status` |
+| `time_series_daily` | ✅ | `python -m scripts.ingest.run_bronze_ingestion --provider alpha_vantage --endpoints time_series_daily --max-tickers 5` |
+| `company_overview` | ✅ | `python -m scripts.ingest.run_bronze_ingestion --provider alpha_vantage --endpoints company_overview --max-tickers 5` |
+| `income_statement` | ✅ | Verify facet exists |
+| `balance_sheet` | ✅ | Verify facet exists |
+| `cash_flow` | ✅ | Verify facet exists |
+| `earnings` | ✅ | Verify facet exists |
+
+**6.4.1 Quick Verification**
+```bash
+# List all available endpoints
+python -c "from datapipelines.providers.alpha_vantage import AlphaVantageIngestor; print(AlphaVantageIngestor.available_endpoints())"
+
+# Run quick test with 3 tickers
+python -m scripts.ingest.run_bronze_ingestion --provider alpha_vantage --endpoints listing_status,time_series_daily --max-tickers 3
+```
+
+---
+
+#### 6.5 Multi-Provider Integration Test
+
+**This is the key deliverable for Phase 6.** Running all providers demonstrates readiness for Airflow orchestration.
+
+```bash
+# Run all providers in sequence (simulating what Airflow will orchestrate)
+
+# 1. Seeding
+python -m scripts.seed.seed_calendar --storage-path /shared/storage
+python -m scripts.seed.seed_geography
+
+# 2. Chicago (all 6 endpoints)
+python -m scripts.ingest.run_bronze_ingestion --provider chicago --all
+
+# 3. FRED (all series)
+python -m scripts.ingest.run_bronze_ingestion --provider fred --all
+
+# 4. BLS (all 8 series)
+python -m scripts.ingest.run_bronze_ingestion --provider bls --all
+
+# 5. Alpha Vantage (quick verification)
+python -m scripts.ingest.run_bronze_ingestion --provider alpha_vantage --endpoints listing_status --max-tickers 10
+```
+
+**Expected Bronze Directory Structure After Phase 6:**
+```
+/shared/storage/bronze/
+├── calendar_seed/              # Seeding
+├── geography_states/           # Seeding
+├── alpha_vantage/              # Existing
+│   ├── securities_reference/
+│   ├── securities_prices_daily/
+│   ├── company_overview/
+│   ├── income_statements/
+│   ├── balance_sheets/
+│   ├── cash_flows/
+│   └── earnings/
+├── chicago/                    # EXPANDED (2→6 tables)
+│   ├── building_permits/
+│   ├── unemployment_rates/
+│   ├── business_licenses/      # NEW
+│   ├── per_capita_income/      # NEW
+│   ├── economic_indicators/    # NEW
+│   └── affordable_housing/     # NEW
+├── fred/                       # NEW PROVIDER
+│   ├── interest_rates/
+│   ├── employment/
+│   ├── inflation/
+│   ├── gdp/
+│   ├── chicago_metro/
+│   ├── housing/
+│   └── market_indices/
+└── bls/                        # EXPANDED (2→5 tables)
+    ├── unemployment/
+    ├── cpi/
+    ├── employment/             # NEW
+    ├── ppi/                    # NEW
+    ├── productivity/           # NEW
+    ├── wages/                  # NEW
+    └── jolts/                  # NEW
+```
+
+---
+
+#### Phase 6 Files to Create/Modify
+
+| File | Action | Priority | Description |
+|------|--------|----------|-------------|
+| **FRED Provider (NEW)** | | | |
+| `configs/pipelines/fred_endpoints.json` | CREATE | HIGH | FRED API configuration |
+| `datapipelines/providers/fred/__init__.py` | CREATE | HIGH | Package init |
+| `datapipelines/providers/fred/provider.yaml` | CREATE | HIGH | Provider metadata |
+| `datapipelines/providers/fred/fred_registry.py` | CREATE | HIGH | Endpoint registry |
+| `datapipelines/providers/fred/fred_ingestor.py` | CREATE | HIGH | Main ingestor |
+| `datapipelines/providers/fred/facets/fred_base_facet.py` | CREATE | HIGH | Base facet |
+| `datapipelines/providers/fred/facets/observations_facet.py` | CREATE | HIGH | Series data facet |
+| **Chicago Facets (NEW)** | | | |
+| `datapipelines/providers/chicago/facets/business_licenses_facet.py` | CREATE | HIGH | Business licenses |
+| `datapipelines/providers/chicago/facets/per_capita_income_facet.py` | CREATE | HIGH | Income by area |
+| `datapipelines/providers/chicago/facets/economic_indicators_facet.py` | CREATE | HIGH | Economic time series |
+| `datapipelines/providers/chicago/facets/affordable_housing_facet.py` | CREATE | HIGH | Housing data |
+| `datapipelines/providers/chicago/chicago_ingestor.py` | MODIFY | HIGH | Add new facets |
+| **BLS Facets (NEW)** | | | |
+| `datapipelines/providers/bls/facets/bls_timeseries_facet.py` | CREATE | MEDIUM | Generic series facet |
+| `datapipelines/providers/bls/bls_ingestor.py` | MODIFY | MEDIUM | Add new series |
+| **Infrastructure** | | | |
+| `configs/storage.json` | MODIFY | MEDIUM | Add new Bronze paths |
+| `scripts/ingest/run_bronze_ingestion.py` | MODIFY | MEDIUM | Support all providers |
+| `scripts/validate_bronze.py` | CREATE | LOW | Validate all Bronze tables |
+| **Seeding (EXISTS)** | | | |
+| `scripts/seed/seed_calendar.py` | EXISTS | LOW | Verify working |
+| `scripts/seed/seed_geography.py` | EXISTS | LOW | Verify working |
+
+---
+
+#### Phase 6 Success Criteria
+
+Before moving to Phase 7, verify:
+
+- [ ] **4 providers functional**: Alpha Vantage, Chicago, FRED, BLS
+- [ ] **Chicago**: All 6 endpoints ingesting to Bronze
+- [ ] **FRED**: New provider created, 10+ series ingesting
+- [ ] **BLS**: All 8 series ingesting to Bronze
+- [ ] **Alpha Vantage**: Existing endpoints verified working
+- [ ] **Seeding**: Calendar and geography seeds verified
+- [ ] **Bronze tables**: 20+ distinct Bronze tables populated
+- [ ] **Documentation**: Each provider has README with usage examples
+
+**Handoff to Phase 7:** With multiple providers populating Bronze, Phase 7 (Silver Model Builds) can create dimensional models from diverse sources. Phase 8 (Airflow) can then orchestrate daily/weekly/monthly schedules for each provider independently
 
 ---
 
@@ -3758,9 +4079,9 @@ This phase is a catch-all for:
 | Phase 3: Config Standardization | 3 | High | Foundation | ✅ COMPLETE |
 | Phase 4: Core Geography (US-Agnostic) | 5 | High | Foundation | Pending |
 | Phase 5: Spark Cluster Implementation | 4 | High | Foundation | ✅ COMPLETE |
-| Phase 6: Bronze Ingestion (endpoints, facets) | 5 | High | Foundation | **NEXT STEPS** |
-| Phase 7: Silver Model Builds | 5 | High | Foundation | Pending (after Phase 6) |
-| Phase 8: Airflow Orchestration | 5 | High | Foundation | Pending (after Phase 7) |
+| Phase 6: Multi-Source Bronze (Chicago, FRED, BLS) | 7 | High | Foundation | **NEXT STEPS** |
+| Phase 7: Silver Model Builds (multi-source) | 5 | High | Foundation | Pending (after Phase 6) |
+| Phase 8: Airflow Orchestration (4 providers) | 5 | High | Foundation | Pending (after Phase 7) |
 | **Foundation Subtotal** | **32 days** | | | **4/8 Complete** |
 | Phase 9: Economic Series Enhancement | 5 | High | Enhancement | |
 | Phase 10: Chart of Accounts Enhancement | 6 | High | Enhancement | |
@@ -4060,12 +4381,24 @@ Query Request
 
 ## Pending Phases
 
-**See Part 8: Step-by-Step Implementation Tasks** for detailed todo lists for:
-- Phase 4: Core Geography
-- Phase 6: Bronze Ingestion (NEXT STEPS)
-- Phase 7: Silver Model Builds
-- Phase 8: Airflow Orchestration
-- Phases 9-17: Enhancement & Cleanup
+**See Part 11: Step-by-Step Implementation Tasks** for detailed todo lists for:
 
+### Phase 6: Multi-Source Bronze Ingestion (NEXT STEPS)
+**Priority order for next session:**
+1. 🔴 **Chicago Data Portal** - Expand 2→6 facets (endpoints already defined)
+2. 🔴 **FRED Provider** - Create from scratch (new provider)
+3. 🟡 **BLS** - Expand 2→8 series facets
+4. 🟢 **Alpha Vantage** - Verify only (already working)
+5. 🟢 **Seeding** - Quick verification
+
+**Goal:** 4 providers functional, 20+ Bronze tables populated → ready for Airflow
+
+### Phase 7: Silver Model Builds
+Uses multi-source Bronze data from Phase 6
+
+### Phase 8: Airflow Orchestration
+Orchestrates 4 providers with different schedules (daily/weekly/quarterly)
+
+### Phases 9-17: Enhancement & Cleanup
 *Completion logs will be added here as phases are finished.*
 
