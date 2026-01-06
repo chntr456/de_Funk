@@ -12,15 +12,15 @@
 #   --max-tickers N      Override max tickers to process
 #   --skip-seed          Skip ticker seeding (use existing Bronze data)
 #   --skip-ingest        Skip Bronze ingestion
-#   --with-silver        Include Silver model building (skipped by default)
+#   --skip-silver        Skip Silver model building
 #   --with-financials    Include company financials (income, balance, cash flow, earnings)
 #   --storage-path PATH  Override storage path (default: from run_config.json)
 #   --local              Run locally (ignore SPARK_MASTER_URL)
 #   --help               Show this help message
 #
 # Examples:
-#   ./scripts/test/test_pipeline.sh --profile dev               # Bronze only (default)
-#   ./scripts/test/test_pipeline.sh --profile dev --with-silver # Bronze + Silver build
+#   ./scripts/test/test_pipeline.sh --profile dev               # Full test (Bronze + Silver)
+#   ./scripts/test/test_pipeline.sh --profile dev --skip-silver # Bronze only
 #   ./scripts/test/test_pipeline.sh --with-financials           # Include financial statements
 #   ./scripts/test/test_pipeline.sh --profile production --skip-seed
 #
@@ -42,7 +42,7 @@ PROFILE=""
 MAX_TICKERS=""
 SKIP_SEED=false
 SKIP_INGEST=false
-SKIP_SILVER=true      # Skip silver by default during testing
+SKIP_SILVER=false     # Test everything by default
 WITH_FINANCIALS=false  # Skip financials by default (saves API calls)
 STORAGE_PATH=""
 RUN_LOCAL=false
@@ -66,8 +66,8 @@ while [[ $# -gt 0 ]]; do
             SKIP_INGEST=true
             shift
             ;;
-        --with-silver)
-            SKIP_SILVER=false
+        --skip-silver)
+            SKIP_SILVER=true
             shift
             ;;
         --with-financials)
@@ -124,7 +124,7 @@ echo -e "${YELLOW}Configuration:${NC}"
 [ -n "$STORAGE_PATH" ] && echo "  Storage path: $STORAGE_PATH"
 echo "  Skip seed: $SKIP_SEED"
 echo "  Skip ingest: $SKIP_INGEST"
-echo "  Build silver: $([ "$SKIP_SILVER" = false ] && echo 'yes' || echo 'no (use --with-silver to enable)')"
+echo "  Build silver: $([ "$SKIP_SILVER" = false ] && echo 'yes' || echo 'no')"
 echo "  With financials: $WITH_FINANCIALS"
 echo ""
 
@@ -366,5 +366,5 @@ echo "Results:"
 [ "$SKIP_SEED" = false ] && echo "  ✓ Tickers seeded"
 [ "$SKIP_INGEST" = false ] && echo "  ✓ Bronze data ingested (prices, reference$([ "$WITH_FINANCIALS" = true ] && echo ', financials'))"
 [ "$SKIP_SILVER" = false ] && echo "  ✓ Silver models built"
-[ "$SKIP_SILVER" = true ] && echo "  ○ Silver build skipped (use --with-silver to enable)"
+[ "$SKIP_SILVER" = true ] && echo "  ○ Silver build skipped (--skip-silver)"
 echo ""
