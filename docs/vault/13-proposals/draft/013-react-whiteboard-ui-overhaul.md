@@ -1370,3 +1370,345 @@ interface GroupNodeData {
 - [ ] Performance benchmarked
 - [ ] Documentation updated
 - [ ] Streamlit code deprecated
+
+---
+
+## Appendix D: Existing Component Migration Matrix
+
+### Complete Inventory of Streamlit Components to Replace
+
+This is the authoritative list of all existing UI components that must be migrated to React equivalents.
+
+#### Main Application Views
+
+| Streamlit File | Purpose | React Replacement | Priority |
+|----------------|---------|-------------------|----------|
+| `app/ui/notebook_app_duckdb.py` | Main application shell | `App.tsx` + Router | 🔴 Critical |
+| `app/ui/components/notebook_view.py` | Notebook renderer | `views/DocumentView.tsx` | 🔴 Critical |
+| `app/ui/components/sidebar.py` | Navigation sidebar | `components/Sidebar.tsx` | 🔴 Critical |
+| `app/ui/components/model_graph_viewer.py` | Model dependency graph | `components/ModelGraphViewer.tsx` (ReactFlow) | 🟡 High |
+
+#### Exhibit Components (Charts & Visualizations)
+
+| Streamlit File | Exhibit Type | React Replacement | Migration Notes |
+|----------------|--------------|-------------------|-----------------|
+| `exhibits/bar_chart.py` | `bar_chart` | `nodes/ExhibitNode.tsx` + Plotly | ✅ Direct config transfer |
+| `exhibits/line_chart.py` | `line_chart` | `nodes/ExhibitNode.tsx` + Plotly | ✅ Direct config transfer |
+| `exhibits/great_table.py` | `great_table` | `nodes/GridNode.tsx` + Tabulator | 🟡 Rebuild styling |
+| `exhibits/data_table.py` | `data_table` | `nodes/GridNode.tsx` + Tabulator | ✅ Simple table |
+| `exhibits/metric_cards.py` | `metric_cards` | `nodes/MetricNode.tsx` + Plotly Indicator | ✅ Direct transfer |
+| `exhibits/forecast_chart.py` | `forecast_chart` | `nodes/ExhibitNode.tsx` + Plotly | ✅ Add forecast traces |
+| `exhibits/weighted_aggregate_chart.py` | `weighted_aggregate_chart` | `nodes/ExhibitNode.tsx` + Plotly | ✅ Bar with aggregation |
+| `exhibits/dimension_selector.py` | Dimension picker | `components/DimensionSelector.tsx` | 🟢 Standard select |
+| `exhibits/measure_selector.py` | Measure picker | `components/MeasureSelector.tsx` | 🟢 Multi-select |
+| `exhibits/click_events.py` | Chart click handling | React event handlers | ✅ Native React |
+| `exhibits/base_renderer.py` | Rendering utilities | TypeScript utils | ✅ Port logic |
+
+**Additional Exhibit Types (from `__init__.py` dispatcher):**
+
+| Exhibit Type | Current Implementation | React Component |
+|--------------|----------------------|-----------------|
+| `scatter_chart` | Plotly Express | `ExhibitNode` + Plotly scatter |
+| `heatmap` | Plotly Express imshow | `ExhibitNode` + Plotly heatmap |
+| `dual_axis_chart` | Plotly subplots | `ExhibitNode` + Plotly dual-axis |
+
+#### Filter Components
+
+| Streamlit File | Filter Type | React Replacement | Notes |
+|----------------|-------------|-------------------|-------|
+| `components/filters.py` | Filter section container | `nodes/FilterNode.tsx` | Main filter component |
+| `components/dynamic_filters.py` | Dynamic options loading | `hooks/useDimensions.ts` | API-driven options |
+| `components/active_filters_display.py` | Active filter chips | `components/ActiveFilters.tsx` | Dismissable chips |
+
+**Filter Types to Implement:**
+
+| Filter Type | Streamlit Widget | React Component |
+|-------------|------------------|-----------------|
+| `date_range` | `st.date_input` (x2) | `DateRangePicker` (shadcn) |
+| `multi_select` | `st.multiselect` | `MultiSelect` (shadcn) |
+| `single_select` | `st.selectbox` | `Select` (shadcn) |
+| `slider` | `st.slider` | `Slider` (shadcn) |
+| `text_input` | `st.text_input` | `Input` (shadcn) |
+| `number_range` | `st.slider` (range) | `RangeSlider` |
+
+#### Markdown Rendering Components
+
+| Streamlit File | Purpose | React Replacement |
+|----------------|---------|-------------------|
+| `markdown/renderer.py` | Main markdown renderer | `components/MarkdownRenderer.tsx` |
+| `markdown/parser.py` | Parse $filter$, $exhibit$ | `utils/markdownParser.ts` |
+| `markdown/styles.py` | CSS constants | `styles/markdown.css` |
+| `markdown/utils.py` | Exhibit/collapsible utils | `utils/exhibitUtils.ts` |
+| `markdown/grid_renderer.py` | CSS Grid layouts | `components/GridLayout.tsx` |
+| `markdown/flat_renderer.py` | Flat list rendering | Part of DocumentView |
+| `markdown/toggle_container.py` | Collapsible sections | `components/Collapsible.tsx` |
+
+**Block Types:**
+
+| Block File | Block Type | React Component |
+|------------|------------|-----------------|
+| `blocks/text.py` | Markdown text | `react-markdown` |
+| `blocks/header.py` | Headers (h1-h6) | Native markdown |
+| `blocks/exhibit.py` | Exhibit wrapper | `nodes/ExhibitNode.tsx` |
+| `blocks/collapsible.py` | Collapsible sections | `components/Collapsible.tsx` |
+| `blocks/error.py` | Error display | `components/ErrorBoundary.tsx` |
+
+#### Editor Components
+
+| Streamlit File | Purpose | React Replacement |
+|----------------|---------|-------------------|
+| `markdown/editors/inline_editor.py` | Inline text editing | `editors/InlineEditor.tsx` |
+| `markdown/editors/section_editor.py` | Section editing | `editors/SectionEditor.tsx` |
+| `markdown/editors/block_editor.py` | Block-level editing | `editors/BlockEditor.tsx` |
+| `markdown/editors/insert_button.py` | Insert new blocks | `editors/InsertMenu.tsx` |
+| `components/yaml_editor.py` | YAML frontmatter editor | Monaco Editor |
+| `components/notebook_creator.py` | New notebook dialog | `dialogs/NewNotebookDialog.tsx` |
+
+#### State & Callbacks
+
+| Streamlit File | Purpose | React Replacement |
+|----------------|---------|-------------------|
+| `state/session_state.py` | AppState dataclass | `stores/appStore.ts` (Zustand) |
+| `callbacks/block_callbacks.py` | Edit/insert/delete handlers | React event handlers |
+| `components/theme.py` | Theme configuration | `tailwind.config.js` |
+
+#### Utility Components
+
+| Streamlit File | Purpose | React Replacement |
+|----------------|---------|-------------------|
+| `components/toggle_container.py` | Generic collapsible | `components/Collapsible.tsx` |
+
+---
+
+## Appendix E: Detailed Component Migration To-Dos
+
+### Phase 1: Core Components (Weeks 1-4)
+
+#### Views
+- [ ] **App Shell** (`notebook_app_duckdb.py` → `App.tsx`)
+  - [ ] Router setup (React Router)
+  - [ ] Layout with sidebar + main content
+  - [ ] Theme provider
+  - [ ] Error boundary
+
+- [ ] **Sidebar** (`sidebar.py` → `Sidebar.tsx`)
+  - [ ] Notebook tree with folders
+  - [ ] Expand/collapse folders
+  - [ ] Notebook selection
+  - [ ] Search input
+
+- [ ] **Document View** (`notebook_view.py` → `DocumentView.tsx`)
+  - [ ] Linear markdown rendering
+  - [ ] Filter sections
+  - [ ] Exhibit sections
+  - [ ] Scroll sync
+
+#### Charts (Plotly - Direct Transfer)
+- [ ] **Bar Chart** (`bar_chart.py` → Plotly config)
+  - [ ] Basic bar chart
+  - [ ] Stacked bars
+  - [ ] Horizontal bars
+  - [ ] Color by dimension
+  - [ ] Multi-measure support
+
+- [ ] **Line Chart** (`line_chart.py` → Plotly config)
+  - [ ] Basic line chart
+  - [ ] Multi-series
+  - [ ] Area fill
+  - [ ] Markers toggle
+
+- [ ] **Scatter Chart** (inline in `__init__.py` → Plotly config)
+  - [ ] Basic scatter
+  - [ ] Size by measure
+  - [ ] Color by dimension
+
+- [ ] **Metric Cards** (`metric_cards.py` → Plotly Indicator)
+  - [ ] Single metric display
+  - [ ] Delta/comparison
+  - [ ] Multiple metrics grid
+
+- [ ] **Dual Axis Chart** (inline → Plotly subplots)
+  - [ ] Primary Y axis
+  - [ ] Secondary Y axis
+  - [ ] Mixed chart types
+
+- [ ] **Heatmap** (inline → Plotly imshow)
+  - [ ] 2D heatmap
+  - [ ] Color scale
+  - [ ] Annotations
+
+- [ ] **Forecast Chart** (`forecast_chart.py` → Plotly)
+  - [ ] Actual vs forecast lines
+  - [ ] Confidence intervals
+  - [ ] Forecast metrics table
+
+#### Tables
+- [ ] **Data Table** (`data_table.py` → Tabulator)
+  - [ ] Basic table rendering
+  - [ ] Column sorting
+  - [ ] Pagination
+
+- [ ] **Great Table** (`great_table.py` → Tabulator with styling)
+  - [ ] Column spanners/groups
+  - [ ] Currency formatting
+  - [ ] Percent formatting
+  - [ ] Conditional coloring
+  - [ ] Footer calculations
+  - [ ] Row grouping
+
+#### Filters
+- [ ] **Date Range** (`st.date_input` → DateRangePicker)
+  - [ ] Start/end date pickers
+  - [ ] Preset ranges (YTD, last 30 days, etc.)
+
+- [ ] **Multi-Select** (`st.multiselect` → MultiSelect)
+  - [ ] Searchable dropdown
+  - [ ] Select all / clear all
+  - [ ] Chip display
+
+- [ ] **Single Select** (`st.selectbox` → Select)
+  - [ ] Searchable dropdown
+  - [ ] Option groups
+
+- [ ] **Slider** (`st.slider` → Slider)
+  - [ ] Single value
+  - [ ] Range (min/max)
+  - [ ] Step increments
+
+- [ ] **Dynamic Options** (`dynamic_filters.py` → API hook)
+  - [ ] Load options from API
+  - [ ] Caching
+  - [ ] Loading states
+
+- [ ] **Active Filters Display** (`active_filters_display.py` → chips)
+  - [ ] Show active filters
+  - [ ] Click to remove
+  - [ ] Clear all button
+
+### Phase 2: Editing Components (Weeks 5-8)
+
+- [ ] **Markdown Editor** (new → Milkdown/BlockNote)
+  - [ ] WYSIWYG editing
+  - [ ] Source mode toggle
+  - [ ] Toolbar
+
+- [ ] **YAML Editor** (`yaml_editor.py` → Monaco)
+  - [ ] Syntax highlighting
+  - [ ] Validation
+  - [ ] Auto-complete
+
+- [ ] **Notebook Creator** (`notebook_creator.py` → Dialog)
+  - [ ] Title input
+  - [ ] Folder selection
+  - [ ] Template selection
+  - [ ] Create button
+
+- [ ] **Block Editor** (`block_editor.py` → React)
+  - [ ] Edit exhibit config
+  - [ ] Edit filter config
+  - [ ] Delete block
+
+- [ ] **Insert Menu** (`insert_button.py` → Dropdown)
+  - [ ] Insert filter
+  - [ ] Insert exhibit
+  - [ ] Insert text
+  - [ ] Insert divider
+
+### Phase 3: Canvas Components (Weeks 9-13)
+
+- [ ] **Canvas Container** (new → ReactFlow)
+  - [ ] ReactFlow setup
+  - [ ] Background grid
+  - [ ] Controls (zoom, fit)
+  - [ ] Minimap
+
+- [ ] **Exhibit Node** (new)
+  - [ ] Wrapper for all chart types
+  - [ ] Resize handles
+  - [ ] Connection handles
+  - [ ] Title bar
+
+- [ ] **Filter Node** (new)
+  - [ ] Filter component in node
+  - [ ] Output handle
+  - [ ] Compact mode
+
+- [ ] **Grid Node** (new)
+  - [ ] Tabulator in node
+  - [ ] Resize handles
+  - [ ] Scroll within node
+
+- [ ] **Markdown Node** (new)
+  - [ ] Inline markdown rendering
+  - [ ] Edit on double-click
+
+- [ ] **Group Node** (new)
+  - [ ] Container for children
+  - [ ] Collapse/expand
+  - [ ] Resize
+  - [ ] Label
+
+- [ ] **Data Flow Edge** (new)
+  - [ ] Solid line
+  - [ ] Arrow head
+  - [ ] Animated option
+
+- [ ] **Insight Edge** (new)
+  - [ ] Dashed line
+  - [ ] Editable label
+  - [ ] Color picker
+
+- [ ] **Model Graph Viewer** (`model_graph_viewer.py` → ReactFlow)
+  - [ ] Model nodes
+  - [ ] Dependency edges
+  - [ ] Build status indicators
+  - [ ] Click to view model
+
+### Phase 4: Advanced Components (Weeks 14-17)
+
+- [ ] **Map Node** (new → Mapbox GL)
+  - [ ] Choropleth
+  - [ ] Point markers
+  - [ ] Tooltips
+  - [ ] Legend
+
+- [ ] **Export Dialog** (new)
+  - [ ] PNG export
+  - [ ] PDF export
+  - [ ] CSV/Excel data export
+
+- [ ] **Share Dialog** (new)
+  - [ ] Copy link
+  - [ ] Embed code
+  - [ ] Permissions
+
+### State Management Migration
+
+| Streamlit State | Zustand Store |
+|-----------------|---------------|
+| `st.session_state.current_notebook` | `appStore.currentNotebook` |
+| `st.session_state.filter_values` | `filterStore.values` |
+| `st.session_state.edit_mode` | `appStore.editMode` |
+| `st.session_state.selected_block` | `canvasStore.selectedNodes` |
+| `st.session_state.last_filter_folder` | `filterStore.currentFolder` |
+
+---
+
+## Appendix F: API Endpoints Required by Components
+
+Each React component needs these API endpoints:
+
+| Component | Endpoints Required |
+|-----------|-------------------|
+| Sidebar | `GET /api/notebooks`, `GET /api/folders` |
+| Document/Canvas View | `GET /api/notebooks/{id}` |
+| Filters | `GET /api/dimensions/{name}`, `POST /api/query` |
+| Exhibits | `POST /api/query` |
+| Grid/Table | `POST /api/query` |
+| Markdown Editor | `PUT /api/notebooks/{id}` |
+| Notebook Creator | `POST /api/notebooks` |
+| Delete | `DELETE /api/notebooks/{id}` |
+| Canvas Save | `PUT /api/notebooks/{id}/canvas` |
+| Model Graph | `GET /api/models`, `GET /api/models/graph` |
+| Export | `POST /api/export/png`, `POST /api/export/pdf` |
+| Maps | `GET /api/geo/{region}`, `POST /api/query` |
