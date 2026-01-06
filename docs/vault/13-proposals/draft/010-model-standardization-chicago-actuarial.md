@@ -12,8 +12,9 @@
 - ✅ Phase 3: Config Standardization - Complete
 - ⏸️ Phase 4: Core Geography - Pending
 - ✅ Phase 5: Spark Cluster - Complete
-- 🔜 **Phase 6: Airflow - NEXT STEPS**
-- ⏸️ Phases 7-16: Pending
+- 🔜 **Phase 6: New Endpoints & Model Builds - NEXT STEPS**
+- ⏸️ Phase 7: Airflow Orchestration - After Phase 6
+- ⏸️ Phases 8-17: Pending
 
 ---
 
@@ -4135,23 +4136,24 @@ This phase is a catch-all for:
 | Phase 2: Backend Abstraction (UniversalSession) | 3 | High | Foundation | ✅ COMPLETE |
 | Phase 3: Config Standardization | 3 | High | Foundation | ✅ COMPLETE |
 | Phase 4: Core Geography (US-Agnostic) | 5 | High | Foundation | Pending |
-| Phase 5: Ingestor & Orchestrator Standardization | 4 | High | Foundation | ✅ COMPLETE (Spark Cluster) |
-| Phase 6: Distributed Queue → Airflow | 5 | High | Foundation | **NEXT STEPS** |
-| Phase 7: Bronze Expansion & Ingestion Testing | 4 | High | Foundation | Pending |
-| **Foundation Subtotal** | **26 days** | | | **4/7 Complete** |
-| Phase 8: Economic Series Enhancement | 5 | High | Enhancement |
-| Phase 9: Chart of Accounts Enhancement | 6 | High | Enhancement |
-| Phase 10: City Services Enhancement | 7 | High | Enhancement |
-| Phase 11: Securities Models Enhancement | 7 | Medium | Enhancement |
-| Phase 12: Company Chart of Accounts Enhancement | 7 | High | Enhancement |
-| Phase 13: Metadata Table Enhancement | 5 | High | Enhancement |
-| Phase 14: Logger Model Enhancement | 6 | High | Enhancement |
-| **Enhancement Subtotal** | **43 days** | | |
-| Phase 15: Exhibit Enhancements | 5 | Medium | Exhibits |
-| **Exhibits Subtotal** | **5 days** | | |
-| Phase 16: Final Cleanup & Validation | 3 | Medium | Cleanup |
-| **Cleanup Subtotal** | **3 days** | | |
-| **Total** | **77 days** | | |
+| Phase 5: Ingestor & Orchestrator (Spark Cluster) | 4 | High | Foundation | ✅ COMPLETE |
+| Phase 6: New Endpoints & Model Builds | 5 | High | Foundation | **NEXT STEPS** |
+| Phase 7: Airflow Orchestration | 5 | High | Foundation | Pending (after Phase 6) |
+| Phase 8: Bronze Expansion & Ingestion Testing | 4 | High | Foundation | Pending |
+| **Foundation Subtotal** | **31 days** | | | **4/8 Complete** |
+| Phase 9: Economic Series Enhancement | 5 | High | Enhancement | |
+| Phase 10: Chart of Accounts Enhancement | 6 | High | Enhancement | |
+| Phase 11: City Services Enhancement | 7 | High | Enhancement | |
+| Phase 12: Securities Models Enhancement | 7 | Medium | Enhancement | |
+| Phase 13: Company Chart of Accounts Enhancement | 7 | High | Enhancement | |
+| Phase 14: Metadata Table Enhancement | 5 | High | Enhancement | |
+| Phase 15: Logger Model Enhancement | 6 | High | Enhancement | |
+| **Enhancement Subtotal** | **43 days** | | | |
+| Phase 16: Exhibit Enhancements | 5 | Medium | Exhibits | |
+| **Exhibits Subtotal** | **5 days** | | | |
+| Phase 17: Final Cleanup & Validation | 3 | Medium | Cleanup | |
+| **Cleanup Subtotal** | **3 days** | | | |
+| **Total** | **82 days** | | | |
 
 ---
 
@@ -4445,11 +4447,51 @@ See **"Phase 5: Spark Cluster Implementation"** in Appendix B for full details.
 
 ---
 
-### Phase 6: Distributed Orchestration - Airflow (NEXT STEPS)
+### Phase 6: New Endpoints & Model Builds (NEXT STEPS)
 
 **Status**: Pending - Next major milestone
 
-**Revised Approach**: The original Delta Lake queue design has been superseded. With the Spark cluster now operational, the next step is implementing **Apache Airflow** for production-grade orchestration.
+**Goal**: Add new Alpha Vantage endpoints and build out remaining models to have more items to orchestrate before implementing Airflow.
+
+**New Endpoints to Add:**
+
+| Endpoint | Bronze Table | Model Impact |
+|----------|--------------|--------------|
+| `OVERVIEW` | `company_overview` | Company fundamentals (market cap, PE, etc.) |
+| `EARNINGS` | `earnings` | Quarterly earnings data |
+| `INCOME_STATEMENT` | `income_statements` | Annual/quarterly income statements |
+| `BALANCE_SHEET` | `balance_sheets` | Annual/quarterly balance sheets |
+| `CASH_FLOW` | `cash_flows` | Annual/quarterly cash flow statements |
+| `NEWS_SENTIMENT` | `news_sentiment` | News and sentiment analysis |
+| `INSIDER_TRANSACTIONS` | `insider_transactions` | Insider buying/selling |
+
+**Models to Complete:**
+
+| Model | Status | Tasks |
+|-------|--------|-------|
+| `company` | Partial | Add fundamentals from OVERVIEW, link financial statements |
+| `stocks` | Working | Add earnings, news sentiment |
+| `options` | Skeleton | Complete Black-Scholes, Greeks calculations |
+| `etf` | Skeleton | Add holdings, NAV tracking |
+| `futures` | Skeleton | Add roll-adjusted pricing |
+
+**Implementation Tasks:**
+- [ ] Add endpoint configurations to `alpha_vantage_endpoints.json`
+- [ ] Create facets for new endpoints
+- [ ] Update `run_bronze_ingestion.py` to handle new endpoints
+- [ ] Complete model builders for options, etf, futures
+- [ ] Add measures for new data (earnings growth, PE ratios, etc.)
+- [ ] Test full pipeline with expanded endpoints
+
+**Why Before Airflow**: Having 7+ endpoints and 5+ models provides realistic orchestration complexity for Airflow DAG design.
+
+---
+
+### Phase 7: Airflow Orchestration (Pending)
+
+**Status**: Pending - After Phase 6
+
+**Goal**: Implement Apache Airflow for production-grade orchestration now that we have multiple endpoints and models to coordinate.
 
 **Why Airflow over Delta Lake Queue:**
 - Industry-standard workflow orchestration
@@ -4463,7 +4505,8 @@ See **"Phase 5: Spark Cluster Implementation"** in Appendix B for full details.
 | DAG | Schedule | Purpose |
 |-----|----------|---------|
 | `bronze_daily_ingest` | Daily 6 AM | Ingest daily prices for all tickers |
-| `bronze_weekly_reference` | Weekly Sunday | Refresh securities reference data |
+| `bronze_weekly_reference` | Weekly Sunday | Refresh securities reference, company overview |
+| `bronze_quarterly_financials` | Quarterly | Ingest financial statements after earnings |
 | `silver_model_build` | After Bronze | Build/refresh Silver layer models |
 | `silver_incremental` | Hourly (market hours) | Incremental price updates |
 
@@ -4473,22 +4516,23 @@ See **"Phase 5: Spark Cluster Implementation"** in Appendix B for full details.
 - [ ] Integrate with existing `run_bronze_ingestion.py` and `build_models.py`
 - [ ] Set up Airflow web UI for monitoring
 - [ ] Configure alerting for pipeline failures
+- [ ] Create DAG for each endpoint group (daily, weekly, quarterly)
 
 **Current Workaround**: Use `test_full_pipeline_spark.sh` for manual/cron-based execution until Airflow is implemented
 
 ---
 
-### Phase 7: Bronze Expansion & Ingestion Testing (Pending)
+### Phase 8: Bronze Expansion & Ingestion Testing (Pending)
 
-*Not started*
-
----
-
-*Enhancement phases (8-14) will be logged as they are completed.*
+*Not started - validates Phase 6 & 7 implementation*
 
 ---
 
-### Phase 15: Exhibit Enhancements (Pending)
+*Enhancement phases (9-15) will be logged as they are completed.*
+
+---
+
+### Phase 16: Exhibit Enhancements (Pending)
 
 *This phase will address:*
 - Wire YAML presets into exhibit renderers (currently hardcoded)
@@ -4498,7 +4542,7 @@ See **"Phase 5: Spark Cluster Implementation"** in Appendix B for full details.
 
 ---
 
-### Phase 16: Final Cleanup & Validation (Pending)
+### Phase 17: Final Cleanup & Validation (Pending)
 
 *This phase will address:*
 - Deferred items from earlier phases (e.g., _backend removal from Phase 2)
