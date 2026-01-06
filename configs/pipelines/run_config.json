@@ -92,7 +92,8 @@
       "max_tickers": 10,
       "use_market_cap": true,
       "dry_run": false,
-      "skip_silver": false
+      "skip_silver": false,
+      "with_financials": true
     },
     "staging": {
       "max_tickers": 500,

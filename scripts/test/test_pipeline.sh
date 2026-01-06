@@ -93,16 +93,45 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# Determine repo root first (needed for config loading)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+cd "$REPO_ROOT"
+
+# Load profile settings from run_config.json if profile is specified
+if [ -n "$PROFILE" ] && [ -f "$REPO_ROOT/configs/pipelines/run_config.json" ]; then
+    # Read max_tickers from profile if not overridden by CLI
+    if [ -z "$MAX_TICKERS" ]; then
+        PROFILE_MAX_TICKERS=$(python3 -c "
+import json
+with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
+    cfg = json.load(f)
+profile = cfg.get('profiles', {}).get('$PROFILE', {})
+print(profile.get('max_tickers', '') or '')
+" 2>/dev/null || echo "")
+        [ -n "$PROFILE_MAX_TICKERS" ] && MAX_TICKERS="$PROFILE_MAX_TICKERS"
+    fi
+
+    # Read with_financials from profile (CLI --with-financials still overrides)
+    PROFILE_WITH_FINANCIALS=$(python3 -c "
+import json
+with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
+    cfg = json.load(f)
+profile = cfg.get('profiles', {}).get('$PROFILE', {})
+print('true' if profile.get('with_financials') else 'false')
+" 2>/dev/null || echo "false")
+
+    # Only use profile setting if CLI didn't explicitly set --with-financials
+    if [ "$WITH_FINANCIALS" = false ] && [ "$PROFILE_WITH_FINANCIALS" = "true" ]; then
+        WITH_FINANCIALS=true
+    fi
+fi
+
 # Print header
 echo -e "${BLUE}============================================================${NC}"
 echo -e "${BLUE}     de_Funk Pipeline Test - IngestorEngine Paradigm        ${NC}"
 echo -e "${BLUE}============================================================${NC}"
 echo ""
-
-# Determine repo root
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-cd "$REPO_ROOT"
 
 echo -e "Repository root: ${GREEN}$REPO_ROOT${NC}"
 

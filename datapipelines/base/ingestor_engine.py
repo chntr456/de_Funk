@@ -40,6 +40,17 @@ logger = get_logger(__name__)
 
 
 @dataclass
+class IngestionError:
+    """Detailed error information from ingestion."""
+    ticker: str
+    data_type: str
+    step: str  # 'fetch', 'normalize', 'write'
+    error_type: str
+    error_message: str
+    timestamp: str = field(default_factory=lambda: time.strftime("%Y-%m-%d %H:%M:%S"))
+
+
+@dataclass
 class IngestionResults:
     """Results from an ingestion run."""
     tickers: List[str] = field(default_factory=list)
@@ -49,6 +60,57 @@ class IngestionResults:
     tables_written: Dict[str, str] = field(default_factory=dict)
     stats: Dict[str, Any] = field(default_factory=dict)
     metrics: Dict[str, Any] = field(default_factory=dict)
+    errors: List[IngestionError] = field(default_factory=list)
+
+    def add_error(
+        self,
+        ticker: str,
+        data_type: str,
+        step: str,
+        error: Exception
+    ) -> None:
+        """Add an error to the error log."""
+        self.errors.append(IngestionError(
+            ticker=ticker,
+            data_type=data_type,
+            step=step,
+            error_type=type(error).__name__,
+            error_message=str(error)[:200]
+        ))
+        self.total_errors += 1
+
+    def print_error_summary(self) -> None:
+        """Print a summary of errors encountered."""
+        if not self.errors:
+            return
+
+        print(f"\n{'=' * 60}")
+        print("ERROR SUMMARY")
+        print(f"{'=' * 60}")
+        print(f"Total errors: {len(self.errors)}")
+
+        # Group by step
+        by_step = {}
+        for err in self.errors:
+            by_step.setdefault(err.step, []).append(err)
+
+        for step, errs in by_step.items():
+            print(f"\n  {step.upper()} errors ({len(errs)}):")
+            # Group by error type
+            by_type = {}
+            for err in errs:
+                by_type.setdefault(err.error_type, []).append(err)
+
+            for err_type, type_errs in by_type.items():
+                print(f"    - {err_type}: {len(type_errs)} occurrences")
+                # Show sample tickers
+                sample_tickers = [e.ticker for e in type_errs[:3]]
+                print(f"      Sample tickers: {', '.join(sample_tickers)}")
+                # Show sample message
+                if type_errs:
+                    print(f"      Sample error: {type_errs[0].error_message[:80]}...")
+
+        print(f"{'=' * 60}\n")
 
 
 class IngestorEngine:
@@ -163,7 +225,7 @@ class IngestorEngine:
                 # Normalize and accumulate (aggregate by step type)
                 with metrics.time("normalize"):
                     self._normalize_and_accumulate(
-                        ticker_data, data_types, accumulators, company_ref_dfs
+                        ticker_data, data_types, accumulators, company_ref_dfs, results
                     )
 
                 results.tickers.append(ticker)
@@ -186,7 +248,9 @@ class IngestorEngine:
         final_stats = tracker.finish()
         results.stats = final_stats
         results.completed_tickers = len(results.tickers)
-        results.total_errors = final_stats.get('total_errors', 0)
+        # Combine errors from tracker stats and our internal error log
+        tracker_errors = final_stats.get('total_errors', 0)
+        results.total_errors = max(tracker_errors, len(results.errors))
 
         # Print metrics report
         if not silent:
@@ -194,6 +258,10 @@ class IngestorEngine:
             metrics.print_report()
 
         results.metrics = metrics.summary()
+
+        # Print error summary if there were errors
+        if not silent and results.errors:
+            results.print_error_summary()
 
         # Auto-compact Delta tables to prevent file fragmentation
         if auto_compact and results.tables_written:
@@ -252,7 +320,8 @@ class IngestorEngine:
         ticker_data: TickerData,
         data_types: List[DataType],
         accumulators: Dict[DataType, List],
-        company_ref_dfs: List
+        company_ref_dfs: List,
+        results: IngestionResults
     ) -> None:
         """
         Normalize ticker data and add to accumulators.
@@ -262,22 +331,38 @@ class IngestorEngine:
             data_types: Data types to normalize
             accumulators: Dict of accumulators by data type
             company_ref_dfs: Accumulator for company reference
+            results: Results object to track errors
         """
-        try:
-            for data_type in data_types:
+        ticker = ticker_data.ticker
+
+        for data_type in data_types:
+            try:
                 df = self.provider.normalize_data(ticker_data, data_type)
                 if df is not None and df.count() > 0:
                     accumulators[data_type].append(df)
+            except Exception as e:
+                # Log detailed error with stack trace
+                import traceback
+                logger.error(
+                    f"Failed to normalize {data_type.value} for {ticker}: {e}\n"
+                    f"Stack trace: {traceback.format_exc()}"
+                )
+                results.add_error(ticker, data_type.value, "normalize", e)
 
-            # Also normalize company reference if provider supports it
-            if self.include_company_reference and DataType.REFERENCE in data_types:
-                if hasattr(self.provider, 'normalize_company_reference'):
+        # Also normalize company reference if provider supports it
+        if self.include_company_reference and DataType.REFERENCE in data_types:
+            if hasattr(self.provider, 'normalize_company_reference'):
+                try:
                     comp_df = self.provider.normalize_company_reference(ticker_data)
                     if comp_df is not None and comp_df.count() > 0:
                         company_ref_dfs.append(comp_df)
-
-        except Exception as e:
-            logger.warning(f"Failed to normalize data for {ticker_data.ticker}: {e}")
+                except Exception as e:
+                    import traceback
+                    logger.error(
+                        f"Failed to normalize company reference for {ticker}: {e}\n"
+                        f"Stack trace: {traceback.format_exc()}"
+                    )
+                    results.add_error(ticker, "company_reference", "normalize", e)
 
     # Data types that are immutable (historical data that doesn't change)
     # These use append_immutable() for better performance
@@ -341,7 +426,12 @@ class IngestorEngine:
                     results.tables_written[table_name] = path
 
             except Exception as e:
-                logger.warning(f"Failed to write {data_type.value}: {e}")
+                import traceback
+                logger.error(
+                    f"Failed to write {data_type.value}: {e}\n"
+                    f"Stack trace: {traceback.format_exc()}"
+                )
+                results.add_error("batch", data_type.value, "write", e)
 
         # Write company reference separately
         if company_ref_dfs:
@@ -360,7 +450,12 @@ class IngestorEngine:
                     results.tables_written["company_reference"] = path
 
             except Exception as e:
-                logger.warning(f"Failed to write company_reference: {e}")
+                import traceback
+                logger.error(
+                    f"Failed to write company_reference: {e}\n"
+                    f"Stack trace: {traceback.format_exc()}"
+                )
+                results.add_error("batch", "company_reference", "write", e)
 
     def run_with_discovery(
         self,

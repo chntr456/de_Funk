@@ -29,7 +29,7 @@ from datapipelines.base.provider import (
     FetchResult,
     ProviderConfig
 )
-from datapipelines.base.ingestor_engine import IngestorEngine, IngestionResults, create_engine
+from datapipelines.base.ingestor_engine import IngestorEngine, IngestionResults, IngestionError, create_engine
 
 __all__ = [
     # Facet (Data Transformation)
@@ -60,5 +60,6 @@ __all__ = [
     # Ingestor Engine
     'IngestorEngine',
     'IngestionResults',
+    'IngestionError',
     'create_engine',
 ]
