@@ -98,6 +98,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
+# Source .env file if it exists (for API keys)
+if [ -f "$REPO_ROOT/.env" ]; then
+    set -a  # automatically export all variables
+    source "$REPO_ROOT/.env"
+    set +a
+fi
+
 # Load profile settings from run_config.json if profile is specified
 if [ -n "$PROFILE" ] && [ -f "$REPO_ROOT/configs/pipelines/run_config.json" ]; then
     # Read max_tickers from profile if not overridden by CLI
