@@ -2,6 +2,14 @@
 Alpha Vantage Provider Implementation.
 
 Implements the BaseProvider interface for Alpha Vantage API.
+This is the STANDARD REFERENCE implementation for all data providers.
+
+Features:
+- Rate limiting: Pro tier 75 calls/min (1.25 calls/sec)
+- Bulk ticker discovery via LISTING_STATUS endpoint
+- Seed tickers to Bronze layer
+- All financial statement endpoints (income, balance, cash flow, earnings)
+- Integration with IngestorEngine for distributed cluster execution
 
 Usage:
     from datapipelines.providers.alpha_vantage.provider import AlphaVantageProvider
@@ -10,15 +18,21 @@ Usage:
     config = ProviderConfig(
         name="alpha_vantage",
         base_url="https://www.alphavantage.co/query",
-        rate_limit=1.0,
+        rate_limit=1.25,  # Pro tier: 75 calls/min
         supported_data_types=[DataType.REFERENCE, DataType.PRICES, ...]
     )
 
     provider = AlphaVantageProvider(config, spark=spark_session)
+
+    # Seed tickers (1 API call)
+    df = provider.seed_tickers()
+
+    # Fetch data for specific tickers
     ticker_data = provider.fetch_ticker_data("AAPL", [DataType.REFERENCE, DataType.PRICES])
 
 Author: de_Funk Team
 Date: December 2025
+Updated: January 2026 - Standardized as reference provider implementation
 """
 
 from __future__ import annotations
@@ -451,6 +465,113 @@ class AlphaVantageProvider(BaseProvider):
             logger.warning(f"Failed to get market cap rankings: {e}")
             return []
 
+    def seed_tickers(
+        self,
+        state: str = "active",
+        filter_us_exchanges: bool = True
+    ) -> Any:
+        """
+        Seed tickers from LISTING_STATUS endpoint to Bronze layer.
+
+        This is a bulk operation that fetches ALL tickers in a single API call
+        (CSV format, not JSON) and returns a Spark DataFrame ready for Bronze.
+
+        Args:
+            state: 'active' or 'delisted'
+            filter_us_exchanges: Only include US exchanges (NYSE, NASDAQ, etc.)
+
+        Returns:
+            Spark DataFrame with ticker reference data
+
+        Note:
+            This uses 1 API call regardless of ticker count (~12,500 active tickers).
+        """
+        import csv
+        import io
+        from datetime import datetime
+        from pyspark.sql.types import (
+            StructType, StructField, StringType, DateType, TimestampType
+        )
+
+        logger.info(f"Testing task: seed tickers (state={state})")
+
+        # Fetch LISTING_STATUS (returns CSV)
+        ep, path, query = self.registry.render("listing_status", state=state)
+        query['apikey'] = self.key_pool.next_key() if self.key_pool else None
+
+        with self._http_lock:
+            response_text = self.http.request_text(ep.base, path, query, ep.method)
+
+        # Parse CSV
+        csv_reader = csv.DictReader(io.StringIO(response_text))
+        rows = list(csv_reader)
+
+        logger.info(f"Fetched {len(rows)} tickers from LISTING_STATUS")
+
+        # Filter to US exchanges if requested
+        if filter_us_exchanges:
+            rows = [r for r in rows if r.get('exchange') in self._us_exchanges]
+            logger.info(f"Filtered to {len(rows)} US exchange tickers")
+
+        # Transform to Bronze schema
+        now = datetime.now()
+        transformed = []
+        for row in rows:
+            # Parse IPO date
+            ipo_date = None
+            if row.get('ipoDate'):
+                try:
+                    ipo_date = datetime.strptime(row['ipoDate'], '%Y-%m-%d').date()
+                except ValueError:
+                    pass
+
+            # Parse delisting date
+            delisting_date = None
+            if row.get('delistingDate'):
+                try:
+                    delisting_date = datetime.strptime(row['delistingDate'], '%Y-%m-%d').date()
+                except ValueError:
+                    pass
+
+            # Map asset type
+            asset_type_raw = row.get('assetType', 'Stock')
+            if asset_type_raw == 'Stock':
+                asset_type = 'stocks'
+            elif asset_type_raw == 'ETF':
+                asset_type = 'etfs'
+            else:
+                asset_type = 'stocks'
+
+            transformed.append({
+                'ticker': row.get('symbol'),
+                'security_name': row.get('name'),
+                'asset_type': asset_type,
+                'exchange_code': row.get('exchange'),
+                'ipo_date': ipo_date,
+                'delisting_date': delisting_date,
+                'status': row.get('status', 'Active'),
+                'ingestion_timestamp': now,
+                'snapshot_date': now.date(),
+            })
+
+        # Create DataFrame with explicit schema
+        schema = StructType([
+            StructField('ticker', StringType(), False),
+            StructField('security_name', StringType(), True),
+            StructField('asset_type', StringType(), True),
+            StructField('exchange_code', StringType(), True),
+            StructField('ipo_date', DateType(), True),
+            StructField('delisting_date', DateType(), True),
+            StructField('status', StringType(), True),
+            StructField('ingestion_timestamp', TimestampType(), True),
+            StructField('snapshot_date', DateType(), True),
+        ])
+
+        df = self.spark.createDataFrame(transformed, schema=schema)
+        logger.info(f"Created DataFrame with {df.count()} tickers")
+
+        return df
+
 
 def create_alpha_vantage_provider(
     alpha_vantage_cfg: Dict,
@@ -466,10 +587,11 @@ def create_alpha_vantage_provider(
     Returns:
         Configured AlphaVantageProvider
     """
+    # Pro tier: 75 calls/min = 1.25 calls/sec
     config = ProviderConfig(
         name="alpha_vantage",
         base_url="https://www.alphavantage.co/query",
-        rate_limit=alpha_vantage_cfg.get("rate_limit_per_sec", 1.0),
+        rate_limit=alpha_vantage_cfg.get("rate_limit_per_sec", 1.25),
         batch_size=20,
         credentials_env_var="ALPHA_VANTAGE_API_KEYS",
         supported_data_types=[

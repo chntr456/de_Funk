@@ -11,7 +11,7 @@
 # =============================================================================
 # CLUSTER TOPOLOGY
 # =============================================================================
-# Shared by both Spark and legacy Ray configurations
+# Defines head node and worker nodes for Spark cluster
 
 cluster:
   # Head node configuration
@@ -68,30 +68,6 @@ airflow:
   venv_path: ~/airflow-venv
 
 # =============================================================================
-# RAY CLUSTER SETTINGS (Legacy - kept for reference)
-# =============================================================================
-ray:
-  # Cluster mode: "local", "auto", or "address"
-  mode: local
-  address: null
-
-  local:
-    num_cpus: 12
-    memory_gb: 8
-
-  # Legacy cluster settings (now use cluster.workers above)
-  cluster:
-    head:
-      host: "192.168.1.212"
-      port: 6379
-      dashboard_port: 8265
-
-  runtime_env:
-    working_dir: null
-    pip: []
-    env_vars: {}
-
-# =============================================================================
 # SHARED STORAGE SETTINGS
 # =============================================================================
 # NOTE: The actual storage path is defined in configs/pipelines/run_config.json
@@ -118,8 +94,8 @@ storage:
       host: "192.168.1.100"
       export_path: "/home/de_funk/storage"
 
-  # Repo code sharing (for distributed Ray tasks)
-  # Setup: scripts/cluster/setup_repo_nfs.sh
+  # Repo code sharing (for distributed Spark tasks)
+  # Setup: scripts/spark-cluster/setup-head.sh
   repo_nfs:
     # Head node exports the repo for workers to access
     enabled: true
@@ -191,8 +167,8 @@ ingestion:
   # Auto-compact Delta tables after ingestion
   auto_compact: true
 
-  # Rate limiting (requests per second)
-  rate_limit: 1.0
+  # Rate limiting (requests per second) - Pro tier: 75 calls/min = 1.25/sec
+  rate_limit: 1.25
 
   # Retry settings
   max_retries: 3
