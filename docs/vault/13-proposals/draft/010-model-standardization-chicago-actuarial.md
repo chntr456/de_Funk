@@ -4323,6 +4323,55 @@ All session abstraction verified working. Models use UniversalSession without di
 
 ---
 
+### Phase 5: Spark Cluster Implementation ✅ COMPLETE
+
+✅ **Completed December 2025 - January 2026**
+
+**Goal Achieved**: Pure Spark-based pipeline execution with cluster support, replacing the Delta Lake queue approach in favor of future Airflow integration.
+
+**Implementation Summary:**
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| Cluster init script | `scripts/spark-cluster/init-cluster.sh` | ✅ Complete |
+| Head node setup | `scripts/spark-cluster/setup-head.sh` | ✅ Complete |
+| Worker node setup | `scripts/spark-cluster/setup-worker.sh` | ✅ Complete |
+| Spark environment | `scripts/spark-cluster/spark-env.sh` | ✅ Complete |
+| Master start/stop | `scripts/spark-cluster/start-master.sh`, `stop-cluster.sh` | ✅ Complete |
+| Worker start/stop | `scripts/spark-cluster/start-worker.sh`, `start-all-workers.sh` | ✅ Complete |
+| Cluster status | `scripts/spark-cluster/status.sh` | ✅ Complete |
+| Job submission | `scripts/spark-cluster/submit-job.sh` | ✅ Complete |
+| Pipeline runner | `scripts/spark-cluster/run_pipeline.sh` | ✅ Complete |
+| Monitoring | `scripts/spark-cluster/monitoring/` | ✅ Complete |
+
+**Profile-Based Configuration** (`run_config.json`):
+- `quick_test`: 10 tickers for fast validation
+- `dev`: 50 tickers for development
+- `production`: All tickers from Bronze seed
+
+**Main Pipeline Script**: `scripts/test/test_full_pipeline_spark.sh`
+```bash
+# Run with profile
+./scripts/test/test_full_pipeline_spark.sh --profile dev
+
+# Override ticker count
+./scripts/test/test_full_pipeline_spark.sh --max-tickers 100
+```
+
+**Key Design Decisions:**
+1. **Pure Spark execution** - No Ray cluster dependency
+2. **NFS shared storage** at `/shared/storage` for Bronze/Silver layers
+3. **Profile-based config** via `run_config.json` instead of CLI arguments
+4. **Direct script execution** rather than Delta Lake queue (simpler for current scale)
+
+**Scripts Consolidated (v2.6):**
+- Removed Ray-based cluster scripts (migrated to pure Spark)
+- Consolidated build scripts to `build_models.py`
+- Consolidated ingest scripts to `run_bronze_ingestion.py`
+- Main test script: `test_full_pipeline_spark.sh`
+
+---
+
 ### Session: DuckDB Query Path Fixes (January 2026)
 
 ✅ **Completed 2026-01-06**
@@ -4377,15 +4426,46 @@ Query Request
 
 ---
 
-### Phase 5: Ingestor & Orchestrator Standardization (Pending)
+### Phase 5: Ingestor & Orchestrator Standardization ✅ COMPLETE
 
-*Not started*
+✅ **Completed December 2025 - January 2026**
+
+See **"Phase 5: Spark Cluster Implementation"** in Appendix B for full details.
+
+**Summary**: Implemented pure Spark-based pipeline with cluster support via `scripts/spark-cluster/`. Profile-based configuration via `run_config.json`. Main entry point: `test_full_pipeline_spark.sh`.
 
 ---
 
-### Phase 6: Distributed Queue (Pending)
+### Phase 6: Distributed Orchestration - Airflow (NEXT STEPS)
 
-*Not started*
+**Status**: Pending - Next major milestone
+
+**Revised Approach**: The original Delta Lake queue design has been superseded. With the Spark cluster now operational, the next step is implementing **Apache Airflow** for production-grade orchestration.
+
+**Why Airflow over Delta Lake Queue:**
+- Industry-standard workflow orchestration
+- Built-in scheduling, retries, and dependency management
+- DAG visualization and monitoring UI
+- Battle-tested for data pipeline orchestration
+- Better separation of concerns (Spark for compute, Airflow for orchestration)
+
+**Proposed Airflow DAGs:**
+
+| DAG | Schedule | Purpose |
+|-----|----------|---------|
+| `bronze_daily_ingest` | Daily 6 AM | Ingest daily prices for all tickers |
+| `bronze_weekly_reference` | Weekly Sunday | Refresh securities reference data |
+| `silver_model_build` | After Bronze | Build/refresh Silver layer models |
+| `silver_incremental` | Hourly (market hours) | Incremental price updates |
+
+**Implementation Tasks:**
+- [ ] Install Airflow on head node
+- [ ] Create `dags/` directory with pipeline DAGs
+- [ ] Integrate with existing `run_bronze_ingestion.py` and `build_models.py`
+- [ ] Set up Airflow web UI for monitoring
+- [ ] Configure alerting for pipeline failures
+
+**Current Workaround**: Use `test_full_pipeline_spark.sh` for manual/cron-based execution until Airflow is implemented
 
 ---
 
