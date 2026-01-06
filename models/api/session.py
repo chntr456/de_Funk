@@ -401,9 +401,13 @@ class UniversalSession:
             import pandas as pd
             return self.connection.conn.from_df(pd.DataFrame()) if hasattr(self.connection, 'conn') else pd.DataFrame()
 
-        # Strategy 4: Fall back to building from Bronze (SLOW - avoid if possible)
-        logger.warning(f"Building {model_name}.{table_name} from Bronze (this is slow, consider creating Silver views)")
-        return model.get_table(table_name)
+        # Strategy 4: REMOVED - Never fall back to Bronze for queries
+        # Building from Bronze would load 22M+ rows into memory and crash.
+        # If we get here, Silver doesn't exist - raise clear error.
+        raise ValueError(
+            f"Table '{model_name}.{table_name}' not available. Silver layer not found at {base_silver_path}. "
+            f"Run: python -m scripts.build.build_models --models {model_name}"
+        )
 
     def get_table(
         self,
@@ -493,7 +497,8 @@ class UniversalSession:
 
         if materialized_table:
             logger.debug(f"AUTO-JOIN: Using materialized view: {materialized_table}")
-            df = model.get_table(materialized_table)
+            # Use session method to get from Silver - don't call model.get_table() directly
+            df = self._get_table_from_view_or_build(model, model_name, materialized_table, allow_build=False)
 
             if filters:
                 df = FilterEngine.apply_from_session(df, filters, self)
@@ -507,22 +512,17 @@ class UniversalSession:
             return df
 
         # Strategy 2: Build joins from graph
-        try:
-            t0 = time.time()
-            join_plan = auto_join.plan_auto_joins(model_name, table_name, missing)
-            logger.debug(f"AUTO-JOIN: plan_auto_joins took {time.time() - t0:.2f}s")
-            logger.debug(f"AUTO-JOIN: Join plan: {' -> '.join(join_plan['table_sequence'])}")
+        t0 = time.time()
+        join_plan = auto_join.plan_auto_joins(model_name, table_name, missing)
+        logger.debug(f"AUTO-JOIN: plan_auto_joins took {time.time() - t0:.2f}s")
+        logger.debug(f"AUTO-JOIN: Join plan: {' -> '.join(join_plan['table_sequence'])}")
 
-            t0 = time.time()
-            df = auto_join.execute_auto_joins(model_name, join_plan, required_columns, filters)
-            logger.debug(f"AUTO-JOIN: execute_auto_joins took {time.time() - t0:.2f}s")
-        except Exception as e:
-            logger.error(f"AUTO-JOIN FAILED: {e}", exc_info=True)
-            logger.warning(f"AUTO-JOIN: Falling back to base table {table_name}")
-            df = model.get_table(table_name)
+        t0 = time.time()
+        df = auto_join.execute_auto_joins(model_name, join_plan, required_columns, filters)
+        logger.debug(f"AUTO-JOIN: execute_auto_joins took {time.time() - t0:.2f}s")
 
-            if filters:
-                df = FilterEngine.apply_from_session(df, filters, self)
+        # NOTE: Removed try/except fallback to model.get_table()
+        # If auto-join fails, let the error propagate - don't silently read from Bronze
 
         if group_by:
             t0 = time.time()

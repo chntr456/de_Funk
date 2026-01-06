@@ -664,12 +664,12 @@ class AutoJoinHandler:
 
         logger.debug(f"AUTO-JOIN DUCKDB SQL: {sql[:500]}{'...' if len(sql) > 500 else ''}")
 
+        # Return lazy DuckDB relation - do NOT use fetchdf() which loads all data into memory
         t0 = time.time()
-        result = self.connection.conn.execute(sql)
-        result_df = result.fetchdf()
-        logger.debug(f"AUTO-JOIN DUCKDB: View query took {time.time() - t0:.2f}s, shape={result_df.shape}")
+        result = self.connection.conn.sql(sql)
+        logger.debug(f"AUTO-JOIN DUCKDB: View query prepared (lazy) in {time.time() - t0:.2f}s")
 
-        return self.connection.conn.from_df(result_df)
+        return result
 
     def _execute_duckdb_joins_via_tables(
         self,
