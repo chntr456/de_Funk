@@ -1,79 +1,54 @@
 """
-Alpha Vantage Data Provider
+Alpha Vantage Data Provider - IngestorEngine Paradigm
 
 Provides stock market data from Alpha Vantage API:
 - Company fundamentals (OVERVIEW)
 - Daily/intraday time series (TIME_SERIES_DAILY, TIME_SERIES_INTRADAY)
+- Financial statements (INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW, EARNINGS)
 - Technical indicators (SMA, RSI, MACD, etc.)
 - Forex, crypto, and commodities
 
 API Key Required:
 Set ALPHA_VANTAGE_API_KEYS environment variable with your API key(s).
+Pro tier: 75 requests/minute (1.25/sec)
 Free tier: 25 requests/day, 5 requests/minute
-Premium tiers available with higher limits.
 
-Key Features:
-- Maps to unified bronze schema (securities_reference, securities_prices_daily)
-- Compatible with v2.0 modular model architecture
-- Supports stocks, ETFs, and other asset types
-- Split/dividend adjusted prices available
-
-Limitations:
-- No CIK field (use Polygon or SEC EDGAR for company identifiers)
-- Lower rate limits compared to Polygon
-- No bulk ticker endpoints (one call per ticker)
-- No VWAP data (calculated as approximation)
+Architecture:
+- AlphaVantageProvider: Implements BaseProvider interface for data fetching
+- AlphaVantageRegistry: Maps endpoints to Facet classes for transformation
+- IngestorEngine: Generic engine from datapipelines.base for orchestration
+- BronzeSink: Writes DataFrames to Bronze layer (Delta Lake)
 
 Usage:
-    from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
-
-    ingestor = AlphaVantageIngestor(
-        alpha_vantage_cfg=config.apis['alpha_vantage'],
-        storage_cfg=config.storage,
-        spark=spark_session
+    from datapipelines.providers.alpha_vantage import (
+        AlphaVantageProvider,
+        create_alpha_vantage_provider,
     )
+    from datapipelines.base import IngestorEngine, create_engine
+    from datapipelines.ingestors import BronzeSink
 
-    # Ingest reference data
-    ingestor.ingest_reference_data(tickers=['AAPL', 'MSFT'])
+    # Create provider
+    provider = create_alpha_vantage_provider(config, spark=spark)
 
-    # Ingest prices
-    ingestor.ingest_prices(
-        tickers=['AAPL', 'MSFT'],
-        date_from='2024-01-01',
-        date_to='2024-12-31'
+    # Option 1: Use IngestorEngine for full pipeline
+    engine = create_engine(
+        provider=provider,
+        storage_cfg=storage_cfg,
+        spark=spark
     )
+    results = engine.run(tickers, data_types=[DataType.PRICES, DataType.REFERENCE])
 
-Progress Tracking:
-    The ingestor provides real-time progress updates during API fetches.
-    Progress is enabled by default and shows: current/total, ticker, ETA.
-
-    # Use default progress (prints to console)
-    ingestor.run_all(tickers=['AAPL', 'MSFT'], show_progress=True)
-
-    # Disable progress updates
-    ingestor.run_all(tickers=['AAPL', 'MSFT'], show_progress=False)
-
-    # Custom progress callback
-    from datapipelines.providers.alpha_vantage import ProgressInfo
-
-    def my_progress(info: ProgressInfo):
-        print(f"{info.phase}: {info.percent_complete:.1f}% - {info.ticker}")
-
-    ingestor.run_all(tickers=['AAPL', 'MSFT'], progress_callback=my_progress)
+    # Option 2: Use provider directly for custom logic
+    df = provider.seed_tickers(state='active', filter_us_exchanges=True)
+    sink = BronzeSink(spark, storage_cfg)
+    sink.write(df, 'ticker_seed', mode='overwrite')
 """
 
-from .alpha_vantage_ingestor import (
-    AlphaVantageIngestor,
-    ProgressInfo,
-    ProgressCallback,
-    default_progress_callback,
-)
+from .provider import AlphaVantageProvider, create_alpha_vantage_provider
 from .alpha_vantage_registry import AlphaVantageRegistry
 
 __all__ = [
-    'AlphaVantageIngestor',
+    'AlphaVantageProvider',
     'AlphaVantageRegistry',
-    'ProgressInfo',
-    'ProgressCallback',
-    'default_progress_callback',
+    'create_alpha_vantage_provider',
 ]
