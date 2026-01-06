@@ -14,6 +14,7 @@
 #   --skip-ingest        Skip Bronze ingestion
 #   --skip-silver        Skip Silver model building
 #   --with-financials    Include company financials (income, balance, cash flow, earnings)
+#   --with-reference     Include reference data (COMPANY_OVERVIEW - for market_cap updates)
 #   --storage-path PATH  Override storage path (default: from run_config.json)
 #   --local              Run locally (ignore SPARK_MASTER_URL)
 #   --help               Show this help message
@@ -44,6 +45,7 @@ SKIP_SEED=false
 SKIP_INGEST=false
 SKIP_SILVER=false     # Test everything by default
 WITH_FINANCIALS=false  # Skip financials by default (saves API calls)
+WITH_REFERENCE=false   # Skip reference by default (seed has basic info, only need for market_cap)
 STORAGE_PATH=""
 RUN_LOCAL=false
 
@@ -72,6 +74,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --with-financials)
             WITH_FINANCIALS=true
+            shift
+            ;;
+        --with-reference)
+            WITH_REFERENCE=true
             shift
             ;;
         --storage-path)
@@ -162,6 +168,7 @@ echo "  Skip seed: $SKIP_SEED"
 echo "  Skip ingest: $SKIP_INGEST"
 echo "  Build silver: $([ "$SKIP_SILVER" = false ] && echo 'yes' || echo 'no')"
 echo "  With financials: $WITH_FINANCIALS"
+echo "  With reference: $WITH_REFERENCE"
 echo ""
 
 # Build Python arguments
@@ -282,10 +289,12 @@ av_config['credentials'] = {'api_keys': api_keys}
 storage_path = '${STORAGE_PATH:-/shared/storage}'
 max_tickers = ${MAX_TICKERS:-10}
 with_financials = True if '${WITH_FINANCIALS}' == 'true' else False
+with_reference = True if '${WITH_REFERENCE}' == 'true' else False
 
 logger.info(f'Storage path: {storage_path}')
 logger.info(f'Max tickers: {max_tickers}')
 logger.info(f'With financials: {with_financials}')
+logger.info(f'With reference: {with_reference}')
 
 # Initialize Spark
 spark = get_spark(app_name='test_pipeline_ingest')
@@ -340,8 +349,13 @@ logger.info(f'Found {len(tickers)} tickers for ingestion')
 # Create engine and run
 engine = IngestorEngine(provider, storage_cfg)
 
-# Build data types list
-data_types = [DataType.PRICES, DataType.REFERENCE]
+# Build data types list - prices is always included
+data_types = [DataType.PRICES]
+
+# Add reference if requested (not needed if seed already has basic info)
+if with_reference:
+    logger.info('Including reference data (COMPANY_OVERVIEW)')
+    data_types.append(DataType.REFERENCE)
 
 # Add financial statements if requested (uses ticker-based lookups, not CIK)
 if with_financials:
