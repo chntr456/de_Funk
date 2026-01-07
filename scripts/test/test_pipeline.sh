@@ -196,7 +196,7 @@ logger = get_logger('test_pipeline')
 logger.info('Testing task: seed tickers')
 
 # Import provider
-from datapipelines.providers.alpha_vantage.provider import create_alpha_vantage_provider
+from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 from datapipelines.ingestors.bronze_sink import BronzeSink
 from orchestration.common.spark_session import get_spark
 import json
@@ -268,7 +268,7 @@ logger = get_logger('test_pipeline')
 logger.info('Testing task: bronze ingestion')
 
 # Import components
-from datapipelines.providers.alpha_vantage.provider import create_alpha_vantage_provider
+from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 from datapipelines.base.ingestor_engine import IngestorEngine
 from datapipelines.base.provider import DataType
 from orchestration.common.spark_session import get_spark
