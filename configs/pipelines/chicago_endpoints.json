@@ -1,15 +1,70 @@
 {
   "credentials": {
-    "api_keys": []
+    "api_keys": [],
+    "comment": "Set CHICAGO_API_KEYS environment variable for higher rate limits"
   },
   "base_urls": {
     "core": "https://data.cityofchicago.org"
   },
   "headers": {
-    "X-App-Token": "${API_KEY}"
+    "Content-Type": "application/json"
   },
   "rate_limit_per_sec": 5.0,
   "endpoints": {
+    "budget_fy2024": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/resource/grek-qr65.json",
+      "required_params": [],
+      "default_query": {
+        "$limit": 50000,
+        "$order": "fund_code,department_code"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "pagination_type": "offset",
+      "metadata": {
+        "fiscal_year": "2024",
+        "table_name": "chicago_budget"
+      },
+      "description": "Chicago Budget Appropriations FY2024"
+    },
+    "budget_fy2023": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/resource/ptux-2w65.json",
+      "required_params": [],
+      "default_query": {
+        "$limit": 50000,
+        "$order": "fund_code,department_code"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "pagination_type": "offset",
+      "metadata": {
+        "fiscal_year": "2023",
+        "table_name": "chicago_budget"
+      },
+      "description": "Chicago Budget Appropriations FY2023"
+    },
+    "budget_fy2022": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/resource/ygqb-4c3y.json",
+      "required_params": [],
+      "default_query": {
+        "$limit": 50000,
+        "$order": "fund_code,department_code"
+      },
+      "response_key": null,
+      "default_path_params": {},
+      "pagination_type": "offset",
+      "metadata": {
+        "fiscal_year": "2022",
+        "table_name": "chicago_budget"
+      },
+      "description": "Chicago Budget Appropriations FY2022"
+    },
     "building_permits": {
       "base": "core",
       "method": "GET",

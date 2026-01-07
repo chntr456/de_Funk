@@ -582,3 +582,290 @@ if __name__ == "__main__":
 | BronzeSink | `datapipelines/ingestors/bronze_sink.py` |
 | Storage Config | `configs/storage.json` |
 | API Config | `configs/pipelines/alpha_vantage_endpoints.json` |
+
+---
+
+## Advanced Pattern: Multiple Endpoints → Single Table
+
+Some APIs expose the same data type across multiple endpoints (e.g., budget data by fiscal year). This pattern consolidates them into a single partitioned Delta table.
+
+### Use Case: Chicago Budget Data
+
+Chicago Data Portal has separate endpoints for each fiscal year's budget:
+- `/resource/abc123.json` → FY2024 budget
+- `/resource/def456.json` → FY2023 budget
+- `/resource/ghi789.json` → FY2022 budget
+
+Instead of creating separate tables, we consolidate into one partitioned table.
+
+### Pattern Overview
+
+```
+Ingestion Flow (per endpoint):
+─────────────────────────────────────────────────────────────────
+budget_fy2024 endpoint → BudgetFacet → BronzeSink.smart_write()
+                                              ↓
+                              bronze/chicago/budget/fiscal_year=2024/
+
+budget_fy2023 endpoint → BudgetFacet → BronzeSink.smart_write()
+                                              ↓
+                              bronze/chicago/budget/fiscal_year=2023/
+─────────────────────────────────────────────────────────────────
+                    Same Delta table, different partitions
+```
+
+### Step 1: Endpoint Configuration with Metadata
+
+**File**: `configs/pipelines/chicago_endpoints.json`
+
+```json
+{
+  "endpoints": {
+    "budget_fy2024": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/resource/xjhr-2w65.json",
+      "default_query": { "$limit": 50000 },
+      "metadata": {
+        "fiscal_year": "2024",
+        "table_name": "chicago_budget"
+      },
+      "description": "Chicago Budget FY2024"
+    },
+    "budget_fy2023": {
+      "base": "core",
+      "method": "GET",
+      "path_template": "/resource/ptux-2w65.json",
+      "default_query": { "$limit": 50000 },
+      "metadata": {
+        "fiscal_year": "2023",
+        "table_name": "chicago_budget"
+      },
+      "description": "Chicago Budget FY2023"
+    }
+  }
+}
+```
+
+**Key**: The `metadata` field passes context to the facet without hardcoding.
+
+### Step 2: Registry Mapping (All to Same Facet)
+
+**File**: `datapipelines/providers/chicago/chicago_registry.py`
+
+```python
+from .facets.budget_facet import BudgetFacet
+
+# All budget endpoints use the same facet
+ENDPOINT_FACET_MAP = {
+    "budget_fy2024": BudgetFacet,
+    "budget_fy2023": BudgetFacet,
+    "budget_fy2022": BudgetFacet,
+    # Easy to add more years
+}
+```
+
+### Step 3: Facet Extracts Metadata
+
+**File**: `datapipelines/providers/chicago/facets/budget_facet.py`
+
+```python
+from pyspark.sql.functions import lit
+
+class BudgetFacet(ChicagoBaseFacet):
+    """Normalize Chicago budget data with fiscal year from metadata."""
+
+    TABLE_NAME = "chicago_budget"  # Always same table
+
+    def transform(self, raw_data: list[dict], endpoint_config: dict) -> DataFrame:
+        """Transform raw API response, adding fiscal_year from endpoint metadata."""
+        df = self.spark.createDataFrame(raw_data)
+
+        # Extract fiscal_year from endpoint metadata
+        metadata = endpoint_config.get("metadata", {})
+        fiscal_year = metadata.get("fiscal_year")
+
+        if fiscal_year:
+            df = df.withColumn("fiscal_year", lit(fiscal_year))
+
+        return df
+```
+
+### Step 4: Storage Configuration (Single Table)
+
+**File**: `configs/storage.json`
+
+```json
+{
+  "tables": {
+    "chicago_budget": {
+      "root": "bronze",
+      "rel": "chicago/budget",
+      "partitions": ["fiscal_year"],
+      "write_strategy": "upsert",
+      "key_columns": ["fund_code", "department_code", "fiscal_year"],
+      "comment": "Chicago budget data - all fiscal years in one table"
+    }
+  }
+}
+```
+
+### Benefits of This Pattern
+
+1. **Fault Tolerance**: Each endpoint is processed independently - if FY2023 fails, FY2024 still succeeds
+2. **No Code Duplication**: One facet class handles all years
+3. **Easy to Extend**: Adding a new year = add endpoint config only
+4. **Partition Pruning**: Queries for single year only scan that partition
+5. **Unified Schema**: All years have identical schema (enforced by facet)
+
+---
+
+## Directory Structure Examples
+
+### Minimal Provider (Single Endpoint)
+
+```
+datapipelines/providers/simple_api/
+├── __init__.py
+├── provider.py                    # SimpleApiProvider class
+└── facets/
+    ├── __init__.py
+    └── data_facet.py              # Single facet
+```
+
+### Standard Provider (Multiple Endpoints, Different Tables)
+
+```
+datapipelines/providers/alpha_vantage/
+├── __init__.py
+├── provider.py                    # AlphaVantageProvider class
+├── alpha_vantage_registry.py      # Endpoint → Facet mapping
+└── facets/
+    ├── __init__.py
+    ├── alpha_vantage_base_facet.py    # Shared logic
+    ├── securities_reference_facet.py  # → securities_reference table
+    ├── securities_prices_facet.py     # → securities_prices_daily table
+    ├── income_statement_facet.py      # → income_statements table
+    ├── balance_sheet_facet.py         # → balance_sheets table
+    └── cash_flow_facet.py             # → cash_flows table
+```
+
+### Multi-Endpoint to Single Table Provider
+
+```
+datapipelines/providers/chicago/
+├── __init__.py
+├── provider.py                    # ChicagoProvider class
+├── chicago_registry.py            # Endpoint → Facet mapping
+└── facets/
+    ├── __init__.py
+    ├── chicago_base_facet.py      # Shared Socrata API logic
+    ├── budget_facet.py            # budget_fy* endpoints → chicago_budget table
+    ├── unemployment_facet.py      # → chicago_unemployment table
+    └── building_permits_facet.py  # → chicago_building_permits table
+```
+
+### Provider with Complex Transformations
+
+```
+datapipelines/providers/sec_edgar/
+├── __init__.py
+├── provider.py
+├── sec_registry.py
+├── parsers/                       # Complex XML/XBRL parsing
+│   ├── __init__.py
+│   ├── xbrl_parser.py
+│   └── filing_parser.py
+└── facets/
+    ├── __init__.py
+    ├── sec_base_facet.py
+    ├── form_10k_facet.py
+    └── form_10q_facet.py
+```
+
+---
+
+## Next Steps After Provider Implementation
+
+### 1. Verify Bronze Ingestion
+
+```bash
+# Run test ingestion
+python -m scripts.ingest.run_{provider}_ingestion --endpoints endpoint_name
+
+# Verify Delta table created
+ls -la storage/bronze/{provider}/{table}/
+
+# Check row count
+python -c "
+from delta import DeltaTable
+dt = DeltaTable.forPath(spark, 'storage/bronze/{provider}/{table}')
+print(f'Rows: {dt.toDF().count()}')
+"
+```
+
+### 2. Create Silver Model (if needed)
+
+If this data needs to be in the Silver layer:
+
+1. Create model config: `configs/models/{model_name}/`
+2. Create model builder: `models/domain/{model_name}/builder.py`
+3. Add to build pipeline: `scripts/build/build_models.py`
+
+### 3. Add Integration Tests
+
+```python
+# tests/integration/test_{provider}_ingestion.py
+def test_ingestion_creates_delta_table():
+    """Test that ingestion creates proper Delta table."""
+    # Run ingestion
+    # Assert table exists
+    # Assert schema matches
+    # Assert partitions correct
+```
+
+### 4. Document in CLAUDE.md
+
+Update the Data Sources section:
+
+```markdown
+### Data Sources Status
+- **{Provider Name}**: Active, {description}
+  - Endpoints: {list endpoints}
+  - Tables: {list bronze tables}
+```
+
+### 5. Add to CI/CD Pipeline
+
+If using automated testing:
+
+```yaml
+# .github/workflows/test.yml
+- name: Test {Provider} Ingestion
+  run: python -m scripts.ingest.run_{provider}_ingestion --dry-run
+```
+
+---
+
+## Troubleshooting New Providers
+
+### Common Issues
+
+| Issue | Cause | Solution |
+|-------|-------|----------|
+| `KeyError: 'endpoint_name'` | Endpoint not in config | Check `{provider}_endpoints.json` |
+| `Table not found in storage.json` | Missing table config | Add to `configs/storage.json` |
+| `Schema mismatch` | Facet schema doesn't match data | Update `OUTPUT_SCHEMA` in facet |
+| `Partition column not in data` | Facet not adding partition column | Add `withColumn()` in facet |
+| `Rate limit exceeded` | Too many API calls | Reduce `rate_limit_per_sec` |
+| `Empty DataFrame` | API returned no data | Check API response, add logging |
+
+### Debug Checklist
+
+```
+[ ] API key set in environment: echo $PROVIDER_API_KEYS
+[ ] Endpoint config valid: cat configs/pipelines/{provider}_endpoints.json | jq .
+[ ] Storage config valid: cat configs/storage.json | jq .tables.{table_name}
+[ ] Facet produces non-empty DataFrame: add logger.info(f"Rows: {df.count()}")
+[ ] Partition column exists in DataFrame: add df.printSchema()
+```
