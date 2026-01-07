@@ -44,7 +44,6 @@ def backfill_asset_type(
     4. Overwrite the table with corrected data (using partition config from storage.json)
     """
     import json
-    from pyspark.sql import SparkSession
     from pyspark.sql.functions import col, lit, coalesce, year as spark_year, month as spark_month
 
     # Load storage config (single source of truth for partitions)
@@ -53,12 +52,8 @@ def backfill_asset_type(
         storage_cfg = json.load(f)
 
     # Initialize Spark with Delta support
-    spark = (SparkSession.builder
-        .appName("BackfillPriceAssetType")
-        .config("spark.jars.packages", "io.delta:delta-spark_2.13:4.0.0")
-        .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-        .getOrCreate())
+    from orchestration.common.spark_session import get_spark
+    spark = get_spark("BackfillPriceAssetType")
 
     # Paths
     bronze_root = repo_root / "storage" / "bronze"
@@ -77,16 +72,24 @@ def backfill_asset_type(
         logger.error(f"Reference table not found: {reference_path}")
         return False
 
-    # Read tables
+    # Read tables (auto-detect Delta or Parquet)
+    def read_table(spark, path):
+        """Read table, auto-detecting Delta or Parquet format."""
+        delta_log = path / "_delta_log"
+        if delta_log.exists():
+            return spark.read.format("delta").load(str(path)), "Delta"
+        else:
+            return spark.read.parquet(str(path)), "Parquet"
+
     logger.info(f"Reading prices from: {prices_path}")
-    prices_df = spark.read.parquet(str(prices_path))
+    prices_df, prices_fmt = read_table(spark, prices_path)
     prices_count = prices_df.count()
-    logger.info(f"  Total price rows: {prices_count:,}")
+    logger.info(f"  Total price rows: {prices_count:,} (format: {prices_fmt})")
 
     logger.info(f"Reading reference from: {reference_path}")
-    ref_df = spark.read.parquet(str(reference_path))
+    ref_df, ref_fmt = read_table(spark, reference_path)
     ref_count = ref_df.count()
-    logger.info(f"  Total reference rows: {ref_count:,}")
+    logger.info(f"  Total reference rows: {ref_count:,} (format: {ref_fmt})")
 
     # Check current asset_type distribution
     logger.info("\nCurrent asset_type distribution in prices:")
@@ -142,14 +145,16 @@ def backfill_asset_type(
         if pcol == "month" and "month" not in updated_df.columns:
             updated_df = updated_df.withColumn("month", spark_month(col("trade_date")))
 
-    # Write back
+    # Write back as Delta (standard format)
     logger.info(f"\nWriting corrected data to: {prices_path}")
+    logger.info("  Format: Delta")
 
-    # Write as Parquet (overwrite)
+    # Write as Delta (overwrite)
     # Note: Use coalesce to reduce file count
     writer = (updated_df
         .coalesce(100)  # Reduce to ~100 files for manageable size
         .write
+        .format("delta")
         .mode("overwrite"))
 
     if partition_cols:
@@ -158,13 +163,13 @@ def backfill_asset_type(
     else:
         logger.info("  No partitions configured for securities_prices_daily in storage.json")
 
-    writer.parquet(str(prices_path))
+    writer.save(str(prices_path))
 
     logger.info("✓ Backfill complete!")
 
     # Verify
     logger.info("\nVerifying...")
-    verify_df = spark.read.parquet(str(prices_path))
+    verify_df = spark.read.format("delta").load(str(prices_path))
     verify_df.groupBy("asset_type").count().show()
 
     spark.stop()

@@ -58,9 +58,15 @@ def compact_table(spark, bronze_root: Path, table_name: str, storage_cfg: dict, 
         print(f"     [DRY RUN] Would read and rewrite with new partitioning")
         return None
 
-    # Read all data
+    # Read all data (auto-detect Delta or Parquet)
     try:
-        df = spark.read.parquet(str(table_path))
+        delta_log = table_path / "_delta_log"
+        if delta_log.exists():
+            df = spark.read.format("delta").load(str(table_path))
+            print(f"     Format: Delta")
+        else:
+            df = spark.read.parquet(str(table_path))
+            print(f"     Format: Parquet (will convert to Delta)")
         row_count = df.count()
         print(f"     Rows: {row_count:,}")
 
@@ -95,19 +101,20 @@ def compact_table(spark, bronze_root: Path, table_name: str, storage_cfg: dict, 
         # Coalesce to reduce files (4 files per partition)
         df = df.coalesce(4)
 
-        # Write with partitioning from storage.json
-        writer = df.write.mode("overwrite")
+        # Write as Delta with partitioning from storage.json
+        writer = df.write.format("delta").mode("overwrite")
         if partition_cols:
             print(f"     Partitions: {partition_cols} (from storage.json)")
             writer = writer.partitionBy(*partition_cols)
         else:
             print(f"     No partitions configured for {table_name} in storage.json")
-        writer.parquet(str(temp_path))
+        writer.save(str(temp_path))
 
         # Count files after
         new_files = list(temp_path.rglob("*.parquet"))
         print(f"     Files after: {len(new_files)}")
-        print(f"     Reduction: {len(parquet_files)} → {len(new_files)} ({100 * (1 - len(new_files)/len(parquet_files)):.1f}% less)")
+        print(f"     Reduction: {len(parquet_files)} → {len(new_files)}")
+        print(f"     Output format: Delta")
 
     except Exception as e:
         print(f"     ✗ Failed to write: {e}")
@@ -156,14 +163,10 @@ def main():
         print("🔍 DRY RUN MODE - No changes will be made")
         print()
 
-    # Initialize Spark
+    # Initialize Spark with Delta Lake support
     try:
-        from pyspark.sql import SparkSession
-        spark = SparkSession.builder \
-            .appName("BronzeCompaction") \
-            .config("spark.driver.memory", "8g") \
-            .config("spark.sql.parquet.compression.codec", "snappy") \
-            .getOrCreate()
+        from orchestration.common.spark_session import get_spark
+        spark = get_spark("BronzeCompaction")
     except Exception as e:
         print(f"✗ Failed to create Spark session: {e}")
         return 1
