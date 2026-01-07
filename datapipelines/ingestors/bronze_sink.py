@@ -126,6 +126,17 @@ class BronzeSink:
             existing_df = spark.read.format("delta").load(str(base_path))
             existing_schema = {f.name: f.dataType for f in existing_df.schema.fields}
 
+            # Get existing table's partition columns - must match when appending
+            from delta.tables import DeltaTable
+            dt = DeltaTable.forPath(spark, str(base_path))
+            existing_partitions = dt.detail().select("partitionColumns").collect()[0][0]
+            if existing_partitions != (partitions or []):
+                logger.warning(
+                    f"Partition mismatch: config has {partitions}, table has {existing_partitions}. "
+                    f"Using existing table partitions to avoid Delta error."
+                )
+                partitions = existing_partitions if existing_partitions else None
+
             # Cast new df columns to match existing schema types to avoid merge conflicts
             for field in df.schema.fields:
                 if field.name in existing_schema:
@@ -240,6 +251,17 @@ class BronzeSink:
         else:
             # Read-Merge-Overwrite: Read existing, union with new, deduplicate, overwrite
             existing_df = spark.read.format("delta").load(str(base_path))
+
+            # Get existing table's partition columns - must match when writing
+            from delta.tables import DeltaTable
+            dt = DeltaTable.forPath(spark, str(base_path))
+            existing_partitions = dt.detail().select("partitionColumns").collect()[0][0]
+            if existing_partitions != (partitions or []):
+                logger.warning(
+                    f"Partition mismatch in upsert: config has {partitions}, table has {existing_partitions}. "
+                    f"Using existing table partitions."
+                )
+                partitions = existing_partitions if existing_partitions else None
 
             # Cast new df columns to match existing schema to avoid type conflicts
             # (e.g., shares_outstanding: string vs long)
