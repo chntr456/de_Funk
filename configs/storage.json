@@ -28,6 +28,7 @@
   },
   "tables": {
     "calendar_seed":   { "root": "bronze", "rel": "calendar_seed", "partitions": [] },
+    "ticker_seed":     { "root": "bronze", "rel": "ticker_seed", "partitions": ["asset_type"], "write_strategy": "overwrite", "comment": "Seeded tickers from LISTING_STATUS API" },
 
     "securities_reference": { "root": "bronze", "rel": "securities_reference", "partitions": ["asset_type"], "write_strategy": "upsert", "key_columns": ["ticker"], "comment": "v2.0 unified reference data - basic ticker info from LISTING_STATUS" },
     "company_reference": { "root": "bronze", "rel": "company_reference", "partitions": [], "write_strategy": "upsert", "key_columns": ["cik"], "comment": "v2.0 company data from OVERVIEW - CIK, sector, industry, market_cap (separate from securities to avoid overwrite issues)" },

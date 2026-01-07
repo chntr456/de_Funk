@@ -225,13 +225,16 @@ provider = create_alpha_vantage_provider(av_config, spark=spark)
 # Seed tickers
 df = provider.seed_tickers(state='active', filter_us_exchanges=True)
 
-# Write to Bronze
-storage_cfg = {
-    'roots': {'bronze': f'{storage_path}/bronze'},
-    'tables': {'ticker_seed': {'rel': 'ticker_seed'}}
-}
+# Write to Bronze - load config from storage.json (single source of truth)
+with open('$REPO_ROOT/configs/storage.json') as f:
+    storage_cfg = json.load(f)
+# Override roots to use storage_path from CLI
+storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in storage_cfg['roots'].items()}
+
 sink = BronzeSink(storage_cfg)
-sink.write(df, 'ticker_seed', partitions=['asset_type'], mode='overwrite')
+# Partitions come from storage.json config, not hardcoded here
+table_cfg = storage_cfg['tables'].get('ticker_seed', {})
+sink.write(df, 'ticker_seed', partitions=table_cfg.get('partitions'), mode='overwrite')
 
 logger.info(f'Seeded {df.count()} tickers to Bronze layer')
 spark.stop()
@@ -308,9 +311,6 @@ with open('$REPO_ROOT/configs/storage.json') as f:
 
 # Override roots to use storage_path from CLI (replace 'storage/' prefix with custom path)
 storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in storage_cfg['roots'].items()}
-# Add ticker_seed table if not present (used for seeding)
-if 'ticker_seed' not in storage_cfg['tables']:
-    storage_cfg['tables']['ticker_seed'] = {'root': 'bronze', 'rel': 'ticker_seed', 'partitions': ['asset_type']}
 
 # Try to get tickers by market cap from securities_reference
 tickers = provider.get_tickers_by_market_cap(max_tickers=max_tickers, storage_cfg=storage_cfg)
