@@ -44,7 +44,7 @@ Usage:
     sink.write(df, 'ticker_seed', mode='overwrite')
 """
 
-from .provider import AlphaVantageProvider, create_alpha_vantage_provider
+from .alpha_vantage_provider import AlphaVantageProvider, create_alpha_vantage_provider
 from .alpha_vantage_registry import AlphaVantageRegistry
 
 __all__ = [
