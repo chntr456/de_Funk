@@ -34,7 +34,7 @@ from datapipelines.base.http_client import HttpClient
 from datapipelines.base.key_pool import ApiKeyPool
 from datapipelines.ingestors.base_ingestor import Ingestor
 from datapipelines.ingestors.bronze_sink import BronzeSink
-from datapipelines.facets.base_facet import Facet
+from datapipelines.base.facet import Facet
 
 
 # ============================================================

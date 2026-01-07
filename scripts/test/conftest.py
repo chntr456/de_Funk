@@ -99,8 +99,8 @@ def simple_model_config():
                         'ticker': 'string',
                         'close': 'double',
                         'volume': 'long'
-                    },
-                    'partitions': ['trade_date']
+                    }
+                    # Note: partitions are defined in storage.json, not here
                 }
             }
         },

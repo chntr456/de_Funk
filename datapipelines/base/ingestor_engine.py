@@ -6,7 +6,7 @@ Uses BatchProgressTracker for clean progress display and MetricsCollector for ti
 
 Usage:
     from datapipelines.base.ingestor_engine import IngestorEngine
-    from datapipelines.providers.alpha_vantage.provider import create_alpha_vantage_provider
+    from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 
     provider = create_alpha_vantage_provider(alpha_vantage_cfg, spark)
     engine = IngestorEngine(provider, storage_cfg)
@@ -562,7 +562,7 @@ def create_engine(
         Configured IngestorEngine
     """
     if provider_name == "alpha_vantage":
-        from datapipelines.providers.alpha_vantage.provider import create_alpha_vantage_provider
+        from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
         provider = create_alpha_vantage_provider(api_cfg, spark)
     else:
         raise ValueError(f"Unknown provider: {provider_name}")

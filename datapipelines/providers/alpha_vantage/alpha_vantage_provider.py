@@ -12,7 +12,7 @@ Features:
 - Integration with IngestorEngine for distributed cluster execution
 
 Usage:
-    from datapipelines.providers.alpha_vantage.provider import AlphaVantageProvider
+    from datapipelines.providers.alpha_vantage.alpha_vantage_provider import AlphaVantageProvider
     from datapipelines.base.provider import DataType, ProviderConfig
 
     config = ProviderConfig(

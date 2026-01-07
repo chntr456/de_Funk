@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
-from datapipelines.facets.base_facet import Facet
+from datapipelines.base.facet import Facet
 
 try:
     from pyspark.sql import DataFrame, functions as F

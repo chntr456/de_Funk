@@ -30,12 +30,8 @@ bronze_tables:
   # - technicals_macd
 
 # API configuration key (maps to configs/pipelines/{config_key}_endpoints.json)
+# Rate limiting is configured in the JSON config file (rate_limit_per_sec)
 config_key: alpha_vantage
-
-# Rate limiting
-rate_limit: 5        # requests per minute (free tier)
-daily_limit: 25      # requests per day (free tier)
-# Note: Premium tiers have higher limits
 
 # Ingestor class configuration
 module_path: datapipelines.providers.alpha_vantage

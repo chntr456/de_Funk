@@ -351,7 +351,7 @@ def job_weekly_forecasts():
 
             # Get tickers
             from core.context import RepoContext
-            from datapipelines.providers.alpha_vantage.provider import create_alpha_vantage_provider
+            from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 
             ctx = RepoContext.from_repo_root(connection_type="spark")
             provider = create_alpha_vantage_provider(

@@ -22,7 +22,7 @@ from typing import Optional
 import pandas as pd
 from pyspark.sql.types import StructType
 
-from datapipelines.facets.base_facet import Facet
+from datapipelines.base.facet import Facet
 from config.schema_loader import SchemaLoader
 
 

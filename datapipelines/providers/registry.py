@@ -8,7 +8,7 @@ Purpose:
 Key Features:
     - Auto-discover providers from directory structure
     - Dynamic import and instantiation
-    - Provider metadata from provider.yaml files
+    - Provider metadata from {name}_provider.yaml files
     - Unified interface for orchestrator
 
 Usage:
@@ -54,11 +54,8 @@ class ProviderInfo:
     bronze_tables: List[str] = field(default_factory=list)
 
     # API configuration key (in configs/pipelines/)
+    # Rate limiting is configured in the JSON config file (rate_limit_per_sec)
     config_key: str = ""
-
-    # Rate limiting
-    rate_limit: Optional[int] = None  # requests per minute
-    daily_limit: Optional[int] = None  # requests per day
 
     # Ingestor class info
     module_path: str = ""
@@ -77,8 +74,7 @@ class ProviderInfo:
             'version': self.version,
             'models': self.models,
             'bronze_tables': self.bronze_tables,
-            'rate_limit': self.rate_limit,
-            'daily_limit': self.daily_limit,
+            'config_key': self.config_key,
             'tags': self.tags,
             'enabled': self.enabled,
         }
@@ -89,7 +85,7 @@ class ProviderRegistry:
     Registry for data providers with auto-discovery.
 
     Discovers providers by scanning the providers directory for:
-    1. provider.yaml files (preferred - explicit metadata)
+    1. {name}_provider.yaml files (preferred - explicit metadata)
     2. {name}_ingestor.py files (fallback - convention-based)
 
     Usage:
@@ -131,8 +127,8 @@ class ProviderRegistry:
             if item.name.startswith('_') or item.name.startswith('.'):
                 continue
 
-            # Check for provider.yaml (preferred)
-            provider_yaml = item / 'provider.yaml'
+            # Check for {name}_provider.yaml (preferred)
+            provider_yaml = item / f'{item.name}_provider.yaml'
             if provider_yaml.exists():
                 cls._load_provider_yaml(item.name, provider_yaml)
                 continue
@@ -147,7 +143,7 @@ class ProviderRegistry:
 
     @classmethod
     def _load_provider_yaml(cls, name: str, yaml_path: Path) -> None:
-        """Load provider info from provider.yaml file."""
+        """Load provider info from {name}_provider.yaml file."""
         try:
             with open(yaml_path, 'r') as f:
                 data = yaml.safe_load(f)
@@ -159,8 +155,6 @@ class ProviderRegistry:
                 models=data.get('models', []),
                 bronze_tables=data.get('bronze_tables', []),
                 config_key=data.get('config_key', name),
-                rate_limit=data.get('rate_limit'),
-                daily_limit=data.get('daily_limit'),
                 module_path=data.get('module_path', f'datapipelines.providers.{name}'),
                 class_name=data.get('class_name', f'{cls._pascal_case(name)}Ingestor'),
                 tags=data.get('tags', []),

@@ -19,7 +19,7 @@ from pyspark.sql.types import StringType
 from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import (
     AlphaVantageFacet, safe_long, safe_double
 )
-from datapipelines.facets.base_facet import coalesce_existing, first_existing
+from datapipelines.base.facet import coalesce_existing, first_existing
 from datetime import datetime
 
 

@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 from utils.repo import get_repo_root
 repo_root = get_repo_root()
 
-from datapipelines.facets.base_facet import Facet
+from datapipelines.base.facet import Facet
 
 
 # ============================================================
