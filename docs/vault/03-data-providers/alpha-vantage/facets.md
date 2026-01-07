@@ -187,8 +187,8 @@ if self.date_to:
 6. Validate
    df = facet.validate(df)  # Type checking
 
-7. Write
-   sink.write(df, table_name, partitions=['asset_type', 'year', 'month'])
+7. Write (partitions from storage.json - single source of truth)
+   sink.smart_write(df, table_name)  # Reads partitions from configs/storage.json
 ```
 
 ---

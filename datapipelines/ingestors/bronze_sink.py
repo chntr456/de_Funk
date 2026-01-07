@@ -83,12 +83,16 @@ class BronzeSink:
             Path to table
 
         Example:
-            # Daily price updates - only inserts new dates
+            # RECOMMENDED: Use smart_write() which reads partitions from storage.json
+            sink.smart_write(df, "securities_prices_daily")
+
+            # Or for direct control (partitions should match storage.json config):
+            table_cfg = storage_cfg["tables"]["securities_prices_daily"]
             sink.append_immutable(
                 df, "securities_prices_daily",
-                key_columns=["ticker", "trade_date"],
-                partitions=["asset_type", "year", "month"],
-                date_column="trade_date"
+                key_columns=table_cfg.get("key_columns", []),
+                partitions=table_cfg.get("partitions", []),
+                date_column=table_cfg.get("date_column", "trade_date")
             )
         """
         from datetime import date

@@ -5,8 +5,8 @@ Compact Bronze Fundamentals - Fix file sprawl from ticker-based partitioning.
 Problem: The original ingestion created 8,000+ × 2 = 16,000+ files per table
          due to partitioning by ticker/report_type.
 
-Solution: This script reads all data and rewrites with report_type/snapshot_date
-          partitioning, reducing to ~4-8 files per table.
+Solution: This script reads all data and rewrites with partitioning configured
+          in storage.json (single source of truth), reducing file count.
 
 Usage:
     python -m scripts.maintenance.compact_bronze_fundamentals [--dry-run]
@@ -14,12 +14,13 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 from pathlib import Path
 from datetime import date
 
 from utils.repo import setup_repo_imports
-setup_repo_imports()
+repo_root = setup_repo_imports()
 
 from config.logging import setup_logging, get_logger
 
@@ -34,9 +35,9 @@ TABLES_TO_COMPACT = [
 ]
 
 
-def compact_table(spark, bronze_root: Path, table_name: str, dry_run: bool = False):
+def compact_table(spark, bronze_root: Path, table_name: str, storage_cfg: dict, dry_run: bool = False):
     """
-    Compact a single table from ticker partitioning to report_type/snapshot_date.
+    Compact a single table using partition config from storage.json.
     """
     table_path = bronze_root / table_name
 
@@ -77,9 +78,15 @@ def compact_table(spark, bronze_root: Path, table_name: str, dry_run: bool = Fal
         df = df.withColumn("snapshot_date", current_date())
         print(f"     Added snapshot_date column")
 
-    if "report_type" not in df.columns:
-        print(f"     ✗ Missing report_type column, cannot compact")
-        return None
+    # Get partition config from storage.json (single source of truth)
+    table_cfg = storage_cfg.get("tables", {}).get(table_name, {})
+    partition_cols = table_cfg.get("partitions", [])
+
+    # Validate partition columns exist
+    for pcol in partition_cols:
+        if pcol not in df.columns:
+            print(f"     ✗ Missing partition column '{pcol}', cannot compact")
+            return None
 
     # Write to temp location with new partitioning
     temp_path = bronze_root / f"{table_name}_compacted"
@@ -88,8 +95,14 @@ def compact_table(spark, bronze_root: Path, table_name: str, dry_run: bool = Fal
         # Coalesce to reduce files (4 files per partition)
         df = df.coalesce(4)
 
-        # Write with new partitioning
-        df.write.mode("overwrite").partitionBy("report_type", "snapshot_date").parquet(str(temp_path))
+        # Write with partitioning from storage.json
+        writer = df.write.mode("overwrite")
+        if partition_cols:
+            print(f"     Partitions: {partition_cols} (from storage.json)")
+            writer = writer.partitionBy(*partition_cols)
+        else:
+            print(f"     No partitions configured for {table_name} in storage.json")
+        writer.parquet(str(temp_path))
 
         # Count files after
         new_files = list(temp_path.rglob("*.parquet"))
@@ -136,7 +149,7 @@ def main():
     print("=" * 70)
     print()
     print("Problem: Ticker-based partitioning created 16,000+ files per table")
-    print("Solution: Rewrite with report_type/snapshot_date partitioning")
+    print("Solution: Rewrite with partitioning from storage.json (single source of truth)")
     print()
 
     if args.dry_run:
@@ -155,10 +168,11 @@ def main():
         print(f"✗ Failed to create Spark session: {e}")
         return 1
 
-    # Get bronze root (already resolved by ConfigLoader)
+    # Get bronze root and storage config (single source of truth for partitions)
     from config import ConfigLoader
     config = ConfigLoader().load()
-    bronze_root = Path(config.storage["roots"]["bronze"])
+    storage_cfg = config.storage
+    bronze_root = Path(storage_cfg["roots"]["bronze"])
 
     print(f"Bronze root: {bronze_root}")
     print()
@@ -171,7 +185,7 @@ def main():
 
     results = {}
     for table in tables:
-        result = compact_table(spark, bronze_root, table, dry_run=args.dry_run)
+        result = compact_table(spark, bronze_root, table, storage_cfg, dry_run=args.dry_run)
         results[table] = result
 
     print()

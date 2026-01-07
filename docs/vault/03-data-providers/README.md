@@ -113,8 +113,8 @@ raw_data = ingestor._fetch_calls(calls)
 # 4. Facet normalizes to DataFrame
 df = facet.normalize(raw_data)
 
-# 5. Write to Bronze
-sink.write(df, 'securities_prices_daily', partitions=['asset_type', 'year'])
+# 5. Write to Bronze (partitions from storage.json - single source of truth)
+sink.smart_write(df, 'securities_prices_daily')  # Reads partitions from configs/storage.json
 ```
 
 ---

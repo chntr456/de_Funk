@@ -41,10 +41,16 @@ def backfill_asset_type(
     1. Read securities_reference to get ticker -> asset_type mapping
     2. Read securities_prices_daily
     3. Join to get asset_type for each ticker
-    4. Overwrite the table with corrected data
+    4. Overwrite the table with corrected data (using partition config from storage.json)
     """
+    import json
     from pyspark.sql import SparkSession
     from pyspark.sql.functions import col, lit, coalesce, year as spark_year, month as spark_month
+
+    # Load storage config (single source of truth for partitions)
+    storage_json_path = repo_root / "configs" / "storage.json"
+    with open(storage_json_path) as f:
+        storage_cfg = json.load(f)
 
     # Initialize Spark with Delta support
     spark = (SparkSession.builder
@@ -125,24 +131,34 @@ def backfill_asset_type(
         logger.info(f"Would update {null_before:,} rows with NULL asset_type")
         return True
 
-    # Ensure year/month partition columns exist
-    if "year" not in updated_df.columns:
-        updated_df = updated_df.withColumn("year", spark_year(col("trade_date")))
-    if "month" not in updated_df.columns:
-        updated_df = updated_df.withColumn("month", spark_month(col("trade_date")))
+    # Get partition config from storage.json (single source of truth)
+    table_cfg = storage_cfg.get("tables", {}).get("securities_prices_daily", {})
+    partition_cols = table_cfg.get("partitions", [])
+
+    # Ensure partition columns exist in the data
+    for pcol in partition_cols:
+        if pcol == "year" and "year" not in updated_df.columns:
+            updated_df = updated_df.withColumn("year", spark_year(col("trade_date")))
+        if pcol == "month" and "month" not in updated_df.columns:
+            updated_df = updated_df.withColumn("month", spark_month(col("trade_date")))
 
     # Write back
     logger.info(f"\nWriting corrected data to: {prices_path}")
-    logger.info("  Partitions: asset_type, year, month")
 
     # Write as Parquet (overwrite)
     # Note: Use coalesce to reduce file count
-    (updated_df
+    writer = (updated_df
         .coalesce(100)  # Reduce to ~100 files for manageable size
         .write
-        .mode("overwrite")
-        .partitionBy("asset_type", "year", "month")
-        .parquet(str(prices_path)))
+        .mode("overwrite"))
+
+    if partition_cols:
+        logger.info(f"  Partitions: {partition_cols} (from storage.json)")
+        writer = writer.partitionBy(*partition_cols)
+    else:
+        logger.info("  No partitions configured for securities_prices_daily in storage.json")
+
+    writer.parquet(str(prices_path))
 
     logger.info("✓ Backfill complete!")
 

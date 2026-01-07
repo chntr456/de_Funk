@@ -217,8 +217,10 @@ class NewProviderIngestor(BaseIngestor):
         df = facet.postprocess(df)
         df = facet.validate(df)
 
-        # Write to Bronze
-        self._write_bronze(df, "new_provider_data", partitions=["date"])
+        # Write to Bronze (partitions come from storage.json - single source of truth)
+        from datapipelines.ingestors.bronze_sink import BronzeSink
+        sink = BronzeSink(self.storage_cfg)
+        sink.smart_write(df, "new_provider_data")  # Reads partitions from storage.json
 
         return df
 ```

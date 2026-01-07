@@ -110,14 +110,20 @@ def analyze_table(spark, table_path: Path) -> dict:
     return result
 
 
-def fix_table(spark, table_path: Path, dry_run: bool = False) -> bool:
+def fix_table(spark, table_path: Path, storage_cfg: dict, dry_run: bool = False) -> bool:
     """
     Fix a Bronze table by consolidating partitioned data into Delta.
 
     Steps:
     1. Read all data from partition directories
     2. Remove Delta log and root-level parquet files
-    3. Write as proper Delta table
+    3. Write as proper Delta table (using partition config from storage.json)
+
+    Args:
+        spark: SparkSession
+        table_path: Path to the table
+        storage_cfg: Storage configuration dict (from storage.json)
+        dry_run: If True, only show what would be done
     """
     logger.info(f"Fixing table: {table_path}")
 
@@ -189,17 +195,17 @@ def fix_table(spark, table_path: Path, dry_run: bool = False) -> bool:
     # Write as Delta table
     logger.info(f"  Writing {row_count:,} rows as Delta table...")
 
-    # Determine partition columns from the data
-    partition_cols = []
-    if 'snapshot_dt' in df.columns:
-        partition_cols.append('snapshot_dt')
-    if 'asset_type' in df.columns:
-        partition_cols.append('asset_type')
+    # Get partition columns from storage.json (single source of truth)
+    table_name = table_path.name
+    table_cfg = storage_cfg.get("tables", {}).get(table_name, {})
+    partition_cols = table_cfg.get("partitions", [])
 
     writer = df.write.format("delta").mode("overwrite")
     if partition_cols:
-        logger.info(f"  Partitioning by: {partition_cols}")
+        logger.info(f"  Partitioning by: {partition_cols} (from storage.json)")
         writer = writer.partitionBy(*partition_cols)
+    else:
+        logger.info(f"  No partitions configured for {table_name} in storage.json")
 
     writer.save(str(table_path))
 
@@ -253,6 +259,13 @@ def main():
     # Initialize Spark
     logger.info("Initializing Spark...")
     spark = get_spark("BronzeDeltaFix")
+
+    # Load storage config (single source of truth for partitions)
+    import json
+    storage_json_path = Path(repo_root) / "configs" / "storage.json"
+    with open(storage_json_path) as f:
+        storage_cfg = json.load(f)
+    logger.info(f"Loaded storage config from {storage_json_path}")
 
     bronze_root = Path(repo_root) / "storage" / "bronze"
 
@@ -313,7 +326,7 @@ def main():
 
     for table_name in tables_to_fix:
         table_path = bronze_root / table_name
-        success = fix_table(spark, table_path, dry_run=args.dry_run)
+        success = fix_table(spark, table_path, storage_cfg, dry_run=args.dry_run)
 
         if success:
             print(f"✓ {table_name}: Fixed")

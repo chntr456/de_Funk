@@ -47,8 +47,8 @@ raw_batches = ingestor._fetch_calls(calls)
 df = facet.normalize(raw_batches)
 # DataFrame with columns: ticker, trade_date, open, high, low, close, volume
 
-# 4. Write to Bronze
-sink.write(df, 'securities_prices_daily', partitions=['asset_type', 'year', 'month'])
+# 4. Write to Bronze (partitions from storage.json - single source of truth)
+sink.smart_write(df, 'securities_prices_daily')  # Reads partitions from configs/storage.json
 ```
 
 ---
