@@ -1,63 +1,161 @@
-# Adding a New Data Provider - Checklist
+# Adding a New Data Provider - Planning Guide
 
-**Purpose**: Step-by-step guide for adding a new data provider (e.g., Chicago, BLS, Yahoo Finance)
-
----
-
-## Quick Reference: Files to Create/Modify
-
-| Step | File | Action |
-|------|------|--------|
-| 1 | `datapipelines/providers/{provider}/` | Create directory structure |
-| 2 | `configs/pipelines/{provider}_endpoints.json` | Define API endpoints |
-| 3 | `configs/storage.json` | Add Bronze table definitions |
-| 4 | `datapipelines/providers/{provider}/{provider}_registry.py` | Create endpoint registry |
-| 5 | `datapipelines/providers/{provider}/provider.py` | Create provider class |
-| 6 | `datapipelines/providers/{provider}/facets/*.py` | Create facet classes |
-| 7 | `datapipelines/base/ingestor_engine.py` | Register in `create_engine()` |
-| 8 | `scripts/ingest/run_{provider}_ingestion.py` | Create test script |
+**Purpose**: Planning checklist and considerations for adding a new data provider
 
 ---
 
-## Step 1: Create Directory Structure
+## Files to Touch (Complete Map)
 
-```bash
-mkdir -p datapipelines/providers/{provider}/facets
-touch datapipelines/providers/{provider}/__init__.py
-touch datapipelines/providers/{provider}/provider.py
-touch datapipelines/providers/{provider}/{provider}_registry.py
-touch datapipelines/providers/{provider}/facets/__init__.py
-touch datapipelines/providers/{provider}/facets/{provider}_base_facet.py
+When adding a new provider, these are ALL the files that need to be created or modified:
+
+```
+Files to CREATE:
+─────────────────────────────────────────────────────────────────────
+datapipelines/providers/{provider}/
+├── __init__.py                    # Exports
+├── provider.py                    # Provider class (API client)
+├── {provider}_registry.py         # Endpoint → Facet mapping
+└── facets/
+    ├── __init__.py
+    ├── {provider}_base_facet.py   # Shared transformation logic
+    └── {endpoint}_facet.py        # One per endpoint type
+
+configs/pipelines/
+└── {provider}_endpoints.json      # API endpoint definitions
+
+scripts/ingest/
+└── run_{provider}_ingestion.py    # Test/run script
+
+
+Files to MODIFY:
+─────────────────────────────────────────────────────────────────────
+configs/storage.json               # Add Bronze table definitions
+datapipelines/base/ingestor_engine.py  # Register provider in create_engine()
+.env                               # Add {PROVIDER}_API_KEYS
 ```
 
-**Example for Chicago:**
+---
+
+## Key Considerations
+
+### 1. API Structure Considerations
+
+| Question | Options | Impact |
+|----------|---------|--------|
+| **Authentication method?** | API key, OAuth, None | Affects key_pool setup |
+| **Rate limiting?** | Calls/sec, Calls/day, None | Sets `rate_limit_per_sec` |
+| **Pagination method?** | Offset, Cursor, Page number, None | Affects fetch loop |
+| **Response format?** | JSON array, Nested JSON, CSV | Affects facet parsing |
+| **Batch support?** | Multiple items per call, Single item | Affects efficiency |
+
+### 2. Data Architecture Considerations
+
+| Question | Options | Impact |
+|----------|---------|--------|
+| **One table or many?** | Single table (partitioned), Multiple tables | Storage config structure |
+| **Partition column?** | Date, Year, Asset type, None | Query performance |
+| **Write strategy?** | `upsert` (mutable), `append` (immutable) | Dedup vs time-series |
+| **Key columns?** | Natural keys for upsert | Required for upsert strategy |
+| **Date column?** | For append strategy | Required for append strategy |
+
+### 3. Multi-Endpoint → Single Table Pattern
+
+**When to use**: Same data type across multiple endpoints (e.g., budget by fiscal year)
+
+```
+Example: Chicago Budget Data
+────────────────────────────────────────────────────────────
+Endpoints:                         Single Table:
+├── budget_fy2024    ──┐
+├── budget_fy2023    ──┼──→  bronze/chicago/budget/
+└── budget_fy2022    ──┘           ├── fiscal_year=2024/
+                                   ├── fiscal_year=2023/
+                                   └── fiscal_year=2022/
+```
+
+**Key pattern**:
+- Endpoint config has `metadata.fiscal_year` field
+- All endpoints map to same Facet class
+- Facet extracts metadata and adds as partition column
+- Storage config defines single table with `partitions: ["fiscal_year"]`
+
+---
+
+## Directory Structure Examples
+
+### Minimal Provider (1 endpoint → 1 table)
+
+```
+datapipelines/providers/simple_api/
+├── __init__.py
+├── provider.py
+└── facets/
+    ├── __init__.py
+    └── data_facet.py
+```
+
+### Standard Provider (N endpoints → N tables)
+
+```
+datapipelines/providers/alpha_vantage/
+├── __init__.py
+├── provider.py
+├── alpha_vantage_registry.py       # Endpoint → Facet mapping
+└── facets/
+    ├── __init__.py
+    ├── alpha_vantage_base_facet.py
+    ├── securities_reference_facet.py   # → securities_reference table
+    ├── securities_prices_facet.py      # → securities_prices_daily table
+    ├── income_statement_facet.py       # → income_statements table
+    └── balance_sheet_facet.py          # → balance_sheets table
+```
+
+### Multi-Endpoint Provider (N endpoints → M tables, where N > M)
+
 ```
 datapipelines/providers/chicago/
 ├── __init__.py
-├── provider.py              # ChicagoProvider class
-├── chicago_registry.py      # Endpoint rendering
+├── provider.py
+├── chicago_registry.py
 └── facets/
     ├── __init__.py
-    ├── chicago_base_facet.py     # Shared facet logic
-    ├── unemployment_facet.py     # Endpoint-specific facet
-    ├── building_permits_facet.py # Endpoint-specific facet
-    └── business_licenses_facet.py
+    ├── chicago_base_facet.py
+    ├── budget_facet.py             # budget_fy2024, budget_fy2023, etc. → chicago_budget
+    ├── unemployment_facet.py       # → chicago_unemployment
+    └── building_permits_facet.py   # → chicago_building_permits
+```
+
+### Complex Provider (with parsers/transformers)
+
+```
+datapipelines/providers/sec_edgar/
+├── __init__.py
+├── provider.py
+├── sec_registry.py
+├── parsers/                        # Complex XML/XBRL parsing
+│   ├── __init__.py
+│   ├── xbrl_parser.py
+│   └── filing_parser.py
+└── facets/
+    ├── __init__.py
+    ├── sec_base_facet.py
+    └── form_10k_facet.py
 ```
 
 ---
 
-## Step 2: Define API Endpoints
+## Configuration Templates
 
-**File**: `configs/pipelines/{provider}_endpoints.json`
+### Endpoint Config (`configs/pipelines/{provider}_endpoints.json`)
 
 ```json
 {
   "credentials": {
     "api_keys": [],
-    "comment": "Set {PROVIDER}_API_KEYS environment variable"
+    "comment": "Set {PROVIDER}_API_KEYS env var"
   },
   "base_urls": {
-    "core": "https://data.cityofchicago.org/resource"
+    "core": "https://api.example.com"
   },
   "headers": {
     "Content-Type": "application/json"
@@ -65,807 +163,107 @@ datapipelines/providers/chicago/
   "rate_limit_per_sec": 1.0,
 
   "endpoints": {
-    "unemployment": {
+    "endpoint_name": {
       "base": "core",
       "method": "GET",
-      "path_template": "/{dataset_id}.json",
-      "required_params": [],
-      "default_query": {
-        "$limit": 50000
-      },
-      "response_key": null,
-      "default_path_params": {
-        "dataset_id": "iqnk-2tcu"
-      },
-      "comment": "Chicago unemployment statistics"
-    },
-    "building_permits": {
-      "base": "core",
-      "method": "GET",
-      "path_template": "/{dataset_id}.json",
-      "required_params": [],
-      "default_query": {
-        "$limit": 50000
-      },
-      "response_key": null,
-      "default_path_params": {
-        "dataset_id": "ydr8-5enu"
-      },
-      "comment": "Building permit data"
+      "path_template": "/resource/{id}",
+      "default_query": { "$limit": 50000 },
+      "metadata": {
+        "table_name": "target_table",
+        "custom_field": "value"
+      }
     }
   }
 }
 ```
 
----
-
-## Step 3: Add Storage Configuration
-
-**File**: `configs/storage.json` - Add to "tables" section:
+### Storage Config (`configs/storage.json` - add to tables section)
 
 ```json
 {
-  "tables": {
-    "chicago_unemployment": {
-      "root": "bronze",
-      "rel": "chicago/unemployment",
-      "partitions": ["year"],
-      "write_strategy": "upsert",
-      "key_columns": ["record_id", "period"],
-      "comment": "Chicago unemployment data"
-    },
-    "chicago_building_permits": {
-      "root": "bronze",
-      "rel": "chicago/building_permits",
-      "partitions": ["issue_year"],
-      "write_strategy": "append",
-      "key_columns": ["permit_id"],
-      "date_column": "issue_date",
-      "comment": "Chicago building permits"
-    }
+  "table_name": {
+    "root": "bronze",
+    "rel": "{provider}/{table_path}",
+    "partitions": ["partition_column"],
+    "write_strategy": "upsert",
+    "key_columns": ["unique_id"],
+    "comment": "Description"
   }
 }
 ```
 
-**Key fields:**
-- `partitions`: Columns to partition by (from storage.json ONLY - single source of truth)
-- `write_strategy`: "upsert" for mutable data, "append" for immutable time-series
-- `key_columns`: Unique identifier columns for upsert/dedup
-- `date_column`: Required for append strategy
-
 ---
 
-## Step 4: Create Registry Class
-
-**File**: `datapipelines/providers/{provider}/{provider}_registry.py`
-
-```python
-"""
-Registry for {Provider} API endpoints.
-"""
-from datapipelines.base.registry import BaseRegistry, Endpoint
-
-class ChicagoRegistry(BaseRegistry):
-    """Registry for Chicago Data Portal endpoints."""
-
-    def __init__(self, config_path: str = None):
-        if config_path is None:
-            from utils.repo import get_repo_root
-            config_path = get_repo_root() / "configs" / "pipelines" / "chicago_endpoints.json"
-        super().__init__(config_path)
-
-    def render(self, endpoint_name: str, **kwargs) -> Endpoint:
-        """Render an endpoint with parameters."""
-        ep_cfg = self.config["endpoints"][endpoint_name]
-        base_url = self.config["base_urls"][ep_cfg["base"]]
-
-        # Build path from template
-        path_params = {**ep_cfg.get("default_path_params", {}), **kwargs.get("path_params", {})}
-        path = ep_cfg["path_template"].format(**path_params)
-
-        # Build query params
-        query = {**ep_cfg.get("default_query", {}), **kwargs.get("query", {})}
-
-        return Endpoint(
-            name=endpoint_name,
-            url=f"{base_url}{path}",
-            method=ep_cfg["method"],
-            params=query,
-            headers=self.config.get("headers", {}),
-            response_key=ep_cfg.get("response_key")
-        )
-```
-
----
-
-## Step 5: Create Provider Class
-
-**File**: `datapipelines/providers/{provider}/provider.py`
-
-```python
-"""
-Chicago Data Portal provider implementation.
-"""
-from __future__ import annotations
-from dataclasses import dataclass
-from enum import Enum
-from typing import Dict, List, Optional, Any
-
-from datapipelines.base.provider import BaseProvider, DataType, TickerData, ProviderConfig
-from datapipelines.base.http_client import HttpClient
-from datapipelines.base.key_pool import ApiKeyPool
-
-
-# Define provider-specific data types (extend base DataType if needed)
-class ChicagoDataType(Enum):
-    UNEMPLOYMENT = "unemployment"
-    BUILDING_PERMITS = "building_permits"
-    BUSINESS_LICENSES = "business_licenses"
-
-
-class ChicagoProvider(BaseProvider):
-    """Provider for Chicago Data Portal API."""
-
-    # Map data types to endpoint names
-    ENDPOINT_MAP = {
-        ChicagoDataType.UNEMPLOYMENT: "unemployment",
-        ChicagoDataType.BUILDING_PERMITS: "building_permits",
-        ChicagoDataType.BUSINESS_LICENSES: "business_licenses",
-    }
-
-    # Map data types to Bronze table names (must match storage.json)
-    TABLE_NAMES = {
-        ChicagoDataType.UNEMPLOYMENT: "chicago_unemployment",
-        ChicagoDataType.BUILDING_PERMITS: "chicago_building_permits",
-        ChicagoDataType.BUSINESS_LICENSES: "chicago_business_licenses",
-    }
-
-    # Key columns for upsert (must match storage.json)
-    KEY_COLUMNS = {
-        ChicagoDataType.UNEMPLOYMENT: ["record_id", "period"],
-        ChicagoDataType.BUILDING_PERMITS: ["permit_id"],
-        ChicagoDataType.BUSINESS_LICENSES: ["license_id"],
-    }
-
-    def __init__(self, config: ProviderConfig, spark):
-        super().__init__(config, spark)
-        self.registry = None  # Lazy load
-
-    def _setup(self):
-        """Initialize registry and HTTP client."""
-        from .chicago_registry import ChicagoRegistry
-        self.registry = ChicagoRegistry()
-
-        # Get API keys from environment
-        import os
-        keys = os.environ.get("CHICAGO_API_KEYS", "").split(",")
-        keys = [k.strip() for k in keys if k.strip()]
-
-        self.key_pool = ApiKeyPool(keys, cooldown_seconds=60.0)
-        self.http = HttpClient(
-            rate_limit=self.config.rate_limit,
-            max_retries=self.config.max_retries,
-            retry_delay=self.config.retry_delay
-        )
-
-    def get_supported_data_types(self) -> List[DataType]:
-        """Return list of supported data types."""
-        return list(ChicagoDataType)
-
-    def fetch_ticker_data(
-        self,
-        ticker: str = None,  # Not used for Chicago (city-level data)
-        data_types: List = None,
-        progress_callback=None,
-        **kwargs
-    ) -> TickerData:
-        """Fetch data for specified data types."""
-        if self.registry is None:
-            self._setup()
-
-        result = TickerData(ticker=ticker or "CHICAGO")
-
-        for dt in (data_types or self.get_supported_data_types()):
-            try:
-                endpoint_name = self.ENDPOINT_MAP[dt]
-                endpoint = self.registry.render(endpoint_name, **kwargs)
-
-                # Add API key if available
-                api_key = self.key_pool.next_key()
-                if api_key:
-                    endpoint.params["$$app_token"] = api_key
-
-                # Fetch data
-                response = self.http.request(
-                    method=endpoint.method,
-                    url=endpoint.url,
-                    params=endpoint.params,
-                    headers=endpoint.headers
-                )
-
-                # Store in result
-                setattr(result, dt.value, response.json())
-
-                if progress_callback:
-                    progress_callback(ticker, dt, "success", None)
-
-            except Exception as e:
-                result.errors.append(f"{dt.value}: {str(e)}")
-                if progress_callback:
-                    progress_callback(ticker, dt, "error", str(e))
-
-        return result
-
-    def normalize_data(self, ticker_data: TickerData, data_type) -> Any:
-        """Normalize raw data to Spark DataFrame using facets."""
-        raw_data = getattr(ticker_data, data_type.value, None)
-        if raw_data is None:
-            return None
-
-        # Import the appropriate facet
-        if data_type == ChicagoDataType.UNEMPLOYMENT:
-            from .facets.unemployment_facet import UnemploymentFacet
-            facet = UnemploymentFacet(self.spark)
-        elif data_type == ChicagoDataType.BUILDING_PERMITS:
-            from .facets.building_permits_facet import BuildingPermitsFacet
-            facet = BuildingPermitsFacet(self.spark)
-        else:
-            raise ValueError(f"Unknown data type: {data_type}")
-
-        return facet.normalize([[raw_data]])
-
-    def get_bronze_table_name(self, data_type) -> str:
-        """Get the Bronze table name for a data type."""
-        return self.TABLE_NAMES[data_type]
-
-    def get_key_columns(self, data_type) -> List[str]:
-        """Get key columns for upsert."""
-        return self.KEY_COLUMNS[data_type]
-
-
-def create_chicago_provider(api_cfg: Dict, spark) -> ChicagoProvider:
-    """Factory function to create ChicagoProvider."""
-    config = ProviderConfig(
-        name="chicago",
-        base_url=api_cfg["base_urls"]["core"],
-        rate_limit=api_cfg.get("rate_limit_per_sec", 1.0),
-        credentials_env_var="CHICAGO_API_KEYS",
-        headers=api_cfg.get("headers", {}),
-    )
-    return ChicagoProvider(config, spark)
-```
-
----
-
-## Step 6: Create Facet Classes
-
-**File**: `datapipelines/providers/{provider}/facets/{provider}_base_facet.py`
-
-```python
-"""
-Base facet for Chicago Data Portal.
-"""
-from datapipelines.facets.base_facet import Facet
-
-class ChicagoBaseFacet(Facet):
-    """Base facet for Chicago data transformations."""
-
-    def __init__(self, spark):
-        super().__init__(spark)
-
-    def normalize(self, raw_batches):
-        """Override in subclass."""
-        raise NotImplementedError
-```
-
-**File**: `datapipelines/providers/{provider}/facets/unemployment_facet.py`
-
-```python
-"""
-Facet for Chicago unemployment data.
-"""
-from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
-from .chicago_base_facet import ChicagoBaseFacet
-
-class UnemploymentFacet(ChicagoBaseFacet):
-    """Normalize Chicago unemployment data."""
-
-    OUTPUT_SCHEMA = StructType([
-        StructField("record_id", StringType(), True),
-        StructField("period", StringType(), True),
-        StructField("year", IntegerType(), True),
-        StructField("month", IntegerType(), True),
-        StructField("unemployment_rate", DoubleType(), True),
-        StructField("labor_force", IntegerType(), True),
-        StructField("employed", IntegerType(), True),
-        StructField("unemployed", IntegerType(), True),
-    ])
-
-    def normalize(self, raw_batches):
-        """Transform raw API response to DataFrame."""
-        rows = []
-        for batch in raw_batches:
-            for record in batch:
-                rows.append({
-                    "record_id": record.get("id"),
-                    "period": record.get("period"),
-                    "year": int(record.get("year")) if record.get("year") else None,
-                    "month": int(record.get("month")) if record.get("month") else None,
-                    "unemployment_rate": float(record.get("unemployment_rate")) if record.get("unemployment_rate") else None,
-                    "labor_force": int(record.get("labor_force")) if record.get("labor_force") else None,
-                    "employed": int(record.get("employed")) if record.get("employed") else None,
-                    "unemployed": int(record.get("unemployed")) if record.get("unemployed") else None,
-                })
-
-        if not rows:
-            return self.spark.createDataFrame([], schema=self.OUTPUT_SCHEMA)
-
-        return self.spark.createDataFrame(rows, schema=self.OUTPUT_SCHEMA)
-```
-
-**File**: `datapipelines/providers/{provider}/facets/__init__.py`
-
-```python
-"""Chicago facets."""
-from .unemployment_facet import UnemploymentFacet
-from .building_permits_facet import BuildingPermitsFacet
-
-__all__ = ["UnemploymentFacet", "BuildingPermitsFacet"]
-```
-
----
-
-## Step 7: Register with IngestorEngine
-
-**File**: `datapipelines/base/ingestor_engine.py` - Update `create_engine()`:
-
-```python
-def create_engine(
-    provider_name: str,
-    api_cfg: Dict,
-    storage_cfg: Dict,
-    spark=None
-) -> IngestorEngine:
-    """Factory function to create an IngestorEngine for a provider."""
-    if provider_name == "alpha_vantage":
-        from datapipelines.providers.alpha_vantage.provider import create_alpha_vantage_provider
-        provider = create_alpha_vantage_provider(api_cfg, spark)
-    elif provider_name == "chicago":
-        from datapipelines.providers.chicago.provider import create_chicago_provider
-        provider = create_chicago_provider(api_cfg, spark)
-    elif provider_name == "bls":
-        from datapipelines.providers.bls.provider import create_bls_provider
-        provider = create_bls_provider(api_cfg, spark)
-    else:
-        raise ValueError(f"Unknown provider: {provider_name}")
-
-    return IngestorEngine(provider, storage_cfg)
-```
-
----
-
-## Step 8: Create Test Script
-
-**File**: `scripts/ingest/run_chicago_ingestion.py`
-
-```python
-#!/usr/bin/env python
-"""
-Run Chicago Data Portal ingestion.
-
-Usage:
-    python -m scripts.ingest.run_chicago_ingestion
-    python -m scripts.ingest.run_chicago_ingestion --endpoints unemployment building_permits
-"""
-from __future__ import annotations
-import argparse
-import json
-from pathlib import Path
-
-from utils.repo import setup_repo_imports
-repo_root = setup_repo_imports()
-
-from config.logging import setup_logging, get_logger
-from orchestration.common.spark_session import get_spark
-from datapipelines.base.ingestor_engine import create_engine
-from datapipelines.providers.chicago.provider import ChicagoDataType
-
-logger = get_logger(__name__)
-
-
-def main():
-    setup_logging()
-
-    parser = argparse.ArgumentParser(description="Run Chicago Data Portal ingestion")
-    parser.add_argument("--endpoints", nargs="+", default=["unemployment"],
-                       choices=["unemployment", "building_permits", "business_licenses"],
-                       help="Endpoints to ingest")
-    args = parser.parse_args()
-
-    # Load configs
-    with open(repo_root / "configs" / "pipelines" / "chicago_endpoints.json") as f:
-        api_cfg = json.load(f)
-    with open(repo_root / "configs" / "storage.json") as f:
-        storage_cfg = json.load(f)
-
-    # Initialize Spark
-    spark = get_spark("ChicagoIngestion")
-
-    # Create engine
-    engine = create_engine("chicago", api_cfg, storage_cfg, spark)
-
-    # Map endpoint names to data types
-    data_type_map = {
-        "unemployment": ChicagoDataType.UNEMPLOYMENT,
-        "building_permits": ChicagoDataType.BUILDING_PERMITS,
-        "business_licenses": ChicagoDataType.BUSINESS_LICENSES,
-    }
-    data_types = [data_type_map[ep] for ep in args.endpoints]
-
-    # Run ingestion (no tickers needed for city-level data)
-    results = engine.run(
-        tickers=["CHICAGO"],  # Placeholder - Chicago is city-level data
-        data_types=data_types,
-        batch_size=1,
-        auto_compact=True
-    )
-
-    print(f"\nIngestion complete!")
-    print(f"Tables written: {list(results.tables_written.keys())}")
-    print(f"Errors: {results.total_errors}")
-
-    spark.stop()
-
-
-if __name__ == "__main__":
-    main()
-```
-
----
-
-## Checklist Summary
+## Implementation Checklist
 
 ```
-[ ] 1. Directory structure created
-      datapipelines/providers/{provider}/
-      datapipelines/providers/{provider}/facets/
+[ ] 1. Analyze API documentation
+      - Auth method, rate limits, pagination
+      - Response structure
+      - Available endpoints
 
-[ ] 2. API config created
+[ ] 2. Design data architecture
+      - How many tables?
+      - Partition strategy?
+      - Upsert vs append?
+
+[ ] 3. Create endpoint config
       configs/pipelines/{provider}_endpoints.json
 
-[ ] 3. Storage config updated
+[ ] 4. Add storage config
       configs/storage.json - tables section
 
-[ ] 4. Registry class created
-      datapipelines/providers/{provider}/{provider}_registry.py
+[ ] 5. Create provider directory
+      datapipelines/providers/{provider}/
 
-[ ] 5. Provider class created
-      datapipelines/providers/{provider}/provider.py
-      - Implements: fetch_ticker_data(), normalize_data()
-      - Maps: ENDPOINT_MAP, TABLE_NAMES, KEY_COLUMNS
+[ ] 6. Implement provider class
+      - Extends BaseProvider
+      - Implements fetch_ticker_data()
 
-[ ] 6. Facets created (one per endpoint)
-      datapipelines/providers/{provider}/facets/{endpoint}_facet.py
-      - Define OUTPUT_SCHEMA
-      - Implement normalize()
+[ ] 7. Implement registry
+      - Endpoint rendering with params
+      - Metadata extraction
 
-[ ] 7. Engine factory updated
+[ ] 8. Implement facets
+      - One per data type
+      - OUTPUT_SCHEMA defined
+      - normalize() method
+
+[ ] 9. Register in engine
       datapipelines/base/ingestor_engine.py - create_engine()
 
-[ ] 8. Test script created
-      scripts/ingest/run_{provider}_ingestion.py
+[ ] 10. Create test script
+       scripts/ingest/run_{provider}_ingestion.py
 
-[ ] 9. Environment variable set
-      .env: {PROVIDER}_API_KEYS=your_key_here
+[ ] 11. Set environment variable
+       .env: {PROVIDER}_API_KEYS=...
+
+[ ] 12. Test ingestion
+       python -m scripts.ingest.run_{provider}_ingestion
 ```
 
 ---
 
-## Key Principles
+## Reference Implementations
 
-1. **Partition config in storage.json ONLY** - Never hardcode partitions in provider code
-2. **Use get_spark()** - Always use `orchestration.common.spark_session.get_spark()` for Delta Lake support
-3. **Write Delta format** - Use `sink.smart_write()` which reads config from storage.json
-4. **One facet per endpoint** - Each endpoint should have its own facet class with OUTPUT_SCHEMA
-5. **Test early** - Create test script immediately and verify basic data flow
-
----
-
-## Reference Files
-
-| Component | Reference Implementation |
-|-----------|-------------------------|
-| Provider | `datapipelines/providers/alpha_vantage/provider.py` |
+| Component | Example File |
+|-----------|-------------|
+| Provider class | `datapipelines/providers/alpha_vantage/provider.py` |
 | Registry | `datapipelines/providers/alpha_vantage/alpha_vantage_registry.py` |
-| Facet | `datapipelines/providers/alpha_vantage/facets/securities_prices_facet.py` |
-| Engine | `datapipelines/base/ingestor_engine.py` |
-| BronzeSink | `datapipelines/ingestors/bronze_sink.py` |
-| Storage Config | `configs/storage.json` |
-| API Config | `configs/pipelines/alpha_vantage_endpoints.json` |
+| Base facet | `datapipelines/providers/alpha_vantage/facets/alpha_vantage_base_facet.py` |
+| Endpoint facet | `datapipelines/providers/alpha_vantage/facets/securities_prices_facet.py` |
+| Engine factory | `datapipelines/base/ingestor_engine.py` |
+| Storage config | `configs/storage.json` |
+| Endpoint config | `configs/pipelines/alpha_vantage_endpoints.json` |
 
 ---
 
-## Advanced Pattern: Multiple Endpoints → Single Table
-
-Some APIs expose the same data type across multiple endpoints (e.g., budget data by fiscal year). This pattern consolidates them into a single partitioned Delta table.
-
-### Use Case: Chicago Budget Data
-
-Chicago Data Portal has separate endpoints for each fiscal year's budget:
-- `/resource/abc123.json` → FY2024 budget
-- `/resource/def456.json` → FY2023 budget
-- `/resource/ghi789.json` → FY2022 budget
-
-Instead of creating separate tables, we consolidate into one partitioned table.
-
-### Pattern Overview
-
-```
-Ingestion Flow (per endpoint):
-─────────────────────────────────────────────────────────────────
-budget_fy2024 endpoint → BudgetFacet → BronzeSink.smart_write()
-                                              ↓
-                              bronze/chicago/budget/fiscal_year=2024/
-
-budget_fy2023 endpoint → BudgetFacet → BronzeSink.smart_write()
-                                              ↓
-                              bronze/chicago/budget/fiscal_year=2023/
-─────────────────────────────────────────────────────────────────
-                    Same Delta table, different partitions
-```
-
-### Step 1: Endpoint Configuration with Metadata
-
-**File**: `configs/pipelines/chicago_endpoints.json`
-
-```json
-{
-  "endpoints": {
-    "budget_fy2024": {
-      "base": "core",
-      "method": "GET",
-      "path_template": "/resource/xjhr-2w65.json",
-      "default_query": { "$limit": 50000 },
-      "metadata": {
-        "fiscal_year": "2024",
-        "table_name": "chicago_budget"
-      },
-      "description": "Chicago Budget FY2024"
-    },
-    "budget_fy2023": {
-      "base": "core",
-      "method": "GET",
-      "path_template": "/resource/ptux-2w65.json",
-      "default_query": { "$limit": 50000 },
-      "metadata": {
-        "fiscal_year": "2023",
-        "table_name": "chicago_budget"
-      },
-      "description": "Chicago Budget FY2023"
-    }
-  }
-}
-```
-
-**Key**: The `metadata` field passes context to the facet without hardcoding.
-
-### Step 2: Registry Mapping (All to Same Facet)
-
-**File**: `datapipelines/providers/chicago/chicago_registry.py`
-
-```python
-from .facets.budget_facet import BudgetFacet
-
-# All budget endpoints use the same facet
-ENDPOINT_FACET_MAP = {
-    "budget_fy2024": BudgetFacet,
-    "budget_fy2023": BudgetFacet,
-    "budget_fy2022": BudgetFacet,
-    # Easy to add more years
-}
-```
-
-### Step 3: Facet Extracts Metadata
-
-**File**: `datapipelines/providers/chicago/facets/budget_facet.py`
-
-```python
-from pyspark.sql.functions import lit
-
-class BudgetFacet(ChicagoBaseFacet):
-    """Normalize Chicago budget data with fiscal year from metadata."""
-
-    TABLE_NAME = "chicago_budget"  # Always same table
-
-    def transform(self, raw_data: list[dict], endpoint_config: dict) -> DataFrame:
-        """Transform raw API response, adding fiscal_year from endpoint metadata."""
-        df = self.spark.createDataFrame(raw_data)
-
-        # Extract fiscal_year from endpoint metadata
-        metadata = endpoint_config.get("metadata", {})
-        fiscal_year = metadata.get("fiscal_year")
-
-        if fiscal_year:
-            df = df.withColumn("fiscal_year", lit(fiscal_year))
-
-        return df
-```
-
-### Step 4: Storage Configuration (Single Table)
-
-**File**: `configs/storage.json`
-
-```json
-{
-  "tables": {
-    "chicago_budget": {
-      "root": "bronze",
-      "rel": "chicago/budget",
-      "partitions": ["fiscal_year"],
-      "write_strategy": "upsert",
-      "key_columns": ["fund_code", "department_code", "fiscal_year"],
-      "comment": "Chicago budget data - all fiscal years in one table"
-    }
-  }
-}
-```
-
-### Benefits of This Pattern
-
-1. **Fault Tolerance**: Each endpoint is processed independently - if FY2023 fails, FY2024 still succeeds
-2. **No Code Duplication**: One facet class handles all years
-3. **Easy to Extend**: Adding a new year = add endpoint config only
-4. **Partition Pruning**: Queries for single year only scan that partition
-5. **Unified Schema**: All years have identical schema (enforced by facet)
-
----
-
-## Directory Structure Examples
-
-### Minimal Provider (Single Endpoint)
-
-```
-datapipelines/providers/simple_api/
-├── __init__.py
-├── provider.py                    # SimpleApiProvider class
-└── facets/
-    ├── __init__.py
-    └── data_facet.py              # Single facet
-```
-
-### Standard Provider (Multiple Endpoints, Different Tables)
-
-```
-datapipelines/providers/alpha_vantage/
-├── __init__.py
-├── provider.py                    # AlphaVantageProvider class
-├── alpha_vantage_registry.py      # Endpoint → Facet mapping
-└── facets/
-    ├── __init__.py
-    ├── alpha_vantage_base_facet.py    # Shared logic
-    ├── securities_reference_facet.py  # → securities_reference table
-    ├── securities_prices_facet.py     # → securities_prices_daily table
-    ├── income_statement_facet.py      # → income_statements table
-    ├── balance_sheet_facet.py         # → balance_sheets table
-    └── cash_flow_facet.py             # → cash_flows table
-```
-
-### Multi-Endpoint to Single Table Provider
-
-```
-datapipelines/providers/chicago/
-├── __init__.py
-├── provider.py                    # ChicagoProvider class
-├── chicago_registry.py            # Endpoint → Facet mapping
-└── facets/
-    ├── __init__.py
-    ├── chicago_base_facet.py      # Shared Socrata API logic
-    ├── budget_facet.py            # budget_fy* endpoints → chicago_budget table
-    ├── unemployment_facet.py      # → chicago_unemployment table
-    └── building_permits_facet.py  # → chicago_building_permits table
-```
-
-### Provider with Complex Transformations
-
-```
-datapipelines/providers/sec_edgar/
-├── __init__.py
-├── provider.py
-├── sec_registry.py
-├── parsers/                       # Complex XML/XBRL parsing
-│   ├── __init__.py
-│   ├── xbrl_parser.py
-│   └── filing_parser.py
-└── facets/
-    ├── __init__.py
-    ├── sec_base_facet.py
-    ├── form_10k_facet.py
-    └── form_10q_facet.py
-```
-
----
-
-## Next Steps After Provider Implementation
-
-### 1. Verify Bronze Ingestion
-
-```bash
-# Run test ingestion
-python -m scripts.ingest.run_{provider}_ingestion --endpoints endpoint_name
-
-# Verify Delta table created
-ls -la storage/bronze/{provider}/{table}/
-
-# Check row count
-python -c "
-from delta import DeltaTable
-dt = DeltaTable.forPath(spark, 'storage/bronze/{provider}/{table}')
-print(f'Rows: {dt.toDF().count()}')
-"
-```
-
-### 2. Create Silver Model (if needed)
-
-If this data needs to be in the Silver layer:
-
-1. Create model config: `configs/models/{model_name}/`
-2. Create model builder: `models/domain/{model_name}/builder.py`
-3. Add to build pipeline: `scripts/build/build_models.py`
-
-### 3. Add Integration Tests
-
-```python
-# tests/integration/test_{provider}_ingestion.py
-def test_ingestion_creates_delta_table():
-    """Test that ingestion creates proper Delta table."""
-    # Run ingestion
-    # Assert table exists
-    # Assert schema matches
-    # Assert partitions correct
-```
-
-### 4. Document in CLAUDE.md
-
-Update the Data Sources section:
-
-```markdown
-### Data Sources Status
-- **{Provider Name}**: Active, {description}
-  - Endpoints: {list endpoints}
-  - Tables: {list bronze tables}
-```
-
-### 5. Add to CI/CD Pipeline
-
-If using automated testing:
-
-```yaml
-# .github/workflows/test.yml
-- name: Test {Provider} Ingestion
-  run: python -m scripts.ingest.run_{provider}_ingestion --dry-run
-```
-
----
-
-## Troubleshooting New Providers
-
-### Common Issues
+## Troubleshooting
 
 | Issue | Cause | Solution |
 |-------|-------|----------|
 | `KeyError: 'endpoint_name'` | Endpoint not in config | Check `{provider}_endpoints.json` |
-| `Table not found in storage.json` | Missing table config | Add to `configs/storage.json` |
-| `Schema mismatch` | Facet schema doesn't match data | Update `OUTPUT_SCHEMA` in facet |
-| `Partition column not in data` | Facet not adding partition column | Add `withColumn()` in facet |
-| `Rate limit exceeded` | Too many API calls | Reduce `rate_limit_per_sec` |
-| `Empty DataFrame` | API returned no data | Check API response, add logging |
-
-### Debug Checklist
-
-```
-[ ] API key set in environment: echo $PROVIDER_API_KEYS
-[ ] Endpoint config valid: cat configs/pipelines/{provider}_endpoints.json | jq .
-[ ] Storage config valid: cat configs/storage.json | jq .tables.{table_name}
-[ ] Facet produces non-empty DataFrame: add logger.info(f"Rows: {df.count()}")
-[ ] Partition column exists in DataFrame: add df.printSchema()
-```
+| `Table not found` | Missing storage config | Add to `configs/storage.json` |
+| `Schema mismatch` | Facet schema wrong | Update `OUTPUT_SCHEMA` |
+| `Missing partition column` | Facet not adding it | Add `withColumn()` |
+| `Rate limit exceeded` | Too many calls | Reduce `rate_limit_per_sec` |
