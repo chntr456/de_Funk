@@ -1,203 +1,855 @@
-# Proposal 011: Pipeline Orchestration - IngestorEngine Architecture
+# Proposal 011: IngestorEngine Architecture - Complete Provider Guide
 
 **Status**: Implemented (January 2026)
 **Author**: de_Funk Team
-**Date**: December 2025 (Updated January 2026)
-**Priority**: High
+**Updated**: January 2026
+**Purpose**: Complete guide for adding new data providers to the ingestion pipeline
+
+---
+
+## Table of Contents
+
+1. [Executive Summary](#executive-summary)
+2. [Architecture Overview](#architecture-overview)
+3. [Creating a New Provider](#creating-a-new-provider)
+   - [Step 1: Directory Structure](#step-1-directory-structure)
+   - [Step 2: API Endpoints Configuration](#step-2-api-endpoints-configuration)
+   - [Step 3: Storage Configuration](#step-3-storage-configuration)
+   - [Step 4: Registry Class](#step-4-registry-class)
+   - [Step 5: Provider Implementation](#step-5-provider-implementation)
+   - [Step 6: Create Facets](#step-6-create-facets)
+   - [Step 7: Factory Function](#step-7-factory-function)
+   - [Step 8: Register with Engine](#step-8-register-with-engine)
+   - [Step 9: Test Script](#step-9-test-script)
+4. [Adding Endpoints to Existing Provider](#adding-endpoints-to-existing-provider)
+5. [Component Reference](#component-reference)
+6. [Reference Implementation: Alpha Vantage](#reference-implementation-alpha-vantage)
+7. [Common Patterns](#common-patterns)
+8. [Troubleshooting](#troubleshooting)
+9. [Session Summary](#session-summary)
 
 ---
 
 ## Executive Summary
 
-This document describes the **IngestorEngine paradigm** for data ingestion in de_Funk. This is the canonical reference for:
-1. Understanding how the ingestion pipeline works
-2. Adding new endpoints to existing providers
-3. Creating new data providers
-4. Troubleshooting ingestion issues
+This document is the **complete guide for adding new data providers** to de_Funk's ingestion pipeline.
 
-The architecture is now fully implemented and running on the Spark cluster.
+The IngestorEngine is a **provider-agnostic orchestrator** that handles:
+- Batch processing with configurable size
+- Rate limiting and API key rotation
+- Progress tracking and metrics
+- Delta Lake writes with compaction
+
+To add a new provider (e.g., BLS, Yahoo Finance, FRED), follow the steps in this document.
 
 ---
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                           INGESTION FLOW                                     │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                              │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌───────────┐ │
-│  │  Provider    │───►│   Facets     │───►│ IngestorEngine│───►│ BronzeSink│ │
-│  │ (API client) │    │ (normalize)  │    │ (orchestrate) │    │ (Delta)   │ │
-│  └──────────────┘    └──────────────┘    └──────────────┘    └───────────┘ │
-│         │                   │                   │                  │        │
-│         ▼                   ▼                   ▼                  ▼        │
-│   ┌──────────┐       ┌──────────┐       ┌──────────┐       ┌──────────┐    │
-│   │ HttpClient│       │  Schema  │       │  Batch   │       │  Delta   │    │
-│   │ KeyPool  │       │ Transform│       │ Progress │       │  Tables  │    │
-│   │ Registry │       │  Filter  │       │ Metrics  │       │ Compact  │    │
-│   └──────────┘       └──────────┘       └──────────┘       └──────────┘    │
-│                                                                              │
-└─────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│                           PROVIDER ARCHITECTURE                                  │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│                                                                                  │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                        CONFIGURATION LAYER                                │   │
+│  │  configs/pipelines/{provider}_endpoints.json  ← API endpoints            │   │
+│  │  configs/storage.json                         ← Table definitions        │   │
+│  │  configs/pipelines/run_config.json            ← Run profiles             │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                           │
+│                                      ▼                                           │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                        PROVIDER LAYER                                     │   │
+│  │  datapipelines/providers/{provider}/                                      │   │
+│  │    ├── __init__.py                                                        │   │
+│  │    ├── provider.py          ← BaseProvider implementation                 │   │
+│  │    ├── {provider}_registry.py  ← Endpoint rendering                       │   │
+│  │    └── facets/                                                            │   │
+│  │        ├── __init__.py                                                    │   │
+│  │        ├── {provider}_base_facet.py   ← Shared facet logic               │   │
+│  │        ├── {endpoint1}_facet.py       ← Endpoint-specific facet          │   │
+│  │        └── {endpoint2}_facet.py       ← Endpoint-specific facet          │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                           │
+│                                      ▼                                           │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                        ENGINE LAYER                                       │   │
+│  │  datapipelines/base/                                                      │   │
+│  │    ├── provider.py           ← BaseProvider abstract class               │   │
+│  │    ├── ingestor_engine.py    ← Generic orchestrator                      │   │
+│  │    ├── http_client.py        ← Rate-limited HTTP                         │   │
+│  │    ├── key_pool.py           ← API key rotation                          │   │
+│  │    ├── registry.py           ← Base endpoint registry                    │   │
+│  │    └── metrics.py            ← Performance tracking                      │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                      │                                           │
+│                                      ▼                                           │
+│  ┌──────────────────────────────────────────────────────────────────────────┐   │
+│  │                        STORAGE LAYER                                      │   │
+│  │  datapipelines/ingestors/bronze_sink.py  ← Delta Lake writes             │   │
+│  │  storage/bronze/{provider}/              ← Bronze tables                  │   │
+│  └──────────────────────────────────────────────────────────────────────────┘   │
+│                                                                                  │
+└─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Key Components
 
-| Component | Location | Purpose |
-|-----------|----------|---------|
-| **BaseProvider** | `datapipelines/base/provider.py` | Abstract interface for all data providers |
-| **IngestorEngine** | `datapipelines/base/ingestor_engine.py` | Generic orchestrator for batch ingestion |
-| **BronzeSink** | `datapipelines/ingestors/bronze_sink.py` | Writes to Delta Lake with upsert/append |
-| **Facets** | `datapipelines/providers/{provider}/facets/` | Transform raw API data to Spark DataFrames |
-| **HttpClient** | `datapipelines/base/http_client.py` | Rate-limited HTTP client with retries |
-| **ApiKeyPool** | `datapipelines/base/key_pool.py` | Rotating API key pool with cooldowns |
-| **MetricsCollector** | `datapipelines/base/metrics.py` | Performance timing and reporting |
-| **BatchProgressTracker** | `datapipelines/base/progress_tracker.py` | Real-time progress display |
+| Component | File | Purpose |
+|-----------|------|---------|
+| **BaseProvider** | `datapipelines/base/provider.py` | Abstract interface all providers implement |
+| **IngestorEngine** | `datapipelines/base/ingestor_engine.py` | Generic batch orchestrator |
+| **HttpClient** | `datapipelines/base/http_client.py` | Rate-limited HTTP with retries |
+| **ApiKeyPool** | `datapipelines/base/key_pool.py` | Rotating API keys with cooldown |
+| **BaseRegistry** | `datapipelines/base/registry.py` | Endpoint definition and rendering |
+| **BronzeSink** | `datapipelines/ingestors/bronze_sink.py` | Delta Lake writer |
+| **DataType** | `datapipelines/base/provider.py` | Enum of data types (PRICES, REFERENCE, etc.) |
+| **TickerData** | `datapipelines/base/provider.py` | Container for fetched data |
 
 ---
 
-## Configuration Files Reference
+## Creating a New Provider
 
-### 1. API Endpoints: `configs/pipelines/alpha_vantage_endpoints.json`
+### Step 1: Directory Structure
 
-Defines all Alpha Vantage API endpoints.
+Create the provider directory structure:
+
+```bash
+mkdir -p datapipelines/providers/{provider}/facets
+touch datapipelines/providers/{provider}/__init__.py
+touch datapipelines/providers/{provider}/provider.py
+touch datapipelines/providers/{provider}/{provider}_registry.py
+touch datapipelines/providers/{provider}/facets/__init__.py
+touch datapipelines/providers/{provider}/facets/{provider}_base_facet.py
+```
+
+**Example for BLS (Bureau of Labor Statistics):**
+
+```
+datapipelines/providers/bls/
+├── __init__.py
+├── provider.py              # BLSProvider class
+├── bls_registry.py          # Endpoint rendering
+└── facets/
+    ├── __init__.py
+    ├── bls_base_facet.py    # Shared BLS facet logic
+    ├── unemployment_facet.py # Unemployment data facet
+    ├── cpi_facet.py         # CPI data facet
+    └── employment_facet.py  # Employment data facet
+```
+
+---
+
+### Step 2: API Endpoints Configuration
+
+Create `configs/pipelines/{provider}_endpoints.json`:
 
 ```json
 {
   "credentials": {
     "api_keys": [],
-    "comment": "Set ALPHA_VANTAGE_API_KEYS environment variable"
+    "comment": "Set {PROVIDER}_API_KEYS environment variable"
   },
   "base_urls": {
-    "core": "https://www.alphavantage.co/query"
+    "core": "https://api.bls.gov/publicAPI/v2"
   },
-  "rate_limit_per_sec": 1.0,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "rate_limit_per_sec": 0.5,
+  "_rate_limit_comment": "BLS allows 500 requests/day, ~0.5/sec safely",
+
   "endpoints": {
-    "endpoint_name": {
+    "series_data": {
       "base": "core",
-      "method": "GET",
-      "required_params": ["symbol"],
+      "method": "POST",
+      "path_template": "/timeseries/data/",
+      "required_params": ["seriesid"],
+      "default_query": {},
+      "response_key": "Results",
+      "default_path_params": {},
+      "comment": "Fetch time series data for one or more series IDs"
+    },
+    "unemployment_rate": {
+      "base": "core",
+      "method": "POST",
+      "path_template": "/timeseries/data/",
+      "required_params": [],
       "default_query": {
-        "function": "FUNCTION_NAME"
+        "seriesid": ["LNS14000000"],
+        "startyear": "2020",
+        "endyear": "2024"
       },
-      "response_key": null,
-      "comment": "Description"
+      "response_key": "Results",
+      "default_path_params": {},
+      "comment": "National unemployment rate (seasonally adjusted)"
+    },
+    "cpi_all_urban": {
+      "base": "core",
+      "method": "POST",
+      "path_template": "/timeseries/data/",
+      "required_params": [],
+      "default_query": {
+        "seriesid": ["CUUR0000SA0"],
+        "startyear": "2020",
+        "endyear": "2024"
+      },
+      "response_key": "Results",
+      "default_path_params": {},
+      "comment": "Consumer Price Index - All Urban Consumers"
     }
   }
 }
 ```
 
-### 2. Storage Configuration: `configs/storage.json`
+**Key Fields:**
 
-**Single source of truth** for table definitions, partitions, and keys.
+| Field | Description |
+|-------|-------------|
+| `base_urls` | Named base URLs (e.g., "core", "v2") |
+| `rate_limit_per_sec` | Max API calls per second |
+| `endpoints.{name}.base` | Which base URL to use |
+| `endpoints.{name}.method` | HTTP method (GET/POST) |
+| `endpoints.{name}.path_template` | URL path with placeholders |
+| `endpoints.{name}.required_params` | Required parameters |
+| `endpoints.{name}.default_query` | Default query parameters |
+| `endpoints.{name}.response_key` | Key to extract data from response |
+
+---
+
+### Step 3: Storage Configuration
+
+Add tables to `configs/storage.json`:
 
 ```json
 {
-  "defaults": { "format": "delta" },
-  "roots": {
-    "bronze": "storage/bronze",
-    "silver": "storage/silver"
-  },
   "tables": {
-    "table_name": {
+    "bls_unemployment": {
       "root": "bronze",
-      "rel": "relative/path",
-      "partitions": ["partition_col"],
-      "write_strategy": "upsert|append",
-      "key_columns": ["key_col1", "key_col2"],
-      "date_column": "date_col_for_append",
-      "comment": "Description"
+      "rel": "bls/unemployment",
+      "partitions": ["year"],
+      "write_strategy": "append",
+      "key_columns": ["series_id", "period", "year"],
+      "date_column": "period_date",
+      "comment": "BLS unemployment rate time series"
+    },
+    "bls_cpi": {
+      "root": "bronze",
+      "rel": "bls/cpi",
+      "partitions": ["year"],
+      "write_strategy": "append",
+      "key_columns": ["series_id", "period", "year"],
+      "date_column": "period_date",
+      "comment": "BLS Consumer Price Index time series"
+    },
+    "bls_employment": {
+      "root": "bronze",
+      "rel": "bls/employment",
+      "partitions": ["year"],
+      "write_strategy": "append",
+      "key_columns": ["series_id", "period", "year"],
+      "date_column": "period_date",
+      "comment": "BLS employment statistics"
     }
   }
 }
 ```
 
-### 3. Run Profiles: `configs/pipelines/run_config.json`
+**Write Strategy Rules:**
 
-Controls pipeline execution parameters.
+| Strategy | When to Use | Method Called |
+|----------|-------------|---------------|
+| `upsert` | Mutable reference data | `BronzeSink.upsert()` |
+| `append` | Immutable time-series | `BronzeSink.append_immutable()` |
+| `overwrite` | Full refresh | `BronzeSink.write(mode="overwrite")` |
 
-```json
-{
-  "profiles": {
-    "quick_test": { "max_tickers": 5, "with_financials": false },
-    "dev": { "max_tickers": 50, "with_financials": false },
-    "staging": { "max_tickers": 500, "with_financials": true },
-    "production": { "max_tickers": null, "with_financials": true }
-  },
-  "defaults": {
-    "storage_path": "/shared/storage",
-    "batch_size": 20
-  }
-}
+---
+
+### Step 4: Registry Class
+
+Create `datapipelines/providers/{provider}/{provider}_registry.py`:
+
+```python
+"""
+BLS Registry - Endpoint definitions and request rendering.
+
+Handles BLS-specific request formatting:
+- POST requests with JSON body
+- API key in request body (registrationkey)
+- Multiple series IDs per request
+"""
+
+from datapipelines.base.registry import BaseRegistry, Endpoint
+
+
+class BLSRegistry(BaseRegistry):
+    """
+    Registry for BLS API endpoints.
+
+    BLS uses POST requests with JSON body containing:
+    - seriesid: List of series IDs to fetch
+    - startyear/endyear: Date range
+    - registrationkey: API key (optional but recommended)
+    """
+
+    def __init__(self, config):
+        """
+        Initialize BLS registry.
+
+        Args:
+            config: BLS configuration from bls_endpoints.json
+        """
+        super().__init__(config)
+
+    def render(self, ep_name, **params):
+        """
+        Render endpoint with parameters.
+
+        BLS-specific handling:
+        - Builds JSON body for POST requests
+        - Injects API key into body
+
+        Args:
+            ep_name: Endpoint name
+            **params: Parameters (seriesid, startyear, endyear)
+
+        Returns:
+            Tuple of (Endpoint, path, query_params/body)
+        """
+        ep_config = self.endpoints.get(ep_name)
+        if not ep_config:
+            raise ValueError(f"Unknown endpoint: {ep_name}")
+
+        ep = Endpoint(
+            name=ep_name,
+            base=ep_config["base"],
+            method=ep_config["method"],
+            path_template=ep_config.get("path_template", ""),
+            required_params=ep_config.get("required_params", []),
+            default_query=ep_config.get("default_query", {}),
+            response_key=ep_config.get("response_key")
+        )
+
+        # Build path
+        path = ep.path_template or ""
+
+        # BLS uses JSON body for POST, not query params
+        body = dict(ep.default_query)
+        body.update(params)
+
+        # API key placeholder (injected by HttpClient)
+        body['registrationkey'] = '${API_KEY}'
+
+        return ep, path, body
 ```
 
 ---
 
-## Step-by-Step: Adding a New Endpoint
+### Step 5: Provider Implementation
 
-Follow these steps to add a new data endpoint (e.g., ETF holdings, options data, or new financial statement type).
+Create `datapipelines/providers/{provider}/provider.py`:
 
-### Step 1: Add Endpoint to API Config
+```python
+"""
+BLS Provider Implementation.
 
-**File:** `configs/pipelines/alpha_vantage_endpoints.json`
+Implements BaseProvider for Bureau of Labor Statistics API.
 
-Add the new endpoint definition:
+Endpoints:
+- unemployment_rate: National unemployment rate
+- cpi_all_urban: Consumer Price Index
+- employment: Employment statistics
 
-```json
-{
-  "endpoints": {
-    "etf_profile": {
-      "base": "core",
-      "method": "GET",
-      "path_template": "",
-      "required_params": ["symbol"],
-      "default_query": {
-        "function": "ETF_PROFILE"
-      },
-      "response_key": null,
-      "default_path_params": {},
-      "comment": "ETF profile including holdings, sector weights, expense ratio, AUM."
+Usage:
+    from datapipelines.providers.bls.provider import create_bls_provider
+    provider = create_bls_provider(bls_cfg, spark)
+"""
+
+from __future__ import annotations
+
+import threading
+from typing import List, Optional, Callable, Any, Dict
+from enum import Enum
+
+from datapipelines.base.provider import (
+    BaseProvider, TickerData, ProviderConfig, FetchResult
+)
+from datapipelines.base.http_client import HttpClient
+from datapipelines.base.key_pool import ApiKeyPool
+from datapipelines.providers.bls.bls_registry import BLSRegistry
+from config.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class BLSDataType(Enum):
+    """BLS-specific data types (maps to series IDs)."""
+    UNEMPLOYMENT = "unemployment"
+    CPI = "cpi"
+    EMPLOYMENT = "employment"
+
+
+class BLSProvider(BaseProvider):
+    """
+    BLS implementation of BaseProvider.
+
+    Handles all BLS API interactions including:
+    - Unemployment rate (LNS14000000)
+    - CPI (CUUR0000SA0)
+    - Employment statistics
+    """
+
+    # Mapping from data type to endpoint name
+    ENDPOINT_MAP = {
+        BLSDataType.UNEMPLOYMENT: "unemployment_rate",
+        BLSDataType.CPI: "cpi_all_urban",
+        BLSDataType.EMPLOYMENT: "series_data",
     }
-  }
-}
+
+    # Series IDs for each data type
+    SERIES_IDS = {
+        BLSDataType.UNEMPLOYMENT: ["LNS14000000"],
+        BLSDataType.CPI: ["CUUR0000SA0"],
+        BLSDataType.EMPLOYMENT: ["CES0000000001"],
+    }
+
+    # Bronze table names
+    TABLE_NAMES = {
+        BLSDataType.UNEMPLOYMENT: "bls_unemployment",
+        BLSDataType.CPI: "bls_cpi",
+        BLSDataType.EMPLOYMENT: "bls_employment",
+    }
+
+    # Key columns for upsert
+    KEY_COLUMNS = {
+        BLSDataType.UNEMPLOYMENT: ["series_id", "period", "year"],
+        BLSDataType.CPI: ["series_id", "period", "year"],
+        BLSDataType.EMPLOYMENT: ["series_id", "period", "year"],
+    }
+
+    def __init__(self, config: ProviderConfig, spark=None, bls_cfg: Dict = None):
+        self._bls_cfg = bls_cfg or {}
+        super().__init__(config, spark)
+
+    def _setup(self) -> None:
+        """Setup HTTP client and API key pool."""
+        self.registry = BLSRegistry(self._bls_cfg)
+
+        credentials = self._bls_cfg.get("credentials", {})
+        api_keys = credentials.get("api_keys", [])
+        self.key_pool = ApiKeyPool(api_keys, cooldown_seconds=60.0)
+
+        self.http = HttpClient(
+            self.registry.base_urls,
+            self.registry.headers,
+            self.config.rate_limit,
+            self.key_pool
+        )
+
+        self._http_lock = threading.Lock()
+
+    def fetch_ticker_data(
+        self,
+        ticker: str,  # For BLS, this is a series_id
+        data_types: List,
+        progress_callback: Optional[Callable] = None,
+        **kwargs
+    ) -> TickerData:
+        """
+        Fetch data for a series ID.
+
+        Note: BLS uses series_id instead of ticker, but we reuse
+        the TickerData structure for compatibility with IngestorEngine.
+        """
+        result = TickerData(ticker=ticker)
+
+        for data_type in data_types:
+            fetch_result = self._fetch_single(ticker, data_type, **kwargs)
+
+            if fetch_result.success:
+                result.set_data(data_type, fetch_result.data)
+            else:
+                result.errors.append(f"{data_type.value}: {fetch_result.error}")
+
+            if progress_callback:
+                progress_callback(ticker, data_type, fetch_result.success, fetch_result.error)
+
+        return result
+
+    def _fetch_single(self, series_id: str, data_type, **kwargs) -> FetchResult:
+        """Fetch a single series."""
+        endpoint = self.ENDPOINT_MAP.get(data_type)
+        if not endpoint:
+            return FetchResult(
+                ticker=series_id,
+                data_type=data_type,
+                success=False,
+                error=f"Unsupported data type: {data_type}"
+            )
+
+        try:
+            params = {
+                "seriesid": [series_id],
+                "startyear": kwargs.get("start_year", "2020"),
+                "endyear": kwargs.get("end_year", "2024"),
+            }
+
+            ep, path, body = self.registry.render(endpoint, **params)
+
+            with self._http_lock:
+                # BLS uses POST with JSON body
+                payload = self.http.request(ep.base, path, body, ep.method)
+
+            # Extract data using response key
+            if ep.response_key:
+                data = payload.get(ep.response_key, payload)
+            else:
+                data = payload
+
+            return FetchResult(
+                ticker=series_id,
+                data_type=data_type,
+                success=True,
+                data=data
+            )
+
+        except Exception as e:
+            return FetchResult(
+                ticker=series_id,
+                data_type=data_type,
+                success=False,
+                error=str(e)[:50]
+            )
+
+    def normalize_data(self, ticker_data: TickerData, data_type) -> Optional[Any]:
+        """Normalize BLS response to Spark DataFrame."""
+        from datapipelines.providers.bls.facets import UnemploymentFacet
+
+        series_id = ticker_data.ticker
+
+        try:
+            if data_type == BLSDataType.UNEMPLOYMENT:
+                raw = ticker_data.reference  # Reuse existing field
+                if raw:
+                    facet = UnemploymentFacet(self.spark, series_id=series_id)
+                    return facet.normalize(raw)
+
+            # Add more data types as needed...
+
+        except Exception as e:
+            logger.warning(f"Failed to normalize {data_type} for {series_id}: {e}")
+
+        return None
+
+    def get_bronze_table_name(self, data_type) -> str:
+        return self.TABLE_NAMES.get(data_type, f"bls_{data_type.value}")
+
+    def get_key_columns(self, data_type) -> List[str]:
+        return self.KEY_COLUMNS.get(data_type, ["series_id", "period", "year"])
+
+
+def create_bls_provider(bls_cfg: Dict, spark=None) -> BLSProvider:
+    """Factory function to create BLSProvider."""
+    config = ProviderConfig(
+        name="bls",
+        base_url="https://api.bls.gov/publicAPI/v2",
+        rate_limit=bls_cfg.get("rate_limit_per_sec", 0.5),
+        batch_size=10,
+        credentials_env_var="BLS_API_KEYS",
+        supported_data_types=[]
+    )
+    return BLSProvider(config=config, spark=spark, bls_cfg=bls_cfg)
 ```
 
-### Step 2: Add Table to Storage Config
+---
 
-**File:** `configs/storage.json`
+### Step 6: Create Facets
 
-Add the Bronze table definition:
+Create a facet for each endpoint. Example: `datapipelines/providers/bls/facets/unemployment_facet.py`:
 
-```json
+```python
+"""
+UnemploymentFacet - Transforms BLS unemployment data to Bronze schema.
+
+BLS Response Format:
 {
-  "tables": {
-    "etf_profiles": {
-      "root": "bronze",
-      "rel": "etf_profiles",
-      "partitions": [],
-      "write_strategy": "upsert",
-      "key_columns": ["ticker"],
-      "comment": "Alpha Vantage ETF_PROFILE"
-    }
+  "Results": {
+    "series": [{
+      "seriesID": "LNS14000000",
+      "data": [
+        {"year": "2024", "period": "M01", "periodName": "January", "value": "3.7"},
+        ...
+      ]
+    }]
   }
 }
+
+Bronze Schema:
+- series_id: string
+- year: int
+- period: string (M01-M12)
+- period_name: string
+- value: double
+- period_date: date
+- ingestion_timestamp: timestamp
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from typing import Optional
+from pyspark.sql import SparkSession
+from pyspark.sql.types import (
+    StructType, StructField, StringType, IntegerType, DoubleType, DateType, TimestampType
+)
+from datapipelines.providers.bls.facets.bls_base_facet import BLSBaseFacet
+
+
+class UnemploymentFacet(BLSBaseFacet):
+    """Transform BLS unemployment data to Bronze schema."""
+
+    name = "bls_unemployment"
+
+    OUTPUT_SCHEMA = StructType([
+        StructField("series_id", StringType(), False),
+        StructField("year", IntegerType(), True),
+        StructField("period", StringType(), True),
+        StructField("period_name", StringType(), True),
+        StructField("value", DoubleType(), True),
+        StructField("period_date", DateType(), True),
+        StructField("ingestion_timestamp", TimestampType(), True),
+    ])
+
+    def __init__(self, spark: SparkSession, series_id: str):
+        super().__init__(spark)
+        self.series_id = series_id
+
+    def normalize(self, raw_data: dict) -> Optional:
+        """
+        Normalize BLS response to Spark DataFrame.
+
+        Args:
+            raw_data: BLS API response (already extracted to Results level)
+
+        Returns:
+            Spark DataFrame with normalized data
+        """
+        if not raw_data:
+            return None
+
+        series_list = raw_data.get("series", [])
+        if not series_list:
+            return None
+
+        series = series_list[0]
+        data_points = series.get("data", [])
+
+        if not data_points:
+            return None
+
+        now = datetime.now()
+        rows = []
+
+        for point in data_points:
+            year = int(point.get("year", 0))
+            period = point.get("period", "")
+
+            # Parse period to date (assume 1st of month)
+            period_date = None
+            if period.startswith("M"):
+                month = int(period[1:])
+                period_date = datetime(year, month, 1).date()
+
+            rows.append({
+                "series_id": self.series_id,
+                "year": year,
+                "period": period,
+                "period_name": point.get("periodName"),
+                "value": float(point.get("value", 0)),
+                "period_date": period_date,
+                "ingestion_timestamp": now,
+            })
+
+        return self.spark.createDataFrame(rows, schema=self.OUTPUT_SCHEMA)
+
+    def validate(self, df):
+        """Validate the DataFrame."""
+        from pyspark.sql.functions import col
+
+        null_series = df.filter(col("series_id").isNull()).count()
+        if null_series > 0:
+            raise ValueError(f"Found {null_series} rows with null series_id")
+
+        return df
 ```
 
-**Important fields:**
-- `write_strategy`: Use `"upsert"` for mutable data, `"append"` for immutable time-series
-- `key_columns`: Columns that uniquely identify a row (for deduplication/updates)
-- `partitions`: Partition columns (improves query performance for large tables)
-- `date_column`: Required if using `"append"` strategy
+**Base Facet** (`datapipelines/providers/bls/facets/bls_base_facet.py`):
 
-### Step 3: Add DataType Enum
+```python
+"""Base facet for BLS data transformations."""
 
-**File:** `datapipelines/base/provider.py`
+from datapipelines.facets.base_facet import Facet
 
-Add the new data type:
+
+class BLSBaseFacet(Facet):
+    """Base facet for BLS providers."""
+
+    def __init__(self, spark):
+        super().__init__(spark)
+
+    @staticmethod
+    def parse_period_to_date(year: int, period: str):
+        """Convert BLS period (M01-M12) to date."""
+        from datetime import datetime
+
+        if not period or not period.startswith("M"):
+            return None
+
+        try:
+            month = int(period[1:])
+            return datetime(year, month, 1).date()
+        except (ValueError, IndexError):
+            return None
+```
+
+**Export facets** in `datapipelines/providers/bls/facets/__init__.py`:
+
+```python
+from datapipelines.providers.bls.facets.unemployment_facet import UnemploymentFacet
+
+__all__ = ["UnemploymentFacet"]
+```
+
+---
+
+### Step 7: Factory Function
+
+Already included in provider.py (Step 5):
+
+```python
+def create_bls_provider(bls_cfg: Dict, spark=None) -> BLSProvider:
+    """Factory function to create BLSProvider."""
+    config = ProviderConfig(...)
+    return BLSProvider(config=config, spark=spark, bls_cfg=bls_cfg)
+```
+
+---
+
+### Step 8: Register with Engine
+
+Update `datapipelines/base/ingestor_engine.py`:
+
+```python
+def create_engine(
+    provider_name: str,
+    api_cfg: Dict,
+    storage_cfg: Dict,
+    spark=None
+) -> IngestorEngine:
+    """Factory to create IngestorEngine for any provider."""
+
+    if provider_name == "alpha_vantage":
+        from datapipelines.providers.alpha_vantage.provider import create_alpha_vantage_provider
+        provider = create_alpha_vantage_provider(api_cfg, spark)
+
+    elif provider_name == "bls":
+        from datapipelines.providers.bls.provider import create_bls_provider
+        provider = create_bls_provider(api_cfg, spark)
+
+    # Add more providers here...
+
+    else:
+        raise ValueError(f"Unknown provider: {provider_name}")
+
+    return IngestorEngine(provider, storage_cfg)
+```
+
+---
+
+### Step 9: Test Script
+
+Create test script or add to existing pipeline:
+
+```python
+# Test BLS provider
+from datapipelines.providers.bls.provider import create_bls_provider, BLSDataType
+from datapipelines.base.ingestor_engine import IngestorEngine
+from orchestration.common.spark_session import get_spark
+import json
+
+# Load configs
+with open('configs/pipelines/bls_endpoints.json') as f:
+    bls_cfg = json.load(f)
+with open('configs/storage.json') as f:
+    storage_cfg = json.load(f)
+
+# Setup
+spark = get_spark(app_name='test_bls')
+provider = create_bls_provider(bls_cfg, spark=spark)
+engine = IngestorEngine(provider, storage_cfg)
+
+# Run ingestion
+results = engine.run(
+    tickers=['LNS14000000'],  # Series IDs as 'tickers'
+    data_types=[BLSDataType.UNEMPLOYMENT],
+    batch_size=5
+)
+
+print(f'Completed: {results.completed_tickers}')
+print(f'Errors: {results.total_errors}')
+spark.stop()
+```
+
+---
+
+## Adding Endpoints to Existing Provider
+
+For adding a new endpoint to an existing provider (e.g., adding ETF_PROFILE to Alpha Vantage):
+
+### Checklist
+
+```
+[ ] 1. configs/pipelines/{provider}_endpoints.json
+      - Add endpoint definition with function, params, response_key
+
+[ ] 2. configs/storage.json
+      - Add table with rel path, partitions, key_columns, write_strategy
+
+[ ] 3. datapipelines/base/provider.py
+      - Add DataType enum value (if new type)
+      - Add field to TickerData dataclass
+      - Update set_data() attr_map
+
+[ ] 4. datapipelines/providers/{provider}/facets/{name}_facet.py
+      - Create facet class with OUTPUT_SCHEMA
+      - Implement normalize() method
+      - Implement validate() method
+
+[ ] 5. datapipelines/providers/{provider}/facets/__init__.py
+      - Export the new facet
+
+[ ] 6. datapipelines/providers/{provider}/provider.py
+      - Add to ENDPOINT_MAP
+      - Add to RESPONSE_KEYS
+      - Add to TABLE_NAMES
+      - Add to KEY_COLUMNS
+      - Add handler in normalize_data()
+      - Add to supported_data_types in factory function
+
+[ ] 7. Test the endpoint
+```
+
+---
+
+## Component Reference
+
+### DataType Enum
+
+Defined in `datapipelines/base/provider.py`:
 
 ```python
 class DataType(Enum):
-    """Standard data types supported by providers."""
     REFERENCE = "reference"
     PRICES = "prices"
     INCOME_STATEMENT = "income"
@@ -205,203 +857,14 @@ class DataType(Enum):
     CASH_FLOW = "cashflow"
     EARNINGS = "earnings"
     OPTIONS = "options"
-    ETF_PROFILE = "etf_profile"  # <-- NEW
+    ETF_PROFILE = "etf_profile"
 ```
 
-### Step 4: Create Facet Class
-
-**File:** `datapipelines/providers/alpha_vantage/facets/etf_profile_facet.py`
-
-Create a new facet to transform API response to Spark DataFrame:
-
-```python
-"""
-ETFProfileFacet - Alpha Vantage ETF profile facet.
-
-Maps Alpha Vantage ETF_PROFILE endpoint to Bronze schema.
-Bronze table: bronze/etf_profiles/
-"""
-
-from __future__ import annotations
-from typing import List
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, lit, current_timestamp
-from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import (
-    AlphaVantageFacet, safe_double, safe_long
-)
-
-
-class ETFProfileFacet(AlphaVantageFacet):
-    """
-    ETF profile data from Alpha Vantage ETF_PROFILE endpoint.
-    """
-
-    name = "etf_profiles"
-
-    # Output schema - define all columns you want in Bronze
-    OUTPUT_SCHEMA = [
-        ("ticker", "string"),
-        ("fund_name", "string"),
-        ("description", "string"),
-        ("expense_ratio", "double"),
-        ("net_assets", "double"),
-        ("nav", "double"),
-        ("pe_ratio", "double"),
-        ("dividend_yield", "double"),
-        ("snapshot_date", "date"),
-        ("ingestion_timestamp", "timestamp"),
-    ]
-
-    def __init__(self, spark: SparkSession, *, ticker: str):
-        """
-        Initialize ETF profile facet.
-
-        Args:
-            spark: SparkSession
-            ticker: ETF ticker symbol
-        """
-        super().__init__(spark, tickers=[ticker])
-        self.ticker = ticker
-
-    def normalize(self, raw_data: dict):
-        """
-        Normalize ETF_PROFILE API response to Spark DataFrame.
-
-        Args:
-            raw_data: Raw API response dict
-
-        Returns:
-            Spark DataFrame with normalized data
-        """
-        from datetime import datetime
-
-        if not raw_data:
-            return None
-
-        # Map API fields to our schema
-        # (Check Alpha Vantage docs for actual field names)
-        row = {
-            "ticker": self.ticker,
-            "fund_name": raw_data.get("fund_family"),
-            "description": raw_data.get("fund_description"),
-            "expense_ratio": safe_double(raw_data.get("expense_ratio")),
-            "net_assets": safe_double(raw_data.get("net_assets")),
-            "nav": safe_double(raw_data.get("nav")),
-            "pe_ratio": safe_double(raw_data.get("pe_ratio")),
-            "dividend_yield": safe_double(raw_data.get("dividend_yield")),
-            "snapshot_date": datetime.now().date(),
-            "ingestion_timestamp": datetime.now(),
-        }
-
-        # Create single-row DataFrame
-        df = self.spark.createDataFrame([row])
-
-        return df
-
-    def validate(self, df):
-        """Validate the output DataFrame."""
-        # Check for null tickers
-        null_tickers = df.filter(col("ticker").isNull()).count()
-        if null_tickers > 0:
-            raise ValueError(f"Found {null_tickers} rows with null ticker")
-        return df
-```
-
-### Step 5: Export Facet in `__init__.py`
-
-**File:** `datapipelines/providers/alpha_vantage/facets/__init__.py`
-
-Add the import:
-
-```python
-from datapipelines.providers.alpha_vantage.facets.etf_profile_facet import ETFProfileFacet
-
-__all__ = [
-    # ... existing exports ...
-    "ETFProfileFacet",
-]
-```
-
-### Step 6: Update Provider Mappings
-
-**File:** `datapipelines/providers/alpha_vantage/provider.py`
-
-Add mappings for the new data type:
-
-```python
-class AlphaVantageProvider(BaseProvider):
-
-    # Add endpoint mapping
-    ENDPOINT_MAP = {
-        # ... existing mappings ...
-        DataType.ETF_PROFILE: "etf_profile",
-    }
-
-    # Add response key (null if top-level, or string if nested)
-    RESPONSE_KEYS = {
-        # ... existing mappings ...
-        DataType.ETF_PROFILE: None,  # Top-level response
-    }
-
-    # Add Bronze table name
-    TABLE_NAMES = {
-        # ... existing mappings ...
-        DataType.ETF_PROFILE: "etf_profiles",
-    }
-
-    # Add key columns for upsert
-    KEY_COLUMNS = {
-        # ... existing mappings ...
-        DataType.ETF_PROFILE: ["ticker"],
-    }
-```
-
-### Step 7: Add Normalization Logic
-
-**File:** `datapipelines/providers/alpha_vantage/provider.py`
-
-In the `normalize_data()` method, add handling for the new type:
-
-```python
-def normalize_data(
-    self,
-    ticker_data: TickerData,
-    data_type: DataType
-) -> Optional[Any]:
-    """Normalize raw data to Spark DataFrame."""
-    from datapipelines.providers.alpha_vantage.facets import (
-        # ... existing imports ...
-        ETFProfileFacet,
-    )
-
-    ticker = ticker_data.ticker
-
-    try:
-        # ... existing handlers ...
-
-        elif data_type == DataType.ETF_PROFILE:
-            # Get raw data (stored in appropriate TickerData field)
-            raw = getattr(ticker_data, 'etf_profile', None)
-            if raw:
-                facet = ETFProfileFacet(self.spark, ticker=ticker)
-                return facet.normalize(raw)
-
-    except Exception as e:
-        logger.warning(f"Failed to normalize {data_type.value} for {ticker}: {e}")
-
-    return None
-```
-
-### Step 8: Update TickerData Class
-
-**File:** `datapipelines/base/provider.py`
-
-Add field to TickerData if needed:
+### TickerData Dataclass
 
 ```python
 @dataclass
 class TickerData:
-    """All data fetched for a single ticker."""
     ticker: str
     reference: Optional[Any] = None
     prices: Optional[Any] = None
@@ -410,224 +873,99 @@ class TickerData:
     cash_flow: Optional[Any] = None
     earnings: Optional[Any] = None
     options: Optional[Any] = None
-    etf_profile: Optional[Any] = None  # <-- NEW
     errors: List[str] = field(default_factory=list)
-
-    # Update attr_map in set_data() method
-    def set_data(self, data_type: DataType, data: Any) -> None:
-        attr_map = {
-            # ... existing mappings ...
-            DataType.ETF_PROFILE: 'etf_profile',
-        }
 ```
 
-### Step 9: Add to Supported Data Types
-
-**File:** `datapipelines/providers/alpha_vantage/provider.py`
-
-In `create_alpha_vantage_provider()`:
+### ProviderConfig Dataclass
 
 ```python
-def create_alpha_vantage_provider(
-    alpha_vantage_cfg: Dict,
-    spark=None
-) -> AlphaVantageProvider:
-    config = ProviderConfig(
-        name="alpha_vantage",
-        base_url="https://www.alphavantage.co/query",
-        rate_limit=alpha_vantage_cfg.get("rate_limit_per_sec", 1.25),
-        batch_size=20,
-        credentials_env_var="ALPHA_VANTAGE_API_KEYS",
-        supported_data_types=[
-            DataType.REFERENCE,
-            DataType.PRICES,
-            DataType.INCOME_STATEMENT,
-            DataType.BALANCE_SHEET,
-            DataType.CASH_FLOW,
-            DataType.EARNINGS,
-            DataType.ETF_PROFILE,  # <-- NEW
-        ]
-    )
-    # ...
+@dataclass
+class ProviderConfig:
+    name: str                    # Provider name
+    base_url: str                # Primary base URL
+    rate_limit: float = 1.0      # Calls per second
+    max_retries: int = 3
+    retry_delay: float = 2.0
+    batch_size: int = 20
+    credentials_env_var: str = ""
+    headers: Dict[str, str] = field(default_factory=dict)
+    supported_data_types: List[DataType] = field(default_factory=list)
 ```
 
-### Step 10: Test the New Endpoint
+---
 
-```bash
-# Test with a single ETF ticker
-./scripts/test/test_pipeline.sh --profile quick_test --max-tickers 1
-```
+## Reference Implementation: Alpha Vantage
 
-Or in Python:
+See these files for the complete reference implementation:
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| `datapipelines/providers/alpha_vantage/provider.py` | 612 | Full provider implementation |
+| `datapipelines/providers/alpha_vantage/alpha_vantage_registry.py` | 86 | Endpoint rendering |
+| `datapipelines/providers/alpha_vantage/facets/alpha_vantage_base_facet.py` | 207 | Base facet |
+| `datapipelines/providers/alpha_vantage/facets/securities_prices_facet.py` | 425 | Prices facet |
+
+### Currently Implemented Endpoints
+
+| Provider | Endpoint | DataType | Bronze Table | Status |
+|----------|----------|----------|--------------|--------|
+| Alpha Vantage | LISTING_STATUS | seed | ticker_seed | ✅ |
+| Alpha Vantage | COMPANY_OVERVIEW | REFERENCE | securities_reference | ✅ |
+| Alpha Vantage | TIME_SERIES_DAILY_ADJUSTED | PRICES | securities_prices_daily | ✅ |
+| Alpha Vantage | INCOME_STATEMENT | INCOME_STATEMENT | income_statements | ✅ |
+| Alpha Vantage | BALANCE_SHEET | BALANCE_SHEET | balance_sheets | ✅ |
+| Alpha Vantage | CASH_FLOW | CASH_FLOW | cash_flows | ✅ |
+| Alpha Vantage | EARNINGS | EARNINGS | earnings | ✅ |
+| Alpha Vantage | HISTORICAL_OPTIONS | OPTIONS | historical_options | Partial |
+| BLS | series_data | custom | bls_* | Skeleton |
+| Chicago | various | custom | chicago_* | Skeleton |
+
+---
+
+## Common Patterns
+
+### Rate Limiting
+
+HttpClient handles rate limiting automatically:
 
 ```python
-from datapipelines.providers.alpha_vantage.provider import create_alpha_vantage_provider
-from datapipelines.base.ingestor_engine import IngestorEngine
-from datapipelines.base.provider import DataType
-
-provider = create_alpha_vantage_provider(config, spark=spark)
-engine = IngestorEngine(provider, storage_cfg)
-
-results = engine.run(
-    tickers=["SPY", "QQQ", "IWM"],
-    data_types=[DataType.ETF_PROFILE],
-    batch_size=5
+self.http = HttpClient(
+    self.registry.base_urls,
+    self.registry.headers,
+    self.config.rate_limit,  # Calls per second
+    self.key_pool
 )
 ```
 
----
+### API Key Rotation
 
-## Checklist: Adding a New Endpoint
-
-Use this checklist when adding new endpoints:
-
-```
-[ ] 1. configs/pipelines/alpha_vantage_endpoints.json
-      - Add endpoint definition with function, params, response_key
-
-[ ] 2. configs/storage.json
-      - Add table with rel path, partitions, key_columns, write_strategy
-
-[ ] 3. datapipelines/base/provider.py
-      - Add DataType enum value
-      - Add field to TickerData dataclass
-      - Update set_data() attr_map
-
-[ ] 4. datapipelines/providers/alpha_vantage/facets/{name}_facet.py
-      - Create facet class with OUTPUT_SCHEMA
-      - Implement normalize() method
-      - Implement validate() method
-
-[ ] 5. datapipelines/providers/alpha_vantage/facets/__init__.py
-      - Export the new facet
-
-[ ] 6. datapipelines/providers/alpha_vantage/provider.py
-      - Add to ENDPOINT_MAP
-      - Add to RESPONSE_KEYS
-      - Add to TABLE_NAMES
-      - Add to KEY_COLUMNS
-      - Add handler in normalize_data()
-      - Add to supported_data_types in create_alpha_vantage_provider()
-
-[ ] 7. Test the endpoint
-      - Run with single ticker first
-      - Verify data in Bronze layer
-      - Check Delta table structure
-```
-
----
-
-## Pipeline Execution Flow
-
-### 1. Seed Tickers (Optional First Run)
-
-```bash
-./scripts/test/test_pipeline.sh --profile dev
-```
-
-Calls:
-- `provider.seed_tickers()` → fetches LISTING_STATUS CSV (1 API call)
-- Writes to `bronze/ticker_seed/`
-
-### 2. Bronze Ingestion
+Keys rotate with cooldown:
 
 ```python
-engine = IngestorEngine(provider, storage_cfg)
-results = engine.run(tickers, data_types, batch_size=20)
+self.key_pool = ApiKeyPool(api_keys, cooldown_seconds=60.0)
 ```
 
-Flow:
-1. **Batch Loop**: Process tickers in batches of 20
-2. **Fetch**: Call API for each ticker/data_type combo
-3. **Normalize**: Transform via Facet to Spark DataFrame
-4. **Accumulate**: Collect DataFrames in memory
-5. **Write Batch**: Write to Delta using BronzeSink
-6. **Clear**: Free memory, GC
-7. **Compact**: After all batches, run Delta OPTIMIZE
-
-### 3. Compaction Strategy
-
-**Current behavior:** Compaction runs ONCE after ALL batches complete.
+### Batch Processing
 
 ```python
-# In IngestorEngine.run():
+results = engine.run(
+    tickers=['AAPL', 'MSFT', ...],
+    data_types=[DataType.PRICES],
+    batch_size=20,
+    auto_compact=True  # OPTIMIZE after all batches
+)
+```
+
+### Compaction Strategy
+
+Delta OPTIMIZE runs ONCE after ALL batches:
+
+```python
 if auto_compact and results.tables_written:
     self._compact_tables(results.tables_written, silent)
 ```
 
-**Why after all batches?**
-- Compaction (OPTIMIZE) is expensive I/O
-- Running once at end minimizes overhead
-- For production, set `auto_compact=False` and schedule separately
-
-### 4. Write Strategies
-
-| Strategy | Use Case | Method |
-|----------|----------|--------|
-| `upsert` | Reference data that changes | `BronzeSink.upsert()` |
-| `append` | Immutable time-series | `BronzeSink.append_immutable()` |
-| `overwrite` | Full table replacement | `BronzeSink.write(mode="overwrite")` |
-
-Configured in `storage.json` per table:
-```json
-"securities_prices_daily": {
-  "write_strategy": "append",
-  "key_columns": ["ticker", "trade_date"],
-  "date_column": "trade_date"
-}
-```
-
----
-
-## Currently Implemented Endpoints
-
-| Endpoint | DataType | Bronze Table | Status |
-|----------|----------|--------------|--------|
-| LISTING_STATUS | seed | ticker_seed | ✅ Working |
-| COMPANY_OVERVIEW | REFERENCE | securities_reference, company_reference | ✅ Working |
-| TIME_SERIES_DAILY_ADJUSTED | PRICES | securities_prices_daily | ✅ Working |
-| INCOME_STATEMENT | INCOME_STATEMENT | income_statements | ✅ Working |
-| BALANCE_SHEET | BALANCE_SHEET | balance_sheets | ✅ Working |
-| CASH_FLOW | CASH_FLOW | cash_flows | ✅ Working |
-| EARNINGS | EARNINGS | earnings | ✅ Working |
-| HISTORICAL_OPTIONS | OPTIONS | historical_options | Partial |
-| ETF_PROFILE | ETF_PROFILE | etf_profiles | Not started |
-
----
-
-## Running the Pipeline
-
-### Quick Test (5 tickers, prices only)
-```bash
-./scripts/test/test_pipeline.sh --profile quick_test
-```
-
-### Development (50 tickers, prices only)
-```bash
-./scripts/test/test_pipeline.sh --profile dev
-```
-
-### Development with Financials
-```bash
-./scripts/test/test_pipeline.sh --profile dev --with-financials
-```
-
-### Production (all tickers)
-```bash
-./scripts/test/test_pipeline.sh --profile production
-```
-
-### Skip Steps
-```bash
-# Skip seeding (use existing tickers)
-./scripts/test/test_pipeline.sh --skip-seed
-
-# Bronze only (skip Silver build)
-./scripts/test/test_pipeline.sh --skip-silver
-
-# Silver only (skip ingestion)
-./scripts/test/test_pipeline.sh --skip-ingest
-```
+For production, set `auto_compact=False` and schedule compaction separately.
 
 ---
 
@@ -637,85 +975,75 @@ Configured in `storage.json` per table:
 ```
 Error: API limit reached
 ```
-- Check `rate_limit_per_sec` in `alpha_vantage_endpoints.json`
-- Free tier: 5 calls/min (0.08/sec)
-- Premium: 75 calls/min (1.25/sec)
+- Check `rate_limit_per_sec` in endpoints config
+- Add more API keys to pool
+- Reduce batch_size
 
-### Missing Tickers
+### Missing Data
 ```
-Error: No tickers found
+Error: No data returned
 ```
-- Run seed first: `./scripts/test/test_pipeline.sh` (without --skip-seed)
-- Check `bronze/ticker_seed/` exists
+- Verify API response format in facet.normalize()
+- Check response_key in endpoint config
+- Test endpoint manually with curl
 
 ### Schema Mismatch
 ```
 Error: Cannot merge schema
 ```
-- Facet output schema doesn't match existing table
-- Either update facet to match, or delete existing table
+- Facet output doesn't match existing table
+- Delete Bronze table and re-ingest
+- Or update facet to match existing schema
 
-### Partition Mismatch
+### Partition Errors
 ```
 Error: Partition columns don't match
 ```
-- Partitions are defined in `storage.json`
+- Partitions defined in storage.json only
 - Delete existing table if partitions changed
+- Never hardcode partitions in provider
 
 ---
 
 ## Session Summary (January 2026)
 
-### What Was Done
+### What Was Implemented
 
-1. **IngestorEngine Implementation**
-   - Generic provider-agnostic orchestrator
-   - Batch processing with configurable size (default: 20)
-   - Progress tracking with real-time display
-   - Performance metrics collection
+1. **IngestorEngine** - Provider-agnostic batch orchestrator
+2. **BaseProvider** - Abstract interface for all providers
+3. **AlphaVantageProvider** - Complete reference implementation
+4. **7+ Facets** - Reference, prices, income, balance, cash flow, earnings, company
+5. **Compaction** - Delta OPTIMIZE after all batches
+6. **Configuration** - Centralized in storage.json and endpoint configs
 
-2. **Compaction Strategy**
-   - Delta OPTIMIZE runs after all batches complete
-   - Controlled by `auto_compact` parameter (default: True)
-   - For production: set `auto_compact=False`, schedule compaction separately
+### Provider Creation Checklist
 
-3. **Configuration Consolidation**
-   - `storage.json` is single source of truth for partitions
-   - Provider no longer hardcodes partition columns
-   - All table configs centralized
+```
+[ ] 1. Create directory: datapipelines/providers/{provider}/
+[ ] 2. Create configs/pipelines/{provider}_endpoints.json
+[ ] 3. Add tables to configs/storage.json
+[ ] 4. Create {provider}_registry.py (extend BaseRegistry)
+[ ] 5. Create provider.py (extend BaseProvider)
+[ ] 6. Create facets for each endpoint
+[ ] 7. Export facets in facets/__init__.py
+[ ] 8. Add factory function create_{provider}_provider()
+[ ] 9. Register in ingestor_engine.py create_engine()
+[ ] 10. Create test script and verify
+```
 
-4. **Financial Statement Endpoints**
-   - Added: income_statement, balance_sheet, cash_flow, earnings
-   - Registry pattern for endpoint consolidation
+### Key Files Modified
 
-5. **Test Pipeline Script**
-   - Unified `test_pipeline.sh` with profile support
-   - Options for skipping steps, selecting data types
-   - Automatic environment variable loading
-
-### Files Changed
-
-| File | Change |
-|------|--------|
-| `datapipelines/base/ingestor_engine.py` | Core orchestration engine |
-| `datapipelines/base/provider.py` | BaseProvider interface with DataType enum |
-| `datapipelines/ingestors/bronze_sink.py` | Delta Lake writes with upsert/append |
-| `datapipelines/providers/alpha_vantage/provider.py` | AlphaVantageProvider implementation |
-| `datapipelines/providers/alpha_vantage/facets/*.py` | Normalization facets |
-| `configs/storage.json` | Table configurations |
-| `configs/pipelines/alpha_vantage_endpoints.json` | API endpoints |
-| `scripts/test/test_pipeline.sh` | Unified test script |
+| File | Purpose |
+|------|---------|
+| `datapipelines/base/provider.py` | BaseProvider, DataType, TickerData |
+| `datapipelines/base/ingestor_engine.py` | Generic orchestrator |
+| `datapipelines/base/http_client.py` | Rate-limited HTTP |
+| `datapipelines/base/key_pool.py` | API key rotation |
+| `datapipelines/base/registry.py` | Base endpoint registry |
+| `datapipelines/ingestors/bronze_sink.py` | Delta Lake writes |
+| `configs/storage.json` | Table definitions |
+| `configs/pipelines/*.json` | API endpoints |
 
 ---
 
-## Next Steps
-
-1. **Add ETF_PROFILE endpoint** - Follow step-by-step guide above
-2. **Add REALTIME_OPTIONS endpoint** - For options data
-3. **Create BLS provider** - Economic data (unemployment, CPI)
-4. **Create Chicago provider** - Municipal data
-5. **Scheduled compaction** - Separate compaction job for production
-
----
-
-**For questions or issues, check the logs at `logs/de_funk.log`**
+**For questions, check logs at `logs/de_funk.log`**
