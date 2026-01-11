@@ -49,26 +49,38 @@ Historical options chain data including strike prices, expiration dates, bid/ask
 ## Schema
 
 ```yaml
-# Format: [field_name, type, source_field, nullable, description]
+# Format: [field_name, type, source_field, nullable, description, {options}]
+# Options: transform, coerce, expr, default
 schema:
+  # Contract identification
   - [contract_id, string, contractID, false, "Unique option contract ID"]
   - [underlying_ticker, string, symbol, false, "Underlying stock ticker"]
-  - [trade_date, date, date, false, "Trading date"]
-  - [expiration_date, date, expiration, false, "Option expiration date"]
-  - [strike, double, strike, false, "Strike price"]
+
+  # Dates
+  - [trade_date, date, date, false, "Trading date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [expiration_date, date, expiration, false, "Option expiration date", {transform: "to_date(yyyy-MM-dd)"}]
+
+  # Contract specs
+  - [strike, double, strike, false, "Strike price", {coerce: double}]
   - [option_type, string, type, false, "call or put"]
-  - [last_price, double, last, true, "Last traded price"]
-  - [mark, double, mark, true, "Mark price (mid)"]
-  - [bid, double, bid, true, "Bid price"]
-  - [ask, double, ask, true, "Ask price"]
-  - [volume, long, volume, true, "Trading volume"]
-  - [open_interest, long, open_interest, true, "Open interest"]
-  - [implied_volatility, double, implied_volatility, true, "Implied volatility"]
-  - [delta, double, delta, true, "Delta Greek"]
-  - [gamma, double, gamma, true, "Gamma Greek"]
-  - [theta, double, theta, true, "Theta Greek (time decay)"]
-  - [vega, double, vega, true, "Vega Greek (volatility sensitivity)"]
-  - [rho, double, rho, true, "Rho Greek (interest rate sensitivity)"]
+
+  # Pricing (require coercion)
+  - [last_price, double, last, true, "Last traded price", {coerce: double}]
+  - [mark, double, mark, true, "Mark price (mid)", {coerce: double}]
+  - [bid, double, bid, true, "Bid price", {coerce: double}]
+  - [ask, double, ask, true, "Ask price", {coerce: double}]
+
+  # Volume and interest
+  - [volume, long, volume, true, "Trading volume", {coerce: long}]
+  - [open_interest, long, open_interest, true, "Open interest", {coerce: long}]
+
+  # Greeks
+  - [implied_volatility, double, implied_volatility, true, "Implied volatility", {coerce: double}]
+  - [delta, double, delta, true, "Delta Greek", {coerce: double}]
+  - [gamma, double, gamma, true, "Gamma Greek", {coerce: double}]
+  - [theta, double, theta, true, "Theta Greek (time decay)", {coerce: double}]
+  - [vega, double, vega, true, "Vega Greek (volatility sensitivity)", {coerce: double}]
+  - [rho, double, rho, true, "Rho Greek (interest rate sensitivity)", {coerce: double}]
 ```
 
 ## Request Notes

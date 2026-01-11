@@ -50,14 +50,20 @@ Returns all active (or delisted) US stock listings in a single API call. This is
 ## Schema
 
 ```yaml
-# Format: [field_name, type, source_field, nullable, description]
+# Format: [field_name, type, source_field, nullable, description, {options}]
+# Options: transform, coerce, expr, default
 schema:
+  # Core fields
   - [ticker, string, symbol, false, "Stock ticker symbol"]
   - [security_name, string, name, true, "Security name"]
   - [exchange_code, string, exchange, true, "Primary exchange"]
   - [asset_type, string, assetType, true, "Stock, ETF, etc."]
-  - [ipo_date, date, ipoDate, true, "IPO date"]
-  - [delisting_date, date, delistingDate, true, "Delisting date (if state=delisted)"]
+
+  # Date fields
+  - [ipo_date, date, ipoDate, true, "IPO date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [delisting_date, date, delistingDate, true, "Delisting date (if state=delisted)", {transform: "to_date(yyyy-MM-dd)"}]
+
+  # Status
   - [status, string, status, true, "Active or Delisted"]
 ```
 

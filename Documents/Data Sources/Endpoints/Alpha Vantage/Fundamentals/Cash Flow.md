@@ -47,29 +47,39 @@ Annual and quarterly cash flow statement data including operating, investing, an
 ## Schema
 
 ```yaml
-# Format: [field_name, type, source_field, nullable, description]
+# Format: [field_name, type, source_field, nullable, description, {options}]
+# Options: transform, coerce, expr, default
 schema:
+  # Identifiers
   - [ticker, string, symbol, false, "Stock ticker"]
-  - [fiscal_date_ending, date, fiscalDateEnding, false, "End of fiscal period"]
+  - [fiscal_date_ending, date, fiscalDateEnding, false, "End of fiscal period", {transform: "to_date(yyyy-MM-dd)"}]
   - [report_type, string, _generated, false, "annual or quarterly"]
   - [reported_currency, string, reportedCurrency, true, "Reporting currency"]
-  - [operating_cashflow, long, operatingCashflow, true, "Cash from operations"]
-  - [payments_for_operating_activities, long, paymentsForOperatingActivities, true, "Operating payments"]
-  - [change_in_operating_liabilities, long, changeInOperatingLiabilities, true, "Change in op liabilities"]
-  - [change_in_operating_assets, long, changeInOperatingAssets, true, "Change in op assets"]
-  - [depreciation_depletion_amortization, long, depreciationDepletionAndAmortization, true, "D&A"]
-  - [capital_expenditures, long, capitalExpenditures, true, "CapEx"]
-  - [change_in_receivables, long, changeInReceivables, true, "Change in receivables"]
-  - [change_in_inventory, long, changeInInventory, true, "Change in inventory"]
-  - [profit_loss, long, profitLoss, true, "Net profit/loss"]
-  - [cashflow_from_investment, long, cashflowFromInvestment, true, "Cash from investing"]
-  - [cashflow_from_financing, long, cashflowFromFinancing, true, "Cash from financing"]
-  - [dividend_payout, long, dividendPayout, true, "Dividends paid"]
-  - [dividend_payout_common, long, dividendPayoutCommonStock, true, "Common dividends"]
-  - [dividend_payout_preferred, long, dividendPayoutPreferredStock, true, "Preferred dividends"]
-  - [proceeds_from_stock_issuance, long, proceedsFromIssuanceOfCommonStock, true, "Stock issuance proceeds"]
-  - [proceeds_from_stock_repurchase, long, paymentsForRepurchaseOfCommonStock, true, "Buyback payments"]
-  - [net_change_in_cash, long, changeInCashAndCashEquivalents, true, "Net change in cash"]
+
+  # Operating activities (require coercion from string)
+  - [operating_cashflow, long, operatingCashflow, true, "Cash from operations", {coerce: long}]
+  - [payments_for_operating_activities, long, paymentsForOperatingActivities, true, "Operating payments", {coerce: long}]
+  - [change_in_operating_liabilities, long, changeInOperatingLiabilities, true, "Change in op liabilities", {coerce: long}]
+  - [change_in_operating_assets, long, changeInOperatingAssets, true, "Change in op assets", {coerce: long}]
+  - [depreciation_depletion_amortization, long, depreciationDepletionAndAmortization, true, "D&A", {coerce: long}]
+  - [capital_expenditures, long, capitalExpenditures, true, "CapEx", {coerce: long}]
+  - [change_in_receivables, long, changeInReceivables, true, "Change in receivables", {coerce: long}]
+  - [change_in_inventory, long, changeInInventory, true, "Change in inventory", {coerce: long}]
+  - [profit_loss, long, profitLoss, true, "Net profit/loss", {coerce: long}]
+
+  # Investing activities
+  - [cashflow_from_investment, long, cashflowFromInvestment, true, "Cash from investing", {coerce: long}]
+
+  # Financing activities
+  - [cashflow_from_financing, long, cashflowFromFinancing, true, "Cash from financing", {coerce: long}]
+  - [dividend_payout, long, dividendPayout, true, "Dividends paid", {coerce: long}]
+  - [dividend_payout_common, long, dividendPayoutCommonStock, true, "Common dividends", {coerce: long}]
+  - [dividend_payout_preferred, long, dividendPayoutPreferredStock, true, "Preferred dividends", {coerce: long}]
+  - [proceeds_from_stock_issuance, long, proceedsFromIssuanceOfCommonStock, true, "Stock issuance proceeds", {coerce: long}]
+  - [proceeds_from_stock_repurchase, long, paymentsForRepurchaseOfCommonStock, true, "Buyback payments", {coerce: long}]
+
+  # Net change
+  - [net_change_in_cash, long, changeInCashAndCashEquivalents, true, "Net change in cash", {coerce: long}]
 ```
 
 ## Request Notes

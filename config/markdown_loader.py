@@ -44,13 +44,38 @@ logger = get_logger(__name__)
 
 @dataclass
 class SchemaField:
-    """Parsed schema field from array format."""
+    """
+    Parsed schema field from array format.
+
+    Enhanced format supports options dict as 6th element:
+    [name, type, source, nullable, description, {transform: "...", coerce: "...", expr: "..."}]
+
+    Options:
+        transform: String transform to apply (e.g., "zfill(10)", "to_date(yyyy-MM-dd)")
+        coerce: Type coercion for source value (e.g., "double", "long")
+        expr: Expression for computed fields (e.g., "(high + low + close) / 3")
+        default: Default value if source is null
+    """
     name: str
     type: str
     source: str
     nullable: bool = True
     description: str = ""
+    # Options from enhanced format
     transform: Optional[str] = None
+    coerce: Optional[str] = None
+    expr: Optional[str] = None
+    default: Optional[Any] = None
+
+    @property
+    def is_computed(self) -> bool:
+        """Check if this field is computed (source is _computed or expr is set)."""
+        return self.source == '_computed' or self.expr is not None
+
+    @property
+    def is_generated(self) -> bool:
+        """Check if this field is generated (source is _generated)."""
+        return self.source == '_generated'
 
 
 @dataclass
@@ -192,7 +217,15 @@ class MarkdownConfigLoader:
         """
         Convert compact array schema to structured SchemaField objects.
 
-        Array format: [field_name, type, source_field, nullable, description]
+        Basic format: [field_name, type, source_field, nullable, description]
+        Enhanced format: [field_name, type, source_field, nullable, description, options_dict]
+
+        Options dict can contain:
+            - transform: String transform (e.g., "zfill(10)")
+            - coerce: Type coercion (e.g., "double")
+            - expr: Computed field expression
+            - default: Default value
+
         Minimum: [field_name, type, source_field]
 
         Args:
@@ -207,12 +240,28 @@ class MarkdownConfigLoader:
                 logger.warning(f"Invalid schema row (need at least 3 elements): {row}")
                 continue
 
+            # Extract basic fields
+            name = str(row[0])
+            field_type = str(row[1])
+            source = str(row[2])
+            nullable = bool(row[3]) if len(row) > 3 else True
+            description = str(row[4]) if len(row) > 4 else ""
+
+            # Extract options dict if present (6th element)
+            options = {}
+            if len(row) > 5 and isinstance(row[5], dict):
+                options = row[5]
+
             field = SchemaField(
-                name=str(row[0]),
-                type=str(row[1]),
-                source=str(row[2]),
-                nullable=bool(row[3]) if len(row) > 3 else True,
-                description=str(row[4]) if len(row) > 4 else ""
+                name=name,
+                type=field_type,
+                source=source,
+                nullable=nullable,
+                description=description,
+                transform=options.get('transform'),
+                coerce=options.get('coerce'),
+                expr=options.get('expr'),
+                default=options.get('default'),
             )
             fields.append(field)
 
@@ -504,7 +553,8 @@ class MarkdownConfigLoader:
             endpoint_id: Endpoint identifier
 
         Returns:
-            List of field dicts with name, type, source, nullable, description
+            List of field dicts with name, type, source, nullable, description,
+            and optional transform, coerce, expr, default
         """
         endpoints = self.load_endpoints()
         endpoint = endpoints.get(endpoint_id)
@@ -512,16 +562,109 @@ class MarkdownConfigLoader:
         if not endpoint or not endpoint.schema:
             return []
 
-        return [
-            {
+        result = []
+        for f in endpoint.schema:
+            field_dict = {
                 'name': f.name,
                 'type': f.type,
                 'source': f.source,
                 'nullable': f.nullable,
                 'description': f.description,
             }
-            for f in endpoint.schema
-        ]
+            # Add optional fields if present
+            if f.transform:
+                field_dict['transform'] = f.transform
+            if f.coerce:
+                field_dict['coerce'] = f.coerce
+            if f.expr:
+                field_dict['expr'] = f.expr
+            if f.default is not None:
+                field_dict['default'] = f.default
+
+            result.append(field_dict)
+
+        return result
+
+    def get_coercion_rules(self, endpoint_id: str) -> Dict[str, str]:
+        """
+        Get source field to type coercion rules for an endpoint.
+
+        Returns a dict mapping source field names to their coercion type.
+        This is derived from schema fields with coerce option set.
+
+        Args:
+            endpoint_id: Endpoint identifier
+
+        Returns:
+            Dict mapping source field name to coercion type (e.g., {'MarketCap': 'long'})
+        """
+        endpoints = self.load_endpoints()
+        endpoint = endpoints.get(endpoint_id)
+
+        if not endpoint or not endpoint.schema:
+            return {}
+
+        rules = {}
+        for f in endpoint.schema:
+            if f.coerce and f.source != '_computed' and f.source != '_generated':
+                rules[f.source] = f.coerce
+
+        return rules
+
+    def get_field_mappings(self, endpoint_id: str) -> Dict[str, str]:
+        """
+        Get source field to output field name mappings for an endpoint.
+
+        Returns a dict mapping source field names to output field names.
+
+        Args:
+            endpoint_id: Endpoint identifier
+
+        Returns:
+            Dict mapping source field name to output field name
+        """
+        endpoints = self.load_endpoints()
+        endpoint = endpoints.get(endpoint_id)
+
+        if not endpoint or not endpoint.schema:
+            return {}
+
+        mappings = {}
+        for f in endpoint.schema:
+            if f.source and f.source not in ('_computed', '_generated'):
+                mappings[f.source] = f.name
+
+        return mappings
+
+    def get_computed_fields(self, endpoint_id: str) -> List[Dict[str, Any]]:
+        """
+        Get computed field definitions for an endpoint.
+
+        Returns list of computed fields with their expressions.
+
+        Args:
+            endpoint_id: Endpoint identifier
+
+        Returns:
+            List of dicts with name, type, expr, and optional default
+        """
+        endpoints = self.load_endpoints()
+        endpoint = endpoints.get(endpoint_id)
+
+        if not endpoint or not endpoint.schema:
+            return []
+
+        computed = []
+        for f in endpoint.schema:
+            if f.is_computed and f.expr:
+                computed.append({
+                    'name': f.name,
+                    'type': f.type,
+                    'expr': f.expr,
+                    'default': f.default,
+                })
+
+        return computed
 
     def clear_cache(self) -> None:
         """Clear all cached configurations."""

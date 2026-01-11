@@ -49,16 +49,23 @@ Key for earnings analysis and predicting stock price movements around earnings a
 ## Schema
 
 ```yaml
-# Format: [field_name, type, source_field, nullable, description]
+# Format: [field_name, type, source_field, nullable, description, {options}]
+# Options: transform, coerce, expr, default
 schema:
+  # Identifiers
   - [ticker, string, symbol, false, "Stock ticker"]
-  - [fiscal_date_ending, date, fiscalDateEnding, false, "End of fiscal period"]
+  - [fiscal_date_ending, date, fiscalDateEnding, false, "End of fiscal period", {transform: "to_date(yyyy-MM-dd)"}]
   - [report_type, string, _generated, false, "annual or quarterly"]
-  - [reported_date, date, reportedDate, true, "Actual announcement date"]
-  - [reported_eps, double, reportedEPS, true, "Actual EPS reported"]
-  - [estimated_eps, double, estimatedEPS, true, "Consensus EPS estimate"]
-  - [surprise, double, surprise, true, "EPS surprise (actual - estimate)"]
-  - [surprise_percentage, double, surprisePercentage, true, "Surprise as percentage"]
+  - [reported_date, date, reportedDate, true, "Actual announcement date", {transform: "to_date(yyyy-MM-dd)"}]
+
+  # EPS metrics (require coercion from string)
+  - [reported_eps, double, reportedEPS, true, "Actual EPS reported", {coerce: double}]
+  - [estimated_eps, double, estimatedEPS, true, "Consensus EPS estimate", {coerce: double}]
+  - [surprise, double, surprise, true, "EPS surprise (actual - estimate)", {coerce: double}]
+  - [surprise_percentage, double, surprisePercentage, true, "Surprise as percentage", {coerce: double}]
+
+  # Computed field - did actual beat estimate?
+  - [beat_estimate, boolean, _computed, true, "Did actual beat estimate?", {expr: "reported_eps > estimated_eps"}]
 ```
 
 ## Request Notes

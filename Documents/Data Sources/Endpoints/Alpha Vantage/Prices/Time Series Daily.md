@@ -51,24 +51,36 @@ This is the primary source for the `stocks` Silver model's `fact_stock_prices` t
 ## Schema
 
 ```yaml
-# Format: [field_name, type, source_field, nullable, description]
+# Format: [field_name, type, source_field, nullable, description, {options}]
+# Options: transform, coerce, expr, default
 schema:
-  - [trade_date, date, _key, false, "Trading date (from response dict key)"]
+  # Keys and identifiers
+  - [trade_date, date, _key, false, "Trading date (from response dict key)", {transform: "to_date(yyyy-MM-dd)"}]
   - [ticker, string, _param, false, "Stock ticker (from request param)"]
-  - [asset_type, string, _generated, false, "Asset type (stocks)"]
-  - [year, int, _generated, false, "Year extracted from trade_date"]
-  - [month, int, _generated, false, "Month extracted from trade_date"]
-  - [open, double, "1. open", true, "Opening price"]
-  - [high, double, "2. high", true, "High price"]
-  - [low, double, "3. low", true, "Low price"]
-  - [close, double, "4. close", true, "Closing price (unadjusted)"]
-  - [volume, double, "6. volume", true, "Trading volume"]
-  - [volume_weighted, double, _calculated, true, "VWAP approximation: (H+L+C)/3"]
-  - [transactions, long, _na, true, "Not available from Alpha Vantage"]
-  - [otc, boolean, _na, false, "Not available, defaults to false"]
-  - [adjusted_close, double, "5. adjusted close", true, "Split/dividend adjusted close"]
-  - [dividend_amount, double, "7. dividend amount", true, "Dividend amount on ex-date"]
-  - [split_coefficient, double, "8. split coefficient", true, "Stock split ratio"]
+  - [asset_type, string, _generated, false, "Asset type", {default: "stocks"}]
+
+  # Partition columns (computed from trade_date)
+  - [year, int, _computed, false, "Year extracted from trade_date", {expr: "extract(year from trade_date)"}]
+  - [month, int, _computed, false, "Month extracted from trade_date", {expr: "extract(month from trade_date)"}]
+
+  # OHLCV data (require coercion from string)
+  - [open, double, "1. open", true, "Opening price", {coerce: double}]
+  - [high, double, "2. high", true, "High price", {coerce: double}]
+  - [low, double, "3. low", true, "Low price", {coerce: double}]
+  - [close, double, "4. close", true, "Closing price (unadjusted)", {coerce: double}]
+  - [volume, double, "6. volume", true, "Trading volume", {coerce: double}]
+
+  # Computed field - VWAP approximation
+  - [volume_weighted, double, _computed, true, "VWAP approximation", {expr: "(high + low + close) / 3"}]
+
+  # Fields not available from Alpha Vantage
+  - [transactions, long, _na, true, "Not available from Alpha Vantage", {default: null}]
+  - [otc, boolean, _na, false, "Not available", {default: false}]
+
+  # Alpha Vantage specific fields
+  - [adjusted_close, double, "5. adjusted close", true, "Split/dividend adjusted close", {coerce: double}]
+  - [dividend_amount, double, "7. dividend amount", true, "Dividend amount on ex-date", {coerce: double}]
+  - [split_coefficient, double, "8. split coefficient", true, "Stock split ratio", {coerce: double}]
 ```
 
 ## Request Notes

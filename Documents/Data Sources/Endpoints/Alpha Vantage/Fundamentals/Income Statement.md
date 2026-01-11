@@ -49,26 +49,36 @@ Used by the `company` Silver model for financial analysis.
 ## Schema
 
 ```yaml
-# Format: [field_name, type, source_field, nullable, description]
+# Format: [field_name, type, source_field, nullable, description, {options}]
+# Options: transform, coerce, expr, default
 schema:
+  # Identifiers
   - [ticker, string, symbol, false, "Stock ticker"]
-  - [fiscal_date_ending, date, fiscalDateEnding, false, "End of fiscal period"]
+  - [fiscal_date_ending, date, fiscalDateEnding, false, "End of fiscal period", {transform: "to_date(yyyy-MM-dd)"}]
   - [report_type, string, _generated, false, "annual or quarterly"]
   - [reported_currency, string, reportedCurrency, true, "Reporting currency"]
-  - [gross_profit, long, grossProfit, true, "Gross profit"]
-  - [total_revenue, long, totalRevenue, true, "Total revenue"]
-  - [cost_of_revenue, long, costOfRevenue, true, "Cost of revenue"]
-  - [cost_of_goods_sold, long, costofGoodsAndServicesSold, true, "COGS"]
-  - [operating_income, long, operatingIncome, true, "Operating income"]
-  - [sg_and_a, long, sellingGeneralAndAdministrative, true, "SG&A expenses"]
-  - [research_and_development, long, researchAndDevelopment, true, "R&D expenses"]
-  - [operating_expenses, long, operatingExpenses, true, "Total operating expenses"]
-  - [interest_expense, long, interestExpense, true, "Interest expense"]
-  - [income_before_tax, long, incomeBeforeTax, true, "Pre-tax income"]
-  - [income_tax_expense, long, incomeTaxExpense, true, "Income tax expense"]
-  - [net_income, long, netIncome, true, "Net income"]
-  - [ebit, long, ebit, true, "EBIT"]
-  - [ebitda, long, ebitda, true, "EBITDA"]
+
+  # Revenue and gross profit (require coercion from string)
+  - [gross_profit, long, grossProfit, true, "Gross profit", {coerce: long}]
+  - [total_revenue, long, totalRevenue, true, "Total revenue", {coerce: long}]
+  - [cost_of_revenue, long, costOfRevenue, true, "Cost of revenue", {coerce: long}]
+  - [cost_of_goods_sold, long, costofGoodsAndServicesSold, true, "COGS", {coerce: long}]
+
+  # Operating income and expenses
+  - [operating_income, long, operatingIncome, true, "Operating income", {coerce: long}]
+  - [sg_and_a, long, sellingGeneralAndAdministrative, true, "SG&A expenses", {coerce: long}]
+  - [research_and_development, long, researchAndDevelopment, true, "R&D expenses", {coerce: long}]
+  - [operating_expenses, long, operatingExpenses, true, "Total operating expenses", {coerce: long}]
+  - [interest_expense, long, interestExpense, true, "Interest expense", {coerce: long}]
+
+  # Net income
+  - [income_before_tax, long, incomeBeforeTax, true, "Pre-tax income", {coerce: long}]
+  - [income_tax_expense, long, incomeTaxExpense, true, "Income tax expense", {coerce: long}]
+  - [net_income, long, netIncome, true, "Net income", {coerce: long}]
+
+  # EBIT/EBITDA
+  - [ebit, long, ebit, true, "EBIT", {coerce: long}]
+  - [ebitda, long, ebitda, true, "EBITDA", {coerce: long}]
 ```
 
 ## Request Notes

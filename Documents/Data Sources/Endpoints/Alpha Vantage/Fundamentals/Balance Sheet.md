@@ -47,30 +47,38 @@ Annual and quarterly balance sheet data including assets, liabilities, and share
 ## Schema
 
 ```yaml
-# Format: [field_name, type, source_field, nullable, description]
+# Format: [field_name, type, source_field, nullable, description, {options}]
+# Options: transform, coerce, expr, default
 schema:
+  # Identifiers
   - [ticker, string, symbol, false, "Stock ticker"]
-  - [fiscal_date_ending, date, fiscalDateEnding, false, "End of fiscal period"]
+  - [fiscal_date_ending, date, fiscalDateEnding, false, "End of fiscal period", {transform: "to_date(yyyy-MM-dd)"}]
   - [report_type, string, _generated, false, "annual or quarterly"]
   - [reported_currency, string, reportedCurrency, true, "Reporting currency"]
-  - [total_assets, long, totalAssets, true, "Total assets"]
-  - [total_current_assets, long, totalCurrentAssets, true, "Current assets"]
-  - [cash_and_equivalents, long, cashAndCashEquivalentsAtCarryingValue, true, "Cash"]
-  - [inventory, long, inventory, true, "Inventory"]
-  - [current_net_receivables, long, currentNetReceivables, true, "Receivables"]
-  - [total_non_current_assets, long, totalNonCurrentAssets, true, "Non-current assets"]
-  - [property_plant_equipment, long, propertyPlantEquipment, true, "PP&E"]
-  - [goodwill, long, goodwill, true, "Goodwill"]
-  - [intangible_assets, long, intangibleAssets, true, "Intangibles"]
-  - [total_liabilities, long, totalLiabilities, true, "Total liabilities"]
-  - [total_current_liabilities, long, totalCurrentLiabilities, true, "Current liabilities"]
-  - [accounts_payable, long, currentAccountsPayable, true, "Accounts payable"]
-  - [short_term_debt, long, shortTermDebt, true, "Short-term debt"]
-  - [long_term_debt, long, longTermDebt, true, "Long-term debt"]
-  - [total_shareholder_equity, long, totalShareholderEquity, true, "Shareholder equity"]
-  - [retained_earnings, long, retainedEarnings, true, "Retained earnings"]
-  - [common_stock, long, commonStock, true, "Common stock"]
-  - [shares_outstanding, long, commonStockSharesOutstanding, true, "Shares outstanding"]
+
+  # Assets (all require coercion from string)
+  - [total_assets, long, totalAssets, true, "Total assets", {coerce: long}]
+  - [total_current_assets, long, totalCurrentAssets, true, "Current assets", {coerce: long}]
+  - [cash_and_equivalents, long, cashAndCashEquivalentsAtCarryingValue, true, "Cash", {coerce: long}]
+  - [inventory, long, inventory, true, "Inventory", {coerce: long}]
+  - [current_net_receivables, long, currentNetReceivables, true, "Receivables", {coerce: long}]
+  - [total_non_current_assets, long, totalNonCurrentAssets, true, "Non-current assets", {coerce: long}]
+  - [property_plant_equipment, long, propertyPlantEquipment, true, "PP&E", {coerce: long}]
+  - [goodwill, long, goodwill, true, "Goodwill", {coerce: long}]
+  - [intangible_assets, long, intangibleAssets, true, "Intangibles", {coerce: long}]
+
+  # Liabilities
+  - [total_liabilities, long, totalLiabilities, true, "Total liabilities", {coerce: long}]
+  - [total_current_liabilities, long, totalCurrentLiabilities, true, "Current liabilities", {coerce: long}]
+  - [accounts_payable, long, currentAccountsPayable, true, "Accounts payable", {coerce: long}]
+  - [short_term_debt, long, shortTermDebt, true, "Short-term debt", {coerce: long}]
+  - [long_term_debt, long, longTermDebt, true, "Long-term debt", {coerce: long}]
+
+  # Equity
+  - [total_shareholder_equity, long, totalShareholderEquity, true, "Shareholder equity", {coerce: long}]
+  - [retained_earnings, long, retainedEarnings, true, "Retained earnings", {coerce: long}]
+  - [common_stock, long, commonStock, true, "Common stock", {coerce: long}]
+  - [shares_outstanding, long, commonStockSharesOutstanding, true, "Shares outstanding", {coerce: long}]
 ```
 
 ## Request Notes

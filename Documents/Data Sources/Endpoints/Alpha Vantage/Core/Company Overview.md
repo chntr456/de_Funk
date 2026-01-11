@@ -49,30 +49,38 @@ This is the primary source for the `company` Silver model's `dim_company` dimens
 ## Schema
 
 ```yaml
-# Format: [field_name, type, source_field, nullable, description]
+# Format: [field_name, type, source_field, nullable, description, {options}]
+# Options: transform, coerce, expr, default
 schema:
+  # Core identifiers
   - [ticker, string, Symbol, false, "Stock ticker symbol"]
-  - [cik, string, CIK, true, "SEC Central Index Key (10 digits, zero-padded)"]
+  - [cik, string, CIK, true, "SEC Central Index Key (10 digits)", {transform: "zfill(10)"}]
+
+  # Company info
   - [company_name, string, Name, true, "Company legal name"]
   - [sector, string, Sector, true, "GICS Sector"]
   - [industry, string, Industry, true, "GICS Industry"]
   - [description, string, Description, true, "Business description"]
   - [exchange_code, string, Exchange, true, "Primary exchange (NYSE, NASDAQ)"]
-  - [country, string, Country, true, "Country of incorporation"]
-  - [currency, string, Currency, true, "Reporting currency"]
+  - [country, string, Country, true, "Country of incorporation", {default: "US"}]
+  - [currency, string, Currency, true, "Reporting currency", {default: "USD"}]
   - [fiscal_year_end, string, FiscalYearEnd, true, "Fiscal year end month"]
-  - [shares_outstanding, long, SharesOutstanding, true, "Total shares outstanding"]
-  - [market_cap, double, MarketCapitalization, true, "Market capitalization USD"]
-  - [pe_ratio, double, PERatio, true, "Price to earnings ratio"]
-  - [peg_ratio, double, PEGRatio, true, "Price/earnings to growth ratio"]
-  - [book_value, double, BookValue, true, "Book value per share"]
-  - [dividend_per_share, double, DividendPerShare, true, "Annual dividend per share"]
-  - [dividend_yield, double, DividendYield, true, "Dividend yield percentage"]
-  - [eps, double, EPS, true, "Earnings per share (TTM)"]
-  - [ebitda, double, EBITDA, true, "EBITDA"]
-  - [revenue_ttm, double, RevenueTTM, true, "Trailing 12 month revenue"]
-  - [profit_margin, double, ProfitMargin, true, "Profit margin percentage"]
-  - [is_active, boolean, _generated, false, "Currently active (always true from API)"]
+
+  # Numeric fields (require coercion from string)
+  - [shares_outstanding, long, SharesOutstanding, true, "Total shares outstanding", {coerce: long}]
+  - [market_cap, double, MarketCapitalization, true, "Market capitalization USD", {coerce: double}]
+  - [pe_ratio, double, PERatio, true, "Price to earnings ratio", {coerce: double}]
+  - [peg_ratio, double, PEGRatio, true, "Price/earnings to growth ratio", {coerce: double}]
+  - [book_value, double, BookValue, true, "Book value per share", {coerce: double}]
+  - [dividend_per_share, double, DividendPerShare, true, "Annual dividend per share", {coerce: double}]
+  - [dividend_yield, double, DividendYield, true, "Dividend yield percentage", {coerce: double}]
+  - [eps, double, EPS, true, "Earnings per share (TTM)", {coerce: double}]
+  - [ebitda, double, EBITDA, true, "EBITDA", {coerce: double}]
+  - [revenue_ttm, double, RevenueTTM, true, "Trailing 12 month revenue", {coerce: double}]
+  - [profit_margin, double, ProfitMargin, true, "Profit margin percentage", {coerce: double}]
+
+  # Generated fields
+  - [is_active, boolean, _generated, false, "Currently active", {default: true}]
 ```
 
 ## Request Notes

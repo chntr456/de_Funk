@@ -50,11 +50,42 @@ What data this endpoint returns.
 ## Schema
 
 ```yaml
-# Format: [field_name, type, source_field, nullable, description]
-# Types: string | long | double | boolean | date | timestamp
-# Source: API field name or "_generated" for computed fields
+# Format: [field_name, type, source_field, nullable, description, {options}]
+#
+# Basic format: [name, type, source, nullable, description]
+# Enhanced format adds options dict as 6th element
+#
+# Types: string | long | double | boolean | date | timestamp | int
+#
+# Source field values:
+#   - API field name (e.g., "Symbol", "MarketCapitalization")
+#   - "_generated" for fields set by pipeline (e.g., report_type)
+#   - "_computed" for fields calculated from expression
+#   - "_key" for dict key extraction (nested responses)
+#   - "_param" for request parameter injection
+#   - "_na" for unavailable fields (set default)
+#
+# Options (optional dict as 6th element):
+#   - transform: String transform (e.g., "zfill(10)", "to_date(yyyy-MM-dd)")
+#   - coerce: Type coercion for numeric strings (e.g., "double", "long")
+#   - expr: Expression for computed fields (e.g., "(high + low + close) / 3")
+#   - default: Default value when source is null
+
 schema:
-  - [example_field, string, ExampleField, false, "Description of field"]
+  # Basic fields
+  - [ticker, string, Symbol, false, "Stock ticker"]
+
+  # With transform (pad CIK to 10 digits)
+  - [cik, string, CIK, true, "SEC identifier", {transform: "zfill(10)"}]
+
+  # With coercion (convert string to numeric)
+  - [market_cap, double, MarketCapitalization, true, "Market cap", {coerce: double}]
+
+  # Computed field (calculated from other fields)
+  - [vwap, double, _computed, true, "VWAP approximation", {expr: "(high + low + close) / 3"}]
+
+  # Generated with default
+  - [is_active, boolean, _generated, false, "Active status", {default: true}]
 ```
 
 ## Request Notes
