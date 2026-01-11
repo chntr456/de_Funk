@@ -1,20 +1,21 @@
 ---
 type: api-provider
+provider_id: chicago
 provider: Chicago Data Portal
-api_type: soda 
-category: public            
+api_type: soda
+category: public
 base_url: https://data.cityofchicago.org
 homepage: https://data.cityofchicago.org
-auth_model: api-key           
+auth_model: api-key
 env_api_key: CHICAGO_API_KEYS
 data_domains: [finance, public Safety, education, municipal]
 data_tags: [public, time-series, reference, city]
-status: active              
-rate_limit: false
+status: active
+rate_limit_per_sec: 5.0
 bulk_download: true
-last_verified:             
-last_reviewed:              
-notes:                      
+last_verified:
+last_reviewed:
+notes:
 ---
 
 ## Description
