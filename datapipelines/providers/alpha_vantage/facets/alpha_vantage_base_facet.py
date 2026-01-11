@@ -7,23 +7,35 @@ Alpha Vantage uses a different API structure than Polygon:
 - Response format varies by endpoint (some nested, some flat)
 - Rate limits are more restrictive (5 calls/min for free tier)
 
-Schema Loading:
-    Facets can use centralized schema definitions from configs/schemas/alpha_vantage.yaml
-    by setting the INPUT_SCHEMA_KEY class attribute:
+Schema Loading (v2.6 - Markdown-Driven):
+    Facets load schema from markdown endpoint files by setting ENDPOINT_ID:
 
         class MyFacet(AlphaVantageFacet):
-            INPUT_SCHEMA_KEY = "overview"  # References alpha_vantage.yaml key
+            ENDPOINT_ID = "balance_sheet"  # Loads from Documents/Data Sources/Endpoints/Alpha Vantage/.../Balance Sheet.md
 
-    The base class get_input_schema() will automatically load the schema.
+    The base class will automatically:
+    - Load schema from markdown
+    - Derive NUMERIC_COERCE from fields with coerce option
+    - Derive FINAL_COLUMNS from schema fields
+    - Generate field mappings (source -> output)
+
+Legacy Support:
+    INPUT_SCHEMA_KEY still works for facets not yet migrated to markdown.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Dict, List, Tuple, Any
+from datetime import datetime
 import pandas as pd
-from pyspark.sql.types import StructType
+from pyspark.sql.types import (
+    StructType, StructField, StringType, DoubleType, LongType,
+    IntegerType, BooleanType, DateType, TimestampType
+)
 
 from datapipelines.base.facet import Facet
 from config.schema_loader import SchemaLoader
+from config.markdown_loader import get_markdown_loader
+from utils.repo import get_repo_root
 
 
 def safe_long(series: pd.Series) -> list:
@@ -88,15 +100,120 @@ class AlphaVantageFacet(Facet):
     - Lower rate limits
 
     Attributes:
-        INPUT_SCHEMA_KEY: Schema key in configs/schemas/alpha_vantage.yaml
+        ENDPOINT_ID: Endpoint ID in markdown (e.g., "balance_sheet")
+        INPUT_SCHEMA_KEY: Legacy schema key in configs/schemas/alpha_vantage.yaml
         tickers: List of ticker symbols to fetch
         date_from: Start date for time series data
         date_to: End date for time series data
         extra: Additional parameters (interval, outputsize, etc.)
     """
 
-    # Set in subclass to auto-load schema from configs/schemas/alpha_vantage.yaml
+    # Set in subclass to load schema from markdown endpoint file
+    ENDPOINT_ID: Optional[str] = None
+
+    # Legacy: Schema key in configs/schemas/alpha_vantage.yaml (for facets not yet migrated)
     INPUT_SCHEMA_KEY: Optional[str] = None
+
+    # Cache for markdown-derived schema info
+    _md_schema_cache: Optional[Dict[str, Any]] = None
+
+    @classmethod
+    def _load_markdown_schema(cls) -> Dict[str, Any]:
+        """
+        Load and cache schema information from markdown endpoint file.
+
+        Returns dict with:
+            - schema: List of SchemaField dicts
+            - coerce_rules: Dict[source_field, type]
+            - final_columns: List[(output_name, type)]
+            - field_mappings: Dict[source_field, output_name]
+            - computed_fields: List of computed field defs
+        """
+        if cls._md_schema_cache is not None:
+            return cls._md_schema_cache
+
+        if not cls.ENDPOINT_ID:
+            cls._md_schema_cache = {}
+            return cls._md_schema_cache
+
+        try:
+            repo_root = get_repo_root()
+            loader = get_markdown_loader(repo_root)
+
+            # Get full schema
+            schema = loader.get_endpoint_schema(cls.ENDPOINT_ID)
+            if not schema:
+                cls._md_schema_cache = {}
+                return cls._md_schema_cache
+
+            # Derive coercion rules (source_field -> type)
+            coerce_rules = {}
+            for f in schema:
+                if f.get('coerce') and f.get('source') not in ('_computed', '_generated', '_param', '_key', '_na'):
+                    coerce_rules[f['source']] = f['coerce']
+
+            # Derive final columns (output_name, type)
+            final_columns = []
+            for f in schema:
+                final_columns.append((f['name'], f['type']))
+
+            # Derive field mappings (source -> output)
+            field_mappings = {}
+            for f in schema:
+                src = f.get('source')
+                if src and src not in ('_computed', '_generated', '_param', '_key', '_na'):
+                    field_mappings[src] = f['name']
+
+            # Get computed fields
+            computed = []
+            for f in schema:
+                if f.get('source') == '_computed' and f.get('expr'):
+                    computed.append({
+                        'name': f['name'],
+                        'type': f['type'],
+                        'expr': f['expr'],
+                        'default': f.get('default'),
+                    })
+
+            cls._md_schema_cache = {
+                'schema': schema,
+                'coerce_rules': coerce_rules,
+                'final_columns': final_columns,
+                'field_mappings': field_mappings,
+                'computed_fields': computed,
+            }
+            return cls._md_schema_cache
+
+        except Exception as e:
+            # Log but don't fail - allow fallback to legacy
+            import logging
+            logging.getLogger(__name__).warning(f"Could not load markdown schema for {cls.ENDPOINT_ID}: {e}")
+            cls._md_schema_cache = {}
+            return cls._md_schema_cache
+
+    @classmethod
+    def get_coerce_rules(cls) -> Dict[str, str]:
+        """Get source field -> type coercion rules from markdown schema."""
+        md_info = cls._load_markdown_schema()
+        return md_info.get('coerce_rules', {})
+
+    @classmethod
+    def get_final_columns(cls) -> List[Tuple[str, str]]:
+        """Get final columns list from markdown schema."""
+        md_info = cls._load_markdown_schema()
+        return md_info.get('final_columns', [])
+
+    @classmethod
+    def get_field_mappings(cls) -> Dict[str, str]:
+        """Get source -> output field name mappings from markdown schema."""
+        md_info = cls._load_markdown_schema()
+        return md_info.get('field_mappings', {})
+
+    @classmethod
+    def get_computed_fields(cls) -> List[Dict[str, Any]]:
+        """Get computed field definitions from markdown schema."""
+        md_info = cls._load_markdown_schema()
+        return md_info.get('computed_fields', [])
 
     def __init__(self, spark, tickers=None, date_from=None, date_to=None, **extra):
         """
@@ -127,20 +244,54 @@ class AlphaVantageFacet(Facet):
         """
         raise NotImplementedError
 
+    def _type_str_to_spark_type(self, type_str: str):
+        """Convert type string to Spark type."""
+        type_map = {
+            "string": StringType(),
+            "double": DoubleType(),
+            "float": DoubleType(),
+            "int": IntegerType(),
+            "integer": IntegerType(),
+            "long": LongType(),
+            "bigint": LongType(),
+            "boolean": BooleanType(),
+            "date": DateType(),
+            "timestamp": TimestampType(),
+        }
+        return type_map.get(type_str.lower(), StringType())
+
     def get_input_schema(self) -> Optional[StructType]:
         """
         Get the input schema for this facet's API response.
 
-        If INPUT_SCHEMA_KEY is set, loads schema from configs/schemas/alpha_vantage.yaml.
-        Otherwise, subclasses can override to provide custom schema.
+        Priority:
+        1. ENDPOINT_ID (markdown) - New v2.6 approach
+        2. INPUT_SCHEMA_KEY (YAML) - Legacy approach
+        3. None - Let Spark infer
 
         This prevents CANNOT_DETERMINE_TYPE errors when columns have all NULL values.
 
         Returns:
             pyspark.sql.types.StructType or None
         """
+        # Try markdown schema first (v2.6)
+        if self.ENDPOINT_ID:
+            final_cols = self.get_final_columns()
+            if final_cols:
+                fields = []
+                for name, type_str in final_cols:
+                    # Handle special cases for input schema
+                    # fiscal_date_ending comes in as string, convert in postprocess
+                    if name in ('fiscal_date_ending', 'trade_date') and type_str == 'date':
+                        fields.append(StructField(name, StringType(), True))
+                    else:
+                        fields.append(StructField(name, self._type_str_to_spark_type(type_str), True))
+                return StructType(fields)
+
+        # Fallback to legacy YAML schema
         if self.INPUT_SCHEMA_KEY:
             return SchemaLoader.load("alpha_vantage", self.INPUT_SCHEMA_KEY)
+
         return None
 
     def normalize(self, raw_batches):

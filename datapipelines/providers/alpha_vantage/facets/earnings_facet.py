@@ -1,14 +1,16 @@
 """
 Earnings Facet - Transform Alpha Vantage EARNINGS to normalized schema.
 
+v2.6: Schema-driven from markdown endpoint file.
 Handles both annual and quarterly earnings data from the API response.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
 from datetime import datetime
 
-from datapipelines.base.facet import Facet
+from datapipelines.providers.alpha_vantage.facets.alpha_vantage_base_facet import (
+    AlphaVantageFacet
+)
 
 try:
     from pyspark.sql import DataFrame, functions as F
@@ -18,9 +20,11 @@ except ImportError:
     DataFrame = None
 
 
-class EarningsFacet(Facet):
+class EarningsFacet(AlphaVantageFacet):
     """
     Transform Alpha Vantage earnings data to normalized schema.
+
+    Schema loaded from: Documents/Data Sources/Endpoints/Alpha Vantage/Fundamentals/Earnings.md
 
     API returns:
     {
@@ -30,64 +34,16 @@ class EarningsFacet(Facet):
     }
 
     Each report contains EPS actual, estimate, and surprise percentage.
+
+    Note: beat_estimate is a computed field (reported_eps > estimated_eps)
     """
 
-    # Numeric fields that need type coercion
-    NUMERIC_COERCE: Dict[str, str] = {
-        "reportedEPS": "double",
-        "estimatedEPS": "double",
-        "surprise": "double",
-        "surprisePercentage": "double",
-    }
-
-    # Final schema columns
-    FINAL_COLUMNS: Optional[List[Tuple[str, str]]] = [
-        ("ticker", "string"),
-        ("fiscal_date_ending", "date"),
-        ("report_type", "string"),
-        ("reported_date", "date"),  # When earnings were announced
-        ("reported_eps", "double"),
-        ("estimated_eps", "double"),
-        ("surprise", "double"),
-        ("surprise_percentage", "double"),
-        # Calculated fields
-        ("beat_estimate", "boolean"),  # Did actual beat estimate?
-        # Metadata
-        ("ingestion_timestamp", "timestamp"),
-        ("snapshot_date", "date"),
-    ]
+    # Load schema from markdown endpoint file (v2.6)
+    ENDPOINT_ID = "earnings"
 
     def __init__(self, spark, ticker: str = None, **kwargs):
         super().__init__(spark, **kwargs)
         self.ticker = ticker
-
-    def get_input_schema(self):
-        """Get explicit schema to avoid CANNOT_DETERMINE_TYPE errors."""
-        from pyspark.sql.types import (
-            StructType, StructField, StringType, LongType, DoubleType,
-            DateType, TimestampType, BooleanType
-        )
-
-        type_map = {
-            "string": StringType(),
-            "long": LongType(),
-            "double": DoubleType(),
-            "date": DateType(),
-            "timestamp": TimestampType(),
-            "boolean": BooleanType(),
-        }
-
-        fields = []
-        for col_name, col_type in self.FINAL_COLUMNS:
-            if col_name in ("fiscal_date_ending", "reported_date"):
-                fields.append(StructField(col_name, StringType(), True))
-            elif col_name == "snapshot_date":
-                fields.append(StructField(col_name, DateType(), True))
-            else:
-                spark_type = type_map.get(col_type, StringType())
-                fields.append(StructField(col_name, spark_type, True))
-
-        return StructType(fields)
 
     def normalize(self, raw_response: dict) -> DataFrame:
         """
@@ -116,20 +72,22 @@ class EarningsFacet(Facet):
         if not all_reports:
             return self._empty_df()
 
-        # Coerce numeric types
-        all_reports = self._coerce_rows(all_reports)
-
-        # Create DataFrame with explicit schema
+        # Create DataFrame with explicit schema from markdown
         schema = self.get_input_schema()
         df = self.spark.createDataFrame(all_reports, schema=schema)
         df = self.postprocess(df)
         df = self._apply_final_casts(df)
+
+        # Apply final columns from markdown
+        final_cols = self.get_final_columns()
+        if final_cols:
+            self.FINAL_COLUMNS = final_cols
         df = self._apply_final_columns(df)
 
         return df
 
     def _transform_report(self, report: dict, ticker: str, report_type: str) -> dict:
-        """Transform a single earnings report to normalized schema."""
+        """Transform a single earnings report using markdown schema mappings."""
 
         def safe_double(val):
             """Convert to double, handling None and 'None' strings."""
@@ -142,28 +100,43 @@ class EarningsFacet(Facet):
 
         now = datetime.now()
 
-        reported_eps = safe_double(report.get("reportedEPS"))
-        estimated_eps = safe_double(report.get("estimatedEPS"))
+        # Get field mappings from markdown schema (source -> output)
+        mappings = self.get_field_mappings()
 
-        # Calculate if beat estimate
-        if reported_eps is not None and estimated_eps is not None:
-            beat_estimate = reported_eps > estimated_eps
-        else:
-            beat_estimate = None
-
-        return {
+        # Start with fixed fields
+        result = {
             "ticker": ticker,
             "fiscal_date_ending": report.get("fiscalDateEnding"),
             "report_type": report_type,
             "reported_date": report.get("reportedDate"),
-            "reported_eps": reported_eps,
-            "estimated_eps": estimated_eps,
-            "surprise": safe_double(report.get("surprise")),
-            "surprise_percentage": safe_double(report.get("surprisePercentage")),
-            "beat_estimate": beat_estimate,
-            "ingestion_timestamp": now,
-            "snapshot_date": now.date(),
         }
+
+        # Map all other fields from API response using markdown schema
+        for api_field, output_field in mappings.items():
+            # Skip already handled fields
+            if output_field in result:
+                continue
+            if api_field in ('symbol', 'fiscalDateEnding', 'reportedDate'):
+                continue
+
+            # Get value and apply coercion for double fields
+            val = report.get(api_field)
+            result[output_field] = safe_double(val)
+
+        # Compute beat_estimate = reported_eps > estimated_eps
+        # Note: This is a computed field marked in markdown schema
+        reported_eps = result.get('reported_eps')
+        estimated_eps = result.get('estimated_eps')
+        if reported_eps is not None and estimated_eps is not None:
+            result['beat_estimate'] = reported_eps > estimated_eps
+        else:
+            result['beat_estimate'] = None
+
+        # Add metadata
+        result["ingestion_timestamp"] = now
+        result["snapshot_date"] = now.date()
+
+        return result
 
     def postprocess(self, df: DataFrame) -> DataFrame:
         """Apply any post-processing transformations."""
@@ -175,3 +148,10 @@ class EarningsFacet(Facet):
                     F.to_date(F.col(date_col), "yyyy-MM-dd")
                 )
         return df
+
+    def _empty_df(self) -> DataFrame:
+        """Create empty DataFrame with schema from markdown."""
+        final_cols = self.get_final_columns()
+        if final_cols:
+            self.FINAL_COLUMNS = final_cols
+        return super()._empty_df()
