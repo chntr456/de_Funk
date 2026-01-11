@@ -3,6 +3,12 @@ Centralized configuration loader.
 
 This module provides the main ConfigLoader class that handles all configuration loading
 with proper precedence, validation, and error handling.
+
+Configuration Source Priority (for API configs):
+1. Markdown files in Documents/Data Sources/ (preferred - unified config + docs)
+2. JSON files in configs/pipelines/ (fallback - legacy format)
+
+When JSON fallback is used, a warning is logged to encourage migration.
 """
 
 import json
@@ -11,6 +17,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 
 from .logging import get_logger
+from .markdown_loader import MarkdownConfigLoader
 from .models import (
     AppConfig,
     ConnectionConfig,
@@ -388,6 +395,38 @@ class ConfigLoader:
 
         return config
 
+    def _load_api_configs_from_markdown(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Load API configurations from markdown files in Documents/Data Sources/.
+
+        Returns:
+            Dict mapping provider_id to config dict (JSON-compatible format)
+        """
+        docs_path = self._repo_root / "Documents"
+        if not (docs_path / "Data Sources" / "Providers").exists():
+            logger.debug("No markdown provider configs found (Documents/Data Sources/Providers/ missing)")
+            return {}
+
+        try:
+            md_loader = MarkdownConfigLoader(docs_path)
+            providers = md_loader.load_providers()
+
+            apis = {}
+            for provider_id, provider in providers.items():
+                # Get JSON-compatible config
+                config = md_loader.get_provider_config(provider_id)
+                if config:
+                    # Inject API keys
+                    config = self._inject_api_keys(provider_id, config)
+                    apis[provider_id] = config
+                    logger.debug(f"Loaded API config from markdown: {provider_id}")
+
+            return apis
+
+        except Exception as e:
+            logger.warning(f"Error loading markdown configs: {e}")
+            return {}
+
     def load(
         self,
         connection_type: Optional[str] = None,
@@ -423,18 +462,39 @@ class ConfigLoader:
         # This ensures ALL code uses consistent absolute paths
         storage = self._resolve_storage_paths(storage_json)
 
-        # Auto-discover API configs (any *_endpoints.json file in pipelines/)
+        # Load API configs: Markdown first (preferred), JSON fallback (legacy)
+        # Priority: Markdown > JSON
         apis = {}
+
+        # 1. Try loading from markdown (Documents/Data Sources/)
+        markdown_apis = self._load_api_configs_from_markdown()
+        apis.update(markdown_apis)
+
+        if markdown_apis:
+            logger.info(f"Loaded {len(markdown_apis)} provider(s) from markdown: {list(markdown_apis.keys())}")
+
+        # 2. Fallback to JSON for providers not in markdown
         pipelines_dir = self._repo_root / "configs" / "pipelines"
 
         if pipelines_dir.exists():
             for endpoint_file in pipelines_dir.glob("*_endpoints.json"):
                 provider_name = endpoint_file.stem.replace("_endpoints", "")
+
+                # Skip if already loaded from markdown
+                if provider_name in apis:
+                    logger.debug(f"Provider '{provider_name}' loaded from markdown, skipping JSON")
+                    continue
+
                 try:
                     endpoint_json = self._load_json_config(f"pipelines/{endpoint_file.name}")
                     # Just inject API keys, don't transform structure
                     apis[provider_name] = self._inject_api_keys(provider_name, endpoint_json)
-                    logger.debug(f"Loaded API config for {provider_name}")
+
+                    # Warn about JSON fallback - encourage migration to markdown
+                    logger.warning(
+                        f"⚠️ FALLBACK: Using JSON config for '{provider_name}'. "
+                        f"Migrate to: Documents/Data Sources/Providers/{provider_name.replace('_', ' ').title()}.md"
+                    )
                 except ValueError as e:
                     logger.warning(f"Could not load {provider_name} API config: {e}")
 
