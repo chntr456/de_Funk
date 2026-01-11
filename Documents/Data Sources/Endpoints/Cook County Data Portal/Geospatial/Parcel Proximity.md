@@ -5,8 +5,8 @@ multiple_endpoints: false
 endpoint_pattern:  /api/v3/views/ydue-e5u3/query.json           
 method: GET                              
 auth: inherit               
-domain: regulatory            
-legal_entity_type: geospatial        
+domain: geospatial            
+legal_entity_type: county      
 subject_entity_type: [county, property]       
 data_tags: [ geospatial,  parcel, reference]
 status: active                                

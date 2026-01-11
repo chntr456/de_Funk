@@ -2,13 +2,13 @@
 type: api-endpoint          
 provider: Cook County Data Portal                 
 multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/vgzx-68gb/query.json           
+endpoint_pattern:  /api/v3/views/uzyt-m557/query.json           
 method: GET                              
 auth: inherit               
-domain: regulatory            
+domain: finance           
 legal_entity_type: county        
 subject_entity_type: [county, property]       
-data_tags: [ geospatial, property tax, parcel]
+data_tags: [ geospatial, property tax, parcel, assessment]
 status: active                                
 update_cadence: monthly
 last_verified:              
