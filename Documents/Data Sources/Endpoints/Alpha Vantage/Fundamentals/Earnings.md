@@ -1,0 +1,81 @@
+---
+type: api-endpoint
+provider: Alpha Vantage
+endpoint_id: earnings
+
+# API Configuration
+endpoint_pattern: ""
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  function: EARNINGS
+required_params: [symbol]
+
+# Pagination
+pagination_type: none
+bulk_download: false
+
+# Metadata
+domain: finance
+legal_entity_type: vendor
+subject_entity_tags: [corporate]
+data_tags: [fundamentals, earnings, quarterly, annual]
+status: active
+update_cadence: quarterly
+last_verified:
+last_reviewed:
+notes: "EPS actuals vs estimates with surprise percentage"
+
+# Bronze Layer Configuration
+bronze:
+  table: earnings
+  partitions: [report_type]
+  write_strategy: upsert
+  key_columns: [ticker, fiscal_date_ending, report_type]
+  date_column: fiscal_date_ending
+  comment: "Earnings data with EPS surprise - partitioned by annual/quarterly"
+---
+
+## Description
+
+Annual and quarterly earnings data including actual EPS, estimated EPS, and surprise percentage. Returns both `annualEarnings` and `quarterlyEarnings` arrays.
+
+Key for earnings analysis and predicting stock price movements around earnings announcements.
+
+## Schema
+
+```yaml
+# Format: [field_name, type, source_field, nullable, description]
+schema:
+  - [ticker, string, symbol, false, "Stock ticker"]
+  - [fiscal_date_ending, date, fiscalDateEnding, false, "End of fiscal period"]
+  - [report_type, string, _generated, false, "annual or quarterly"]
+  - [reported_date, date, reportedDate, true, "Actual announcement date"]
+  - [reported_eps, double, reportedEPS, true, "Actual EPS reported"]
+  - [estimated_eps, double, estimatedEPS, true, "Consensus EPS estimate"]
+  - [surprise, double, surprise, true, "EPS surprise (actual - estimate)"]
+  - [surprise_percentage, double, surprisePercentage, true, "Surprise as percentage"]
+```
+
+## Request Notes
+
+- Quarterly data includes analyst estimates and surprise calculations
+- Annual data typically only has reported EPS
+- `reportedDate` is when earnings were announced (may differ from fiscal period end)
+
+## Homelab Usage
+
+```bash
+python -m scripts.ingest.run_bronze_ingestion --endpoints earnings --tickers AAPL MSFT GOOGL
+```
+
+## Known Quirks
+
+1. **Different structures**: Annual and quarterly have different fields
+2. **Missing estimates**: Annual earnings rarely have estimates
+3. **Historical depth**: ~10 years of quarterly, ~20 years annual
+4. **Surprise calculation**: May not always match `(reported - estimated)`

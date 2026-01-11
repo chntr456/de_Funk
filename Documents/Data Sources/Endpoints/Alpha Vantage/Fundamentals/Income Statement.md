@@ -1,0 +1,92 @@
+---
+type: api-endpoint
+provider: Alpha Vantage
+endpoint_id: income_statement
+
+# API Configuration
+endpoint_pattern: ""
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  function: INCOME_STATEMENT
+required_params: [symbol]
+
+# Pagination
+pagination_type: none
+bulk_download: false
+
+# Metadata
+domain: finance
+legal_entity_type: vendor
+subject_entity_tags: [corporate]
+data_tags: [fundamentals, financial-statements, quarterly, annual]
+status: active
+update_cadence: quarterly
+last_verified:
+last_reviewed:
+notes: "Returns both annualReports and quarterlyReports arrays"
+
+# Bronze Layer Configuration
+bronze:
+  table: income_statements
+  partitions: [report_type]
+  write_strategy: upsert
+  key_columns: [ticker, fiscal_date_ending, report_type]
+  date_column: fiscal_date_ending
+  comment: "Income statements - partitioned by annual/quarterly"
+---
+
+## Description
+
+Annual and quarterly income statement data including revenue, expenses, and net income. The API returns both `annualReports` and `quarterlyReports` arrays in a single response.
+
+Used by the `company` Silver model for financial analysis.
+
+## Schema
+
+```yaml
+# Format: [field_name, type, source_field, nullable, description]
+schema:
+  - [ticker, string, symbol, false, "Stock ticker"]
+  - [fiscal_date_ending, date, fiscalDateEnding, false, "End of fiscal period"]
+  - [report_type, string, _generated, false, "annual or quarterly"]
+  - [reported_currency, string, reportedCurrency, true, "Reporting currency"]
+  - [gross_profit, long, grossProfit, true, "Gross profit"]
+  - [total_revenue, long, totalRevenue, true, "Total revenue"]
+  - [cost_of_revenue, long, costOfRevenue, true, "Cost of revenue"]
+  - [cost_of_goods_sold, long, costofGoodsAndServicesSold, true, "COGS"]
+  - [operating_income, long, operatingIncome, true, "Operating income"]
+  - [sg_and_a, long, sellingGeneralAndAdministrative, true, "SG&A expenses"]
+  - [research_and_development, long, researchAndDevelopment, true, "R&D expenses"]
+  - [operating_expenses, long, operatingExpenses, true, "Total operating expenses"]
+  - [interest_expense, long, interestExpense, true, "Interest expense"]
+  - [income_before_tax, long, incomeBeforeTax, true, "Pre-tax income"]
+  - [income_tax_expense, long, incomeTaxExpense, true, "Income tax expense"]
+  - [net_income, long, netIncome, true, "Net income"]
+  - [ebit, long, ebit, true, "EBIT"]
+  - [ebitda, long, ebitda, true, "EBITDA"]
+```
+
+## Request Notes
+
+- Returns both annual (last 5 years) and quarterly (last 20 quarters) reports
+- All numeric values returned as strings (including "None" for nulls)
+- Currency is reported in `reportedCurrency` field
+
+## Homelab Usage
+
+```bash
+# Ingest income statements for specific tickers
+python -m scripts.ingest.run_bronze_ingestion --endpoints income_statement --tickers AAPL MSFT
+```
+
+## Known Quirks
+
+1. **String numerics**: All financial figures are strings - convert to long
+2. **"None" strings**: Null values represented as string "None"
+3. **Varying fields**: Some fields may be missing depending on company type
+4. **Historical depth**: Annual goes back ~5 years, quarterly ~5 years
