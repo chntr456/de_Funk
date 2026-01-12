@@ -16,7 +16,7 @@ nodes:
     filters:
       # Only include active stocks (not ETFs, options, etc.)
       # LISTING_STATUS returns 'Stock', OVERVIEW returns 'Common Stock'
-      - "type IN ('Stock', 'Common Stock')"
+      - "type IN ('Stock', 'Common Stock', 'Preferred Stock')"
       - "is_active = true"
     select:
       cik: cik  # May be NULL from bulk listing, populated from OVERVIEW calls

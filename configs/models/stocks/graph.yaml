@@ -10,7 +10,7 @@ nodes:
       # Use 'type' column (raw Alpha Vantage value) instead of derived 'asset_type'
       # LISTING_STATUS returns 'Stock', OVERVIEW returns 'Common Stock'
       # Accept both for compatibility with bulk listing and individual OVERVIEW calls
-      - "type IN ('Stock', 'Common Stock')"
+      - "type IN ('Stock', 'Common Stock', 'Preferred Stock')"
       - "is_active = true"
     select:
       # Inherited from base: ticker, security_name, exchange_code, currency, is_active
