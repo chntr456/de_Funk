@@ -66,7 +66,6 @@ nodes:
       operating_expenses: operating_expenses
       sg_and_a: sg_and_a
       research_and_development: research_and_development
-      depreciation_and_amortization: depreciation_and_amortization
       interest_expense: interest_expense
       income_tax_expense: income_tax_expense
       # Metadata
@@ -97,8 +96,7 @@ nodes:
       # Liabilities
       total_liabilities: total_liabilities
       total_current_liabilities: total_current_liabilities
-      current_accounts_payable: current_accounts_payable
-      total_non_current_liabilities: total_non_current_liabilities
+      accounts_payable: accounts_payable
       long_term_debt: long_term_debt
       short_term_debt: short_term_debt
       # Equity
@@ -111,6 +109,7 @@ nodes:
     derive:
       company_id: "CONCAT('COMPANY_', ticker)"
       report_date: "fiscal_date_ending"
+      total_debt: "COALESCE(short_term_debt, 0) + COALESCE(long_term_debt, 0)"
     tags: [fact, financials, balance_sheet]
     unique_key: [ticker, fiscal_date_ending, report_type]
 
@@ -127,18 +126,17 @@ nodes:
       change_in_receivables: change_in_receivables
       change_in_inventory: change_in_inventory
       profit_loss: profit_loss
-      net_income: net_income
       # Investing
       cashflow_from_investment: cashflow_from_investment
       capital_expenditures: capital_expenditures
       # Financing
       cashflow_from_financing: cashflow_from_financing
       dividend_payout: dividend_payout
-      dividend_payout_common_stock: dividend_payout_common_stock
-      payments_repurchase_common_stock: payments_repurchase_common_stock
-      proceeds_issuance_common_stock: proceeds_issuance_common_stock
+      dividend_payout_common: dividend_payout_common
+      proceeds_from_stock_repurchase: proceeds_from_stock_repurchase
+      proceeds_from_stock_issuance: proceeds_from_stock_issuance
       # Summary
-      change_in_cash: change_in_cash
+      net_change_in_cash: net_change_in_cash
       free_cash_flow: free_cash_flow
       # Metadata
       reported_currency: reported_currency
