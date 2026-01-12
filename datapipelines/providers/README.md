@@ -8,6 +8,7 @@ This directory contains provider-specific implementations for different data sou
 providers/
 ├── alpha_vantage/    # Alpha Vantage financial market data (v2.0 - sole securities provider)
 ├── chicago/          # Chicago Data Portal (Socrata API)
+├── cook_county/      # Cook County Data Portal (Socrata API) - property tax & assessor data
 └── bls/              # Bureau of Labor Statistics
 ```
 
@@ -111,33 +112,102 @@ results = ingestor.run_comprehensive(
 ## Chicago Provider
 
 ### Configuration
-**File**: `configs/chicago_endpoints.json`
+**File**: `Documents/Data Sources/Providers/Chicago Data Portal.md`
 
-**Endpoints**:
-- `building_permits`: Building permits issued
-- `business_licenses`: Active business licenses
-- `unemployment_rates`: Monthly unemployment by community area
-- `per_capita_income`: Income by community area
-- `economic_indicators`: Economic time series
-- `affordable_rental_housing`: Affordable housing developments
+**Key Endpoints** (27 total across domains):
+- **Finance**: `budget_appropriations`, `contracts`, `payments`
+- **Public Safety**: `crimes`, `arrests`, `police_beats`
+- **Transportation**: `cta_ridership_l`, `cta_ridership_bus`, `traffic_congestion`
+- **Housing**: `building_permits`, `zoning_districts`
+- **Regulatory**: `food_inspections`, `building_violations`, `business_licenses`
+- **Economic**: `economic_indicators`, `unemployment`, `per_capita_income`
 
 ### API Details
-- **Platform**: Socrata Open Data API
+- **Platform**: Socrata Open Data API (SODA)
 - **Base URL**: `https://data.cityofchicago.org`
+- **Authentication**: X-App-Token header (optional but recommended)
+- **Rate Limit**: 5 req/sec with token, throttled without
+- **Pagination**: Offset-based using `$offset` and `$limit`
+- **Max per page**: 50,000 records
+
+### Usage Example (v2.6+)
+```python
+from datapipelines.providers.chicago import create_chicago_provider
+from pathlib import Path
+
+# Create provider
+provider = create_chicago_provider(api_cfg, storage_cfg, spark, docs_path=Path("Documents"))
+
+# Ingest single endpoint
+result = provider.ingest_endpoint("crimes", max_records=10000)
+print(f"Ingested {result.record_count} records")
+
+# Ingest all active endpoints
+results = provider.ingest_all(max_records_per_endpoint=10000)
+for eid, result in results.items():
+    print(f"{eid}: {'✓' if result.success else '✗'} {result.record_count} records")
+
+# Query with filters
+result = provider.fetch_dataset(
+    "crimes",
+    query_params={"$where": "year >= 2023", "$order": "date DESC"},
+    max_records=5000
+)
+```
+
+### Bronze Tables (Delta Lake)
+- `chicago_crimes` - Crime incidents
+- `chicago_building_permits` - Building permits
+- `chicago_business_licenses` - Business licenses
+- `chicago_budget_appropriations` - Annual budget data
+- See `Documents/Data Sources/Endpoints/Chicago Data Portal/` for full list
+
+## Cook County Provider
+
+### Configuration
+**File**: `Documents/Data Sources/Providers/Cook County Data Portal.md`
+
+**Key Endpoints** (13 total across domains):
+- **Finance**: `parcel_sales`, `assessed_values`, `tax_exempt_parcels`
+- **Housing**: `residential_characteristics`, `condo_characteristics`, `commercial_valuation`
+- **Geospatial**: `parcel_universe`, `neighborhood_boundaries`, `parcel_addresses`
+- **Regulatory**: `permits`, `assessor_appeals`, `bor_appeal_decisions`
+
+### API Details
+- **Platform**: Socrata Open Data API (SODA)
+- **Base URL**: `https://datacatalog.cookcountyil.gov`
 - **Authentication**: X-App-Token header (optional but recommended)
 - **Rate Limit**: 5 req/sec with token
 - **Pagination**: Offset-based using `$offset` and `$limit`
+- **PIN Format**: 14-digit zero-padded (transforms applied automatically)
 
-### Usage Example
+### Usage Example (v2.6+)
 ```python
-from datapipelines.providers.chicago.chicago_ingestor import ChicagoIngestor
-from datapipelines.providers.chicago.facets.unemployment_rates_facet import UnemploymentRatesFacet
+from datapipelines.providers.cook_county import create_cook_county_provider
+from pathlib import Path
 
-ingestor = ChicagoIngestor(ctx.chicago_cfg, ctx.storage_cfg, ctx.spark)
-facet = UnemploymentRatesFacet(ctx.spark, date_from="2020-01-01", date_to="2023-12-31")
-batches = ingestor._fetch_calls(facet.calls(), enable_pagination=True)
-df = facet.normalize(batches)
+# Create provider
+provider = create_cook_county_provider(api_cfg, storage_cfg, spark, docs_path=Path("Documents"))
+
+# Ingest property data endpoints
+results = provider.ingest_all(
+    endpoint_ids=["parcel_sales", "assessed_values", "residential_characteristics"],
+    max_records_per_endpoint=50000
+)
+
+# Fetch specific parcels by PIN
+result = provider.fetch_parcel_data(
+    pins=["12345678901234", "12345678901235"],
+    year=2023
+)
 ```
+
+### Bronze Tables (Delta Lake)
+- `cook_county_parcel_sales` - Property sales transactions
+- `cook_county_assessed_values` - Annual assessed values
+- `cook_county_parcel_universe` - All parcels with characteristics
+- `cook_county_residential_chars` - Single/multi-family characteristics
+- See `Documents/Data Sources/Endpoints/Cook County Data Portal/` for full list
 
 ## BLS Provider
 
@@ -316,5 +386,7 @@ python -m scripts.test_alpha_vantage_ingestion --tickers AAPL MSFT
 ## Resources
 
 - **Alpha Vantage API**: https://www.alphavantage.co/documentation/
-- **Chicago Data Portal**: https://dev.socrata.com/foundry/data.cityofchicago.org
+- **Chicago Data Portal**: https://data.cityofchicago.org
+- **Cook County Data Portal**: https://datacatalog.cookcountyil.gov
+- **Socrata Developer Docs**: https://dev.socrata.com/docs/endpoints.html
 - **BLS API**: https://www.bls.gov/developers/api_signature_v2.htm

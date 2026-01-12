@@ -36,8 +36,30 @@
       "_comment": "BLS provider to be rebuilt"
     },
     "chicago": {
-      "enabled": false,
-      "_comment": "Chicago provider to be rebuilt"
+      "enabled": true,
+      "rate_limit_per_sec": 5.0,
+      "_rate_limit_comment": "5 req/sec with app token",
+      "endpoints": [
+        "crimes",
+        "building_permits",
+        "business_licenses",
+        "food_inspections",
+        "cta_ridership_l",
+        "budget_appropriations"
+      ],
+      "_endpoints_comment": "Endpoints to ingest. Core municipal data for dev profile."
+    },
+    "cook_county": {
+      "enabled": true,
+      "rate_limit_per_sec": 5.0,
+      "_rate_limit_comment": "5 req/sec with app token",
+      "endpoints": [
+        "parcel_sales",
+        "assessed_values",
+        "parcel_universe",
+        "residential_characteristics"
+      ],
+      "_endpoints_comment": "Endpoints to ingest. Core property data for dev profile."
     }
   },
   "silver_models": {
@@ -93,7 +115,16 @@
       "use_market_cap": true,
       "dry_run": false,
       "skip_silver": false,
-      "with_financials": true
+      "with_financials": true,
+      "_comment": "Includes alpha_vantage, chicago, cook_county"
+    },
+    "dev_municipal": {
+      "providers": ["chicago", "cook_county"],
+      "max_records_per_endpoint": 10000,
+      "dry_run": false,
+      "skip_silver": true,
+      "log_level": "DEBUG",
+      "_comment": "Municipal/county data only - no securities"
     },
     "staging": {
       "max_tickers": 500,

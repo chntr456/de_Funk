@@ -547,24 +547,37 @@ def create_engine(
     provider_name: str,
     api_cfg: Dict,
     storage_cfg: Dict,
-    spark=None
-) -> IngestorEngine:
+    spark=None,
+    docs_path=None
+):
     """
-    Factory function to create an IngestorEngine for a provider.
+    Factory function to create a provider or IngestorEngine.
 
     Args:
-        provider_name: Provider name (e.g., "alpha_vantage")
+        provider_name: Provider name (e.g., "alpha_vantage", "chicago", "cook_county")
         api_cfg: API configuration dict
         storage_cfg: Storage configuration dict
         spark: SparkSession
+        docs_path: Path to Documents folder (for Socrata providers)
 
     Returns:
-        Configured IngestorEngine
+        IngestorEngine for ticker-based providers (alpha_vantage)
+        Provider instance for bulk providers (chicago, cook_county)
     """
     if provider_name == "alpha_vantage":
         from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
         provider = create_alpha_vantage_provider(api_cfg, spark)
+        return IngestorEngine(provider, storage_cfg)
+
+    elif provider_name in ("chicago", "chicago_data_portal"):
+        from datapipelines.providers.chicago.chicago_provider import create_chicago_provider
+        # Chicago uses bulk datasets, not ticker-based ingestion
+        return create_chicago_provider(api_cfg, storage_cfg, spark, docs_path)
+
+    elif provider_name in ("cook_county", "cook_county_data_portal"):
+        from datapipelines.providers.cook_county.cook_county_provider import create_cook_county_provider
+        # Cook County uses bulk datasets, not ticker-based ingestion
+        return create_cook_county_provider(api_cfg, storage_cfg, spark, docs_path)
+
     else:
         raise ValueError(f"Unknown provider: {provider_name}")
-
-    return IngestorEngine(provider, storage_cfg)
