@@ -440,9 +440,18 @@ logger.info('Testing task: bulk provider ingestion')
 from datapipelines.base.ingestor_engine import create_engine
 from orchestration.common.spark_session import get_spark
 from config.markdown_loader import get_markdown_loader
+from utils.env_loader import load_dotenv
 from pathlib import Path
 import json
 import os
+
+# Load .env file first
+env_path = Path('$REPO_ROOT/.env')
+if env_path.exists():
+    load_dotenv(env_path)
+    logger.info(f'Loaded environment from {env_path}')
+else:
+    logger.warning(f'.env file not found at {env_path}')
 
 # Load configs
 loader = get_markdown_loader(Path('$REPO_ROOT'))
@@ -484,10 +493,19 @@ for provider_name in bulk_providers:
         logger.warning(f'Could not load config for {provider_name} - skipping')
         continue
 
-    # Load API keys from environment
+    # Load API keys from environment - FAIL if not found
     env_key = f'{provider_name.upper()}_API_KEYS'
     api_keys_str = os.environ.get(env_key, '')
     api_keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
+
+    if not api_keys:
+        raise ValueError(
+            f'API key required for {provider_name}. '
+            f'Set {env_key} in .env file or environment. '
+            f'Example: {env_key}=your_app_token_here'
+        )
+
+    logger.info(f'{provider_name}: Found API key ({api_keys[0][:4]}...{api_keys[0][-4:]})')
     api_cfg['credentials'] = {'api_keys': api_keys}
 
     # Create provider

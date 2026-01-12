@@ -44,10 +44,10 @@
         "building_permits",
         "business_licenses",
         "food_inspections",
-        "cta_ridership_l",
-        "budget_appropriations"
+        "cta_l_ridership_daily",
+        "cta_bus_ridership_daily"
       ],
-      "_endpoints_comment": "Endpoints to ingest. Core municipal data for dev profile."
+      "_endpoints_comment": "Endpoints to ingest. Core municipal data for dev profile. Note: budget_appropriations requires view_id iteration (not included here)."
     },
     "cook_county": {
       "enabled": true,
