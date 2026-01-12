@@ -178,10 +178,22 @@ PYTHON_ARGS=""
 [ -n "$MAX_TICKERS" ] && PYTHON_ARGS="$PYTHON_ARGS --max-tickers $MAX_TICKERS"
 [ -n "$STORAGE_PATH" ] && PYTHON_ARGS="$PYTHON_ARGS --storage-path $STORAGE_PATH"
 
+# Check if Alpha Vantage is enabled
+ALPHA_VANTAGE_ENABLED=$(python3 -c "
+import json
+with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
+    cfg = json.load(f)
+print('true' if cfg.get('providers', {}).get('alpha_vantage', {}).get('enabled') else 'false')
+" 2>/dev/null || echo "false")
+
+if [ "$ALPHA_VANTAGE_ENABLED" = "false" ]; then
+    echo -e "${YELLOW}Alpha Vantage is disabled in run_config.json${NC}"
+fi
+
 # ==============================================================================
-# Task 1: Seed Tickers
+# Task 1: Seed Tickers (Alpha Vantage)
 # ==============================================================================
-if [ "$SKIP_SEED" = false ]; then
+if [ "$SKIP_SEED" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ]; then
     echo -e "${BLUE}============================================================${NC}"
     echo -e "${BLUE}Testing task: seed tickers${NC}"
     echo -e "${BLUE}============================================================${NC}"
@@ -257,11 +269,11 @@ spark.stop()
 fi
 
 # ==============================================================================
-# Task 2: Bronze Ingestion
+# Task 2: Bronze Ingestion (Alpha Vantage)
 # ==============================================================================
-if [ "$SKIP_INGEST" = false ]; then
+if [ "$SKIP_INGEST" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ]; then
     echo -e "${BLUE}============================================================${NC}"
-    echo -e "${BLUE}Testing task: bronze ingestion${NC}"
+    echo -e "${BLUE}Testing task: bronze ingestion (Alpha Vantage)${NC}"
     echo -e "${BLUE}============================================================${NC}"
 
     python -c "
@@ -541,8 +553,10 @@ echo -e "${GREEN}Pipeline test completed successfully!${NC}"
 echo -e "${BLUE}============================================================${NC}"
 echo ""
 echo "Results:"
-[ "$SKIP_SEED" = false ] && echo "  ✓ Tickers seeded"
-[ "$SKIP_INGEST" = false ] && echo "  ✓ Bronze data ingested (Alpha Vantage: prices$([ "$WITH_FINANCIALS" = true ] && echo ', financials'))"
+[ "$SKIP_SEED" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ] && echo "  ✓ Tickers seeded (Alpha Vantage)"
+[ "$SKIP_SEED" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "false" ] && echo "  ○ Ticker seed skipped (Alpha Vantage disabled)"
+[ "$SKIP_INGEST" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ] && echo "  ✓ Bronze data ingested (Alpha Vantage: prices$([ "$WITH_FINANCIALS" = true ] && echo ', financials'))"
+[ "$SKIP_INGEST" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "false" ] && echo "  ○ Alpha Vantage ingestion skipped (disabled)"
 [ "$SKIP_INGEST" = false ] && [ -n "$BULK_PROVIDERS" ] && echo "  ✓ Bulk providers ingested ($BULK_PROVIDERS)"
 [ "$SKIP_SILVER" = false ] && echo "  ✓ Silver models built"
 [ "$SKIP_SILVER" = true ] && echo "  ○ Silver build skipped (--skip-silver)"
