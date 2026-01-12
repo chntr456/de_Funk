@@ -281,8 +281,8 @@ class AlphaVantageFacet(Facet):
                 fields = []
                 for name, type_str in final_cols:
                     # Handle special cases for input schema
-                    # fiscal_date_ending comes in as string, convert in postprocess
-                    if name in ('fiscal_date_ending', 'trade_date') and type_str == 'date':
+                    # Date columns come in as strings, convert in postprocess
+                    if type_str == 'date' and name not in ('snapshot_date',):
                         fields.append(StructField(name, StringType(), True))
                     else:
                         fields.append(StructField(name, self._type_str_to_spark_type(type_str), True))
