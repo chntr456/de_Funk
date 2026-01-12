@@ -271,18 +271,30 @@ class AlphaVantageFacet(Facet):
 
         This prevents CANNOT_DETERMINE_TYPE errors when columns have all NULL values.
 
+        Schema-driven type handling:
+        - Fields with source starting with '_' (generated/computed/na) use declared type
+        - Fields with API source names use StringType for dates (API returns strings)
+
         Returns:
             pyspark.sql.types.StructType or None
         """
         # Try markdown schema first (v2.6)
         if self.ENDPOINT_ID:
-            final_cols = self.get_final_columns()
-            if final_cols:
+            md_info = self._load_markdown_schema()
+            schema = md_info.get('schema', [])
+            if schema:
                 fields = []
-                for name, type_str in final_cols:
-                    # Handle special cases for input schema
-                    # Date columns come in as strings, convert in postprocess
-                    if type_str == 'date' and name not in ('snapshot_date',):
+                for field_def in schema:
+                    name = field_def['name']
+                    type_str = field_def['type']
+                    source = field_def.get('source', '')
+
+                    # Check if this is a generated/computed/na field (source starts with '_')
+                    is_generated = source.startswith('_') if source else False
+
+                    # Date fields from API come as strings - need conversion in postprocess
+                    # Generated/computed date fields are already date objects
+                    if type_str == 'date' and not is_generated:
                         fields.append(StructField(name, StringType(), True))
                     else:
                         fields.append(StructField(name, self._type_str_to_spark_type(type_str), True))
