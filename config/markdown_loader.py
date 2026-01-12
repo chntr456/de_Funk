@@ -267,24 +267,55 @@ class MarkdownConfigLoader:
 
         return fields
 
-    def parse_bronze_config(self, bronze_dict: Dict[str, Any]) -> BronzeConfig:
+    def parse_bronze_config(self, frontmatter: Dict[str, Any]) -> Optional[BronzeConfig]:
         """
         Parse bronze layer configuration from frontmatter.
 
+        Supports two formats:
+        1. Flattened (v2.6+): bronze is table name, other props at top level
+           bronze: income_statements
+           partitions: [report_type]
+           write_strategy: upsert
+           key_columns: [...]
+
+        2. Nested (legacy): bronze is dict with all properties
+           bronze:
+             table: income_statements
+             partitions: [report_type]
+
         Args:
-            bronze_dict: Bronze config dict from frontmatter
+            frontmatter: Full frontmatter dict
 
         Returns:
-            BronzeConfig object
+            BronzeConfig object or None if not configured
         """
-        return BronzeConfig(
-            table=bronze_dict.get('table', ''),
-            partitions=bronze_dict.get('partitions', []) or [],
-            write_strategy=bronze_dict.get('write_strategy', 'upsert'),
-            key_columns=bronze_dict.get('key_columns', []) or [],
-            date_column=bronze_dict.get('date_column'),
-            comment=bronze_dict.get('comment', '')
-        )
+        bronze_value = frontmatter.get('bronze')
+        if not bronze_value:
+            return None
+
+        # New flattened format: bronze is just the table name (string)
+        if isinstance(bronze_value, str):
+            return BronzeConfig(
+                table=bronze_value,
+                partitions=frontmatter.get('partitions', []) or [],
+                write_strategy=frontmatter.get('write_strategy', 'upsert'),
+                key_columns=frontmatter.get('key_columns', []) or [],
+                date_column=frontmatter.get('date_column'),
+                comment=frontmatter.get('comment', '')
+            )
+
+        # Legacy nested format: bronze is a dict
+        if isinstance(bronze_value, dict):
+            return BronzeConfig(
+                table=bronze_value.get('table', ''),
+                partitions=bronze_value.get('partitions', []) or [],
+                write_strategy=bronze_value.get('write_strategy', 'upsert'),
+                key_columns=bronze_value.get('key_columns', []) or [],
+                date_column=bronze_value.get('date_column'),
+                comment=bronze_value.get('comment', '')
+            )
+
+        return None
 
     def load_provider(self, md_path: Path) -> Optional[ProviderConfig]:
         """
@@ -353,16 +384,19 @@ class MarkdownConfigLoader:
             md_path.stem.lower().replace(' ', '_').replace('-', '_')
         )
 
-        # Parse schema from body if present
-        schema_list = self.parse_schema_block(body)
+        # Parse schema - check frontmatter first (v2.6+), then body code block (legacy)
         schema_fields = []
-        if schema_list:
-            schema_fields = self.parse_schema_array(schema_list)
+        if 'schema' in frontmatter and frontmatter['schema']:
+            # Schema in frontmatter (flattened format)
+            schema_fields = self.parse_schema_array(frontmatter['schema'])
+        else:
+            # Fallback to schema in markdown code block (legacy)
+            schema_list = self.parse_schema_block(body)
+            if schema_list:
+                schema_fields = self.parse_schema_array(schema_list)
 
-        # Parse bronze config if present
-        bronze_config = None
-        if 'bronze' in frontmatter and frontmatter['bronze']:
-            bronze_config = self.parse_bronze_config(frontmatter['bronze'])
+        # Parse bronze config (supports both flattened and nested formats)
+        bronze_config = self.parse_bronze_config(frontmatter)
 
         return EndpointConfig(
             endpoint_id=endpoint_id,

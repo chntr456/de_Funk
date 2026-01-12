@@ -30,25 +30,14 @@ last_verified:
 last_reviewed:
 notes: "One API call per ticker - no bulk endpoint"
 
-# Bronze Layer Configuration
-bronze:
-  table: company_reference
-  partitions: []
-  write_strategy: upsert
-  key_columns: [cik]
-  date_column: null
-  comment: "Company fundamentals from OVERVIEW - CIK as primary key for SEC linkage"
----
+# Storage Configuration
+bronze: company_reference
+partitions: []
+write_strategy: upsert
+key_columns: [cik]
+date_column: null
 
-## Description
-
-Company overview including sector, industry, market cap, PE ratio, and other fundamentals. The OVERVIEW endpoint provides comprehensive company data including the SEC CIK (Central Index Key) which enables linkage to SEC EDGAR filings.
-
-This is the primary source for the `company` Silver model's `dim_company` dimension.
-
-## Schema
-
-```yaml
+# Schema
 # Format: [field_name, type, source_field, nullable, description, {options}]
 # Options: transform, coerce, expr, default
 schema:
@@ -81,7 +70,13 @@ schema:
 
   # Generated fields
   - [is_active, boolean, _generated, false, "Currently active", {default: true}]
-```
+---
+
+## Description
+
+Company overview including sector, industry, market cap, PE ratio, and other fundamentals. The OVERVIEW endpoint provides comprehensive company data including the SEC CIK (Central Index Key) which enables linkage to SEC EDGAR filings.
+
+This is the primary source for the `company` Silver model's `dim_company` dimension.
 
 ## Request Notes
 

@@ -31,25 +31,14 @@ last_verified:
 last_reviewed:
 notes: "Single API call returns all US tickers - CSV format"
 
-# Bronze Layer Configuration
-bronze:
-  table: securities_reference
-  partitions: [asset_type]
-  write_strategy: upsert
-  key_columns: [ticker]
-  date_column: null
-  comment: "Basic ticker info from LISTING_STATUS - all 12k+ US tickers in one call"
----
+# Storage Configuration
+bronze: securities_reference
+partitions: [asset_type]
+write_strategy: upsert
+key_columns: [ticker]
+date_column: null
 
-## Description
-
-Returns all active (or delisted) US stock listings in a single API call. This is the **primary ticker discovery endpoint** for seeding the Bronze layer with all available tickers before detailed ingestion.
-
-**Critical for ingestion**: Use this endpoint first to get the universe of tickers, then iterate through them for OVERVIEW, prices, etc.
-
-## Schema
-
-```yaml
+# Schema
 # Format: [field_name, type, source_field, nullable, description, {options}]
 # Options: transform, coerce, expr, default
 schema:
@@ -65,7 +54,13 @@ schema:
 
   # Status
   - [status, string, status, true, "Active or Delisted"]
-```
+---
+
+## Description
+
+Returns all active (or delisted) US stock listings in a single API call. This is the **primary ticker discovery endpoint** for seeding the Bronze layer with all available tickers before detailed ingestion.
+
+**Critical for ingestion**: Use this endpoint first to get the universe of tickers, then iterate through them for OVERVIEW, prices, etc.
 
 ## Request Notes
 

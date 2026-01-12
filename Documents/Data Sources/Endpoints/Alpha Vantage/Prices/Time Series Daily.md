@@ -32,25 +32,14 @@ last_verified:
 last_reviewed:
 notes: "Full history (20+ years) in single call with outputsize=full"
 
-# Bronze Layer Configuration
-bronze:
-  table: securities_prices_daily
-  partitions: []
-  write_strategy: append
-  key_columns: [ticker, trade_date]
-  date_column: trade_date
-  comment: "Daily OHLCV with split/dividend adjustments - append for immutable time-series"
----
+# Storage Configuration
+bronze: securities_prices_daily
+partitions: []
+write_strategy: append
+key_columns: [ticker, trade_date]
+date_column: trade_date
 
-## Description
-
-Daily OHLCV (Open, High, Low, Close, Volume) price data with split and dividend adjustments. Returns up to 20+ years of historical data in a single API call when `outputsize=full`.
-
-This is the primary source for the `stocks` Silver model's `fact_stock_prices` table.
-
-## Schema
-
-```yaml
+# Schema
 # Format: [field_name, type, source_field, nullable, description, {options}]
 # Options: transform, coerce, expr, default
 schema:
@@ -81,7 +70,13 @@ schema:
   - [adjusted_close, double, "5. adjusted close", true, "Split/dividend adjusted close", {coerce: double}]
   - [dividend_amount, double, "7. dividend amount", true, "Dividend amount on ex-date", {coerce: double}]
   - [split_coefficient, double, "8. split coefficient", true, "Stock split ratio", {coerce: double}]
-```
+---
+
+## Description
+
+Daily OHLCV (Open, High, Low, Close, Volume) price data with split and dividend adjustments. Returns up to 20+ years of historical data in a single API call when `outputsize=full`.
+
+This is the primary source for the `stocks` Silver model's `fact_stock_prices` table.
 
 ## Request Notes
 

@@ -30,25 +30,14 @@ last_verified:
 last_reviewed:
 notes: "Premium endpoint - requires paid subscription"
 
-# Bronze Layer Configuration
-bronze:
-  table: historical_options
-  partitions: [underlying_ticker, expiration_date]
-  write_strategy: upsert
-  key_columns: [contract_id, trade_date]
-  date_column: trade_date
-  comment: "Historical options chain with Greeks"
----
+# Storage Configuration
+bronze: historical_options
+partitions: [underlying_ticker, expiration_date]
+write_strategy: upsert
+key_columns: [contract_id, trade_date]
+date_column: trade_date
 
-## Description
-
-Historical options chain data including strike prices, expiration dates, bid/ask spreads, Greeks (delta, gamma, theta, vega), and implied volatility.
-
-**Premium Endpoint**: Requires paid Alpha Vantage subscription.
-
-## Schema
-
-```yaml
+# Schema
 # Format: [field_name, type, source_field, nullable, description, {options}]
 # Options: transform, coerce, expr, default
 schema:
@@ -81,7 +70,13 @@ schema:
   - [theta, double, theta, true, "Theta Greek (time decay)", {coerce: double}]
   - [vega, double, vega, true, "Vega Greek (volatility sensitivity)", {coerce: double}]
   - [rho, double, rho, true, "Rho Greek (interest rate sensitivity)", {coerce: double}]
-```
+---
+
+## Description
+
+Historical options chain data including strike prices, expiration dates, bid/ask spreads, Greeks (delta, gamma, theta, vega), and implied volatility.
+
+**Premium Endpoint**: Requires paid Alpha Vantage subscription.
 
 ## Request Notes
 
