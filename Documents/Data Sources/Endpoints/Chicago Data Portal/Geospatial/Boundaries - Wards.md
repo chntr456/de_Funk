@@ -1,19 +1,47 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: true   
-endpoint_pattern: /api/v3/views/htai-wnw4/query.json
-method: GET                              
-auth: inherit               
-domain: Geospatial             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, geographic-area]       
-data_tags: [regulatory, geospatial, reference]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: wards
+
+# API Configuration
+endpoint_pattern: /resource/{view_id}.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 100
+required_params: [view_id]
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: geospatial
+legal_entity_type: municipal
+subject_entity_tags: [municipal, geographic-area]
+data_tags: [boundaries, geospatial, reference, political]
+status: active
 update_cadence: irregular
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "50 Chicago ward boundaries. Changes after Census redistricting. Multiple view_ids."
+
+# Storage Configuration
+bronze: chicago_wards
+partitions: []
+write_strategy: overwrite
+key_columns: [ward]
+date_column: null
+
+# Schema
+schema:
+  - [ward, int, ward, false, "Ward number (1-50)"]
+  - [alderman, string, alderman, true, "Alderman name"]
+  - [the_geom, string, the_geom, true, "GeoJSON geometry"]
 ---
 
 ## Description

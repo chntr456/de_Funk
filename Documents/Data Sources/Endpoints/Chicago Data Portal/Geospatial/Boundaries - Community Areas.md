@@ -1,19 +1,47 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern: /api/v3/views/igwz-8jzy/query.json 
-method: GET                              
-auth: inherit               
-domain: Geospatial             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, geographic-area]       
-data_tags: [culture, geospatial, reference]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: community_areas
+
+# API Configuration
+endpoint_pattern: /resource/igwz-8jzy.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 100
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: geospatial
+legal_entity_type: municipal
+subject_entity_tags: [municipal, geographic-area]
+data_tags: [boundaries, geospatial, reference, neighborhoods]
+status: active
 update_cadence: irregular
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "77 Chicago community area boundaries. Stable since 1920s."
+
+# Storage Configuration
+bronze: chicago_community_areas
+partitions: []
+write_strategy: overwrite
+key_columns: [area_numbe]
+date_column: null
+
+# Schema
+schema:
+  - [area_numbe, int, area_numbe, false, "Community area number (1-77)"]
+  - [community, string, community, true, "Community area name"]
+  - [the_geom, string, the_geom, true, "GeoJSON geometry"]
 ---
 
 

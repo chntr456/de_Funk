@@ -1,19 +1,48 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern: /api/v3/views/c7ck-438e/query.json  
-method: GET                              
-auth: inherit               
-domain: public-safety             
-legal_entity_type: municipal          
-subject_entity_type: [municipal]       
-data_tags: [police,  reference, categorical, crimes, codes]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: iucr_codes
+
+# API Configuration
+endpoint_pattern: /resource/c7ck-438e.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 1000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: public-safety
+legal_entity_type: municipal
+subject_entity_tags: [municipal]
+data_tags: [police, reference, categorical, crimes, codes]
+status: active
 update_cadence: irregular
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "IUCR codes used by CPD. 400+ codes divided into Index and Non-Index offenses."
+
+# Storage Configuration
+bronze: chicago_iucr_codes
+partitions: []
+write_strategy: overwrite
+key_columns: [iucr]
+date_column: null
+
+# Schema
+schema:
+  - [iucr, string, iucr, false, "4-digit IUCR code"]
+  - [primary_description, string, primary_description, true, "Primary crime category"]
+  - [secondary_description, string, secondary_description, true, "Secondary crime description"]
+  - [index_code, string, index_code, true, "Index code (I=Index, N=Non-Index)"]
 ---
 
 

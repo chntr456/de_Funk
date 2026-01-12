@@ -1,19 +1,54 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/nj4t-kc8j/query.json           
-method: GET                              
-auth: inherit               
-domain: geospatial            
-legal_entity_type: county 
-subject_entity_type: [county, property]       
-data_tags: [ geospatial,  parcel, reference]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: parcel_universe
+
+# API Configuration
+endpoint_pattern: /resource/nj4t-kc8j.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: year DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: geospatial
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [parcel, reference, geospatial, governmental]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Complete historic parcel universe with geographic, governmental, spatial data."
+
+# Storage Configuration
+bronze: cook_county_parcel_universe
+partitions: [year]
+write_strategy: upsert
+key_columns: [pin, year]
+date_column: null
+
+# Schema
+schema:
+  - [pin, string, pin, false, "14-digit Parcel Index Number", {transform: "zfill(14)"}]
+  - [year, int, year, false, "Tax year"]
+  - [township_code, string, township_code, true, "Township code"]
+  - [class, string, class, true, "Property class code"]
+  - [municipality, string, municipality, true, "Municipality name"]
+  - [school_district, string, school_district, true, "School district"]
+  - [park_district, string, park_district, true, "Park district"]
+  - [latitude, double, latitude, true, "Centroid latitude"]
+  - [longitude, double, longitude, true, "Centroid longitude"]
 ---
 
 ## Description

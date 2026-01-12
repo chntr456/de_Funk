@@ -31,33 +31,27 @@ last_verified:
 last_reviewed:
 notes: "Monthly unemployment rates by Chicago community area"
 
-# Bronze Layer Configuration
-bronze:
-  table: chicago_unemployment
-  partitions: []
-  write_strategy: upsert
-  key_columns: [date, community_area]
-  date_column: date
-  comment: "Chicago unemployment by community area"
+# Storage Configuration
+bronze: chicago_unemployment
+partitions: []
+write_strategy: upsert
+key_columns: [date, community_area]
+date_column: date
+
+# Schema
+schema:
+  - [date, date, date, false, "Report date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [community_area, string, community_area, false, "Chicago community area name"]
+  - [community_area_number, int, community_area_number, true, "Community area code", {coerce: long}]
+  - [unemployment_rate, double, unemployment_rate, true, "Unemployment rate %", {coerce: double}]
 ---
 
 ## Description
 
 Monthly unemployment rates by Chicago community area. Provides granular local labor market data.
 
-## Schema
-
-```yaml
-# Format: [field_name, type, source_field, nullable, description, {options}]
-schema:
-  - [date, date, date, false, "Report date", {transform: "to_date(yyyy-MM-dd)"}]
-  - [community_area, string, community_area, false, "Chicago community area name"]
-  - [community_area_number, int, community_area_number, true, "Community area code", {coerce: long}]
-  - [unemployment_rate, double, unemployment_rate, true, "Unemployment rate %", {coerce: double}]
-```
-
 ## Homelab Usage
 
 ```bash
-python -m scripts.ingest.run_chicago_ingestion --endpoint unemployment_rates
+python -m scripts.ingest.run_bronze_ingestion --provider chicago --endpoints unemployment_rates
 ```

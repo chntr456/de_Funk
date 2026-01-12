@@ -1,19 +1,53 @@
 ---
 type: api-endpoint
 provider: Chicago Data Portal
-multiple_endpoints: true
-endpoint_pattern: /api/v3/views/rsxa-ify5/query.json
+endpoint_id: contracts
+
+# API Configuration
+endpoint_pattern: /resource/rsxa-ify5.json
 method: GET
+format: json
 auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
 domain: finance
 legal_entity_type: municipal
 subject_entity_tags: [municipal, corporate]
-data_tags: [spending]
+data_tags: [spending, contracts, procurement]
 status: active
 update_cadence: daily
 last_verified:
 last_reviewed:
-notes:
+notes: "City contracts and modifications since 1993"
+
+# Storage Configuration
+bronze: chicago_contracts
+partitions: []
+write_strategy: upsert
+key_columns: [contract_number, specification_number]
+date_column: start_date
+
+# Schema
+schema:
+  - [contract_number, string, contract_number, false, "Contract identifier"]
+  - [specification_number, string, specification_number, true, "Specification number"]
+  - [vendor_name, string, vendor_name, true, "Vendor/contractor name"]
+  - [description, string, description, true, "Contract description"]
+  - [award_amount, double, award_amount, true, "Award amount in dollars", {coerce: double}]
+  - [start_date, date, start_date, true, "Contract start date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [end_date, date, end_date, true, "Contract end date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [procurement_type, string, procurement_type, true, "Type of procurement"]
+  - [department, string, department, true, "City department"]
 ---
 
 ## Description

@@ -1,19 +1,53 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/uzyt-m557/query.json           
-method: GET                              
-auth: inherit               
-domain: finance           
-legal_entity_type: county        
-subject_entity_type: [county, property]       
-data_tags: [ geospatial, property tax, parcel, assessment]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: assessed_values
+
+# API Configuration
+endpoint_pattern: /resource/uzyt-m557.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: year DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: finance
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [property-tax, parcel, assessment, time-series]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Assessed values 1999-present. Three stages: mailed, certified, BOR certified."
+
+# Storage Configuration
+bronze: cook_county_assessed_values
+partitions: [year]
+write_strategy: upsert
+key_columns: [pin, year, stage_name]
+date_column: null
+
+# Schema
+schema:
+  - [pin, string, pin, false, "14-digit Parcel Index Number", {transform: "zfill(14)"}]
+  - [year, int, year, false, "Assessment year"]
+  - [township_code, string, township_code, true, "Township code"]
+  - [class, string, class, true, "Property class code"]
+  - [stage_name, string, stage_name, true, "Assessment stage (mailed/certified/bor)"]
+  - [av_land, double, av_land, true, "Land assessed value", {coerce: double}]
+  - [av_bldg, double, av_bldg, true, "Building assessed value", {coerce: double}]
+  - [av_tot, double, av_tot, true, "Total assessed value", {coerce: double}]
 ---
 
 ## Description

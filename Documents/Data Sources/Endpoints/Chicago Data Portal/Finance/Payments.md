@@ -1,19 +1,51 @@
 ---
 type: api-endpoint
 provider: Chicago Data Portal
-multiple_endpoints: true
-endpoint_pattern: /api/v3/views/s4vu-giwb/query.json
+endpoint_id: payments
+
+# API Configuration
+endpoint_pattern: /resource/s4vu-giwb.json
 method: GET
+format: json
 auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
 domain: finance
 legal_entity_type: municipal
 subject_entity_tags: [municipal, corporate]
-data_tags: [spending]
+data_tags: [spending, payments, vendors]
 status: active
 update_cadence: daily
 last_verified:
 last_reviewed:
-notes:
+notes: "All vendor payments 1996-present. Pre-2002 data rolled up to 2002."
+
+# Storage Configuration
+bronze: chicago_payments
+partitions: [year]
+write_strategy: upsert
+key_columns: [voucher_number]
+date_column: check_date
+
+# Schema
+schema:
+  - [voucher_number, string, voucher_number, false, "Payment voucher number"]
+  - [vendor_name, string, vendor_name, true, "Vendor name"]
+  - [contract_number, string, contract_number, true, "Related contract number"]
+  - [amount, double, amount, true, "Payment amount", {coerce: double}]
+  - [check_date, date, check_date, true, "Payment date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [department, string, department, true, "City department"]
+  - [description, string, description, true, "Payment description"]
 ---
 
 ## Description

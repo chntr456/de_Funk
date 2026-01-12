@@ -1,19 +1,49 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern: /api/v3/views/n9it-hstw/query.json  
-method: GET                              
-auth: inherit               
-domain: public-safety             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, geographic-area]       
-data_tags: [police, geospatial, reference]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: police_beats
+
+# API Configuration
+endpoint_pattern: /resource/n9it-hstw.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: public-safety
+legal_entity_type: municipal
+subject_entity_tags: [municipal, geographic-area]
+data_tags: [police, geospatial, reference, boundaries]
+status: active
 update_cadence: irregular
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Current police beat boundaries. Historical beat boundaries available separately."
+
+# Storage Configuration
+bronze: chicago_police_beats
+partitions: []
+write_strategy: overwrite
+key_columns: [beat_num]
+date_column: null
+
+# Schema
+schema:
+  - [beat_num, string, beat_num, false, "Beat number"]
+  - [beat, string, beat, true, "Beat identifier"]
+  - [district, string, district, true, "Police district"]
+  - [sector, string, sector, true, "Sector"]
+  - [the_geom, string, the_geom, true, "GeoJSON geometry"]
 ---
 
 

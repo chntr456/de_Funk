@@ -31,24 +31,14 @@ last_verified:
 last_reviewed:
 notes: "Per capita income by Chicago community area (Census-based)"
 
-# Bronze Layer Configuration
-bronze:
-  table: chicago_per_capita_income
-  partitions: []
-  write_strategy: overwrite
-  key_columns: [community_area_number]
-  date_column: null
-  comment: "Chicago per capita income by community area"
----
+# Storage Configuration
+bronze: chicago_per_capita_income
+partitions: []
+write_strategy: overwrite
+key_columns: [community_area_number]
+date_column: null
 
-## Description
-
-Per capita income by Chicago community area. Based on Census data, updated irregularly.
-
-## Schema
-
-```yaml
-# Format: [field_name, type, source_field, nullable, description, {options}]
+# Schema
 schema:
   - [community_area_number, int, community_area_number, false, "Community area code", {coerce: long}]
   - [community_area_name, string, community_area_name, false, "Community area name"]
@@ -58,10 +48,14 @@ schema:
   - [percent_aged_25_without_high_school_diploma, double, percent_aged_25_without_high_school_diploma, true, "No HS diploma %", {coerce: double}]
   - [percent_aged_under_18_or_over_64, double, percent_aged_under_18_or_over_64, true, "Dependent age %", {coerce: double}]
   - [hardship_index, double, hardship_index, true, "Composite hardship index", {coerce: double}]
-```
+---
+
+## Description
+
+Per capita income by Chicago community area. Based on Census data, updated irregularly.
 
 ## Homelab Usage
 
 ```bash
-python -m scripts.ingest.run_chicago_ingestion --endpoint per_capita_income
+python -m scripts.ingest.run_bronze_ingestion --provider chicago --endpoints per_capita_income
 ```

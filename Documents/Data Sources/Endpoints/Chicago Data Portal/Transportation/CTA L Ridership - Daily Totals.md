@@ -1,19 +1,50 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/5neh-572f/query.json           
-method: GET                              
-auth: inherit               
-domain: transportation             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, infrustructure]       
-data_tags: [ geospatial, ridership]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: cta_l_ridership_daily
+
+# API Configuration
+endpoint_pattern: /resource/5neh-572f.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: date DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: transportation
+legal_entity_type: municipal
+subject_entity_tags: [municipal, infrastructure]
+data_tags: [transit, ridership, time-series, cta]
+status: active
 update_cadence: irregular
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Daily L station ridership since 2001. W=Weekday, A=Saturday, U=Sunday/Holiday."
+
+# Storage Configuration
+bronze: chicago_cta_l_ridership
+partitions: [year]
+write_strategy: upsert
+key_columns: [station_id, date]
+date_column: date
+
+# Schema
+schema:
+  - [station_id, string, station_id, false, "Station identifier"]
+  - [stationname, string, stationname, true, "Station name"]
+  - [date, date, date, true, "Date", {transform: "to_date(MM/dd/yyyy)"}]
+  - [daytype, string, daytype, true, "Day type (W/A/U)"]
+  - [rides, long, rides, true, "Total station entries", {coerce: long}]
 ---
 
 ## Description

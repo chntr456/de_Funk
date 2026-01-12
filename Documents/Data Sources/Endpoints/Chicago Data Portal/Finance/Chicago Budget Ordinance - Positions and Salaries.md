@@ -1,19 +1,52 @@
 ---
 type: api-endpoint
 provider: Chicago Data Portal
-multiple_endpoints: true
-endpoint_pattern: /api/v3/views/{view_id}/query.json
+endpoint_id: budget_positions_salaries
+
+# API Configuration
+endpoint_pattern: /resource/{view_id}.json
 method: GET
+format: json
 auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: [view_id]
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
 domain: finance
 legal_entity_type: municipal
 subject_entity_tags: [municipal]
-data_tags: [budget, public, annual, admin]
+data_tags: [budget, public, annual, positions, salaries]
 status: active
 update_cadence: annual
 last_verified:
 last_reviewed:
-notes:
+notes: "Multiple view_ids by year - iterate over view_id table below"
+
+# Storage Configuration
+bronze: chicago_budget_positions
+partitions: [year]
+write_strategy: upsert
+key_columns: [department_code, title_code]
+date_column: null
+
+# Schema
+schema:
+  - [year, int, _param, false, "Budget year (from view_id mapping)"]
+  - [department_code, string, department_code, true, "Department code"]
+  - [department_description, string, department_description, true, "Department name"]
+  - [title_code, string, title_code, true, "Position title code"]
+  - [title_description, string, title_description, true, "Position title"]
+  - [budgeted_unit, double, budgeted_unit, true, "Number of budgeted units", {coerce: double}]
+  - [total_budgeted_amount, double, total_budgeted_amount, true, "Total budgeted salary", {coerce: double}]
+  - [position_control, int, position_control, true, "Position control flag (1=employees, 0=hours)"]
 ---
 
 ## Description

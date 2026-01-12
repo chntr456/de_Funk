@@ -1,19 +1,57 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern: /api/v3/views/dpt3-jri9/query.json  
-method: GET                              
-auth: inherit               
-domain: public-safety             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, Individual]       
-data_tags: [police, geospatial, arrests]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: arrests
+
+# API Configuration
+endpoint_pattern: /resource/dpt3-jri9.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: arrest_date DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: public-safety
+legal_entity_type: municipal
+subject_entity_tags: [municipal, individual]
+data_tags: [police, geospatial, arrests, time-series]
+status: active
 update_cadence: daily
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Adult arrests only (18+). Up to 4 charges per record, ordered by severity."
+
+# Storage Configuration
+bronze: chicago_arrests
+partitions: [year]
+write_strategy: upsert
+key_columns: [cb_no]
+date_column: arrest_date
+
+# Schema
+schema:
+  - [cb_no, string, cb_no, false, "Central booking number"]
+  - [arrest_date, timestamp, arrest_date, true, "Date/time of arrest", {transform: "to_timestamp(yyyy-MM-dd'T'HH:mm:ss)"}]
+  - [race, string, race, true, "Race of arrestee"]
+  - [charge_1_statute, string, charge_1_statute, true, "Primary charge statute"]
+  - [charge_1_description, string, charge_1_description, true, "Primary charge description"]
+  - [charge_1_type, string, charge_1_type, true, "Primary charge type"]
+  - [charge_1_class, string, charge_1_class, true, "Primary charge class"]
+  - [beat, string, beat, true, "Police beat"]
+  - [district, string, district, true, "Police district"]
+  - [year, int, year, true, "Year of arrest"]
+  - [latitude, double, latitude, true, "Latitude"]
+  - [longitude, double, longitude, true, "Longitude"]
 ---
 
 

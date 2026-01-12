@@ -1,19 +1,52 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/csik-bsws/query.json           
-method: GET                              
-auth: inherit               
-domain: regulatory            
-legal_entity_type: housing        
-subject_entity_type: [county, property]       
-data_tags: [ geospatial, property tax, commercial, parcel, reference]
-status: active                                
-update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: commercial_valuation
+
+# API Configuration
+endpoint_pattern: /resource/csik-bsws.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: year DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: housing
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [property-tax, commercial, parcel, valuation]
+status: active
+update_cadence: yearly
+last_verified:
+last_reviewed:
+notes: "Commercial property valuation 2021-present. KeyPIN = commercial entity (may span multiple PINs)."
+
+# Storage Configuration
+bronze: cook_county_commercial_valuation
+partitions: [year]
+write_strategy: upsert
+key_columns: [keypin, year]
+date_column: null
+
+# Schema
+schema:
+  - [keypin, string, keypin, false, "14-digit key PIN (commercial entity)"]
+  - [pins, string, pins, true, "Constituent PINs (comma-separated)"]
+  - [year, int, year, false, "Valuation year"]
+  - [township_code, string, township_code, true, "Township code"]
+  - [class, string, class, true, "Property class code"]
+  - [model_group, string, model_group, true, "Valuation model group"]
+  - [total_value, double, total_value, true, "Total property value", {coerce: double}]
 ---
 
 ## Description

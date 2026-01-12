@@ -1,19 +1,50 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/ydue-e5u3/query.json           
-method: GET                              
-auth: inherit               
-domain: geospatial            
-legal_entity_type: county      
-subject_entity_type: [county, property]       
-data_tags: [ geospatial,  parcel, reference]
-status: active                                
-update_cadence: Annualy
-last_verified:              
-last_reviewed:             
-notes:                      
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: parcel_proximity
+
+# API Configuration
+endpoint_pattern: /resource/ydue-e5u3.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: geospatial
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [parcel, geospatial, proximity, reference]
+status: active
+update_cadence: yearly
+last_verified:
+last_reviewed:
+notes: "10-digit parcels with distances to spatial features. Available mostly after 2012."
+
+# Storage Configuration
+bronze: cook_county_parcel_proximity
+partitions: []
+write_strategy: overwrite
+key_columns: [pin10]
+date_column: null
+
+# Schema
+schema:
+  - [pin10, string, pin10, false, "10-digit PIN (building level)", {transform: "zfill(10)"}]
+  - [year, int, year, true, "Data year"]
+  - [dist_to_cta, double, dist_to_cta, true, "Distance to CTA station (m)", {coerce: double}]
+  - [dist_to_metra, double, dist_to_metra, true, "Distance to Metra station (m)", {coerce: double}]
+  - [dist_to_highway, double, dist_to_highway, true, "Distance to highway (m)", {coerce: double}]
+  - [dist_to_park, double, dist_to_park, true, "Distance to park (m)", {coerce: double}]
 ---
 
 ## Description

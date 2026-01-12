@@ -1,19 +1,63 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/r5kz-chrr/query.json           
-method: GET                              
-auth: inherit               
-domain: regulatory             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, facility]       
-data_tags: [licenses, geospatial]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: business_licenses
+
+# API Configuration
+endpoint_pattern: /resource/r5kz-chrr.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: date_issued DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: regulatory
+legal_entity_type: municipal
+subject_entity_tags: [municipal, facility, corporate]
+data_tags: [licenses, geospatial, time-series]
+status: active
 update_cadence: daily
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Business licenses from 2002-present. Large dataset - use CSV export."
+
+# Storage Configuration
+bronze: chicago_business_licenses
+partitions: [year]
+write_strategy: upsert
+key_columns: [id]
+date_column: date_issued
+
+# Schema
+schema:
+  - [id, string, id, false, "License record identifier"]
+  - [license_id, string, license_id, true, "License ID"]
+  - [account_number, string, account_number, true, "Account number"]
+  - [legal_name, string, legal_name, true, "Legal business name"]
+  - [doing_business_as_name, string, doing_business_as_name, true, "DBA name"]
+  - [address, string, address, true, "Business address"]
+  - [city, string, city, true, "City"]
+  - [state, string, state, true, "State"]
+  - [zip_code, string, zip_code, true, "ZIP code"]
+  - [license_code, string, license_code, true, "License code"]
+  - [license_description, string, license_description, true, "License type"]
+  - [application_type, string, application_type, true, "Application type (ISSUE/RENEW/etc.)"]
+  - [license_status, string, license_status, true, "Status (AAI/AAC/REV/REA)"]
+  - [date_issued, date, date_issued, true, "Issue date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [license_term_start_date, date, license_term_start_date, true, "Term start", {transform: "to_date(yyyy-MM-dd)"}]
+  - [license_term_expiration_date, date, expiration_date, true, "Expiration date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [latitude, double, latitude, true, "Latitude"]
+  - [longitude, double, longitude, true, "Longitude"]
 ---
 
 

@@ -1,19 +1,48 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/pcdw-pxtg/query.json           
-method: GET                              
-auth: inherit               
-domain: geospatial            
-legal_entity_type: county 
-subject_entity_type: [county, property]       
-data_tags: [ geospatial,  reference]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: neighborhood_boundaries
+
+# API Configuration
+endpoint_pattern: /resource/pcdw-pxtg.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 1000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: geospatial
+legal_entity_type: county
+subject_entity_tags: [county, geographic-area]
+data_tags: [boundaries, geospatial, reference, neighborhood]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Assessor neighborhood polygons. Represent housing submarkets, NOT Chicago community areas."
+
+# Storage Configuration
+bronze: cook_county_neighborhoods
+partitions: []
+write_strategy: overwrite
+key_columns: [neighborhood_id]
+date_column: null
+
+# Schema
+schema:
+  - [neighborhood_id, string, neighborhood_id, false, "Neighborhood identifier"]
+  - [township_code, string, township_code, true, "Township code"]
+  - [triad, string, triad, true, "Assessment triad"]
+  - [the_geom, string, the_geom, true, "GeoJSON geometry"]
 ---
 
 ## Description

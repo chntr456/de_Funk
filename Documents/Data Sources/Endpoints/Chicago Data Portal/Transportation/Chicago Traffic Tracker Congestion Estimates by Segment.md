@@ -1,19 +1,53 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: true   
-endpoint_pattern:  /api/v3/views/kf7e-cur8/query.json           
-method: GET                              
-auth: inherit               
-domain: transportation             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, infrustructure]       
-data_tags: [ geospatial, traffic]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: traffic_congestion_segments
+
+# API Configuration
+endpoint_pattern: /resource/{view_id}.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: [view_id]
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: transportation
+legal_entity_type: municipal
+subject_entity_tags: [municipal, infrastructure]
+data_tags: [traffic, geospatial, time-series, congestion]
+status: active
 update_cadence: irregular
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Traffic congestion by segment. Multiple view_ids for date ranges. 10-min updates."
+
+# Storage Configuration
+bronze: chicago_traffic_congestion
+partitions: [year]
+write_strategy: upsert
+key_columns: [segmentid, time]
+date_column: time
+
+# Schema
+schema:
+  - [segmentid, string, segmentid, false, "Segment identifier"]
+  - [street, string, street, true, "Street name"]
+  - [direction, string, direction, true, "Direction of traffic"]
+  - [from_street, string, from_street, true, "From street"]
+  - [to_street, string, to_street, true, "To street"]
+  - [length, double, length, true, "Segment length in miles", {coerce: double}]
+  - [speed, double, speed, true, "Estimated speed MPH", {coerce: double}]
+  - [time, timestamp, time, true, "Observation time", {transform: "to_timestamp(yyyy-MM-dd'T'HH:mm:ss)"}]
+  - [bus_count, int, bus_count, true, "Number of bus observations"]
 ---
 
 ## Description

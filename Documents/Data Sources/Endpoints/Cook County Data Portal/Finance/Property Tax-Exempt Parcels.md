@@ -1,19 +1,52 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/vgzx-68gb/query.json           
-method: GET                              
-auth: inherit               
-domain: finance           
-legal_entity_type: county        
-subject_entity_type: [county, property]       
-data_tags: [ geospatial, property tax, parcel]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: tax_exempt_parcels
+
+# API Configuration
+endpoint_pattern: /resource/vgzx-68gb.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: finance
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [property-tax, parcel, exempt, geospatial]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Tax-exempt parcels from Tax Year 2022+. Religious, charitable, educational, government."
+
+# Storage Configuration
+bronze: cook_county_tax_exempt
+partitions: [year]
+write_strategy: upsert
+key_columns: [pin, year]
+date_column: null
+
+# Schema
+schema:
+  - [pin, string, pin, false, "14-digit Parcel Index Number", {transform: "zfill(14)"}]
+  - [year, int, year, false, "Tax year"]
+  - [township_code, string, township_code, true, "Township code"]
+  - [class, string, class, true, "Property class code"]
+  - [exempt_type, string, exempt_type, true, "Exemption type"]
+  - [property_address, string, property_address, true, "Property address"]
+  - [latitude, double, latitude, true, "Latitude"]
+  - [longitude, double, longitude, true, "Longitude"]
 ---
 
 ## Description

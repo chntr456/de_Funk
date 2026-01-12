@@ -1,19 +1,50 @@
 ---
 type: api-endpoint
 provider: Chicago Data Portal
-multiple_endpoints: true
-endpoint_pattern: /api/v3/views/{view_id}/query.json
+endpoint_id: budget_revenue
+
+# API Configuration
+endpoint_pattern: /resource/{view_id}.json
 method: GET
+format: json
 auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: [view_id]
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
 domain: finance
 legal_entity_type: municipal
 subject_entity_tags: [municipal]
-data_tags: [budget, public, annual, taxes]
+data_tags: [budget, public, annual, revenue, taxes]
 status: active
 update_cadence: annual
 last_verified:
 last_reviewed:
-notes:
+notes: "Multiple view_ids by year - iterate over view_id table below"
+
+# Storage Configuration
+bronze: chicago_budget_revenue
+partitions: [year]
+write_strategy: upsert
+key_columns: [fund_code, revenue_source_code]
+date_column: null
+
+# Schema
+schema:
+  - [year, int, _param, false, "Budget year (from view_id mapping)"]
+  - [fund_code, string, fund_code, true, "Fund code"]
+  - [fund_description, string, fund_description, true, "Fund description"]
+  - [revenue_source_code, string, revenue_source_code, true, "Revenue source code"]
+  - [revenue_source_description, string, revenue_source_description, true, "Revenue source description"]
+  - [amount, double, amount, true, "Budgeted revenue amount", {coerce: double}]
 ---
 
 ## Description

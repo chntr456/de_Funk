@@ -1,19 +1,56 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/22u3-xenr/query.json           
-method: GET                              
-auth: inherit               
-domain: regulatory             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, property]       
-data_tags: [violation, inspection, geospatial]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: building_violations
+
+# API Configuration
+endpoint_pattern: /resource/22u3-xenr.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: violation_date DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: regulatory
+legal_entity_type: municipal
+subject_entity_tags: [municipal, property]
+data_tags: [violation, inspection, geospatial, time-series]
+status: active
 update_cadence: daily
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Building violations from 2006-present. Historical data, not for real estate transactions."
+
+# Storage Configuration
+bronze: chicago_building_violations
+partitions: [year]
+write_strategy: upsert
+key_columns: [id]
+date_column: violation_date
+
+# Schema
+schema:
+  - [id, string, id, false, "Violation identifier"]
+  - [violation_last_modified_date, date, violation_last_modified_date, true, "Last modified", {transform: "to_date(yyyy-MM-dd)"}]
+  - [violation_date, date, violation_date, true, "Violation date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [violation_code, string, violation_code, true, "Violation code"]
+  - [violation_status, string, violation_status, true, "Violation status"]
+  - [violation_description, string, violation_description, true, "Description"]
+  - [violation_location, string, violation_location, true, "Location description"]
+  - [property_group, string, property_group, true, "Property group"]
+  - [address, string, address, true, "Property address"]
+  - [latitude, double, latitude, true, "Latitude"]
+  - [longitude, double, longitude, true, "Longitude"]
 ---
 
 

@@ -1,19 +1,55 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern: /api/v3/views/z8bn-74gv/query.json   
-method: GET                              
-auth: inherit               
-domain: public-safety             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, facility]       
-data_tags: [police, geospatial, reference]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: police_stations
+
+# API Configuration
+endpoint_pattern: /resource/z8bn-74gv.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 1000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: public-safety
+legal_entity_type: municipal
+subject_entity_tags: [municipal, facility]
+data_tags: [police, geospatial, reference, facilities]
+status: active
 update_cadence: irregular
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Police district station locations and contact information."
+
+# Storage Configuration
+bronze: chicago_police_stations
+partitions: []
+write_strategy: overwrite
+key_columns: [district]
+date_column: null
+
+# Schema
+schema:
+  - [district, string, district, false, "District number"]
+  - [district_name, string, district_name, true, "District name"]
+  - [address, string, address, true, "Station address"]
+  - [city, string, city, true, "City"]
+  - [state, string, state, true, "State"]
+  - [zip, string, zip, true, "ZIP code"]
+  - [phone, string, phone, true, "Phone number"]
+  - [fax, string, fax, true, "Fax number"]
+  - [tty, string, tty, true, "TTY number"]
+  - [latitude, double, latitude, true, "Latitude"]
+  - [longitude, double, longitude, true, "Longitude"]
 ---
 
 

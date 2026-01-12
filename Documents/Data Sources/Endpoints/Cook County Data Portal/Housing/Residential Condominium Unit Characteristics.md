@@ -1,19 +1,53 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/3r7i-mrz4/query.json           
-method: GET                              
-auth: inherit               
-domain: housing           
-legal_entity_type: county     
-subject_entity_type: [county, property]       
-data_tags: [ geospatial, property tax, residential, condominium, parcel, reference]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: condo_characteristics
+
+# API Configuration
+endpoint_pattern: /resource/3r7i-mrz4.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: year DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: housing
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [property-tax, residential, condominium, parcel, reference]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Condo unit characteristics 1999-present. Unit-level data. First 10 digits = building PIN."
+
+# Storage Configuration
+bronze: cook_county_condo_chars
+partitions: [year]
+write_strategy: upsert
+key_columns: [pin, year]
+date_column: null
+
+# Schema
+schema:
+  - [pin, string, pin, false, "14-digit unit PIN", {transform: "zfill(14)"}]
+  - [year, int, year, false, "Assessment year"]
+  - [township_code, string, township_code, true, "Township code"]
+  - [class, string, class, true, "Property class code"]
+  - [pct_ownership, double, pct_ownership, true, "Percentage of ownership", {coerce: double}]
+  - [unit_sf, double, unit_sf, true, "Unit square footage", {coerce: double}]
+  - [building_sf, double, building_sf, true, "Building total SF", {coerce: double}]
+  - [num_bedrooms, int, num_bedrooms, true, "Number of bedrooms"]
 ---
 
 ## Description

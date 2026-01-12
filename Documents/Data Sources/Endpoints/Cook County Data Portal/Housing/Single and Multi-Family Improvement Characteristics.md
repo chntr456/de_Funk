@@ -1,19 +1,54 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/x54s-btds/query.json           
-method: GET                              
-auth: inherit               
-domain: housing           
-legal_entity_type: county     
-subject_entity_type: [county, property]       
-data_tags: [ geospatial, property tax, residential, family home, parcel, reference]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: residential_characteristics
+
+# API Configuration
+endpoint_pattern: /resource/x54s-btds.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: year DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: housing
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [property-tax, residential, parcel, characteristics, reference]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Single/multi-family (<7 units) characteristics 1999-present. Improvement-level (per building)."
+
+# Storage Configuration
+bronze: cook_county_residential_chars
+partitions: [year]
+write_strategy: upsert
+key_columns: [pin, year, improvement_number]
+date_column: null
+
+# Schema
+schema:
+  - [pin, string, pin, false, "14-digit Parcel Index Number", {transform: "zfill(14)"}]
+  - [year, int, year, false, "Assessment year"]
+  - [improvement_number, int, improvement_number, true, "Building number on parcel"]
+  - [township_code, string, township_code, true, "Township code"]
+  - [class, string, class, true, "Property class code"]
+  - [sf, double, sf, true, "Square footage", {coerce: double}]
+  - [num_bedrooms, int, num_bedrooms, true, "Number of bedrooms"]
+  - [num_bathrooms, double, num_bathrooms, true, "Number of bathrooms", {coerce: double}]
+  - [year_built, int, year_built, true, "Year built"]
 ---
 
 ## Description

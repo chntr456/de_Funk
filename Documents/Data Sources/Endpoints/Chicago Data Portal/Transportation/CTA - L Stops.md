@@ -1,19 +1,60 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/8pix-ypme/query.json           
-method: GET                              
-auth: inherit               
-domain: transportation             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, infrustructure]       
-data_tags: [ geospatial, reference]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: cta_l_stops
+
+# API Configuration
+endpoint_pattern: /resource/8pix-ypme.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 1000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: transportation
+legal_entity_type: municipal
+subject_entity_tags: [municipal, infrastructure]
+data_tags: [transit, geospatial, reference, cta, rail]
+status: active
 update_cadence: irregular
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "L stop locations with station names and service availability."
+
+# Storage Configuration
+bronze: chicago_cta_l_stops
+partitions: []
+write_strategy: overwrite
+key_columns: [stop_id]
+date_column: null
+
+# Schema
+schema:
+  - [stop_id, string, stop_id, false, "Stop identifier"]
+  - [stop_name, string, stop_name, true, "Stop name"]
+  - [station_name, string, station_name, true, "Station name"]
+  - [station_descriptive_name, string, station_descriptive_name, true, "Full station description"]
+  - [map_id, string, map_id, true, "Map identifier"]
+  - [ada, boolean, ada, true, "ADA accessible"]
+  - [red, boolean, red, true, "Serves Red Line"]
+  - [blue, boolean, blue, true, "Serves Blue Line"]
+  - [green, boolean, g, true, "Serves Green Line"]
+  - [brown, boolean, brn, true, "Serves Brown Line"]
+  - [purple, boolean, p, true, "Serves Purple Line"]
+  - [pink, boolean, pnk, true, "Serves Pink Line"]
+  - [orange, boolean, o, true, "Serves Orange Line"]
+  - [yellow, boolean, y, true, "Serves Yellow Line"]
+  - [latitude, double, latitude, true, "Latitude"]
+  - [longitude, double, longitude, true, "Longitude"]
 ---
 
 ## Description

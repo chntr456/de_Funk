@@ -1,19 +1,63 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern: /api/v3/views/ijzp-q8t2/query.json  
-method: GET                              
-auth: inherit               
-domain: public-safety             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, Individual]       
-data_tags: [police, geospatial, crimes]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: crimes
+
+# API Configuration
+endpoint_pattern: /resource/ijzp-q8t2.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: date DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: public-safety
+legal_entity_type: municipal
+subject_entity_tags: [municipal, individual]
+data_tags: [police, geospatial, crimes, time-series]
+status: active
 update_cadence: daily
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Crime incidents 2001-present, minus most recent 7 days. Block-level only."
+
+# Storage Configuration
+bronze: chicago_crimes
+partitions: [year]
+write_strategy: upsert
+key_columns: [id]
+date_column: date
+
+# Schema
+schema:
+  - [id, string, id, false, "Unique crime identifier"]
+  - [case_number, string, case_number, true, "CPD case number"]
+  - [date, timestamp, date, true, "Date/time of incident", {transform: "to_timestamp(yyyy-MM-dd'T'HH:mm:ss)"}]
+  - [block, string, block, true, "Block-level address"]
+  - [iucr, string, iucr, true, "Illinois Uniform Crime Reporting code"]
+  - [primary_type, string, primary_type, true, "Primary crime type"]
+  - [description, string, description, true, "Crime description"]
+  - [location_description, string, location_description, true, "Location type"]
+  - [arrest, boolean, arrest, true, "Whether arrest was made"]
+  - [domestic, boolean, domestic, true, "Whether domestic-related"]
+  - [beat, string, beat, true, "Police beat"]
+  - [district, string, district, true, "Police district"]
+  - [ward, int, ward, true, "City ward"]
+  - [community_area, int, community_area, true, "Community area number"]
+  - [fbi_code, string, fbi_code, true, "FBI crime code"]
+  - [year, int, year, true, "Year of incident"]
+  - [latitude, double, latitude, true, "Latitude"]
+  - [longitude, double, longitude, true, "Longitude"]
 ---
 
 

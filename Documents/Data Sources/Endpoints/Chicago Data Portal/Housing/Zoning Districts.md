@@ -1,19 +1,48 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/dj47-wfun/query.json          
-method: GET                              
-auth: inherit               
-domain: housing               
-legal_entity_type: municipal          
-subject_entity_type: [municipal, geographic-area]       
-data_tags: [regulatory, geospatial]
-status: active                                
-update_cadence: irregularly
-last_verified:              
-last_reviewed:             
-notes:                      
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: zoning_districts
+
+# API Configuration
+endpoint_pattern: /resource/dj47-wfun.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: housing
+legal_entity_type: municipal
+subject_entity_tags: [municipal, geographic-area]
+data_tags: [regulatory, geospatial, zoning, boundaries]
+status: active
+update_cadence: irregular
+last_verified:
+last_reviewed:
+notes: "Zoning district boundaries based on Chicago Zoning Ordinance."
+
+# Storage Configuration
+bronze: chicago_zoning_districts
+partitions: []
+write_strategy: overwrite
+key_columns: [zone_type, zone_class]
+date_column: null
+
+# Schema
+schema:
+  - [zone_type, string, zone_type, false, "Zoning type"]
+  - [zone_class, string, zone_class, true, "Zoning classification"]
+  - [ordinance_date, date, ordinance_date, true, "Ordinance date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [the_geom, string, the_geom, true, "GeoJSON geometry"]
 ---
 
 

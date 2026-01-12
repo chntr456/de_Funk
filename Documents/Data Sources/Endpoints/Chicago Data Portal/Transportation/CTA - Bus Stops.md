@@ -1,19 +1,49 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints:
-endpoint_pattern:            
-method:                               
-auth:             
-domain: transportation             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, infrustructure]       
-data_tags: [ geospatial, reference]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: cta_bus_stops
+
+# API Configuration
+endpoint_pattern: /resource/84eu-buny.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: transportation
+legal_entity_type: municipal
+subject_entity_tags: [municipal, infrastructure]
+data_tags: [transit, geospatial, reference, cta, bus]
+status: active
 update_cadence: irregular
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "11,000+ CTA bus stops. Stop ID used for Bus Tracker. Also available as KMZ."
+
+# Storage Configuration
+bronze: chicago_cta_bus_stops
+partitions: []
+write_strategy: overwrite
+key_columns: [stop_id]
+date_column: null
+
+# Schema
+schema:
+  - [stop_id, string, stop_id, false, "Stop identifier"]
+  - [stop_name, string, stop_name, true, "Stop name"]
+  - [routes, string, routes, true, "Routes serving this stop"]
+  - [latitude, double, latitude, true, "Latitude"]
+  - [longitude, double, longitude, true, "Longitude"]
 ---
 
 ## Description

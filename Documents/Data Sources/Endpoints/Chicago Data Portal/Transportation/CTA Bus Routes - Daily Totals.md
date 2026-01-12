@@ -1,19 +1,50 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/jyb9-n7fm/query.json           
-method: GET                              
-auth: inherit               
-domain: transportation             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, infrustructure]       
-data_tags: [ geospatial, ridership]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: cta_bus_ridership_daily
+
+# API Configuration
+endpoint_pattern: /resource/jyb9-n7fm.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: date DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: transportation
+legal_entity_type: municipal
+subject_entity_tags: [municipal, infrastructure]
+data_tags: [transit, ridership, time-series, cta, bus]
+status: active
 update_cadence: irregular
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Daily bus ridership by route since 2001. W=Weekday, A=Saturday, U=Sunday/Holiday."
+
+# Storage Configuration
+bronze: chicago_cta_bus_ridership
+partitions: [year]
+write_strategy: upsert
+key_columns: [route, date]
+date_column: date
+
+# Schema
+schema:
+  - [route, string, route, false, "Route number"]
+  - [routename, string, routename, true, "Route name"]
+  - [date, date, date, true, "Date", {transform: "to_date(MM/dd/yyyy)"}]
+  - [daytype, string, daytype, true, "Day type (W/A/U)"]
+  - [rides, long, rides, true, "Total boardings", {coerce: long}]
 ---
 
 ## Description

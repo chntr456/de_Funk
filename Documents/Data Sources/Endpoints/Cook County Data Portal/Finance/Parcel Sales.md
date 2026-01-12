@@ -1,19 +1,55 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/wvhk-k5uv/query.json           
-method: GET                              
-auth: inherit               
-domain: finance           
-legal_entity_type: county        
-subject_entity_type: [county, property]       
-data_tags: [ geospatial, property tax, parcel, sales]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: parcel_sales
+
+# API Configuration
+endpoint_pattern: /resource/wvhk-k5uv.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: sale_date DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: finance
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [property-tax, parcel, sales, time-series]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Parcel sales 1999-present. PIN must be zero-padded to 14 digits."
+
+# Storage Configuration
+bronze: cook_county_parcel_sales
+partitions: [year]
+write_strategy: upsert
+key_columns: [pin, sale_document_num]
+date_column: sale_date
+
+# Schema
+schema:
+  - [pin, string, pin, false, "14-digit Parcel Index Number", {transform: "zfill(14)"}]
+  - [year, int, year, true, "Sale year"]
+  - [township_code, string, township_code, true, "Township code"]
+  - [class, string, class, true, "Property class code"]
+  - [sale_date, date, sale_date, true, "Sale date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [sale_price, double, sale_price, true, "Sale price", {coerce: double}]
+  - [sale_document_num, string, sale_document_num, true, "Clerk document number"]
+  - [deed_type, string, deed_type, true, "Deed type"]
+  - [seller_name, string, seller_name, true, "Seller name"]
+  - [buyer_name, string, buyer_name, true, "Buyer name"]
 ---
 
 ## Description

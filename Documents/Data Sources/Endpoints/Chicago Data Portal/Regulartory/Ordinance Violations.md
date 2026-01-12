@@ -1,19 +1,57 @@
 ---
-type: api-endpoint          
-provider: Chicago Data Portal                  
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/22u3-xenr/query.json           
-method: GET                              
-auth: inherit               
-domain: regulatory             
-legal_entity_type: municipal          
-subject_entity_type: [municipal, property]       
-data_tags: [violation, ordinance, geospatial]
-status: active                                
+type: api-endpoint
+provider: Chicago Data Portal
+endpoint_id: ordinance_violations
+
+# API Configuration
+endpoint_pattern: /resource/6br9-quuz.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: violation_date DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: regulatory
+legal_entity_type: municipal
+subject_entity_tags: [municipal, property]
+data_tags: [violation, ordinance, geospatial, time-series, administrative]
+status: active
 update_cadence: daily
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Ordinance violations filed with Dept of Administrative Hearings. Currently includes Dept of Buildings violations."
+
+# Storage Configuration
+bronze: chicago_ordinance_violations
+partitions: [year]
+write_strategy: upsert
+key_columns: [case_id, violation_code]
+date_column: violation_date
+
+# Schema
+schema:
+  - [case_id, string, case_id, false, "Case identifier"]
+  - [case_number, string, case_number, true, "Case number"]
+  - [violation_code, string, violation_code, true, "Violation code"]
+  - [violation_description, string, violation_description, true, "Violation description"]
+  - [violation_date, date, violation_date, true, "Violation date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [respondent, string, respondent, true, "Respondent (pipe-separated if multiple)"]
+  - [address, string, address, true, "Property address"]
+  - [disposition, string, disposition, true, "Case disposition"]
+  - [disposition_date, date, disposition_date, true, "Disposition date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [fine_amount, double, fine_amount, true, "Fine amount", {coerce: double}]
+  - [latitude, double, latitude, true, "Latitude"]
+  - [longitude, double, longitude, true, "Longitude"]
 ---
 
 ## Description

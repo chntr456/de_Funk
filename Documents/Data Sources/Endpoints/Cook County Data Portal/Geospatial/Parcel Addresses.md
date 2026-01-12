@@ -1,19 +1,53 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/3723-97qp/query.json           
-method: GET                              
-auth: inherit               
-domain: geospatial            
-legal_entity_type: county       
-subject_entity_type: [county, property]       
-data_tags: [ geospatial,  parcel, reference]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: parcel_addresses
+
+# API Configuration
+endpoint_pattern: /resource/3723-97qp.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: geospatial
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [parcel, address, reference]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Situs and mailing addresses. WARNING: Mailing addresses not updated since 2017."
+
+# Storage Configuration
+bronze: cook_county_parcel_addresses
+partitions: [year]
+write_strategy: upsert
+key_columns: [pin, year]
+date_column: null
+
+# Schema
+schema:
+  - [pin, string, pin, false, "14-digit Parcel Index Number", {transform: "zfill(14)"}]
+  - [year, int, year, false, "Tax year"]
+  - [property_address, string, property_address, true, "Situs address"]
+  - [property_city, string, property_city, true, "City"]
+  - [property_zip, string, property_zip, true, "ZIP code"]
+  - [mailing_address, string, mailing_address, true, "Mailing address (may be outdated)"]
+  - [mailing_city, string, mailing_city, true, "Mailing city"]
+  - [mailing_state, string, mailing_state, true, "Mailing state"]
+  - [mailing_zip, string, mailing_zip, true, "Mailing ZIP"]
 ---
 
 ## Description

@@ -1,19 +1,53 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/y282-6ig3/query.json           
-method: GET                              
-auth: inherit               
-domain: regulatory            
-legal_entity_type: county        
-subject_entity_type: [county, property]       
-data_tags: [ geospatial, appeals, parcel]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: assessor_appeals
+
+# API Configuration
+endpoint_pattern: /resource/y282-6ig3.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: year DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: regulatory
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [appeals, parcel, assessment, time-series]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Assessor appeals 1999-present with pre/post values. Includes open appeals."
+
+# Storage Configuration
+bronze: cook_county_appeals
+partitions: [year]
+write_strategy: upsert
+key_columns: [pin, year]
+date_column: null
+
+# Schema
+schema:
+  - [pin, string, pin, false, "14-digit Parcel Index Number", {transform: "zfill(14)"}]
+  - [year, int, year, false, "Assessment year"]
+  - [township_code, string, township_code, true, "Township code"]
+  - [class, string, class, true, "Property class code"]
+  - [mailed_tot, double, mailed_tot, true, "Mailed total AV", {coerce: double}]
+  - [certified_tot, double, certified_tot, true, "Certified total AV", {coerce: double}]
+  - [change, string, change, true, "Change/no change decision"]
+  - [reason, string, reason, true, "Appeal reason"]
 ---
 
 ## Description

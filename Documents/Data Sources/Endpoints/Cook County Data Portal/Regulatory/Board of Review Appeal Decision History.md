@@ -1,19 +1,53 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/7pny-nedm/query.json           
-method: GET                              
-auth: inherit               
-domain: regulatory            
-legal_entity_type: county        
-subject_entity_type: [county, property]       
-data_tags: [ geospatial, appeals, parcel, board of review]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: bor_appeal_decisions
+
+# API Configuration
+endpoint_pattern: /resource/7pny-nedm.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: year DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: regulatory
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [appeals, parcel, board-of-review, time-series]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Board of Review appeal decisions 2010-present. Final stage of appeal process."
+
+# Storage Configuration
+bronze: cook_county_bor_appeals
+partitions: [year]
+write_strategy: upsert
+key_columns: [pin, year]
+date_column: null
+
+# Schema
+schema:
+  - [pin, string, pin, false, "14-digit Parcel Index Number", {transform: "zfill(14)"}]
+  - [year, int, year, false, "Tax year"]
+  - [township_code, string, township_code, true, "Township code"]
+  - [class, string, class, true, "Property class code"]
+  - [assessor_tot, double, assessor_tot, true, "Assessor certified total AV", {coerce: double}]
+  - [bor_tot, double, bor_tot, true, "BOR certified total AV", {coerce: double}]
+  - [change_reason, string, change_reason, true, "Reason for change (2015+)"]
+  - [no_change_reason, string, no_change_reason, true, "Reason for no change (2015+)"]
 ---
 
 ## Description

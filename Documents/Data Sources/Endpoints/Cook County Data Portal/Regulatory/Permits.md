@@ -1,19 +1,53 @@
 ---
-type: api-endpoint          
-provider: Cook County Data Portal                 
-multiple_endpoints: false   
-endpoint_pattern:  /api/v3/views/6yjf-dfxs/query.json           
-method: GET                              
-auth: inherit               
-domain: regulatory            
-legal_entity_type: county        
-subject_entity_type: [county, property]       
-data_tags: [ geospatial, permit, parcel]
-status: active                                
+type: api-endpoint
+provider: Cook County Data Portal
+endpoint_id: permits
+
+# API Configuration
+endpoint_pattern: /resource/6yjf-dfxs.json
+method: GET
+format: json
+auth: inherit
+response_key: null
+
+# Query Parameters
+default_query:
+  $limit: 50000
+  $order: date_issued DESC
+required_params: []
+
+# Pagination
+pagination_type: offset
+bulk_download: true
+
+# Metadata
+domain: regulatory
+legal_entity_type: county
+subject_entity_tags: [county, property]
+data_tags: [permits, parcel, construction, time-series]
+status: active
 update_cadence: monthly
-last_verified:              
-last_reviewed:             
-notes:                      
+last_verified:
+last_reviewed:
+notes: "Historical permit data from municipalities. Includes open/pending permits."
+
+# Storage Configuration
+bronze: cook_county_permits
+partitions: [year]
+write_strategy: upsert
+key_columns: [pin, permit_number, date_issued]
+date_column: date_issued
+
+# Schema
+schema:
+  - [pin, string, pin, false, "14-digit Parcel Index Number", {transform: "zfill(14)"}]
+  - [permit_number, string, permit_number, true, "Permit number"]
+  - [date_issued, date, date_issued, true, "Issue date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [date_submitted, date, date_submitted, true, "Submission date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [work_description, string, work_description, true, "Work description"]
+  - [permit_amount, double, permit_amount, true, "Permit amount", {coerce: double}]
+  - [job_code, string, job_code, true, "Job code"]
+  - [status, string, status, true, "Permit status (open/closed)"]
 ---
 
 ## Description
