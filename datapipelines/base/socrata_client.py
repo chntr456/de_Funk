@@ -85,24 +85,15 @@ class SocrataClient:
             "Accept": "application/json",
             "Content-Type": "application/json"
         }
-        # Require valid app token - fail loudly if missing/invalid
-        # This ensures we catch token configuration issues early
-        if not app_token or not isinstance(app_token, str) or len(app_token.strip()) == 0:
-            raise ValueError(
-                f"Valid Socrata app token required for {base_url}. "
-                f"Set CHICAGO_API_KEYS or COOK_COUNTY_API_KEYS in .env file."
-            )
 
-        # Validate token format (Socrata tokens are typically alphanumeric)
-        token = app_token.strip()
-        if len(token) < 10:
-            raise ValueError(
-                f"Socrata app token appears invalid (too short): '{token[:4]}...'. "
-                f"Check CHICAGO_API_KEYS or COOK_COUNTY_API_KEYS in .env file."
-            )
-
-        self.headers["X-App-Token"] = token
-        logger.info(f"SocrataClient configured with app token: {token[:4]}...{token[-4:]}")
+        # Token is optional - Socrata works without it (just slower: ~1 req/sec)
+        if app_token and isinstance(app_token, str) and len(app_token.strip()) >= 10:
+            self.headers["X-App-Token"] = app_token.strip()
+            logger.info(f"SocrataClient: using app token ({app_token[:4]}...)")
+        else:
+            # No token - throttle to 1 req/sec to avoid rate limits
+            self.rate_limit = 1.0
+            logger.info("SocrataClient: no token, using throttled rate (1 req/sec)")
 
         logger.debug(
             f"SocrataClient initialized: base_url={base_url}, "

@@ -493,19 +493,16 @@ for provider_name in bulk_providers:
         logger.warning(f'Could not load config for {provider_name} - skipping')
         continue
 
-    # Load API keys from environment - FAIL if not found
+    # Load API keys from environment (optional - works without, just slower)
     env_key = f'{provider_name.upper()}_API_KEYS'
     api_keys_str = os.environ.get(env_key, '')
     api_keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
 
-    if not api_keys:
-        raise ValueError(
-            f'API key required for {provider_name}. '
-            f'Set {env_key} in .env file or environment. '
-            f'Example: {env_key}=your_app_token_here'
-        )
+    if api_keys:
+        logger.info(f'{provider_name}: Found API key ({api_keys[0][:4]}...)')
+    else:
+        logger.warning(f'{provider_name}: No {env_key} - using throttled rate (1 req/sec)')
 
-    logger.info(f'{provider_name}: Found API key ({api_keys[0][:4]}...{api_keys[0][-4:]})')
     api_cfg['credentials'] = {'api_keys': api_keys}
 
     # Create provider
