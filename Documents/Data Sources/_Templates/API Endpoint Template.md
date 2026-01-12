@@ -31,25 +31,18 @@ last_reviewed:
 notes:
 
 # ============================================
-# BRONZE LAYER CONFIGURATION
+# STORAGE CONFIGURATION
 # (Replaces storage.json entries for this endpoint)
 # ============================================
-bronze:
-  table:                                # Bronze table name (e.g., "company_reference")
-  partitions: []                        # Partition columns (e.g., [asset_type])
-  write_strategy: upsert                # upsert | append | overwrite
-  key_columns: []                       # Primary key columns for upsert (e.g., [ticker])
-  date_column:                          # Date column for incremental loads
-  comment:                              # Description of this bronze table
----
+bronze:                                 # Bronze table name (e.g., "company_reference")
+partitions: []                          # Partition columns (e.g., [asset_type])
+write_strategy: upsert                  # upsert | append | overwrite
+key_columns: []                         # Primary key columns for upsert (e.g., [ticker])
+date_column:                            # Date column for incremental loads
 
-## Description
-
-What data this endpoint returns.
-
-## Schema
-
-```yaml
+# ============================================
+# SCHEMA DEFINITION
+# ============================================
 # Format: [field_name, type, source_field, nullable, description, {options}]
 #
 # Basic format: [name, type, source, nullable, description]
@@ -86,7 +79,11 @@ schema:
 
   # Generated with default
   - [is_active, boolean, _generated, false, "Active status", {default: true}]
-```
+---
+
+## Description
+
+What data this endpoint returns.
 
 ## Request Notes
 
