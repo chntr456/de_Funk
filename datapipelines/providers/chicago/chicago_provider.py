@@ -273,21 +273,23 @@ class ChicagoProvider:
         df = self.spark.createDataFrame(transformed_records, string_schema)
 
         # Now cast columns to target types
-        type_map = {
-            'string': 'string',
-            'int': 'int',
-            'long': 'long',
-            'double': 'double',
-            'float': 'double',
-            'boolean': 'boolean',
-            'date': 'date',
-            'timestamp': 'timestamp',
-        }
-
+        # Note: For int/long, cast to double first to handle "2025.0" style values
         for field_def in endpoint.schema:
-            target_type = type_map.get(field_def.type.lower(), 'string')
-            if target_type != 'string':
-                df = df.withColumn(field_def.name, F.col(field_def.name).cast(target_type))
+            target_type = field_def.type.lower()
+            if target_type == 'string':
+                continue
+            elif target_type in ('int', 'long'):
+                # Cast string -> double -> int to handle "2025.0" format
+                df = df.withColumn(field_def.name,
+                    F.col(field_def.name).cast('double').cast(target_type))
+            elif target_type in ('double', 'float'):
+                df = df.withColumn(field_def.name, F.col(field_def.name).cast('double'))
+            elif target_type == 'date':
+                df = df.withColumn(field_def.name, F.col(field_def.name).cast('date'))
+            elif target_type == 'timestamp':
+                df = df.withColumn(field_def.name, F.col(field_def.name).cast('timestamp'))
+            elif target_type == 'boolean':
+                df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
 
         return df
 
