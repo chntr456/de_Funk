@@ -199,13 +199,19 @@ logger.info('Testing task: seed tickers')
 from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 from datapipelines.ingestors.bronze_sink import BronzeSink
 from orchestration.common.spark_session import get_spark
+from config.markdown_loader import get_markdown_loader
+from pathlib import Path
 import json
-
-# Load config
-with open('$REPO_ROOT/configs/pipelines/alpha_vantage_endpoints.json') as f:
-    av_config = json.load(f)
-# Load API keys from environment variable
 import os
+
+# Load config from markdown (v2.6)
+loader = get_markdown_loader(Path('$REPO_ROOT'))
+av_config = loader.get_provider_config('alpha_vantage')
+if not av_config:
+    logger.error('Could not load Alpha Vantage config from markdown')
+    sys.exit(1)
+
+# Load API keys from environment variable
 api_keys_str = os.environ.get('ALPHA_VANTAGE_API_KEYS', '')
 api_keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
 if not api_keys:
@@ -272,16 +278,22 @@ from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_
 from datapipelines.base.ingestor_engine import IngestorEngine
 from datapipelines.base.provider import DataType
 from orchestration.common.spark_session import get_spark
+from config.markdown_loader import get_markdown_loader
+from pathlib import Path
 import json
+import os
 
-# Load configs
-with open('$REPO_ROOT/configs/pipelines/alpha_vantage_endpoints.json') as f:
-    av_config = json.load(f)
+# Load configs from markdown (v2.6)
+loader = get_markdown_loader(Path('$REPO_ROOT'))
+av_config = loader.get_provider_config('alpha_vantage')
+if not av_config:
+    logger.error('Could not load Alpha Vantage config from markdown')
+    sys.exit(1)
+
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     run_config = json.load(f)
 
 # Load API keys from environment variable
-import os
 api_keys_str = os.environ.get('ALPHA_VANTAGE_API_KEYS', '')
 api_keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
 if not api_keys:
