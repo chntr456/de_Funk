@@ -162,6 +162,8 @@ class ModelWriter:
 
             row_count = df.count()
             writer = df.write.mode(mode).format(format)
+            if format == "delta":
+                writer = writer.option("overwriteSchema", "true")
             if partition_by and name in partition_by:
                 writer = writer.partitionBy(partition_by[name])
 
@@ -193,6 +195,8 @@ class ModelWriter:
                 self._print(f"    Estimated time: {est_minutes:.1f} min (large dataset)")
 
             writer = df.write.mode(mode).format(format)
+            if format == "delta":
+                writer = writer.option("overwriteSchema", "true")
             if partition_by and name in partition_by:
                 writer = writer.partitionBy(partition_by[name])
                 self._print(f"    Partitioning by: {partition_by[name]}")
