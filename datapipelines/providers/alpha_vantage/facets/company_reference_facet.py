@@ -41,8 +41,8 @@ class CompanyReferenceFacet(AlphaVantageFacet):
 
     name = "company_reference"
 
-    # Load schema from configs/schemas/alpha_vantage.yaml
-    INPUT_SCHEMA_KEY = "overview"
+    # Load schema from markdown endpoint file (v2.6)
+    ENDPOINT_ID = "company_overview"
 
     # Company-specific fields from OVERVIEW
     FINAL_COLUMNS = [

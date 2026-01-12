@@ -1,19 +1,20 @@
 """
 SchemaLoader - Load Spark schemas from YAML configuration files.
 
-This module centralizes schema definitions for data pipelines, preventing
-CANNOT_DETERMINE_TYPE errors by providing explicit schemas for all DataFrames.
+DEPRECATED (v2.6): This module is superseded by markdown-driven schemas.
+Facets should now use ENDPOINT_ID to load schemas from markdown endpoint files:
 
-Usage:
-    from config.schema_loader import SchemaLoader
-
-    # Load a schema
-    schema = SchemaLoader.load("alpha_vantage", "overview")
-    df = spark.createDataFrame(rows, schema=schema)
-
-    # Or use in facets via INPUT_SCHEMA_KEY
     class MyFacet(AlphaVantageFacet):
-        INPUT_SCHEMA_KEY = "overview"
+        ENDPOINT_ID = "income_statement"  # Loads from Documents/Data Sources/Endpoints/
+
+The markdown approach provides:
+- Field mappings (source -> output)
+- Coercion rules (type conversion)
+- Computed field expressions
+- Transform specifications
+
+This module is kept for backwards compatibility with any legacy code that
+may still reference configs/schemas/*.yaml files.
 """
 from __future__ import annotations
 

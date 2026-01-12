@@ -41,8 +41,8 @@ class SecuritiesReferenceFacetAV(AlphaVantageFacet):
 
     name = "securities_reference"
 
-    # Load schema from configs/schemas/alpha_vantage.yaml
-    INPUT_SCHEMA_KEY = "overview"
+    # Load schema from markdown endpoint file (v2.6)
+    ENDPOINT_ID = "company_overview"
 
     # Numeric coercion for Alpha Vantage response
     NUMERIC_COERCE = {
