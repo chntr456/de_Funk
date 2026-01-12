@@ -48,6 +48,7 @@ WITH_FINANCIALS=false  # Skip financials by default (saves API calls)
 WITH_REFERENCE=false   # Skip reference by default (seed has basic info, only need for market_cap)
 STORAGE_PATH=""
 RUN_LOCAL=false
+BULK_PROVIDERS=""
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -390,6 +391,127 @@ spark.stop()
 fi
 
 # ==============================================================================
+# Task 2b: Chicago/Cook County Ingestion (Bulk Providers)
+# ==============================================================================
+if [ "$SKIP_INGEST" = false ]; then
+    # Check if bulk providers are enabled in run_config.json
+    BULK_PROVIDERS=$(python3 -c "
+import json
+with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
+    cfg = json.load(f)
+providers = cfg.get('providers', {})
+enabled = []
+if providers.get('chicago', {}).get('enabled'):
+    enabled.append('chicago')
+if providers.get('cook_county', {}).get('enabled'):
+    enabled.append('cook_county')
+print(' '.join(enabled))
+" 2>/dev/null || echo "")
+
+    if [ -n "$BULK_PROVIDERS" ]; then
+        echo -e "${BLUE}============================================================${NC}"
+        echo -e "${BLUE}Testing task: bulk provider ingestion (Chicago/Cook County)${NC}"
+        echo -e "${BLUE}============================================================${NC}"
+        echo -e "Enabled providers: ${GREEN}$BULK_PROVIDERS${NC}"
+
+        python -c "
+import sys
+sys.path.insert(0, '$REPO_ROOT')
+
+from config.logging import setup_logging, get_logger
+setup_logging()
+logger = get_logger('test_pipeline')
+
+logger.info('Testing task: bulk provider ingestion')
+
+# Import components
+from datapipelines.base.ingestor_engine import create_engine
+from orchestration.common.spark_session import get_spark
+from config.markdown_loader import get_markdown_loader
+from pathlib import Path
+import json
+import os
+
+# Load configs
+loader = get_markdown_loader(Path('$REPO_ROOT'))
+
+with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
+    run_config = json.load(f)
+
+with open('$REPO_ROOT/configs/storage.json') as f:
+    storage_cfg = json.load(f)
+
+# Get storage path
+storage_path = '${STORAGE_PATH:-/shared/storage}'
+storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in storage_cfg['roots'].items()}
+
+logger.info(f'Storage path: {storage_path}')
+
+# Initialize Spark
+spark = get_spark(app_name='test_pipeline_bulk')
+
+# Docs path for markdown loader
+docs_path = Path('$REPO_ROOT/Documents')
+
+# Run each enabled bulk provider
+bulk_providers = '$BULK_PROVIDERS'.split()
+for provider_name in bulk_providers:
+    provider_cfg = run_config.get('providers', {}).get(provider_name, {})
+    if not provider_cfg.get('enabled'):
+        continue
+
+    logger.info(f'Processing provider: {provider_name}')
+
+    # Get API config from markdown
+    api_cfg = loader.get_provider_config(provider_name.replace('_', ' ').title().replace(' ', '_').lower())
+    if not api_cfg:
+        # Try alternate name format
+        api_cfg = loader.get_provider_config(provider_name)
+
+    if not api_cfg:
+        logger.warning(f'Could not load config for {provider_name} - skipping')
+        continue
+
+    # Load API keys from environment
+    env_key = f'{provider_name.upper()}_API_KEYS'
+    api_keys_str = os.environ.get(env_key, '')
+    api_keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
+    api_cfg['credentials'] = {'api_keys': api_keys}
+
+    # Create provider
+    provider = create_engine(provider_name, api_cfg, storage_cfg, spark, docs_path)
+
+    # Get endpoints to ingest from run_config
+    endpoints = provider_cfg.get('endpoints', [])
+    max_records = run_config.get('profiles', {}).get('${PROFILE}', {}).get('max_records_per_endpoint', 10000)
+
+    if endpoints:
+        logger.info(f'Ingesting endpoints: {endpoints}')
+        results = provider.ingest_all(endpoint_ids=endpoints, max_records_per_endpoint=max_records)
+    else:
+        logger.info(f'Ingesting all active endpoints (max {max_records} records each)')
+        results = provider.ingest_all(max_records_per_endpoint=max_records)
+
+    # Summary
+    success_count = sum(1 for r in results.values() if r.success)
+    total_records = sum(r.record_count for r in results.values() if r.success)
+    logger.info(f'{provider_name}: {success_count}/{len(results)} endpoints, {total_records} total records')
+
+spark.stop()
+logger.info('Bulk provider ingestion complete')
+"
+
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✓ Bulk provider ingestion completed${NC}"
+        else
+            echo -e "${RED}✗ Bulk provider ingestion failed${NC}"
+            exit 1
+        fi
+        echo ""
+    fi
+fi
+
+# ==============================================================================
 # Task 3: Silver Build
 # ==============================================================================
 if [ "$SKIP_SILVER" = false ]; then
@@ -420,7 +542,8 @@ echo -e "${BLUE}============================================================${NC
 echo ""
 echo "Results:"
 [ "$SKIP_SEED" = false ] && echo "  ✓ Tickers seeded"
-[ "$SKIP_INGEST" = false ] && echo "  ✓ Bronze data ingested (prices, reference$([ "$WITH_FINANCIALS" = true ] && echo ', financials'))"
+[ "$SKIP_INGEST" = false ] && echo "  ✓ Bronze data ingested (Alpha Vantage: prices$([ "$WITH_FINANCIALS" = true ] && echo ', financials'))"
+[ "$SKIP_INGEST" = false ] && [ -n "$BULK_PROVIDERS" ] && echo "  ✓ Bulk providers ingested ($BULK_PROVIDERS)"
 [ "$SKIP_SILVER" = false ] && echo "  ✓ Silver models built"
 [ "$SKIP_SILVER" = true ] && echo "  ○ Silver build skipped (--skip-silver)"
 echo ""
