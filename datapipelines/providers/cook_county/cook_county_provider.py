@@ -257,42 +257,38 @@ class CookCountyProvider:
         if not endpoint.schema:
             return self.spark.createDataFrame(records, samplingRatio=1.0)
 
-        # Build schema from endpoint config
-        type_map = {
-            'string': StringType(),
-            'int': IntegerType(),
-            'long': LongType(),
-            'double': DoubleType(),
-            'float': DoubleType(),
-            'boolean': BooleanType(),
-            'date': DateType(),
-            'timestamp': TimestampType(),
-        }
-
-        fields = []
-        for field_def in endpoint.schema:
-            spark_type = type_map.get(field_def.type.lower(), StringType())
-            fields.append(StructField(field_def.name, spark_type, field_def.nullable))
-
-        schema = StructType(fields)
-
-        # Map source fields to target fields
+        # Map source fields to target fields (keep as strings initially)
         transformed_records = []
         for record in records:
             transformed = {}
             for field_def in endpoint.schema:
                 source_val = record.get(field_def.source)
-
-                # Apply coercion if specified
-                if source_val is not None and field_def.coerce:
-                    source_val = self._coerce_value(source_val, field_def.coerce)
-
-                transformed[field_def.name] = source_val
-
+                # Keep as string - we'll cast after DataFrame creation
+                transformed[field_def.name] = str(source_val) if source_val is not None else None
             transformed_records.append(transformed)
 
-        # Create DataFrame
-        df = self.spark.createDataFrame(transformed_records, schema)
+        # Create DataFrame with all strings first (Socrata returns strings)
+        string_schema = StructType([
+            StructField(f.name, StringType(), True) for f in endpoint.schema
+        ])
+        df = self.spark.createDataFrame(transformed_records, string_schema)
+
+        # Now cast columns to target types
+        type_map = {
+            'string': 'string',
+            'int': 'int',
+            'long': 'long',
+            'double': 'double',
+            'float': 'double',
+            'boolean': 'boolean',
+            'date': 'date',
+            'timestamp': 'timestamp',
+        }
+
+        for field_def in endpoint.schema:
+            target_type = type_map.get(field_def.type.lower(), 'string')
+            if target_type != 'string':
+                df = df.withColumn(field_def.name, F.col(field_def.name).cast(target_type))
 
         # Apply transforms (including PIN zero-padding)
         df = self._apply_transforms(df, endpoint)
