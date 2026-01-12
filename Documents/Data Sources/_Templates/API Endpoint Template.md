@@ -85,6 +85,24 @@ schema:
 
 What data this endpoint returns.
 
+## Schema
+
+```dataview
+TABLE
+  s[0] AS Field,
+  s[1] AS Type,
+  s[2] AS Source,
+  s[3] AS Nullable,
+  s[4] AS Description,
+  s[5] AS Options
+FROM ""
+FLATTEN schema AS s
+WHERE file.path = this.file.path
+
+```
+
+
+
 ## Request Notes
 
 Query params, limits, filters, authentication details.

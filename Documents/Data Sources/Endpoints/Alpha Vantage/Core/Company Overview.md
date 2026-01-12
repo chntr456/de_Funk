@@ -78,12 +78,30 @@ Company overview including sector, industry, market cap, PE ratio, and other fun
 
 This is the primary source for the `company` Silver model's `dim_company` dimension.
 
+## Schema
+
+```dataview
+TABLE
+  s[0] AS Field,
+  s[1] AS Type,
+  s[2] AS Source,
+  s[3] AS Nullable,
+  s[4] AS Description,
+  s[5] AS Options
+FROM ""
+FLATTEN schema AS s
+WHERE file.path = this.file.path
+
+```
+
+
 ## Request Notes
 
 - **One call per ticker**: No bulk endpoint available
 - **Rate limit aware**: Respect 5 calls/min (free) or 75 calls/min (premium)
 - **CIK Padding**: CIK should be zero-padded to 10 digits per SEC standard
 - **Error detection**: Check for `"Error Message"` key in response
+
 
 ## Homelab Usage
 
