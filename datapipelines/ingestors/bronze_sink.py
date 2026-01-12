@@ -404,6 +404,30 @@ class BronzeSink:
 
         return str(base_path)
 
+    def overwrite(
+        self,
+        df,
+        table: str,
+        partitions: Optional[List[str]] = None
+    ) -> str:
+        """
+        Simple overwrite for tables not in storage.json.
+
+        Uses bronze root + table name as path.
+
+        Args:
+            df: Spark DataFrame
+            table: Table name (used as subdirectory)
+            partitions: Partition columns
+
+        Returns:
+            Path to written table
+        """
+        base_path = Path(self.cfg["roots"]["bronze"]) / table
+        base_path.parent.mkdir(parents=True, exist_ok=True)
+        self._write_delta(df, str(base_path), mode="overwrite", partitions=partitions)
+        return str(base_path)
+
     def _write_delta(
         self,
         df,
