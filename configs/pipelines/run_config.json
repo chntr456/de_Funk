@@ -41,13 +41,26 @@
       "_rate_limit_comment": "5 req/sec with app token",
       "endpoints": [
         "crimes",
+        "arrests",
         "building_permits",
+        "building_violations",
         "business_licenses",
         "food_inspections",
+        "ordinance_violations",
         "cta_l_ridership_daily",
-        "cta_bus_ridership_daily"
+        "cta_bus_ridership_daily",
+        "cta_bus_stops",
+        "cta_l_stops",
+        "payments",
+        "contracts",
+        "police_beats",
+        "police_stations",
+        "iucr_codes",
+        "community_areas",
+        "zoning_districts",
+        "service_requests_311"
       ],
-      "_endpoints_comment": "Core municipal data. Available: crimes, building_permits, business_licenses, food_inspections, cta_l_ridership_daily, cta_bus_ridership_daily"
+      "_endpoints_comment": "All 19 Chicago endpoints. Note: wards and traffic_congestion_segments have {view_id} placeholders - excluded for now."
     },
     "cook_county": {
       "enabled": true,
@@ -57,9 +70,18 @@
         "parcel_sales",
         "assessed_values",
         "parcel_universe",
-        "residential_characteristics"
+        "residential_characteristics",
+        "condo_characteristics",
+        "commercial_valuation",
+        "assessor_appeals",
+        "bor_appeal_decisions",
+        "permits",
+        "parcel_addresses",
+        "parcel_proximity",
+        "neighborhood_boundaries",
+        "tax_exempt_parcels"
       ],
-      "_endpoints_comment": "Core property data. Available: parcel_sales, assessed_values, parcel_universe, residential_characteristics"
+      "_endpoints_comment": "All 13 Cook County endpoints covering finance, housing, regulatory, and geospatial data."
     }
   },
   "silver_models": {
@@ -116,7 +138,7 @@
       "dry_run": false,
       "skip_silver": false,
       "with_financials": true,
-      "_comment": "Full dev profile: alpha_vantage (10 tickers w/ financials) + chicago (6 endpoints) + cook_county (4 endpoints). Endpoint limits from markdown configs."
+      "_comment": "Full dev profile: alpha_vantage (10 tickers w/ financials) + chicago (19 endpoints) + cook_county (13 endpoints). Endpoint limits from markdown configs."
     },
     "dev_municipal": {
       "providers": ["chicago", "cook_county"],
