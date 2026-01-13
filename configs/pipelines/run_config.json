@@ -131,10 +131,14 @@
     "_comment": "Named profiles for common run scenarios. Use --profile to activate.",
     "_write_batch_size_comment": "Records to buffer before writing to Delta. Default 500k. Prevents memory overflow on large datasets.",
     "quick_test": {
-      "max_tickers": 10,
+      "providers": ["alpha_vantage", "chicago", "cook_county"],
+      "max_tickers": 3,
+      "max_records_per_endpoint": 1000,
+      "write_batch_size": 10000,
       "dry_run": false,
-      "skip_silver": false,
-      "log_level": "DEBUG"
+      "skip_silver": true,
+      "log_level": "DEBUG",
+      "_comment": "Quick smoke test: 3 tickers, 1000 records per endpoint. Tests all providers without full data load."
     },
     "dev": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
