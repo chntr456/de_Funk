@@ -13,7 +13,7 @@ response_key: null
 # Query Parameters
 default_query:
   $limit: 50000
-  $order: year DESC
+  $order: tax_year DESC
 required_params: []
 
 # Pagination
@@ -33,15 +33,15 @@ notes: "Board of Review appeal decisions 2010-present. Final stage of appeal pro
 
 # Storage Configuration
 bronze: cook_county_bor_appeals
-partitions: [year]
+partitions: [tax_year]
 write_strategy: upsert
-key_columns: [pin, year]
+key_columns: [pin, tax_year]
 date_column: null
 
 # Schema
 schema:
   - [pin, string, pin, false, "14-digit Parcel Index Number", {transform: "zfill(14)"}]
-  - [year, int, year, false, "Tax year"]
+  - [tax_year, int, tax_year, false, "Tax year"]
   - [township_code, string, township_code, true, "Township code"]
   - [class, string, class, true, "Property class code"]
   - [assessor_tot, double, assessor_tot, true, "Assessor certified total AV", {coerce: double}]

@@ -57,13 +57,14 @@ class SocrataClient:
 
     DEFAULT_LIMIT = 50000  # SODA allows up to 50k per request
     MAX_RETRIES = 6
+    DEFAULT_TIMEOUT = 300  # 5 minutes for large datasets
 
     def __init__(
         self,
         base_url: str,
         app_token: Optional[str] = None,
         rate_limit_per_sec: float = 5.0,
-        timeout: int = 120
+        timeout: int = 300
     ):
         """
         Initialize Socrata client.
@@ -72,7 +73,7 @@ class SocrataClient:
             base_url: Base URL for the Socrata portal (e.g., "https://data.cityofchicago.org")
             app_token: Optional app token for higher rate limits
             rate_limit_per_sec: Maximum requests per second (default: 5.0 with token)
-            timeout: Request timeout in seconds (default: 120)
+            timeout: Request timeout in seconds (default: 300 for large datasets)
         """
         self.base_url = base_url.rstrip("/")
         self.app_token = app_token

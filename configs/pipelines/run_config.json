@@ -49,7 +49,6 @@
         "ordinance_violations",
         "cta_l_ridership_daily",
         "cta_bus_ridership_daily",
-        "cta_bus_stops",
         "cta_l_stops",
         "payments",
         "contracts",
@@ -60,7 +59,7 @@
         "zoning_districts",
         "service_requests_311"
       ],
-      "_endpoints_comment": "All 19 Chicago endpoints. Note: wards and traffic_congestion_segments have {view_id} placeholders - excluded for now."
+      "_endpoints_comment": "18 Chicago endpoints. Excluded: cta_bus_stops (non-tabular geospatial), wards, traffic_congestion_segments (view_id required)."
     },
     "cook_county": {
       "enabled": true,

@@ -285,7 +285,19 @@ class ChicagoProvider:
             elif target_type in ('double', 'float'):
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('double'))
             elif target_type == 'date':
-                df = df.withColumn(field_def.name, F.col(field_def.name).cast('date'))
+                # Check for transform with date format
+                if field_def.transform and field_def.transform.startswith("to_date("):
+                    fmt = field_def.transform[8:-1]  # Extract format from to_date(fmt)
+                    df = df.withColumn(field_def.name, F.to_date(F.col(field_def.name), fmt))
+                else:
+                    # Try common formats: MM/dd/yyyy is common in Chicago data
+                    df = df.withColumn(field_def.name,
+                        F.coalesce(
+                            F.to_date(F.col(field_def.name), "yyyy-MM-dd"),
+                            F.to_date(F.col(field_def.name), "MM/dd/yyyy"),
+                            F.to_date(F.col(field_def.name), "M/d/yyyy")
+                        )
+                    )
             elif target_type == 'timestamp':
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('timestamp'))
             elif target_type == 'boolean':
