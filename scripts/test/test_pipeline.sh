@@ -555,7 +555,7 @@ for provider_name in bulk_providers:
         logger.info(f'Endpoints from config: {len(endpoints)} endpoints')
 
         # Get max_records from profile - null/None means no limit (fetch all)
-        # DO NOT default to a number - explicit null means "fetch everything"
+        # DO NOT default to a number - explicit null means fetch everything
         profile_cfg = run_config.get('profiles', {}).get('${PROFILE}', {})
         max_records = profile_cfg.get('max_records_per_endpoint')  # None if not set or null
 
