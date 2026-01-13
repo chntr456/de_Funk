@@ -40,12 +40,12 @@ Updated: January 2026 - Unified interface implementation
 from __future__ import annotations
 
 import threading
-from typing import List, Optional, Callable, Any, Dict, Generator
+from typing import List, Optional, Any, Dict, Generator
 
 from pyspark.sql import DataFrame
 
 from datapipelines.base.provider import (
-    BaseProvider, DataType, TickerData, ProviderConfig, FetchResult
+    BaseProvider, DataType, ProviderConfig, FetchResult
 )
 from datapipelines.base.http_client import HttpClient
 from datapipelines.base.key_pool import ApiKeyPool
@@ -476,49 +476,8 @@ class AlphaVantageProvider(BaseProvider):
         return records
 
     # =========================================================================
-    # LEGACY INTERFACE (kept for backwards compatibility)
+    # API REQUEST HELPERS
     # =========================================================================
-
-    def fetch_ticker_data(
-        self,
-        ticker: str,
-        data_types: List[DataType],
-        progress_callback: Optional[Callable[[str, DataType, bool, Optional[str]], None]] = None,
-        **kwargs
-    ) -> TickerData:
-        """
-        Fetch all requested data types for a single ticker.
-
-        Args:
-            ticker: Ticker symbol
-            data_types: List of data types to fetch
-            progress_callback: Optional callback(ticker, data_type, success, error)
-            **kwargs: Options like date_from, date_to, outputsize
-
-        Returns:
-            TickerData with all fetched data
-        """
-        result = TickerData(ticker=ticker)
-        outputsize = kwargs.get('outputsize', 'full')
-
-        for data_type in data_types:
-            fetch_result = self._fetch_single(ticker, data_type, outputsize=outputsize)
-
-            if fetch_result.success:
-                result.set_data(data_type, fetch_result.data)
-            else:
-                result.errors.append(f"{data_type.value}: {fetch_result.error}")
-
-            # Call progress callback
-            if progress_callback:
-                progress_callback(
-                    ticker,
-                    data_type,
-                    fetch_result.success,
-                    fetch_result.error
-                )
-
-        return result
 
     def _fetch_single(
         self,
@@ -598,95 +557,9 @@ class AlphaVantageProvider(BaseProvider):
                 error=str(e)[:50]
             )
 
-    def normalize_data(
-        self,
-        ticker_data: TickerData,
-        data_type: DataType
-    ) -> Optional[Any]:
-        """
-        Normalize raw data to a Spark DataFrame.
-
-        Args:
-            ticker_data: TickerData from fetch_ticker_data
-            data_type: Which data type to normalize
-
-        Returns:
-            Spark DataFrame or None
-        """
-        from datapipelines.providers.alpha_vantage.facets import (
-            SecuritiesReferenceFacetAV,
-            SecuritiesPricesFacetAV,
-            IncomeStatementFacet,
-            BalanceSheetFacet,
-            CashFlowFacet,
-            EarningsFacet
-        )
-
-        ticker = ticker_data.ticker
-
-        try:
-            if data_type == DataType.REFERENCE and ticker_data.reference:
-                facet = SecuritiesReferenceFacetAV(self.spark, tickers=[ticker])
-                return facet.normalize([[ticker_data.reference]])
-
-            elif data_type == DataType.PRICES and ticker_data.prices:
-                facet = SecuritiesPricesFacetAV(self.spark, tickers=[ticker])
-                full_response = {"Time Series (Daily)": ticker_data.prices}
-                return facet.normalize([[full_response]])
-
-            elif data_type == DataType.INCOME_STATEMENT and ticker_data.income_statement:
-                facet = IncomeStatementFacet(self.spark, ticker=ticker)
-                return facet.normalize(ticker_data.income_statement)
-
-            elif data_type == DataType.BALANCE_SHEET and ticker_data.balance_sheet:
-                facet = BalanceSheetFacet(self.spark, ticker=ticker)
-                return facet.normalize(ticker_data.balance_sheet)
-
-            elif data_type == DataType.CASH_FLOW and ticker_data.cash_flow:
-                facet = CashFlowFacet(self.spark, ticker=ticker)
-                return facet.normalize(ticker_data.cash_flow)
-
-            elif data_type == DataType.EARNINGS and ticker_data.earnings:
-                facet = EarningsFacet(self.spark, ticker=ticker)
-                return facet.normalize(ticker_data.earnings)
-
-        except Exception as e:
-            logger.warning(f"Failed to normalize {data_type.value} for {ticker}: {e}")
-
-        return None
-
-    def normalize_company_reference(self, ticker_data: TickerData) -> Optional[Any]:
-        """
-        Normalize reference data to company_reference table format.
-
-        This is separate from securities_reference - stores company-specific
-        data like CIK, sector, etc.
-
-        Args:
-            ticker_data: TickerData with reference data
-
-        Returns:
-            Spark DataFrame or None
-        """
-        from datapipelines.providers.alpha_vantage.facets.company_reference_facet import CompanyReferenceFacet
-
-        if not ticker_data.reference:
-            return None
-
-        try:
-            facet = CompanyReferenceFacet(self.spark, tickers=[ticker_data.ticker])
-            return facet.normalize([[ticker_data.reference]])
-        except Exception as e:
-            logger.warning(f"Failed to normalize company reference for {ticker_data.ticker}: {e}")
-            return None
-
-    def get_bronze_table_name(self, data_type: DataType) -> str:
-        """Get bronze table name for a data type."""
-        return self.TABLE_NAMES.get(data_type, f"unknown_{data_type.value}")
-
-    def get_key_columns(self, data_type: DataType) -> List[str]:
-        """Get key columns for upsert."""
-        return self.KEY_COLUMNS.get(data_type, ["ticker"])
+    # =========================================================================
+    # TICKER DISCOVERY AND SEEDING
+    # =========================================================================
 
     def discover_tickers(self, state: str = "active", **kwargs) -> tuple:
         """
