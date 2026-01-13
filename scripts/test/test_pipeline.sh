@@ -12,6 +12,7 @@
 #   --profile PROFILE    Use named profile (quick_test, dev, staging, production)
 #   --max-tickers N      Override max tickers to process
 #   --skip-seed          Skip ticker seeding (use existing Bronze data)
+#   --force-seed         Force re-seed even if ticker data exists
 #   --skip-ingest        Skip Bronze ingestion
 #   --skip-silver        Skip Silver model building
 #   --with-financials    Include company financials (income, balance, cash flow, earnings)
@@ -42,6 +43,7 @@ NC='\033[0m' # No Color
 PROFILE=""
 MAX_TICKERS=""
 SKIP_SEED=false
+FORCE_SEED=false
 SKIP_INGEST=false
 SKIP_SILVER=false     # Test everything by default
 WITH_FINANCIALS=false  # Skip financials by default (saves API calls)
@@ -63,6 +65,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-seed)
             SKIP_SEED=true
+            shift
+            ;;
+        --force-seed)
+            FORCE_SEED=true
             shift
             ;;
         --skip-ingest)
@@ -249,11 +255,16 @@ fi
 # Task 1: Seed Tickers (Alpha Vantage)
 # ==============================================================================
 if [ "$SKIP_SEED" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ]; then
-    echo -e "${BLUE}============================================================${NC}"
-    echo -e "${BLUE}Testing task: seed tickers${NC}"
-    echo -e "${BLUE}============================================================${NC}"
+    # Check if seed data already exists
+    SEED_PATH="${STORAGE_PATH:-/shared/storage}/bronze/ticker_seed"
+    if [ -d "$SEED_PATH/_delta_log" ] && [ "$FORCE_SEED" != "true" ]; then
+        echo -e "${YELLOW}○ Ticker seed exists at $SEED_PATH - skipping (use --force-seed to override)${NC}"
+    else
+        echo -e "${BLUE}============================================================${NC}"
+        echo -e "${BLUE}Testing task: seed tickers${NC}"
+        echo -e "${BLUE}============================================================${NC}"
 
-    python -c "
+        python -c "
 import sys
 sys.path.insert(0, '$REPO_ROOT')
 
@@ -301,13 +312,14 @@ logger.info(f'Seeded {df.count()} tickers to Bronze layer')
 spark.stop()
 "
 
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}✓ Seed tickers completed${NC}"
-    else
-        echo -e "${RED}✗ Seed tickers failed${NC}"
-        exit 1
-    fi
-    echo ""
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✓ Seed tickers completed${NC}"
+        else
+            echo -e "${RED}✗ Seed tickers failed${NC}"
+            exit 1
+        fi
+        echo ""
+    fi  # end else (seed doesn't exist)
 fi
 
 # ==============================================================================
