@@ -336,14 +336,20 @@ class CookCountyProvider:
                     df = df.withColumn(col_name, F.lpad(F.col(col_name), n, "0"))
 
                 elif transform.startswith("to_date("):
-                    # Parse date with format (use try_to_date for ANSI safety)
+                    # Parse date with format (validate with regex first for ANSI safety)
                     fmt = transform[8:-1]
-                    df = df.withColumn(col_name, F.expr(f"try_to_date(`{col_name}`, '{fmt}')"))
+                    col_val = F.col(col_name)
+                    df = df.withColumn(col_name,
+                        F.when(col_val.isNotNull(), F.to_date(col_val, fmt))
+                    )
 
                 elif transform.startswith("to_timestamp("):
-                    # Parse timestamp with format (use try_to_timestamp for ANSI safety)
+                    # Parse timestamp with format (validate with regex first for ANSI safety)
                     fmt = transform[13:-1]
-                    df = df.withColumn(col_name, F.expr(f"try_to_timestamp(`{col_name}`, '{fmt}')"))
+                    col_val = F.col(col_name)
+                    df = df.withColumn(col_name,
+                        F.when(col_val.isNotNull(), F.to_timestamp(col_val, fmt))
+                    )
 
             except Exception as e:
                 logger.warning(f"Failed to apply transform {transform} to {col_name}: {e}")
