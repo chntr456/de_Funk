@@ -1,8 +1,13 @@
 """
 Alpha Vantage Provider Implementation.
 
-Implements the BaseProvider interface for Alpha Vantage API.
-This is the STANDARD REFERENCE implementation for all data providers.
+Implements the unified BaseProvider interface for Alpha Vantage API.
+
+v2.7 UNIFIED INTERFACE (January 2026):
+- Implements BaseProvider unified interface
+- Work items = DataType values (e.g., "prices", "reference", "income_statement")
+- All writes go through IngestorEngine + StreamingBronzeWriter
+- Tickers must be set via set_tickers() before running
 
 Features:
 - Rate limiting: Pro tier 75 calls/min (1.25 calls/sec)
@@ -12,33 +17,32 @@ Features:
 - Integration with IngestorEngine for distributed cluster execution
 
 Usage:
-    from datapipelines.providers.alpha_vantage.alpha_vantage_provider import AlphaVantageProvider
-    from datapipelines.base.provider import DataType, ProviderConfig
+    from datapipelines.providers.alpha_vantage import create_alpha_vantage_provider
+    from datapipelines.base.ingestor_engine import IngestorEngine
 
-    config = ProviderConfig(
-        name="alpha_vantage",
-        base_url="https://www.alphavantage.co/query",
-        rate_limit=1.25,  # Pro tier: 75 calls/min
-        supported_data_types=[DataType.REFERENCE, DataType.PRICES, ...]
-    )
+    provider = create_alpha_vantage_provider(config, spark)
+    engine = IngestorEngine(provider, storage_cfg)
 
-    provider = AlphaVantageProvider(config, spark=spark_session)
+    # Set tickers to process
+    provider.set_tickers(["AAPL", "MSFT", "GOOGL"])
 
-    # Seed tickers (1 API call)
-    df = provider.seed_tickers()
+    # Ingest specific data types
+    results = engine.run(work_items=["prices", "reference"])
 
-    # Fetch data for specific tickers
-    ticker_data = provider.fetch_ticker_data("AAPL", [DataType.REFERENCE, DataType.PRICES])
+    # Or ingest all data types
+    results = engine.run()
 
 Author: de_Funk Team
 Date: December 2025
-Updated: January 2026 - Standardized as reference provider implementation
+Updated: January 2026 - Unified interface implementation
 """
 
 from __future__ import annotations
 
 import threading
-from typing import List, Optional, Callable, Any, Dict
+from typing import List, Optional, Callable, Any, Dict, Generator
+
+from pyspark.sql import DataFrame
 
 from datapipelines.base.provider import (
     BaseProvider, DataType, TickerData, ProviderConfig, FetchResult
@@ -149,6 +153,331 @@ class AlphaVantageProvider(BaseProvider):
         self._us_exchanges = self._alpha_vantage_cfg.get("us_exchanges", [
             "NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"
         ])
+
+        # Tickers to process (set via set_tickers() before running)
+        self._tickers: List[str] = []
+
+    # =========================================================================
+    # UNIFIED INTERFACE IMPLEMENTATION (v2.7)
+    # =========================================================================
+
+    def set_tickers(self, tickers: List[str]) -> None:
+        """
+        Set tickers to process for ingestion.
+
+        Must be called before using fetch() or running with IngestorEngine.
+
+        Args:
+            tickers: List of ticker symbols
+        """
+        self._tickers = tickers
+        logger.info(f"AlphaVantageProvider: set {len(tickers)} tickers")
+
+    def list_work_items(self, **kwargs) -> List[str]:
+        """
+        List available work items (data types) for ingestion.
+
+        Args:
+            **kwargs: Optional filters
+
+        Returns:
+            List of data type strings
+        """
+        return [dt.value for dt in self.config.supported_data_types]
+
+    def fetch(
+        self,
+        work_item: str,
+        max_records: Optional[int] = None,
+        **kwargs
+    ) -> Generator[List[Dict], None, None]:
+        """
+        Fetch data for a data type, yielding batches of records.
+
+        Iterates through tickers and fetches the specified data type for each.
+
+        Args:
+            work_item: Data type string (e.g., "prices", "reference")
+            max_records: Maximum records to fetch (None = no limit)
+            **kwargs: Additional options (outputsize, etc.)
+
+        Yields:
+            List[Dict] - Batches of raw records
+        """
+        # Convert work_item string to DataType
+        data_type = self._get_data_type(work_item)
+        if not data_type:
+            logger.warning(f"Unknown work item: {work_item}")
+            return
+
+        if not self._tickers:
+            logger.warning("No tickers set. Call set_tickers() before fetch().")
+            return
+
+        logger.info(f"Fetching {work_item} for {len(self._tickers)} tickers")
+
+        total_records = 0
+        for ticker in self._tickers:
+            # Check max_records limit
+            if max_records and total_records >= max_records:
+                logger.info(f"Reached max_records limit ({max_records})")
+                break
+
+            # Fetch single ticker
+            result = self._fetch_single(ticker, data_type, **kwargs)
+
+            if not result.success:
+                logger.warning(f"Failed to fetch {work_item} for {ticker}: {result.error}")
+                continue
+
+            if result.data:
+                # Convert to records list
+                records = self._convert_to_records(ticker, data_type, result.data)
+                if records:
+                    total_records += len(records)
+                    yield records
+
+        logger.info(f"Fetched {total_records} records for {work_item}")
+
+    def normalize(self, records: List[Dict], work_item: str) -> DataFrame:
+        """
+        Normalize raw records to a Spark DataFrame.
+
+        Records are already flattened by _convert_to_records() with ticker
+        and trade_date/fiscal_date fields injected.
+
+        Args:
+            records: List of raw record dicts (pre-flattened)
+            work_item: Data type string
+
+        Returns:
+            Spark DataFrame
+        """
+        if not records:
+            # Return empty DataFrame
+            return self.spark.createDataFrame([], samplingRatio=1.0)
+
+        data_type = self._get_data_type(work_item)
+        if not data_type:
+            return self.spark.createDataFrame(records, samplingRatio=1.0)
+
+        try:
+            if data_type == DataType.PRICES:
+                return self._normalize_prices(records)
+            elif data_type == DataType.REFERENCE:
+                return self._normalize_reference(records)
+            elif data_type in (DataType.INCOME_STATEMENT, DataType.BALANCE_SHEET,
+                              DataType.CASH_FLOW, DataType.EARNINGS):
+                return self._normalize_financials(records, data_type)
+        except Exception as e:
+            logger.warning(f"Failed to normalize {work_item}: {e}", exc_info=True)
+
+        # Fallback
+        return self.spark.createDataFrame(records, samplingRatio=1.0)
+
+    def _normalize_prices(self, records: List[Dict]) -> DataFrame:
+        """Normalize price records to DataFrame."""
+        from pyspark.sql.types import (
+            StructType, StructField, StringType, DateType, DoubleType,
+            LongType, BooleanType, IntegerType
+        )
+        from pyspark.sql import functions as F
+        import pandas as pd
+
+        # Convert to pandas for easier type handling
+        pdf = pd.DataFrame(records)
+
+        if pdf.empty:
+            return self.spark.createDataFrame([], samplingRatio=1.0)
+
+        # Parse trade_date
+        pdf['trade_date'] = pd.to_datetime(pdf['trade_date'], errors='coerce')
+        pdf['year'] = pdf['trade_date'].dt.year.astype('Int32')
+        pdf['month'] = pdf['trade_date'].dt.month.astype('Int32')
+        pdf['trade_date'] = pdf['trade_date'].dt.date
+
+        # Rename Alpha Vantage fields
+        rename_map = {
+            "1. open": "open", "2. high": "high", "3. low": "low",
+            "4. close": "close", "5. adjusted close": "adjusted_close",
+            "6. volume": "volume", "7. dividend amount": "dividend_amount",
+            "8. split coefficient": "split_coefficient"
+        }
+        pdf = pdf.rename(columns=rename_map)
+
+        # Convert numeric fields
+        for field in ['open', 'high', 'low', 'close', 'adjusted_close', 'volume',
+                      'dividend_amount', 'split_coefficient']:
+            if field in pdf.columns:
+                pdf[field] = pd.to_numeric(pdf[field], errors='coerce').astype('float64')
+
+        # Calculate VWAP approximation
+        pdf['volume_weighted'] = ((pdf['high'] + pdf['low'] + pdf['close']) / 3.0).astype('float64')
+
+        # Add missing fields
+        pdf['transactions'] = None
+        pdf['otc'] = False
+        if 'asset_type' not in pdf.columns:
+            pdf['asset_type'] = 'stocks'
+
+        # Select final columns
+        final_cols = ['trade_date', 'ticker', 'asset_type', 'year', 'month',
+                      'open', 'high', 'low', 'close', 'volume', 'volume_weighted',
+                      'transactions', 'otc', 'adjusted_close', 'dividend_amount',
+                      'split_coefficient']
+        for col in final_cols:
+            if col not in pdf.columns:
+                pdf[col] = None
+        pdf = pdf[final_cols]
+
+        # Create Spark DataFrame
+        schema = StructType([
+            StructField("trade_date", DateType(), True),
+            StructField("ticker", StringType(), True),
+            StructField("asset_type", StringType(), True),
+            StructField("year", IntegerType(), True),
+            StructField("month", IntegerType(), True),
+            StructField("open", DoubleType(), True),
+            StructField("high", DoubleType(), True),
+            StructField("low", DoubleType(), True),
+            StructField("close", DoubleType(), True),
+            StructField("volume", DoubleType(), True),
+            StructField("volume_weighted", DoubleType(), True),
+            StructField("transactions", LongType(), True),
+            StructField("otc", BooleanType(), True),
+            StructField("adjusted_close", DoubleType(), True),
+            StructField("dividend_amount", DoubleType(), True),
+            StructField("split_coefficient", DoubleType(), True)
+        ])
+
+        return self.spark.createDataFrame(pdf, schema=schema)
+
+    def _normalize_reference(self, records: List[Dict]) -> DataFrame:
+        """Normalize reference/overview records to DataFrame."""
+        import pandas as pd
+        from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType, DateType
+        from datetime import datetime
+
+        pdf = pd.DataFrame(records)
+        if pdf.empty:
+            return self.spark.createDataFrame([], samplingRatio=1.0)
+
+        # Add metadata
+        pdf['asset_type'] = 'stocks'
+        pdf['snapshot_date'] = datetime.now().date()
+        pdf['ingestion_timestamp'] = datetime.now()
+
+        # Rename fields to snake_case
+        rename_map = {
+            'Symbol': 'ticker', 'Name': 'security_name', 'Exchange': 'exchange_code',
+            'Sector': 'sector', 'Industry': 'industry', 'MarketCapitalization': 'market_cap',
+            'CIK': 'cik', 'Description': 'description', 'SharesOutstanding': 'shares_outstanding'
+        }
+        pdf = pdf.rename(columns=rename_map)
+
+        # Convert numeric fields
+        for field in ['market_cap', 'shares_outstanding']:
+            if field in pdf.columns:
+                pdf[field] = pd.to_numeric(pdf[field], errors='coerce')
+
+        return self.spark.createDataFrame(pdf, samplingRatio=1.0)
+
+    def _normalize_financials(self, records: List[Dict], data_type: DataType) -> DataFrame:
+        """Normalize financial statement records to DataFrame."""
+        import pandas as pd
+        from datetime import datetime
+
+        pdf = pd.DataFrame(records)
+        if pdf.empty:
+            return self.spark.createDataFrame([], samplingRatio=1.0)
+
+        # Add metadata
+        pdf['ingestion_timestamp'] = datetime.now()
+
+        # Rename fiscalDateEnding to fiscal_date_ending
+        if 'fiscalDateEnding' in pdf.columns:
+            pdf = pdf.rename(columns={'fiscalDateEnding': 'fiscal_date_ending'})
+
+        return self.spark.createDataFrame(pdf, samplingRatio=1.0)
+
+    def get_table_name(self, work_item: str) -> str:
+        """Get Bronze table name for a data type."""
+        data_type = self._get_data_type(work_item)
+        if data_type:
+            return self.TABLE_NAMES.get(data_type, f"unknown_{work_item}")
+        return f"unknown_{work_item}"
+
+    def get_partitions(self, work_item: str) -> Optional[List[str]]:
+        """Get partition columns for a data type."""
+        # Most Alpha Vantage tables don't use partitions
+        # Prices could partition by trade_date if needed
+        return None
+
+    def get_key_columns(self, work_item: str) -> List[str]:
+        """Get key columns for upsert operations."""
+        data_type = self._get_data_type(work_item)
+        if data_type:
+            return self.KEY_COLUMNS.get(data_type, ["ticker"])
+        return ["ticker"]
+
+    def _get_data_type(self, work_item: str) -> Optional[DataType]:
+        """Convert work_item string to DataType enum."""
+        for dt in DataType:
+            if dt.value == work_item:
+                return dt
+        return None
+
+    def _convert_to_records(
+        self,
+        ticker: str,
+        data_type: DataType,
+        data: Any
+    ) -> List[Dict]:
+        """
+        Convert raw API data to list of record dicts.
+
+        Args:
+            ticker: Ticker symbol
+            data_type: Data type
+            data: Raw API response data
+
+        Returns:
+            List of record dicts with ticker included
+        """
+        records = []
+
+        if data_type == DataType.REFERENCE:
+            # Single record per ticker
+            if isinstance(data, dict):
+                record = dict(data)
+                record['ticker'] = ticker
+                records.append(record)
+
+        elif data_type == DataType.PRICES:
+            # Time series data: {date: {open, high, low, close, volume}}
+            if isinstance(data, dict):
+                for date_str, ohlcv in data.items():
+                    record = dict(ohlcv)
+                    record['ticker'] = ticker
+                    record['trade_date'] = date_str
+                    records.append(record)
+
+        elif data_type in (DataType.INCOME_STATEMENT, DataType.BALANCE_SHEET,
+                          DataType.CASH_FLOW, DataType.EARNINGS):
+            # Financial statements: {annualReports: [...], quarterlyReports: [...]}
+            if isinstance(data, dict):
+                for report_type in ['annualReports', 'quarterlyReports']:
+                    for report in data.get(report_type, []):
+                        record = dict(report)
+                        record['ticker'] = ticker
+                        record['report_type'] = 'annual' if 'annual' in report_type.lower() else 'quarterly'
+                        records.append(record)
+
+        return records
+
+    # =========================================================================
+    # LEGACY INTERFACE (kept for backwards compatibility)
+    # =========================================================================
 
     def fetch_ticker_data(
         self,

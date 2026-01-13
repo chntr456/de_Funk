@@ -137,13 +137,14 @@
       "log_level": "DEBUG"
     },
     "dev": {
-      "providers": ["chicago", "cook_county"],
+      "providers": ["alpha_vantage", "chicago", "cook_county"],
+      "max_tickers": 10,
       "max_records_per_endpoint": null,
       "write_batch_size": 500000,
       "dry_run": false,
       "skip_silver": true,
       "log_level": "DEBUG",
-      "_comment": "Full municipal data run: chicago (22 endpoints) + cook_county (13 endpoints). No record limits, streams to Delta in 500k batches."
+      "_comment": "Full run: alpha_vantage (10 tickers) + chicago (22 endpoints) + cook_county (13 endpoints). Streams to Delta in 500k batches."
     },
     "dev_municipal": {
       "providers": ["chicago", "cook_county"],

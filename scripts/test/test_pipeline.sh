@@ -339,12 +339,10 @@ from config.logging import setup_logging, get_logger
 setup_logging()
 logger = get_logger('test_pipeline')
 
-logger.info('Testing task: bronze ingestion')
+logger.info('Testing task: bronze ingestion (Alpha Vantage)')
 
 # Import components
-from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
-from datapipelines.base.ingestor_engine import IngestorEngine
-from datapipelines.base.provider import DataType
+from datapipelines.base.ingestor_engine import create_engine
 from orchestration.common.spark_session import get_spark
 from config.markdown_loader import get_markdown_loader
 from pathlib import Path
@@ -382,15 +380,16 @@ logger.info(f'With reference: {with_reference}')
 # Initialize Spark
 spark = get_spark(app_name='test_pipeline_ingest')
 
-# Create provider
-provider = create_alpha_vantage_provider(av_config, spark=spark)
-
 # Load storage config from storage.json (single source of truth for partitions, keys, etc.)
 with open('$REPO_ROOT/configs/storage.json') as f:
     storage_cfg = json.load(f)
 
 # Override roots to use storage_path from CLI (replace 'storage/' prefix with custom path)
 storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in storage_cfg['roots'].items()}
+
+# Create unified IngestorEngine for Alpha Vantage (v2.7 unified interface)
+engine = create_engine('alpha_vantage', av_config, storage_cfg, spark)
+provider = engine.provider
 
 # Try to get tickers by market cap from securities_reference
 tickers = provider.get_tickers_by_market_cap(max_tickers=max_tickers, storage_cfg=storage_cfg)
@@ -420,31 +419,36 @@ if not tickers:
 
 logger.info(f'Found {len(tickers)} tickers for ingestion')
 
-# Create engine and run
-engine = IngestorEngine(provider, storage_cfg)
+# Set tickers on provider (required for unified interface)
+provider.set_tickers(tickers)
 
-# Build data types list - prices is always included
-data_types = [DataType.PRICES]
+# Build work items list (data types) - prices is always included
+work_items = ['prices']
 
 # Add reference if requested (not needed if seed already has basic info)
 if with_reference:
     logger.info('Including reference data (COMPANY_OVERVIEW)')
-    data_types.append(DataType.REFERENCE)
+    work_items.append('reference')
 
 # Add financial statements if requested (uses ticker-based lookups, not CIK)
 if with_financials:
     logger.info('Including financial statements (income, balance, cash flow, earnings)')
-    data_types.extend([
-        DataType.INCOME_STATEMENT,
-        DataType.BALANCE_SHEET,
-        DataType.CASH_FLOW,
-        DataType.EARNINGS,
-    ])
+    work_items.extend(['income', 'balance', 'cashflow', 'earnings'])
 
-logger.info(f'Data types: {[dt.value for dt in data_types]}')
-results = engine.run(tickers, data_types)
+logger.info(f'Work items (data types): {work_items}')
 
-logger.info(f'Ingestion complete. Completed: {results.completed_tickers}, Errors: {results.total_errors}')
+# Get write_batch_size from profile (default 500k for streaming Delta writes)
+write_batch_size = int('${PROFILE_WRITE_BATCH_SIZE:-500000}')
+logger.info(f'write_batch_size: {write_batch_size} records per batch')
+
+# Run unified ingestion engine
+results = engine.run(
+    work_items=work_items,
+    write_batch_size=write_batch_size,
+    silent=False
+)
+
+logger.info(f'Ingestion complete. Completed: {results.completed_work_items}/{results.total_work_items}, Records: {results.total_records:,}')
 spark.stop()
 "
 
