@@ -113,32 +113,35 @@ if [ -f "$REPO_ROOT/.env" ]; then
 fi
 
 # Load profile settings from run_config.json if profile is specified
+PROFILE_PROVIDERS=""
+PROFILE_SKIP_SILVER=""
 if [ -n "$PROFILE" ] && [ -f "$REPO_ROOT/configs/pipelines/run_config.json" ]; then
-    # Read max_tickers from profile if not overridden by CLI
-    if [ -z "$MAX_TICKERS" ]; then
-        PROFILE_MAX_TICKERS=$(python3 -c "
+    # Read all profile settings at once
+    eval $(python3 -c "
 import json
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     cfg = json.load(f)
 profile = cfg.get('profiles', {}).get('$PROFILE', {})
-print(profile.get('max_tickers', '') or '')
-" 2>/dev/null || echo "")
-        [ -n "$PROFILE_MAX_TICKERS" ] && MAX_TICKERS="$PROFILE_MAX_TICKERS"
-    fi
 
-    # Read with_financials from profile (CLI --with-financials still overrides)
-    PROFILE_WITH_FINANCIALS=$(python3 -c "
-import json
-with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
-    cfg = json.load(f)
-profile = cfg.get('profiles', {}).get('$PROFILE', {})
-print('true' if profile.get('with_financials') else 'false')
-" 2>/dev/null || echo "false")
+# max_tickers - empty string if not set or null
+max_tickers = profile.get('max_tickers')
+print(f'PROFILE_MAX_TICKERS=\"{max_tickers if max_tickers else \"\"}\"')
 
-    # Only use profile setting if CLI didn't explicitly set --with-financials
-    if [ "$WITH_FINANCIALS" = false ] && [ "$PROFILE_WITH_FINANCIALS" = "true" ]; then
-        WITH_FINANCIALS=true
-    fi
+# with_financials
+print(f'PROFILE_WITH_FINANCIALS=\"{\"true\" if profile.get(\"with_financials\") else \"false\"}\"')
+
+# skip_silver from profile
+print(f'PROFILE_SKIP_SILVER=\"{\"true\" if profile.get(\"skip_silver\") else \"false\"}\"')
+
+# providers list - if set, use only these providers
+providers = profile.get('providers', [])
+print(f'PROFILE_PROVIDERS=\"{\" \".join(providers) if providers else \"\"}\"')
+" 2>/dev/null)
+
+    # Apply profile settings if not overridden by CLI
+    [ -z "$MAX_TICKERS" ] && [ -n "$PROFILE_MAX_TICKERS" ] && MAX_TICKERS="$PROFILE_MAX_TICKERS"
+    [ "$WITH_FINANCIALS" = false ] && [ "$PROFILE_WITH_FINANCIALS" = "true" ] && WITH_FINANCIALS=true
+    [ "$SKIP_SILVER" = false ] && [ "$PROFILE_SKIP_SILVER" = "true" ] && SKIP_SILVER=true
 fi
 
 # Print header
@@ -149,7 +152,22 @@ echo ""
 
 echo -e "Repository root: ${GREEN}$REPO_ROOT${NC}"
 
-# Check Spark environment
+# Check Spark environment - detect from cluster.yaml or env var
+if [ "$RUN_LOCAL" = false ]; then
+    # Try to get master URL from cluster.yaml if not already set
+    if [ -z "$SPARK_MASTER_URL" ] && [ -f "$REPO_ROOT/configs/cluster.yaml" ]; then
+        CLUSTER_HEAD=$(python3 -c "
+import yaml
+with open('$REPO_ROOT/configs/cluster.yaml') as f:
+    cfg = yaml.safe_load(f)
+head = cfg.get('head', {}).get('host', '')
+port = cfg.get('spark', {}).get('master_port', 7077)
+print(f'spark://{head}:{port}' if head else '')
+" 2>/dev/null || echo "")
+        [ -n "$CLUSTER_HEAD" ] && export SPARK_MASTER_URL="$CLUSTER_HEAD"
+    fi
+fi
+
 if [ "$RUN_LOCAL" = false ] && [ -n "$SPARK_MASTER_URL" ]; then
     echo -e "Spark master: ${GREEN}$SPARK_MASTER_URL${NC}"
     SPARK_MODE="cluster"
@@ -178,16 +196,27 @@ PYTHON_ARGS=""
 [ -n "$MAX_TICKERS" ] && PYTHON_ARGS="$PYTHON_ARGS --max-tickers $MAX_TICKERS"
 [ -n "$STORAGE_PATH" ] && PYTHON_ARGS="$PYTHON_ARGS --storage-path $STORAGE_PATH"
 
-# Check if Alpha Vantage is enabled
-ALPHA_VANTAGE_ENABLED=$(python3 -c "
+# Check if Alpha Vantage is enabled - respect profile's providers list
+if [ -n "$PROFILE_PROVIDERS" ]; then
+    # Profile specifies explicit provider list - check if alpha_vantage is in it
+    if echo "$PROFILE_PROVIDERS" | grep -qw "alpha_vantage"; then
+        ALPHA_VANTAGE_ENABLED="true"
+    else
+        ALPHA_VANTAGE_ENABLED="false"
+        echo -e "${YELLOW}Alpha Vantage not in profile providers list: $PROFILE_PROVIDERS${NC}"
+    fi
+else
+    # No profile providers list - fall back to global enabled flag
+    ALPHA_VANTAGE_ENABLED=$(python3 -c "
 import json
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     cfg = json.load(f)
 print('true' if cfg.get('providers', {}).get('alpha_vantage', {}).get('enabled') else 'false')
 " 2>/dev/null || echo "false")
 
-if [ "$ALPHA_VANTAGE_ENABLED" = "false" ]; then
-    echo -e "${YELLOW}Alpha Vantage is disabled in run_config.json${NC}"
+    if [ "$ALPHA_VANTAGE_ENABLED" = "false" ]; then
+        echo -e "${YELLOW}Alpha Vantage is disabled in run_config.json${NC}"
+    fi
 fi
 
 # ==============================================================================
@@ -406,8 +435,19 @@ fi
 # Task 2b: Chicago/Cook County Ingestion (Bulk Providers)
 # ==============================================================================
 if [ "$SKIP_INGEST" = false ]; then
-    # Check if bulk providers are enabled in run_config.json
-    BULK_PROVIDERS=$(python3 -c "
+    # Determine which bulk providers to run
+    if [ -n "$PROFILE_PROVIDERS" ]; then
+        # Use profile's providers list (filter to bulk providers only)
+        BULK_PROVIDERS=""
+        for p in $PROFILE_PROVIDERS; do
+            if [ "$p" = "chicago" ] || [ "$p" = "cook_county" ]; then
+                BULK_PROVIDERS="$BULK_PROVIDERS $p"
+            fi
+        done
+        BULK_PROVIDERS=$(echo "$BULK_PROVIDERS" | xargs)  # trim whitespace
+    else
+        # Fall back to global enabled flags
+        BULK_PROVIDERS=$(python3 -c "
 import json
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     cfg = json.load(f)
@@ -419,6 +459,7 @@ if providers.get('cook_county', {}).get('enabled'):
     enabled.append('cook_county')
 print(' '.join(enabled))
 " 2>/dev/null || echo "")
+    fi
 
     if [ -n "$BULK_PROVIDERS" ]; then
         echo -e "${BLUE}============================================================${NC}"
@@ -474,12 +515,11 @@ spark = get_spark(app_name='test_pipeline_bulk')
 # Docs path for markdown loader
 docs_path = Path('$REPO_ROOT/Documents')
 
-# Run each enabled bulk provider
+# Run each bulk provider from the list (profile or global enabled)
 bulk_providers = '$BULK_PROVIDERS'.split()
 for provider_name in bulk_providers:
     provider_cfg = run_config.get('providers', {}).get(provider_name, {})
-    if not provider_cfg.get('enabled'):
-        continue
+    # Don't check enabled flag here - the provider list is already filtered
 
     logger.info(f'Processing provider: {provider_name}')
 
@@ -510,13 +550,21 @@ for provider_name in bulk_providers:
 
     # Get endpoints to ingest from run_config
     endpoints = provider_cfg.get('endpoints', [])
-    max_records = run_config.get('profiles', {}).get('${PROFILE}', {}).get('max_records_per_endpoint', 10000)
+
+    # Get max_records from profile - null/None means no limit (fetch all)
+    # DO NOT default to a number - explicit null means "fetch everything"
+    profile_cfg = run_config.get('profiles', {}).get('${PROFILE}', {})
+    max_records = profile_cfg.get('max_records_per_endpoint')  # None if not set or null
+
+    if max_records is None:
+        logger.info(f'max_records_per_endpoint is null - fetching ALL records (no limit)')
 
     if endpoints:
         logger.info(f'Ingesting endpoints: {endpoints}')
         results = provider.ingest_all(endpoint_ids=endpoints, max_records_per_endpoint=max_records)
     else:
-        logger.info(f'Ingesting all active endpoints (max {max_records} records each)')
+        limit_msg = f'max {max_records} records each' if max_records else 'no limit'
+        logger.info(f'Ingesting all active endpoints ({limit_msg})')
         results = provider.ingest_all(max_records_per_endpoint=max_records)
 
     # Summary
