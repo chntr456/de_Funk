@@ -192,8 +192,11 @@ if [ "$RUN_LOCAL" = false ]; then
 import yaml
 with open('$REPO_ROOT/configs/cluster.yaml') as f:
     cfg = yaml.safe_load(f)
-head = cfg.get('head', {}).get('host', '')
-port = cfg.get('spark', {}).get('master_port', 7077)
+# cluster.yaml structure: cluster.head.ip or cluster.head.hostname, spark.master.port
+cluster = cfg.get('cluster', {})
+head_cfg = cluster.get('head', {})
+head = head_cfg.get('ip') or head_cfg.get('hostname', '')
+port = cfg.get('spark', {}).get('master', {}).get('port', 7077)
 print(f'spark://{head}:{port}' if head else '')
 " 2>/dev/null || echo "")
         [ -n "$CLUSTER_HEAD" ] && export SPARK_MASTER_URL="$CLUSTER_HEAD"
