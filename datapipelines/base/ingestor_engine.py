@@ -204,14 +204,17 @@ class IngestorEngine:
         **kwargs
     ) -> IngestionResults:
         """
-        Run ingestion for work items with async writes.
+        Run ingestion for work items.
 
         Args:
             work_items: List of work items to ingest (None = all from provider)
-            write_batch_size: Records to buffer before Delta write (default 500k)
+            write_batch_size: Records to buffer before Delta write.
+                Only used in sync mode (async_writes=False).
+                In async mode, all records are collected then written at once.
             max_records: Max records per work item (None = no limit)
             silent: Suppress progress output
-            async_writes: Enable async writes (default True for better throughput)
+            async_writes: Enable async writes (default True for ~2-3x throughput).
+                Async mode overlaps fetch(N+1) with write(N) for parallelism.
             **kwargs: Provider-specific options passed to fetch()
 
         Returns:
@@ -230,8 +233,10 @@ class IngestorEngine:
             print(f"INGESTOR ENGINE: {self.provider.provider_id.upper()}")
             print(f"{'=' * 60}")
             print(f"  Work items: {len(work_items)}")
-            print(f"  Batch size: {write_batch_size:,} records")
-            print(f"  Async writes: {'enabled' if async_writes else 'disabled'}")
+            if async_writes:
+                print(f"  Mode: async (fetch/write overlap)")
+            else:
+                print(f"  Mode: sync (batch size: {write_batch_size:,})")
             if max_records:
                 print(f"  Max records per item: {max_records:,}")
             print()
