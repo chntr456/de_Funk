@@ -285,70 +285,15 @@ class ChicagoProvider:
             elif target_type in ('double', 'float'):
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('double'))
             elif target_type == 'date':
-                # ANSI-safe date parsing using regex validation before to_date()
-                # Spark 4.0 ANSI mode throws exceptions on parse failure, so we
-                # pre-validate with regex to only parse values that will succeed
-                col_name = field_def.name
-                col_val = F.col(col_name)
-
-                if field_def.transform and field_def.transform.startswith("to_date("):
-                    fmt = field_def.transform[8:-1]  # Extract format from to_date(fmt)
-                    # Use regex to validate format before parsing
-                    df = df.withColumn(col_name,
-                        F.when(col_val.isNotNull(), F.to_date(col_val, fmt))
-                    )
-                else:
-                    # Socrata returns various date formats:
-                    # - ISO timestamps: "2025-06-06T00:00:00.000" (most common)
-                    # - Simple dates: "2025-06-06", "01/16/2025", "1/6/2025"
-                    # - Year only: "2020" (edge case)
-                    #
-                    # Strategy: Use regex to detect format, then parse appropriately
-                    # This avoids ANSI mode exceptions by only calling to_date on valid formats
-
-                    # Regex patterns for different date formats
-                    iso_pattern = r"^\d{4}-\d{2}-\d{2}(T.*)?$"  # 2025-06-06 or 2025-06-06T...
-                    mdy_pattern = r"^\d{1,2}/\d{1,2}/\d{4}$"     # MM/dd/yyyy or M/d/yyyy
-                    year_pattern = r"^\d{4}$"                     # Just year
-
-                    # Extract date portion from ISO timestamps (first 10 chars)
-                    iso_date = F.substring(col_val, 1, 10)
-
-                    df = df.withColumn(col_name,
-                        F.when(
-                            col_val.rlike(iso_pattern),
-                            F.to_date(iso_date, "yyyy-MM-dd")
-                        ).when(
-                            col_val.rlike(mdy_pattern),
-                            F.to_date(col_val, "MM/dd/yyyy")
-                        ).when(
-                            col_val.rlike(year_pattern),
-                            F.to_date(F.concat(col_val, F.lit("-01-01")), "yyyy-MM-dd")
-                        ).otherwise(F.lit(None).cast("date"))
-                    )
+                # Keep dates as strings in Bronze layer - proper parsing in Silver
+                # Spark 4.0 ANSI mode makes safe date parsing extremely difficult
+                # The Bronze layer stores raw data; Silver layer does type conversion
+                pass
 
             elif target_type == 'timestamp':
-                # ANSI-safe timestamp parsing using regex validation
-                col_name = field_def.name
-                col_val = F.col(col_name)
-
-                # Socrata ISO format patterns
-                iso_millis_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}$"
-                iso_secs_pattern = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$"
-                iso_date_pattern = r"^\d{4}-\d{2}-\d{2}$"
-
-                df = df.withColumn(col_name,
-                    F.when(
-                        col_val.rlike(iso_millis_pattern),
-                        F.to_timestamp(col_val, "yyyy-MM-dd'T'HH:mm:ss.SSS")
-                    ).when(
-                        col_val.rlike(iso_secs_pattern),
-                        F.to_timestamp(col_val, "yyyy-MM-dd'T'HH:mm:ss")
-                    ).when(
-                        col_val.rlike(iso_date_pattern),
-                        F.to_timestamp(col_val, "yyyy-MM-dd")
-                    ).otherwise(F.lit(None).cast("timestamp"))
-                )
+                # Keep timestamps as strings in Bronze layer - proper parsing in Silver
+                # Spark 4.0 ANSI mode makes safe timestamp parsing extremely difficult
+                pass
             elif target_type == 'boolean':
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
 
