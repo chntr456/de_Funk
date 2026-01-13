@@ -492,17 +492,20 @@ class ChicagoProvider:
         df = self.spark.createDataFrame(transformed_records, string_schema)
 
         # Now cast columns to target types
-        # Note: For int/long, cast to double first to handle "2025.0" style values
+        # Note: Use try_cast for numeric types to handle malformed input (e.g., 'Annual')
+        # Spark 4.0 ANSI mode requires try_cast to tolerate malformed input and return NULL
         for field_def in endpoint.schema:
             target_type = field_def.type.lower()
             if target_type == 'string':
                 continue
             elif target_type in ('int', 'long'):
+                # Use try_cast for safe casting - returns NULL on malformed input
                 # Cast string -> double -> int to handle "2025.0" format
                 df = df.withColumn(field_def.name,
-                    F.col(field_def.name).cast('double').cast(target_type))
+                    F.col(field_def.name).try_cast('double').cast(target_type))
             elif target_type in ('double', 'float'):
-                df = df.withColumn(field_def.name, F.col(field_def.name).cast('double'))
+                # Use try_cast to handle non-numeric values like 'Annual'
+                df = df.withColumn(field_def.name, F.col(field_def.name).try_cast('double'))
             elif target_type == 'date':
                 # Normalize date strings to yyyy-MM-dd before casting
                 # This handles Socrata's various date formats without ANSI exceptions
