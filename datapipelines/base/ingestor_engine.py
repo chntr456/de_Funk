@@ -347,7 +347,7 @@ class IngestorEngine:
             self.sink.append(df, table_name, partitions=partitions)
         else:
             self.sink.overwrite(df, table_name, partitions=partitions)
-        logger.debug(f"Async write complete: {table_name} ({count:,} records, mode={mode})")
+        logger.info(f"Wrote {table_name}: {count:,} records (mode={mode})")
         return count
 
     def _ingest_work_item_async(
@@ -425,7 +425,7 @@ class IngestorEngine:
 
                     total_records += len(buffer)
                     chunk_count += 1
-                    logger.debug(
+                    logger.info(
                         f"{work_item}: queued chunk {chunk_count} "
                         f"({len(buffer):,} records, mode={mode})"
                     )
@@ -457,7 +457,7 @@ class IngestorEngine:
 
                 total_records += len(buffer)
                 chunk_count += 1
-                logger.debug(
+                logger.info(
                     f"{work_item}: queued final chunk {chunk_count} "
                     f"({len(buffer):,} records, mode={mode})"
                 )
