@@ -572,13 +572,16 @@ for provider_name in bulk_providers:
 
         api_cfg['credentials'] = {'api_keys': api_keys}
 
-        # Create provider
-        provider = create_engine(provider_name, api_cfg, storage_cfg, spark, docs_path)
-        logger.info(f'Provider created: {type(provider).__name__}')
+        # Create unified IngestorEngine (v2.7 unified interface)
+        engine = create_engine(provider_name, api_cfg, storage_cfg, spark, docs_path)
+        logger.info(f'IngestorEngine created for: {engine.provider.config.name}')
 
-        # Get endpoints to ingest from run_config
-        endpoints = provider_cfg.get('endpoints', [])
-        logger.info(f'Endpoints from config: {len(endpoints)} endpoints')
+        # Get work items (endpoints) to ingest from run_config
+        work_items = provider_cfg.get('endpoints', []) or None  # None = discover from provider
+        if work_items:
+            logger.info(f'Work items from config: {len(work_items)} endpoints')
+        else:
+            logger.info('Work items: auto-discover from provider')
 
         # Get max_records from profile - null/None means no limit (fetch all)
         # DO NOT default to a number - explicit null means fetch everything
@@ -592,25 +595,16 @@ for provider_name in bulk_providers:
         write_batch_size = int('${PROFILE_WRITE_BATCH_SIZE:-500000}')
         logger.info(f'write_batch_size: {write_batch_size} records per batch')
 
-        if endpoints:
-            logger.info(f'Ingesting {len(endpoints)} endpoints: {endpoints[:5]}...')
-            results = provider.ingest_all(
-                endpoint_ids=endpoints,
-                max_records_per_endpoint=max_records,
-                write_batch_size=write_batch_size
-            )
-        else:
-            limit_msg = f'max {max_records} records each' if max_records else 'no limit'
-            logger.info(f'Ingesting all active endpoints ({limit_msg})')
-            results = provider.ingest_all(
-                max_records_per_endpoint=max_records,
-                write_batch_size=write_batch_size
-            )
+        # Run unified ingestion engine
+        results = engine.run(
+            work_items=work_items,
+            write_batch_size=write_batch_size,
+            max_records=max_records,
+            silent=False
+        )
 
-        # Summary
-        success_count = sum(1 for r in results.values() if r.success)
-        total_records = sum(r.record_count for r in results.values() if r.success)
-        logger.info(f'{provider_name}: {success_count}/{len(results)} endpoints, {total_records} total records')
+        # Summary from IngestionResults
+        logger.info(f'{provider_name}: {results.completed_work_items}/{results.total_work_items} work items, {results.total_records:,} total records')
 
     except Exception as e:
         logger.error(f'Error processing {provider_name}: {e}', exc_info=True)

@@ -2,38 +2,50 @@
 Cook County Data Portal Provider Implementation.
 
 Implements data ingestion from Cook County's Socrata Open Data API.
-This provider focuses on property assessment, tax, and parcel data.
+This provider fetches bulk datasets (property data, assessments, etc.).
+
+v2.7 UNIFIED INTERFACE (January 2026):
+- Implements BaseProvider unified interface
+- Work items = endpoint IDs (e.g., "property_locations", "assessments")
+- All writes go through IngestorEngine + StreamingBronzeWriter
+- Removed duplicate ingest_endpoint/ingest_all methods
 
 Features:
 - Offset-based pagination for large datasets
 - SoQL query support ($where, $select, $order, etc.)
-- PIN zero-padding (14-digit format)
 - Rate limiting with app token support
+- Schema-driven transformation using markdown configs
+- PIN-based property lookups
 
 Usage:
-    from datapipelines.providers.cook_county.cook_county_provider import CookCountyProvider
+    from datapipelines.providers.cook_county import create_cook_county_provider
+    from datapipelines.base.ingestor_engine import IngestorEngine
 
-    provider = CookCountyProvider(config, spark, storage_cfg)
-    df = provider.fetch_dataset("parcel_sales")
-    provider.write_to_bronze(df, "parcel_sales")
+    provider = create_cook_county_provider(config, storage_cfg, spark, docs_path)
+    engine = IngestorEngine(provider, storage_cfg)
+
+    # Ingest all endpoints
+    results = engine.run(write_batch_size=500000)
+
+    # Ingest specific endpoints
+    results = engine.run(work_items=["property_locations", "assessments"])
 
 Author: de_Funk Team
 Date: January 2026
+Updated: January 2026 - Unified interface implementation
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Any, Generator
 from pathlib import Path
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
-from pyspark.sql.types import (
-    StructType, StructField, StringType, DoubleType, IntegerType,
-    LongType, DateType, TimestampType, BooleanType
-)
+from pyspark.sql.types import StructType, StructField, StringType
 
+from datapipelines.base.provider import BaseProvider, ProviderConfig
 from datapipelines.base.socrata_client import SocrataClient
 from datapipelines.ingestors.bronze_sink import BronzeSink
 from config.logging import get_logger
@@ -52,28 +64,12 @@ class CookCountyProviderConfig:
     timeout: int = 120
 
 
-@dataclass
-class DatasetFetchResult:
-    """Result from fetching a dataset."""
-    endpoint_id: str
-    success: bool
-    record_count: int = 0
-    error: Optional[str] = None
-    df: Optional[DataFrame] = None
-
-
-class CookCountyProvider:
+class CookCountyProvider(BaseProvider):
     """
     Provider for Cook County Data Portal (Socrata API).
 
-    Specializes in property assessment and tax data from Cook County
-    Assessor and other county agencies.
-
-    Key datasets:
-    - Parcel sales (property transactions)
-    - Assessed values (property valuations)
-    - Property characteristics (residential, commercial)
-    - Appeals and Board of Review decisions
+    Implements the unified BaseProvider interface (v2.7).
+    Work items are endpoint IDs (e.g., "property_locations", "assessments").
     """
 
     PROVIDER_ID = "cook_county_data_portal"
@@ -81,7 +77,7 @@ class CookCountyProvider:
 
     def __init__(
         self,
-        config: CookCountyProviderConfig,
+        provider_config: CookCountyProviderConfig,
         spark,
         storage_cfg: Dict,
         docs_path: Optional[Path] = None
@@ -90,22 +86,29 @@ class CookCountyProvider:
         Initialize Cook County provider.
 
         Args:
-            config: Provider configuration
+            provider_config: Provider-specific configuration
             spark: SparkSession
             storage_cfg: Storage configuration for Bronze paths
             docs_path: Path to Documents folder (for loading endpoint configs)
         """
-        self.config = config
+        self._provider_config = provider_config
         self.spark = spark
         self.storage_cfg = storage_cfg
         self.sink = BronzeSink(storage_cfg)
 
+        # Create ProviderConfig for BaseProvider compatibility
+        self.config = ProviderConfig(
+            name=self.PROVIDER_ID,
+            base_url=provider_config.base_url,
+            rate_limit=provider_config.rate_limit_per_sec,
+        )
+
         # Initialize Socrata client
         self.client = SocrataClient(
-            base_url=config.base_url,
-            app_token=config.app_token,
-            rate_limit_per_sec=config.rate_limit_per_sec,
-            timeout=config.timeout
+            base_url=provider_config.base_url,
+            app_token=provider_config.app_token,
+            rate_limit_per_sec=provider_config.rate_limit_per_sec,
+            timeout=provider_config.timeout
         )
 
         # Load endpoint configs from markdown
@@ -115,8 +118,12 @@ class CookCountyProvider:
 
         logger.info(
             f"CookCountyProvider initialized: {len(self._endpoints)} endpoints, "
-            f"rate_limit={config.rate_limit_per_sec}"
+            f"rate_limit={provider_config.rate_limit_per_sec}"
         )
+
+    def _setup(self) -> None:
+        """Setup is done in __init__ for this provider."""
+        pass
 
     def _load_endpoint_configs(self, docs_path: Path) -> None:
         """Load endpoint configurations from markdown files."""
@@ -127,192 +134,225 @@ class CookCountyProvider:
         except Exception as e:
             logger.warning(f"Failed to load Cook County endpoint configs: {e}")
 
-    def get_resource_id(self, endpoint_id: str) -> Optional[str]:
-        """
-        Get Socrata resource ID for an endpoint.
+    # =========================================================================
+    # UNIFIED INTERFACE IMPLEMENTATION (v2.7)
+    # =========================================================================
 
-        Extracts the 4x4 ID from the endpoint_pattern.
+    def list_work_items(self, status: str = 'active', **kwargs) -> List[str]:
+        """
+        List available endpoint IDs for ingestion.
 
         Args:
-            endpoint_id: Endpoint identifier
+            status: Filter by endpoint status ('active', 'all')
+            **kwargs: Additional filters
 
         Returns:
-            Resource ID or None if not found
+            List of endpoint IDs
         """
-        endpoint = self._endpoints.get(endpoint_id)
-        if not endpoint:
-            logger.warning(f"Unknown endpoint: {endpoint_id}")
-            return None
+        if status == 'active':
+            return [
+                eid for eid, ep in self._endpoints.items()
+                if ep.status == 'active'
+            ]
+        return list(self._endpoints.keys())
 
-        # Extract resource ID from pattern like "/resource/5pge-nu6u.json"
+    def fetch(
+        self,
+        work_item: str,
+        max_records: Optional[int] = None,
+        **kwargs
+    ) -> Generator[List[Dict], None, None]:
+        """
+        Fetch data for an endpoint, yielding batches of records.
+
+        Handles both single-resource and multi-year (view_id) endpoints.
+
+        Args:
+            work_item: Endpoint ID (e.g., "property_locations")
+            max_records: Maximum records to fetch (None = no limit)
+            **kwargs: Additional query parameters
+
+        Yields:
+            List[Dict] - Batches of raw records
+        """
+        endpoint = self._endpoints.get(work_item)
+        if not endpoint:
+            logger.warning(f"Unknown endpoint: {work_item}")
+            return
+
+        # Check if this is a multi-year endpoint with view_ids
+        if endpoint.view_ids:
+            yield from self._fetch_multi_year(endpoint, max_records, **kwargs)
+        else:
+            yield from self._fetch_single_resource(work_item, endpoint, max_records, **kwargs)
+
+    def _fetch_single_resource(
+        self,
+        endpoint_id: str,
+        endpoint: EndpointConfig,
+        max_records: Optional[int] = None,
+        **kwargs
+    ) -> Generator[List[Dict], None, None]:
+        """Fetch from a single Socrata resource."""
+        resource_id = self._get_resource_id(endpoint)
+        if not resource_id:
+            logger.warning(f"Could not extract resource_id for: {endpoint_id}")
+            return
+
+        # Merge default query with provided params
+        params = dict(endpoint.default_query or {})
+
+        for batch in self.client.fetch_all(
+            resource_id=resource_id,
+            query_params=params,
+            limit=self._provider_config.default_limit,
+            max_records=max_records
+        ):
+            yield batch
+
+    def _fetch_multi_year(
+        self,
+        endpoint: EndpointConfig,
+        max_records: Optional[int] = None,
+        **kwargs
+    ) -> Generator[List[Dict], None, None]:
+        """Fetch from multiple year-based view_ids."""
+        params = dict(endpoint.default_query or {})
+
+        for view_id_entry in endpoint.view_ids:
+            year = view_id_entry.get('year')
+            resource_id = view_id_entry.get('view_id')
+
+            if not resource_id:
+                continue
+
+            logger.info(f"Fetching year {year} from {resource_id}")
+
+            for batch in self.client.fetch_all(
+                resource_id=resource_id,
+                query_params=params,
+                limit=self._provider_config.default_limit,
+                max_records=max_records
+            ):
+                # Add year to each record for partitioning
+                for record in batch:
+                    record['year'] = year
+                yield batch
+
+    def normalize(self, records: List[Dict], work_item: str) -> DataFrame:
+        """
+        Normalize raw records to a Spark DataFrame.
+
+        Args:
+            records: List of raw record dicts from API
+            work_item: Endpoint ID
+
+        Returns:
+            Spark DataFrame with proper schema
+        """
+        endpoint = self._endpoints.get(work_item)
+        if not endpoint:
+            # Fallback: create DataFrame with schema inference
+            return self.spark.createDataFrame(records, samplingRatio=1.0)
+
+        return self._create_dataframe(records, endpoint)
+
+    def get_table_name(self, work_item: str) -> str:
+        """Get Bronze table name for an endpoint."""
+        endpoint = self._endpoints.get(work_item)
+        if endpoint and endpoint.bronze:
+            return endpoint.bronze.table
+        # Default: use endpoint_id as table name
+        return f"cook_county_{work_item}"
+
+    def get_partitions(self, work_item: str) -> Optional[List[str]]:
+        """Get partition columns for an endpoint."""
+        endpoint = self._endpoints.get(work_item)
+        if endpoint and endpoint.bronze:
+            return endpoint.bronze.partitions or None
+        return None
+
+    def get_key_columns(self, work_item: str) -> List[str]:
+        """Get key columns for upsert operations."""
+        endpoint = self._endpoints.get(work_item)
+        if endpoint and endpoint.bronze:
+            return endpoint.bronze.key_columns or []
+        return []
+
+    # =========================================================================
+    # HELPER METHODS
+    # =========================================================================
+
+    def _get_resource_id(self, endpoint: EndpointConfig) -> Optional[str]:
+        """Extract Socrata 4x4 resource ID from endpoint pattern."""
         pattern = endpoint.endpoint_pattern
         if "/resource/" in pattern and ".json" in pattern:
             start = pattern.find("/resource/") + len("/resource/")
             end = pattern.find(".json")
             return pattern[start:end]
-
         return None
 
+    def get_resource_id(self, endpoint_id: str) -> Optional[str]:
+        """Get Socrata resource ID for an endpoint (public method)."""
+        endpoint = self._endpoints.get(endpoint_id)
+        if not endpoint:
+            return None
+        return self._get_resource_id(endpoint)
+
     def list_endpoints(self) -> List[str]:
-        """List all available endpoint IDs."""
-        return list(self._endpoints.keys())
+        """List all available endpoint IDs (alias for list_work_items)."""
+        return self.list_work_items(status='all')
 
     def get_endpoint_config(self, endpoint_id: str) -> Optional[EndpointConfig]:
         """Get configuration for an endpoint."""
         return self._endpoints.get(endpoint_id)
 
-    def fetch_dataset(
-        self,
-        endpoint_id: str,
-        query_params: Optional[Dict[str, Any]] = None,
-        max_records: Optional[int] = None,
-        progress_callback: Optional[callable] = None
-    ) -> DatasetFetchResult:
-        """
-        Fetch a complete dataset from Cook County Data Portal.
-
-        Args:
-            endpoint_id: Endpoint identifier (e.g., "parcel_sales", "assessed_values")
-            query_params: Additional SoQL query parameters
-            max_records: Maximum records to fetch (None = all)
-            progress_callback: Optional callback(batch_num, record_count)
-
-        Returns:
-            DatasetFetchResult with DataFrame or error
-        """
-        resource_id = self.get_resource_id(endpoint_id)
-        if not resource_id:
-            return DatasetFetchResult(
-                endpoint_id=endpoint_id,
-                success=False,
-                error=f"Unknown endpoint: {endpoint_id}"
-            )
-
-        endpoint = self._endpoints[endpoint_id]
-
-        # Merge default query with provided params
-        params = dict(endpoint.default_query or {})
-        if query_params:
-            params.update(query_params)
-
-        try:
-            # Fetch all records with pagination
-            all_records = []
-            batch_num = 0
-
-            for batch in self.client.fetch_all(
-                resource_id=resource_id,
-                query_params=params,
-                limit=self.config.default_limit,
-                max_records=max_records
-            ):
-                all_records.extend(batch)
-                batch_num += 1
-
-                if progress_callback:
-                    progress_callback(batch_num, len(all_records))
-
-            if not all_records:
-                logger.warning(f"No records fetched for {endpoint_id}")
-                return DatasetFetchResult(
-                    endpoint_id=endpoint_id,
-                    success=True,
-                    record_count=0
-                )
-
-            # Convert to Spark DataFrame
-            df = self._create_dataframe(all_records, endpoint)
-
-            return DatasetFetchResult(
-                endpoint_id=endpoint_id,
-                success=True,
-                record_count=len(all_records),
-                df=df
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to fetch {endpoint_id}: {e}")
-            return DatasetFetchResult(
-                endpoint_id=endpoint_id,
-                success=False,
-                error=str(e)
-            )
-
     def _safe_parse_date(self, col_val):
         """
         Normalize date strings to yyyy-MM-dd format for ANSI-safe parsing.
-
-        Handles Socrata date formats:
-        - ISO timestamp: 2025-02-26T00:00:00.000 -> 2025-02-26
-        - ISO date: 2025-02-26 (no change)
-        - US date: 01/16/2025 or 1/6/2025 -> 2025-01-16
-        - Year only: 2020 -> 2020-01-01
-        - NULL/empty: NULL
-
-        Returns a date column expression.
         """
-        # Handle NULL values explicitly
         trimmed = F.trim(col_val)
 
-        # Split US date format (MM/dd/yyyy) for reformatting
         parts = F.split(trimmed, "/")
         us_date_formatted = F.concat(
-            parts[2],  # year
+            parts[2],
             F.lit("-"),
-            F.lpad(parts[0], 2, "0"),  # month (zero-padded)
+            F.lpad(parts[0], 2, "0"),
             F.lit("-"),
-            F.lpad(parts[1], 2, "0")   # day (zero-padded)
+            F.lpad(parts[1], 2, "0")
         )
 
-        # Normalize string to yyyy-MM-dd based on detected format
         normalized = (
             F.when(
                 col_val.isNull() | (F.length(trimmed) == 0),
                 F.lit(None).cast("string")
             ).when(
-                # ISO timestamp: extract date portion (first 10 chars)
                 trimmed.contains("T"),
                 F.substring(trimmed, 1, 10)
             ).when(
-                # US date format: reformat to ISO
                 trimmed.contains("/"),
                 us_date_formatted
             ).when(
-                # Year only: append -01-01
                 F.length(trimmed) == 4,
                 F.concat(trimmed, F.lit("-01-01"))
             ).otherwise(
-                # Assume already in yyyy-MM-dd format
                 trimmed
             )
         )
 
-        # Cast normalized string to date
         return F.to_date(normalized, "yyyy-MM-dd")
 
     def _safe_parse_timestamp(self, col_val):
         """
         Normalize timestamp strings for ANSI-safe parsing.
-
-        Handles Socrata timestamp formats:
-        - ISO: 2025-02-26T00:00:00.000 -> 2025-02-26 00:00:00
-        - Date only: 2025-02-26 -> 2025-02-26 00:00:00
-        - US date: 01/16/2025 -> 2025-01-16 00:00:00
-        - Year only: 2020 -> 2020-01-01 00:00:00
-        - NULL/empty: NULL
-
-        Returns a timestamp column expression.
         """
         trimmed = F.trim(col_val)
 
-        # For ISO format with T, replace T with space and truncate at 19 chars
-        # Input: 2025-02-26T00:00:00.000 -> Output: 2025-02-26 00:00:00
         iso_normalized = F.regexp_replace(
             F.substring(trimmed, 1, 19),
             "T", " "
         )
 
-        # US date parts (MM/dd/yyyy)
         parts = F.split(trimmed, "/")
         us_timestamp = F.concat(
             parts[2], F.lit("-"),
@@ -321,34 +361,27 @@ class CookCountyProvider:
             F.lit(" 00:00:00")
         )
 
-        # Normalize string based on detected format
         normalized = (
             F.when(
                 col_val.isNull() | (F.length(trimmed) == 0),
                 F.lit(None).cast("string")
             ).when(
-                # ISO timestamp with T separator
                 trimmed.contains("T"),
                 iso_normalized
             ).when(
-                # US date format
                 trimmed.contains("/"),
                 us_timestamp
             ).when(
-                # Date only (10 chars like yyyy-MM-dd)
                 F.length(trimmed) == 10,
                 F.concat(trimmed, F.lit(" 00:00:00"))
             ).when(
-                # Year only (4 chars)
                 F.length(trimmed) == 4,
                 F.concat(trimmed, F.lit("-01-01 00:00:00"))
             ).otherwise(
-                # Assume already in correct format
                 trimmed
             )
         )
 
-        # Cast normalized string to timestamp
         return F.to_timestamp(normalized, "yyyy-MM-dd HH:mm:ss")
 
     def _create_dataframe(
@@ -366,7 +399,6 @@ class CookCountyProvider:
         Returns:
             Spark DataFrame
         """
-        # If no schema defined, use inference
         if not endpoint.schema:
             return self.spark.createDataFrame(records, samplingRatio=1.0)
 
@@ -376,328 +408,80 @@ class CookCountyProvider:
             transformed = {}
             for field_def in endpoint.schema:
                 source_val = record.get(field_def.source)
-                # Keep as string - we'll cast after DataFrame creation
                 transformed[field_def.name] = str(source_val) if source_val is not None else None
             transformed_records.append(transformed)
 
-        # Create DataFrame with all strings first (Socrata returns strings)
+        # Create DataFrame with all strings first
         string_schema = StructType([
             StructField(f.name, StringType(), True) for f in endpoint.schema
         ])
         df = self.spark.createDataFrame(transformed_records, string_schema)
 
-        # Now cast columns to target types
-        # Note: Use try_cast for numeric types to handle malformed input
-        # Spark 4.0 ANSI mode requires try_cast to tolerate malformed input and return NULL
+        # Cast columns to target types
         for field_def in endpoint.schema:
             target_type = field_def.type.lower()
             if target_type == 'string':
                 continue
             elif target_type in ('int', 'long'):
-                # Use try_cast for safe casting - returns NULL on malformed input
-                # Cast string -> double -> int to handle "2025.0" format
                 df = df.withColumn(field_def.name,
                     F.col(field_def.name).try_cast('double').cast(target_type))
             elif target_type in ('double', 'float'):
-                # Use try_cast to handle non-numeric values
                 df = df.withColumn(field_def.name, F.col(field_def.name).try_cast('double'))
             elif target_type == 'date':
-                # Normalize date strings to yyyy-MM-dd before casting
-                # This handles Socrata's various date formats without ANSI exceptions
                 df = df.withColumn(field_def.name,
                     self._safe_parse_date(F.col(field_def.name)))
             elif target_type == 'timestamp':
-                # Normalize timestamp strings to yyyy-MM-dd HH:mm:ss before casting
-                # This handles Socrata's ISO format and variations without ANSI exceptions
                 df = df.withColumn(field_def.name,
                     self._safe_parse_timestamp(F.col(field_def.name)))
             elif target_type == 'boolean':
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
 
-        # Apply transforms (including PIN zero-padding)
-        df = self._apply_transforms(df, endpoint)
-
         return df
 
-    def _coerce_value(self, value: Any, target_type: str) -> Any:
-        """Coerce a value to target type."""
-        if value is None:
-            return None
-
-        try:
-            if target_type in ('double', 'float'):
-                return float(value)
-            elif target_type in ('int', 'integer'):
-                return int(float(value))
-            elif target_type in ('long', 'bigint'):
-                return int(float(value))
-            elif target_type == 'string':
-                return str(value)
-        except (ValueError, TypeError):
-            return None
-
-        return value
-
-    def _apply_transforms(self, df: DataFrame, endpoint: EndpointConfig) -> DataFrame:
-        """
-        Apply field transforms from schema config.
-
-        Handles Cook County specific transforms like PIN zero-padding.
-        """
-        for field_def in endpoint.schema:
-            if not field_def.transform:
-                continue
-
-            col_name = field_def.name
-            transform = field_def.transform
-
-            try:
-                if transform.startswith("zfill("):
-                    # Zero-pad to N digits (commonly 14 for PINs)
-                    n = int(transform[6:-1])
-                    df = df.withColumn(col_name, F.lpad(F.col(col_name), n, "0"))
-
-                elif transform.startswith("to_date("):
-                    # Parse date with format (validate with regex first for ANSI safety)
-                    fmt = transform[8:-1]
-                    col_val = F.col(col_name)
-                    df = df.withColumn(col_name,
-                        F.when(col_val.isNotNull(), F.to_date(col_val, fmt))
-                    )
-
-                elif transform.startswith("to_timestamp("):
-                    # Parse timestamp with format (validate with regex first for ANSI safety)
-                    fmt = transform[13:-1]
-                    col_val = F.col(col_name)
-                    df = df.withColumn(col_name,
-                        F.when(col_val.isNotNull(), F.to_timestamp(col_val, fmt))
-                    )
-
-            except Exception as e:
-                logger.warning(f"Failed to apply transform {transform} to {col_name}: {e}")
-
-        return df
-
-    def write_to_bronze(
-        self,
-        df: DataFrame,
-        endpoint_id: str,
-        write_strategy: str = None
-    ) -> Optional[str]:
-        """
-        Write DataFrame to Bronze layer.
-
-        Uses endpoint config for table name, partitions, and key columns.
-
-        Args:
-            df: DataFrame to write
-            endpoint_id: Endpoint identifier
-            write_strategy: Override write strategy ('upsert', 'append', 'overwrite')
-
-        Returns:
-            Path to written data or None on failure
-        """
-        endpoint = self._endpoints.get(endpoint_id)
-        if not endpoint or not endpoint.bronze:
-            logger.error(f"No bronze config for endpoint: {endpoint_id}")
-            return None
-
-        bronze_cfg = endpoint.bronze
-        table_name = bronze_cfg.table
-
-        # Get DataFrame columns
-        df_columns = set(df.columns)
-
-        # Filter partitions to only include columns that exist in DataFrame
-        partitions = [p for p in (bronze_cfg.partitions or []) if p in df_columns]
-        if bronze_cfg.partitions and not partitions:
-            logger.warning(f"Partition columns {bronze_cfg.partitions} not in DataFrame, skipping partitioning")
-
-        try:
-            # Use simple overwrite for now
-            path = self.sink.overwrite(
-                df,
-                table_name,
-                partitions=partitions if partitions else None
-            )
-
-            logger.info(f"Wrote {df.count()} records to {table_name}")
-            return path
-
-        except Exception as e:
-            logger.error(f"Failed to write to bronze: {e}")
-            return None
-
-    def ingest_endpoint(
-        self,
-        endpoint_id: str,
-        query_params: Optional[Dict[str, Any]] = None,
-        max_records: Optional[int] = None,
-        write_batch_size: int = 500000
-    ) -> DatasetFetchResult:
-        """
-        Fetch and write a single endpoint to Bronze with streaming batch writes.
-
-        Uses centralized StreamingBronzeWriter for automatic batch management.
-
-        Args:
-            endpoint_id: Endpoint identifier
-            query_params: Additional query parameters
-            max_records: Maximum records to fetch (None = all)
-            write_batch_size: Records to accumulate before writing (default 500k)
-
-        Returns:
-            DatasetFetchResult with status
-        """
-        resource_id = self.get_resource_id(endpoint_id)
-        if not resource_id:
-            return DatasetFetchResult(
-                endpoint_id=endpoint_id,
-                success=False,
-                error=f"Unknown endpoint: {endpoint_id}"
-            )
-
-        endpoint = self._endpoints[endpoint_id]
-
-        # Get bronze config
-        if not endpoint.bronze:
-            return DatasetFetchResult(
-                endpoint_id=endpoint_id,
-                success=False,
-                error=f"No bronze config for endpoint: {endpoint_id}"
-            )
-
-        bronze_cfg = endpoint.bronze
-        table_name = bronze_cfg.table
-        partitions = bronze_cfg.partitions or []
-
-        # Merge default query with provided params
-        params = dict(endpoint.default_query or {})
-        if query_params:
-            params.update(query_params)
-
-        try:
-            # Create DataFrame factory for this endpoint
-            def df_factory(records):
-                return self._create_dataframe(records, endpoint)
-
-            # Use centralized streaming writer
-            with self.sink.streaming_writer(
-                table=table_name,
-                df_factory=df_factory,
-                batch_size=write_batch_size,
-                partitions=partitions
-            ) as writer:
-                for batch in self.client.fetch_all(
-                    resource_id=resource_id,
-                    query_params=params,
-                    limit=self.config.default_limit,
-                    max_records=max_records
-                ):
-                    writer.add_batch(batch)
-
-                total_records = writer.total_records + writer.buffered_records
-
-            return DatasetFetchResult(
-                endpoint_id=endpoint_id,
-                success=True,
-                record_count=total_records
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to ingest {endpoint_id}: {e}")
-            return DatasetFetchResult(
-                endpoint_id=endpoint_id,
-                success=False,
-                error=str(e)
-            )
-
-    def ingest_all(
-        self,
-        endpoint_ids: Optional[List[str]] = None,
-        max_records_per_endpoint: Optional[int] = None,
-        write_batch_size: int = 500000,
-        silent: bool = False
-    ) -> Dict[str, DatasetFetchResult]:
-        """
-        Ingest multiple endpoints.
-
-        Args:
-            endpoint_ids: List of endpoints to ingest (None = all active)
-            max_records_per_endpoint: Limit per endpoint
-            write_batch_size: Records to buffer before writing to Delta (default 500k)
-            silent: Suppress progress output
-
-        Returns:
-            Dict mapping endpoint_id to result
-        """
-        if endpoint_ids is None:
-            # Get all active endpoints
-            endpoint_ids = [
-                eid for eid, ep in self._endpoints.items()
-                if ep.status == 'active'
-            ]
-
-        if not silent:
-            print(f"\nIngesting {len(endpoint_ids)} Cook County endpoints...")
-
-        results = {}
-        for i, eid in enumerate(endpoint_ids):
-            if not silent:
-                print(f"  [{i+1}/{len(endpoint_ids)}] {eid}...", end=" ", flush=True)
-
-            result = self.ingest_endpoint(
-                eid,
-                max_records=max_records_per_endpoint,
-                write_batch_size=write_batch_size
-            )
-            results[eid] = result
-
-            if not silent:
-                if result.success:
-                    print(f"✓ {result.record_count} records")
-                else:
-                    print(f"✗ {result.error}")
-
-        return results
+    # =========================================================================
+    # PIN-BASED LOOKUP (Cook County specific)
+    # =========================================================================
 
     def fetch_parcel_data(
         self,
         pins: Optional[List[str]] = None,
-        year: Optional[int] = None,
-        max_records: Optional[int] = None
-    ) -> DatasetFetchResult:
+        **kwargs
+    ) -> Generator[List[Dict], None, None]:
         """
-        Convenience method to fetch parcel-level data.
+        Fetch parcel data for specific PINs.
 
-        Filters by PINs and/or year if provided.
+        This is a convenience method for property-specific lookups.
 
         Args:
-            pins: List of 14-digit PINs to filter (optional)
-            year: Tax year to filter (optional)
-            max_records: Maximum records
+            pins: List of Property Index Numbers (PINs)
+            **kwargs: Additional query parameters
 
-        Returns:
-            DatasetFetchResult
+        Yields:
+            List[Dict] - Batches of parcel records
         """
-        query_params = {}
+        if not pins:
+            return
 
-        if pins:
-            # Build $where clause for PINs
-            pins_quoted = ", ".join(f"'{p.zfill(14)}'" for p in pins)
-            query_params["$where"] = f"pin in ({pins_quoted})"
+        # Find the property_locations endpoint
+        endpoint = self._endpoints.get("property_locations")
+        if not endpoint:
+            logger.warning("property_locations endpoint not configured")
+            return
 
-        if year:
-            if "$where" in query_params:
-                query_params["$where"] += f" AND year = '{year}'"
-            else:
-                query_params["$where"] = f"year = '{year}'"
+        resource_id = self._get_resource_id(endpoint)
+        if not resource_id:
+            return
 
-        return self.fetch_dataset(
-            "parcel_universe",
-            query_params=query_params,
-            max_records=max_records
-        )
+        # Build PIN filter
+        pin_list = ",".join(f"'{p}'" for p in pins)
+        params = {"$where": f"pin IN ({pin_list})"}
+
+        for batch in self.client.fetch_all(
+            resource_id=resource_id,
+            query_params=params,
+            limit=self._provider_config.default_limit
+        ):
+            yield batch
 
 
 def create_cook_county_provider(
@@ -718,10 +502,8 @@ def create_cook_county_provider(
     Returns:
         Configured CookCountyProvider
     """
-    # Extract config from api_cfg
     base_url = api_cfg.get('base_urls', {}).get('core', 'https://datacatalog.cookcountyil.gov')
 
-    # Get app token from credentials
     credentials = api_cfg.get('credentials', {})
     api_keys = credentials.get('api_keys', [])
     app_token = api_keys[0] if api_keys else None
@@ -733,7 +515,7 @@ def create_cook_county_provider(
     )
 
     return CookCountyProvider(
-        config=config,
+        provider_config=config,
         spark=spark,
         storage_cfg=storage_cfg,
         docs_path=docs_path
