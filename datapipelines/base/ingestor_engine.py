@@ -208,13 +208,12 @@ class IngestorEngine:
 
         Args:
             work_items: List of work items to ingest (None = all from provider)
-            write_batch_size: Records to buffer before Delta write.
-                Only used in sync mode (async_writes=False).
-                In async mode, all records are collected then written at once.
+            write_batch_size: Records to buffer before each Delta write (default 500k).
+                Used in both sync and async modes to keep memory bounded.
             max_records: Max records per work item (None = no limit)
             silent: Suppress progress output
             async_writes: Enable async writes (default True for ~2-3x throughput).
-                Async mode overlaps fetch(N+1) with write(N) for parallelism.
+                Async mode overlaps fetch with write operations using chunked writes.
             **kwargs: Provider-specific options passed to fetch()
 
         Returns:
@@ -233,10 +232,8 @@ class IngestorEngine:
             print(f"INGESTOR ENGINE: {self.provider.provider_id.upper()}")
             print(f"{'=' * 60}")
             print(f"  Work items: {len(work_items)}")
-            if async_writes:
-                print(f"  Mode: async (fetch/write overlap)")
-            else:
-                print(f"  Mode: sync (batch size: {write_batch_size:,})")
+            print(f"  Mode: {'async (chunked)' if async_writes else 'sync'}")
+            print(f"  Batch size: {write_batch_size:,} records")
             if max_records:
                 print(f"  Max records per item: {max_records:,}")
             print()
@@ -326,7 +323,13 @@ class IngestorEngine:
             if len(self._pending_futures) > max_pending:
                 time.sleep(0.1)
 
-    def _async_write(self, df, table_name: str, partitions: Optional[List[str]]) -> int:
+    def _async_write(
+        self,
+        df,
+        table_name: str,
+        partitions: Optional[List[str]],
+        mode: str = "overwrite"
+    ) -> int:
         """
         Write DataFrame to Delta Lake (runs in background thread).
 
@@ -334,13 +337,17 @@ class IngestorEngine:
             df: Spark DataFrame to write
             table_name: Target table name
             partitions: Partition columns
+            mode: Write mode - "overwrite" or "append"
 
         Returns:
             Number of records written
         """
         count = df.count()
-        self.sink.overwrite(df, table_name, partitions=partitions)
-        logger.debug(f"Async write complete: {table_name} ({count:,} records)")
+        if mode == "append":
+            self.sink.append(df, table_name, partitions=partitions)
+        else:
+            self.sink.overwrite(df, table_name, partitions=partitions)
+        logger.debug(f"Async write complete: {table_name} ({count:,} records, mode={mode})")
         return count
 
     def _ingest_work_item_async(
@@ -351,14 +358,14 @@ class IngestorEngine:
         **kwargs
     ) -> WorkItemResult:
         """
-        Ingest a single work item with async writes.
+        Ingest a single work item with chunked async writes.
 
-        Collects all data for a work item, then queues a single async write.
-        Parallelism comes from overlapping: fetch(N+1) while write(N) happens.
+        Collects records up to write_batch_size, queues async write, continues.
+        Memory stays bounded while overlapping fetch and write operations.
 
         Args:
             work_item: Work item identifier
-            write_batch_size: Records to buffer before write (unused in async mode)
+            write_batch_size: Records to buffer before each write
             max_records: Max records to fetch
             **kwargs: Provider-specific options
 
@@ -366,9 +373,6 @@ class IngestorEngine:
             WorkItemResult with status and record count
         """
         try:
-            # Wait for any pending writes from previous work items (backpressure)
-            self._wait_for_pending_writes(self.max_pending_writes)
-
             # Get table configuration from provider
             table_name = self.provider.get_table_name(work_item)
             partitions = self.provider.get_partitions(work_item)
@@ -379,51 +383,92 @@ class IngestorEngine:
             # Reset write errors for this work item
             self._write_errors = []
 
-            # Collect ALL data for this work item first (single transaction)
-            all_records = []
+            # Track state for chunked writes
+            buffer = []
+            total_records = 0
+            chunk_count = 0
+            validated_partitions = None  # Cache validated partitions after first chunk
+
             for batch in self.provider.fetch(
                 work_item,
                 max_records=max_records,
                 **kwargs
             ):
-                all_records.extend(batch)
+                buffer.extend(batch)
 
-            if not all_records:
+                # When buffer reaches batch size, write it
+                if len(buffer) >= write_batch_size:
+                    # Wait for backpressure before queueing more writes
+                    self._wait_for_pending_writes(self.max_pending_writes)
+
+                    # Normalize buffer to DataFrame
+                    df = self.provider.normalize(buffer, work_item)
+
+                    # Validate partitions on first chunk only
+                    if validated_partitions is None:
+                        validated_partitions = self._validate_partitions(
+                            partitions, df.columns, work_item
+                        )
+
+                    # First chunk overwrites, subsequent chunks append
+                    mode = "overwrite" if chunk_count == 0 else "append"
+
+                    # Queue async write
+                    future = executor.submit(
+                        self._async_write,
+                        df,
+                        table_name,
+                        validated_partitions,
+                        mode
+                    )
+                    self._pending_futures.append(future)
+
+                    total_records += len(buffer)
+                    chunk_count += 1
+                    logger.debug(
+                        f"{work_item}: queued chunk {chunk_count} "
+                        f"({len(buffer):,} records, mode={mode})"
+                    )
+
+                    # Clear buffer for next chunk
+                    buffer = []
+
+            # Write any remaining records in buffer
+            if buffer:
+                self._wait_for_pending_writes(self.max_pending_writes)
+
+                df = self.provider.normalize(buffer, work_item)
+
+                if validated_partitions is None:
+                    validated_partitions = self._validate_partitions(
+                        partitions, df.columns, work_item
+                    )
+
+                mode = "overwrite" if chunk_count == 0 else "append"
+
+                future = executor.submit(
+                    self._async_write,
+                    df,
+                    table_name,
+                    validated_partitions,
+                    mode
+                )
+                self._pending_futures.append(future)
+
+                total_records += len(buffer)
+                chunk_count += 1
+                logger.debug(
+                    f"{work_item}: queued final chunk {chunk_count} "
+                    f"({len(buffer):,} records, mode={mode})"
+                )
+
+            if total_records == 0:
                 return WorkItemResult(
                     work_item=work_item,
                     success=True,
                     record_count=0,
                     table_path=str(self.sink.cfg["roots"]["bronze"]) + "/" + table_name
                 )
-
-            # Normalize all records to DataFrame
-            df = self.provider.normalize(all_records, work_item)
-            total_records = len(all_records)
-
-            # Filter partitions to only include columns that exist in DataFrame
-            if partitions:
-                df_columns = set(df.columns)
-                valid_partitions = [p for p in partitions if p in df_columns]
-                if valid_partitions != partitions:
-                    missing = set(partitions) - set(valid_partitions)
-                    logger.warning(
-                        f"Partition columns {missing} not found in {work_item} schema, "
-                        f"using {valid_partitions or 'no partitions'}"
-                    )
-                partitions = valid_partitions if valid_partitions else None
-
-            # Queue single async write for this work item
-            future = executor.submit(
-                self._async_write,
-                df,
-                table_name,
-                partitions
-            )
-            self._pending_futures.append(future)
-
-            # Don't wait for this write - let it happen in background
-            # The next work item's fetch will overlap with this write
-            # We'll check for errors in the results collection at the end
 
             return WorkItemResult(
                 work_item=work_item,
@@ -439,6 +484,28 @@ class IngestorEngine:
                 success=False,
                 error=str(e)[:200]
             )
+
+    def _validate_partitions(
+        self,
+        partitions: Optional[List[str]],
+        df_columns: List[str],
+        work_item: str
+    ) -> Optional[List[str]]:
+        """Validate partition columns exist in DataFrame schema."""
+        if not partitions:
+            return None
+
+        df_columns_set = set(df_columns)
+        valid_partitions = [p for p in partitions if p in df_columns_set]
+
+        if valid_partitions != partitions:
+            missing = set(partitions) - set(valid_partitions)
+            logger.warning(
+                f"Partition columns {missing} not found in {work_item} schema, "
+                f"using {valid_partitions or 'no partitions'}"
+            )
+
+        return valid_partitions if valid_partitions else None
 
     def _ingest_work_item_sync(
         self,
