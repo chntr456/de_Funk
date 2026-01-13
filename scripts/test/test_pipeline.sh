@@ -116,27 +116,49 @@ fi
 PROFILE_PROVIDERS=""
 PROFILE_SKIP_SILVER=""
 if [ -n "$PROFILE" ] && [ -f "$REPO_ROOT/configs/pipelines/run_config.json" ]; then
+    # Export for Python heredoc
+    export REPO_ROOT PROFILE
+
     # Read all profile settings at once
-    eval $(python3 -c "
+    eval $(python3 << 'PYEOF'
 import json
-with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
+import os
+
+repo_root = os.environ.get('REPO_ROOT', '.')
+profile_name = os.environ.get('PROFILE', '')
+
+with open(f'{repo_root}/configs/pipelines/run_config.json') as f:
     cfg = json.load(f)
-profile = cfg.get('profiles', {}).get('$PROFILE', {})
+
+profile = cfg.get('profiles', {}).get(profile_name, {})
 
 # max_tickers - empty string if not set or null
 max_tickers = profile.get('max_tickers')
-print(f'PROFILE_MAX_TICKERS=\"{max_tickers if max_tickers else \"\"}\"')
+if max_tickers:
+    print(f'PROFILE_MAX_TICKERS="{max_tickers}"')
+else:
+    print('PROFILE_MAX_TICKERS=""')
 
 # with_financials
-print(f'PROFILE_WITH_FINANCIALS=\"{\"true\" if profile.get(\"with_financials\") else \"false\"}\"')
+if profile.get('with_financials'):
+    print('PROFILE_WITH_FINANCIALS="true"')
+else:
+    print('PROFILE_WITH_FINANCIALS="false"')
 
 # skip_silver from profile
-print(f'PROFILE_SKIP_SILVER=\"{\"true\" if profile.get(\"skip_silver\") else \"false\"}\"')
+if profile.get('skip_silver'):
+    print('PROFILE_SKIP_SILVER="true"')
+else:
+    print('PROFILE_SKIP_SILVER="false"')
 
 # providers list - if set, use only these providers
 providers = profile.get('providers', [])
-print(f'PROFILE_PROVIDERS=\"{\" \".join(providers) if providers else \"\"}\"')
-" 2>/dev/null)
+if providers:
+    print(f'PROFILE_PROVIDERS="{" ".join(providers)}"')
+else:
+    print('PROFILE_PROVIDERS=""')
+PYEOF
+)
 
     # Apply profile settings if not overridden by CLI
     [ -z "$MAX_TICKERS" ] && [ -n "$PROFILE_MAX_TICKERS" ] && MAX_TICKERS="$PROFILE_MAX_TICKERS"
