@@ -136,12 +136,12 @@
       "log_level": "DEBUG"
     },
     "dev": {
-      "max_tickers": 10,
-      "use_market_cap": true,
+      "providers": ["chicago", "cook_county"],
+      "max_records_per_endpoint": null,
       "dry_run": false,
-      "skip_silver": false,
-      "with_financials": true,
-      "_comment": "Full dev profile: alpha_vantage (10 tickers w/ financials) + chicago (22 endpoints) + cook_county (13 endpoints). Endpoint limits from markdown configs."
+      "skip_silver": true,
+      "log_level": "DEBUG",
+      "_comment": "Full municipal data run: chicago (22 endpoints) + cook_county (13 endpoints). No record limits - fetches complete datasets."
     },
     "dev_municipal": {
       "providers": ["chicago", "cook_county"],
