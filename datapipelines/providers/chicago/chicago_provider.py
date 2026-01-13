@@ -285,31 +285,53 @@ class ChicagoProvider:
             elif target_type in ('double', 'float'):
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('double'))
             elif target_type == 'date':
-                # Check for transform with date format
+                # Use try_to_date for ANSI-safe parsing (returns NULL instead of exception)
+                # Spark 4.0 ANSI mode makes to_date throw exceptions on parse failure
+                col_name = field_def.name
+
                 if field_def.transform and field_def.transform.startswith("to_date("):
                     fmt = field_def.transform[8:-1]  # Extract format from to_date(fmt)
-                    df = df.withColumn(field_def.name, F.to_date(F.col(field_def.name), fmt))
+                    df = df.withColumn(col_name, F.expr(f"try_to_date(`{col_name}`, '{fmt}')"))
                 else:
                     # Socrata returns various date formats:
                     # - ISO timestamps: "2025-06-06T00:00:00.000" (most common)
                     # - Simple dates: "2025-06-06", "01/16/2025", "1/6/2025"
-                    # Extract just date portion from ISO timestamps first (substring first 10 chars)
-                    col_val = F.col(field_def.name)
-                    # For ISO timestamps, extract date portion (first 10 chars before 'T')
-                    iso_date_part = F.when(
-                        col_val.contains("T"),
-                        F.substring(col_val, 1, 10)
-                    ).otherwise(col_val)
+                    # - Year only: "2020" (edge case)
+                    #
+                    # Strategy: Extract date portion from ISO timestamps first,
+                    # then try multiple formats with try_to_date (ANSI-safe)
 
-                    df = df.withColumn(field_def.name,
-                        F.coalesce(
-                            F.to_date(iso_date_part, "yyyy-MM-dd"),
-                            F.to_date(col_val, "MM/dd/yyyy"),
-                            F.to_date(col_val, "M/d/yyyy")
-                        )
+                    # First extract ISO date portion if present
+                    df = df.withColumn(
+                        f"__{col_name}_cleaned",
+                        F.when(
+                            F.col(col_name).contains("T"),
+                            F.substring(F.col(col_name), 1, 10)
+                        ).otherwise(F.col(col_name))
                     )
+
+                    # Try multiple date formats with try_to_date (returns NULL on failure)
+                    df = df.withColumn(col_name,
+                        F.coalesce(
+                            F.expr(f"try_to_date(`__{col_name}_cleaned`, 'yyyy-MM-dd')"),
+                            F.expr(f"try_to_date(`{col_name}`, 'MM/dd/yyyy')"),
+                            F.expr(f"try_to_date(`{col_name}`, 'M/d/yyyy')"),
+                            # Handle year-only values by appending -01-01
+                            F.expr(f"try_to_date(concat(`{col_name}`, '-01-01'), 'yyyy-MM-dd')")
+                        )
+                    ).drop(f"__{col_name}_cleaned")
+
             elif target_type == 'timestamp':
-                df = df.withColumn(field_def.name, F.col(field_def.name).cast('timestamp'))
+                # Use try_to_timestamp for ANSI-safe parsing
+                col_name = field_def.name
+                # Socrata ISO format: 2025-06-06T00:00:00.000
+                df = df.withColumn(col_name,
+                    F.coalesce(
+                        F.expr(f"try_to_timestamp(`{col_name}`, \"yyyy-MM-dd'T'HH:mm:ss.SSS\")"),
+                        F.expr(f"try_to_timestamp(`{col_name}`, \"yyyy-MM-dd'T'HH:mm:ss\")"),
+                        F.expr(f"try_to_timestamp(`{col_name}`)")
+                    )
+                )
             elif target_type == 'boolean':
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
 
@@ -350,14 +372,14 @@ class ChicagoProvider:
                     df = df.withColumn(col_name, F.lpad(F.col(col_name), n, "0"))
 
                 elif transform.startswith("to_date("):
-                    # Parse date with format
+                    # Parse date with format (use try_to_date for ANSI safety)
                     fmt = transform[8:-1]
-                    df = df.withColumn(col_name, F.to_date(F.col(col_name), fmt))
+                    df = df.withColumn(col_name, F.expr(f"try_to_date(`{col_name}`, '{fmt}')"))
 
                 elif transform.startswith("to_timestamp("):
-                    # Parse timestamp with format
+                    # Parse timestamp with format (use try_to_timestamp for ANSI safety)
                     fmt = transform[13:-1]
-                    df = df.withColumn(col_name, F.to_timestamp(F.col(col_name), fmt))
+                    df = df.withColumn(col_name, F.expr(f"try_to_timestamp(`{col_name}`, '{fmt}')"))
 
             except Exception as e:
                 logger.warning(f"Failed to apply transform {transform} to {col_name}: {e}")
