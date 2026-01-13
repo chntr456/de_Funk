@@ -428,6 +428,27 @@ class BronzeSink:
         self._write_delta(df, str(base_path), mode="overwrite", partitions=partitions)
         return str(base_path)
 
+    def append(
+        self,
+        df,
+        table: str,
+        partitions: Optional[List[str]] = None
+    ) -> str:
+        """
+        Append data to existing Delta table.
+
+        Args:
+            df: Spark DataFrame
+            table: Table name (used as subdirectory)
+            partitions: Partition columns
+
+        Returns:
+            Path to written table
+        """
+        base_path = Path(self.cfg["roots"]["bronze"]) / table
+        self._write_delta(df, str(base_path), mode="append", partitions=partitions)
+        return str(base_path)
+
     def _write_delta(
         self,
         df,

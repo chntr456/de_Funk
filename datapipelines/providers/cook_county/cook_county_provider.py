@@ -532,34 +532,139 @@ class CookCountyProvider:
         self,
         endpoint_id: str,
         query_params: Optional[Dict[str, Any]] = None,
-        max_records: Optional[int] = None
+        max_records: Optional[int] = None,
+        write_batch_size: int = 500000
     ) -> DatasetFetchResult:
         """
-        Fetch and write a single endpoint to Bronze.
+        Fetch and write a single endpoint to Bronze with streaming batch writes.
 
-        Convenience method that combines fetch + write.
+        Writes data in batches to avoid memory exhaustion on large datasets.
 
         Args:
             endpoint_id: Endpoint identifier
             query_params: Additional query parameters
-            max_records: Maximum records to fetch
+            max_records: Maximum records to fetch (None = all)
+            write_batch_size: Records to accumulate before writing (default 500k)
 
         Returns:
             DatasetFetchResult with status
         """
-        # Fetch
-        result = self.fetch_dataset(endpoint_id, query_params, max_records)
+        resource_id = self.get_resource_id(endpoint_id)
+        if not resource_id:
+            return DatasetFetchResult(
+                endpoint_id=endpoint_id,
+                success=False,
+                error=f"Unknown endpoint: {endpoint_id}"
+            )
 
-        if not result.success or result.df is None:
-            return result
+        endpoint = self._endpoints[endpoint_id]
 
-        # Write
-        path = self.write_to_bronze(result.df, endpoint_id)
-        if not path:
-            result.success = False
-            result.error = "Failed to write to Bronze"
+        # Merge default query with provided params
+        params = dict(endpoint.default_query or {})
+        if query_params:
+            params.update(query_params)
 
-        return result
+        try:
+            batch_records = []
+            total_records = 0
+            batches_written = 0
+            is_first_write = True
+
+            for batch in self.client.fetch_all(
+                resource_id=resource_id,
+                query_params=params,
+                limit=self.config.default_limit,
+                max_records=max_records
+            ):
+                batch_records.extend(batch)
+
+                # Write when we hit batch size
+                if len(batch_records) >= write_batch_size:
+                    df = self._create_dataframe(batch_records, endpoint)
+
+                    # First write overwrites, subsequent appends
+                    if is_first_write:
+                        path = self.write_to_bronze(df, endpoint_id, write_strategy='overwrite')
+                        is_first_write = False
+                    else:
+                        path = self._append_to_bronze(df, endpoint_id)
+
+                    if not path:
+                        return DatasetFetchResult(
+                            endpoint_id=endpoint_id,
+                            success=False,
+                            error=f"Failed to write batch {batches_written + 1}"
+                        )
+
+                    total_records += len(batch_records)
+                    batches_written += 1
+                    logger.info(f"{endpoint_id}: Written batch {batches_written} ({total_records} total records)")
+
+                    # Clear memory
+                    batch_records = []
+                    df.unpersist() if hasattr(df, 'unpersist') else None
+
+            # Write any remaining records
+            if batch_records:
+                df = self._create_dataframe(batch_records, endpoint)
+
+                if is_first_write:
+                    path = self.write_to_bronze(df, endpoint_id, write_strategy='overwrite')
+                else:
+                    path = self._append_to_bronze(df, endpoint_id)
+
+                if not path:
+                    return DatasetFetchResult(
+                        endpoint_id=endpoint_id,
+                        success=False,
+                        error="Failed to write final batch"
+                    )
+
+                total_records += len(batch_records)
+                batches_written += 1
+
+            logger.info(f"{endpoint_id}: Completed - {total_records} records in {batches_written} batches")
+
+            return DatasetFetchResult(
+                endpoint_id=endpoint_id,
+                success=True,
+                record_count=total_records
+            )
+
+        except Exception as e:
+            logger.error(f"Failed to ingest {endpoint_id}: {e}")
+            return DatasetFetchResult(
+                endpoint_id=endpoint_id,
+                success=False,
+                error=str(e)
+            )
+
+    def _append_to_bronze(
+        self,
+        df: DataFrame,
+        endpoint_id: str
+    ) -> Optional[str]:
+        """Append DataFrame to existing Bronze table."""
+        endpoint = self._endpoints.get(endpoint_id)
+        if not endpoint or not endpoint.bronze:
+            return None
+
+        bronze_cfg = endpoint.bronze
+        table_name = bronze_cfg.table
+
+        df_columns = set(df.columns)
+        partitions = [p for p in (bronze_cfg.partitions or []) if p in df_columns]
+
+        try:
+            path = self.sink.append(
+                df,
+                table_name,
+                partitions=partitions if partitions else None
+            )
+            return path
+        except Exception as e:
+            logger.error(f"Failed to append to bronze: {e}")
+            return None
 
     def ingest_all(
         self,
