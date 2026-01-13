@@ -4,16 +4,11 @@ Unified Ingestor Engine.
 Provider-agnostic ingestion engine that works with any BaseProvider implementation.
 Uses StreamingBronzeWriter for memory-safe writes to Delta Lake.
 
-v2.7 UNIFIED ENGINE (January 2026):
-- Single engine for both ticker-based (Alpha Vantage) and endpoint-based (Socrata) providers
-- All writes go through StreamingBronzeWriter
-- Eliminates duplicate code paths between providers
-
 Usage:
     from datapipelines.base.ingestor_engine import IngestorEngine
     from datapipelines.providers.alpha_vantage import create_alpha_vantage_provider
 
-    provider = create_alpha_vantage_provider(config, spark)
+    provider = create_alpha_vantage_provider(spark, docs_path)
     engine = IngestorEngine(provider, storage_cfg)
 
     # Ingest all work items (data types or endpoints)
@@ -23,8 +18,6 @@ Usage:
     results = engine.run(work_items=["prices", "reference"])
 
 Author: de_Funk Team
-Date: December 2025
-Updated: January 2026 - Unified engine for all provider types
 """
 
 from __future__ import annotations
@@ -32,6 +25,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
+from pathlib import Path
 
 from datapipelines.base.provider import BaseProvider, WorkItemResult
 from datapipelines.ingestors.bronze_sink import BronzeSink
@@ -94,14 +88,11 @@ class IngestorEngine:
     """
     Unified ingestion engine for all provider types.
 
-    Uses the unified BaseProvider interface (v2.7) which abstracts
-    both ticker-based and endpoint-based providers behind the same API.
-
     All writes go through StreamingBronzeWriter for memory-safe
     incremental writes to Delta Lake.
 
     Example:
-        provider = create_chicago_provider(config, storage_cfg, spark)
+        provider = create_chicago_provider(spark, docs_path)
         engine = IngestorEngine(provider, storage_cfg)
 
         # Ingest all endpoints
@@ -120,7 +111,7 @@ class IngestorEngine:
         Initialize the ingestion engine.
 
         Args:
-            provider: Provider instance implementing unified interface
+            provider: Provider instance implementing BaseProvider interface
             storage_cfg: Storage configuration dict
         """
         self.provider = provider
@@ -158,7 +149,7 @@ class IngestorEngine:
 
         if not silent:
             print(f"\n{'=' * 60}")
-            print(f"INGESTOR ENGINE: {self.provider.config.name.upper()}")
+            print(f"INGESTOR ENGINE: {self.provider.provider_id.upper()}")
             print(f"{'=' * 60}")
             print(f"  Work items: {len(work_items)}")
             print(f"  Batch size: {write_batch_size:,} records")
@@ -285,39 +276,43 @@ class IngestorEngine:
 
 def create_engine(
     provider_name: str,
-    api_cfg: Dict,
     storage_cfg: Dict,
     spark=None,
-    docs_path=None
+    docs_path: Optional[Path] = None
 ) -> IngestorEngine:
     """
     Factory function to create an IngestorEngine for any provider.
 
-    All providers now return the same type (IngestorEngine) for consistency.
+    Configuration is loaded from markdown documentation (single source of truth).
 
     Args:
         provider_name: Provider name (e.g., "alpha_vantage", "chicago", "cook_county")
-        api_cfg: API configuration dict
         storage_cfg: Storage configuration dict
         spark: SparkSession
-        docs_path: Path to Documents folder (for Socrata providers)
+        docs_path: Path to Documents folder
 
     Returns:
         IngestorEngine wrapping the appropriate provider
     """
     if provider_name == "alpha_vantage":
-        from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
-        provider = create_alpha_vantage_provider(api_cfg, spark)
+        from datapipelines.providers.alpha_vantage.alpha_vantage_provider import (
+            create_alpha_vantage_provider
+        )
+        provider = create_alpha_vantage_provider(spark, docs_path)
         return IngestorEngine(provider, storage_cfg)
 
     elif provider_name in ("chicago", "chicago_data_portal"):
-        from datapipelines.providers.chicago.chicago_provider import create_chicago_provider
-        provider = create_chicago_provider(api_cfg, storage_cfg, spark, docs_path)
+        from datapipelines.providers.chicago.chicago_provider import (
+            create_chicago_provider
+        )
+        provider = create_chicago_provider(spark, docs_path)
         return IngestorEngine(provider, storage_cfg)
 
     elif provider_name in ("cook_county", "cook_county_data_portal"):
-        from datapipelines.providers.cook_county.cook_county_provider import create_cook_county_provider
-        provider = create_cook_county_provider(api_cfg, storage_cfg, spark, docs_path)
+        from datapipelines.providers.cook_county.cook_county_provider import (
+            create_cook_county_provider
+        )
+        provider = create_cook_county_provider(spark, docs_path)
         return IngestorEngine(provider, storage_cfg)
 
     else:

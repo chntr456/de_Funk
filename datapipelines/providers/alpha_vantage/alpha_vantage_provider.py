@@ -1,18 +1,12 @@
 """
 Alpha Vantage Provider Implementation.
 
-Implements the unified BaseProvider interface for Alpha Vantage API.
-
-v2.7 UNIFIED INTERFACE (January 2026):
-- Implements BaseProvider unified interface
-- Work items = DataType values (e.g., "prices", "reference", "income_statement")
-- All writes go through IngestorEngine + StreamingBronzeWriter
-- Tickers must be set via set_tickers() before running
+Implements data ingestion from Alpha Vantage API.
+Configuration loaded from markdown documentation (single source of truth).
 
 Features:
 - Rate limiting: Pro tier 75 calls/min (1.25 calls/sec)
 - Bulk ticker discovery via LISTING_STATUS endpoint
-- Seed tickers to Bronze layer
 - All financial statement endpoints (income, balance, cash flow, earnings)
 - Integration with IngestorEngine for distributed cluster execution
 
@@ -20,7 +14,7 @@ Usage:
     from datapipelines.providers.alpha_vantage import create_alpha_vantage_provider
     from datapipelines.base.ingestor_engine import IngestorEngine
 
-    provider = create_alpha_vantage_provider(config, spark)
+    provider = create_alpha_vantage_provider(spark, docs_path)
     engine = IngestorEngine(provider, storage_cfg)
 
     # Set tickers to process
@@ -29,136 +23,114 @@ Usage:
     # Ingest specific data types
     results = engine.run(work_items=["prices", "reference"])
 
-    # Or ingest all data types
-    results = engine.run()
-
 Author: de_Funk Team
-Date: December 2025
-Updated: January 2026 - Unified interface implementation
 """
 
 from __future__ import annotations
 
+import os
 import threading
 from typing import List, Optional, Any, Dict, Generator
+from pathlib import Path
 
 from pyspark.sql import DataFrame
 
-from datapipelines.base.provider import (
-    BaseProvider, DataType, ProviderConfig, FetchResult
-)
+from datapipelines.base.provider import BaseProvider, DataType, FetchResult
 from datapipelines.base.http_client import HttpClient
 from datapipelines.base.key_pool import ApiKeyPool
-from datapipelines.providers.alpha_vantage.alpha_vantage_registry import AlphaVantageRegistry
 from config.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+# Mapping from DataType enum to endpoint_id in markdown
+DATATYPE_TO_ENDPOINT = {
+    DataType.REFERENCE: "company_overview",
+    DataType.PRICES: "time_series_daily_adjusted",
+    DataType.INCOME_STATEMENT: "income_statement",
+    DataType.BALANCE_SHEET: "balance_sheet",
+    DataType.CASH_FLOW: "cash_flow",
+    DataType.EARNINGS: "earnings",
+    DataType.OPTIONS: "historical_options",
+}
 
 
 class AlphaVantageProvider(BaseProvider):
     """
     Alpha Vantage implementation of BaseProvider.
 
-    Handles all API interactions with Alpha Vantage including:
-    - Company overview (reference data)
-    - Daily prices
-    - Financial statements (income, balance, cash flow)
-    - Earnings
-    - Options (premium)
+    Configuration loaded from:
+    - Documents/Data Sources/Providers/Alpha Vantage.md
+    - Documents/Data Sources/Endpoints/Alpha Vantage/**/*.md
     """
 
-    # Mapping from DataType to Alpha Vantage endpoint names
-    ENDPOINT_MAP = {
-        DataType.REFERENCE: "company_overview",
-        DataType.PRICES: "time_series_daily_adjusted",
-        DataType.INCOME_STATEMENT: "income_statement",
-        DataType.BALANCE_SHEET: "balance_sheet",
-        DataType.CASH_FLOW: "cash_flow",
-        DataType.EARNINGS: "earnings",
-        DataType.OPTIONS: "historical_options",
-    }
-
-    # Response keys for extracting data
-    RESPONSE_KEYS = {
-        DataType.REFERENCE: None,  # Top-level response
-        DataType.PRICES: "Time Series (Daily)",
-        DataType.INCOME_STATEMENT: None,
-        DataType.BALANCE_SHEET: None,
-        DataType.CASH_FLOW: None,
-        DataType.EARNINGS: None,
-        DataType.OPTIONS: "data",
-    }
-
-    # Bronze table mappings
-    TABLE_NAMES = {
-        DataType.REFERENCE: "securities_reference",
-        DataType.PRICES: "securities_prices_daily",
-        DataType.INCOME_STATEMENT: "income_statements",
-        DataType.BALANCE_SHEET: "balance_sheets",
-        DataType.CASH_FLOW: "cash_flows",
-        DataType.EARNINGS: "earnings",
-        DataType.OPTIONS: "historical_options",
-    }
-
-    # Key columns for upsert
-    KEY_COLUMNS = {
-        DataType.REFERENCE: ["ticker"],
-        DataType.PRICES: ["ticker", "trade_date"],
-        DataType.INCOME_STATEMENT: ["ticker", "fiscal_date_ending", "report_type"],
-        DataType.BALANCE_SHEET: ["ticker", "fiscal_date_ending", "report_type"],
-        DataType.CASH_FLOW: ["ticker", "fiscal_date_ending", "report_type"],
-        DataType.EARNINGS: ["ticker", "fiscal_date_ending", "report_type"],
-        DataType.OPTIONS: ["contract_id", "trade_date"],
-    }
+    PROVIDER_NAME = "Alpha Vantage"
 
     def __init__(
         self,
-        config: ProviderConfig,
         spark=None,
-        alpha_vantage_cfg: Dict = None
+        docs_path: Optional[Path] = None
     ):
         """
         Initialize Alpha Vantage provider.
 
         Args:
-            config: Provider configuration
             spark: SparkSession
-            alpha_vantage_cfg: Raw Alpha Vantage config dict (for registry)
+            docs_path: Path to Documents folder
         """
-        self._alpha_vantage_cfg = alpha_vantage_cfg or {}
-        super().__init__(config, spark)
+        # Tickers to process (set via set_tickers() before running)
+        self._tickers: List[str] = []
+
+        # Initialize base (loads markdown config)
+        super().__init__(
+            provider_id="alpha_vantage",
+            spark=spark,
+            docs_path=docs_path
+        )
 
     def _setup(self) -> None:
         """Setup HTTP client and API key pool."""
-        # Create registry from config
-        self.registry = AlphaVantageRegistry(self._alpha_vantage_cfg)
+        # Get API keys from environment
+        api_keys = []
+        if self.env_api_key:
+            env_value = os.environ.get(self.env_api_key, "")
+            if env_value:
+                api_keys = [k.strip() for k in env_value.split(",") if k.strip()]
 
-        # Create API key pool
-        credentials = self._alpha_vantage_cfg.get("credentials", {})
-        api_keys = credentials.get("api_keys", [])
         self.key_pool = ApiKeyPool(api_keys, cooldown_seconds=60.0)
+
+        # Build base URLs dict for HttpClient
+        base_urls = {"core": self.base_url} if self.base_url else {}
+
+        # Get headers from config (usually empty for Alpha Vantage)
+        headers = {}
+        if self._provider_config:
+            headers = self._provider_config.default_headers or {}
 
         # Create HTTP client
         self.http = HttpClient(
-            self.registry.base_urls,
-            self.registry.headers,
-            self.config.rate_limit,
+            base_urls,
+            headers,
+            self.rate_limit,
             self.key_pool
         )
 
         # Thread lock for HTTP requests
         self._http_lock = threading.Lock()
 
-        # Store US exchanges for filtering
-        self._us_exchanges = self._alpha_vantage_cfg.get("us_exchanges", [
-            "NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"
-        ])
+        # Get US exchanges from provider settings
+        self._us_exchanges = self.get_provider_setting(
+            'us_exchanges',
+            ["NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"]
+        )
 
-        # Tickers to process (set via set_tickers() before running)
-        self._tickers: List[str] = []
+        logger.info(
+            f"AlphaVantageProvider initialized: {len(self._endpoints)} endpoints, "
+            f"rate_limit={self.rate_limit}"
+        )
 
     # =========================================================================
-    # UNIFIED INTERFACE IMPLEMENTATION (v2.7)
+    # TICKER MANAGEMENT
     # =========================================================================
 
     def set_tickers(self, tickers: List[str]) -> None:
@@ -173,17 +145,18 @@ class AlphaVantageProvider(BaseProvider):
         self._tickers = tickers
         logger.info(f"AlphaVantageProvider: set {len(tickers)} tickers")
 
+    # =========================================================================
+    # UNIFIED INTERFACE IMPLEMENTATION
+    # =========================================================================
+
     def list_work_items(self, **kwargs) -> List[str]:
-        """
-        List available work items (data types) for ingestion.
-
-        Args:
-            **kwargs: Optional filters
-
-        Returns:
-            List of data type strings
-        """
-        return [dt.value for dt in self.config.supported_data_types]
+        """List available data types for ingestion."""
+        # Return DataType values that have corresponding endpoints configured
+        work_items = []
+        for dt, endpoint_id in DATATYPE_TO_ENDPOINT.items():
+            if endpoint_id in self._endpoints:
+                work_items.append(dt.value)
+        return work_items
 
     def fetch(
         self,
@@ -195,16 +168,7 @@ class AlphaVantageProvider(BaseProvider):
         Fetch data for a data type, yielding batches of records.
 
         Iterates through tickers and fetches the specified data type for each.
-
-        Args:
-            work_item: Data type string (e.g., "prices", "reference")
-            max_records: Maximum records to fetch (None = no limit)
-            **kwargs: Additional options (outputsize, etc.)
-
-        Yields:
-            List[Dict] - Batches of raw records
         """
-        # Convert work_item string to DataType
         data_type = self._get_data_type(work_item)
         if not data_type:
             logger.warning(f"Unknown work item: {work_item}")
@@ -214,16 +178,19 @@ class AlphaVantageProvider(BaseProvider):
             logger.warning("No tickers set. Call set_tickers() before fetch().")
             return
 
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+        if not endpoint_id or endpoint_id not in self._endpoints:
+            logger.warning(f"No endpoint configured for: {work_item}")
+            return
+
         logger.info(f"Fetching {work_item} for {len(self._tickers)} tickers")
 
         total_records = 0
         for ticker in self._tickers:
-            # Check max_records limit
             if max_records and total_records >= max_records:
                 logger.info(f"Reached max_records limit ({max_records})")
                 break
 
-            # Fetch single ticker
             result = self._fetch_single(ticker, data_type, **kwargs)
 
             if not result.success:
@@ -231,7 +198,6 @@ class AlphaVantageProvider(BaseProvider):
                 continue
 
             if result.data:
-                # Convert to records list
                 records = self._convert_to_records(ticker, data_type, result.data)
                 if records:
                     total_records += len(records)
@@ -240,21 +206,8 @@ class AlphaVantageProvider(BaseProvider):
         logger.info(f"Fetched {total_records} records for {work_item}")
 
     def normalize(self, records: List[Dict], work_item: str) -> DataFrame:
-        """
-        Normalize raw records to a Spark DataFrame.
-
-        Records are already flattened by _convert_to_records() with ticker
-        and trade_date/fiscal_date fields injected.
-
-        Args:
-            records: List of raw record dicts (pre-flattened)
-            work_item: Data type string
-
-        Returns:
-            Spark DataFrame
-        """
+        """Normalize raw records to a Spark DataFrame."""
         if not records:
-            # Return empty DataFrame
             return self.spark.createDataFrame([], samplingRatio=1.0)
 
         data_type = self._get_data_type(work_item)
@@ -263,32 +216,120 @@ class AlphaVantageProvider(BaseProvider):
 
         try:
             if data_type == DataType.PRICES:
-                return self._normalize_prices(records)
+                return self._normalize_prices(records, work_item)
             elif data_type == DataType.REFERENCE:
-                return self._normalize_reference(records)
+                return self._normalize_reference(records, work_item)
             elif data_type in (DataType.INCOME_STATEMENT, DataType.BALANCE_SHEET,
                               DataType.CASH_FLOW, DataType.EARNINGS):
                 return self._normalize_financials(records, data_type)
         except Exception as e:
             logger.warning(f"Failed to normalize {work_item}: {e}", exc_info=True)
 
-        # Fallback
         return self.spark.createDataFrame(records, samplingRatio=1.0)
 
-    def _normalize_prices(self, records: List[Dict]) -> DataFrame:
-        """Normalize price records to DataFrame."""
+    def get_table_name(self, work_item: str) -> str:
+        """Get Bronze table name from endpoint config."""
+        data_type = self._get_data_type(work_item)
+        if data_type:
+            endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+            if endpoint_id:
+                endpoint = self._endpoints.get(endpoint_id)
+                if endpoint and endpoint.bronze:
+                    return endpoint.bronze.table
+        return f"alpha_vantage_{work_item}"
+
+    def get_partitions(self, work_item: str) -> Optional[List[str]]:
+        """Get partition columns from endpoint config."""
+        data_type = self._get_data_type(work_item)
+        if data_type:
+            endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+            if endpoint_id:
+                return super().get_partitions(endpoint_id)
+        return None
+
+    def get_key_columns(self, work_item: str) -> List[str]:
+        """Get key columns from endpoint config."""
+        data_type = self._get_data_type(work_item)
+        if data_type:
+            endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+            if endpoint_id:
+                return super().get_key_columns(endpoint_id)
+        return ["ticker"]
+
+    # =========================================================================
+    # HELPER METHODS
+    # =========================================================================
+
+    def _get_data_type(self, work_item: str) -> Optional[DataType]:
+        """Convert work_item string to DataType enum."""
+        for dt in DataType:
+            if dt.value == work_item:
+                return dt
+        return None
+
+    def _get_response_key(self, data_type: DataType) -> Optional[str]:
+        """Get response key from endpoint config."""
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+        if endpoint_id:
+            endpoint = self._endpoints.get(endpoint_id)
+            if endpoint:
+                return endpoint.response_key
+        return None
+
+    def _convert_to_records(
+        self,
+        ticker: str,
+        data_type: DataType,
+        data: Any
+    ) -> List[Dict]:
+        """Convert raw API data to list of record dicts."""
+        records = []
+
+        if data_type == DataType.REFERENCE:
+            if isinstance(data, dict):
+                record = dict(data)
+                record['ticker'] = ticker
+                records.append(record)
+
+        elif data_type == DataType.PRICES:
+            if isinstance(data, dict):
+                for date_str, ohlcv in data.items():
+                    record = dict(ohlcv)
+                    record['ticker'] = ticker
+                    record['trade_date'] = date_str
+                    records.append(record)
+
+        elif data_type in (DataType.INCOME_STATEMENT, DataType.BALANCE_SHEET,
+                          DataType.CASH_FLOW, DataType.EARNINGS):
+            if isinstance(data, dict):
+                for report_type in ['annualReports', 'quarterlyReports']:
+                    for report in data.get(report_type, []):
+                        record = dict(report)
+                        record['ticker'] = ticker
+                        record['report_type'] = 'annual' if 'annual' in report_type.lower() else 'quarterly'
+                        records.append(record)
+
+        return records
+
+    # =========================================================================
+    # NORMALIZATION METHODS
+    # =========================================================================
+
+    def _normalize_prices(self, records: List[Dict], work_item: str) -> DataFrame:
+        """Normalize price records using schema from markdown."""
         from pyspark.sql.types import (
             StructType, StructField, StringType, DateType, DoubleType,
             LongType, BooleanType, IntegerType
         )
-        from pyspark.sql import functions as F
         import pandas as pd
 
-        # Convert to pandas for easier type handling
         pdf = pd.DataFrame(records)
-
         if pdf.empty:
             return self.spark.createDataFrame([], samplingRatio=1.0)
+
+        # Get field mappings from endpoint schema
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(DataType.PRICES)
+        field_mappings = self.get_field_mappings(endpoint_id) if endpoint_id else {}
 
         # Parse trade_date
         pdf['trade_date'] = pd.to_datetime(pdf['trade_date'], errors='coerce')
@@ -296,23 +337,22 @@ class AlphaVantageProvider(BaseProvider):
         pdf['month'] = pdf['trade_date'].dt.month.astype('Int32')
         pdf['trade_date'] = pdf['trade_date'].dt.date
 
-        # Rename Alpha Vantage fields
-        rename_map = {
-            "1. open": "open", "2. high": "high", "3. low": "low",
-            "4. close": "close", "5. adjusted close": "adjusted_close",
-            "6. volume": "volume", "7. dividend amount": "dividend_amount",
-            "8. split coefficient": "split_coefficient"
-        }
+        # Apply field mappings from schema (source -> target)
+        # Reverse mapping for renaming: source_name -> target_name
+        rename_map = {src: tgt for src, tgt in field_mappings.items()
+                      if src in pdf.columns}
         pdf = pdf.rename(columns=rename_map)
 
         # Convert numeric fields
-        for field in ['open', 'high', 'low', 'close', 'adjusted_close', 'volume',
-                      'dividend_amount', 'split_coefficient']:
+        numeric_fields = ['open', 'high', 'low', 'close', 'adjusted_close',
+                         'volume', 'dividend_amount', 'split_coefficient']
+        for field in numeric_fields:
             if field in pdf.columns:
                 pdf[field] = pd.to_numeric(pdf[field], errors='coerce').astype('float64')
 
         # Calculate VWAP approximation
-        pdf['volume_weighted'] = ((pdf['high'] + pdf['low'] + pdf['close']) / 3.0).astype('float64')
+        if all(f in pdf.columns for f in ['high', 'low', 'close']):
+            pdf['volume_weighted'] = ((pdf['high'] + pdf['low'] + pdf['close']) / 3.0).astype('float64')
 
         # Add missing fields
         pdf['transactions'] = None
@@ -330,7 +370,6 @@ class AlphaVantageProvider(BaseProvider):
                 pdf[col] = None
         pdf = pdf[final_cols]
 
-        # Create Spark DataFrame
         schema = StructType([
             StructField("trade_date", DateType(), True),
             StructField("ticker", StringType(), True),
@@ -352,27 +391,27 @@ class AlphaVantageProvider(BaseProvider):
 
         return self.spark.createDataFrame(pdf, schema=schema)
 
-    def _normalize_reference(self, records: List[Dict]) -> DataFrame:
-        """Normalize reference/overview records to DataFrame."""
+    def _normalize_reference(self, records: List[Dict], work_item: str) -> DataFrame:
+        """Normalize reference/overview records using schema from markdown."""
         import pandas as pd
-        from pyspark.sql.types import StructType, StructField, StringType, DoubleType, LongType, DateType
         from datetime import datetime
 
         pdf = pd.DataFrame(records)
         if pdf.empty:
             return self.spark.createDataFrame([], samplingRatio=1.0)
 
+        # Get field mappings from endpoint schema
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(DataType.REFERENCE)
+        field_mappings = self.get_field_mappings(endpoint_id) if endpoint_id else {}
+
         # Add metadata
         pdf['asset_type'] = 'stocks'
         pdf['snapshot_date'] = datetime.now().date()
         pdf['ingestion_timestamp'] = datetime.now()
 
-        # Rename fields to snake_case
-        rename_map = {
-            'Symbol': 'ticker', 'Name': 'security_name', 'Exchange': 'exchange_code',
-            'Sector': 'sector', 'Industry': 'industry', 'MarketCapitalization': 'market_cap',
-            'CIK': 'cik', 'Description': 'description', 'SharesOutstanding': 'shares_outstanding'
-        }
+        # Apply field mappings from schema
+        rename_map = {src: tgt for src, tgt in field_mappings.items()
+                      if src in pdf.columns}
         pdf = pdf.rename(columns=rename_map)
 
         # Convert numeric fields
@@ -383,7 +422,7 @@ class AlphaVantageProvider(BaseProvider):
         return self.spark.createDataFrame(pdf, samplingRatio=1.0)
 
     def _normalize_financials(self, records: List[Dict], data_type: DataType) -> DataFrame:
-        """Normalize financial statement records to DataFrame."""
+        """Normalize financial statement records."""
         import pandas as pd
         from datetime import datetime
 
@@ -391,89 +430,12 @@ class AlphaVantageProvider(BaseProvider):
         if pdf.empty:
             return self.spark.createDataFrame([], samplingRatio=1.0)
 
-        # Add metadata
         pdf['ingestion_timestamp'] = datetime.now()
 
-        # Rename fiscalDateEnding to fiscal_date_ending
         if 'fiscalDateEnding' in pdf.columns:
             pdf = pdf.rename(columns={'fiscalDateEnding': 'fiscal_date_ending'})
 
         return self.spark.createDataFrame(pdf, samplingRatio=1.0)
-
-    def get_table_name(self, work_item: str) -> str:
-        """Get Bronze table name for a data type."""
-        data_type = self._get_data_type(work_item)
-        if data_type:
-            return self.TABLE_NAMES.get(data_type, f"unknown_{work_item}")
-        return f"unknown_{work_item}"
-
-    def get_partitions(self, work_item: str) -> Optional[List[str]]:
-        """Get partition columns for a data type."""
-        # Most Alpha Vantage tables don't use partitions
-        # Prices could partition by trade_date if needed
-        return None
-
-    def get_key_columns(self, work_item: str) -> List[str]:
-        """Get key columns for upsert operations."""
-        data_type = self._get_data_type(work_item)
-        if data_type:
-            return self.KEY_COLUMNS.get(data_type, ["ticker"])
-        return ["ticker"]
-
-    def _get_data_type(self, work_item: str) -> Optional[DataType]:
-        """Convert work_item string to DataType enum."""
-        for dt in DataType:
-            if dt.value == work_item:
-                return dt
-        return None
-
-    def _convert_to_records(
-        self,
-        ticker: str,
-        data_type: DataType,
-        data: Any
-    ) -> List[Dict]:
-        """
-        Convert raw API data to list of record dicts.
-
-        Args:
-            ticker: Ticker symbol
-            data_type: Data type
-            data: Raw API response data
-
-        Returns:
-            List of record dicts with ticker included
-        """
-        records = []
-
-        if data_type == DataType.REFERENCE:
-            # Single record per ticker
-            if isinstance(data, dict):
-                record = dict(data)
-                record['ticker'] = ticker
-                records.append(record)
-
-        elif data_type == DataType.PRICES:
-            # Time series data: {date: {open, high, low, close, volume}}
-            if isinstance(data, dict):
-                for date_str, ohlcv in data.items():
-                    record = dict(ohlcv)
-                    record['ticker'] = ticker
-                    record['trade_date'] = date_str
-                    records.append(record)
-
-        elif data_type in (DataType.INCOME_STATEMENT, DataType.BALANCE_SHEET,
-                          DataType.CASH_FLOW, DataType.EARNINGS):
-            # Financial statements: {annualReports: [...], quarterlyReports: [...]}
-            if isinstance(data, dict):
-                for report_type in ['annualReports', 'quarterlyReports']:
-                    for report in data.get(report_type, []):
-                        record = dict(report)
-                        record['ticker'] = ticker
-                        record['report_type'] = 'annual' if 'annual' in report_type.lower() else 'quarterly'
-                        records.append(record)
-
-        return records
 
     # =========================================================================
     # API REQUEST HELPERS
@@ -485,19 +447,9 @@ class AlphaVantageProvider(BaseProvider):
         data_type: DataType,
         **kwargs
     ) -> FetchResult:
-        """
-        Fetch a single data type for a ticker.
-
-        Args:
-            ticker: Ticker symbol
-            data_type: Data type to fetch
-            **kwargs: Additional parameters
-
-        Returns:
-            FetchResult with data or error
-        """
-        endpoint = self.ENDPOINT_MAP.get(data_type)
-        if not endpoint:
+        """Fetch a single data type for a ticker."""
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+        if not endpoint_id:
             return FetchResult(
                 ticker=ticker,
                 data_type=data_type,
@@ -505,18 +457,28 @@ class AlphaVantageProvider(BaseProvider):
                 error=f"Unsupported data type: {data_type}"
             )
 
+        endpoint = self._endpoints.get(endpoint_id)
+        if not endpoint:
+            return FetchResult(
+                ticker=ticker,
+                data_type=data_type,
+                success=False,
+                error=f"Endpoint not configured: {endpoint_id}"
+            )
+
         try:
-            # Build params based on data type
-            params = {"symbol": ticker}
+            # Build query params from endpoint config
+            params = dict(endpoint.default_query or {})
+            params["symbol"] = ticker
             if data_type == DataType.PRICES:
                 params["outputsize"] = kwargs.get("outputsize", "full")
 
-            # Render endpoint
-            ep, path, query = self.registry.render(endpoint, **params)
+            # Add API key
+            params["apikey"] = self.key_pool.next_key() if self.key_pool else ""
 
-            # Make request (thread-safe)
+            # Make request
             with self._http_lock:
-                payload = self.http.request(ep.base, path, query, ep.method)
+                payload = self.http.request("core", "", params, "GET")
 
             # Check for API errors
             if isinstance(payload, dict):
@@ -535,8 +497,8 @@ class AlphaVantageProvider(BaseProvider):
                         error="API limit reached"
                     )
 
-            # Extract data using response key
-            response_key = self.RESPONSE_KEYS.get(data_type)
+            # Extract data using response key from config
+            response_key = endpoint.response_key
             if response_key:
                 data = payload.get(response_key, payload)
             else:
@@ -562,23 +524,21 @@ class AlphaVantageProvider(BaseProvider):
     # =========================================================================
 
     def discover_tickers(self, state: str = "active", **kwargs) -> tuple:
-        """
-        Discover tickers using LISTING_STATUS endpoint.
-
-        Args:
-            state: 'active' or 'delisted'
-
-        Returns:
-            Tuple of (tickers_list, ticker_to_exchange_map)
-        """
+        """Discover tickers using LISTING_STATUS endpoint."""
         import csv
         import io
 
-        ep, path, query = self.registry.render("listing_status", state=state)
-        query['apikey'] = self.key_pool.next_key() if self.key_pool else None
+        endpoint = self._endpoints.get("listing_status")
+        if not endpoint:
+            logger.warning("listing_status endpoint not configured")
+            return [], {}
+
+        params = dict(endpoint.default_query or {})
+        params["state"] = state
+        params["apikey"] = self.key_pool.next_key() if self.key_pool else ""
 
         with self._http_lock:
-            response_text = self.http.request_text(ep.base, path, query, ep.method)
+            response_text = self.http.request_text("core", "", params, "GET")
 
         csv_reader = csv.DictReader(io.StringIO(response_text))
         rows = list(csv_reader)
@@ -589,7 +549,6 @@ class AlphaVantageProvider(BaseProvider):
             for row in rows if row.get('symbol')
         }
 
-        # Filter to US exchanges
         us_tickers = [t for t in tickers if ticker_exchanges.get(t) in self._us_exchanges]
 
         return us_tickers, ticker_exchanges
@@ -600,19 +559,8 @@ class AlphaVantageProvider(BaseProvider):
         min_market_cap: float = None,
         storage_cfg: Dict = None
     ) -> List[str]:
-        """
-        Get tickers sorted by market cap from existing reference data.
-
-        Args:
-            max_tickers: Maximum tickers to return
-            min_market_cap: Minimum market cap filter
-            storage_cfg: Storage configuration for paths
-
-        Returns:
-            List of tickers sorted by market cap descending
-        """
+        """Get tickers sorted by market cap from existing reference data."""
         from pyspark.sql.functions import col, desc, isnan, upper
-        from pathlib import Path
 
         if not storage_cfg:
             logger.warning("No storage config provided for market cap ranking")
@@ -624,34 +572,28 @@ class AlphaVantageProvider(BaseProvider):
             return []
 
         try:
-            # Auto-detect Delta vs Parquet
             if (bronze_path / "_delta_log").exists():
                 df = self.spark.read.format("delta").load(str(bronze_path))
             else:
                 df = self.spark.read.parquet(str(bronze_path))
 
-            # Filter for valid market cap
             df_filtered = df.filter(
                 (col("market_cap").isNotNull()) &
                 (~isnan(col("market_cap"))) &
                 (col("market_cap") > 0)
             )
 
-            # Apply asset_type filter if column exists
             if "asset_type" in df.columns:
                 df_filtered = df_filtered.filter(col("asset_type") == "stocks")
 
-            # Apply min market cap
             if min_market_cap:
                 df_filtered = df_filtered.filter(col("market_cap") >= min_market_cap)
 
-            # Exclude warrants, preferred, etc.
             df_filtered = df_filtered.filter(
                 (~upper(col("ticker")).rlike(r".*[-]?W[S]?$")) &
                 (~upper(col("ticker")).rlike(r".*-P-.*|.*-P[A-Z]$"))
             )
 
-            # Sort and limit
             df_ranked = (df_filtered
                         .select("ticker", "market_cap")
                         .dropDuplicates(["ticker"])
@@ -672,22 +614,7 @@ class AlphaVantageProvider(BaseProvider):
         state: str = "active",
         filter_us_exchanges: bool = True
     ) -> Any:
-        """
-        Seed tickers from LISTING_STATUS endpoint to Bronze layer.
-
-        This is a bulk operation that fetches ALL tickers in a single API call
-        (CSV format, not JSON) and returns a Spark DataFrame ready for Bronze.
-
-        Args:
-            state: 'active' or 'delisted'
-            filter_us_exchanges: Only include US exchanges (NYSE, NASDAQ, etc.)
-
-        Returns:
-            Spark DataFrame with ticker reference data
-
-        Note:
-            This uses 1 API call regardless of ticker count (~12,500 active tickers).
-        """
+        """Seed tickers from LISTING_STATUS endpoint to Bronze layer."""
         import csv
         import io
         from datetime import datetime
@@ -695,31 +622,32 @@ class AlphaVantageProvider(BaseProvider):
             StructType, StructField, StringType, DateType, TimestampType
         )
 
-        logger.info(f"Testing task: seed tickers (state={state})")
+        logger.info(f"Seeding tickers (state={state})")
 
-        # Fetch LISTING_STATUS (returns CSV)
-        ep, path, query = self.registry.render("listing_status", state=state)
-        query['apikey'] = self.key_pool.next_key() if self.key_pool else None
+        endpoint = self._endpoints.get("listing_status")
+        if not endpoint:
+            logger.warning("listing_status endpoint not configured")
+            return self.spark.createDataFrame([], samplingRatio=1.0)
+
+        params = dict(endpoint.default_query or {})
+        params["state"] = state
+        params["apikey"] = self.key_pool.next_key() if self.key_pool else ""
 
         with self._http_lock:
-            response_text = self.http.request_text(ep.base, path, query, ep.method)
+            response_text = self.http.request_text("core", "", params, "GET")
 
-        # Parse CSV
         csv_reader = csv.DictReader(io.StringIO(response_text))
         rows = list(csv_reader)
 
         logger.info(f"Fetched {len(rows)} tickers from LISTING_STATUS")
 
-        # Filter to US exchanges if requested
         if filter_us_exchanges:
             rows = [r for r in rows if r.get('exchange') in self._us_exchanges]
             logger.info(f"Filtered to {len(rows)} US exchange tickers")
 
-        # Transform to Bronze schema
         now = datetime.now()
         transformed = []
         for row in rows:
-            # Parse IPO date
             ipo_date = None
             if row.get('ipoDate'):
                 try:
@@ -727,7 +655,6 @@ class AlphaVantageProvider(BaseProvider):
                 except ValueError:
                     pass
 
-            # Parse delisting date
             delisting_date = None
             if row.get('delistingDate'):
                 try:
@@ -735,7 +662,6 @@ class AlphaVantageProvider(BaseProvider):
                 except ValueError:
                     pass
 
-            # Map asset type
             asset_type_raw = row.get('assetType', 'Stock')
             if asset_type_raw == 'Stock':
                 asset_type = 'stocks'
@@ -756,7 +682,6 @@ class AlphaVantageProvider(BaseProvider):
                 'snapshot_date': now.date(),
             })
 
-        # Create DataFrame with explicit schema
         schema = StructType([
             StructField('ticker', StringType(), False),
             StructField('security_name', StringType(), True),
@@ -776,38 +701,17 @@ class AlphaVantageProvider(BaseProvider):
 
 
 def create_alpha_vantage_provider(
-    alpha_vantage_cfg: Dict,
-    spark=None
+    spark=None,
+    docs_path: Optional[Path] = None
 ) -> AlphaVantageProvider:
     """
     Factory function to create an AlphaVantageProvider.
 
     Args:
-        alpha_vantage_cfg: Alpha Vantage API configuration
         spark: SparkSession
+        docs_path: Path to Documents folder
 
     Returns:
         Configured AlphaVantageProvider
     """
-    # Pro tier: 75 calls/min = 1.25 calls/sec
-    config = ProviderConfig(
-        name="alpha_vantage",
-        base_url="https://www.alphavantage.co/query",
-        rate_limit=alpha_vantage_cfg.get("rate_limit_per_sec", 1.25),
-        batch_size=20,
-        credentials_env_var="ALPHA_VANTAGE_API_KEYS",
-        supported_data_types=[
-            DataType.REFERENCE,
-            DataType.PRICES,
-            DataType.INCOME_STATEMENT,
-            DataType.BALANCE_SHEET,
-            DataType.CASH_FLOW,
-            DataType.EARNINGS,
-        ]
-    )
-
-    return AlphaVantageProvider(
-        config=config,
-        spark=spark,
-        alpha_vantage_cfg=alpha_vantage_cfg
-    )
+    return AlphaVantageProvider(spark=spark, docs_path=docs_path)

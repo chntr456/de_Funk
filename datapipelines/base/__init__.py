@@ -4,7 +4,8 @@ Base classes and utilities for data pipelines.
 This module provides the foundational components for building data ingestion
 pipelines. It includes:
 - Facet: Base class for data transformation
-- Provider: Abstract interface for data sources
+- Provider: Abstract interface for data sources (config loaded from markdown)
+- SocrataBaseProvider: Base class for Socrata API providers
 - IngestorEngine: Generic ingestion engine
 - HTTP utilities: Rate limiting, key rotation, progress tracking
 """
@@ -25,10 +26,10 @@ from datapipelines.base.metrics import MetricsCollector, TimingContext
 from datapipelines.base.provider import (
     BaseProvider,
     DataType,
-    TickerData,
     FetchResult,
-    ProviderConfig
+    WorkItemResult,
 )
+from datapipelines.base.socrata_provider import SocrataBaseProvider
 from datapipelines.base.ingestor_engine import IngestorEngine, IngestionResults, create_engine
 
 __all__ = [
@@ -53,10 +54,10 @@ __all__ = [
     'TimingContext',
     # Provider Interface
     'BaseProvider',
+    'SocrataBaseProvider',
     'DataType',
-    'TickerData',
     'FetchResult',
-    'ProviderConfig',
+    'WorkItemResult',
     # Ingestor Engine
     'IngestorEngine',
     'IngestionResults',

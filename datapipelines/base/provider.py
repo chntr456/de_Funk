@@ -2,20 +2,14 @@
 Base Provider Interface.
 
 Defines the abstract interface that all data providers must implement.
-This enables the generic IngestorEngine to work with any provider.
-
-v2.7 UNIFIED INTERFACE (January 2026):
-- Single interface for both ticker-based (Alpha Vantage) and endpoint-based (Socrata) providers
-- Work items = tickers OR endpoints (provider-specific)
-- All providers use StreamingBronzeWriter for memory-safe writes
-- Eliminates duplicate code paths
+Configuration is loaded from markdown documentation files (single source of truth).
 
 Usage:
     from datapipelines.base.provider import BaseProvider
 
     class MyProvider(BaseProvider):
         def list_work_items(self, **kwargs) -> List[str]:
-            return ["endpoint1", "endpoint2"]  # or tickers
+            return ["endpoint1", "endpoint2"]
 
         def fetch(self, work_item: str, **kwargs) -> Generator[List[Dict], None, None]:
             for batch in paginate_api(work_item):
@@ -28,18 +22,22 @@ Usage:
             return f"bronze_{work_item}"
 
 Author: de_Funk Team
-Date: December 2025
-Updated: January 2026 - Unified interface for all provider types
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Callable, Generator
+from typing import Dict, List, Optional, Any, Generator
 from enum import Enum
+from pathlib import Path
 
 from config.logging import get_logger
+from config.markdown_loader import (
+    MarkdownConfigLoader,
+    ProviderConfig as MarkdownProviderConfig,
+    EndpointConfig,
+)
 
 logger = get_logger(__name__)
 
@@ -71,63 +69,6 @@ class FetchResult:
 
 
 @dataclass
-class TickerData:
-    """All data fetched for a single ticker."""
-    ticker: str
-    reference: Optional[Any] = None
-    prices: Optional[Any] = None
-    income_statement: Optional[Any] = None
-    balance_sheet: Optional[Any] = None
-    cash_flow: Optional[Any] = None
-    earnings: Optional[Any] = None
-    options: Optional[Any] = None
-    errors: List[str] = field(default_factory=list)
-
-    def has_data(self, data_type: DataType) -> bool:
-        """Check if data exists for a specific type."""
-        attr_name = data_type.value
-        # Map enum values to attribute names
-        attr_map = {
-            'income': 'income_statement',
-            'balance': 'balance_sheet',
-            'cashflow': 'cash_flow',
-        }
-        attr_name = attr_map.get(attr_name, attr_name)
-        return getattr(self, attr_name, None) is not None
-
-    def set_data(self, data_type: DataType, data: Any) -> None:
-        """Set data for a specific type."""
-        attr_map = {
-            DataType.REFERENCE: 'reference',
-            DataType.PRICES: 'prices',
-            DataType.INCOME_STATEMENT: 'income_statement',
-            DataType.BALANCE_SHEET: 'balance_sheet',
-            DataType.CASH_FLOW: 'cash_flow',
-            DataType.EARNINGS: 'earnings',
-            DataType.OPTIONS: 'options',
-        }
-        attr_name = attr_map.get(data_type)
-        if attr_name:
-            setattr(self, attr_name, data)
-
-
-@dataclass
-class ProviderConfig:
-    """Configuration for a provider."""
-    name: str
-    base_url: str
-    rate_limit: float = 1.0  # calls per second
-    max_retries: int = 3
-    retry_delay: float = 2.0
-    batch_size: int = 20
-    credentials_env_var: str = ""
-    headers: Dict[str, str] = field(default_factory=dict)
-
-    # Data types supported by this provider
-    supported_data_types: List[DataType] = field(default_factory=list)
-
-
-@dataclass
 class WorkItemResult:
     """Result from ingesting a single work item."""
     work_item: str
@@ -141,57 +82,136 @@ class BaseProvider(ABC):
     """
     Abstract base class for data providers.
 
-    UNIFIED INTERFACE (v2.7):
-    All providers implement the same interface regardless of whether they're
-    ticker-based (Alpha Vantage) or endpoint-based (Socrata).
+    Configuration is loaded from markdown documentation files via MarkdownConfigLoader.
+    This ensures documentation and configuration stay in sync (single source of truth).
 
     The key abstraction is "work_item":
     - For Alpha Vantage: work_item = DataType (prices, reference, etc.)
     - For Socrata: work_item = endpoint_id (crimes, building_permits, etc.)
 
     Example:
-        class AlphaVantageProvider(BaseProvider):
+        class MyProvider(BaseProvider):
             def list_work_items(self, **kwargs) -> List[str]:
-                return ["prices", "reference", "income"]
+                return list(self._endpoints.keys())
 
             def fetch(self, work_item: str, **kwargs):
-                # work_item is a DataType string
-                for ticker in self.tickers:
-                    data = self.fetch_ticker(ticker, work_item)
-                    yield [data]  # yield as batch
-
-        class ChicagoProvider(BaseProvider):
-            def list_work_items(self, **kwargs) -> List[str]:
-                return ["crimes", "building_permits"]
-
-            def fetch(self, work_item: str, **kwargs):
-                # work_item is an endpoint_id
-                for batch in self.paginate(work_item):
+                endpoint = self._endpoints[work_item]
+                for batch in self.paginate(endpoint):
                     yield batch
     """
 
-    def __init__(self, config: ProviderConfig, spark=None):
+    # Override in subclass to match markdown provider name
+    PROVIDER_NAME: str = ""
+
+    def __init__(
+        self,
+        provider_id: str,
+        spark=None,
+        docs_path: Optional[Path] = None
+    ):
         """
-        Initialize the provider.
+        Initialize the provider with configuration from markdown.
 
         Args:
-            config: Provider configuration
+            provider_id: Provider identifier (e.g., 'alpha_vantage', 'chicago')
             spark: SparkSession for DataFrame operations
+            docs_path: Path to Documents folder containing markdown configs
         """
-        self.config = config
+        self.provider_id = provider_id
         self.spark = spark
+        self._docs_path = docs_path
+
+        # Load configuration from markdown
+        self._provider_config: Optional[MarkdownProviderConfig] = None
+        self._endpoints: Dict[str, EndpointConfig] = {}
+
+        if docs_path:
+            self._load_config_from_markdown(docs_path)
+
+        # Call provider-specific setup
         self._setup()
+
+    def _load_config_from_markdown(self, docs_path: Path) -> None:
+        """
+        Load provider and endpoint configs from markdown files.
+
+        Args:
+            docs_path: Path to Documents folder
+        """
+        try:
+            loader = MarkdownConfigLoader(docs_path)
+
+            # Load provider config (base_url, rate_limit, etc.)
+            providers = loader.load_providers()
+            self._provider_config = providers.get(self.provider_id)
+
+            if not self._provider_config:
+                logger.warning(f"Provider config not found for: {self.provider_id}")
+
+            # Load endpoint configs using provider name
+            provider_name = self.PROVIDER_NAME or (
+                self._provider_config.provider if self._provider_config else None
+            )
+            if provider_name:
+                self._endpoints = loader.load_endpoints(provider=provider_name)
+                logger.debug(
+                    f"Loaded {len(self._endpoints)} endpoints for {provider_name}"
+                )
+
+        except Exception as e:
+            logger.warning(f"Failed to load markdown config for {self.provider_id}: {e}")
+
+    @property
+    def base_url(self) -> str:
+        """Get base URL from markdown config."""
+        if self._provider_config:
+            return self._provider_config.base_url
+        return ""
+
+    @property
+    def rate_limit(self) -> float:
+        """Get rate limit from markdown config."""
+        if self._provider_config:
+            return self._provider_config.rate_limit_per_sec
+        return 1.0
+
+    @property
+    def env_api_key(self) -> str:
+        """Get environment variable name for API key."""
+        if self._provider_config:
+            return self._provider_config.env_api_key
+        return ""
+
+    def get_provider_setting(self, key: str, default: Any = None) -> Any:
+        """
+        Get provider-specific setting from markdown config.
+
+        Args:
+            key: Setting key (e.g., 'us_exchanges', 'default_limit')
+            default: Default value if not found
+
+        Returns:
+            Setting value or default
+        """
+        if self._provider_config and self._provider_config.raw:
+            settings = self._provider_config.raw.get('provider_settings', {})
+            return settings.get(key, default)
+        return default
+
+    def get_endpoint_config(self, endpoint_id: str) -> Optional[EndpointConfig]:
+        """Get endpoint configuration by ID."""
+        return self._endpoints.get(endpoint_id)
 
     @abstractmethod
     def _setup(self) -> None:
         """
         Setup provider-specific resources (HTTP client, key pool, etc).
-        Called during __init__.
+        Called during __init__ after markdown config is loaded.
         """
         pass
 
     # =========================================================================
-    # UNIFIED INTERFACE (v2.7) - All providers must implement these
+    # UNIFIED INTERFACE - All providers must implement these
     # =========================================================================
 
     @abstractmethod
@@ -214,6 +234,7 @@ class BaseProvider(ABC):
     def fetch(
         self,
         work_item: str,
+        max_records: Optional[int] = None,
         **kwargs
     ) -> Generator[List[Dict], None, None]:
         """
@@ -222,19 +243,10 @@ class BaseProvider(ABC):
         This is a generator that yields batches of records. The IngestorEngine
         will pass these to StreamingBronzeWriter for memory-safe writes.
 
-        For ticker-based providers:
-            - work_item is a DataType string (e.g., "prices")
-            - Internally iterates over tickers
-            - Yields batches of normalized records
-
-        For endpoint-based providers:
-            - work_item is an endpoint ID (e.g., "crimes")
-            - Paginates over the API
-            - Yields batches of raw records
-
         Args:
             work_item: Work item identifier (DataType or endpoint_id)
-            **kwargs: Provider-specific options (max_records, tickers, etc.)
+            max_records: Maximum records to fetch (None = no limit)
+            **kwargs: Provider-specific options
 
         Yields:
             List[Dict] - Batches of raw record dictionaries
@@ -270,9 +282,7 @@ class BaseProvider(ABC):
 
     def get_partitions(self, work_item: str) -> Optional[List[str]]:
         """
-        Get partition columns for a work item.
-
-        Override in subclass if partitioning is needed.
+        Get partition columns for a work item from endpoint config.
 
         Args:
             work_item: Work item identifier
@@ -280,13 +290,14 @@ class BaseProvider(ABC):
         Returns:
             List of partition column names, or None
         """
+        endpoint = self._endpoints.get(work_item)
+        if endpoint and endpoint.bronze:
+            return endpoint.bronze.partitions or None
         return None
 
     def get_key_columns(self, work_item: str) -> List[str]:
         """
-        Get key columns for upsert operations.
-
-        Override in subclass if upsert behavior is needed.
+        Get key columns for upsert operations from endpoint config.
 
         Args:
             work_item: Work item identifier
@@ -294,87 +305,42 @@ class BaseProvider(ABC):
         Returns:
             List of column names that form the unique key
         """
+        endpoint = self._endpoints.get(work_item)
+        if endpoint and endpoint.bronze:
+            return endpoint.bronze.key_columns or []
         return []
 
-    # =========================================================================
-    # LEGACY INTERFACE - Kept for backwards compatibility
-    # These methods are used by the old IngestorEngine and will be deprecated
-    # =========================================================================
-
-    def fetch_ticker_data(
-        self,
-        ticker: str,
-        data_types: List[DataType],
-        progress_callback: Optional[Callable[[str, DataType, bool, Optional[str]], None]] = None,
-        **kwargs
-    ) -> TickerData:
+    def get_response_key(self, work_item: str) -> Optional[str]:
         """
-        [LEGACY] Fetch all requested data types for a single ticker.
+        Get response key for extracting data from API response.
 
-        This method is kept for backwards compatibility with existing code.
-        New providers should implement the unified interface instead.
-        """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not implement legacy fetch_ticker_data. "
-            "Use the unified interface (list_work_items, fetch, normalize) instead."
-        )
-
-    def normalize_data(
-        self,
-        ticker_data: TickerData,
-        data_type: DataType
-    ) -> Optional[Any]:
-        """
-        [LEGACY] Normalize raw data to a Spark DataFrame.
-
-        This method is kept for backwards compatibility with existing code.
-        New providers should implement normalize(records, work_item) instead.
-        """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not implement legacy normalize_data. "
-            "Use normalize(records, work_item) instead."
-        )
-
-    def get_bronze_table_name(self, data_type: DataType) -> str:
-        """
-        [LEGACY] Get the bronze table name for a data type.
-
-        This method is kept for backwards compatibility.
-        New providers should implement get_table_name(work_item) instead.
-        """
-        # Default: delegate to new interface
-        return self.get_table_name(data_type.value if isinstance(data_type, DataType) else data_type)
-
-    def get_supported_data_types(self) -> List[DataType]:
-        """Get list of data types this provider supports."""
-        return self.config.supported_data_types
-
-    def discover_tickers(self, **kwargs) -> List[str]:
-        """
-        Discover available tickers from the provider.
-
-        Override in subclass if provider supports ticker discovery.
+        Args:
+            work_item: Work item identifier
 
         Returns:
-            List of ticker symbols
+            Response key string or None
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support ticker discovery"
-        )
+        endpoint = self._endpoints.get(work_item)
+        if endpoint:
+            return endpoint.response_key
+        return None
 
-    def get_tickers_by_market_cap(
-        self,
-        max_tickers: int = None,
-        min_market_cap: float = None
-    ) -> List[str]:
+    def get_field_mappings(self, work_item: str) -> Dict[str, str]:
         """
-        Get tickers sorted by market cap.
+        Get source to target field name mappings from endpoint schema.
 
-        Override in subclass if provider supports market cap ranking.
+        Args:
+            work_item: Work item identifier
 
         Returns:
-            List of ticker symbols sorted by market cap descending
+            Dict mapping source field names to target field names
         """
-        raise NotImplementedError(
-            f"{self.__class__.__name__} does not support market cap ranking"
-        )
+        endpoint = self._endpoints.get(work_item)
+        if not endpoint or not endpoint.schema:
+            return {}
+
+        mappings = {}
+        for field in endpoint.schema:
+            if field.source and field.source not in ('_computed', '_generated'):
+                mappings[field.source] = field.name
+        return mappings

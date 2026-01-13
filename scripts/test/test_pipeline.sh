@@ -3,6 +3,7 @@
 # Unified Pipeline Test Script
 # ==============================================================================
 # Tests the full pipeline using IngestorEngine paradigm on Spark cluster.
+# Configuration loaded from markdown documentation (single source of truth).
 #
 # Usage:
 #   ./scripts/test/test_pipeline.sh [OPTIONS]
@@ -26,7 +27,6 @@
 #   ./scripts/test/test_pipeline.sh --profile production --skip-seed
 #
 # Author: de_Funk Team
-# Date: January 2026
 # ==============================================================================
 
 set -e
@@ -267,34 +267,21 @@ logger.info('Testing task: seed tickers')
 from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 from datapipelines.ingestors.bronze_sink import BronzeSink
 from orchestration.common.spark_session import get_spark
-from config.markdown_loader import get_markdown_loader
 from pathlib import Path
 import json
-import os
-
-# Load config from markdown (v2.6)
-loader = get_markdown_loader(Path('$REPO_ROOT'))
-av_config = loader.get_provider_config('alpha_vantage')
-if not av_config:
-    logger.error('Could not load Alpha Vantage config from markdown')
-    sys.exit(1)
-
-# Load API keys from environment variable
-api_keys_str = os.environ.get('ALPHA_VANTAGE_API_KEYS', '')
-api_keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
-if not api_keys:
-    logger.warning('No ALPHA_VANTAGE_API_KEYS environment variable set - API calls may fail')
-av_config['credentials'] = {'api_keys': api_keys}
 
 # Get storage path
 storage_path = '${STORAGE_PATH:-/shared/storage}'
 logger.info(f'Storage path: {storage_path}')
 
+# Docs path for markdown config
+docs_path = Path('$REPO_ROOT/Documents')
+
 # Initialize Spark
 spark = get_spark(app_name='test_pipeline_seed')
 
-# Create provider
-provider = create_alpha_vantage_provider(av_config, spark=spark)
+# Create provider (config loaded from markdown)
+provider = create_alpha_vantage_provider(spark=spark, docs_path=docs_path)
 
 # Seed tickers
 df = provider.seed_tickers(state='active', filter_us_exchanges=True)
@@ -342,29 +329,11 @@ logger = get_logger('test_pipeline')
 logger.info('Testing task: bronze ingestion (Alpha Vantage)')
 
 # Import components
-from datapipelines.base.ingestor_engine import create_engine
+from datapipelines.base.ingestor_engine import IngestorEngine
+from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 from orchestration.common.spark_session import get_spark
-from config.markdown_loader import get_markdown_loader
 from pathlib import Path
 import json
-import os
-
-# Load configs from markdown (v2.6)
-loader = get_markdown_loader(Path('$REPO_ROOT'))
-av_config = loader.get_provider_config('alpha_vantage')
-if not av_config:
-    logger.error('Could not load Alpha Vantage config from markdown')
-    sys.exit(1)
-
-with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
-    run_config = json.load(f)
-
-# Load API keys from environment variable
-api_keys_str = os.environ.get('ALPHA_VANTAGE_API_KEYS', '')
-api_keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
-if not api_keys:
-    logger.warning('No ALPHA_VANTAGE_API_KEYS environment variable set - API calls may fail')
-av_config['credentials'] = {'api_keys': api_keys}
 
 # Get settings
 storage_path = '${STORAGE_PATH:-/shared/storage}'
@@ -377,6 +346,9 @@ logger.info(f'Max tickers: {max_tickers}')
 logger.info(f'With financials: {with_financials}')
 logger.info(f'With reference: {with_reference}')
 
+# Docs path for markdown config
+docs_path = Path('$REPO_ROOT/Documents')
+
 # Initialize Spark
 spark = get_spark(app_name='test_pipeline_ingest')
 
@@ -387,9 +359,11 @@ with open('$REPO_ROOT/configs/storage.json') as f:
 # Override roots to use storage_path from CLI (replace 'storage/' prefix with custom path)
 storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in storage_cfg['roots'].items()}
 
-# Create unified IngestorEngine for Alpha Vantage (v2.7 unified interface)
-engine = create_engine('alpha_vantage', av_config, storage_cfg, spark)
-provider = engine.provider
+# Create provider (config loaded from markdown)
+provider = create_alpha_vantage_provider(spark=spark, docs_path=docs_path)
+
+# Create IngestorEngine
+engine = IngestorEngine(provider, storage_cfg)
 
 # Try to get tickers by market cap from securities_reference
 tickers = provider.get_tickers_by_market_cap(max_tickers=max_tickers, storage_cfg=storage_cfg)
@@ -419,7 +393,7 @@ if not tickers:
 
 logger.info(f'Found {len(tickers)} tickers for ingestion')
 
-# Set tickers on provider (required for unified interface)
+# Set tickers on provider
 provider.set_tickers(tickers)
 
 # Build work items list (data types) - prices is always included
@@ -441,7 +415,7 @@ logger.info(f'Work items (data types): {work_items}')
 write_batch_size = int('${PROFILE_WRITE_BATCH_SIZE:-500000}')
 logger.info(f'write_batch_size: {write_batch_size} records per batch')
 
-# Run unified ingestion engine
+# Run ingestion engine
 results = engine.run(
     work_items=work_items,
     write_batch_size=write_batch_size,
@@ -508,24 +482,15 @@ logger = get_logger('test_pipeline')
 logger.info('Testing task: bulk provider ingestion')
 
 # Import components
-from datapipelines.base.ingestor_engine import create_engine
+from datapipelines.base.ingestor_engine import IngestorEngine
+from datapipelines.providers.chicago.chicago_provider import create_chicago_provider
+from datapipelines.providers.cook_county.cook_county_provider import create_cook_county_provider
 from orchestration.common.spark_session import get_spark
-from config.markdown_loader import get_markdown_loader
-from utils.env_loader import load_dotenv
 from pathlib import Path
 import json
-import os
 
-# Load .env file first
-env_path = Path('$REPO_ROOT/.env')
-if env_path.exists():
-    load_dotenv(env_path)
-    logger.info(f'Loaded environment from {env_path}')
-else:
-    logger.warning(f'.env file not found at {env_path}')
-
-# Load configs
-loader = get_markdown_loader(Path('$REPO_ROOT'))
+# Get storage path
+storage_path = '${STORAGE_PATH:-/shared/storage}'
 
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     run_config = json.load(f)
@@ -533,8 +498,6 @@ with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
 with open('$REPO_ROOT/configs/storage.json') as f:
     storage_cfg = json.load(f)
 
-# Get storage path
-storage_path = '${STORAGE_PATH:-/shared/storage}'
 storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in storage_cfg['roots'].items()}
 
 logger.info(f'Storage path: {storage_path}')
@@ -542,8 +505,14 @@ logger.info(f'Storage path: {storage_path}')
 # Initialize Spark
 spark = get_spark(app_name='test_pipeline_bulk')
 
-# Docs path for markdown loader
+# Docs path for markdown config
 docs_path = Path('$REPO_ROOT/Documents')
+
+# Factory mapping
+provider_factories = {
+    'chicago': create_chicago_provider,
+    'cook_county': create_cook_county_provider,
+}
 
 # Run each bulk provider from the list (profile or global enabled)
 bulk_providers = '$BULK_PROVIDERS'.split()
@@ -554,31 +523,18 @@ for provider_name in bulk_providers:
         provider_cfg = run_config.get('providers', {}).get(provider_name, {})
         logger.info(f'Processing provider: {provider_name}')
 
-        # Get API config from markdown
-        api_cfg = loader.get_provider_config(provider_name.replace('_', ' ').title().replace(' ', '_').lower())
-        if not api_cfg:
-            # Try alternate name format
-            api_cfg = loader.get_provider_config(provider_name)
-
-        if not api_cfg:
-            logger.warning(f'Could not load config for {provider_name} - skipping')
+        # Get factory function
+        factory = provider_factories.get(provider_name)
+        if not factory:
+            logger.warning(f'Unknown provider: {provider_name} - skipping')
             continue
 
-        # Load API keys from environment (optional - works without, just slower)
-        env_key = f'{provider_name.upper()}_API_KEYS'
-        api_keys_str = os.environ.get(env_key, '')
-        api_keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
+        # Create provider (config loaded from markdown)
+        provider = factory(spark=spark, docs_path=docs_path)
+        logger.info(f'Created provider: {provider.provider_id}')
 
-        if api_keys:
-            logger.info(f'{provider_name}: Found API key ({api_keys[0][:4]}...)')
-        else:
-            logger.warning(f'{provider_name}: No {env_key} - using throttled rate (1 req/sec)')
-
-        api_cfg['credentials'] = {'api_keys': api_keys}
-
-        # Create unified IngestorEngine (v2.7 unified interface)
-        engine = create_engine(provider_name, api_cfg, storage_cfg, spark, docs_path)
-        logger.info(f'IngestorEngine created for: {engine.provider.config.name}')
+        # Create IngestorEngine
+        engine = IngestorEngine(provider, storage_cfg)
 
         # Get work items (endpoints) to ingest from run_config
         work_items = provider_cfg.get('endpoints', []) or None  # None = discover from provider
@@ -599,7 +555,7 @@ for provider_name in bulk_providers:
         write_batch_size = int('${PROFILE_WRITE_BATCH_SIZE:-500000}')
         logger.info(f'write_batch_size: {write_batch_size} records per batch')
 
-        # Run unified ingestion engine
+        # Run ingestion engine
         results = engine.run(
             work_items=work_items,
             write_batch_size=write_batch_size,
