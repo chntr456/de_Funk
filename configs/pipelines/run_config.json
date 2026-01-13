@@ -18,7 +18,7 @@
   },
   "providers": {
     "alpha_vantage": {
-      "enabled": false,
+      "enabled": true,
       "rate_limit_per_sec": 1.25,
       "_rate_limit_comment": "Pro tier: 75 calls/min = 1.25 calls/sec",
       "endpoints": [
@@ -47,7 +47,7 @@
         "cta_l_ridership_daily",
         "cta_bus_ridership_daily"
       ],
-      "_endpoints_comment": "Endpoints to ingest. Core municipal data for dev profile. Note: budget_appropriations requires view_id iteration (not included here)."
+      "_endpoints_comment": "Core municipal data. Available: crimes, building_permits, business_licenses, food_inspections, cta_l_ridership_daily, cta_bus_ridership_daily"
     },
     "cook_county": {
       "enabled": true,
@@ -59,7 +59,7 @@
         "parcel_universe",
         "residential_characteristics"
       ],
-      "_endpoints_comment": "Endpoints to ingest. Core property data for dev profile."
+      "_endpoints_comment": "Core property data. Available: parcel_sales, assessed_values, parcel_universe, residential_characteristics"
     }
   },
   "silver_models": {
@@ -116,7 +116,7 @@
       "dry_run": false,
       "skip_silver": false,
       "with_financials": true,
-      "_comment": "Includes alpha_vantage, chicago, cook_county"
+      "_comment": "Full dev profile: alpha_vantage (10 tickers w/ financials) + chicago (6 endpoints) + cook_county (4 endpoints). Endpoint limits from markdown configs."
     },
     "dev_municipal": {
       "providers": ["chicago", "cook_county"],
