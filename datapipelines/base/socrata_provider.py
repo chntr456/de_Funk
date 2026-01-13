@@ -152,10 +152,8 @@ class SocrataBaseProvider(BaseProvider):
         """Fetch from multiple year-based view_ids."""
         params = dict(endpoint.default_query or {})
 
-        for view_id_entry in endpoint.view_ids:
-            year = view_id_entry.get('year')
-            resource_id = view_id_entry.get('view_id')
-
+        # view_ids is Dict[str, str] mapping year -> view_id
+        for year, resource_id in endpoint.view_ids.items():
             if not resource_id:
                 continue
 

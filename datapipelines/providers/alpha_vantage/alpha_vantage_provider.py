@@ -331,11 +331,12 @@ class AlphaVantageProvider(BaseProvider):
         endpoint_id = DATATYPE_TO_ENDPOINT.get(DataType.PRICES)
         field_mappings = self.get_field_mappings(endpoint_id) if endpoint_id else {}
 
-        # Parse trade_date
+        # Parse trade_date - keep as datetime64 for proper Spark DateType conversion
         pdf['trade_date'] = pd.to_datetime(pdf['trade_date'], errors='coerce')
         pdf['year'] = pdf['trade_date'].dt.year.astype('Int32')
         pdf['month'] = pdf['trade_date'].dt.month.astype('Int32')
-        pdf['trade_date'] = pdf['trade_date'].dt.date
+        # Normalize to midnight (date only) but keep as datetime64 for Spark compatibility
+        pdf['trade_date'] = pdf['trade_date'].dt.normalize()
 
         # Apply field mappings from schema (source -> target)
         # Reverse mapping for renaming: source_name -> target_name

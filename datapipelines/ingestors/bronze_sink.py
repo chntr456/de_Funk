@@ -466,6 +466,7 @@ class BronzeSink:
             partitions: Partition columns
         """
         from pathlib import Path as PathLib
+        from pyspark.errors.exceptions.captured import AnalysisException
 
         writer = df.write.format("delta").mode(mode)
 
@@ -481,7 +482,25 @@ class BronzeSink:
         if is_existing_delta or mode == "append":
             writer = writer.option("mergeSchema", "true")
 
-        writer.save(path)
+        try:
+            writer.save(path)
+        except AnalysisException as e:
+            # Handle schema incompatibility (e.g., type changes)
+            # DELTA_FAILED_TO_MERGE_FIELDS indicates incompatible field types
+            if "DELTA_FAILED_TO_MERGE_FIELDS" in str(e) and mode == "overwrite":
+                logger.warning(
+                    f"Schema incompatibility detected at {path}. "
+                    f"Retrying with overwriteSchema=true"
+                )
+                # Safe to use overwriteSchema in full overwrite mode (not dynamic)
+                writer_retry = df.write.format("delta").mode("overwrite")
+                if partitions:
+                    writer_retry = writer_retry.partitionBy(*partitions)
+                writer_retry = writer_retry.option("overwriteSchema", "true")
+                writer_retry.save(path)
+                logger.info(f"Successfully overwrote table with new schema at {path}")
+            else:
+                raise
 
     def streaming_writer(
         self,
