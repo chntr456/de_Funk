@@ -25,7 +25,7 @@ domain: economic
 legal_entity_type: municipal
 subject_entity_tags: [municipal, labor]
 data_tags: [time-series, unemployment, community-area]
-status: active
+status: deprecated
 update_cadence: monthly
 last_verified:
 last_reviewed:

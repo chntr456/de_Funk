@@ -25,7 +25,7 @@ domain: economic
 legal_entity_type: municipal
 subject_entity_tags: [municipal]
 data_tags: [time-series, economic-indicators, city]
-status: active
+status: deprecated
 update_cadence: monthly
 last_verified:
 last_reviewed:

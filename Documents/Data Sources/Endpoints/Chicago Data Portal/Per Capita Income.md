@@ -25,7 +25,7 @@ domain: economic
 legal_entity_type: municipal
 subject_entity_tags: [municipal, demographic]
 data_tags: [reference, income, community-area]
-status: active
+status: deprecated
 update_cadence: irregular
 last_verified:
 last_reviewed:
