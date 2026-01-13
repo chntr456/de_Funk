@@ -133,6 +133,7 @@
     "quick_test": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
       "max_tickers": 3,
+      "with_financials": true,
       "write_batch_size": 10000,
       "dry_run": false,
       "skip_silver": true,
@@ -143,6 +144,7 @@
       "providers": ["alpha_vantage", "chicago", "cook_county"],
       "max_tickers": 10,
       "max_records_per_endpoint": null,
+      "with_financials": true,
       "write_batch_size": 500000,
       "dry_run": false,
       "skip_silver": true,
@@ -159,11 +161,13 @@
     },
     "staging": {
       "max_tickers": 500,
+      "with_financials": true,
       "dry_run": false,
       "skip_silver": false
     },
     "production": {
       "max_tickers": null,
+      "with_financials": true,
       "dry_run": false,
       "skip_silver": false,
       "log_level": "WARNING"
