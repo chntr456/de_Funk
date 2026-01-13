@@ -210,7 +210,8 @@ class SocrataClient:
         resource_id: str,
         query_params: Optional[Dict[str, Any]] = None,
         limit: int = DEFAULT_LIMIT,
-        max_records: Optional[int] = None
+        max_records: Optional[int] = None,
+        label: Optional[str] = None
     ) -> Generator[List[Dict], None, None]:
         """
         Fetch all records from a resource using pagination.
@@ -223,12 +224,13 @@ class SocrataClient:
             query_params: Base SoQL query parameters (without $limit/$offset)
             limit: Records per page (default: 50000)
             max_records: Optional maximum total records to fetch
+            label: Optional label for logging (e.g., endpoint name)
 
         Yields:
             List of records for each page
 
         Example:
-            for batch in client.fetch_all("ijzp-q8t2"):
+            for batch in client.fetch_all("ijzp-q8t2", label="budget"):
                 for record in batch:
                     process(record)
         """
@@ -236,14 +238,15 @@ class SocrataClient:
         params["$limit"] = limit
         offset = 0
         total_fetched = 0
+        log_name = f"{label} ({resource_id})" if label else resource_id
 
         while True:
             params["$offset"] = offset
-            logger.info(f"Fetching {resource_id} offset={offset} limit={limit}")
+            logger.info(f"Fetching {log_name} offset={offset} limit={limit}")
 
             batch = self.request(resource_id, params)
             if not batch:
-                logger.info(f"Finished fetching {resource_id}: {total_fetched} total records")
+                logger.info(f"Finished {log_name}: {total_fetched:,} total records")
                 break
 
             yield batch
@@ -251,12 +254,12 @@ class SocrataClient:
 
             # Check if we've hit max_records limit
             if max_records and total_fetched >= max_records:
-                logger.info(f"Reached max_records limit ({max_records})")
+                logger.info(f"Reached max_records limit ({max_records:,}) for {log_name}")
                 break
 
             # If we got fewer records than limit, we've reached the end
             if len(batch) < limit:
-                logger.info(f"Finished fetching {resource_id}: {total_fetched} total records")
+                logger.info(f"Finished {log_name}: {total_fetched:,} total records")
                 break
 
             offset += limit

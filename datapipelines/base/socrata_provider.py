@@ -116,7 +116,7 @@ class SocrataBaseProvider(BaseProvider):
 
         # Check if this is a multi-year endpoint with view_ids
         if endpoint.view_ids:
-            yield from self._fetch_multi_year(endpoint, max_records, **kwargs)
+            yield from self._fetch_multi_year(work_item, endpoint, max_records, **kwargs)
         else:
             yield from self._fetch_single_resource(work_item, endpoint, max_records, **kwargs)
 
@@ -139,12 +139,14 @@ class SocrataBaseProvider(BaseProvider):
             resource_id=resource_id,
             query_params=params,
             limit=self._default_limit,
-            max_records=max_records
+            max_records=max_records,
+            label=endpoint_id
         ):
             yield batch
 
     def _fetch_multi_year(
         self,
+        endpoint_id: str,
         endpoint: EndpointConfig,
         max_records: Optional[int] = None,
         **kwargs
@@ -157,13 +159,14 @@ class SocrataBaseProvider(BaseProvider):
             if not resource_id:
                 continue
 
-            logger.info(f"Fetching year {year} from {resource_id}")
+            year_label = f"{endpoint_id}/{year}"
 
             for batch in self.client.fetch_all(
                 resource_id=resource_id,
                 query_params=params,
                 limit=self._default_limit,
-                max_records=max_records
+                max_records=max_records,
+                label=year_label
             ):
                 # Add year to each record for partitioning
                 for record in batch:
