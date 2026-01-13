@@ -492,10 +492,11 @@ class BronzeSink:
                     f"Schema incompatibility detected at {path}. "
                     f"Retrying with overwriteSchema=true"
                 )
-                # Safe to use overwriteSchema in full overwrite mode (not dynamic)
+                # Use static partition mode - overwriteSchema is NOT compatible with dynamic mode
                 writer_retry = df.write.format("delta").mode("overwrite")
                 if partitions:
                     writer_retry = writer_retry.partitionBy(*partitions)
+                    writer_retry = writer_retry.option("partitionOverwriteMode", "static")
                 writer_retry = writer_retry.option("overwriteSchema", "true")
                 writer_retry.save(path)
                 logger.info(f"Successfully overwrote table with new schema at {path}")
