@@ -641,7 +641,7 @@ class ChicagoProvider:
         """
         Fetch and write a single endpoint to Bronze with streaming batch writes.
 
-        Writes data in batches to avoid memory exhaustion on large datasets.
+        Uses centralized StreamingBronzeWriter for automatic batch management.
 
         Args:
             endpoint_id: Endpoint identifier
@@ -662,14 +662,9 @@ class ChicagoProvider:
 
         # Check if this endpoint uses view_id iteration (multi-year datasets)
         if endpoint.view_ids:
-            # Multi-year uses its own batching by year
-            result = self._fetch_multi_year_dataset(endpoint_id, endpoint, query_params, max_records)
-            if result.success and result.df is not None:
-                path = self.write_to_bronze(result.df, endpoint_id)
-                if not path:
-                    result.success = False
-                    result.error = "Failed to write to Bronze"
-            return result
+            return self._ingest_multi_year_streaming(
+                endpoint_id, endpoint, query_params, max_records, write_batch_size
+            )
 
         # Standard single-resource fetch with streaming writes
         resource_id = self.get_resource_id(endpoint_id)
@@ -680,71 +675,44 @@ class ChicagoProvider:
                 error=f"Could not extract resource_id for: {endpoint_id}"
             )
 
+        # Get bronze config
+        if not endpoint.bronze:
+            return DatasetFetchResult(
+                endpoint_id=endpoint_id,
+                success=False,
+                error=f"No bronze config for endpoint: {endpoint_id}"
+            )
+
+        bronze_cfg = endpoint.bronze
+        table_name = bronze_cfg.table
+        partitions = bronze_cfg.partitions or []
+
         # Merge default query with provided params
         params = dict(endpoint.default_query or {})
         if query_params:
             params.update(query_params)
 
         try:
-            batch_records = []
-            total_records = 0
-            batches_written = 0
-            is_first_write = True
+            # Create DataFrame factory for this endpoint
+            def df_factory(records):
+                return self._create_dataframe(records, endpoint)
 
-            for batch in self.client.fetch_all(
-                resource_id=resource_id,
-                query_params=params,
-                limit=self.config.default_limit,
-                max_records=max_records
-            ):
-                batch_records.extend(batch)
+            # Use centralized streaming writer
+            with self.sink.streaming_writer(
+                table=table_name,
+                df_factory=df_factory,
+                batch_size=write_batch_size,
+                partitions=partitions
+            ) as writer:
+                for batch in self.client.fetch_all(
+                    resource_id=resource_id,
+                    query_params=params,
+                    limit=self.config.default_limit,
+                    max_records=max_records
+                ):
+                    writer.add_batch(batch)
 
-                # Write when we hit batch size
-                if len(batch_records) >= write_batch_size:
-                    df = self._create_dataframe(batch_records, endpoint)
-
-                    # First write overwrites, subsequent appends
-                    if is_first_write:
-                        path = self.write_to_bronze(df, endpoint_id, write_strategy='overwrite')
-                        is_first_write = False
-                    else:
-                        path = self._append_to_bronze(df, endpoint_id)
-
-                    if not path:
-                        return DatasetFetchResult(
-                            endpoint_id=endpoint_id,
-                            success=False,
-                            error=f"Failed to write batch {batches_written + 1}"
-                        )
-
-                    total_records += len(batch_records)
-                    batches_written += 1
-                    logger.info(f"{endpoint_id}: Written batch {batches_written} ({total_records} total records)")
-
-                    # Clear memory
-                    batch_records = []
-                    df.unpersist() if hasattr(df, 'unpersist') else None
-
-            # Write any remaining records
-            if batch_records:
-                df = self._create_dataframe(batch_records, endpoint)
-
-                if is_first_write:
-                    path = self.write_to_bronze(df, endpoint_id, write_strategy='overwrite')
-                else:
-                    path = self._append_to_bronze(df, endpoint_id)
-
-                if not path:
-                    return DatasetFetchResult(
-                        endpoint_id=endpoint_id,
-                        success=False,
-                        error="Failed to write final batch"
-                    )
-
-                total_records += len(batch_records)
-                batches_written += 1
-
-            logger.info(f"{endpoint_id}: Completed - {total_records} records in {batches_written} batches")
+                total_records = writer.total_records + writer.buffered_records
 
             return DatasetFetchResult(
                 endpoint_id=endpoint_id,
@@ -760,37 +728,88 @@ class ChicagoProvider:
                 error=str(e)
             )
 
-    def _append_to_bronze(
+    def _ingest_multi_year_streaming(
         self,
-        df: DataFrame,
-        endpoint_id: str
-    ) -> Optional[str]:
-        """Append DataFrame to existing Bronze table."""
-        endpoint = self._endpoints.get(endpoint_id)
-        if not endpoint or not endpoint.bronze:
-            return None
+        endpoint_id: str,
+        endpoint: EndpointConfig,
+        query_params: Optional[Dict[str, Any]] = None,
+        max_records: Optional[int] = None,
+        write_batch_size: int = 500000
+    ) -> DatasetFetchResult:
+        """
+        Ingest multi-year dataset using centralized streaming writes.
+
+        Iterates over view_ids (years) and streams all data through
+        StreamingBronzeWriter for automatic batch management.
+        """
+        logger.info(f"Streaming multi-year dataset {endpoint_id} ({len(endpoint.view_ids)} years)")
+
+        if not endpoint.bronze:
+            return DatasetFetchResult(
+                endpoint_id=endpoint_id,
+                success=False,
+                error=f"No bronze config for endpoint: {endpoint_id}"
+            )
 
         bronze_cfg = endpoint.bronze
         table_name = bronze_cfg.table
+        partitions = bronze_cfg.partitions or []
 
-        df_columns = set(df.columns)
-        partitions = [p for p in (bronze_cfg.partitions or []) if p in df_columns]
+        params = dict(endpoint.default_query or {})
+        if query_params:
+            params.update(query_params)
 
         try:
-            path = self.sink.append(
-                df,
-                table_name,
-                partitions=partitions if partitions else None
+            def df_factory(records):
+                return self._create_dataframe(records, endpoint)
+
+            with self.sink.streaming_writer(
+                table=table_name,
+                df_factory=df_factory,
+                batch_size=write_batch_size,
+                partitions=partitions
+            ) as writer:
+                for view_id_entry in endpoint.view_ids:
+                    year = view_id_entry.get('year')
+                    resource_id = view_id_entry.get('view_id')
+
+                    if not resource_id:
+                        continue
+
+                    logger.info(f"{endpoint_id}: Fetching year {year}")
+
+                    for batch in self.client.fetch_all(
+                        resource_id=resource_id,
+                        query_params=params,
+                        limit=self.config.default_limit,
+                        max_records=max_records
+                    ):
+                        # Add year to each record
+                        for record in batch:
+                            record['year'] = year
+                        writer.add_batch(batch)
+
+                total_records = writer.total_records + writer.buffered_records
+
+            return DatasetFetchResult(
+                endpoint_id=endpoint_id,
+                success=True,
+                record_count=total_records
             )
-            return path
+
         except Exception as e:
-            logger.error(f"Failed to append to bronze: {e}")
-            return None
+            logger.error(f"Failed to ingest multi-year {endpoint_id}: {e}")
+            return DatasetFetchResult(
+                endpoint_id=endpoint_id,
+                success=False,
+                error=str(e)
+            )
 
     def ingest_all(
         self,
         endpoint_ids: Optional[List[str]] = None,
         max_records_per_endpoint: Optional[int] = None,
+        write_batch_size: int = 500000,
         silent: bool = False
     ) -> Dict[str, DatasetFetchResult]:
         """
@@ -798,7 +817,8 @@ class ChicagoProvider:
 
         Args:
             endpoint_ids: List of endpoints to ingest (None = all active)
-            max_records_per_endpoint: Limit per endpoint
+            max_records_per_endpoint: Limit per endpoint (None = all)
+            write_batch_size: Records to buffer before Delta write (default 500k)
             silent: Suppress progress output
 
         Returns:
@@ -819,7 +839,11 @@ class ChicagoProvider:
             if not silent:
                 print(f"  [{i+1}/{len(endpoint_ids)}] {eid}...", end=" ", flush=True)
 
-            result = self.ingest_endpoint(eid, max_records=max_records_per_endpoint)
+            result = self.ingest_endpoint(
+                eid,
+                max_records=max_records_per_endpoint,
+                write_batch_size=write_batch_size
+            )
             results[eid] = result
 
             if not silent:

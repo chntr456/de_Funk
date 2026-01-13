@@ -483,3 +483,160 @@ class BronzeSink:
 
         writer.save(path)
 
+    def streaming_writer(
+        self,
+        table: str,
+        df_factory: callable,
+        batch_size: int = 500000,
+        partitions: Optional[List[str]] = None
+    ) -> 'StreamingBronzeWriter':
+        """
+        Create a streaming writer for incremental batch writes.
+
+        Automatically flushes to Delta when batch_size records accumulated.
+        Prevents memory exhaustion on large datasets.
+
+        Args:
+            table: Table name (subdirectory under bronze root)
+            df_factory: Function that converts List[Dict] -> DataFrame
+            batch_size: Records to accumulate before writing (default 500k)
+            partitions: Partition columns for Delta writes
+
+        Returns:
+            StreamingBronzeWriter context manager
+
+        Example:
+            with sink.streaming_writer('chicago_crimes', create_df, batch_size=500000) as writer:
+                for batch in client.fetch_all(resource_id):
+                    writer.add_records(batch)
+            # Auto-flushes remaining records on exit
+        """
+        return StreamingBronzeWriter(
+            sink=self,
+            table=table,
+            df_factory=df_factory,
+            batch_size=batch_size,
+            partitions=partitions
+        )
+
+
+class StreamingBronzeWriter:
+    """
+    Context manager for streaming batch writes to Bronze layer.
+
+    Accumulates records in memory and flushes to Delta Lake when
+    batch_size is reached. Prevents memory exhaustion on large datasets.
+
+    First flush uses overwrite mode, subsequent flushes append.
+    """
+
+    def __init__(
+        self,
+        sink: BronzeSink,
+        table: str,
+        df_factory: callable,
+        batch_size: int = 500000,
+        partitions: Optional[List[str]] = None
+    ):
+        """
+        Initialize streaming writer.
+
+        Args:
+            sink: BronzeSink instance
+            table: Table name
+            df_factory: Function(records: List[Dict]) -> DataFrame
+            batch_size: Records before auto-flush
+            partitions: Partition columns
+        """
+        self.sink = sink
+        self.table = table
+        self.df_factory = df_factory
+        self.batch_size = batch_size
+        self.partitions = partitions
+
+        self._buffer: List[Dict] = []
+        self._is_first_write = True
+        self._total_records = 0
+        self._batches_written = 0
+
+    def __enter__(self) -> 'StreamingBronzeWriter':
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Flush any remaining records on exit
+        if self._buffer:
+            self.flush()
+        return False  # Don't suppress exceptions
+
+    def add_records(self, records: List[Dict]) -> None:
+        """
+        Add records to buffer, auto-flushing if batch_size reached.
+
+        Args:
+            records: List of record dicts to add
+        """
+        self._buffer.extend(records)
+
+        if len(self._buffer) >= self.batch_size:
+            self.flush()
+
+    def add_batch(self, batch: List[Dict]) -> None:
+        """Alias for add_records for clarity."""
+        self.add_records(batch)
+
+    def flush(self) -> None:
+        """
+        Write buffered records to Delta and clear buffer.
+
+        First flush overwrites, subsequent flushes append.
+        """
+        if not self._buffer:
+            return
+
+        # Convert records to DataFrame using factory
+        df = self.df_factory(self._buffer)
+
+        # Filter partitions to columns that exist in DataFrame
+        df_columns = set(df.columns)
+        valid_partitions = None
+        if self.partitions:
+            valid_partitions = [p for p in self.partitions if p in df_columns]
+            if not valid_partitions:
+                valid_partitions = None
+
+        # Write: overwrite first time, append after
+        if self._is_first_write:
+            self.sink.overwrite(df, self.table, partitions=valid_partitions)
+            self._is_first_write = False
+        else:
+            self.sink.append(df, self.table, partitions=valid_partitions)
+
+        # Update stats
+        self._total_records += len(self._buffer)
+        self._batches_written += 1
+
+        logger.info(
+            f"{self.table}: Written batch {self._batches_written} "
+            f"({self._total_records:,} total records)"
+        )
+
+        # Clear buffer and free memory
+        self._buffer = []
+        if hasattr(df, 'unpersist'):
+            df.unpersist()
+
+    @property
+    def total_records(self) -> int:
+        """Total records written (not including current buffer)."""
+        return self._total_records
+
+    @property
+    def buffered_records(self) -> int:
+        """Records currently in buffer."""
+        return len(self._buffer)
+
+    @property
+    def batches_written(self) -> int:
+        """Number of batches flushed to storage."""
+        return self._batches_written
+

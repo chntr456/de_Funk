@@ -129,6 +129,7 @@
   },
   "profiles": {
     "_comment": "Named profiles for common run scenarios. Use --profile to activate.",
+    "_write_batch_size_comment": "Records to buffer before writing to Delta. Default 500k. Prevents memory overflow on large datasets.",
     "quick_test": {
       "max_tickers": 10,
       "dry_run": false,
@@ -138,10 +139,11 @@
     "dev": {
       "providers": ["chicago", "cook_county"],
       "max_records_per_endpoint": null,
+      "write_batch_size": 500000,
       "dry_run": false,
       "skip_silver": true,
       "log_level": "DEBUG",
-      "_comment": "Full municipal data run: chicago (22 endpoints) + cook_county (13 endpoints). No record limits - fetches complete datasets."
+      "_comment": "Full municipal data run: chicago (22 endpoints) + cook_county (13 endpoints). No record limits, streams to Delta in 500k batches."
     },
     "dev_municipal": {
       "providers": ["chicago", "cook_county"],

@@ -157,6 +157,10 @@ if providers:
     print(f'PROFILE_PROVIDERS="{" ".join(providers)}"')
 else:
     print('PROFILE_PROVIDERS=""')
+
+# write_batch_size - records to buffer before Delta write (default 500000)
+write_batch_size = profile.get('write_batch_size', 500000)
+print(f'PROFILE_WRITE_BATCH_SIZE="{write_batch_size}"')
 PYEOF
 )
 
@@ -584,13 +588,24 @@ for provider_name in bulk_providers:
         if max_records is None:
             logger.info(f'max_records_per_endpoint is null - fetching ALL records (no limit)')
 
+        # Get write_batch_size from profile (default 500k for streaming Delta writes)
+        write_batch_size = int('${PROFILE_WRITE_BATCH_SIZE:-500000}')
+        logger.info(f'write_batch_size: {write_batch_size} records per batch')
+
         if endpoints:
             logger.info(f'Ingesting {len(endpoints)} endpoints: {endpoints[:5]}...')
-            results = provider.ingest_all(endpoint_ids=endpoints, max_records_per_endpoint=max_records)
+            results = provider.ingest_all(
+                endpoint_ids=endpoints,
+                max_records_per_endpoint=max_records,
+                write_batch_size=write_batch_size
+            )
         else:
             limit_msg = f'max {max_records} records each' if max_records else 'no limit'
             logger.info(f'Ingesting all active endpoints ({limit_msg})')
-            results = provider.ingest_all(max_records_per_endpoint=max_records)
+            results = provider.ingest_all(
+                max_records_per_endpoint=max_records,
+                write_batch_size=write_batch_size
+            )
 
         # Summary
         success_count = sum(1 for r in results.values() if r.success)
