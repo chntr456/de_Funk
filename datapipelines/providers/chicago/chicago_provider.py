@@ -290,12 +290,22 @@ class ChicagoProvider:
                     fmt = field_def.transform[8:-1]  # Extract format from to_date(fmt)
                     df = df.withColumn(field_def.name, F.to_date(F.col(field_def.name), fmt))
                 else:
-                    # Try common formats: MM/dd/yyyy is common in Chicago data
+                    # Socrata returns various date formats:
+                    # - ISO timestamps: "2025-06-06T00:00:00.000" (most common)
+                    # - Simple dates: "2025-06-06", "01/16/2025", "1/6/2025"
+                    # Extract just date portion from ISO timestamps first (substring first 10 chars)
+                    col_val = F.col(field_def.name)
+                    # For ISO timestamps, extract date portion (first 10 chars before 'T')
+                    iso_date_part = F.when(
+                        col_val.contains("T"),
+                        F.substring(col_val, 1, 10)
+                    ).otherwise(col_val)
+
                     df = df.withColumn(field_def.name,
                         F.coalesce(
-                            F.to_date(F.col(field_def.name), "yyyy-MM-dd"),
-                            F.to_date(F.col(field_def.name), "MM/dd/yyyy"),
-                            F.to_date(F.col(field_def.name), "M/d/yyyy")
+                            F.to_date(iso_date_part, "yyyy-MM-dd"),
+                            F.to_date(col_val, "MM/dd/yyyy"),
+                            F.to_date(col_val, "M/d/yyyy")
                         )
                     )
             elif target_type == 'timestamp':
