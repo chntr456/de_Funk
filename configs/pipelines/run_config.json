@@ -57,9 +57,10 @@
         "iucr_codes",
         "community_areas",
         "zoning_districts",
-        "service_requests_311"
+        "service_requests_311",
+        "service_request_types"
       ],
-      "_endpoints_comment": "18 Chicago endpoints. Excluded: cta_bus_stops (non-tabular geospatial), wards, traffic_congestion_segments (view_id required)."
+      "_endpoints_comment": "19 Chicago endpoints. Excluded: cta_bus_stops (non-tabular geospatial), wards, traffic_congestion_segments (view_id required)."
     },
     "cook_county": {
       "enabled": true,
