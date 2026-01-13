@@ -108,6 +108,8 @@ class EndpointConfig:
     domain: str = ""
     data_tags: List[str] = field(default_factory=list)
     status: str = "active"
+    # View ID mapping for multi-year datasets (year -> view_id)
+    view_ids: Dict[str, str] = field(default_factory=dict)
     # Raw config dict for additional fields
     raw: Dict[str, Any] = field(default_factory=dict)
 
@@ -212,6 +214,39 @@ class MarkdownConfigLoader:
                 continue
 
         return None
+
+    def parse_view_ids_table(self, body: str) -> Dict[str, str]:
+        """
+        Extract view_id mappings from markdown table.
+
+        Parses tables with Year and view_id columns:
+        | Year | view_id | Format | Notes |
+        |------|---------|--------|-------|
+        | 2026 | 6694-f78c | JSON | provisional |
+        | 2025 | t59y-fr3k | JSON | provisional |
+
+        Args:
+            body: Markdown body content
+
+        Returns:
+            Dict mapping year (str) to view_id (str)
+        """
+        view_ids = {}
+
+        # Find markdown table rows (| col1 | col2 | ...)
+        # Skip header separator row (|---|---|)
+        table_rows = re.findall(r'^\|\s*(\d{4})\s*\|\s*([a-z0-9-]+)\s*\|', body, re.MULTILINE)
+
+        for year, view_id in table_rows:
+            # Validate it looks like a Socrata 4x4 ID (xxxx-xxxx)
+            if re.match(r'^[a-z0-9]{4}-[a-z0-9]{4}$', view_id):
+                view_ids[year] = view_id
+                logger.debug(f"Found view_id: {year} -> {view_id}")
+
+        if view_ids:
+            logger.info(f"Parsed {len(view_ids)} view_ids from markdown table")
+
+        return view_ids
 
     def parse_schema_array(self, schema_list: List) -> List[SchemaField]:
         """
@@ -398,6 +433,12 @@ class MarkdownConfigLoader:
         # Parse bronze config (supports both flattened and nested formats)
         bronze_config = self.parse_bronze_config(frontmatter)
 
+        # Parse view_ids table if this endpoint requires view_id parameter
+        required_params = frontmatter.get('required_params', []) or []
+        view_ids = {}
+        if 'view_id' in required_params:
+            view_ids = self.parse_view_ids_table(body)
+
         return EndpointConfig(
             endpoint_id=endpoint_id,
             provider=frontmatter.get('provider', ''),
@@ -407,13 +448,14 @@ class MarkdownConfigLoader:
             auth=frontmatter.get('auth', 'inherit'),
             response_key=frontmatter.get('response_key'),
             default_query=frontmatter.get('default_query', {}) or {},
-            required_params=frontmatter.get('required_params', []) or [],
+            required_params=required_params,
             pagination_type=frontmatter.get('pagination_type', 'none'),
             schema=schema_fields,
             bronze=bronze_config,
             domain=frontmatter.get('domain', ''),
             data_tags=frontmatter.get('data_tags', []) or [],
             status=frontmatter.get('status', 'active'),
+            view_ids=view_ids,
             raw=frontmatter
         )
 

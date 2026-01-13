@@ -179,15 +179,26 @@ class ChicagoProvider:
         Returns:
             DatasetFetchResult with DataFrame or error
         """
-        resource_id = self.get_resource_id(endpoint_id)
-        if not resource_id:
+        endpoint = self._endpoints.get(endpoint_id)
+        if not endpoint:
             return DatasetFetchResult(
                 endpoint_id=endpoint_id,
                 success=False,
                 error=f"Unknown endpoint: {endpoint_id}"
             )
 
-        endpoint = self._endpoints[endpoint_id]
+        # Check if this endpoint uses view_id iteration (multi-year datasets)
+        if endpoint.view_ids:
+            return self._fetch_multi_year_dataset(endpoint_id, endpoint, query_params, max_records, progress_callback)
+
+        # Standard single-resource fetch
+        resource_id = self.get_resource_id(endpoint_id)
+        if not resource_id:
+            return DatasetFetchResult(
+                endpoint_id=endpoint_id,
+                success=False,
+                error=f"Could not extract resource_id for: {endpoint_id}"
+            )
 
         # Merge default query with provided params
         params = dict(endpoint.default_query or {})
@@ -236,6 +247,101 @@ class ChicagoProvider:
                 success=False,
                 error=str(e)
             )
+
+    def _fetch_multi_year_dataset(
+        self,
+        endpoint_id: str,
+        endpoint: EndpointConfig,
+        query_params: Optional[Dict[str, Any]] = None,
+        max_records: Optional[int] = None,
+        progress_callback: Optional[callable] = None
+    ) -> DatasetFetchResult:
+        """
+        Fetch dataset that spans multiple years with different view_ids.
+
+        Iterates over the view_id table, fetching each year's data and
+        combining into a single DataFrame with a year column.
+
+        Args:
+            endpoint_id: Endpoint identifier
+            endpoint: Endpoint configuration with view_ids
+            query_params: Additional SoQL query parameters
+            max_records: Maximum records to fetch per year (None = all)
+            progress_callback: Optional callback(batch_num, record_count)
+
+        Returns:
+            DatasetFetchResult with combined DataFrame or error
+        """
+        logger.info(f"Fetching multi-year dataset {endpoint_id} with {len(endpoint.view_ids)} years")
+
+        all_dataframes = []
+        total_records = 0
+        errors = []
+
+        # Sort years descending (most recent first)
+        sorted_years = sorted(endpoint.view_ids.keys(), reverse=True)
+
+        for year in sorted_years:
+            view_id = endpoint.view_ids[year]
+            logger.info(f"Fetching {endpoint_id} year={year} view_id={view_id}")
+
+            # Merge default query with provided params
+            params = dict(endpoint.default_query or {})
+            if query_params:
+                params.update(query_params)
+
+            try:
+                # Fetch all records for this year
+                year_records = []
+                for batch in self.client.fetch_all(
+                    resource_id=view_id,
+                    query_params=params,
+                    limit=self.config.default_limit,
+                    max_records=max_records
+                ):
+                    year_records.extend(batch)
+
+                if not year_records:
+                    logger.warning(f"No records for {endpoint_id} year={year}")
+                    continue
+
+                # Add year to each record (for partitioning and identification)
+                for record in year_records:
+                    record['year'] = int(year)
+
+                # Convert to DataFrame
+                df = self._create_dataframe(year_records, endpoint)
+                all_dataframes.append(df)
+                total_records += len(year_records)
+
+                logger.info(f"Fetched {len(year_records)} records for {endpoint_id} year={year}")
+
+                if progress_callback:
+                    progress_callback(len(all_dataframes), total_records)
+
+            except Exception as e:
+                error_msg = f"Failed to fetch {endpoint_id} year={year}: {e}"
+                logger.error(error_msg)
+                errors.append(error_msg)
+                continue
+
+        if not all_dataframes:
+            return DatasetFetchResult(
+                endpoint_id=endpoint_id,
+                success=False,
+                error=f"No data fetched from any year. Errors: {errors}"
+            )
+
+        # Union all year DataFrames
+        from functools import reduce
+        combined_df = reduce(lambda df1, df2: df1.unionByName(df2, allowMissingColumns=True), all_dataframes)
+
+        return DatasetFetchResult(
+            endpoint_id=endpoint_id,
+            success=True,
+            record_count=total_records,
+            df=combined_df
+        )
 
     def _safe_parse_date(self, col_val):
         """
