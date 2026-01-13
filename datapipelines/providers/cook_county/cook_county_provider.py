@@ -238,6 +238,119 @@ class CookCountyProvider:
                 error=str(e)
             )
 
+    def _safe_parse_date(self, col_val):
+        """
+        Normalize date strings to yyyy-MM-dd format for ANSI-safe parsing.
+
+        Handles Socrata date formats:
+        - ISO timestamp: 2025-02-26T00:00:00.000 -> 2025-02-26
+        - ISO date: 2025-02-26 (no change)
+        - US date: 01/16/2025 or 1/6/2025 -> 2025-01-16
+        - Year only: 2020 -> 2020-01-01
+        - NULL/empty: NULL
+
+        Returns a date column expression.
+        """
+        # Handle NULL values explicitly
+        trimmed = F.trim(col_val)
+
+        # Split US date format (MM/dd/yyyy) for reformatting
+        parts = F.split(trimmed, "/")
+        us_date_formatted = F.concat(
+            parts[2],  # year
+            F.lit("-"),
+            F.lpad(parts[0], 2, "0"),  # month (zero-padded)
+            F.lit("-"),
+            F.lpad(parts[1], 2, "0")   # day (zero-padded)
+        )
+
+        # Normalize string to yyyy-MM-dd based on detected format
+        normalized = (
+            F.when(
+                col_val.isNull() | (F.length(trimmed) == 0),
+                F.lit(None).cast("string")
+            ).when(
+                # ISO timestamp: extract date portion (first 10 chars)
+                trimmed.contains("T"),
+                F.substring(trimmed, 1, 10)
+            ).when(
+                # US date format: reformat to ISO
+                trimmed.contains("/"),
+                us_date_formatted
+            ).when(
+                # Year only: append -01-01
+                F.length(trimmed) == 4,
+                F.concat(trimmed, F.lit("-01-01"))
+            ).otherwise(
+                # Assume already in yyyy-MM-dd format
+                trimmed
+            )
+        )
+
+        # Cast normalized string to date
+        return F.to_date(normalized, "yyyy-MM-dd")
+
+    def _safe_parse_timestamp(self, col_val):
+        """
+        Normalize timestamp strings for ANSI-safe parsing.
+
+        Handles Socrata timestamp formats:
+        - ISO: 2025-02-26T00:00:00.000 -> 2025-02-26 00:00:00
+        - Date only: 2025-02-26 -> 2025-02-26 00:00:00
+        - US date: 01/16/2025 -> 2025-01-16 00:00:00
+        - Year only: 2020 -> 2020-01-01 00:00:00
+        - NULL/empty: NULL
+
+        Returns a timestamp column expression.
+        """
+        trimmed = F.trim(col_val)
+
+        # For ISO format with T, replace T with space and truncate at 19 chars
+        # Input: 2025-02-26T00:00:00.000 -> Output: 2025-02-26 00:00:00
+        iso_normalized = F.regexp_replace(
+            F.substring(trimmed, 1, 19),
+            "T", " "
+        )
+
+        # US date parts (MM/dd/yyyy)
+        parts = F.split(trimmed, "/")
+        us_timestamp = F.concat(
+            parts[2], F.lit("-"),
+            F.lpad(parts[0], 2, "0"), F.lit("-"),
+            F.lpad(parts[1], 2, "0"),
+            F.lit(" 00:00:00")
+        )
+
+        # Normalize string based on detected format
+        normalized = (
+            F.when(
+                col_val.isNull() | (F.length(trimmed) == 0),
+                F.lit(None).cast("string")
+            ).when(
+                # ISO timestamp with T separator
+                trimmed.contains("T"),
+                iso_normalized
+            ).when(
+                # US date format
+                trimmed.contains("/"),
+                us_timestamp
+            ).when(
+                # Date only (10 chars like yyyy-MM-dd)
+                F.length(trimmed) == 10,
+                F.concat(trimmed, F.lit(" 00:00:00"))
+            ).when(
+                # Year only (4 chars)
+                F.length(trimmed) == 4,
+                F.concat(trimmed, F.lit("-01-01 00:00:00"))
+            ).otherwise(
+                # Assume already in correct format
+                trimmed
+            )
+        )
+
+        # Cast normalized string to timestamp
+        return F.to_timestamp(normalized, "yyyy-MM-dd HH:mm:ss")
+
     def _create_dataframe(
         self,
         records: List[Dict],
@@ -286,9 +399,15 @@ class CookCountyProvider:
             elif target_type in ('double', 'float'):
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('double'))
             elif target_type == 'date':
-                df = df.withColumn(field_def.name, F.col(field_def.name).cast('date'))
+                # Normalize date strings to yyyy-MM-dd before casting
+                # This handles Socrata's various date formats without ANSI exceptions
+                df = df.withColumn(field_def.name,
+                    self._safe_parse_date(F.col(field_def.name)))
             elif target_type == 'timestamp':
-                df = df.withColumn(field_def.name, F.col(field_def.name).cast('timestamp'))
+                # Normalize timestamp strings to yyyy-MM-dd HH:mm:ss before casting
+                # This handles Socrata's ISO format and variations without ANSI exceptions
+                df = df.withColumn(field_def.name,
+                    self._safe_parse_timestamp(F.col(field_def.name)))
             elif target_type == 'boolean':
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
 
