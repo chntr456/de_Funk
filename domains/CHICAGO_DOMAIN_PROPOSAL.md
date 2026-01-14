@@ -10,10 +10,10 @@ Two distinct entity types with separate geospatial models:
 
 ```
 domains/
-├── _schema/                          # City-agnostic schema templates
-│   ├── crime.yaml                    # Canonical crime schema + taxonomy
-│   ├── service_request.yaml          # Canonical 311 schema
-│   └── property.yaml                 # Canonical property schema
+├── _schema/                          # City-agnostic schema templates (markdown)
+│   ├── crime.md                      # Canonical crime schema + taxonomy
+│   ├── service_request.md            # Canonical 311 schema
+│   └── property.md                   # Canonical property schema
 │
 ├── county/
 │   └── cook_county/
@@ -24,8 +24,8 @@ domains/
 ├── city/
 │   └── chicago/
 │       ├── finance.md                # Payments, contracts, budget
-│       ├── public_safety.md          # Crimes, arrests (refs _schema/crime.yaml)
-│       ├── operations.md             # 311 requests (refs _schema/service_request.yaml)
+│       ├── public_safety.md          # Crimes, arrests (refs _schema/crime.md)
+│       ├── operations.md             # 311 requests (refs _schema/service_request.md)
 │       ├── transportation.md         # CTA ridership, traffic
 │       ├── housing.md                # Building permits, zoning
 │       ├── regulatory.md             # Inspections, violations, licenses
@@ -93,7 +93,7 @@ silver/chicago/public_safety/
 ├── fact_crimes/      # Canonical columns, taxonomy assigned
 ```
 
-**Schema templates** (`_schema/crime.yaml`):
+**Schema templates** (`_schema/crime.md`):
 - Define canonical column names
 - Map source variants → canonical
 - Define taxonomy with catch-all at each level
