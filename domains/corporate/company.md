@@ -5,8 +5,6 @@ version: 2.0
 description: "Corporate legal entities with SEC registration and fundamentals"
 tags: [company, corporate, legal_entity, fundamentals]
 
-# Python Module
-python_module: models/domains/corporate/company/
 
 # Dependencies
 depends_on: []  # Builds independently from Bronze (securities_reference)

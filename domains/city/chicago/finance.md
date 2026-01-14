@@ -4,8 +4,6 @@ model: chicago_finance
 version: 1.0
 description: "Chicago payments, contracts, and budget data"
 
-# Python Module
-python_module: models/domains/city/chicago/finance/
 
 # Dependencies
 depends_on:

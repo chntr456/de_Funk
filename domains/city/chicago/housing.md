@@ -4,8 +4,6 @@ model: chicago_housing
 version: 1.0
 description: "Chicago building permits and zoning data"
 
-# Python Module
-python_module: models/domains/city/chicago/housing/
 
 # Dependencies
 depends_on:

@@ -4,8 +4,6 @@ model: chicago_regulatory
 version: 1.0
 description: "Chicago inspections, violations, and business licenses"
 
-# Python Module
-python_module: models/domains/city/chicago/regulatory/
 
 # Dependencies
 depends_on:

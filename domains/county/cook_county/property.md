@@ -7,8 +7,6 @@ description: "Cook County property assessments, parcels, and sales"
 # Schema Template
 schema_template: _schema/property.md
 
-# Python Module
-python_module: models/domains/county/cook_county/property/
 
 # Dependencies
 depends_on:

@@ -4,8 +4,6 @@ model: chicago_transportation
 version: 1.0
 description: "Chicago CTA ridership and traffic data"
 
-# Python Module
-python_module: models/domains/city/chicago/transportation/
 
 # Dependencies
 depends_on:

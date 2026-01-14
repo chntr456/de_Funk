@@ -4,8 +4,6 @@ model: cook_county_geospatial
 version: 1.0
 description: "Cook County geospatial boundaries and hierarchies"
 
-# Python Module
-python_module: models/domains/county/cook_county/geospatial/
 
 # Dependencies
 depends_on: []  # Foundation geospatial model

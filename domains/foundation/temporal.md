@@ -5,8 +5,6 @@ version: 2.0
 description: "Time and calendar dimensions - foundation for all time-series analysis"
 tags: [time, calendar, dates, foundation, shared]
 
-# Python Module
-python_module: models/foundation/temporal/
 
 # Dependencies
 depends_on: []  # Foundation model - no dependencies

@@ -4,8 +4,6 @@ model: chicago_public_safety
 version: 1.0
 description: "Chicago crime and arrest data"
 
-# Python Module
-python_module: models/domains/city/chicago/public_safety/
 
 # Dependencies
 depends_on:

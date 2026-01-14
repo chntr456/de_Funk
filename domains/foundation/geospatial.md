@@ -4,8 +4,6 @@ model: foundation_geospatial
 version: 1.0
 description: "Foundation geospatial model providing entity containment relationships"
 
-# Python Module
-python_module: models/domains/foundation/geospatial/
 
 # Dependencies
 depends_on: []  # Foundation model - no dependencies

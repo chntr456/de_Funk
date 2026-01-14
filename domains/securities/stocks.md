@@ -5,8 +5,6 @@ version: 2.0
 description: "Common stock equities with price and technical data"
 tags: [stocks, equities, securities, trading]
 
-# Python Module
-python_module: models/domains/securities/stocks/
 
 # Inheritance and Dependencies
 inherits_from: _base.securities

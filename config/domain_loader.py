@@ -217,6 +217,12 @@ class ModelConfigLoader:
         if 'model' not in config:
             config['model'] = model_name
 
+        # Derive python_module from path (convention over configuration)
+        # domains/city/chicago/public_safety.md → models/domains/city/chicago/public_safety/
+        rel_path = file_path.relative_to(self.domains_dir)
+        path_without_ext = str(rel_path).replace('.md', '')
+        config['_python_module'] = f"models/domains/{path_without_ext}"
+
         # Cache and return
         self._cache[model_name] = config
         return config
@@ -495,11 +501,12 @@ class ModelConfigLoader:
         """
         config = self.load_model_config(model_name)
 
-        python_module = config.get('python_module')
+        # Use derived _python_module (convention-based)
+        python_module = config.get('_python_module')
         if not python_module:
             return None
 
-        # Convert path to module: 'models/domains/city/chicago/public_safety/' -> module path
+        # Convert path to module: 'models/domains/city/chicago/public_safety' -> module path
         module_path = python_module.rstrip('/').replace('/', '.')
         measures_module = f"{module_path}.measures"
 

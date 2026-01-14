@@ -4,8 +4,6 @@ model: chicago_operations
 version: 1.0
 description: "Chicago 311 service requests and operational data"
 
-# Python Module
-python_module: models/domains/city/chicago/operations/
 
 # Dependencies
 depends_on:

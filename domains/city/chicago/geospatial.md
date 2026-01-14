@@ -4,8 +4,6 @@ model: chicago_geospatial
 version: 1.0
 description: "Chicago geographic boundaries and hierarchies"
 
-# Python Module
-python_module: models/domains/city/chicago/geospatial/
 
 # Dependencies
 depends_on: []  # Foundation geospatial model
