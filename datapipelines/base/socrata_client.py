@@ -33,6 +33,7 @@ Date: January 2026
 from __future__ import annotations
 
 import json
+import socket
 import time
 import urllib.request
 import urllib.parse
@@ -202,6 +203,23 @@ class SocrataClient:
                     continue
                 logger.error(f"URLError after {self.MAX_RETRIES} attempts for {url}: {e}")
                 raise RuntimeError(f"URLError after {self.MAX_RETRIES} attempts: {e}") from e
+
+            except (TimeoutError, socket.timeout, ConnectionError) as e:
+                # TimeoutError: read/connection timeout
+                # socket.timeout: socket-level timeout (alias for TimeoutError in Python 3.10+)
+                # ConnectionError: ConnectionResetError, BrokenPipeError, ConnectionAbortedError
+                # All are transient network issues - retryable
+                error_type = type(e).__name__
+                if attempt < self.MAX_RETRIES - 1:
+                    # Use longer backoff for timeouts since the server may be overloaded
+                    wait = min(60.0, backoff_base ** (attempt + 1))
+                    logger.warning(
+                        f"{error_type}: {e}. Waiting {wait:.1f}s before retry {attempt + 1}/{self.MAX_RETRIES}"
+                    )
+                    time.sleep(wait)
+                    continue
+                logger.error(f"{error_type} after {self.MAX_RETRIES} attempts for {url}: {e}")
+                raise RuntimeError(f"{error_type} after {self.MAX_RETRIES} attempts: {e}") from e
 
         raise RuntimeError(f"Request failed after {self.MAX_RETRIES} attempts: {url}")
 
