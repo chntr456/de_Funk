@@ -135,12 +135,13 @@
     "quick_test": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
       "max_tickers": 3,
+      "max_records_per_endpoint": 50000,
       "with_financials": true,
       "write_batch_size": 10000,
       "dry_run": false,
       "skip_silver": true,
       "log_level": "DEBUG",
-      "_comment": "Quick smoke test: 3 tickers + all Socrata endpoints (1 batch each). Tests all providers."
+      "_comment": "Quick smoke test: 3 tickers + 50k records per Socrata endpoint. Tests all providers."
     },
     "dev": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
