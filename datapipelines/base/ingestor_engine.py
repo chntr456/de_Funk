@@ -35,6 +35,7 @@ Author: de_Funk Team
 
 from __future__ import annotations
 
+import gc
 import time
 import threading
 from concurrent.futures import ThreadPoolExecutor, Future, as_completed
@@ -140,7 +141,7 @@ class IngestorEngine:
         self,
         provider: BaseProvider,
         storage_cfg: Dict,
-        max_pending_writes: int = 3,
+        max_pending_writes: int = 2,
         writer_threads: int = 2,
     ):
         """
@@ -430,8 +431,9 @@ class IngestorEngine:
                         f"({len(buffer):,} records, mode={mode})"
                     )
 
-                    # Clear buffer for next chunk
-                    buffer = []
+                    # Clear buffer and free memory
+                    buffer.clear()
+                    gc.collect()
 
             # Write any remaining records in buffer
             if buffer:
@@ -605,7 +607,7 @@ def create_engine(
     storage_cfg: Dict,
     spark=None,
     docs_path: Optional[Path] = None,
-    max_pending_writes: int = 3,
+    max_pending_writes: int = 2,
     writer_threads: int = 2,
 ) -> IngestorEngine:
     """
