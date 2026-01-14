@@ -106,16 +106,18 @@ class DuckDBConnection(DataConnection):
         """
         try:
             # Check if any v2.0 model schemas exist (quick check to avoid unnecessary work)
+            # Including 'bronze' schema for Bronze layer views
             existing_schemas = self.conn.execute("""
                 SELECT schema_name
                 FROM information_schema.schemata
-                WHERE schema_name IN ('stocks', 'options', 'company', 'temporal', 'geography')
+                WHERE schema_name IN ('stocks', 'options', 'company', 'temporal', 'geography', 'bronze')
             """).fetchall()
 
             views_need_refresh = False
 
             # If schemas exist with tables, verify views actually work
             # Test both dimension AND fact tables to ensure complete validation
+            # Bronze schema is validated by checking if any bronze.* views exist
             validation_queries = {
                 'stocks': [
                     'SELECT 1 FROM stocks.dim_stock LIMIT 1',
@@ -127,6 +129,8 @@ class DuckDBConnection(DataConnection):
                 'temporal': [
                     'SELECT 1 FROM temporal.dim_calendar LIMIT 1',
                 ],
+                # Bronze views are auto-discovered, just check schema has tables
+                'bronze': [],
             }
 
             if existing_schemas:

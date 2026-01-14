@@ -110,6 +110,13 @@ class DuckDBViewSetup:
             self.conn.close()
             self.conn = None
 
+    def get_bronze_path(self) -> Path:
+        """Get Bronze layer path (absolute path)."""
+        if self.storage_root:
+            return self.storage_root / 'bronze'
+        else:
+            return self.repo_root / 'storage' / 'bronze'
+
     def get_silver_path(self, model: str) -> Path:
         """Get Silver layer path for model (absolute path).
 
@@ -500,6 +507,72 @@ CREATE OR REPLACE VIEW futures.dim_security AS
             except Exception as e:
                 logger.warning(f"⚠ Could not create alias views: {e}")
 
+    def create_bronze_views(self, dry_run: bool = False):
+        """
+        Create views for all Bronze layer tables.
+
+        Auto-discovers all Delta tables in bronze/ directory and creates views.
+        Tables are organized by provider: bronze/{provider}/{table}
+        Views are created as: bronze.{provider}_{table}
+        """
+        logger.info("\n" + "="*80)
+        logger.info("BRONZE LAYER VIEWS")
+        logger.info("="*80)
+
+        bronze_path = self.get_bronze_path()
+
+        if not bronze_path.exists():
+            logger.warning(f"⚠ Bronze path not found: {bronze_path}")
+            return
+
+        # Create bronze schema
+        if not dry_run:
+            self.conn.execute("CREATE SCHEMA IF NOT EXISTS bronze;")
+
+        # Auto-discover all Delta tables in bronze directory
+        # Structure: bronze/{provider}/{table}/ or bronze/{table}/
+        discovered_tables = []
+
+        for item in bronze_path.iterdir():
+            if not item.is_dir() or item.name.startswith('.'):
+                continue
+
+            # Check if this is a Delta table directly (bronze/{table}/)
+            if (item / "_delta_log").exists():
+                discovered_tables.append((None, item.name, item))
+            else:
+                # This might be a provider directory (bronze/{provider}/{table}/)
+                for sub_item in item.iterdir():
+                    if sub_item.is_dir() and not sub_item.name.startswith('.'):
+                        if (sub_item / "_delta_log").exists():
+                            discovered_tables.append((item.name, sub_item.name, sub_item))
+                        # Also check for plain parquet files/directory
+                        elif list(sub_item.glob("*.parquet")) or list(sub_item.glob("**/*.parquet")):
+                            discovered_tables.append((item.name, sub_item.name, sub_item))
+
+        if not discovered_tables:
+            logger.info("No Bronze tables found to create views for")
+            return
+
+        logger.info(f"Discovered {len(discovered_tables)} Bronze tables")
+
+        for provider, table_name, table_path in sorted(discovered_tables):
+            # Create view name: provider_table or just table if no provider
+            if provider:
+                view_name = f"{provider}_{table_name}"
+            else:
+                view_name = table_name
+
+            # Sanitize view name (replace dashes with underscores)
+            view_name = view_name.replace('-', '_')
+
+            self.create_view(
+                schema='bronze',
+                table=view_name,
+                table_path=table_path,
+                dry_run=dry_run
+            )
+
     def create_helper_views(self, dry_run: bool = False):
         """Create helper views for common queries."""
         logger.info("\n" + "="*80)
@@ -580,16 +653,31 @@ LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
         logger.info("\n✓ DuckDB setup complete!")
         logger.info(f"\nConnect with:")
         logger.info(f"  python -c \"import duckdb; conn = duckdb.connect('{self.db_path}')\"")
-        logger.info(f"\nQuery example:")
+        logger.info(f"\nQuery examples:")
+        logger.info(f"  -- Silver layer (dimensional models)")
         logger.info(f"  SELECT * FROM stocks.fact_stock_prices LIMIT 10;")
+        logger.info(f"  SELECT * FROM company.dim_company LIMIT 10;")
+        logger.info(f"")
+        logger.info(f"  -- Bronze layer (raw ingested data)")
+        logger.info(f"  SELECT * FROM bronze.alpha_vantage_securities_prices_daily LIMIT 10;")
+        logger.info(f"  SELECT * FROM bronze.chicago_crimes LIMIT 10;")
 
-    def setup_all(self, dry_run: bool = False):
-        """Create all views."""
+    def setup_all(self, dry_run: bool = False, include_bronze: bool = True):
+        """Create all views.
+
+        Args:
+            dry_run: If True, show SQL without executing
+            include_bronze: If True, create Bronze layer views (default: True)
+        """
         if not dry_run:
             self.connect()
 
         try:
-            # v2.0 models
+            # Bronze layer views (raw data)
+            if include_bronze:
+                self.create_bronze_views(dry_run=dry_run)
+
+            # v2.0 Silver models
             self.create_temporal_views(dry_run=dry_run)
             self.create_geography_views(dry_run=dry_run)
             self.create_company_views(dry_run=dry_run)
