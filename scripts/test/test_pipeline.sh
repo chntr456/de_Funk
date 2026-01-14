@@ -497,9 +497,7 @@ logger = get_logger('test_pipeline')
 logger.info('Testing task: bulk provider ingestion')
 
 # Import components
-from datapipelines.base.ingestor_engine import IngestorEngine
-from datapipelines.providers.chicago.chicago_provider import create_chicago_provider
-from datapipelines.providers.cook_county.cook_county_provider import create_cook_county_provider
+from datapipelines.base.ingestor_engine import create_engine
 from orchestration.common.spark_session import get_spark
 from pathlib import Path
 import json
@@ -523,12 +521,6 @@ spark = get_spark(app_name='test_pipeline_bulk')
 # Docs path for markdown config
 docs_path = Path('$REPO_ROOT')
 
-# Factory mapping
-provider_factories = {
-    'chicago': create_chicago_provider,
-    'cook_county': create_cook_county_provider,
-}
-
 # Run each bulk provider from the list (profile or global enabled)
 bulk_providers = '$BULK_PROVIDERS'.split()
 logger.info(f'Bulk providers to process: {bulk_providers}')
@@ -547,25 +539,17 @@ for provider_name in bulk_providers:
         provider_cfg = run_config.get('providers', {}).get(provider_name, {})
         logger.info(f'Processing provider: {provider_name}')
 
-        # Get factory function
-        factory = provider_factories.get(provider_name)
-        if not factory:
-            logger.warning(f'Unknown provider: {provider_name} - skipping')
-            continue
-
-        # Create provider (config loaded from markdown, storage_path for raw layer)
-        # Pass preserve_raw and load_from_raw from profile
-        provider = factory(
+        # Create engine using unified factory (handles all provider-specific params)
+        engine = create_engine(
+            provider_name=provider_name,
+            storage_cfg=storage_cfg,
             spark=spark,
             docs_path=docs_path,
             storage_path=storage_path,
             preserve_raw=preserve_raw,
             load_from_raw=load_from_raw
         )
-        logger.info(f'Created provider: {provider.provider_id}')
-
-        # Create IngestorEngine
-        engine = IngestorEngine(provider, storage_cfg)
+        logger.info(f'Created engine for: {provider_name}')
 
         # Get work items (endpoints) - check profile-specific first, then global
         # Profile can have {provider}_endpoints (e.g., chicago_endpoints, cook_county_endpoints)

@@ -645,8 +645,11 @@ def create_engine(
     storage_cfg: Dict,
     spark=None,
     docs_path: Optional[Path] = None,
+    storage_path: Optional[Path] = None,
     max_pending_writes: int = 2,
     writer_threads: int = 2,
+    preserve_raw: bool = False,
+    load_from_raw: bool = False,
 ) -> IngestorEngine:
     """
     Factory function to create an IngestorEngine for any provider.
@@ -658,8 +661,11 @@ def create_engine(
         storage_cfg: Storage configuration dict
         spark: SparkSession
         docs_path: Path to repo root
+        storage_path: Path to storage root (for Socrata raw layer)
         max_pending_writes: Max writes to queue before blocking
         writer_threads: Number of writer threads
+        preserve_raw: Keep raw CSV files after Bronze write (Socrata providers)
+        load_from_raw: Skip download and load from existing raw CSVs (Socrata providers)
 
     Returns:
         IngestorEngine wrapping the appropriate provider
@@ -679,7 +685,13 @@ def create_engine(
         from datapipelines.providers.chicago.chicago_provider import (
             create_chicago_provider
         )
-        provider = create_chicago_provider(spark, docs_path)
+        provider = create_chicago_provider(
+            spark=spark,
+            docs_path=docs_path,
+            storage_path=storage_path,
+            preserve_raw=preserve_raw,
+            load_from_raw=load_from_raw
+        )
         return IngestorEngine(
             provider, storage_cfg,
             max_pending_writes=max_pending_writes,
@@ -690,7 +702,13 @@ def create_engine(
         from datapipelines.providers.cook_county.cook_county_provider import (
             create_cook_county_provider
         )
-        provider = create_cook_county_provider(spark, docs_path)
+        provider = create_cook_county_provider(
+            spark=spark,
+            docs_path=docs_path,
+            storage_path=storage_path,
+            preserve_raw=preserve_raw,
+            load_from_raw=load_from_raw
+        )
         return IngestorEngine(
             provider, storage_cfg,
             max_pending_writes=max_pending_writes,
