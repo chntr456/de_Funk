@@ -544,8 +544,8 @@ for provider_name in bulk_providers:
             logger.warning(f'Unknown provider: {provider_name} - skipping')
             continue
 
-        # Create provider (config loaded from markdown)
-        provider = factory(spark=spark, docs_path=docs_path)
+        # Create provider (config loaded from markdown, storage_path for raw layer)
+        provider = factory(spark=spark, docs_path=docs_path, storage_path=storage_path)
         logger.info(f'Created provider: {provider.provider_id}')
 
         # Create IngestorEngine

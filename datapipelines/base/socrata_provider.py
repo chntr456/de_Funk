@@ -40,13 +40,15 @@ class SocrataBaseProvider(BaseProvider):
     - Date/timestamp parsing for various formats
     - DataFrame creation from endpoint schema
     - Resource ID extraction from endpoint patterns
+    - Raw layer support for large CSV downloads
     """
 
     def __init__(
         self,
         provider_id: str,
         spark=None,
-        docs_path: Optional[Path] = None
+        docs_path: Optional[Path] = None,
+        storage_path: Optional[Path] = None
     ):
         """
         Initialize Socrata provider.
@@ -55,7 +57,9 @@ class SocrataBaseProvider(BaseProvider):
             provider_id: Provider identifier (e.g., 'chicago', 'cook_county')
             spark: SparkSession
             docs_path: Path to Documents folder
+            storage_path: Path to storage root (for raw layer)
         """
+        self._storage_path = Path(storage_path) if storage_path else None
         # Initialize base (loads markdown config)
         super().__init__(provider_id, spark, docs_path)
 
@@ -133,16 +137,35 @@ class SocrataBaseProvider(BaseProvider):
             logger.warning(f"Could not extract resource_id for: {endpoint_id}")
             return
 
-        # Use CSV bulk download if configured
+        # Use CSV with raw layer if configured
         if endpoint.download_method == 'csv':
-            logger.info(f"Using CSV bulk download for {endpoint_id}")
-            for batch in self.client.fetch_csv(
-                resource_id=resource_id,
-                batch_size=self._default_limit,
-                max_records=max_records,
-                label=endpoint_id
-            ):
-                yield batch
+            raw_path = self._get_raw_path(endpoint_id, resource_id)
+
+            if raw_path:
+                # Raw layer approach: download to file, then read
+                logger.info(f"Using CSV raw layer for {endpoint_id}")
+                self.client.download_csv_to_file(
+                    resource_id=resource_id,
+                    output_path=str(raw_path),
+                    label=endpoint_id
+                )
+                for batch in self.client.fetch_csv_from_file(
+                    file_path=str(raw_path),
+                    batch_size=self._default_limit,
+                    max_records=max_records,
+                    label=endpoint_id
+                ):
+                    yield batch
+            else:
+                # Streaming approach (no storage path configured)
+                logger.info(f"Using CSV streaming for {endpoint_id}")
+                for batch in self.client.fetch_csv(
+                    resource_id=resource_id,
+                    batch_size=self._default_limit,
+                    max_records=max_records,
+                    label=endpoint_id
+                ):
+                    yield batch
             return
 
         # Default: JSON API with pagination
@@ -169,7 +192,7 @@ class SocrataBaseProvider(BaseProvider):
         params = dict(endpoint.default_query or {})
 
         if use_csv:
-            logger.info(f"Using CSV bulk download for multi-year {endpoint_id}")
+            logger.info(f"Using CSV for multi-year {endpoint_id}")
 
         # view_ids is Dict[str, str] mapping year -> view_id
         for year, resource_id in endpoint.view_ids.items():
@@ -179,17 +202,38 @@ class SocrataBaseProvider(BaseProvider):
             year_label = f"{endpoint_id}/{year}"
 
             if use_csv:
-                # Use CSV bulk download
-                for batch in self.client.fetch_csv(
-                    resource_id=resource_id,
-                    batch_size=self._default_limit,
-                    max_records=max_records,
-                    label=year_label
-                ):
-                    # Add year to each record for partitioning
-                    for record in batch:
-                        record['year'] = year
-                    yield batch
+                raw_path = self._get_raw_path(endpoint_id, resource_id, year=year)
+
+                if raw_path:
+                    # Raw layer approach: download to file, then read
+                    logger.info(f"Using CSV raw layer for {year_label}")
+                    self.client.download_csv_to_file(
+                        resource_id=resource_id,
+                        output_path=str(raw_path),
+                        label=year_label
+                    )
+                    for batch in self.client.fetch_csv_from_file(
+                        file_path=str(raw_path),
+                        batch_size=self._default_limit,
+                        max_records=max_records,
+                        label=year_label
+                    ):
+                        # Add year to each record for partitioning
+                        for record in batch:
+                            record['year'] = year
+                        yield batch
+                else:
+                    # Streaming approach (no storage path configured)
+                    for batch in self.client.fetch_csv(
+                        resource_id=resource_id,
+                        batch_size=self._default_limit,
+                        max_records=max_records,
+                        label=year_label
+                    ):
+                        # Add year to each record for partitioning
+                        for record in batch:
+                            record['year'] = year
+                        yield batch
             else:
                 # Use JSON API with pagination
                 for batch in self.client.fetch_all(
@@ -222,6 +266,34 @@ class SocrataBaseProvider(BaseProvider):
     # =========================================================================
     # HELPER METHODS
     # =========================================================================
+
+    def _get_raw_path(self, endpoint_id: str, resource_id: str, year: Optional[str] = None) -> Optional[Path]:
+        """
+        Get the raw layer file path for a CSV download.
+
+        Raw layer structure:
+            storage/raw/{provider}/{endpoint}_{resource_id}.csv
+            storage/raw/{provider}/{endpoint}_{year}_{resource_id}.csv (for multi-year)
+
+        Args:
+            endpoint_id: Endpoint identifier
+            resource_id: Socrata resource/view ID
+            year: Optional year for multi-year endpoints
+
+        Returns:
+            Path to raw CSV file, or None if storage_path not configured
+        """
+        if not self._storage_path:
+            return None
+
+        raw_dir = self._storage_path / 'raw' / self.provider_id
+
+        if year:
+            filename = f"{endpoint_id}_{year}_{resource_id}.csv"
+        else:
+            filename = f"{endpoint_id}_{resource_id}.csv"
+
+        return raw_dir / filename
 
     def _get_resource_id(self, endpoint: EndpointConfig) -> Optional[str]:
         """Extract Socrata 4x4 resource ID from endpoint pattern."""

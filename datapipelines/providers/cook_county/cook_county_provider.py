@@ -53,7 +53,8 @@ class CookCountyProvider(SocrataBaseProvider):
     def __init__(
         self,
         spark=None,
-        docs_path: Optional[Path] = None
+        docs_path: Optional[Path] = None,
+        storage_path: Optional[Path] = None
     ):
         """
         Initialize Cook County provider.
@@ -61,11 +62,13 @@ class CookCountyProvider(SocrataBaseProvider):
         Args:
             spark: SparkSession
             docs_path: Path to Documents folder
+            storage_path: Path to storage root (for raw layer)
         """
         super().__init__(
             provider_id="cook_county",
             spark=spark,
-            docs_path=docs_path
+            docs_path=docs_path,
+            storage_path=storage_path
         )
 
     # =========================================================================
@@ -115,7 +118,8 @@ class CookCountyProvider(SocrataBaseProvider):
 
 def create_cook_county_provider(
     spark=None,
-    docs_path: Optional[Path] = None
+    docs_path: Optional[Path] = None,
+    storage_path: Optional[Path] = None
 ) -> CookCountyProvider:
     """
     Factory function to create a CookCountyProvider.
@@ -123,8 +127,9 @@ def create_cook_county_provider(
     Args:
         spark: SparkSession
         docs_path: Path to Documents folder
+        storage_path: Path to storage root (for raw layer)
 
     Returns:
         Configured CookCountyProvider
     """
-    return CookCountyProvider(spark=spark, docs_path=docs_path)
+    return CookCountyProvider(spark=spark, docs_path=docs_path, storage_path=storage_path)

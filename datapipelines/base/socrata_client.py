@@ -483,3 +483,194 @@ class SocrataClient:
                 raise RuntimeError(f"CSV {error_type} after {self.MAX_RETRIES} attempts: {e}") from e
 
         raise RuntimeError(f"CSV download failed after {self.MAX_RETRIES} attempts: {url}")
+
+    def download_csv_to_file(
+        self,
+        resource_id: str,
+        output_path: str,
+        label: Optional[str] = None,
+        resume: bool = True
+    ) -> int:
+        """
+        Download CSV to a file on disk with resume support.
+
+        This is more reliable than streaming for very large datasets because:
+        - Supports resume on interrupted downloads
+        - File can be verified before processing
+        - No memory pressure during download
+        - Can be retried independently of Bronze ingestion
+
+        Args:
+            resource_id: The 4x4 resource identifier (view_id)
+            output_path: Path to save the CSV file
+            label: Optional label for logging
+            resume: If True, skip download if file exists with content
+
+        Returns:
+            Number of bytes downloaded (0 if skipped due to existing file)
+        """
+        from pathlib import Path
+        import shutil
+
+        url = f"{self.base_url}/api/views/{resource_id}/rows.csv?accessType=DOWNLOAD"
+        log_name = f"{label} ({resource_id})" if label else resource_id
+        output_file = Path(output_path)
+        backoff_base = 2.0
+
+        # Check if file already exists and has content
+        if resume and output_file.exists():
+            file_size = output_file.stat().st_size
+            if file_size > 100:  # More than just a header
+                logger.info(f"CSV {log_name}: file exists ({file_size:,} bytes), skipping download")
+                return 0
+
+        # Ensure parent directory exists
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = output_file.with_suffix('.csv.tmp')
+
+        logger.info(f"Starting CSV download to file for {log_name}")
+        logger.info(f"  URL: {url}")
+        logger.info(f"  Output: {output_path}")
+
+        for attempt in range(self.MAX_RETRIES):
+            self._throttle()
+
+            try:
+                req = urllib.request.Request(url, headers={
+                    **self.headers,
+                    "Accept": "text/csv"
+                }, method="GET")
+
+                # Use longer timeout for CSV downloads
+                csv_timeout = max(self.timeout, 1800)  # At least 30 minutes for large files
+
+                with urllib.request.urlopen(req, timeout=csv_timeout) as resp:
+                    # Get content length if available
+                    content_length = resp.headers.get('Content-Length')
+                    if content_length:
+                        logger.info(f"CSV {log_name}: downloading {int(content_length):,} bytes")
+
+                    # Stream to temp file
+                    bytes_downloaded = 0
+                    with open(temp_path, 'wb') as f:
+                        while True:
+                            chunk = resp.read(8192 * 16)  # 128KB chunks
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            bytes_downloaded += len(chunk)
+
+                            # Log progress every 50MB
+                            if bytes_downloaded % (50 * 1024 * 1024) < 8192 * 16:
+                                logger.info(f"CSV {log_name}: downloaded {bytes_downloaded:,} bytes")
+
+                # Move temp file to final location
+                shutil.move(str(temp_path), str(output_file))
+                logger.info(f"CSV {log_name}: download complete ({bytes_downloaded:,} bytes)")
+                return bytes_downloaded
+
+            except HTTPError as e:
+                body = None
+                try:
+                    body = e.read().decode("utf-8")[:500]
+                except (IOError, UnicodeDecodeError):
+                    pass
+
+                if e.code == 429:
+                    wait = min(120.0, backoff_base ** attempt)
+                    logger.warning(f"CSV download rate limited (429): waiting {wait:.1f}s")
+                    time.sleep(wait)
+                    continue
+
+                if 500 <= e.code < 600:
+                    wait = min(60.0, backoff_base ** attempt)
+                    logger.warning(f"CSV download server error ({e.code}): waiting {wait:.1f}s")
+                    time.sleep(wait)
+                    continue
+
+                logger.error(f"CSV download client error ({e.code}): {body}")
+                raise RuntimeError(f"CSV download HTTP {e.code}: {body}") from e
+
+            except (URLError, TimeoutError, socket.timeout, ConnectionError) as e:
+                error_type = type(e).__name__
+                if attempt < self.MAX_RETRIES - 1:
+                    wait = min(120.0, backoff_base ** (attempt + 1))
+                    logger.warning(f"CSV download {error_type}: {e}. Retrying in {wait:.1f}s")
+                    time.sleep(wait)
+                    continue
+                logger.error(f"CSV download {error_type} after {self.MAX_RETRIES} attempts: {e}")
+                raise RuntimeError(f"CSV download failed: {e}") from e
+
+            finally:
+                # Clean up temp file on failure
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except OSError:
+                        pass
+
+        raise RuntimeError(f"CSV download failed after {self.MAX_RETRIES} attempts")
+
+    def fetch_csv_from_file(
+        self,
+        file_path: str,
+        batch_size: int = 50000,
+        max_records: Optional[int] = None,
+        label: Optional[str] = None
+    ) -> Generator[List[Dict], None, None]:
+        """
+        Read CSV from a file on disk and yield batches.
+
+        This reads from a previously downloaded CSV file, allowing the download
+        and ingestion steps to be separated for reliability.
+
+        Args:
+            file_path: Path to the CSV file
+            batch_size: Number of records per batch to yield
+            max_records: Optional maximum total records to read
+            label: Optional label for logging
+
+        Yields:
+            List of records (dicts) for each batch
+        """
+        from pathlib import Path
+
+        csv_file = Path(file_path)
+        log_name = label or csv_file.name
+
+        if not csv_file.exists():
+            raise FileNotFoundError(f"CSV file not found: {file_path}")
+
+        file_size = csv_file.stat().st_size
+        logger.info(f"Reading CSV from file: {log_name} ({file_size:,} bytes)")
+
+        total_fetched = 0
+        batch = []
+
+        with open(csv_file, 'r', encoding='utf-8', errors='replace') as f:
+            reader = csv.DictReader(f)
+
+            for row in reader:
+                batch.append(row)
+                total_fetched += 1
+
+                # Check max_records limit
+                if max_records and total_fetched >= max_records:
+                    if batch:
+                        logger.info(f"CSV {log_name}: yielding final batch of {len(batch):,} (max_records reached)")
+                        yield batch
+                    logger.info(f"Finished CSV {log_name}: {total_fetched:,} records (max_records limit)")
+                    return
+
+                # Yield batch when full
+                if len(batch) >= batch_size:
+                    logger.info(f"CSV {log_name}: yielding batch of {len(batch):,} (total: {total_fetched:,})")
+                    yield batch
+                    batch = []
+
+            # Yield remaining records
+            if batch:
+                logger.info(f"CSV {log_name}: yielding final batch of {len(batch):,}")
+                yield batch
+
+            logger.info(f"Finished CSV {log_name}: {total_fetched:,} total records")
