@@ -489,13 +489,12 @@ class SocrataClient:
         resource_id: str,
         output_path: str,
         label: Optional[str] = None,
-        resume: bool = True
+        resume: bool = False
     ) -> int:
         """
-        Download CSV to a file on disk with resume support.
+        Download CSV to a file on disk.
 
         This is more reliable than streaming for very large datasets because:
-        - Supports resume on interrupted downloads
         - File can be verified before processing
         - No memory pressure during download
         - Can be retried independently of Bronze ingestion
@@ -504,7 +503,7 @@ class SocrataClient:
             resource_id: The 4x4 resource identifier (view_id)
             output_path: Path to save the CSV file
             label: Optional label for logging
-            resume: If True, skip download if file exists with content
+            resume: If True, skip download if file exists with content (default: False, re-download)
 
         Returns:
             Number of bytes downloaded (0 if skipped due to existing file)
