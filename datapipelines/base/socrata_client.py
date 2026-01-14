@@ -492,12 +492,13 @@ class SocrataClient:
         resume: bool = False
     ) -> int:
         """
-        Download CSV to a file on disk.
+        Download CSV to a file on disk with resumable download support.
 
         This is more reliable than streaming for very large datasets because:
         - File can be verified before processing
         - No memory pressure during download
         - Can be retried independently of Bronze ingestion
+        - Supports HTTP Range headers for resumable downloads on connection errors
 
         Args:
             resource_id: The 4x4 resource identifier (view_id)
@@ -531,42 +532,71 @@ class SocrataClient:
         logger.info(f"  URL: {url}")
         logger.info(f"  Output: {output_path}")
 
+        # Track bytes downloaded across retries for resumable downloads
+        total_bytes_downloaded = 0
+        delete_temp_on_error = True  # Only delete temp file on non-resumable errors
+
         for attempt in range(self.MAX_RETRIES):
             self._throttle()
 
             try:
-                req = urllib.request.Request(url, headers={
-                    **self.headers,
-                    "Accept": "text/csv"
-                }, method="GET")
+                # Check if we have a partial download to resume
+                resume_from = 0
+                if temp_path.exists():
+                    resume_from = temp_path.stat().st_size
+                    if resume_from > 0:
+                        logger.info(f"CSV {log_name}: resuming download from byte {resume_from:,}")
+
+                # Build request with Range header for resume
+                req_headers = {**self.headers, "Accept": "text/csv"}
+                if resume_from > 0:
+                    req_headers["Range"] = f"bytes={resume_from}-"
+
+                req = urllib.request.Request(url, headers=req_headers, method="GET")
 
                 # Use longer timeout for CSV downloads
                 csv_timeout = max(self.timeout, 1800)  # At least 30 minutes for large files
 
                 with urllib.request.urlopen(req, timeout=csv_timeout) as resp:
+                    # Check if server supports Range requests
+                    status_code = resp.status
+                    is_partial = status_code == 206  # Partial Content
+
+                    if resume_from > 0 and not is_partial:
+                        # Server doesn't support Range, need to restart
+                        logger.warning(f"CSV {log_name}: server doesn't support Range requests, restarting download")
+                        resume_from = 0
+                        if temp_path.exists():
+                            temp_path.unlink()
+
                     # Get content length if available
                     content_length = resp.headers.get('Content-Length')
                     if content_length:
-                        logger.info(f"CSV {log_name}: downloading {int(content_length):,} bytes")
+                        total_size = int(content_length) + resume_from
+                        logger.info(f"CSV {log_name}: downloading {int(content_length):,} bytes (total: {total_size:,})")
 
-                    # Stream to temp file
-                    bytes_downloaded = 0
-                    with open(temp_path, 'wb') as f:
+                    # Stream to temp file (append if resuming)
+                    bytes_this_attempt = 0
+                    mode = 'ab' if resume_from > 0 and is_partial else 'wb'
+                    with open(temp_path, mode) as f:
                         while True:
                             chunk = resp.read(8192 * 16)  # 128KB chunks
                             if not chunk:
                                 break
                             f.write(chunk)
-                            bytes_downloaded += len(chunk)
+                            bytes_this_attempt += len(chunk)
 
                             # Log progress every 50MB
-                            if bytes_downloaded % (50 * 1024 * 1024) < 8192 * 16:
-                                logger.info(f"CSV {log_name}: downloaded {bytes_downloaded:,} bytes")
+                            current_total = resume_from + bytes_this_attempt
+                            if current_total % (50 * 1024 * 1024) < 8192 * 16:
+                                logger.info(f"CSV {log_name}: downloaded {current_total:,} bytes")
+
+                    total_bytes_downloaded = resume_from + bytes_this_attempt
 
                 # Move temp file to final location
                 shutil.move(str(temp_path), str(output_file))
-                logger.info(f"CSV {log_name}: download complete ({bytes_downloaded:,} bytes)")
-                return bytes_downloaded
+                logger.info(f"CSV {log_name}: download complete ({total_bytes_downloaded:,} bytes)")
+                return total_bytes_downloaded
 
             except HTTPError as e:
                 body = None
@@ -579,19 +609,30 @@ class SocrataClient:
                     wait = min(120.0, backoff_base ** attempt)
                     logger.warning(f"CSV download rate limited (429): waiting {wait:.1f}s")
                     time.sleep(wait)
+                    delete_temp_on_error = False  # Keep temp for resume
                     continue
 
                 if 500 <= e.code < 600:
                     wait = min(60.0, backoff_base ** attempt)
                     logger.warning(f"CSV download server error ({e.code}): waiting {wait:.1f}s")
                     time.sleep(wait)
+                    delete_temp_on_error = False  # Keep temp for resume
                     continue
 
+                # 4xx errors are not recoverable - delete temp file
+                delete_temp_on_error = True
                 logger.error(f"CSV download client error ({e.code}): {body}")
+                if temp_path.exists():
+                    try:
+                        temp_path.unlink()
+                    except OSError:
+                        pass
                 raise RuntimeError(f"CSV download HTTP {e.code}: {body}") from e
 
             except (URLError, TimeoutError, socket.timeout, ConnectionError) as e:
+                # Network errors are recoverable - keep temp file for resume
                 error_type = type(e).__name__
+                delete_temp_on_error = False
                 if attempt < self.MAX_RETRIES - 1:
                     wait = min(120.0, backoff_base ** (attempt + 1))
                     logger.warning(f"CSV download {error_type}: {e}. Retrying in {wait:.1f}s")
@@ -600,13 +641,12 @@ class SocrataClient:
                 logger.error(f"CSV download {error_type} after {self.MAX_RETRIES} attempts: {e}")
                 raise RuntimeError(f"CSV download failed: {e}") from e
 
-            finally:
-                # Clean up temp file on failure
-                if temp_path.exists():
-                    try:
-                        temp_path.unlink()
-                    except OSError:
-                        pass
+        # Only clean up temp file if we should delete it
+        if delete_temp_on_error and temp_path.exists():
+            try:
+                temp_path.unlink()
+            except OSError:
+                pass
 
         raise RuntimeError(f"CSV download failed after {self.MAX_RETRIES} attempts")
 

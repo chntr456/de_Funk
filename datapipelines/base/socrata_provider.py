@@ -48,7 +48,9 @@ class SocrataBaseProvider(BaseProvider):
         provider_id: str,
         spark=None,
         docs_path: Optional[Path] = None,
-        storage_path: Optional[Path] = None
+        storage_path: Optional[Path] = None,
+        preserve_raw: bool = False,
+        load_from_raw: bool = False
     ):
         """
         Initialize Socrata provider.
@@ -58,8 +60,12 @@ class SocrataBaseProvider(BaseProvider):
             spark: SparkSession
             docs_path: Path to repo root
             storage_path: Path to storage root (for raw layer)
+            preserve_raw: If True, keep raw CSV files after Bronze write (default: False)
+            load_from_raw: If True, skip download and load from existing raw CSV files (default: False)
         """
         self._storage_path = Path(storage_path) if storage_path else None
+        self._preserve_raw = preserve_raw
+        self._load_from_raw = load_from_raw
         # Initialize base (loads markdown config)
         super().__init__(provider_id, spark, docs_path)
 
@@ -142,13 +148,26 @@ class SocrataBaseProvider(BaseProvider):
             raw_path = self._get_raw_path(endpoint_id, resource_id)
 
             if raw_path:
-                # Raw layer approach: download to file, then read
-                logger.info(f"Using CSV raw layer for {endpoint_id}")
-                self.client.download_csv_to_file(
-                    resource_id=resource_id,
-                    output_path=str(raw_path),
-                    label=endpoint_id
-                )
+                # Check if we should load from existing raw file
+                if self._load_from_raw and raw_path.exists():
+                    logger.info(f"Loading from existing raw CSV for {endpoint_id}: {raw_path}")
+                elif self._load_from_raw and not raw_path.exists():
+                    logger.warning(f"load_from_raw=True but no raw file found for {endpoint_id}, downloading...")
+                    self.client.download_csv_to_file(
+                        resource_id=resource_id,
+                        output_path=str(raw_path),
+                        label=endpoint_id
+                    )
+                else:
+                    # Normal download
+                    logger.info(f"Using CSV raw layer for {endpoint_id}")
+                    self.client.download_csv_to_file(
+                        resource_id=resource_id,
+                        output_path=str(raw_path),
+                        label=endpoint_id
+                    )
+
+                # Read from raw file
                 for batch in self.client.fetch_csv_from_file(
                     file_path=str(raw_path),
                     batch_size=self._default_limit,
@@ -156,8 +175,9 @@ class SocrataBaseProvider(BaseProvider):
                     label=endpoint_id
                 ):
                     yield batch
-                # Cleanup: delete raw CSV after Bronze write
-                self._cleanup_raw_file(raw_path, endpoint_id)
+                # Cleanup: delete raw CSV after Bronze write (unless preserve_raw is True)
+                if not self._preserve_raw:
+                    self._cleanup_raw_file(raw_path, endpoint_id)
             else:
                 # Streaming approach (no storage path configured)
                 logger.info(f"Using CSV streaming for {endpoint_id}")
@@ -207,13 +227,26 @@ class SocrataBaseProvider(BaseProvider):
                 raw_path = self._get_raw_path(endpoint_id, resource_id, year=year)
 
                 if raw_path:
-                    # Raw layer approach: download to file, then read
-                    logger.info(f"Using CSV raw layer for {year_label}")
-                    self.client.download_csv_to_file(
-                        resource_id=resource_id,
-                        output_path=str(raw_path),
-                        label=year_label
-                    )
+                    # Check if we should load from existing raw file
+                    if self._load_from_raw and raw_path.exists():
+                        logger.info(f"Loading from existing raw CSV for {year_label}: {raw_path}")
+                    elif self._load_from_raw and not raw_path.exists():
+                        logger.warning(f"load_from_raw=True but no raw file found for {year_label}, downloading...")
+                        self.client.download_csv_to_file(
+                            resource_id=resource_id,
+                            output_path=str(raw_path),
+                            label=year_label
+                        )
+                    else:
+                        # Normal download
+                        logger.info(f"Using CSV raw layer for {year_label}")
+                        self.client.download_csv_to_file(
+                            resource_id=resource_id,
+                            output_path=str(raw_path),
+                            label=year_label
+                        )
+
+                    # Read from raw file
                     for batch in self.client.fetch_csv_from_file(
                         file_path=str(raw_path),
                         batch_size=self._default_limit,
@@ -224,8 +257,9 @@ class SocrataBaseProvider(BaseProvider):
                         for record in batch:
                             record['year'] = year
                         yield batch
-                    # Cleanup: delete raw CSV after Bronze write
-                    self._cleanup_raw_file(raw_path, year_label)
+                    # Cleanup: delete raw CSV after Bronze write (unless preserve_raw is True)
+                    if not self._preserve_raw:
+                        self._cleanup_raw_file(raw_path, year_label)
                 else:
                     # Streaming approach (no storage path configured)
                     for batch in self.client.fetch_csv(
