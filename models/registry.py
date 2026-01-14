@@ -390,12 +390,6 @@ class ModelRegistry:
         except Exception:
             pass  # Will use auto-registration on first access
 
-        try:
-            from models.foundation.geography.model import GeographyModel
-            self.register_model_class('geography', GeographyModel)
-        except Exception:
-            pass  # Will use auto-registration on first access
-
         # Domain models (v2.6 architecture - organized by domain)
         # Corporate domain
         try:
@@ -408,31 +402,6 @@ class ModelRegistry:
         try:
             from models.domains.securities.stocks import StocksModel
             self.register_model_class('stocks', StocksModel)
-        except Exception:
-            pass  # Will use auto-registration on first access
-
-        try:
-            from models.domains.securities.options import OptionsModel
-            self.register_model_class('options', OptionsModel)
-        except Exception:
-            pass  # Will use auto-registration on first access
-
-        try:
-            from models.domains.securities.etfs import ETFModel
-            self.register_model_class('etf', ETFModel)
-        except Exception:
-            pass  # Will use auto-registration on first access
-
-        try:
-            from models.domains.securities.forecast import ForecastModel
-            self.register_model_class('forecast', ForecastModel)
-        except Exception:
-            pass  # Will use auto-registration on first access
-
-        # Economic domain
-        try:
-            from models.domains.economic.macro import MacroModel
-            self.register_model_class('macro', MacroModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
