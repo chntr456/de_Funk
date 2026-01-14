@@ -347,6 +347,7 @@ class SocrataBaseProvider(BaseProvider):
         - ISO timestamp: 2025-02-26T00:00:00.000 -> 2025-02-26
         - ISO date: 2025-02-26 (no change)
         - US date: 01/16/2025 or 1/6/2025 -> 2025-01-16
+        - Month name: January 16 2024, January 6 2024 -> 2024-01-16, 2024-01-06
         - Year only: 2020 -> 2020-01-01
         - NULL/empty: NULL
         """
@@ -379,7 +380,13 @@ class SocrataBaseProvider(BaseProvider):
             )
         )
 
-        return F.to_date(normalized, "yyyy-MM-dd")
+        # Try multiple date formats using coalesce with try_to_date
+        # Order: ISO format, month name with 2-digit day, month name with 1-digit day
+        return F.coalesce(
+            F.try_to_date(normalized, "yyyy-MM-dd"),
+            F.try_to_date(trimmed, "MMMM dd yyyy"),
+            F.try_to_date(trimmed, "MMMM d yyyy")
+        )
 
     def _safe_parse_timestamp(self, col_val):
         """
@@ -388,6 +395,7 @@ class SocrataBaseProvider(BaseProvider):
         Handles formats:
         - ISO: 2025-02-26T14:30:00.000 -> 2025-02-26 14:30:00
         - US: 01/16/2025 -> 2025-01-16 00:00:00
+        - Month name: January 16 2024, January 6 2024 -> 2024-01-16 00:00:00
         - Date only: 2025-02-26 -> 2025-02-26 00:00:00
         - Year only: 2020 -> 2020-01-01 00:00:00
         """
@@ -427,7 +435,13 @@ class SocrataBaseProvider(BaseProvider):
             )
         )
 
-        return F.to_timestamp(normalized, "yyyy-MM-dd HH:mm:ss")
+        # Try multiple timestamp formats using coalesce with try_to_timestamp
+        # Order: ISO format, month name with 2-digit day, month name with 1-digit day
+        return F.coalesce(
+            F.try_to_timestamp(normalized, "yyyy-MM-dd HH:mm:ss"),
+            F.try_to_timestamp(trimmed, "MMMM dd yyyy"),
+            F.try_to_timestamp(trimmed, "MMMM d yyyy")
+        )
 
     def _create_dataframe(
         self,
