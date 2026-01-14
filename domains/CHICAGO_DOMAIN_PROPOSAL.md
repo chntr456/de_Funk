@@ -172,3 +172,13 @@ silver/chicago/public_safety/
 - Builder registration in BuilderRegistry
 - Bronze ingestion for all Chicago endpoints
 - Silver build testing
+
+## Reference Data Seeds
+
+| Seed | Source | Script |
+|------|--------|--------|
+| IUCR Codes | Chicago API | Pulled via `chicago_iucr_codes` endpoint |
+| FBI UCR Codes | Static (FBI standard) | `python -m scripts.seed.seed_fbi_ucr_codes` |
+| Calendar | Generated | `python -m scripts.seed.seed_calendar` |
+
+**Note**: IUCR codes come from Chicago's API (city-specific), while FBI UCR codes are a national standard seeded from static data.
