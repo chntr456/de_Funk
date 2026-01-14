@@ -156,6 +156,8 @@ class SocrataBaseProvider(BaseProvider):
                     label=endpoint_id
                 ):
                     yield batch
+                # Cleanup: delete raw CSV after Bronze write
+                self._cleanup_raw_file(raw_path, endpoint_id)
             else:
                 # Streaming approach (no storage path configured)
                 logger.info(f"Using CSV streaming for {endpoint_id}")
@@ -222,6 +224,8 @@ class SocrataBaseProvider(BaseProvider):
                         for record in batch:
                             record['year'] = year
                         yield batch
+                    # Cleanup: delete raw CSV after Bronze write
+                    self._cleanup_raw_file(raw_path, year_label)
                 else:
                     # Streaming approach (no storage path configured)
                     for batch in self.client.fetch_csv(
@@ -294,6 +298,22 @@ class SocrataBaseProvider(BaseProvider):
             filename = f"{endpoint_id}_{resource_id}.csv"
 
         return raw_dir / filename
+
+    def _cleanup_raw_file(self, raw_path: Path, label: str) -> None:
+        """
+        Delete raw CSV file after successful Bronze write.
+
+        Args:
+            raw_path: Path to the raw CSV file
+            label: Label for logging (endpoint_id or endpoint_id/year)
+        """
+        try:
+            if raw_path.exists():
+                file_size = raw_path.stat().st_size
+                raw_path.unlink()
+                logger.info(f"Cleaned up raw CSV: {label} ({file_size:,} bytes freed)")
+        except OSError as e:
+            logger.warning(f"Failed to cleanup raw CSV {label}: {e}")
 
     def _get_resource_id(self, endpoint: EndpointConfig) -> Optional[str]:
         """Extract Socrata 4x4 resource ID from endpoint pattern."""
