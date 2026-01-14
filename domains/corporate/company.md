@@ -9,7 +9,7 @@ tags: [company, corporate, legal_entity, fundamentals]
 python_module: models/domains/corporate/company/
 
 # Dependencies
-depends_on: [temporal]
+depends_on: []  # Builds independently from Bronze (securities_reference)
 
 # Storage
 storage:

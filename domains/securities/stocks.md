@@ -10,7 +10,7 @@ python_module: models/domains/securities/stocks/
 
 # Inheritance and Dependencies
 inherits_from: _base.securities
-depends_on: [temporal, company]
+depends_on: []  # Builds independently from Bronze - linked to company via ticker at query time
 
 # Storage
 storage:
