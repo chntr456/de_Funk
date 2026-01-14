@@ -407,9 +407,11 @@ class ModelConfigLoader:
         if 'measures' in config and '_python_module' in config['measures']:
             module_path = config['measures']['_python_module']
 
-            # Convert path to module name: 'stocks/measures.py' -> 'models.domain.stocks.measures'
+            # Convert path to module name: 'stocks/measures.py' -> 'models.domains.securities.stocks.measures'
+            # Handle both old format (stocks/measures.py) and new format with domain category
             module_path = module_path.replace('/', '.').replace('.py', '')
-            full_module = f'models.domain.{module_path}'
+            # Try new domains structure first, fallback to domain for backward compat
+            full_module = f'models.domains.{module_path}'
 
             try:
                 module = importlib.import_module(full_module)

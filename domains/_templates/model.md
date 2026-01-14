@@ -12,6 +12,18 @@
 **Version**: 1.0
 **Status**: Active
 
+### Python Module
+
+**Location**: `models/domains/{domain_category}/{model_name}/`
+
+Required files:
+- `__init__.py` - Module exports
+- `model.py` - Model class extending BaseModel
+- `builder.py` - (Optional) Custom builder logic
+- `measures.py` - (Optional) Python measure implementations
+
+See [Template README](../domains/_templates/README.md) for setup instructions.
+
 ### Dependencies
 
 - `temporal` - Calendar dimension for date-based analysis

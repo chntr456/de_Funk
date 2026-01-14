@@ -1067,7 +1067,7 @@ class MarkdownNotebookParser:
             models=[
                 ModelReference(
                     name=model,
-                    config=f"configs/models/{model}.yaml",
+                    config=f"configs/models/{model}/model.yaml",  # v2.0 modular config
                     nodes=[]
                 )
                 for model in models

@@ -2,6 +2,8 @@
 
 > {Brief description}
 
+**Python Module**: `models/domains/{domain_category}/{model_name}/`
+
 $model${
 model: {model_name}
 version: 1.0

@@ -2,11 +2,26 @@
 
 This directory contains templates for creating new domain models in de_Funk.
 
+> **Note**: These templates define the future markdown-based domain configuration format.
+> Current production configs use YAML files in `configs/models/`. See migration notes below.
+
 ## Quick Start
 
 1. **Copy the appropriate template** to your domain directory
 2. **Replace placeholders** (marked with `{curly braces}`)
-3. **Create corresponding Python module** in `models/domains/`
+3. **Create corresponding Python module** in `models/domains/{category}/{model_name}/`
+
+## Python Module Structure
+
+Each domain needs a corresponding Python module:
+
+```
+models/domains/{category}/{model_name}/
+├── __init__.py       # Module exports
+├── model.py          # Model class (extends BaseModel)
+├── builder.py        # (Optional) Custom builder logic
+└── measures.py       # (Optional) Python measures
+```
 
 ## Templates
 
@@ -165,8 +180,49 @@ To validate your domain markdown:
 python -m scripts.validate.validate_domain domains/{category}/{model_name}.md
 ```
 
+## Current vs Future Configuration
+
+### Current Production Configs (YAML)
+
+Production models currently use YAML files in `configs/models/`:
+
+```
+configs/models/{model_name}/
+├── model.yaml        # Metadata, dependencies
+├── schema.yaml       # Dimensions and facts
+├── graph.yaml        # Nodes, edges, paths
+└── measures.yaml     # Measure definitions
+```
+
+### Future Markdown Configs
+
+These templates define a unified markdown format with embedded YAML blocks:
+
+```markdown
+# Model Name
+
+$model${
+model: model_name
+version: 1.0
+...
+}
+
+$schema${
+dimensions:
+  ...
+}
+```
+
+### Migration Path
+
+To migrate from YAML to markdown format:
+1. Create `domains/{category}/{model_name}.md` using these templates
+2. Copy YAML content into appropriate `$block${}` sections
+3. Update `ModelConfigLoader` to parse markdown (future work)
+
 ## See Also
 
 - [CLAUDE.md](../../CLAUDE.md) - Architecture and conventions
 - [docs/guide/](../../docs/guide/) - Detailed documentation
-- [domains/_base/](../_base/) - Existing base templates
+- [configs/models/](../../configs/models/) - Current YAML configurations
+- [models/domains/](../../models/domains/) - Python model implementations
