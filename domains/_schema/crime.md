@@ -221,14 +221,8 @@ Each level has `_OTHER` catch-all for unmatched values.
 
 - **IUCR**: Illinois Uniform Crime Reporting (Chicago-specific)
   - Source: Chicago Data Portal `chicago_iucr_codes`
-  - ~400+ codes, includes `index_code` (I/N)
-
-- **FBI UCR**: FBI Uniform Crime Report (national standard)
-  - Reference: `_schema/fbi_ucr_codes.md`
-  - ~30 codes, Part I (Index) and Part II
-  - Used for national crime statistics
-
-Both preserved in Silver for cross-reference.
+  - ~400+ codes, includes `index_code` (I=Index, N=Non-Index)
+  - Index crimes align with FBI Part I for national reporting
 
 ### Notes
 
