@@ -289,7 +289,7 @@ storage_path = '${STORAGE_PATH:-/shared/storage}'
 logger.info(f'Storage path: {storage_path}')
 
 # Docs path for markdown config
-docs_path = Path('$REPO_ROOT/Documents')
+docs_path = Path('$REPO_ROOT')
 
 # Initialize Spark
 spark = get_spark(app_name='test_pipeline_seed')
@@ -362,7 +362,7 @@ logger.info(f'With financials: {with_financials}')
 logger.info(f'With reference: {with_reference}')
 
 # Docs path for markdown config
-docs_path = Path('$REPO_ROOT/Documents')
+docs_path = Path('$REPO_ROOT')
 
 # Initialize Spark
 spark = get_spark(app_name='test_pipeline_ingest')
@@ -521,7 +521,7 @@ logger.info(f'Storage path: {storage_path}')
 spark = get_spark(app_name='test_pipeline_bulk')
 
 # Docs path for markdown config
-docs_path = Path('$REPO_ROOT/Documents')
+docs_path = Path('$REPO_ROOT')
 
 # Factory mapping
 provider_factories = {

@@ -5,8 +5,8 @@ Provides data ingestion from Cook County's Socrata Open Data API.
 Includes property tax, assessor, and parcel data.
 
 Configuration loaded from markdown documentation (single source of truth):
-- Documents/Data Sources/Providers/Cook County Data Portal.md
-- Documents/Data Sources/Endpoints/Cook County Data Portal/*.md
+- Data Sources/Providers/Cook County Data Portal.md
+- Data Sources/Endpoints/Cook County Data Portal/*.md
 
 Usage:
     from datapipelines.providers.cook_county import (

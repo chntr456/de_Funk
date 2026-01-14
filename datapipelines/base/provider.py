@@ -115,7 +115,7 @@ class BaseProvider(ABC):
         Args:
             provider_id: Provider identifier (e.g., 'alpha_vantage', 'chicago')
             spark: SparkSession for DataFrame operations
-            docs_path: Path to Documents folder containing markdown configs
+            docs_path: Path to repo root containing markdown configs
         """
         self.provider_id = provider_id
         self.spark = spark
@@ -136,7 +136,7 @@ class BaseProvider(ABC):
         Load provider and endpoint configs from markdown files.
 
         Args:
-            docs_path: Path to Documents folder
+            docs_path: Path to repo root
         """
         try:
             loader = MarkdownConfigLoader(docs_path)

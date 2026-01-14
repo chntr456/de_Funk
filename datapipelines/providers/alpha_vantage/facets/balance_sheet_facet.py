@@ -24,7 +24,7 @@ class BalanceSheetFacet(AlphaVantageFacet):
     """
     Transform Alpha Vantage balance sheet data to normalized schema.
 
-    Schema loaded from: Documents/Data Sources/Endpoints/Alpha Vantage/Fundamentals/Balance Sheet.md
+    Schema loaded from: Data Sources/Endpoints/Alpha Vantage/Fundamentals/Balance Sheet.md
 
     API returns:
     {

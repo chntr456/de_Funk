@@ -60,8 +60,8 @@ class AlphaVantageProvider(BaseProvider):
     Alpha Vantage implementation of BaseProvider.
 
     Configuration loaded from:
-    - Documents/Data Sources/Providers/Alpha Vantage.md
-    - Documents/Data Sources/Endpoints/Alpha Vantage/**/*.md
+    - Data Sources/Providers/Alpha Vantage.md
+    - Data Sources/Endpoints/Alpha Vantage/**/*.md
     """
 
     PROVIDER_NAME = "Alpha Vantage"
@@ -76,7 +76,7 @@ class AlphaVantageProvider(BaseProvider):
 
         Args:
             spark: SparkSession
-            docs_path: Path to Documents folder
+            docs_path: Path to repo root
         """
         # Tickers to process (set via set_tickers() before running)
         self._tickers: List[str] = []
@@ -710,7 +710,7 @@ def create_alpha_vantage_provider(
 
     Args:
         spark: SparkSession
-        docs_path: Path to Documents folder
+        docs_path: Path to repo root
 
     Returns:
         Configured AlphaVantageProvider

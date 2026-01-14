@@ -24,7 +24,7 @@ class IncomeStatementFacet(AlphaVantageFacet):
     """
     Transform Alpha Vantage income statement data to normalized schema.
 
-    Schema loaded from: Documents/Data Sources/Endpoints/Alpha Vantage/Fundamentals/Income Statement.md
+    Schema loaded from: Data Sources/Endpoints/Alpha Vantage/Fundamentals/Income Statement.md
 
     API returns:
     {

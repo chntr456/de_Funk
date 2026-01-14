@@ -11,7 +11,7 @@ Schema Loading (v2.6 - Markdown-Driven):
     Facets load schema from markdown endpoint files by setting ENDPOINT_ID:
 
         class MyFacet(AlphaVantageFacet):
-            ENDPOINT_ID = "balance_sheet"  # Loads from Documents/Data Sources/Endpoints/Alpha Vantage/.../Balance Sheet.md
+            ENDPOINT_ID = "balance_sheet"  # Loads from Data Sources/Endpoints/Alpha Vantage/.../Balance Sheet.md
 
     The base class will automatically:
     - Load schema from markdown

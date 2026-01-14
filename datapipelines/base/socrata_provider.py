@@ -56,7 +56,7 @@ class SocrataBaseProvider(BaseProvider):
         Args:
             provider_id: Provider identifier (e.g., 'chicago', 'cook_county')
             spark: SparkSession
-            docs_path: Path to Documents folder
+            docs_path: Path to repo root
             storage_path: Path to storage root (for raw layer)
         """
         self._storage_path = Path(storage_path) if storage_path else None

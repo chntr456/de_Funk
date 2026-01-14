@@ -43,8 +43,8 @@ class ChicagoProvider(SocrataBaseProvider):
 
     Inherits all functionality from SocrataBaseProvider.
     Configuration loaded from:
-    - Documents/Data Sources/Providers/Chicago Data Portal.md
-    - Documents/Data Sources/Endpoints/Chicago Data Portal/*.md
+    - Data Sources/Providers/Chicago Data Portal.md
+    - Data Sources/Endpoints/Chicago Data Portal/*.md
     """
 
     PROVIDER_NAME = "Chicago Data Portal"
@@ -60,7 +60,7 @@ class ChicagoProvider(SocrataBaseProvider):
 
         Args:
             spark: SparkSession
-            docs_path: Path to Documents folder
+            docs_path: Path to repo root
             storage_path: Path to storage root (for raw layer)
         """
         super().__init__(
@@ -81,7 +81,7 @@ def create_chicago_provider(
 
     Args:
         spark: SparkSession
-        docs_path: Path to Documents folder
+        docs_path: Path to repo root
         storage_path: Path to storage root (for raw layer)
 
     Returns:

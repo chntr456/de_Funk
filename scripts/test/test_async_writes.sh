@@ -76,7 +76,7 @@ from orchestration.common.spark_session import get_spark
 
 # Config
 storage_path = '${STORAGE_PATH:-/shared/storage}'
-docs_path = Path('$REPO_ROOT/Documents')
+docs_path = Path('$REPO_ROOT')
 num_endpoints = $NUM_ENDPOINTS
 max_records = $MAX_RECORDS
 

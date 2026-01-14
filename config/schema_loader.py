@@ -5,7 +5,7 @@ DEPRECATED (v2.6): This module is superseded by markdown-driven schemas.
 Facets should now use ENDPOINT_ID to load schemas from markdown endpoint files:
 
     class MyFacet(AlphaVantageFacet):
-        ENDPOINT_ID = "income_statement"  # Loads from Documents/Data Sources/Endpoints/
+        ENDPOINT_ID = "income_statement"  # Loads from Data Sources/Endpoints/
 
 The markdown approach provides:
 - Field mappings (source -> output)

@@ -44,8 +44,8 @@ class CookCountyProvider(SocrataBaseProvider):
 
     Inherits all functionality from SocrataBaseProvider.
     Configuration loaded from:
-    - Documents/Data Sources/Providers/Cook County Data Portal.md
-    - Documents/Data Sources/Endpoints/Cook County Data Portal/*.md
+    - Data Sources/Providers/Cook County Data Portal.md
+    - Data Sources/Endpoints/Cook County Data Portal/*.md
     """
 
     PROVIDER_NAME = "Cook County Data Portal"
@@ -61,7 +61,7 @@ class CookCountyProvider(SocrataBaseProvider):
 
         Args:
             spark: SparkSession
-            docs_path: Path to Documents folder
+            docs_path: Path to repo root
             storage_path: Path to storage root (for raw layer)
         """
         super().__init__(
@@ -126,7 +126,7 @@ def create_cook_county_provider(
 
     Args:
         spark: SparkSession
-        docs_path: Path to Documents folder
+        docs_path: Path to repo root
         storage_path: Path to storage root (for raw layer)
 
     Returns:

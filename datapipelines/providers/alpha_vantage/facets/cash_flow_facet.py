@@ -24,7 +24,7 @@ class CashFlowFacet(AlphaVantageFacet):
     """
     Transform Alpha Vantage cash flow statement data to normalized schema.
 
-    Schema loaded from: Documents/Data Sources/Endpoints/Alpha Vantage/Fundamentals/Cash Flow.md
+    Schema loaded from: Data Sources/Endpoints/Alpha Vantage/Fundamentals/Cash Flow.md
 
     API returns:
     {

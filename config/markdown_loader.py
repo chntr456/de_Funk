@@ -9,7 +9,7 @@ and machine-readable config live in the same markdown files. This enables:
 - Bronze table config embedded (replaces storage.json entries)
 
 Directory Structure Expected:
-    Documents/Data Sources/
+    Data Sources/
     ├── Providers/
     │   └── Alpha Vantage.md
     └── Endpoints/
@@ -22,7 +22,7 @@ Directory Structure Expected:
 Usage:
     from config.markdown_loader import MarkdownConfigLoader
 
-    loader = MarkdownConfigLoader(repo_root / "Documents")
+    loader = MarkdownConfigLoader(repo_root)
     providers = loader.load_providers()
     endpoints = loader.load_endpoints(provider="Alpha Vantage")
 
@@ -150,7 +150,7 @@ class MarkdownConfigLoader:
         Initialize the markdown config loader.
 
         Args:
-            docs_path: Path to Documents directory (contains Data Sources/, Models/)
+            docs_path: Path to repo root directory (contains Data Sources/, Guides/)
         """
         self.docs_path = Path(docs_path)
         self.data_sources_path = self.docs_path / "Data Sources"
@@ -761,5 +761,4 @@ def get_markdown_loader(repo_root: Path) -> MarkdownConfigLoader:
     Returns:
         MarkdownConfigLoader instance
     """
-    docs_path = repo_root / "Documents"
-    return MarkdownConfigLoader(docs_path)
+    return MarkdownConfigLoader(repo_root)

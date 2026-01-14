@@ -24,7 +24,7 @@ class EarningsFacet(AlphaVantageFacet):
     """
     Transform Alpha Vantage earnings data to normalized schema.
 
-    Schema loaded from: Documents/Data Sources/Endpoints/Alpha Vantage/Fundamentals/Earnings.md
+    Schema loaded from: Data Sources/Endpoints/Alpha Vantage/Fundamentals/Earnings.md
 
     API returns:
     {

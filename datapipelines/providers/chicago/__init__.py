@@ -5,8 +5,8 @@ Provides data ingestion from Chicago's Socrata Open Data API.
 Includes finance, public safety, transportation, and housing data.
 
 Configuration loaded from markdown documentation (single source of truth):
-- Documents/Data Sources/Providers/Chicago Data Portal.md
-- Documents/Data Sources/Endpoints/Chicago Data Portal/*.md
+- Data Sources/Providers/Chicago Data Portal.md
+- Data Sources/Endpoints/Chicago Data Portal/*.md
 
 Usage:
     from datapipelines.providers.chicago import (

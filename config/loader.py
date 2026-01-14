@@ -5,7 +5,7 @@ This module provides the main ConfigLoader class that handles all configuration 
 with proper precedence, validation, and error handling.
 
 Configuration Source Priority (for API configs):
-1. Markdown files in Documents/Data Sources/ (preferred - unified config + docs)
+1. Markdown files in Data Sources/ (preferred - unified config + docs)
 2. JSON files in configs/pipelines/ (fallback - legacy format)
 
 When JSON fallback is used, a warning is logged to encourage migration.
@@ -397,18 +397,17 @@ class ConfigLoader:
 
     def _load_api_configs_from_markdown(self) -> Dict[str, Dict[str, Any]]:
         """
-        Load API configurations from markdown files in Documents/Data Sources/.
+        Load API configurations from markdown files in Data Sources/.
 
         Returns:
             Dict mapping provider_id to config dict (JSON-compatible format)
         """
-        docs_path = self._repo_root / "Documents"
-        if not (docs_path / "Data Sources" / "Providers").exists():
-            logger.debug("No markdown provider configs found (Documents/Data Sources/Providers/ missing)")
+        if not (self._repo_root / "Data Sources" / "Providers").exists():
+            logger.debug("No markdown provider configs found (Data Sources/Providers/ missing)")
             return {}
 
         try:
-            md_loader = MarkdownConfigLoader(docs_path)
+            md_loader = MarkdownConfigLoader(self._repo_root)
             providers = md_loader.load_providers()
 
             apis = {}
@@ -466,7 +465,7 @@ class ConfigLoader:
         # Priority: Markdown > JSON
         apis = {}
 
-        # 1. Try loading from markdown (Documents/Data Sources/)
+        # 1. Try loading from markdown (Data Sources/)
         markdown_apis = self._load_api_configs_from_markdown()
         apis.update(markdown_apis)
 
@@ -493,7 +492,7 @@ class ConfigLoader:
                     # Warn about JSON fallback - encourage migration to markdown
                     logger.warning(
                         f"⚠️ FALLBACK: Using JSON config for '{provider_name}'. "
-                        f"Migrate to: Documents/Data Sources/Providers/{provider_name.replace('_', ' ').title()}.md"
+                        f"Migrate to: Data Sources/Providers/{provider_name.replace('_', ' ').title()}.md"
                     )
                 except ValueError as e:
                     logger.warning(f"Could not load {provider_name} API config: {e}")

@@ -1,5 +1,5 @@
 {
-  "_migration_note": "v2.6: Bronze table configs being migrated to endpoint markdown files. See Documents/Data Sources/Storage Routing.md for overview. Tables below remain for backwards compatibility.",
+  "_migration_note": "v2.6: Bronze table configs being migrated to endpoint markdown files. See Data Sources/Storage Routing.md for overview. Tables below remain for backwards compatibility.",
   "connection": {
     "type": "duckdb",
     "comment": "Default for UI only (10-100x faster). All data pipelines (ingestion + model builds) override to 'spark'. Set CONNECTION_TYPE env var to override."

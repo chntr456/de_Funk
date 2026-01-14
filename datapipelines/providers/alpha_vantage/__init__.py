@@ -7,8 +7,8 @@ Provides stock market data from Alpha Vantage API:
 - Financial statements (INCOME_STATEMENT, BALANCE_SHEET, CASH_FLOW, EARNINGS)
 
 Configuration loaded from markdown documentation (single source of truth):
-- Documents/Data Sources/Providers/Alpha Vantage.md
-- Documents/Data Sources/Endpoints/Alpha Vantage/**/*.md
+- Data Sources/Providers/Alpha Vantage.md
+- Data Sources/Endpoints/Alpha Vantage/**/*.md
 
 API Key Required:
 Set ALPHA_VANTAGE_API_KEYS environment variable with your API key(s).

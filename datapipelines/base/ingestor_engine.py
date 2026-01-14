@@ -657,7 +657,7 @@ def create_engine(
         provider_name: Provider name (e.g., "alpha_vantage", "chicago", "cook_county")
         storage_cfg: Storage configuration dict
         spark: SparkSession
-        docs_path: Path to Documents folder
+        docs_path: Path to repo root
         max_pending_writes: Max writes to queue before blocking
         writer_threads: Number of writer threads
 
