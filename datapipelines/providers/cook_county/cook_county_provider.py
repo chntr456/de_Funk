@@ -54,7 +54,9 @@ class CookCountyProvider(SocrataBaseProvider):
         self,
         spark=None,
         docs_path: Optional[Path] = None,
-        storage_path: Optional[Path] = None
+        storage_path: Optional[Path] = None,
+        preserve_raw: bool = False,
+        load_from_raw: bool = False
     ):
         """
         Initialize Cook County provider.
@@ -63,12 +65,16 @@ class CookCountyProvider(SocrataBaseProvider):
             spark: SparkSession
             docs_path: Path to repo root
             storage_path: Path to storage root (for raw layer)
+            preserve_raw: If True, keep raw CSV files after Bronze write
+            load_from_raw: If True, skip download and load from existing raw CSVs
         """
         super().__init__(
             provider_id="cook_county",
             spark=spark,
             docs_path=docs_path,
-            storage_path=storage_path
+            storage_path=storage_path,
+            preserve_raw=preserve_raw,
+            load_from_raw=load_from_raw
         )
 
     # =========================================================================
@@ -119,7 +125,9 @@ class CookCountyProvider(SocrataBaseProvider):
 def create_cook_county_provider(
     spark=None,
     docs_path: Optional[Path] = None,
-    storage_path: Optional[Path] = None
+    storage_path: Optional[Path] = None,
+    preserve_raw: bool = False,
+    load_from_raw: bool = False
 ) -> CookCountyProvider:
     """
     Factory function to create a CookCountyProvider.
@@ -128,8 +136,16 @@ def create_cook_county_provider(
         spark: SparkSession
         docs_path: Path to repo root
         storage_path: Path to storage root (for raw layer)
+        preserve_raw: If True, keep raw CSV files after Bronze write
+        load_from_raw: If True, skip download and load from existing raw CSVs
 
     Returns:
         Configured CookCountyProvider
     """
-    return CookCountyProvider(spark=spark, docs_path=docs_path, storage_path=storage_path)
+    return CookCountyProvider(
+        spark=spark,
+        docs_path=docs_path,
+        storage_path=storage_path,
+        preserve_raw=preserve_raw,
+        load_from_raw=load_from_raw
+    )

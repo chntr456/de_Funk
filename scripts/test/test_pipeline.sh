@@ -533,6 +533,15 @@ provider_factories = {
 bulk_providers = '$BULK_PROVIDERS'.split()
 logger.info(f'Bulk providers to process: {bulk_providers}')
 
+# Get profile config for profile-specific settings
+profile_name = '${PROFILE}'
+profile_cfg = run_config.get('profiles', {}).get(profile_name, {}) if profile_name else {}
+
+# Get preserve_raw and load_from_raw from profile (default False)
+preserve_raw = profile_cfg.get('preserve_raw', False)
+load_from_raw = profile_cfg.get('load_from_raw', False)
+logger.info(f'preserve_raw={preserve_raw}, load_from_raw={load_from_raw}')
+
 for provider_name in bulk_providers:
     try:
         provider_cfg = run_config.get('providers', {}).get(provider_name, {})
@@ -545,22 +554,43 @@ for provider_name in bulk_providers:
             continue
 
         # Create provider (config loaded from markdown, storage_path for raw layer)
-        provider = factory(spark=spark, docs_path=docs_path, storage_path=storage_path)
+        # Pass preserve_raw and load_from_raw from profile
+        provider = factory(
+            spark=spark,
+            docs_path=docs_path,
+            storage_path=storage_path,
+            preserve_raw=preserve_raw,
+            load_from_raw=load_from_raw
+        )
         logger.info(f'Created provider: {provider.provider_id}')
 
         # Create IngestorEngine
         engine = IngestorEngine(provider, storage_cfg)
 
-        # Get work items (endpoints) to ingest from run_config
-        work_items = provider_cfg.get('endpoints', []) or None  # None = discover from provider
-        if work_items:
-            logger.info(f'Work items from config: {len(work_items)} endpoints')
+        # Get work items (endpoints) - check profile-specific first, then global
+        # Profile can have {provider}_endpoints (e.g., chicago_endpoints, cook_county_endpoints)
+        profile_endpoints_key = f'{provider_name}_endpoints'
+        profile_endpoints = profile_cfg.get(profile_endpoints_key)
+
+        if profile_endpoints is not None:
+            # Profile specifies endpoints for this provider (can be [] to skip, or list)
+            if profile_endpoints:
+                work_items = profile_endpoints
+                logger.info(f'Work items from profile ({profile_endpoints_key}): {len(work_items)} endpoints')
+            else:
+                # Empty list means skip this provider's endpoints
+                logger.info(f'Profile {profile_endpoints_key} is empty - skipping {provider_name}')
+                continue
         else:
-            logger.info('Work items: auto-discover from provider')
+            # Fall back to global config's endpoints for this provider
+            work_items = provider_cfg.get('endpoints', []) or None  # None = discover from provider
+            if work_items:
+                logger.info(f'Work items from global config: {len(work_items)} endpoints')
+            else:
+                logger.info('Work items: auto-discover from provider')
 
         # Get max_records from profile - null/None means no limit (fetch all)
         # DO NOT default to a number - explicit null means fetch everything
-        profile_cfg = run_config.get('profiles', {}).get('${PROFILE}', {})
         max_records = profile_cfg.get('max_records_per_endpoint')  # None if not set or null
 
         if max_records is None:

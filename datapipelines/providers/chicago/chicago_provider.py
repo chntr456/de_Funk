@@ -53,7 +53,9 @@ class ChicagoProvider(SocrataBaseProvider):
         self,
         spark=None,
         docs_path: Optional[Path] = None,
-        storage_path: Optional[Path] = None
+        storage_path: Optional[Path] = None,
+        preserve_raw: bool = False,
+        load_from_raw: bool = False
     ):
         """
         Initialize Chicago provider.
@@ -62,19 +64,25 @@ class ChicagoProvider(SocrataBaseProvider):
             spark: SparkSession
             docs_path: Path to repo root
             storage_path: Path to storage root (for raw layer)
+            preserve_raw: If True, keep raw CSV files after Bronze write
+            load_from_raw: If True, skip download and load from existing raw CSVs
         """
         super().__init__(
             provider_id="chicago",
             spark=spark,
             docs_path=docs_path,
-            storage_path=storage_path
+            storage_path=storage_path,
+            preserve_raw=preserve_raw,
+            load_from_raw=load_from_raw
         )
 
 
 def create_chicago_provider(
     spark=None,
     docs_path: Optional[Path] = None,
-    storage_path: Optional[Path] = None
+    storage_path: Optional[Path] = None,
+    preserve_raw: bool = False,
+    load_from_raw: bool = False
 ) -> ChicagoProvider:
     """
     Factory function to create a ChicagoProvider.
@@ -83,8 +91,16 @@ def create_chicago_provider(
         spark: SparkSession
         docs_path: Path to repo root
         storage_path: Path to storage root (for raw layer)
+        preserve_raw: If True, keep raw CSV files after Bronze write
+        load_from_raw: If True, skip download and load from existing raw CSVs
 
     Returns:
         Configured ChicagoProvider
     """
-    return ChicagoProvider(spark=spark, docs_path=docs_path, storage_path=storage_path)
+    return ChicagoProvider(
+        spark=spark,
+        docs_path=docs_path,
+        storage_path=storage_path,
+        preserve_raw=preserve_raw,
+        load_from_raw=load_from_raw
+    )
