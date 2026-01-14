@@ -155,3 +155,20 @@ silver/chicago/public_safety/
 | Silver | Apply template, normalize, assign taxonomy |
 | Taxonomy | Catch-all `_OTHER` at each level |
 | Templates | Hold off on complex patterns for now |
+
+## Implementation Status
+
+**Completed** (domain markdown files created):
+
+| Domain | Files | Status |
+|--------|-------|--------|
+| Schema Templates | `_schema/crime.md`, `_schema/service_request.md`, `_schema/property.md` | ✅ |
+| Cook County | `county/cook_county/property.md`, `county/cook_county/geospatial.md` | ✅ |
+| Chicago | `city/chicago/public_safety.md`, `city/chicago/operations.md`, `city/chicago/finance.md`, `city/chicago/transportation.md`, `city/chicago/housing.md`, `city/chicago/regulatory.md`, `city/chicago/geospatial.md` | ✅ |
+| Foundation | `foundation/geospatial.md` | ✅ |
+
+**Pending**:
+- Python model implementations in `models/domains/`
+- Builder registration in BuilderRegistry
+- Bronze ingestion for all Chicago endpoints
+- Silver build testing
