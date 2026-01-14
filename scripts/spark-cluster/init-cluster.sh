@@ -401,23 +401,23 @@ log "Starting Spark Master..."
 
 source "$SPARK_VENV/bin/activate"
 JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))
-# Use shared Spark distribution for consistency with workers
-SPARK_HOME="$NFS_ROOT/spark"
+# Use standalone Spark distribution (has sbin scripts)
+SPARK_HOME="$HOME/spark-4.0.1-bin-hadoop3"
+if [ ! -d "$SPARK_HOME" ]; then
+    SPARK_HOME="$NFS_ROOT/spark"
+fi
+
+export JAVA_HOME SPARK_HOME
+export SPARK_MASTER_HOST=$HEAD_IP
+export SPARK_MASTER_PORT=$SPARK_MASTER_PORT
+export SPARK_MASTER_WEBUI_PORT=$SPARK_UI_PORT
 
 mkdir -p "$LOCAL_STORAGE/logs"
 
-nohup "$JAVA_HOME/bin/java" \
-    -cp "$SPARK_HOME/jars/*" \
-    -Xmx1g \
-    org.apache.spark.deploy.master.Master \
-    --host $HEAD_IP \
-    --port $SPARK_MASTER_PORT \
-    --webui-port $SPARK_UI_PORT \
-    > "$LOCAL_STORAGE/logs/spark-master.out" 2>&1 &
+# Use official start-master.sh for proper initialization
+"$SPARK_HOME/sbin/start-master.sh"
 
-echo $! > "$LOCAL_STORAGE/logs/spark-master.pid"
-
-sleep 3
+sleep 5
 
 if curl -s "http://$HEAD_IP:$SPARK_UI_PORT" > /dev/null; then
     log "  ✓ Spark Master running at spark://$HEAD_IP:$SPARK_MASTER_PORT"
@@ -457,13 +457,19 @@ fi
 
 section "Step 6: Start Spark Workers"
 
+# Start local worker on head node first
+log "Starting local worker on head node..."
+"$SPARK_HOME/sbin/start-worker.sh" "spark://$HEAD_IP:$SPARK_MASTER_PORT"
+sleep 2
+
+# Start remote workers via systemd
 for w in "${WORKERS[@]}"; do
     IFS=':' read -r name ip cores mem <<< "$w"
     log "Starting worker on $name..."
     ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "sudo -n systemctl start spark-worker" || warn "Failed to start $name"
 done
 
-sleep 3
+sleep 5
 
 # Verify workers connected
 log "Verifying workers..."
