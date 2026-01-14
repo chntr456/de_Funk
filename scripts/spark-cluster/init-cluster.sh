@@ -258,28 +258,36 @@ if [ ! -f "$SPARK_DIST_DIR/$SPARK_DIST_NAME/sbin/start-worker.sh" ]; then
 fi
 log "  ✓ Spark sbin scripts verified"
 
-# Mount Spark distribution to NFS (only if not already mounted)
-# Check for duplicate mounts and fix them
-SPARK_MOUNT_COUNT=$(mount | grep -c "$NFS_ROOT/spark" || echo "0")
-if [ "$SPARK_MOUNT_COUNT" -gt 1 ]; then
-    log "  WARNING: Multiple mounts detected for $NFS_ROOT/spark, fixing..."
+# Copy Spark distribution to NFS share (bind mounts don't work across NFS!)
+# NFS clients see the underlying directory, not bind-mounted content
+sudo mkdir -p "$NFS_ROOT/spark"
+
+# Check if Spark is already properly copied (not just an empty dir or stale bind mount)
+if [ -f "$NFS_ROOT/spark/sbin/start-worker.sh" ] && [ -d "$NFS_ROOT/spark/jars" ]; then
+    # Verify it's not a stale bind mount by checking file count
+    JAR_COUNT=$(ls "$NFS_ROOT/spark/jars/"*.jar 2>/dev/null | wc -l)
+    if [ "$JAR_COUNT" -gt 10 ]; then
+        log "  ✓ Spark already available at $NFS_ROOT/spark ($JAR_COUNT jars)"
+    else
+        log "  Spark directory exists but appears incomplete, re-copying..."
+        sudo rm -rf "$NFS_ROOT/spark"/*
+        sudo cp -r "$SPARK_DIST_DIR/$SPARK_DIST_NAME"/* "$NFS_ROOT/spark/"
+        sudo chown -R $DE_FUNK_USER:$DE_FUNK_USER "$NFS_ROOT/spark"
+        log "  ✓ Spark copied to NFS share"
+    fi
+else
+    log "  Copying Spark distribution to NFS share..."
+    # Remove any stale bind mount first
     sudo umount "$NFS_ROOT/spark" 2>/dev/null || true
+    sudo rm -rf "$NFS_ROOT/spark"/*
+    sudo cp -r "$SPARK_DIST_DIR/$SPARK_DIST_NAME"/* "$NFS_ROOT/spark/"
+    sudo chown -R $DE_FUNK_USER:$DE_FUNK_USER "$NFS_ROOT/spark"
+    log "  ✓ Spark copied to NFS share"
 fi
 
-# Verify mount has sbin/ directory (not just jars/)
-if mountpoint -q "$NFS_ROOT/spark" 2>/dev/null && [ -f "$NFS_ROOT/spark/sbin/start-worker.sh" ]; then
-    log "  ✓ Spark already mounted at $NFS_ROOT/spark (with sbin/)"
-else
-    log "  Mounting Spark distribution to NFS..."
-    sudo umount "$NFS_ROOT/spark" 2>/dev/null || true
-    sudo mkdir -p "$NFS_ROOT/spark"
-    sudo mount --bind "$SPARK_DIST_DIR/$SPARK_DIST_NAME" "$NFS_ROOT/spark"
-    # Verify mount worked
-    if [ -f "$NFS_ROOT/spark/sbin/start-worker.sh" ]; then
-        log "  ✓ Spark available at /shared/spark on workers (with sbin/)"
-    else
-        fail "Failed to mount Spark distribution with sbin scripts"
-    fi
+# Final verification
+if [ ! -f "$NFS_ROOT/spark/sbin/start-worker.sh" ]; then
+    fail "Spark distribution not available at $NFS_ROOT/spark"
 fi
 
 # =============================================================================
