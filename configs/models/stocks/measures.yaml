@@ -116,7 +116,7 @@ computed_measures:
 
 # Complex measures delegated to Python
 python_measures:
-  # These reference functions in models/implemented/stocks/measures.py
+  # These reference functions in models/domains/securities/stocks/measures.py
 
   sharpe_ratio:
     description: "Risk-adjusted return (Sharpe ratio)"

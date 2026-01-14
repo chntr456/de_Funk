@@ -16,7 +16,7 @@ components:
   graph: etfs/graph.yaml
   measures:
     yaml: etfs/measures.yaml
-    python: etfs/measures.py         # Holdings-weighted calculations
+    # python: securities/etfs/measures.py  # TODO: Create for holdings-weighted calcs
 
 # Storage configuration
 storage:

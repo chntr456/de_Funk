@@ -16,7 +16,7 @@ components:
   graph: options/graph.yaml
   measures:
     yaml: options/measures.yaml
-    python: options/measures.py    # Greeks calculations, implied vol, etc.
+    python: securities/options/measures.py  # Greeks, implied vol (models/domains/...)
 
 # Storage configuration
 storage:

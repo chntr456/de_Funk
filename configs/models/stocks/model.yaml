@@ -16,7 +16,7 @@ components:
   graph: stocks/graph.yaml
   measures:
     yaml: stocks/measures.yaml       # Simple measures
-    python: stocks/measures.py       # Complex measures
+    python: securities/stocks/measures.py  # Complex measures (models/domains/...)
 
 # Storage configuration
 storage:

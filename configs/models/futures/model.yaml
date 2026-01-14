@@ -16,7 +16,7 @@ components:
   graph: futures/graph.yaml
   measures:
     yaml: futures/measures.yaml
-    python: futures/measures.py      # Roll calculations, basis, etc.
+    # python: securities/futures/measures.py  # TODO: Create for roll calcs, basis
 
 # Storage configuration
 storage:
