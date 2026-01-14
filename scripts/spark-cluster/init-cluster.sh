@@ -230,15 +230,16 @@ log "  ✓ JAVA_HOME: $JAVA_HOME"
 log "  ✓ SPARK_HOME: $SPARK_HOME"
 
 # Download and setup Spark distribution for workers
+# IMPORTANT: Must include full distribution with sbin/ scripts for workers
 SPARK_VERSION="4.0.1"
-SPARK_DIST_DIR="/home/$DE_FUNK_USER/spark-dist"
-SPARK_TGZ="spark-${SPARK_VERSION}-bin-hadoop3.tgz"
+SPARK_DIST_NAME="spark-${SPARK_VERSION}-bin-hadoop3"
+SPARK_DIST_DIR="/home/$DE_FUNK_USER"
+SPARK_TGZ="${SPARK_DIST_NAME}.tgz"
 SPARK_URL="https://archive.apache.org/dist/spark/spark-${SPARK_VERSION}/${SPARK_TGZ}"
 
 log "Setting up Spark distribution for workers..."
-if [ ! -d "$SPARK_DIST_DIR/spark-${SPARK_VERSION}-bin-hadoop3" ]; then
+if [ ! -d "$SPARK_DIST_DIR/$SPARK_DIST_NAME" ]; then
     log "  Downloading Spark ${SPARK_VERSION}..."
-    mkdir -p "$SPARK_DIST_DIR"
     cd "$SPARK_DIST_DIR"
     if [ ! -f "$SPARK_TGZ" ]; then
         wget -q "$SPARK_URL" || curl -sLO "$SPARK_URL"
@@ -251,6 +252,12 @@ else
     log "  ✓ Spark distribution already exists"
 fi
 
+# Verify sbin scripts exist
+if [ ! -f "$SPARK_DIST_DIR/$SPARK_DIST_NAME/sbin/start-worker.sh" ]; then
+    fail "Spark distribution missing sbin scripts! Remove $SPARK_DIST_DIR/$SPARK_DIST_NAME and re-run."
+fi
+log "  ✓ Spark sbin scripts verified"
+
 # Mount Spark distribution to NFS (only if not already mounted)
 # Check for duplicate mounts and fix them
 SPARK_MOUNT_COUNT=$(mount | grep -c "$NFS_ROOT/spark" || echo "0")
@@ -259,13 +266,20 @@ if [ "$SPARK_MOUNT_COUNT" -gt 1 ]; then
     sudo umount "$NFS_ROOT/spark" 2>/dev/null || true
 fi
 
-if mountpoint -q "$NFS_ROOT/spark" 2>/dev/null && ls "$NFS_ROOT/spark/jars" >/dev/null 2>&1; then
-    log "  ✓ Spark already mounted at $NFS_ROOT/spark"
+# Verify mount has sbin/ directory (not just jars/)
+if mountpoint -q "$NFS_ROOT/spark" 2>/dev/null && [ -f "$NFS_ROOT/spark/sbin/start-worker.sh" ]; then
+    log "  ✓ Spark already mounted at $NFS_ROOT/spark (with sbin/)"
 else
     log "  Mounting Spark distribution to NFS..."
+    sudo umount "$NFS_ROOT/spark" 2>/dev/null || true
     sudo mkdir -p "$NFS_ROOT/spark"
-    sudo mount --bind "$SPARK_DIST_DIR/spark-${SPARK_VERSION}-bin-hadoop3" "$NFS_ROOT/spark"
-    log "  ✓ Spark available at /shared/spark on workers"
+    sudo mount --bind "$SPARK_DIST_DIR/$SPARK_DIST_NAME" "$NFS_ROOT/spark"
+    # Verify mount worked
+    if [ -f "$NFS_ROOT/spark/sbin/start-worker.sh" ]; then
+        log "  ✓ Spark available at /shared/spark on workers (with sbin/)"
+    else
+        fail "Failed to mount Spark distribution with sbin scripts"
+    fi
 fi
 
 # =============================================================================
@@ -331,18 +345,27 @@ echo "  JAVA_HOME=\$JAVA_HOME"
 echo "  SPARK_HOME=\$SPARK_HOME"
 
 echo "  Creating systemd service..."
-# Create a wrapper script that handles classpath glob expansion
+# Create a wrapper script that uses official start-worker.sh
 # Uses shared Spark distribution from NFS at /shared/spark
-cat > ~/start-spark-worker.sh << 'STARTWRAPPER'
+# IMPORTANT: Explicitly set SPARK_LOCAL_IP to LAN IP to avoid Tailscale interference
+cat > ~/start-spark-worker.sh << STARTWRAPPER
 #!/bin/bash
-source ~/venv/bin/activate
-export JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
 export SPARK_HOME=/shared/spark
+export JAVA_HOME=\\\$(dirname \\\$(dirname \\\$(readlink -f \\\$(which java))))
 export SPARK_SCALA_VERSION=2.13
-export PYSPARK_PYTHON=\$(which python3)
-exec "\$JAVA_HOME/bin/java" -cp "\$SPARK_HOME/jars/*" -Xmx${mem}g \
-    org.apache.spark.deploy.worker.Worker \
-    --cores $cores --memory ${mem}g \
+export PYSPARK_PYTHON=~/venv/bin/python3
+
+# Get LAN IP (route to master) - avoids Tailscale/VPN IPs
+SPARK_LOCAL_IP=\\\$(ip route get $HEAD_IP | grep -oP 'src \K[0-9.]+')
+export SPARK_LOCAL_IP
+
+# Run worker directly (not via start-worker.sh which daemonizes)
+# This keeps it in foreground for systemd Type=simple
+exec \\\$JAVA_HOME/bin/java -cp "\\\$SPARK_HOME/jars/*" -Xmx${mem}g \\
+    -Dspark.worker.host=\\\$SPARK_LOCAL_IP \\
+    org.apache.spark.deploy.worker.Worker \\
+    --host \\\$SPARK_LOCAL_IP \\
+    --cores $cores --memory ${mem}g \\
     spark://$HEAD_IP:$SPARK_MASTER_PORT
 STARTWRAPPER
 chmod +x ~/start-spark-worker.sh
@@ -408,6 +431,8 @@ if [ ! -d "$SPARK_HOME" ]; then
 fi
 
 export JAVA_HOME SPARK_HOME
+# IMPORTANT: Set SPARK_LOCAL_IP to LAN IP to avoid Tailscale/VPN interference
+export SPARK_LOCAL_IP=$HEAD_IP
 export SPARK_MASTER_HOST=$HEAD_IP
 export SPARK_MASTER_PORT=$SPARK_MASTER_PORT
 export SPARK_MASTER_WEBUI_PORT=$SPARK_UI_PORT
@@ -415,7 +440,8 @@ export SPARK_MASTER_WEBUI_PORT=$SPARK_UI_PORT
 mkdir -p "$LOCAL_STORAGE/logs"
 
 # Use official start-master.sh for proper initialization
-"$SPARK_HOME/sbin/start-master.sh"
+# The -h flag explicitly binds to LAN IP
+"$SPARK_HOME/sbin/start-master.sh" -h $HEAD_IP
 
 sleep 5
 
@@ -458,8 +484,10 @@ fi
 section "Step 6: Start Spark Workers"
 
 # Start local worker on head node first
+# IMPORTANT: Set SPARK_LOCAL_IP to LAN IP to avoid Tailscale/VPN interference
 log "Starting local worker on head node..."
-"$SPARK_HOME/sbin/start-worker.sh" "spark://$HEAD_IP:$SPARK_MASTER_PORT"
+export SPARK_LOCAL_IP=$HEAD_IP
+"$SPARK_HOME/sbin/start-worker.sh" "spark://$HEAD_IP:$SPARK_MASTER_PORT" -h $HEAD_IP
 sleep 2
 
 # Start remote workers via systemd
