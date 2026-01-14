@@ -1,26 +1,32 @@
 """
-Domain models - business-specific data models.
+Domain models - BACKWARD COMPATIBILITY LAYER.
 
-Domain models depend on foundation models (temporal, geography) and
-may have dependencies on other domain models:
+DEPRECATED: Import from models.domains instead.
 
-Securities:
-- company: Corporate entities with SEC registration and fundamentals
-- stocks: Stock securities with OHLCV prices and technical indicators
-- options: Options contracts with Greeks (partial implementation)
-- etf: Exchange-traded funds with holdings (skeleton)
+Example:
+    # Old (deprecated)
+    from models.domain.stocks.model import StocksModel
 
-Analytics:
-- forecast: Time series forecasting models
-- macro: Macroeconomic indicators (BLS data)
-- city_finance: Municipal finance data (Chicago)
+    # New (recommended)
+    from models.domains.securities.stocks import StocksModel
+
+This module re-exports from the new locations for backward compatibility.
 """
-# Import models as they're needed - avoid circular imports
-# Models should be imported directly from their module paths
+
+# Re-export from new domain structure for backward compatibility
+from models.domains.corporate.company import CompanyModel
+from models.domains.securities.stocks import StocksModel
+from models.domains.securities.options import OptionsModel
+from models.domains.securities.etfs import ETFModel
+from models.domains.securities.forecast import ForecastModel
+from models.domains.economic.macro import MacroModel
+from models.domains.municipal.city_finance import CityFinanceModel
 
 __all__ = [
     'CompanyModel',
     'StocksModel',
+    'OptionsModel',
+    'ETFModel',
     'ForecastModel',
     'MacroModel',
     'CityFinanceModel',

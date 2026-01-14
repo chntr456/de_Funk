@@ -1,4 +1,16 @@
-"""Company model package"""
-from .model import CompanyModel
+"""
+Company model - BACKWARD COMPATIBILITY LAYER.
 
-__all__ = ['CompanyModel']
+DEPRECATED: Import from models.domains.corporate.company instead.
+
+Example:
+    # Old (deprecated)
+    from models.domain.company import CompanyModel
+
+    # New (recommended)
+    from models.domains.corporate.company import CompanyModel
+"""
+
+from models.domains.corporate.company import CompanyModel, CompanyBuilder
+
+__all__ = ['CompanyModel', 'CompanyBuilder']

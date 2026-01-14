@@ -1,8 +1,21 @@
-"""Forecast model package"""
-from .company_forecast_model import CompanyForecastModel
-from .builder import ForecastBuilder
+"""
+Forecast model - BACKWARD COMPATIBILITY LAYER.
 
-# Backward compatibility alias
-ForecastModel = CompanyForecastModel
+DEPRECATED: Import from models.domains.securities.forecast instead.
 
-__all__ = ['CompanyForecastModel', 'ForecastModel', 'ForecastBuilder']
+Example:
+    # Old (deprecated)
+    from models.domain.forecast import ForecastModel
+
+    # New (recommended)
+    from models.domains.securities.forecast import ForecastModel
+"""
+
+from models.domains.securities.forecast import (
+    CompanyForecastModel,
+    ForecastModel,
+    ForecastBuilder,
+    training_methods,
+)
+
+__all__ = ['CompanyForecastModel', 'ForecastModel', 'ForecastBuilder', 'training_methods']

@@ -1,0 +1,36 @@
+# ETFs Model - Exchange-traded funds
+# Inherits from stocks (ETFs are stocks with extra features)
+
+model: etfs
+version: 2.0
+description: "Exchange-traded funds with holdings and NAV tracking"
+tags: [etfs, funds, securities]
+
+# Model inheritance and dependencies
+inherits_from: _base.securities      # Could also inherit from stocks
+depends_on: [temporal, stocks, company]
+
+# Component composition
+components:
+  schema: etfs/schema.yaml
+  graph: etfs/graph.yaml
+  measures:
+    yaml: etfs/measures.yaml
+    python: etfs/measures.py         # Holdings-weighted calculations
+
+# Storage configuration
+storage:
+  root: storage/silver/etfs
+  format: delta
+
+# Build configuration
+build:
+  partitions: [trade_date]
+  sort_by: [etf_ticker, trade_date]
+  optimize: true
+
+# Metadata
+metadata:
+  owner: data_engineering
+  domain: funds
+  sla_hours: 4

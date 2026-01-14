@@ -1,28 +1,30 @@
 """
-Options Model Package.
+Options model - BACKWARD COMPATIBILITY LAYER.
 
-Provides:
-- Black-Scholes option pricing (European options)
-- Greeks calculation (delta, gamma, theta, vega, rho)
-- Implied volatility solver
-- Options measures for the model framework
+DEPRECATED: Import from models.domains.securities.options instead.
+
+Example:
+    # Old (deprecated)
+    from models.domain.options import OptionsModel
+
+    # New (recommended)
+    from models.domains.securities.options import OptionsModel
 """
-from __future__ import annotations
 
-from .black_scholes import (
+from models.domains.securities.options import (
+    OptionsModel,
     BlackScholes,
     OptionType,
     OptionParams,
     OptionResult,
+    OptionsMeasures,
 )
-from .measures import OptionsMeasures
-from .model import OptionsModel
 
 __all__ = [
+    'OptionsModel',
     'BlackScholes',
     'OptionType',
     'OptionParams',
     'OptionResult',
     'OptionsMeasures',
-    'OptionsModel',
 ]

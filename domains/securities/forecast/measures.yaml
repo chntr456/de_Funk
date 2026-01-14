@@ -1,0 +1,47 @@
+# Forecast Measures - Prediction accuracy metrics
+# Version: 2.0
+
+simple_measures:
+  avg_forecast_error:
+    description: "Average forecast error (MAE)"
+    source: fact_forecast_metrics.mae
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00"
+    tags: [error, accuracy]
+
+  avg_forecast_mape:
+    description: "Average Mean Absolute Percentage Error"
+    source: fact_forecast_metrics.mape
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00%"
+    tags: [error, percentage]
+
+  best_model_r2:
+    description: "Best R-squared score across models"
+    source: fact_forecast_metrics.r2_score
+    aggregation: max
+    data_type: double
+    format: "#,##0.0000"
+    tags: [accuracy, r2]
+
+  total_predictions:
+    description: "Total number of predictions"
+    source: fact_forecast_metrics.num_predictions
+    aggregation: sum
+    data_type: integer
+    format: "#,##0"
+    tags: [count]
+
+  avg_rmse:
+    description: "Average Root Mean Squared Error"
+    source: fact_forecast_metrics.rmse
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00"
+    tags: [error, accuracy]
+
+computed_measures: {}
+
+python_measures: {}

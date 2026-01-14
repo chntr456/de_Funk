@@ -1,10 +1,16 @@
 """
-ETF Model - Domain model for Exchange-Traded Funds.
+ETF model - BACKWARD COMPATIBILITY LAYER.
 
-Demonstrates extensibility of the measure framework with ETF-specific
-calculations including holdings-based weighting.
+DEPRECATED: Import from models.domains.securities.etfs instead.
+
+Example:
+    # Old (deprecated)
+    from models.domain.etf import ETFModel
+
+    # New (recommended)
+    from models.domains.securities.etfs import ETFModel
 """
 
-from .model import ETFModel
+from models.domains.securities.etfs import ETFModel
 
 __all__ = ['ETFModel']

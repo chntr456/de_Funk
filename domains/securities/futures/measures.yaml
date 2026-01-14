@@ -1,0 +1,10 @@
+# Futures Model Measures
+# Placeholder measures for futures analysis
+
+extends: _base.securities.measures
+
+simple_measures: {}
+
+computed_measures: {}
+
+python_measures: {}

@@ -1,0 +1,10 @@
+# Futures Model Graph
+# Placeholder graph structure for futures data flow
+
+extends: _base.securities.graph
+
+nodes: {}
+
+edges: {}
+
+paths: {}

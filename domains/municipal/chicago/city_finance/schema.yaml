@@ -1,0 +1,76 @@
+# City Finance Schema - Dimensions and Facts
+# Chicago municipal data structures
+
+dimensions:
+  dim_community_area:
+    path: dims/dim_community_area
+    description: "Chicago community areas (77 total)"
+    columns:
+      community_area: string
+      community_name: string
+      geography_type: string
+    primary_key: [community_area]
+    tags: [dim, geography, chicago]
+
+  dim_permit_type:
+    path: dims/dim_permit_type
+    description: "Building permit types"
+    columns:
+      permit_type: string
+      permit_category: string
+    primary_key: [permit_type]
+    tags: [dim, reference, permits]
+
+facts:
+  fact_local_unemployment:
+    path: facts/fact_local_unemployment
+    description: "Unemployment by Chicago community area (monthly)"
+    columns:
+      geography: string
+      geography_type: string
+      date: date
+      unemployment_rate: double
+      labor_force: long
+      employed: long
+      unemployed: long
+    partitions: [date]
+    tags: [fact, unemployment, community, monthly]
+
+  fact_building_permits:
+    path: facts/fact_building_permits
+    description: "Building permits issued in Chicago"
+    columns:
+      permit_number: string
+      permit_type: string
+      issue_date: date
+      total_fee: double
+      contractor_name: string
+      work_description: string
+      community_area: string
+      latitude: double
+      longitude: double
+    partitions: [issue_date]
+    tags: [fact, permits, construction, event]
+
+  fact_business_licenses:
+    path: facts/fact_business_licenses
+    description: "Active business licenses in Chicago"
+    columns:
+      license_id: string
+      business_name: string
+      license_type: string
+      start_date: date
+      community_area: string
+    partitions: [start_date]
+    tags: [fact, business, licenses]
+
+  fact_economic_indicators:
+    path: facts/fact_economic_indicators
+    description: "City-level economic indicators"
+    columns:
+      indicator_name: string
+      date: date
+      value: double
+      community_area: string
+    partitions: [date]
+    tags: [fact, economics, city]

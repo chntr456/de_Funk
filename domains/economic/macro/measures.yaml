@@ -1,0 +1,57 @@
+# Macro Measures
+# Simple aggregation measures for economic indicators
+
+simple_measures:
+  avg_unemployment_rate:
+    description: "Average unemployment rate"
+    source: fact_unemployment.value
+    aggregation: avg
+    data_type: double
+    format: "#,##0.00%"
+    tags: [unemployment, average]
+
+  latest_cpi:
+    description: "Latest CPI value"
+    source: fact_cpi.value
+    aggregation: max
+    data_type: double
+    format: "#,##0.00"
+    tags: [cpi, latest]
+
+  employment_growth:
+    description: "Total employment growth"
+    source: fact_employment.value
+    aggregation: sum
+    data_type: double
+    format: "#,##0"
+    tags: [employment, growth]
+
+  wage_trend:
+    description: "Average wage trend"
+    source: fact_wages.value
+    aggregation: avg
+    data_type: double
+    format: "$#,##0.00"
+    tags: [wages, average]
+
+# BLS Series Reference
+bls_series:
+  unemployment:
+    series_id: "LNS14000000"
+    name: "Unemployment Rate - Civilian Labor Force"
+    category: "unemployment"
+
+  cpi:
+    series_id: "CUUR0000SA0"
+    name: "Consumer Price Index - All Urban Consumers"
+    category: "inflation"
+
+  employment:
+    series_id: "CES0000000001"
+    name: "Total Nonfarm Employment"
+    category: "employment"
+
+  wages:
+    series_id: "CES0500000003"
+    name: "Average Hourly Earnings - Total Private"
+    category: "wages"

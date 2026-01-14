@@ -396,46 +396,50 @@ class ModelRegistry:
         except Exception:
             pass  # Will use auto-registration on first access
 
-        # Domain models (v2.0 architecture)
+        # Domain models (v2.6 architecture - organized by domain)
+        # Corporate domain
         try:
-            from models.domain.company.model import CompanyModel
+            from models.domains.corporate.company import CompanyModel
             self.register_model_class('company', CompanyModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
+        # Securities domain
         try:
-            from models.domain.stocks.model import StocksModel
+            from models.domains.securities.stocks import StocksModel
             self.register_model_class('stocks', StocksModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         try:
-            from models.domain.options.model import OptionsModel
+            from models.domains.securities.options import OptionsModel
             self.register_model_class('options', OptionsModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         try:
-            from models.domain.etf.model import ETFModel
+            from models.domains.securities.etfs import ETFModel
             self.register_model_class('etf', ETFModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         try:
-            from models.domain.macro.model import MacroModel
+            from models.domains.securities.forecast import ForecastModel
+            self.register_model_class('forecast', ForecastModel)
+        except Exception:
+            pass  # Will use auto-registration on first access
+
+        # Economic domain
+        try:
+            from models.domains.economic.macro import MacroModel
             self.register_model_class('macro', MacroModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
+        # Municipal domain
         try:
-            from models.domain.city_finance.model import CityFinanceModel
+            from models.domains.municipal.city_finance import CityFinanceModel
             self.register_model_class('city_finance', CityFinanceModel)
-        except Exception:
-            pass  # Will use auto-registration on first access
-
-        try:
-            from models.domain.forecast import ForecastModel
-            self.register_model_class('forecast', ForecastModel)
         except Exception:
             pass  # Will use auto-registration on first access
 

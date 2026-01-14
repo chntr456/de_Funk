@@ -26,7 +26,7 @@ repo_root = setup_repo_imports()
 
 from config import ConfigLoader
 from config.logging import get_logger, setup_logging
-from models.domain.forecast.company_forecast_model import CompanyForecastModel as ForecastModel
+from models.domains.securities.forecast import ForecastModel
 from models.api.session import UniversalSession
 from datapipelines.base.progress_tracker import StepProgressTracker
 

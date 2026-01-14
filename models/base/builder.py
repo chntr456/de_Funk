@@ -14,7 +14,7 @@ Usage:
         depends_on = ["company"]
 
         def get_model_class(self):
-            from models.domain.stocks.model import StocksModel
+            from models.domains.securities.stocks import StocksModel
             return StocksModel
 
 The build orchestrator discovers all builders and executes them in dependency order.

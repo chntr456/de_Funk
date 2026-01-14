@@ -27,7 +27,7 @@ except ImportError:
     DataFrame = None  # type: ignore
 
 from models.base.model import BaseModel
-from models.domain.forecast import training_methods
+from models.domains.securities.forecast import training_methods
 
 
 class TimeSeriesForecastModel(BaseModel):

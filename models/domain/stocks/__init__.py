@@ -1,9 +1,16 @@
 """
-Stocks model implementation.
+Stocks model - BACKWARD COMPATIBILITY LAYER.
 
-Version: 2.0 - Modular architecture with inheritance
+DEPRECATED: Import from models.domains.securities.stocks instead.
+
+Example:
+    # Old (deprecated)
+    from models.domain.stocks import StocksModel
+
+    # New (recommended)
+    from models.domains.securities.stocks import StocksModel
 """
 
-from .model import StocksModel
+from models.domains.securities.stocks import StocksModel, StocksBuilder, StocksMeasures
 
-__all__ = ['StocksModel']
+__all__ = ['StocksModel', 'StocksBuilder', 'StocksMeasures']

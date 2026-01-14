@@ -1,13 +1,16 @@
 """
 Backward compatibility layer for services.
 
-Services have been moved to models/company/services/.
-This file re-exports them for backward compatibility.
+Note: Legacy services (NewsAPI, PricesAPI, CompanyAPI) have been deprecated
+as part of the v2.6 domain reorganization. The company model now uses
+standard model patterns without separate service classes.
+
+This file is kept for backward compatibility but exports nothing.
 """
 
 from __future__ import annotations
 
-# Import from new location
-from models.domain.company.services import NewsAPI, PricesAPI, CompanyAPI
+# Legacy services removed in v2.6 domain reorganization
+# Use models.domains.corporate.company.CompanyModel directly
 
-__all__ = ['NewsAPI', 'PricesAPI', 'CompanyAPI']
+__all__ = []

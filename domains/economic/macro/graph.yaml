@@ -1,0 +1,87 @@
+# Macro Graph - Nodes, Edges, and Paths
+# Defines data transformations and relationships
+
+nodes:
+  - id: dim_economic_series
+    from: bronze.bls_unemployment
+    select:
+      series_id: series_id
+    derive:
+      series_name: "National Unemployment Rate"
+      category: "unemployment"
+      frequency: "monthly"
+      units: "percent"
+      seasonal_adjustment: "seasonally_adjusted"
+    tags: [dim, series]
+    unique_key: [series_id]
+
+  - id: fact_unemployment
+    from: bronze.bls_unemployment
+    select:
+      series_id: series_id
+      date: date
+      year: year
+      period: period
+      value: value
+      period_name: period_name
+    tags: [fact, unemployment]
+
+  - id: fact_cpi
+    from: bronze.bls_cpi
+    select:
+      series_id: series_id
+      date: date
+      year: year
+      period: period
+      value: value
+      period_name: period_name
+    tags: [fact, cpi]
+
+  - id: fact_employment
+    from: bronze.bls_employment
+    select:
+      series_id: series_id
+      date: date
+      year: year
+      period: period
+      value: value
+      period_name: period_name
+    tags: [fact, employment]
+
+  - id: fact_wages
+    from: bronze.bls_wages
+    select:
+      series_id: series_id
+      date: date
+      year: year
+      period: period
+      value: value
+      period_name: period_name
+    tags: [fact, wages]
+
+edges:
+  - from: fact_unemployment
+    to: dim_economic_series
+    "on": ["series_id=series_id"]
+    type: many_to_one
+    description: "Unemployment data belongs to a series"
+
+  - from: fact_cpi
+    to: dim_economic_series
+    "on": ["series_id=series_id"]
+    type: many_to_one
+    description: "CPI data belongs to a series"
+
+  - from: fact_employment
+    to: dim_economic_series
+    "on": ["series_id=series_id"]
+    type: many_to_one
+    description: "Employment data belongs to a series"
+
+  - from: fact_wages
+    to: dim_economic_series
+    "on": ["series_id=series_id"]
+    type: many_to_one
+    description: "Wage data belongs to a series"
+
+paths: []

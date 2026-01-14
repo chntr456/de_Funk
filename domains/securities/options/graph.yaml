@@ -1,0 +1,52 @@
+# Options graph - extends base securities graph
+
+extends: _base.securities.graph
+
+nodes:
+  dim_option:
+    from: bronze.securities_reference
+    filters:
+      - "asset_type = 'options'"     # KEY FILTER
+      - "is_active = true"
+    select:
+      # Base fields
+      ticker: ticker
+      security_name: security_name
+      asset_type: asset_type
+      exchange_code: primary_exchange
+      currency: currency
+      is_active: is_active
+      # Options-specific fields
+      underlying_ticker: underlying_ticker
+      strike_price: strike_price
+      expiry_date: expiry_date
+      option_type: option_type
+      contract_size: contract_size
+    unique_key: [ticker]
+    tags: [dim, option]
+
+  fact_option_prices:
+    from: bronze.securities_prices_daily
+    filters:
+      - "asset_type = 'options'"     # KEY FILTER
+      - "trade_date IS NOT NULL"
+      - "ticker IS NOT NULL"
+    select:
+      # OHLCV fields
+      ticker: ticker
+      trade_date: trade_date
+      open: open
+      high: high
+      low: low
+      close: close
+      volume: volume
+      volume_weighted: volume_weighted
+    tags: [fact, prices, options]
+
+edges:
+  option_to_underlying:
+    from: dim_option
+    to: stocks.dim_stock
+    "on": ["underlying_ticker=ticker"]
+    type: many_to_one
+    description: "Option derives from underlying stock"
