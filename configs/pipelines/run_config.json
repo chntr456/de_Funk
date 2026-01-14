@@ -61,9 +61,11 @@
         "service_request_types",
         "budget_appropriations",
         "budget_positions_salaries",
-        "budget_revenue"
+        "budget_revenue",
+        "wards",
+        "traffic_congestion_segments"
       ],
-      "_endpoints_comment": "22 Chicago endpoints. Budget endpoints use multi-year view_id iteration. Excluded: cta_bus_stops (non-tabular geospatial), wards, traffic_congestion_segments (geospatial). Deprecated (404): economic_indicators, per_capita_income, unemployment_rates."
+      "_endpoints_comment": "24 Chicago endpoints. Budget, wards, and traffic_congestion endpoints use multi-year view_id iteration. Excluded: cta_bus_stops (non-tabular KMZ). Deprecated (404): economic_indicators, per_capita_income, unemployment_rates."
     },
     "cook_county": {
       "enabled": true,
@@ -149,7 +151,7 @@
       "dry_run": false,
       "skip_silver": true,
       "log_level": "DEBUG",
-      "_comment": "Full run: alpha_vantage (10 tickers) + chicago (22 endpoints) + cook_county (13 endpoints). Streams to Delta in 500k batches."
+      "_comment": "Full run: alpha_vantage (10 tickers) + chicago (24 endpoints) + cook_county (13 endpoints). Streams to Delta in 500k batches."
     },
     "dev_municipal": {
       "providers": ["chicago", "cook_county"],
