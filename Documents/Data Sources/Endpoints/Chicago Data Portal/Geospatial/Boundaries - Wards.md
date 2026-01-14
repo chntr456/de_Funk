@@ -56,8 +56,8 @@ Ward boundaries changed corresponding to census changes the prior wards were in 
 
 | Year | view_id | Format | Notes |
 |----|----|----|----|
-| May 2023 - current | p293-wvbd| JSON | provisional |
-| May 2015 - May 2023 | k9yb-bpqx | JSON | provisional |
+| 2023 | p293-wvbd | JSON | May 2023 - current |
+| 2015 | k9yb-bpqx | JSON | May 2015 - May 2023 |
 
 
 ## Request Notes

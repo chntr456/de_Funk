@@ -64,8 +64,8 @@ The segment speed and traffic region congestion estimates together may give a be
 
 | Year | view_id | Format | Notes |
 |----|----|----|----|
-| 2024-Current | 4g9f-3jbs | JSON | provisional |
-| 2018-2023 | sxs8-h27x | JSON | provisional |
+| 2024 | 4g9f-3jbs | JSON | 2024 - current |
+| 2018 | sxs8-h27x | JSON | 2018 - 2023 |
 
 
 ## Request Notes
