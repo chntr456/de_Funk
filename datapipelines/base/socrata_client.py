@@ -6,6 +6,7 @@ Chicago Data Portal and Cook County Data Portal.
 
 Features:
 - Offset-based pagination with configurable page size
+- CSV bulk download for large datasets (streaming)
 - SoQL query parameter handling ($select, $where, $order, $limit, $offset)
 - Rate limiting with app token support
 - Automatic retry with exponential backoff
@@ -19,12 +20,16 @@ Usage:
         rate_limit_per_sec=5.0
     )
 
-    # Fetch all records with pagination
+    # Fetch all records with pagination (JSON API)
     records = client.fetch_all(
         resource_id="ijzp-q8t2",
         query_params={"$where": "year > 2020"},
         limit=50000
     )
+
+    # Fetch via CSV bulk download (faster for large datasets)
+    for batch in client.fetch_csv(resource_id="sxs8-h27x", batch_size=50000):
+        process(batch)
 
 Author: de_Funk Team
 Date: January 2026
@@ -32,6 +37,8 @@ Date: January 2026
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import socket
 import time
@@ -353,3 +360,126 @@ class SocrataClient:
         except HTTPError as e:
             logger.warning(f"Failed to get metadata for {resource_id}: {e}")
             return {}
+
+    def fetch_csv(
+        self,
+        resource_id: str,
+        batch_size: int = 50000,
+        max_records: Optional[int] = None,
+        label: Optional[str] = None
+    ) -> Generator[List[Dict], None, None]:
+        """
+        Fetch all records via CSV bulk download (streaming).
+
+        This is faster and more reliable than JSON pagination for large datasets.
+        The CSV is streamed and processed in batches to avoid memory issues.
+
+        CSV export URL format:
+            https://data.cityofchicago.org/api/views/{view_id}/rows.csv?accessType=DOWNLOAD
+
+        Args:
+            resource_id: The 4x4 resource identifier (view_id)
+            batch_size: Number of records per batch to yield (default: 50000)
+            max_records: Optional maximum total records to fetch
+            label: Optional label for logging (e.g., endpoint name)
+
+        Yields:
+            List of records (dicts) for each batch
+
+        Example:
+            for batch in client.fetch_csv("sxs8-h27x", label="traffic"):
+                for record in batch:
+                    process(record)
+        """
+        url = f"{self.base_url}/api/views/{resource_id}/rows.csv?accessType=DOWNLOAD"
+        log_name = f"{label} ({resource_id})" if label else resource_id
+        backoff_base = 2.0
+
+        logger.info(f"Starting CSV bulk download for {log_name}")
+
+        for attempt in range(self.MAX_RETRIES):
+            self._throttle()
+
+            try:
+                req = urllib.request.Request(url, headers={
+                    **self.headers,
+                    "Accept": "text/csv"
+                }, method="GET")
+
+                # Use longer timeout for CSV downloads (can be very large)
+                csv_timeout = max(self.timeout, 600)  # At least 10 minutes
+
+                with urllib.request.urlopen(req, timeout=csv_timeout) as resp:
+                    # Stream the response and process in batches
+                    total_fetched = 0
+                    batch = []
+
+                    # Wrap response in text wrapper for csv.DictReader
+                    text_stream = io.TextIOWrapper(resp, encoding='utf-8', errors='replace')
+                    reader = csv.DictReader(text_stream)
+
+                    for row in reader:
+                        batch.append(row)
+                        total_fetched += 1
+
+                        # Check max_records limit
+                        if max_records and total_fetched >= max_records:
+                            if batch:
+                                logger.info(
+                                    f"CSV {log_name}: yielding final batch of {len(batch):,} "
+                                    f"(reached max_records={max_records:,})"
+                                )
+                                yield batch
+                            logger.info(f"Finished CSV {log_name}: {total_fetched:,} total records (max_records limit)")
+                            return
+
+                        # Yield batch when full
+                        if len(batch) >= batch_size:
+                            logger.info(f"CSV {log_name}: yielding batch of {len(batch):,} (total: {total_fetched:,})")
+                            yield batch
+                            batch = []
+
+                    # Yield remaining records
+                    if batch:
+                        logger.info(f"CSV {log_name}: yielding final batch of {len(batch):,}")
+                        yield batch
+
+                    logger.info(f"Finished CSV {log_name}: {total_fetched:,} total records")
+                    return
+
+            except HTTPError as e:
+                body = None
+                try:
+                    body = e.read().decode("utf-8")[:500]
+                except (IOError, UnicodeDecodeError):
+                    pass
+
+                if e.code == 429:
+                    retry_after = e.headers.get("Retry-After")
+                    wait = float(retry_after) if retry_after and retry_after.isdigit() else min(120.0, backoff_base ** attempt)
+                    logger.warning(f"CSV rate limited (429): waiting {wait:.1f}s before retry {attempt + 1}/{self.MAX_RETRIES}")
+                    time.sleep(wait)
+                    continue
+
+                if 500 <= e.code < 600:
+                    wait = min(60.0, backoff_base ** attempt)
+                    logger.warning(f"CSV server error ({e.code}): waiting {wait:.1f}s before retry {attempt + 1}/{self.MAX_RETRIES}")
+                    time.sleep(wait)
+                    continue
+
+                logger.error(f"CSV client error ({e.code}) for {url}: {body}")
+                raise RuntimeError(f"CSV HTTP {e.code} for {url}: {body}") from e
+
+            except (URLError, TimeoutError, socket.timeout, ConnectionError) as e:
+                error_type = type(e).__name__
+                if attempt < self.MAX_RETRIES - 1:
+                    wait = min(120.0, backoff_base ** (attempt + 1))
+                    logger.warning(
+                        f"CSV {error_type}: {e}. Waiting {wait:.1f}s before retry {attempt + 1}/{self.MAX_RETRIES}"
+                    )
+                    time.sleep(wait)
+                    continue
+                logger.error(f"CSV {error_type} after {self.MAX_RETRIES} attempts for {url}: {e}")
+                raise RuntimeError(f"CSV {error_type} after {self.MAX_RETRIES} attempts: {e}") from e
+
+        raise RuntimeError(f"CSV download failed after {self.MAX_RETRIES} attempts: {url}")

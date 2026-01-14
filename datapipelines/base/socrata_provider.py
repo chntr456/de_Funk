@@ -133,6 +133,19 @@ class SocrataBaseProvider(BaseProvider):
             logger.warning(f"Could not extract resource_id for: {endpoint_id}")
             return
 
+        # Use CSV bulk download if configured
+        if endpoint.download_method == 'csv':
+            logger.info(f"Using CSV bulk download for {endpoint_id}")
+            for batch in self.client.fetch_csv(
+                resource_id=resource_id,
+                batch_size=self._default_limit,
+                max_records=max_records,
+                label=endpoint_id
+            ):
+                yield batch
+            return
+
+        # Default: JSON API with pagination
         params = dict(endpoint.default_query or {})
 
         for batch in self.client.fetch_all(
@@ -152,7 +165,11 @@ class SocrataBaseProvider(BaseProvider):
         **kwargs
     ) -> Generator[List[Dict], None, None]:
         """Fetch from multiple year-based view_ids."""
+        use_csv = endpoint.download_method == 'csv'
         params = dict(endpoint.default_query or {})
+
+        if use_csv:
+            logger.info(f"Using CSV bulk download for multi-year {endpoint_id}")
 
         # view_ids is Dict[str, str] mapping year -> view_id
         for year, resource_id in endpoint.view_ids.items():
@@ -161,17 +178,31 @@ class SocrataBaseProvider(BaseProvider):
 
             year_label = f"{endpoint_id}/{year}"
 
-            for batch in self.client.fetch_all(
-                resource_id=resource_id,
-                query_params=params,
-                limit=self._default_limit,
-                max_records=max_records,
-                label=year_label
-            ):
-                # Add year to each record for partitioning
-                for record in batch:
-                    record['year'] = year
-                yield batch
+            if use_csv:
+                # Use CSV bulk download
+                for batch in self.client.fetch_csv(
+                    resource_id=resource_id,
+                    batch_size=self._default_limit,
+                    max_records=max_records,
+                    label=year_label
+                ):
+                    # Add year to each record for partitioning
+                    for record in batch:
+                        record['year'] = year
+                    yield batch
+            else:
+                # Use JSON API with pagination
+                for batch in self.client.fetch_all(
+                    resource_id=resource_id,
+                    query_params=params,
+                    limit=self._default_limit,
+                    max_records=max_records,
+                    label=year_label
+                ):
+                    # Add year to each record for partitioning
+                    for record in batch:
+                        record['year'] = year
+                    yield batch
 
     def normalize(self, records: List[Dict], work_item: str) -> DataFrame:
         """Normalize raw records to a Spark DataFrame."""

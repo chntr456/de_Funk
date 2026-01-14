@@ -110,6 +110,8 @@ class EndpointConfig:
     status: str = "active"
     # View ID mapping for multi-year datasets (year -> view_id)
     view_ids: Dict[str, str] = field(default_factory=dict)
+    # Download method: "json" (default API pagination) or "csv" (bulk download)
+    download_method: str = "json"
     # Raw config dict for additional fields
     raw: Dict[str, Any] = field(default_factory=dict)
 
@@ -456,6 +458,7 @@ class MarkdownConfigLoader:
             data_tags=frontmatter.get('data_tags', []) or [],
             status=frontmatter.get('status', 'active'),
             view_ids=view_ids,
+            download_method=frontmatter.get('download_method', 'json'),
             raw=frontmatter
         )
 
