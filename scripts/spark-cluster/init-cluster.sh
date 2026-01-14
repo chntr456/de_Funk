@@ -311,29 +311,27 @@ sudo apt-get install -y -qq openjdk-17-jdk python3-pip python3-venv nfs-common
 
 echo "  Mounting NFS..."
 sudo mkdir -p /shared
-# Check if mount is working including /shared/spark (which can go stale)
-if mountpoint -q /shared && ls /shared/storage >/dev/null 2>&1 && ls /shared/spark >/dev/null 2>&1; then
-    echo "  NFS already mounted and working"
+
+# Always force remount to clear NFS cache (critical for seeing updated Spark files)
+echo "  Remounting NFS to clear cache..."
+sudo umount -l /shared 2>/dev/null || true
+sleep 1
+sudo mount -t nfs -o vers=4,noac $HEAD_IP:$NFS_ROOT /shared
+
+# Verify Spark jars are accessible (not just the directory)
+if ls /shared/spark/jars/*.jar >/dev/null 2>&1; then
+    JAR_COUNT=\$(ls /shared/spark/jars/*.jar | wc -l)
+    echo "  NFS mounted - Spark jars accessible (\$JAR_COUNT jars)"
 else
-    # Force unmount stale mount and remount fresh
-    echo "  Remounting NFS (stale or missing)..."
-    sudo umount -f /shared 2>/dev/null || true
-    sudo umount -l /shared 2>/dev/null || true
-    sleep 2
-    sudo mount -t nfs -o vers=3 $HEAD_IP:$NFS_ROOT /shared
-    echo "  NFS mounted"
-    # Verify /shared/spark is accessible
-    if ! ls /shared/spark >/dev/null 2>&1; then
-        echo "  WARNING: /shared/spark still not accessible, retrying mount..."
-        sudo umount -l /shared 2>/dev/null || true
-        sleep 2
-        sudo mount -t nfs $HEAD_IP:$NFS_ROOT /shared
-    fi
+    echo "  ERROR: /shared/spark/jars not accessible after mount!"
+    echo "  Contents of /shared/spark:"
+    ls -la /shared/spark/ 2>&1 || echo "  (directory not found)"
+    exit 1
 fi
 ls /shared/
 
-# Persist mount
-grep -q "/shared" /etc/fstab || echo "$HEAD_IP:$NFS_ROOT /shared nfs defaults,_netdev 0 0" | sudo tee -a /etc/fstab
+# Persist mount (with noac to prevent attribute caching issues)
+grep -q "/shared" /etc/fstab || echo "$HEAD_IP:$NFS_ROOT /shared nfs defaults,noac,_netdev 0 0" | sudo tee -a /etc/fstab
 
 echo "  Setting up Python..."
 if [ ! -d ~/venv ]; then
