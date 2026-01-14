@@ -324,6 +324,28 @@ class IngestorEngine:
             if len(self._pending_futures) > max_pending:
                 time.sleep(0.1)
 
+    def _cleanup_spark_memory(self) -> None:
+        """
+        Force cleanup of Spark memory after a work item completes.
+
+        Clears Spark's in-memory cache and triggers Python GC.
+        Critical for large endpoints like crimes (8M+ records).
+        """
+        try:
+            # Get Spark session and clear cache
+            from pyspark.sql import SparkSession
+            spark = SparkSession.getActiveSession()
+            if spark:
+                spark.catalog.clearCache()
+                # Force JVM garbage collection
+                spark._jvm.System.gc()
+                logger.debug("Cleared Spark cache and triggered JVM GC")
+        except Exception as e:
+            logger.debug(f"Spark cleanup (non-critical): {e}")
+
+        # Python garbage collection
+        gc.collect()
+
     def _async_write(
         self,
         df,
@@ -343,13 +365,22 @@ class IngestorEngine:
         Returns:
             Number of records written
         """
-        count = df.count()
-        if mode == "append":
-            self.sink.append(df, table_name, partitions=partitions)
-        else:
-            self.sink.overwrite(df, table_name, partitions=partitions)
-        logger.info(f"Wrote {table_name}: {count:,} records (mode={mode})")
-        return count
+        try:
+            count = df.count()
+            if mode == "append":
+                self.sink.append(df, table_name, partitions=partitions)
+            else:
+                self.sink.overwrite(df, table_name, partitions=partitions)
+            logger.info(f"Wrote {table_name}: {count:,} records (mode={mode})")
+            return count
+        finally:
+            # CRITICAL: Release Spark memory after write completes
+            try:
+                df.unpersist()
+            except Exception:
+                pass  # DataFrame may not be cached
+            # Force Python GC to release any remaining references
+            gc.collect()
 
     def _ingest_work_item_async(
         self,
@@ -463,6 +494,13 @@ class IngestorEngine:
                     f"{work_item}: queued final chunk {chunk_count} "
                     f"({len(buffer):,} records, mode={mode})"
                 )
+
+            # Wait for all pending writes for this work item to complete
+            # This ensures memory is released before starting next work item
+            self._wait_for_pending_writes(0)  # Wait for all
+
+            # Force cleanup of any remaining Spark memory
+            self._cleanup_spark_memory()
 
             if total_records == 0:
                 return WorkItemResult(
