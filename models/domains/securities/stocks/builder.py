@@ -2,7 +2,7 @@
 StocksBuilder - Builder for the Stocks model.
 
 Builds the stocks silver layer from bronze securities data.
-Depends on the company model being built first.
+Independent of other models - company linkage is at query time via ticker.
 """
 
 from __future__ import annotations
@@ -25,11 +25,11 @@ class StocksBuilder(BaseModelBuilder):
     - fact_stock_prices: Daily OHLCV data
 
     Dependencies:
-    - company: For company linkage via CIK
+    - None: Builds independently from Bronze - linked to company via ticker at query time
     """
 
     model_name = "stocks"
-    depends_on = ["company"]
+    depends_on = []  # No build-time dependencies
 
     def get_model_class(self) -> Type:
         """Return the StocksModel class."""
@@ -47,7 +47,6 @@ class StocksBuilder(BaseModelBuilder):
 
         required_paths = [
             bronze_root / "securities_prices_daily",  # Daily OHLCV
-            bronze_root / "company_reference",        # Company data for linkage
         ]
 
         missing = [p for p in required_paths if not p.exists()]

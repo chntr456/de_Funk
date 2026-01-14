@@ -22,7 +22,7 @@ from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 from orchestration.common.spark_session import get_spark
-from models.foundation.temporal.builders.calendar_builder import CalendarBuilder
+from models.domains.foundation.temporal.builders.calendar_builder import CalendarBuilder
 
 
 def seed_calendar(storage_path: Path = None, spark=None) -> int:

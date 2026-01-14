@@ -385,7 +385,7 @@ class ModelRegistry:
 
         # Foundation models
         try:
-            from models.foundation.temporal.model import TemporalModel
+            from models.domains.foundation.temporal.model import TemporalModel
             self.register_model_class('temporal', TemporalModel)
         except Exception:
             pass  # Will use auto-registration on first access

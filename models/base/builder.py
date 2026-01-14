@@ -115,12 +115,16 @@ class BaseModelBuilder(ABC):
         Load and return model configuration.
 
         Returns:
-            Model configuration dict from YAML
+            Model configuration dict from YAML/markdown front matter
+
+        Note:
+            Uses the new domain_loader.ModelConfigLoader which reads from
+            domains/ markdown files with YAML front matter.
         """
         if self._model_config is None:
-            from config.model_loader import ModelConfigLoader
-            config_dir = self.repo_root / "configs" / "models"
-            loader = ModelConfigLoader(config_dir)
+            from config.domain_loader import ModelConfigLoader
+            domains_dir = self.repo_root / "domains"
+            loader = ModelConfigLoader(domains_dir)
             self._model_config = loader.load_model_config(self.model_name)
         return self._model_config
 
@@ -326,35 +330,53 @@ class BuilderRegistry:
         Discover and register builders from model directories.
 
         Args:
-            models_path: Path to models/domain or models/foundation directory
+            models_path: Path to models/domains directory (new unified structure)
+
+        The new structure is nested:
+            models/domains/
+                foundation/temporal/builder.py
+                corporate/company/builder.py
+                securities/stocks/builder.py
+                municipal/city_finance/builder.py
         """
         import importlib
 
-        # Get the parent directory name (domain, foundation, etc.)
-        parent_name = models_path.name  # 'domain' or 'foundation'
-
-        for model_dir in models_path.iterdir():
-            if not model_dir.is_dir() or model_dir.name.startswith('_'):
+        # Find all builder.py files recursively
+        for builder_file in models_path.rglob("builder.py"):
+            # Skip __pycache__ and hidden directories
+            if '__pycache__' in str(builder_file) or any(
+                p.startswith('_') and p != '__pycache__' for p in builder_file.parts
+            ):
                 continue
 
-            builder_file = model_dir / "builder.py"
-            if builder_file.exists():
-                try:
-                    module_name = f"models.{parent_name}.{model_dir.name}.builder"
-                    module = importlib.import_module(module_name)
+            # Build module name from path
+            # e.g., models/domains/foundation/temporal/builder.py
+            #    -> models.domains.foundation.temporal.builder
+            try:
+                # Get path relative to the parent of models_path
+                # models_path is typically models/domains
+                models_root = models_path.parent  # models/
+                rel_path = builder_file.relative_to(models_root)
 
-                    # Find builder classes in the module
-                    for attr_name in dir(module):
-                        attr = getattr(module, attr_name)
-                        if (isinstance(attr, type) and
-                            issubclass(attr, BaseModelBuilder) and
-                            attr is not BaseModelBuilder and
-                            attr.model_name):
-                            cls.register(attr)
-                            logger.debug(f"Discovered builder: {attr.model_name}")
+                # Convert path to module name
+                module_parts = list(rel_path.parts[:-1])  # Remove 'builder.py'
+                module_parts.append('builder')
+                module_name = 'models.' + '.'.join(module_parts)
 
-                except Exception as e:
-                    logger.warning(f"Failed to load builder from {model_dir.name}: {e}")
+                module = importlib.import_module(module_name)
+
+                # Find builder classes in the module
+                for attr_name in dir(module):
+                    attr = getattr(module, attr_name)
+                    if (isinstance(attr, type) and
+                        issubclass(attr, BaseModelBuilder) and
+                        attr is not BaseModelBuilder and
+                        attr.model_name):
+                        cls.register(attr)
+                        logger.debug(f"Discovered builder: {attr.model_name}")
+
+            except Exception as e:
+                logger.warning(f"Failed to load builder from {builder_file}: {e}")
 
     @classmethod
     def get_build_order(cls, models: Optional[List[str]] = None) -> List[str]:

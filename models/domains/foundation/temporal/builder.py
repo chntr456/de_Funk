@@ -35,7 +35,7 @@ class TemporalBuilder(BaseModelBuilder):
 
     def get_model_class(self) -> Type:
         """Return the TemporalModel class."""
-        from models.foundation.temporal.model import TemporalModel
+        from models.domains.foundation.temporal.model import TemporalModel
         return TemporalModel
 
     def pre_build(self) -> None:

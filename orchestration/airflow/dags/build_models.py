@@ -6,9 +6,9 @@ with proper dependencies based on each builder's depends_on attribute.
 
 This DAG uses the existing infrastructure:
 - models/base/builder.py - BuilderRegistry
-- models/foundation/temporal/builder.py - TemporalBuilder
-- models/domain/company/builder.py - CompanyBuilder
-- models/domain/stocks/builder.py - StocksBuilder
+- models/domains/foundation/temporal/builder.py - TemporalBuilder
+- models/domains/corporate/company/builder.py - CompanyBuilder
+- models/domains/securities/stocks/builder.py - StocksBuilder
 
 Schedule: Manual trigger only (set schedule for automation)
 """
