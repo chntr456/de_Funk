@@ -361,12 +361,8 @@ export SPARK_LOCAL_IP
 
 # Run worker directly (not via start-worker.sh which daemonizes)
 # This keeps it in foreground for systemd Type=simple
-exec \\\$JAVA_HOME/bin/java -cp "\\\$SPARK_HOME/jars/*" -Xmx${mem}g \\
-    -Dspark.worker.host=\\\$SPARK_LOCAL_IP \\
-    org.apache.spark.deploy.worker.Worker \\
-    --host \\\$SPARK_LOCAL_IP \\
-    --cores $cores --memory ${mem}g \\
-    spark://$HEAD_IP:$SPARK_MASTER_PORT
+# Note: Java classpath wildcard must NOT be quoted and must NOT have .jar extension
+exec \\\$JAVA_HOME/bin/java -cp \\\$SPARK_HOME/jars/'*' -Xmx${mem}g -Dspark.worker.host=\\\$SPARK_LOCAL_IP org.apache.spark.deploy.worker.Worker --host \\\$SPARK_LOCAL_IP --cores $cores --memory ${mem}g spark://$HEAD_IP:$SPARK_MASTER_PORT
 STARTWRAPPER
 chmod +x ~/start-spark-worker.sh
 
