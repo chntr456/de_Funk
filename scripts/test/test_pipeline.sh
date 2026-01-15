@@ -49,6 +49,7 @@ SKIP_SEED=false
 FORCE_SEED=false
 SKIP_INGEST=false
 SKIP_SILVER=false     # Test everything by default
+SKIP_SILVER_EXPLICIT=false  # Track if --skip-silver was explicitly passed
 MODELS=""             # Empty = build all discovered models
 WITH_FINANCIALS=false  # Skip financials by default (saves API calls)
 WITH_REFERENCE=false   # Skip reference by default (seed has basic info, only need for market_cap)
@@ -81,6 +82,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-silver)
             SKIP_SILVER=true
+            SKIP_SILVER_EXPLICIT=true
             shift
             ;;
         --models)
@@ -187,6 +189,17 @@ fi
 # If --models is specified, we want to build them regardless of profile skip_silver setting
 if [ -n "$MODELS" ]; then
     SKIP_SILVER=false
+fi
+
+# If both ingest and seed are skipped, default to building silver (otherwise script does nothing)
+# User can still explicitly pass --skip-silver to skip everything
+if [ "$SKIP_INGEST" = true ] && [ "$SKIP_SEED" = true ] && [ "$SKIP_SILVER" = true ]; then
+    if [ "$SKIP_SILVER_EXPLICIT" = false ]; then
+        # Profile set skip_silver but user wants silver-only mode (--skip-ingest --skip-seed)
+        echo -e "${YELLOW}Note: Profile has skip_silver=true, but enabling silver build for silver-only mode${NC}"
+        echo -e "${YELLOW}      Use --skip-silver explicitly to skip silver build${NC}"
+        SKIP_SILVER=false
+    fi
 fi
 
 # Print header
