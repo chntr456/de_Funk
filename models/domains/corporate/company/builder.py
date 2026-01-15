@@ -24,11 +24,11 @@ class CompanyBuilder(BaseModelBuilder):
     - dim_company: Company dimension with fundamentals
 
     Dependencies:
-    - None (foundational model)
+    - temporal: For date dimension joins
     """
 
     model_name = "company"
-    depends_on = []  # No dependencies - foundational model
+    depends_on = ["temporal"]  # Requires temporal for date dimension
 
     def get_model_class(self) -> Type:
         """Return the CompanyModel class."""

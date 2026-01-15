@@ -383,21 +383,39 @@ class BuilderRegistry:
         """
         Get models in dependency order (topological sort).
 
+        Automatically expands the models list to include all required dependencies.
+        For example, if stocks depends on temporal and you request ["stocks"],
+        the result will be ["temporal", "stocks"].
+
         Args:
             models: Optional list of models to build (None = all)
 
         Returns:
-            List of model names in build order
+            List of model names in build order (including dependencies)
         """
         if models is None:
             models = list(cls._builders.keys())
+
+        # Expand models to include all dependencies (recursive)
+        expanded = set(models)
+        to_process = list(models)
+        while to_process:
+            model_name = to_process.pop(0)
+            builder_cls = cls._builders.get(model_name)
+            if builder_cls:
+                for dep in builder_cls.depends_on:
+                    if dep not in expanded and dep in cls._builders:
+                        expanded.add(dep)
+                        to_process.append(dep)
+                        logger.debug(f"Auto-adding dependency: {dep} (required by {model_name})")
+
+        models = list(expanded)
 
         # Build dependency graph
         graph = {}
         for model_name in models:
             builder_cls = cls._builders.get(model_name)
             if builder_cls:
-                # Only include dependencies that are in our build set
                 deps = [d for d in builder_cls.depends_on if d in models]
                 graph[model_name] = deps
             else:

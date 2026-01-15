@@ -89,11 +89,10 @@
   },
   "silver_models": {
     "models": [
-      "temporal",
       "company",
       "stocks"
     ],
-    "_models_comment": "Models to build. Order matters (dependencies)."
+    "_models_comment": "Models to build. Dependencies (like temporal) are auto-resolved."
   },
   "cluster": {
     "spark_master": "auto",

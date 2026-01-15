@@ -25,11 +25,11 @@ class StocksBuilder(BaseModelBuilder):
     - fact_stock_prices: Daily OHLCV data
 
     Dependencies:
-    - None: Builds independently from Bronze - linked to company via ticker at query time
+    - temporal: For date dimension joins
     """
 
     model_name = "stocks"
-    depends_on = []  # No build-time dependencies
+    depends_on = ["temporal"]  # Requires temporal for date dimension
 
     def get_model_class(self) -> Type:
         """Return the StocksModel class."""
