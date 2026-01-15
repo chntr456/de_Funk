@@ -84,21 +84,30 @@ class TemporalModel(BaseModel):
             return self._generate_calendar_duckdb(start_date, end_date, fiscal_year_start_month)
 
     def _generate_calendar_spark(self, start_date: str, end_date: str, fiscal_year_start_month: int) -> DataFrame:
-        """Generate calendar using Spark."""
+        """Generate calendar using Spark with driver-side date generation."""
         from pyspark.sql import functions as F
-        from pyspark.sql.types import DateType
+        from pyspark.sql import Row
+        from pyspark.sql.types import StructType, StructField, DateType
+        from datetime import datetime, timedelta
 
         # Get spark session from connection
         spark = getattr(self.connection, 'spark', self.connection)
 
-        # Generate date sequence
-        df = spark.sql(f"""
-            SELECT explode(sequence(
-                to_date('{start_date}'),
-                to_date('{end_date}'),
-                interval 1 day
-            )) as date
-        """)
+        # Generate dates on the driver side (no cluster execution needed)
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = datetime.strptime(end_date, "%Y-%m-%d").date()
+
+        dates = []
+        current = start
+        while current <= end:
+            dates.append(Row(date=current))
+            current += timedelta(days=1)
+
+        logger.info(f"Generated {len(dates):,} dates on driver, creating DataFrame...")
+
+        # Create DataFrame from driver-side data
+        schema = StructType([StructField("date", DateType(), False)])
+        df = spark.createDataFrame(dates, schema)
 
         # Add all calendar attributes
         df = df.select(
@@ -145,8 +154,7 @@ class TemporalModel(BaseModel):
             F.date_format("date", "yyyy-MM-dd").alias("date_str"),
         )
 
-        row_count = df.count()
-        logger.info(f"Generated {row_count:,} calendar rows")
+        logger.info(f"Calendar DataFrame created with all attributes")
         return df
 
     def _generate_calendar_duckdb(self, start_date: str, end_date: str, fiscal_year_start_month: int) -> DataFrame:
