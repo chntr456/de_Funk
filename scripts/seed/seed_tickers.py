@@ -82,67 +82,46 @@ def seed_tickers(storage_path: Path = None, force: bool = False) -> int:
     spark = get_spark("TickerSeed")
     print()
 
-    # Initialize ingestor
-    print("2. Initializing Alpha Vantage ingestor...")
-    from core.context import RepoContext
-    from datapipelines.providers.alpha_vantage.alpha_vantage_ingestor import AlphaVantageIngestor
+    # Initialize provider (new v2.6 pattern)
+    print("2. Initializing Alpha Vantage provider...")
+    from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 
-    ctx = RepoContext.from_repo_root(connection_type="spark")
-
-    # Get Alpha Vantage config
-    alpha_vantage_cfg = ctx.get_api_config("alpha_vantage")
-
-    # Build storage config with correct paths
-    storage_cfg = ctx.storage.copy() if ctx.storage else {}
-    storage_cfg["roots"] = storage_cfg.get("roots", {}).copy()
-    storage_cfg["roots"]["bronze"] = str(storage_path / "bronze")
-    storage_cfg["roots"]["silver"] = str(storage_path / "silver")
-
-    ingestor = AlphaVantageIngestor(alpha_vantage_cfg, storage_cfg, spark)
+    provider = create_alpha_vantage_provider(spark=spark, docs_path=repo_root)
     print()
 
-    # Fetch bulk listing
+    # Fetch bulk listing using provider's seed_tickers method
     print("3. Fetching ALL tickers from LISTING_STATUS (1 API call)...")
     print("-" * 70)
 
-    # Call the bulk listing method - returns (path, tickers, ticker_exchanges, ticker_asset_types)
-    table_path, all_tickers, ticker_exchanges, ticker_asset_types = ingestor.ingest_bulk_listing(
-        table_name="securities_reference",
-        state="active"
-    )
+    # Call the seed_tickers method - returns a DataFrame
+    df = provider.seed_tickers(state="active", filter_us_exchanges=True)
 
-    if table_path is None or len(all_tickers) == 0:
+    if df is None or df.count() == 0:
         print("ERROR: No tickers returned from LISTING_STATUS")
         spark.stop()
         return 0
 
-    # Filter to US exchanges
-    us_exchanges = ["NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"]
-    us_tickers = [t for t in all_tickers if ticker_exchanges.get(t) in us_exchanges]
-
+    ticker_count = df.count()
     print()
-    print(f"   Total tickers from LISTING_STATUS: {len(all_tickers):,}")
-    print(f"   US exchange tickers: {len(us_tickers):,}")
-    print(f"   Foreign exchange tickers (excluded): {len(all_tickers) - len(us_tickers):,}")
+    print(f"   Fetched {ticker_count:,} US exchange tickers")
     print()
 
-    # Verify Bronze data (ingest_bulk_listing already wrote it)
-    print("4. Verifying Bronze data...")
+    # Write to Bronze layer
+    print("4. Writing to Bronze layer...")
+    bronze_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Verify
-    verify_df = spark.read.format("delta").load(str(bronze_path))
-    ticker_count = verify_df.count()
+    df.write.format("delta").mode("overwrite").partitionBy("asset_type").save(str(bronze_path))
 
-    print(f"   ✓ Written {ticker_count:,} US tickers to {bronze_path}")
+    print(f"   ✓ Written {ticker_count:,} tickers to {bronze_path}")
     print()
 
     # Show sample
     print("5. Sample tickers:")
-    verify_df.select("ticker", "security_name", "exchange_code", "asset_type").show(10, truncate=False)
+    df.select("ticker", "security_name", "exchange_code", "asset_type").show(10, truncate=False)
 
     # Show exchange breakdown
     print("6. Exchange breakdown:")
-    verify_df.groupBy("exchange_code").count().orderBy("count", ascending=False).show()
+    df.groupBy("exchange_code").count().orderBy("count", ascending=False).show()
 
     print("=" * 70)
     print("Ticker seed complete!")
@@ -151,7 +130,7 @@ def seed_tickers(storage_path: Path = None, force: bool = False) -> int:
     print(f"Total US tickers available: {ticker_count:,}")
     print()
     print("You can now run the full pipeline:")
-    print("  ./scripts/cluster/run_production.sh")
+    print("  ./scripts/test/test_pipeline.sh --profile dev")
     print()
 
     spark.stop()
