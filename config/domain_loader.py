@@ -315,7 +315,10 @@ class ModelConfigLoader:
         Resolve an extends reference that may point to a specific section.
 
         Args:
-            extends_ref: Reference like '_schema/crime.canonical_schema' or '_base/securities._dim_security'
+            extends_ref: Reference like '_base.securities._dim_security_base'
+
+        Format: {base_path}.{item_name}
+            - _base.securities._dim_security_base → file: _base/securities/securities.md, item: _dim_security_base
 
         Returns:
             Resolved configuration section
@@ -326,23 +329,88 @@ class ModelConfigLoader:
             # Just a file reference
             return self._load_extends(parts[0])
 
-        # First part is file/path, rest is navigation path
-        file_ref = parts[0]
-        nav_path = parts[1:]
+        # Try to find the file by progressively combining parts as path
+        # _base.securities._dim_security_base → try _base/securities first
+        base_config = None
+        nav_start_idx = 1
 
-        # Load the base file
-        base_config = self._load_extends(file_ref)
+        for i in range(len(parts) - 1, 0, -1):
+            # Try path: parts[0:i] joined with /
+            path_parts = parts[:i]
+            path_str = '/'.join(path_parts)
+
+            # Try as directory with main file (e.g., _base/securities/securities.md)
+            dir_path = self.domains_dir / path_str
+            if dir_path.is_dir():
+                # Look for main file in directory (named same as last path component)
+                main_file = dir_path / f"{path_parts[-1]}.md"
+                if main_file.exists():
+                    base_config = self._parse_front_matter(main_file)
+                    nav_start_idx = i
+                    break
+
+            # Try as file path (e.g., _base/securities.md)
+            file_path = self.domains_dir / f"{path_str}.md"
+            if file_path.exists():
+                base_config = self._parse_front_matter(file_path)
+                nav_start_idx = i
+                break
+
+        if base_config is None:
+            # Fallback: first part is file, rest is navigation
+            base_config = self._load_extends(parts[0])
+            nav_start_idx = 1
+
+        if not base_config:
+            logger.warning(f"Could not resolve extends: {extends_ref}")
+            return {}
+
+        nav_path = parts[nav_start_idx:]
+
+        if not nav_path:
+            return base_config
 
         # Navigate to the specific section
+        # For graph nodes, the path might be just the node name - search common locations
         current = base_config
+
+        # First try direct navigation
+        found = True
         for nav in nav_path:
             if isinstance(current, dict) and nav in current:
                 current = current[nav]
             else:
-                logger.warning(f"Could not navigate to {nav} in {extends_ref}")
-                return {}
+                found = False
+                break
 
-        return current if isinstance(current, dict) else {}
+        if found:
+            return current if isinstance(current, dict) else {}
+
+        # If direct navigation failed, try common locations for the last part
+        item_name = nav_path[-1]
+        search_paths = [
+            ['graph', 'nodes', item_name],
+            ['schema', 'dimensions', item_name],
+            ['schema', 'facts', item_name],
+            ['measures', 'simple', item_name],
+            ['measures', 'computed', item_name],
+            ['graph', 'edges', item_name],
+        ]
+
+        for search_path in search_paths:
+            current = base_config
+            found = True
+            for key in search_path:
+                if isinstance(current, dict) and key in current:
+                    current = current[key]
+                else:
+                    found = False
+                    break
+            if found and isinstance(current, dict):
+                return current
+
+        logger.warning(f"Could not navigate to {nav_path} in {extends_ref}")
+        return {}
 
     def _deep_merge(self, base: Dict, override: Dict) -> Dict:
         """
