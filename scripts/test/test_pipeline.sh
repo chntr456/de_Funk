@@ -553,14 +553,21 @@ for provider_name in bulk_providers:
 
         # Get work items (endpoints) - check profile-specific first, then global
         # Profile can have {provider}_endpoints (e.g., chicago_endpoints, cook_county_endpoints)
+        # Items starting with '#' are treated as disabled/commented out
         profile_endpoints_key = f'{provider_name}_endpoints'
         profile_endpoints = profile_cfg.get(profile_endpoints_key)
 
         if profile_endpoints is not None:
-            # Profile specifies endpoints for this provider (can be [] to skip, or list)
-            if profile_endpoints:
-                work_items = profile_endpoints
-                logger.info(f'Work items from profile ({profile_endpoints_key}): {len(work_items)} endpoints')
+            # Filter out disabled endpoints (those starting with '#')
+            enabled_endpoints = [ep for ep in profile_endpoints if not ep.startswith('#')]
+            disabled_count = len(profile_endpoints) - len(enabled_endpoints)
+
+            if enabled_endpoints:
+                work_items = enabled_endpoints
+                if disabled_count > 0:
+                    logger.info(f'Work items from profile ({profile_endpoints_key}): {len(work_items)} endpoints ({disabled_count} disabled)')
+                else:
+                    logger.info(f'Work items from profile ({profile_endpoints_key}): {len(work_items)} endpoints')
             else:
                 # Empty list means skip this provider's endpoints
                 logger.info(f'Profile {profile_endpoints_key} is empty - skipping {provider_name}')
