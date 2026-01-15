@@ -642,8 +642,9 @@ print(' '.join(models))
     fi
 
     # Build arguments for build_models.py
-    BUILD_ARGS=""
-    [ -n "$STORAGE_PATH" ] && BUILD_ARGS="$BUILD_ARGS --storage-root $STORAGE_PATH"
+    # Always pass storage-root (default to /shared/storage for cluster mode)
+    BUILD_STORAGE="${STORAGE_PATH:-/shared/storage}"
+    BUILD_ARGS="--storage-root $BUILD_STORAGE"
     [ -n "$MODELS" ] && BUILD_ARGS="$BUILD_ARGS --models $MODELS"
 
     echo -e "Building models: ${GREEN}${MODELS:-all discovered}${NC}"
