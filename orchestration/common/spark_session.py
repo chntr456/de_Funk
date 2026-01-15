@@ -79,6 +79,8 @@ def get_spark(
     # Standard configs not in SparkConfig
     builder = (builder
         .config("spark.sql.caseSensitive", "true")
+        # Disable ANSI mode so to_date/to_timestamp return null on parse failure instead of throwing
+        .config("spark.sql.ansi.enabled", "false")
         .config("spark.driver.maxResultSize", "2g")
         .config("spark.python.worker.faulthandler.enabled", "true")
         .config("spark.sql.execution.pyspark.udf.faulthandler.enabled", "true")

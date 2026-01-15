@@ -414,12 +414,13 @@ class SocrataBaseProvider(BaseProvider):
             )
         )
 
-        # Try multiple date formats using coalesce with try_to_date
+        # Try multiple date formats using coalesce
+        # to_date returns null on parse failure (when spark.sql.ansi.enabled=false, which is default)
         # Order: ISO format, month name with 2-digit day, month name with 1-digit day
         return F.coalesce(
-            F.try_to_date(normalized, "yyyy-MM-dd"),
-            F.try_to_date(trimmed, "MMMM dd yyyy"),
-            F.try_to_date(trimmed, "MMMM d yyyy")
+            F.to_date(normalized, "yyyy-MM-dd"),
+            F.to_date(trimmed, "MMMM dd yyyy"),
+            F.to_date(trimmed, "MMMM d yyyy")
         )
 
     def _safe_parse_timestamp(self, col_val):
@@ -469,12 +470,13 @@ class SocrataBaseProvider(BaseProvider):
             )
         )
 
-        # Try multiple timestamp formats using coalesce with try_to_timestamp
+        # Try multiple timestamp formats using coalesce
+        # to_timestamp returns null on parse failure (when spark.sql.ansi.enabled=false, which is default)
         # Order: ISO format, month name with 2-digit day, month name with 1-digit day
         return F.coalesce(
-            F.try_to_timestamp(normalized, "yyyy-MM-dd HH:mm:ss"),
-            F.try_to_timestamp(trimmed, "MMMM dd yyyy"),
-            F.try_to_timestamp(trimmed, "MMMM d yyyy")
+            F.to_timestamp(normalized, "yyyy-MM-dd HH:mm:ss"),
+            F.to_timestamp(trimmed, "MMMM dd yyyy"),
+            F.to_timestamp(trimmed, "MMMM d yyyy")
         )
 
     def _create_dataframe(
