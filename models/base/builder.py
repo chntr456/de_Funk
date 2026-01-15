@@ -115,65 +115,27 @@ class BaseModelBuilder(ABC):
         Load and return model configuration.
 
         Returns:
-            Model configuration dict from YAML files
+            Model configuration dict from markdown front matter
 
         Note:
-            Loads YAML configs from models/domains/ structure (co-located with code).
-            Searches recursively for model directory matching model_name.
-            Falls back to configs/models/ for legacy configs.
+            Loads from domains/ directory using domain_loader.
+            Markdown files have YAML front matter with full model config.
         """
         if self._model_config is None:
-            from config.model_loader import ModelConfigLoader
+            from config.domain_loader import ModelConfigLoader
 
-            # Try models/domains/ first (new structure - co-located with code)
-            # Search recursively for directory named {model_name} containing model.yaml or graph.yaml
-            domains_dir = self.repo_root / "models" / "domains"
+            # Load from domains/ (markdown with YAML front matter)
+            domains_dir = self.repo_root / "domains"
             if domains_dir.exists():
-                model_config_dir = self._find_model_config_dir(domains_dir, self.model_name)
-                if model_config_dir:
-                    # Load using parent dir so ModelConfigLoader can find {model_name}/
-                    loader = ModelConfigLoader(model_config_dir.parent)
-                    try:
-                        self._model_config = loader.load_model_config(self.model_name)
-                        if self._model_config:
-                            return self._model_config
-                    except Exception as e:
-                        logger.debug(f"Failed to load from domains: {e}")
-
-            # Fall back to configs/models/ (legacy structure - DEPRECATED)
-            configs_dir = self.repo_root / "configs" / "models"
-            if configs_dir.exists():
-                logger.warning(
-                    f"⚠️ DEPRECATED: Loading '{self.model_name}' config from configs/models/. "
-                    f"Move to models/domains/{{category}}/{self.model_name}/"
-                )
-                loader = ModelConfigLoader(configs_dir)
+                loader = ModelConfigLoader(domains_dir)
                 self._model_config = loader.load_model_config(self.model_name)
             else:
                 raise FileNotFoundError(
-                    f"Model config not found for '{self.model_name}'. "
-                    f"Expected at models/domains/{{category}}/{self.model_name}/"
+                    f"Domains directory not found: {domains_dir}. "
+                    f"Expected markdown config at domains/{{category}}/{self.model_name}.md"
                 )
 
         return self._model_config
-
-    def _find_model_config_dir(self, base_dir: Path, model_name: str) -> Optional[Path]:
-        """
-        Recursively find model config directory by name.
-
-        Args:
-            base_dir: Directory to search in
-            model_name: Name of model to find
-
-        Returns:
-            Path to model directory if found, None otherwise
-        """
-        for path in base_dir.rglob(model_name):
-            if path.is_dir():
-                # Check if it has config files (model.yaml, graph.yaml, or schema.yaml)
-                if (path / "model.yaml").exists() or (path / "graph.yaml").exists() or (path / "schema.yaml").exists():
-                    return path
-        return None
 
     def create_model_instance(self) -> Any:
         """
