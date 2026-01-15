@@ -141,28 +141,28 @@ graph:
       tags: [dim, entity, corporate]
 
     fact_income_statement:
-      from: bronze.income_statements
+      from: bronze.company_income_statements
       derive:
         company_id: "CONCAT('COMPANY_', ticker)"
         report_date: "fiscal_date_ending"
       unique_key: [ticker, fiscal_date_ending, report_type]
 
     fact_balance_sheet:
-      from: bronze.balance_sheets
+      from: bronze.company_balance_sheets
       derive:
         company_id: "CONCAT('COMPANY_', ticker)"
         report_date: "fiscal_date_ending"
       unique_key: [ticker, fiscal_date_ending, report_type]
 
     fact_cash_flow:
-      from: bronze.cash_flows
+      from: bronze.company_cash_flows
       derive:
         company_id: "CONCAT('COMPANY_', ticker)"
         report_date: "fiscal_date_ending"
       unique_key: [ticker, fiscal_date_ending, report_type]
 
     fact_earnings:
-      from: bronze.earnings
+      from: bronze.company_earnings
       derive:
         company_id: "CONCAT('COMPANY_', ticker)"
         report_date: "fiscal_date_ending"

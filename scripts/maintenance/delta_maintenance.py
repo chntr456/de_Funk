@@ -179,10 +179,10 @@ def get_table_stats(spark, path: str) -> dict:
 ZORDER_COLUMNS = {
     "securities_reference": ["ticker"],
     "securities_prices_daily": ["ticker", "trade_date"],
-    "income_statements": ["ticker", "fiscal_date_ending"],
-    "balance_sheets": ["ticker", "fiscal_date_ending"],
-    "cash_flows": ["ticker", "fiscal_date_ending"],
-    "earnings": ["ticker", "fiscal_date_ending"],
+    "company_income_statements": ["ticker", "fiscal_date_ending"],
+    "company_balance_sheets": ["ticker", "fiscal_date_ending"],
+    "company_cash_flows": ["ticker", "fiscal_date_ending"],
+    "company_earnings": ["ticker", "fiscal_date_ending"],
 }
 
 

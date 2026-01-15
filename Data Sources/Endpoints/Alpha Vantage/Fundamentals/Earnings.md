@@ -31,7 +31,7 @@ last_reviewed:
 notes: "EPS actuals vs estimates with surprise percentage"
 
 # Storage Configuration
-bronze: earnings
+bronze: company_earnings
 partitions: [report_type]
 write_strategy: upsert
 key_columns: [ticker, fiscal_date_ending, report_type]

@@ -31,7 +31,7 @@ last_reviewed:
 notes: "Returns both annualReports and quarterlyReports arrays"
 
 # Storage Configuration
-bronze: cash_flows
+bronze: company_cash_flows
 partitions: [report_type]
 write_strategy: upsert
 key_columns: [ticker, fiscal_date_ending, report_type]

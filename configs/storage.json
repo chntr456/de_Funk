@@ -29,16 +29,16 @@
   },
   "tables": {
     "calendar_seed":   { "root": "bronze", "rel": "calendar_seed", "partitions": [] },
-    "ticker_seed":     { "root": "bronze", "rel": "ticker_seed", "partitions": ["asset_type"], "write_strategy": "overwrite", "comment": "Seeded tickers from LISTING_STATUS API" },
+    "ticker_seed":     { "root": "bronze", "rel": "ticker_seed", "partitions": [], "write_strategy": "overwrite", "comment": "Seeded tickers from LISTING_STATUS API - no partitions, full overwrite" },
 
     "securities_reference": { "root": "bronze", "rel": "securities_reference", "partitions": ["asset_type"], "write_strategy": "upsert", "key_columns": ["ticker"], "comment": "v2.0 unified reference data - basic ticker info from LISTING_STATUS" },
     "company_reference": { "root": "bronze", "rel": "company_reference", "partitions": [], "write_strategy": "upsert", "key_columns": ["cik"], "comment": "v2.0 company data from OVERVIEW - CIK, sector, industry, market_cap (separate from securities to avoid overwrite issues)" },
     "securities_prices_daily": { "root": "bronze", "rel": "securities_prices_daily", "partitions": [], "write_strategy": "append", "key_columns": ["ticker", "trade_date"], "date_column": "trade_date", "comment": "v2.0 unified daily OHLCV - append strategy for immutable time-series (prevents O(N²) memory growth)" },
 
-    "income_statements": { "root": "bronze", "rel": "income_statements", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage INCOME_STATEMENT" },
-    "balance_sheets": { "root": "bronze", "rel": "balance_sheets", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage BALANCE_SHEET" },
-    "cash_flows": { "root": "bronze", "rel": "cash_flows", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage CASH_FLOW" },
-    "earnings": { "root": "bronze", "rel": "earnings", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage EARNINGS" },
+    "company_income_statements": { "root": "bronze", "rel": "company_income_statements", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage INCOME_STATEMENT" },
+    "company_balance_sheets": { "root": "bronze", "rel": "company_balance_sheets", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage BALANCE_SHEET" },
+    "company_cash_flows": { "root": "bronze", "rel": "company_cash_flows", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage CASH_FLOW" },
+    "company_earnings": { "root": "bronze", "rel": "company_earnings", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "date_column": "fiscal_date_ending", "comment": "Alpha Vantage EARNINGS" },
     "historical_options": { "root": "bronze", "rel": "historical_options", "partitions": ["underlying_ticker", "expiration_date"], "comment": "Alpha Vantage HISTORICAL_OPTIONS" },
 
     "ref_all_tickers": { "root": "bronze", "rel": "ref_all_tickers", "partitions": [], "comment": "v1.x legacy - use securities_reference" },

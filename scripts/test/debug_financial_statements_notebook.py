@@ -73,10 +73,10 @@ def check_bronze_layer(conn: duckdb.DuckDBPyConnection, storage_root: Path):
     bronze_root = storage_root / "bronze"
     tables = [
         ("securities_reference", "Ticker reference data", False),
-        ("income_statements", "Income statement data", False),
-        ("balance_sheets", "Balance sheet data", False),
-        ("cash_flows", "Cash flow data", False),
-        ("earnings", "Earnings data", False),
+        ("company_income_statements", "Income statement data", False),
+        ("company_balance_sheets", "Balance sheet data", False),
+        ("company_cash_flows", "Cash flow data", False),
+        ("company_earnings", "Earnings data", False),
         ("securities_prices_daily", "Stock prices (large table)", True),  # Count only
     ]
 
