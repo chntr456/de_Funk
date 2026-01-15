@@ -367,6 +367,27 @@ class ConfigLoader:
         logger.debug(f"Resolved storage roots: {resolved.get('roots', {})}")
         return resolved
 
+    def load_storage(self) -> Dict[str, Any]:
+        """
+        Load only storage configuration (no API/provider configs).
+
+        Use this for silver-only builds or any operation that doesn't need
+        ingestion configuration. Much faster than load() since it skips
+        parsing provider markdown files.
+
+        Returns:
+            Storage configuration dict with resolved paths
+
+        Raises:
+            ValueError: If storage.json missing or storage_path not configured
+        """
+        try:
+            storage_json = self._load_json_config("storage.json")
+        except ValueError as e:
+            raise ValueError(f"Failed to load storage configuration: {e}")
+
+        return self._resolve_storage_paths(storage_json)
+
     def _inject_api_keys(self, provider: str, endpoint_json: Dict[str, Any]) -> Dict[str, Any]:
         """
         Inject API keys into raw endpoint config.
@@ -430,15 +451,15 @@ class ConfigLoader:
         self,
         connection_type: Optional[str] = None,
         load_env: bool = True,
-        skip_apis: bool = False,
     ) -> AppConfig:
         """
-        Load complete application configuration.
+        Load complete application configuration including API configs.
+
+        For silver-only builds that don't need API configs, use load_storage() instead.
 
         Args:
             connection_type: Optional explicit connection type ('spark' or 'duckdb')
             load_env: Whether to load .env file. Default True.
-            skip_apis: If True, skip loading API/provider configs (faster for silver-only builds).
 
         Returns:
             Complete AppConfig instance
@@ -465,41 +486,39 @@ class ConfigLoader:
 
         # Load API configs: Markdown first (preferred), JSON fallback (legacy)
         # Priority: Markdown > JSON
-        # Skip for silver-only builds (no ingestion needed)
         apis = {}
 
-        if not skip_apis:
-            # 1. Try loading from markdown (Data Sources/)
-            markdown_apis = self._load_api_configs_from_markdown()
-            apis.update(markdown_apis)
+        # 1. Try loading from markdown (Data Sources/)
+        markdown_apis = self._load_api_configs_from_markdown()
+        apis.update(markdown_apis)
 
-            if markdown_apis:
-                logger.info(f"Loaded {len(markdown_apis)} provider(s) from markdown: {list(markdown_apis.keys())}")
+        if markdown_apis:
+            logger.info(f"Loaded {len(markdown_apis)} provider(s) from markdown: {list(markdown_apis.keys())}")
 
-            # 2. Fallback to JSON for providers not in markdown
-            pipelines_dir = self._repo_root / "configs" / "pipelines"
+        # 2. Fallback to JSON for providers not in markdown
+        pipelines_dir = self._repo_root / "configs" / "pipelines"
 
-            if pipelines_dir.exists():
-                for endpoint_file in pipelines_dir.glob("*_endpoints.json"):
-                    provider_name = endpoint_file.stem.replace("_endpoints", "")
+        if pipelines_dir.exists():
+            for endpoint_file in pipelines_dir.glob("*_endpoints.json"):
+                provider_name = endpoint_file.stem.replace("_endpoints", "")
 
-                    # Skip if already loaded from markdown
-                    if provider_name in apis:
-                        logger.debug(f"Provider '{provider_name}' loaded from markdown, skipping JSON")
-                        continue
+                # Skip if already loaded from markdown
+                if provider_name in apis:
+                    logger.debug(f"Provider '{provider_name}' loaded from markdown, skipping JSON")
+                    continue
 
-                    try:
-                        endpoint_json = self._load_json_config(f"pipelines/{endpoint_file.name}")
-                        # Just inject API keys, don't transform structure
-                        apis[provider_name] = self._inject_api_keys(provider_name, endpoint_json)
+                try:
+                    endpoint_json = self._load_json_config(f"pipelines/{endpoint_file.name}")
+                    # Just inject API keys, don't transform structure
+                    apis[provider_name] = self._inject_api_keys(provider_name, endpoint_json)
 
-                        # Warn about JSON fallback - encourage migration to markdown
-                        logger.warning(
-                            f"⚠️ FALLBACK: Using JSON config for '{provider_name}'. "
-                            f"Migrate to: Data Sources/Providers/{provider_name.replace('_', ' ').title()}.md"
-                        )
-                    except ValueError as e:
-                        logger.warning(f"Could not load {provider_name} API config: {e}")
+                    # Warn about JSON fallback - encourage migration to markdown
+                    logger.warning(
+                        f"⚠️ FALLBACK: Using JSON config for '{provider_name}'. "
+                        f"Migrate to: Data Sources/Providers/{provider_name.replace('_', ' ').title()}.md"
+                    )
+                except ValueError as e:
+                    logger.warning(f"Could not load {provider_name} API config: {e}")
 
         # Get log level
         log_level = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()

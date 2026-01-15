@@ -87,12 +87,10 @@ def load_storage_config(repo_root: Path, storage_root: Optional[Path] = None) ->
     """
     from config import ConfigLoader
 
-    # Load config from ConfigLoader (reads run_config.json storage_path)
-    # ConfigLoader will raise ValueError if storage_path not configured
-    # skip_apis=True because silver build doesn't need provider/API configs
+    # Load only storage config (silver build doesn't need API/provider configs)
+    # This is faster and cleaner than loading the full config
     loader = ConfigLoader(repo_root=repo_root)
-    config = loader.load(skip_apis=True)
-    storage_cfg = config.storage  # Already resolved from run_config.json
+    storage_cfg = loader.load_storage()  # Just storage paths, no API configs
 
     # CLI override for testing only
     if storage_root:
