@@ -178,7 +178,15 @@
     "dev_fill": {
       "providers": ["cook_county", "chicago"],
       "chicago_endpoints": ["traffic_congestion_segments"],
-      "cook_county_endpoints": null,
+      "cook_county_endpoints": [
+        "assessor_appeals",
+        "bor_appeal_decisions",
+        "permits",
+        "parcel_addresses",
+        "parcel_proximity",
+        "neighborhood_boundaries",
+        "tax_exempt_parcels"
+      ],
       "max_records_per_endpoint": null,
       "preserve_raw": true,
       "load_from_raw": true,
@@ -186,7 +194,7 @@
       "skip_silver": true,
       "write_batch_size": 1000000,
       "log_level": "DEBUG",
-      "_comment": "Fill missing data: Cook County (all endpoints) + Chicago traffic_congestion. Loads from raw CSVs if available."
+      "_comment": "Fill missing data: remaining Cook County endpoints + Chicago traffic_congestion."
     },
     "dev_reload_raw": {
       "providers": ["cook_county", "chicago"],
