@@ -137,8 +137,9 @@ class SocrataBaseProvider(BaseProvider):
             logger.warning(f"Could not extract resource_id for: {endpoint_id}")
             return
 
-        # Use CSV with raw layer if configured
-        if endpoint.download_method == 'csv':
+        # Use CSV only for full downloads (no max_records limit)
+        # When max_records is set, use JSON API for efficiency
+        if endpoint.download_method == 'csv' and max_records is None:
             raw_path = self._get_raw_path(endpoint_id, resource_id)
 
             if raw_path:
