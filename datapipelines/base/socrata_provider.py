@@ -403,14 +403,43 @@ class SocrataBaseProvider(BaseProvider):
         logger.info(f"Spark CSV read {work_item}: {len(csv_columns)} columns: {csv_columns[:20]}{'...' if len(csv_columns) > 20 else ''}")
 
         # For large files, repartition to distribute across cluster workers
-        # This prevents single-node bottlenecks on cluster deployments
+        # Repartition by Delta partition columns to avoid small files problem
         try:
             file_size_mb = Path(csv_path).stat().st_size / (1024 * 1024)
             if file_size_mb > 100:  # Files > 100MB get repartitioned
-                # Aim for ~100MB per partition for efficient cluster distribution
-                num_partitions = max(int(file_size_mb / 100), df.rdd.getNumPartitions())
-                if num_partitions > df.rdd.getNumPartitions():
-                    logger.info(f"Repartitioning {work_item} from {df.rdd.getNumPartitions()} to {num_partitions} partitions for cluster distribution")
+                # Get Delta partition columns from endpoint config
+                delta_partitions = []
+                if endpoint and endpoint.bronze and endpoint.bronze.partitions:
+                    delta_partitions = endpoint.bronze.partitions
+
+                if delta_partitions:
+                    # Check which partition columns exist in the DataFrame
+                    # Note: 'year' might come from 'tax_year' alias, so check after aliasing
+                    available_partition_cols = [p for p in delta_partitions if p in df.columns or
+                                                (p == 'year' and 'tax_year' in df.columns)]
+                    if available_partition_cols:
+                        # Repartition by Delta partition columns - this:
+                        # 1. Distributes work across cluster (parallelism)
+                        # 2. Groups data by partition value (fewer files in Delta)
+                        logger.info(f"Repartitioning {work_item} by {available_partition_cols} for Delta optimization")
+                        # Use the actual column names (tax_year if year not yet aliased)
+                        repart_cols = []
+                        for col in available_partition_cols:
+                            if col in df.columns:
+                                repart_cols.append(col)
+                            elif col == 'year' and 'tax_year' in df.columns:
+                                repart_cols.append('tax_year')
+                        if repart_cols:
+                            df = df.repartition(*[F.col(c) for c in repart_cols])
+                    else:
+                        # No partition columns available yet, use count-based repartitioning
+                        num_partitions = max(int(file_size_mb / 100), 4)
+                        logger.info(f"Repartitioning {work_item} to {num_partitions} partitions")
+                        df = df.repartition(num_partitions)
+                else:
+                    # No Delta partitions configured, use count-based repartitioning
+                    num_partitions = max(int(file_size_mb / 100), 4)
+                    logger.info(f"Repartitioning {work_item} to {num_partitions} partitions")
                     df = df.repartition(num_partitions)
         except Exception as e:
             logger.debug(f"Could not check file size for repartitioning: {e}")
