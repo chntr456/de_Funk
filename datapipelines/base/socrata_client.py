@@ -435,7 +435,9 @@ class SocrataClient:
 
                         # Yield batch when full
                         if len(batch) >= batch_size:
-                            logger.info(f"CSV {log_name}: yielding batch of {len(batch):,} (total: {total_fetched:,})")
+                            # Only log every 500k records to reduce noise
+                            if total_fetched % 500000 < batch_size:
+                                logger.info(f"CSV {log_name}: {total_fetched:,} records processed")
                             yield batch
                             batch = []
 
@@ -703,13 +705,14 @@ class SocrataClient:
 
                 # Yield batch when full
                 if len(batch) >= batch_size:
-                    logger.info(f"CSV {log_name}: yielding batch of {len(batch):,} (total: {total_fetched:,})")
+                    # Only log every 500k records to reduce noise
+                    if total_fetched % 500000 < batch_size:
+                        logger.info(f"CSV {log_name}: {total_fetched:,} records processed")
                     yield batch
                     batch = []
 
             # Yield remaining records
             if batch:
-                logger.info(f"CSV {log_name}: yielding final batch of {len(batch):,}")
                 yield batch
 
-            logger.info(f"Finished CSV {log_name}: {total_fetched:,} total records")
+            logger.info(f"CSV {log_name}: completed - {total_fetched:,} total records")

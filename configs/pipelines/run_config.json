@@ -181,12 +181,12 @@
       "cook_county_endpoints": null,
       "max_records_per_endpoint": null,
       "preserve_raw": true,
-      "load_from_raw": false,
+      "load_from_raw": true,
       "dry_run": false,
       "skip_silver": true,
       "write_batch_size": 500000,
       "log_level": "DEBUG",
-      "_comment": "Fill missing data: Cook County (all endpoints) + Chicago traffic_congestion. preserve_raw=true keeps CSVs for resume on failure."
+      "_comment": "Fill missing data: Cook County (all endpoints) + Chicago traffic_congestion. Loads from raw CSVs if available."
     },
     "dev_reload_raw": {
       "providers": ["cook_county", "chicago"],
