@@ -394,19 +394,57 @@ class SocrataBaseProvider(BaseProvider):
             escape='"'
         )
 
-        logger.info(f"Spark CSV read {work_item}: {df.count():,} rows, {len(df.columns)} columns")
+        # Log actual CSV columns for debugging
+        csv_columns = df.columns
+        logger.info(f"Spark CSV read {work_item}: {len(csv_columns)} columns: {csv_columns[:20]}{'...' if len(csv_columns) > 20 else ''}")
 
         if not endpoint or not endpoint.schema:
             return df
 
-        # Rename columns from source names to target names
+        # Build column alias map for common variations (Socrata column names → schema names)
+        # This handles cases where CSV has different column names than schema expects
+        column_aliases = {
+            'tax_year': 'year',        # Cook County uses tax_year
+            'taxyr': 'year',           # Alternative
+            'taxyear': 'year',         # Alternative
+            'sale_year': 'year',       # For sales data
+        }
+
+        # Apply column aliases if the target column is in schema but source is not in CSV
+        schema_cols = {f.name for f in endpoint.schema}
+        for alias_source, alias_target in column_aliases.items():
+            if alias_target in schema_cols and alias_target not in df.columns and alias_source in df.columns:
+                logger.info(f"Column alias: '{alias_source}' → '{alias_target}'")
+                df = df.withColumnRenamed(alias_source, alias_target)
+
+        # Rename columns from source names to target names (as defined in schema)
         for field_def in endpoint.schema:
             if field_def.source in df.columns and field_def.source != field_def.name:
                 df = df.withColumnRenamed(field_def.source, field_def.name)
 
+        # If 'year' is needed for partitioning but not in DataFrame, derive from date column
+        partitions = endpoint.partitions or []
+        date_col = endpoint.date_column
+        if 'year' in partitions and 'year' not in df.columns:
+            # Try to derive year from date column
+            if date_col and date_col in df.columns:
+                logger.info(f"Deriving 'year' partition from date column '{date_col}'")
+                df = df.withColumn('year', F.year(self._safe_parse_date(F.col(date_col))))
+            # Or check for any date/timestamp columns we can extract year from
+            elif not date_col:
+                for col_name in df.columns:
+                    if 'date' in col_name.lower() or col_name.lower() in ('time', 'timestamp'):
+                        logger.info(f"Deriving 'year' partition from column '{col_name}'")
+                        df = df.withColumn('year', F.year(self._safe_parse_date(F.col(col_name))))
+                        break
+
         # Select only schema columns (drop extra columns from CSV)
-        schema_cols = [f.name for f in endpoint.schema]
-        available_cols = [c for c in schema_cols if c in df.columns]
+        schema_cols_list = [f.name for f in endpoint.schema]
+        # Also include derived partition columns that may not be in schema
+        for p in partitions:
+            if p not in schema_cols_list and p in df.columns:
+                schema_cols_list.append(p)
+        available_cols = [c for c in schema_cols_list if c in df.columns]
         df = df.select(available_cols)
 
         # Cast columns to target types
@@ -639,12 +677,29 @@ class SocrataBaseProvider(BaseProvider):
         if not endpoint.schema:
             return self.spark.createDataFrame(records, samplingRatio=1.0)
 
+        # Build column alias map for common variations (Socrata → schema)
+        column_aliases = {
+            'tax_year': 'year',
+            'taxyr': 'year',
+            'taxyear': 'year',
+            'sale_year': 'year',
+        }
+
         # Map source fields to target fields (keep as strings initially)
         transformed_records = []
+        schema_fields = {f.name for f in endpoint.schema}
+
         for record in records:
             transformed = {}
             for field_def in endpoint.schema:
+                # Try primary source first
                 source_val = record.get(field_def.source)
+                # If not found and this is a field with known aliases, try aliases
+                if source_val is None and field_def.name in column_aliases.values():
+                    for alias_source, alias_target in column_aliases.items():
+                        if alias_target == field_def.name and alias_source in record:
+                            source_val = record.get(alias_source)
+                            break
                 transformed[field_def.name] = str(source_val) if source_val is not None else None
             transformed_records.append(transformed)
 
@@ -661,9 +716,9 @@ class SocrataBaseProvider(BaseProvider):
                 continue
             elif target_type in ('int', 'long'):
                 df = df.withColumn(field_def.name,
-                    F.col(field_def.name).try_cast('double').cast(target_type))
+                    F.col(field_def.name).cast('double').cast(target_type))
             elif target_type in ('double', 'float'):
-                df = df.withColumn(field_def.name, F.col(field_def.name).try_cast('double'))
+                df = df.withColumn(field_def.name, F.col(field_def.name).cast('double'))
             elif target_type == 'date':
                 df = df.withColumn(field_def.name,
                     self._safe_parse_date(F.col(field_def.name)))
@@ -672,5 +727,20 @@ class SocrataBaseProvider(BaseProvider):
                     self._safe_parse_timestamp(F.col(field_def.name)))
             elif target_type == 'boolean':
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
+
+        # If 'year' is needed for partitioning but is null/missing, derive from date column
+        partitions = endpoint.partitions or []
+        date_col = endpoint.date_column
+        if 'year' in partitions and 'year' in df.columns:
+            # Check if year column is mostly null (meaning alias didn't work)
+            # In that case, derive from date column
+            if date_col and date_col in df.columns:
+                # Add year derivation as fallback when year is null
+                df = df.withColumn('year',
+                    F.coalesce(
+                        F.col('year').cast('int'),
+                        F.year(self._safe_parse_date(F.col(date_col)))
+                    )
+                )
 
         return df
