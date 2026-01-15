@@ -15,6 +15,7 @@
 #   --force-seed         Force re-seed even if ticker data exists
 #   --skip-ingest        Skip Bronze ingestion
 #   --skip-silver        Skip Silver model building
+#   --models MODELS      Specify models to build (space-separated, e.g., "temporal stocks")
 #   --with-financials    Include company financials (income, balance, cash flow, earnings)
 #   --with-reference     Include reference data (COMPANY_OVERVIEW - for market_cap updates)
 #   --storage-path PATH  Override storage path (default: from run_config.json)
@@ -24,6 +25,8 @@
 # Examples:
 #   ./scripts/test/test_pipeline.sh --profile dev               # Full test (Bronze + Silver)
 #   ./scripts/test/test_pipeline.sh --profile dev --skip-silver # Bronze only
+#   ./scripts/test/test_pipeline.sh --profile dev --skip-ingest --skip-seed  # Silver only (skip Bronze)
+#   ./scripts/test/test_pipeline.sh --profile dev --skip-ingest --skip-seed --models temporal stocks  # Specific models only
 #   ./scripts/test/test_pipeline.sh --with-financials           # Include financial statements
 #   ./scripts/test/test_pipeline.sh --profile production --skip-seed
 #
@@ -46,6 +49,7 @@ SKIP_SEED=false
 FORCE_SEED=false
 SKIP_INGEST=false
 SKIP_SILVER=false     # Test everything by default
+MODELS=""             # Empty = build all discovered models
 WITH_FINANCIALS=false  # Skip financials by default (saves API calls)
 WITH_REFERENCE=false   # Skip reference by default (seed has basic info, only need for market_cap)
 STORAGE_PATH=""
@@ -78,6 +82,10 @@ while [[ $# -gt 0 ]]; do
         --skip-silver)
             SKIP_SILVER=true
             shift
+            ;;
+        --models)
+            MODELS="$2"
+            shift 2
             ;;
         --with-financials)
             WITH_FINANCIALS=true
@@ -176,6 +184,11 @@ PYEOF
     [ "$SKIP_SILVER" = false ] && [ "$PROFILE_SKIP_SILVER" = "true" ] && SKIP_SILVER=true
 fi
 
+# If --models is specified, we want to build them regardless of profile skip_silver setting
+if [ -n "$MODELS" ]; then
+    SKIP_SILVER=false
+fi
+
 # Print header
 echo -e "${BLUE}============================================================${NC}"
 echo -e "${BLUE}     de_Funk Pipeline Test - IngestorEngine Paradigm        ${NC}"
@@ -221,6 +234,7 @@ echo -e "${YELLOW}Configuration:${NC}"
 echo "  Skip seed: $SKIP_SEED"
 echo "  Skip ingest: $SKIP_INGEST"
 echo "  Build silver: $([ "$SKIP_SILVER" = false ] && echo 'yes' || echo 'no')"
+[ -n "$MODELS" ] && echo "  Models to build: $MODELS"
 echo "  With financials: $WITH_FINANCIALS"
 echo "  With reference: $WITH_REFERENCE"
 echo ""
@@ -607,10 +621,18 @@ if [ "$SKIP_SILVER" = false ]; then
     echo -e "${BLUE}Testing task: silver model build${NC}"
     echo -e "${BLUE}============================================================${NC}"
 
-    STORAGE_ARG=""
-    [ -n "$STORAGE_PATH" ] && STORAGE_ARG="--storage-path $STORAGE_PATH"
+    # Build arguments for build_models.py
+    BUILD_ARGS=""
+    [ -n "$STORAGE_PATH" ] && BUILD_ARGS="$BUILD_ARGS --storage-root $STORAGE_PATH"
+    [ -n "$MODELS" ] && BUILD_ARGS="$BUILD_ARGS --models $MODELS"
 
-    python -m scripts.build.build_models $STORAGE_ARG
+    if [ -n "$MODELS" ]; then
+        echo -e "Building models: ${GREEN}$MODELS${NC}"
+    else
+        echo -e "Building: ${GREEN}all discovered models${NC}"
+    fi
+
+    python -m scripts.build.build_models $BUILD_ARGS --verbose
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Silver build completed${NC}"
