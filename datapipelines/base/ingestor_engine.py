@@ -455,6 +455,11 @@ class IngestorEngine:
                     )
                     self._pending_futures.append(future)
 
+                    # Wait for first write to complete before appends
+                    # This prevents Delta protocol conflicts on table creation
+                    if chunk_count == 0:
+                        self._wait_for_pending_writes(0)
+
                     total_records += len(buffer)
                     chunk_count += 1
                     logger.info(
