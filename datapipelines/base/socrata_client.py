@@ -624,7 +624,7 @@ class SocrataClient:
         output_path: str,
         label: Optional[str] = None,
         resume: bool = False,
-        use_gzip: bool = True
+        use_gzip: bool = False
     ) -> int:
         """
         Download CSV to a file on disk with optional gzip compression.
