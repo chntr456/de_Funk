@@ -191,7 +191,8 @@ class SocrataBaseProvider(BaseProvider):
         **kwargs
     ) -> Generator[List[Dict], None, None]:
         """Fetch from multiple year-based view_ids."""
-        use_csv = endpoint.download_method == 'csv'
+        # Only use CSV for full downloads (no max_records limit)
+        use_csv = endpoint.download_method == 'csv' and max_records is None
         params = dict(endpoint.default_query or {})
 
         if use_csv:

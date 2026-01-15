@@ -2,6 +2,7 @@
 type: api-endpoint
 provider: Chicago Data Portal
 endpoint_id: traffic_congestion_segments
+enabled: false  # Large multi-year CSV dataset - disabled for dev testing
 
 # API Configuration
 endpoint_pattern: /resource/{view_id}.json
