@@ -481,4 +481,22 @@ class SocrataBaseProvider(BaseProvider):
             elif target_type == 'boolean':
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
 
+        # Derive year partition from date_column if year is NULL/missing
+        # This fixes the __HIVE_DEFAULT_PARTITION__ issue for year partitions
+        if endpoint.bronze and endpoint.bronze.partitions and 'year' in endpoint.bronze.partitions:
+            date_col = endpoint.bronze.date_column
+            if date_col and date_col in df.columns:
+                if 'year' in df.columns:
+                    # Year column exists but may be NULL - coalesce with derived value
+                    df = df.withColumn(
+                        'year',
+                        F.coalesce(
+                            F.col('year'),
+                            F.year(F.col(date_col))
+                        )
+                    )
+                else:
+                    # No year column - derive from date
+                    df = df.withColumn('year', F.year(F.col(date_col)))
+
         return df
