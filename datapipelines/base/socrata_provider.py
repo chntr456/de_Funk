@@ -322,6 +322,11 @@ class SocrataBaseProvider(BaseProvider):
         if endpoint.download_method != 'csv':
             return None
 
+        # Check if this is a multi-year endpoint
+        if endpoint.view_ids:
+            return self._fetch_dataframe_multi_year(work_item, endpoint, max_records, **kwargs)
+
+        # Single resource endpoint
         resource_id = self._get_resource_id(endpoint)
         if not resource_id:
             return None
@@ -360,6 +365,84 @@ class SocrataBaseProvider(BaseProvider):
             self._cleanup_raw_file(raw_path, work_item)
 
         return df
+
+    def _fetch_dataframe_multi_year(
+        self,
+        work_item: str,
+        endpoint: "EndpointConfig",
+        max_records: Optional[int] = None,
+        **kwargs
+    ) -> Optional[DataFrame]:
+        """
+        Fetch multi-year endpoint as a Spark DataFrame.
+
+        Downloads each year's CSV, reads with Spark, adds year column, and unions.
+        """
+        from pyspark.sql.functions import lit
+
+        logger.info(f"Spark CSV: multi-year endpoint {work_item} with {len(endpoint.view_ids)} view_ids")
+
+        dfs = []
+        for year, resource_id in endpoint.view_ids.items():
+            if not resource_id:
+                continue
+
+            year_label = f"{work_item}/{year}"
+            raw_path = self._get_raw_path(work_item, resource_id, year=year)
+
+            if not raw_path:
+                logger.warning(f"No raw path for {year_label}, skipping")
+                continue
+
+            # Download if needed
+            if self._load_from_raw and raw_path.exists():
+                logger.info(f"Spark CSV: loading from existing raw file for {year_label}")
+            elif self._load_from_raw and not raw_path.exists():
+                logger.warning(f"load_from_raw=True but no raw file for {year_label}, downloading...")
+                self.client.download_csv_to_file(
+                    resource_id=resource_id,
+                    output_path=str(raw_path),
+                    label=year_label
+                )
+            else:
+                logger.info(f"Spark CSV: downloading {year_label}")
+                self.client.download_csv_to_file(
+                    resource_id=resource_id,
+                    output_path=str(raw_path),
+                    label=year_label
+                )
+
+            # Read with Spark
+            df = self.read_csv_with_spark(str(raw_path), work_item)
+
+            # Add year column for partitioning
+            df = df.withColumn("year", lit(year))
+
+            dfs.append(df)
+            logger.info(f"Spark CSV: {year_label} loaded with {df.count()} records")
+
+            # Cleanup if not preserving
+            if not self._preserve_raw:
+                self._cleanup_raw_file(raw_path, year_label)
+
+        if not dfs:
+            logger.warning(f"No data loaded for {work_item}")
+            return None
+
+        # Union all years
+        result = dfs[0]
+        for df in dfs[1:]:
+            result = result.unionByName(df, allowMissingColumns=True)
+
+        logger.info(f"Spark CSV: {work_item} combined {len(dfs)} years")
+
+        # Apply max_records limit
+        if max_records:
+            total = result.count()
+            if total > max_records:
+                result = result.limit(max_records)
+
+        return result
 
     def supports_dataframe_fetch(self, work_item: str) -> bool:
         """

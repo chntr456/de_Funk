@@ -176,25 +176,16 @@
       "log_level": "WARNING"
     },
     "dev_fill": {
-      "providers": ["cook_county", "chicago"],
+      "providers": ["chicago"],
       "chicago_endpoints": ["traffic_congestion_segments"],
-      "cook_county_endpoints": [
-        "assessor_appeals",
-        "bor_appeal_decisions",
-        "permits",
-        "parcel_addresses",
-        "parcel_proximity",
-        "neighborhood_boundaries",
-        "tax_exempt_parcels"
-      ],
       "max_records_per_endpoint": null,
       "preserve_raw": true,
-      "load_from_raw": true,
+      "load_from_raw": false,
       "dry_run": false,
       "skip_silver": true,
       "write_batch_size": 1000000,
       "log_level": "DEBUG",
-      "_comment": "Fill missing data: remaining Cook County endpoints + Chicago traffic_congestion."
+      "_comment": "Fill missing data: Chicago traffic_congestion multi-year endpoint."
     },
     "dev_reload_raw": {
       "providers": ["cook_county", "chicago"],
