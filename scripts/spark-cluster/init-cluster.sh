@@ -492,11 +492,82 @@ export SPARK_LOCAL_IP=$HEAD_IP
 "$SPARK_HOME/sbin/start-worker.sh" "spark://$HEAD_IP:$SPARK_MASTER_PORT" -h $HEAD_IP
 sleep 2
 
-# Start remote workers via systemd
+# Start remote workers via systemd with diagnostics
 for w in "${WORKERS[@]}"; do
     IFS=':' read -r name ip cores mem <<< "$w"
     log "Starting worker on $name..."
-    ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "sudo -n systemctl start spark-worker" || warn "Failed to start $name"
+
+    # First verify NFS is mounted and Spark is accessible
+    if ! ssh -o ConnectTimeout=5 "$DE_FUNK_USER@$ip" "ls /shared/spark/jars/*.jar >/dev/null 2>&1"; then
+        warn "$name: NFS/Spark not accessible, attempting repair..."
+
+        # Remount NFS
+        ssh "$DE_FUNK_USER@$ip" "sudo umount -l /shared 2>/dev/null; sudo mount -t nfs -o vers=4,noac $HEAD_IP:$NFS_ROOT /shared" || true
+        sleep 2
+
+        # Verify again
+        if ! ssh "$DE_FUNK_USER@$ip" "ls /shared/spark/jars/*.jar >/dev/null 2>&1"; then
+            warn "$name: NFS repair failed - skipping this worker"
+            continue
+        fi
+        log "  ✓ $name NFS repaired"
+    fi
+
+    # Check if systemd service exists
+    if ! ssh "$DE_FUNK_USER@$ip" "systemctl list-unit-files | grep -q spark-worker"; then
+        warn "$name: spark-worker service not found, re-running setup..."
+        # Re-run worker setup for this node
+        ssh "$DE_FUNK_USER@$ip" bash -s "$HEAD_IP" "$cores" "$mem" <<'REPAIR_SCRIPT'
+HEAD_IP=$1
+CORES=$2
+MEM=$3
+
+# Create wrapper script
+cat > ~/start-spark-worker.sh << WRAPPER
+#!/bin/bash
+export SPARK_HOME=/shared/spark
+export JAVA_HOME=\$(dirname \$(dirname \$(readlink -f \$(which java))))
+export SPARK_SCALA_VERSION=2.13
+export PYSPARK_PYTHON=~/venv/bin/python3
+SPARK_LOCAL_IP=\$(ip route get $HEAD_IP | grep -oP 'src \K[0-9.]+')
+export SPARK_LOCAL_IP
+exec \$JAVA_HOME/bin/java -cp \$SPARK_HOME/jars/'*' -Xmx${MEM}g -Dspark.worker.host=\$SPARK_LOCAL_IP org.apache.spark.deploy.worker.Worker --host \$SPARK_LOCAL_IP --cores $CORES --memory ${MEM}g spark://$HEAD_IP:7077
+WRAPPER
+chmod +x ~/start-spark-worker.sh
+
+# Create systemd service
+cat << SERVICE | sudo tee /etc/systemd/system/spark-worker.service
+[Unit]
+Description=Apache Spark Worker
+After=network.target
+
+[Service]
+Type=simple
+User=$(whoami)
+WorkingDirectory=/home/$(whoami)
+Environment=SPARK_HOME=/shared/spark
+Environment=SPARK_SCALA_VERSION=2.13
+ExecStart=/home/$(whoami)/start-spark-worker.sh
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+
+sudo systemctl daemon-reload
+sudo systemctl enable spark-worker
+REPAIR_SCRIPT
+        log "  ✓ $name service created"
+    fi
+
+    # Start the service
+    if ssh -o ConnectTimeout=5 -o BatchMode=yes "$DE_FUNK_USER@$ip" "sudo -n systemctl restart spark-worker"; then
+        log "  ✓ $name started"
+    else
+        warn "$name: Failed to start, checking logs..."
+        ssh "$DE_FUNK_USER@$ip" "sudo journalctl -u spark-worker -n 10 --no-pager" 2>/dev/null || true
+    fi
 done
 
 sleep 5
@@ -505,10 +576,14 @@ sleep 5
 log "Verifying workers..."
 WORKER_COUNT=$(curl -s "http://$HEAD_IP:$SPARK_UI_PORT/json/" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('workers',[])))" 2>/dev/null || echo "0")
 
-log "  ✓ $WORKER_COUNT workers connected"
+# Expected count is workers array + 1 for head node local worker
+EXPECTED_COUNT=$((${#WORKERS[@]} + 1))
+log "  ✓ $WORKER_COUNT workers connected (expected $EXPECTED_COUNT)"
 
-if [ "$WORKER_COUNT" -lt "${#WORKERS[@]}" ]; then
-    warn "Expected ${#WORKERS[@]} workers, got $WORKER_COUNT. Some may still be connecting..."
+if [ "$WORKER_COUNT" -lt "$EXPECTED_COUNT" ]; then
+    warn "Some workers missing. Troubleshoot with:"
+    echo "  ssh <worker> 'sudo journalctl -u spark-worker -f'"
+    echo "  ssh <worker> 'ls -la /shared/spark/jars/ | head'"
 fi
 
 # =============================================================================
