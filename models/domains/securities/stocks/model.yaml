@@ -1,0 +1,41 @@
+# Stocks Model - Common stock equities
+# Inherits from securities base class
+
+model: stocks
+version: 2.0
+description: "Common stock equities with price and technical data"
+tags: [stocks, equities, securities, trading]
+
+# Model inheritance and dependencies
+inherits_from: _base.securities      # Inherits schema, graph, measures from securities
+depends_on: [temporal, company]      # Runtime dependencies
+
+# Component composition
+components:
+  schema: stocks/schema.yaml
+  graph: stocks/graph.yaml
+  measures:
+    yaml: stocks/measures.yaml       # Simple measures
+    python: securities/stocks/measures.py  # Complex measures (models/domains/...)
+
+# Storage configuration
+storage:
+  root: storage/silver/stocks
+  format: delta
+
+# Build configuration
+build:
+  partitions: [trade_date]
+  sort_by: [ticker, trade_date]
+  optimize: true
+
+# Metadata
+metadata:
+  owner: data_engineering
+  domain: securities
+  sla_hours: 4
+  data_quality_checks:
+    - no_null_tickers
+    - positive_prices
+    - reasonable_volumes
+    - valid_company_links

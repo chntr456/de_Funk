@@ -1,0 +1,69 @@
+# Core Graph - Foundation model graph structure
+# Version: 2.0
+
+nodes:
+  - id: dim_calendar
+    from: bronze.calendar_seed
+    description: "Universal calendar dimension"
+    select:
+      date: date
+      year: year
+      quarter: quarter
+      month: month
+      month_name: month_name
+      month_abbr: month_abbr
+      week_of_year: week_of_year
+      day_of_month: day_of_month
+      day_of_week: day_of_week
+      day_of_week_name: day_of_week_name
+      day_of_week_abbr: day_of_week_abbr
+      day_of_year: day_of_year
+      is_weekend: is_weekend
+      is_weekday: is_weekday
+      is_month_start: is_month_start
+      is_month_end: is_month_end
+      is_quarter_start: is_quarter_start
+      is_quarter_end: is_quarter_end
+      is_year_start: is_year_start
+      is_year_end: is_year_end
+      fiscal_year: fiscal_year
+      fiscal_quarter: fiscal_quarter
+      fiscal_month: fiscal_month
+      days_in_month: days_in_month
+      year_month: year_month
+      year_quarter: year_quarter
+    tags: [dim, calendar, shared]
+    unique_key: [date]
+
+# No internal edges - calendar is a standalone dimension
+# Other models join TO temporal.dim_calendar via their edges
+edges: []
+
+# No paths needed for core itself
+paths: []
+
+# Calendar generation configuration
+calendar_config:
+  start_date: "2000-01-01"
+  end_date: "2050-12-31"
+  fiscal_year_start_month: 1  # January
+
+  # Weekend days (1=Monday, 7=Sunday)
+  weekend_days: [6, 7]  # Saturday, Sunday
+
+  # Holidays (US Federal)
+  holidays:
+    - name: "New Year's Day"
+      type: "fixed"
+      month: 1
+      day: 1
+
+    - name: "Independence Day"
+      type: "fixed"
+      month: 7
+      day: 4
+
+    - name: "Christmas Day"
+      type: "fixed"
+      month: 12
+      day: 25

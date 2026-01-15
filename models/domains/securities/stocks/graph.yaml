@@ -1,0 +1,86 @@
+# Stocks graph definition - v2.0 with base inheritance
+# Consolidated: fact_stock_prices includes all OHLCV + technical indicators
+
+extends: _base.securities.graph
+
+nodes:
+  dim_stock:
+    extends: _base.securities._dim_security_base
+    filters:
+      # Use 'type' column (raw Alpha Vantage value) instead of derived 'asset_type'
+      # LISTING_STATUS returns 'Stock', OVERVIEW returns 'Common Stock'
+      # Accept both for compatibility with bulk listing and individual OVERVIEW calls
+      - "type IN ('Stock', 'Common Stock', 'Preferred Stock')"
+      - "is_active = true"
+    select:
+      # Inherited from base: ticker, security_name, exchange_code, currency, is_active
+      # Add securities type for clarity
+      security_type: type  # Raw Alpha Vantage type (Common Stock, ETF, etc.)
+      # Add stocks-specific fields from Alpha Vantage
+      cik: cik
+      shares_outstanding: shares_outstanding
+      market_cap: market_cap
+      sector: sector
+      industry: industry
+    derive:
+      # Inherited: security_id
+      company_id: "CONCAT('COMPANY_', cik)"  # Link to company model
+    unique_key: [ticker]
+    tags: [dim, stock]
+
+  fact_stock_prices:
+    extends: _base.securities._fact_prices_base
+    # NOTE: Do NOT filter by asset_type here - Bronze prices may have NULL asset_type
+    # Instead, the model filters prices to only tickers that exist in dim_stock
+    # This JOIN-based filtering is handled in StocksModel.after_build()
+    filter_by_dimension: dim_stock  # Filter to tickers in dim_stock (model-level)
+    filters:
+      - "trade_date IS NOT NULL"
+      - "ticker IS NOT NULL"
+    # Inherits select from base (ticker, trade_date, open, high, low, close, volume, adjusted_close)
+    #
+    # NOTE: Technical indicators (SMA, RSI, Bollinger, etc.) are computed AFTER
+    # the initial build using scripts/build/compute_technicals.py
+    # This avoids OOM on large datasets by processing in batches.
+    #
+    # To add technicals after build:
+    #   python -m scripts.build.compute_technicals --storage-path /shared/storage
+    #
+    unique_key: [ticker, trade_date]  # Dedup by ticker+date to prevent row growth
+    tags: [fact, prices, stocks]
+
+edges:
+  # Inherit base edges: _prices_to_security, _prices_to_calendar
+
+  stock_to_company:
+    from: dim_stock
+    to: company.dim_company
+    "on": ["company_id=company_id"]
+    type: many_to_one
+    description: "Stock belongs to a company (corporate entity)"
+
+  prices_to_stock:
+    from: fact_stock_prices
+    to: dim_stock
+    "on": ["ticker=ticker"]
+    type: many_to_one
+    description: "Prices belong to a stock"
+
+  prices_to_calendar:
+    from: fact_stock_prices
+    to: temporal.dim_calendar
+    "on": ["trade_date=date"]
+    type: left
+    description: "Join prices to calendar for date filtering"
+
+paths:
+  # Path for cross-model ticker filtering: company → stock → prices
+  company_ticker_to_prices:
+    description: "Enable ticker filter from company.dim_company to apply to fact_stock_prices"
+    steps:
+      - from: company.dim_company
+        to: dim_stock
+        via: ticker
+      - from: dim_stock
+        to: fact_stock_prices
+        via: ticker

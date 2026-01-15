@@ -1,0 +1,12 @@
+# Core Measures - Foundation model measures
+# Version: 2.0
+# Note: Core model is primarily reference dimensions, so measures are minimal
+
+# No measures needed for core model (it's all reference data)
+# Other models use temporal.dim_calendar for date-based filtering and aggregation
+
+simple_measures: {}
+
+computed_measures: {}
+
+python_measures: {}

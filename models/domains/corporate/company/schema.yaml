@@ -1,0 +1,436 @@
+# Company schema - corporate legal entities
+# v2.2: Updated to use ticker as primary key (CIK optional from bulk listing)
+
+dimensions:
+  dim_company:
+    description: "Corporate entity master - from securities_reference (bulk listing)"
+    columns:
+      company_id:
+        type: string
+        description: "PK - Internal ID (e.g., COMPANY_AAPL or COMPANY_0000320193)"
+        required: true
+
+      cik:
+        type: string
+        description: "SEC Central Index Key (10 digits) - may be NULL from bulk listing"
+        pattern: "^[0-9]{10}$"
+        required: false  # Not available from LISTING_STATUS
+
+      company_name:
+        type: string
+        description: "Company name (from security_name)"
+        required: true
+
+      legal_name:
+        type: string
+        description: "Legal entity name"
+
+      ticker_primary:
+        type: string
+        description: "Primary trading symbol"
+        required: true
+
+      ticker:
+        type: string
+        description: "Ticker symbol - primary key for filtering"
+        required: true
+
+      exchange_code:
+        type: string
+        description: "Primary exchange code"
+
+      is_active:
+        type: boolean
+        description: "Currently active/operating"
+        default: true
+
+      sector:
+        type: string
+        description: "GICS Sector - may be NULL from bulk listing"
+
+      industry:
+        type: string
+        description: "GICS Industry - may be NULL from bulk listing"
+
+      market_cap:
+        type: double
+        description: "Market capitalization - may be NULL from bulk listing"
+
+      shares_outstanding:
+        type: long
+        description: "Shares outstanding - may be NULL from bulk listing"
+
+      pe_ratio:
+        type: double
+        description: "Price to earnings ratio - may be NULL from bulk listing"
+
+      eps:
+        type: double
+        description: "Earnings per share - may be NULL from bulk listing"
+
+      dividend_yield:
+        type: double
+        description: "Dividend yield - may be NULL from bulk listing"
+
+      incorporation_country:
+        type: string
+        description: "Country of incorporation"
+        default: "US"
+
+    primary_key: [ticker]  # Use ticker as PK (works with bulk listing)
+    tags: [dim, entity, corporate, company]
+
+facts:
+  # Income Statement - matches graph.yaml fact_income_statement
+  # Note: Facts read directly from bronze, join to dim_company via ticker at query time
+  fact_income_statement:
+    description: "Income statement data from SEC filings"
+    columns:
+      ticker:
+        type: string
+        description: "Trading symbol - FK to dim_company"
+        required: true
+
+      fiscal_date_ending:
+        type: date
+        description: "Fiscal period end date"
+        required: true
+
+      report_type:
+        type: string
+        description: "annual or quarterly"
+
+      report_date:
+        type: date
+        description: "Alias for fiscal_date_ending (for calendar joins)"
+
+      company_id:
+        type: string
+        description: "FK to dim_company"
+
+      # Revenue & Profit
+      total_revenue:
+        type: double
+        description: "Total revenue"
+
+      cost_of_revenue:
+        type: double
+        description: "Cost of goods/services sold"
+
+      gross_profit:
+        type: double
+        description: "Revenue - COGS"
+
+      operating_income:
+        type: double
+        description: "Operating profit/loss"
+
+      net_income:
+        type: double
+        description: "Net income/loss"
+
+      ebit:
+        type: double
+        description: "Earnings before interest and taxes"
+
+      ebitda:
+        type: double
+        description: "Earnings before interest, taxes, depreciation, amortization"
+
+      # Expenses
+      operating_expenses:
+        type: double
+        description: "Operating expenses"
+
+      sg_and_a:
+        type: double
+        description: "Selling, general and administrative"
+
+      research_and_development:
+        type: double
+        description: "R&D expenses"
+
+      depreciation_and_amortization:
+        type: double
+        description: "Depreciation and amortization"
+
+      interest_expense:
+        type: double
+        description: "Interest expense"
+
+      income_tax_expense:
+        type: double
+        description: "Income tax expense"
+
+      reported_currency:
+        type: string
+        description: "Reporting currency"
+
+    primary_key: [ticker, fiscal_date_ending, report_type]
+    partitions: [fiscal_date_ending]
+    tags: [fact, financials, income_statement]
+
+  # Balance Sheet - matches graph.yaml fact_balance_sheet
+  fact_balance_sheet:
+    description: "Balance sheet data from SEC filings"
+    columns:
+      ticker:
+        type: string
+        description: "Trading symbol - FK to dim_company"
+        required: true
+
+      fiscal_date_ending:
+        type: date
+        description: "Fiscal period end date"
+        required: true
+
+      report_type:
+        type: string
+        description: "annual or quarterly"
+
+      report_date:
+        type: date
+        description: "Alias for fiscal_date_ending"
+
+      company_id:
+        type: string
+        description: "FK to dim_company"
+
+      # Assets
+      total_assets:
+        type: double
+        description: "Total assets"
+
+      total_current_assets:
+        type: double
+        description: "Current assets"
+
+      cash_and_equivalents:
+        type: double
+        description: "Cash and cash equivalents"
+
+      inventory:
+        type: double
+        description: "Inventory"
+
+      current_net_receivables:
+        type: double
+        description: "Net receivables"
+
+      total_non_current_assets:
+        type: double
+        description: "Non-current assets"
+
+      property_plant_equipment:
+        type: double
+        description: "PP&E"
+
+      goodwill:
+        type: double
+        description: "Goodwill"
+
+      intangible_assets:
+        type: double
+        description: "Intangible assets"
+
+      # Liabilities
+      total_liabilities:
+        type: double
+        description: "Total liabilities"
+
+      total_current_liabilities:
+        type: double
+        description: "Current liabilities"
+
+      current_accounts_payable:
+        type: double
+        description: "Accounts payable"
+
+      total_non_current_liabilities:
+        type: double
+        description: "Non-current liabilities"
+
+      long_term_debt:
+        type: double
+        description: "Long-term debt"
+
+      total_debt:
+        type: double
+        description: "Total debt"
+
+      # Equity
+      total_shareholder_equity:
+        type: double
+        description: "Stockholders' equity"
+
+      retained_earnings:
+        type: double
+        description: "Retained earnings"
+
+      common_stock:
+        type: double
+        description: "Common stock"
+
+      shares_outstanding:
+        type: long
+        description: "Shares outstanding"
+
+      reported_currency:
+        type: string
+        description: "Reporting currency"
+
+    primary_key: [ticker, fiscal_date_ending, report_type]
+    partitions: [fiscal_date_ending]
+    tags: [fact, financials, balance_sheet]
+
+  # Cash Flow - matches graph.yaml fact_cash_flow
+  fact_cash_flow:
+    description: "Cash flow statement data from SEC filings"
+    columns:
+      ticker:
+        type: string
+        description: "Trading symbol - FK to dim_company"
+        required: true
+
+      fiscal_date_ending:
+        type: date
+        description: "Fiscal period end date"
+        required: true
+
+      report_type:
+        type: string
+        description: "annual or quarterly"
+
+      report_date:
+        type: date
+        description: "Alias for fiscal_date_ending"
+
+      company_id:
+        type: string
+        description: "FK to dim_company"
+
+      # Operating
+      operating_cashflow:
+        type: double
+        description: "Cash from operations"
+
+      depreciation_depletion_amortization:
+        type: double
+        description: "D&A"
+
+      change_in_receivables:
+        type: double
+        description: "Change in receivables"
+
+      change_in_inventory:
+        type: double
+        description: "Change in inventory"
+
+      profit_loss:
+        type: double
+        description: "Profit/loss"
+
+      net_income:
+        type: double
+        description: "Net income"
+
+      # Investing
+      cashflow_from_investment:
+        type: double
+        description: "Cash from investing"
+
+      capital_expenditures:
+        type: double
+        description: "CapEx"
+
+      # Financing
+      cashflow_from_financing:
+        type: double
+        description: "Cash from financing"
+
+      dividend_payout:
+        type: double
+        description: "Dividend payout"
+
+      dividend_payout_common_stock:
+        type: double
+        description: "Common stock dividends"
+
+      payments_repurchase_common_stock:
+        type: double
+        description: "Stock repurchases"
+
+      proceeds_issuance_long_term_debt:
+        type: double
+        description: "Debt proceeds"
+
+      # Summary
+      change_in_cash:
+        type: double
+        description: "Net change in cash"
+
+      free_cash_flow:
+        type: double
+        description: "Free cash flow"
+
+      reported_currency:
+        type: string
+        description: "Reporting currency"
+
+    primary_key: [ticker, fiscal_date_ending, report_type]
+    partitions: [fiscal_date_ending]
+    tags: [fact, financials, cash_flow]
+
+  # Earnings - matches graph.yaml fact_earnings
+  fact_earnings:
+    description: "Earnings data (EPS actual vs estimate)"
+    columns:
+      ticker:
+        type: string
+        description: "Trading symbol - FK to dim_company"
+        required: true
+
+      fiscal_date_ending:
+        type: date
+        description: "Fiscal period end date"
+        required: true
+
+      report_type:
+        type: string
+        description: "annual or quarterly"
+
+      report_date:
+        type: date
+        description: "Alias for fiscal_date_ending"
+
+      company_id:
+        type: string
+        description: "FK to dim_company"
+
+      reported_date:
+        type: date
+        description: "Date earnings were reported"
+
+      reported_eps:
+        type: double
+        description: "Actual reported EPS"
+
+      estimated_eps:
+        type: double
+        description: "Analyst estimated EPS"
+
+      surprise:
+        type: double
+        description: "EPS surprise (actual - estimated)"
+
+      surprise_percentage:
+        type: double
+        description: "Surprise as percentage"
+
+      beat_estimate:
+        type: boolean
+        description: "Whether actual beat estimate"
+
+    primary_key: [ticker, fiscal_date_ending, report_type]
+    partitions: [fiscal_date_ending]
+    tags: [fact, financials, earnings]
