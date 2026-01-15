@@ -362,11 +362,36 @@ class SocrataBaseProvider(BaseProvider):
         return df
 
     def supports_dataframe_fetch(self, work_item: str) -> bool:
-        """Check if endpoint supports direct DataFrame fetch (faster for large CSVs)."""
+        """
+        Check if endpoint supports direct DataFrame fetch (faster for medium CSVs).
+
+        Returns False for very large files to avoid memory exhaustion.
+        The streaming batch approach with write_batch_size is safer for large files.
+        """
         endpoint = self._endpoints.get(work_item)
         if not endpoint:
             return False
-        return endpoint.download_method == 'csv' and self._storage_path is not None
+        if endpoint.download_method != 'csv' or self._storage_path is None:
+            return False
+
+        # Check if raw file exists and its size
+        resource_id = self._get_resource_id(endpoint)
+        if not resource_id:
+            return False
+
+        raw_path = self._get_raw_path(work_item, resource_id)
+        if raw_path and raw_path.exists():
+            # Max 500MB for fast path - larger files use streaming batch mode
+            max_size_bytes = 500 * 1024 * 1024  # 500MB
+            file_size = raw_path.stat().st_size
+            if file_size > max_size_bytes:
+                logger.info(
+                    f"File too large for fast path ({file_size / 1024 / 1024:.0f}MB > 500MB), "
+                    f"using streaming batch mode for {work_item}"
+                )
+                return False
+
+        return True
 
     def read_csv_with_spark(self, csv_path: str, work_item: str) -> DataFrame:
         """
