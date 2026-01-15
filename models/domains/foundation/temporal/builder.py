@@ -1,8 +1,9 @@
 """
 TemporalBuilder - Builder for the Temporal (calendar) model.
 
-Builds the temporal silver layer from seeded calendar data.
-This is a foundational model with no dependencies.
+Builds the temporal silver layer with self-generated calendar data.
+This is a foundational model with no dependencies - it generates
+dim_calendar directly without needing bronze layer data.
 """
 
 from __future__ import annotations
@@ -26,8 +27,8 @@ class TemporalBuilder(BaseModelBuilder):
     Dependencies:
     - None (foundational model)
 
-    Note: Requires calendar_seed to be seeded first via:
-        python -m scripts.seed.seed_calendar --storage-path /shared/storage
+    Note: This model is SELF-GENERATING - it creates the calendar
+    dimension directly without needing bronze layer data.
     """
 
     model_name = "temporal"
@@ -39,21 +40,9 @@ class TemporalBuilder(BaseModelBuilder):
         return TemporalModel
 
     def pre_build(self) -> None:
-        """Validate bronze data exists before building."""
+        """Pre-build hook - no bronze validation needed."""
         if self.context.verbose:
-            logger.info(f"  Checking bronze data for {self.model_name}...")
-
-        # Check for required bronze tables (use storage_config from context)
-        from pathlib import Path
-        bronze_root = Path(self.context.storage_config["roots"]["bronze"])
-
-        calendar_seed_path = bronze_root / "calendar_seed"
-
-        if not calendar_seed_path.exists() and not self.context.dry_run:
-            logger.warning(
-                f"  Missing bronze data: {calendar_seed_path}\n"
-                f"  Run: python -m scripts.seed.seed_calendar --storage-path {bronze_root.parent}"
-            )
+            logger.info(f"  Temporal is self-generating (no bronze dependency)")
 
     def post_build(self, result: BuildResult) -> None:
         """Log build statistics after completion."""

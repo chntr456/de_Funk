@@ -1,7 +1,7 @@
 ---
 type: domain-model
 model: temporal
-version: 2.0
+version: 2.2
 description: "Time and calendar dimensions - foundation for all time-series analysis"
 tags: [time, calendar, dates, foundation, shared]
 
@@ -19,6 +19,12 @@ build:
   partitions: []
   sort_by: [date]
   optimize: true
+
+# Calendar Generation Config
+calendar_config:
+  start_date: "2000-01-01"
+  end_date: "2050-12-31"
+  fiscal_year_start_month: 1  # January
 
 # Schema
 schema:
@@ -58,11 +64,11 @@ schema:
 
   facts: {}  # No fact tables - reference dimensions only
 
-# Graph
+# Graph - dim_calendar is self-generated (custom_node_loading override)
 graph:
   nodes:
     dim_calendar:
-      from: bronze.calendar_seed
+      from: self  # Generated programmatically, not from bronze
       type: dimension
       unique_key: [date]
       tags: [dim, calendar]
@@ -104,24 +110,12 @@ status: active
 
 Foundation model providing time and calendar dimensions for all time-series analysis.
 
-### Data Sources
-
-| Source | Provider | Update Frequency |
-|--------|----------|------------------|
-| calendar_seed | Generated | One-time (2000-2050) |
-
 ### Key Features
 
+- **Self-Generating**: Creates calendar directly during silver build (no bronze dependency)
 - **Dimension**: `dim_calendar` - Universal calendar with rich date attributes
 - **Foundation**: All models with date-based facts join to this
 - **Coverage**: 2000-01-01 to 2050-12-31
-
-### Seeding the Calendar
-
-```bash
-# Generate calendar seed data
-python -m scripts.seed.seed_calendar --storage-path /shared/storage
-```
 
 ### Usage
 
@@ -141,7 +135,7 @@ year_2024 = model.get_table("dim_calendar", filters={"year": 2024})
 Other models join to `dim_calendar` for date filtering:
 
 ```yaml
-# In other model's graph.yaml
+# In other model's graph config
 edges:
   prices_to_calendar:
     from: fact_prices
@@ -150,8 +144,23 @@ edges:
     type: left
 ```
 
+### Temporal Normalization
+
+Downstream models (stocks, company) encode their date columns as foreign keys to `dim_calendar`:
+
+| Model | Date Column | Joins To |
+|-------|-------------|----------|
+| stocks.fact_prices | trade_date | temporal.dim_calendar.date |
+| company.fact_financials | report_date | temporal.dim_calendar.date |
+
+This enables:
+- Consistent date filtering across models
+- Time-based aggregations (YTD, QTD, MTD)
+- Fiscal period calculations
+
 ### Notes
 
 - Foundation model with no dependencies
 - Other models link TO temporal, not from it
 - Pre-computed attributes for efficient filtering
+- ~18,628 rows (51 years of dates)
