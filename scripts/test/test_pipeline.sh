@@ -127,6 +127,7 @@ fi
 
 # Load profile settings from run_config.json if profile is specified
 PROFILE_PROVIDERS=""
+PROFILE_HAS_PROVIDERS="false"
 PROFILE_BUILD_SILVER=""
 if [ -n "$PROFILE" ] && [ -f "$REPO_ROOT/configs/pipelines/run_config.json" ]; then
     # Export for Python heredoc
@@ -164,12 +165,14 @@ if profile.get('build_silver'):
 else:
     print('PROFILE_BUILD_SILVER="false"')
 
-# providers list - if set, use only these providers
-providers = profile.get('providers', [])
-if providers:
+# providers list - track if profile explicitly defines providers (even if empty)
+if 'providers' in profile:
+    providers = profile.get('providers', [])
     print(f'PROFILE_PROVIDERS="{" ".join(providers)}"')
+    print('PROFILE_HAS_PROVIDERS="true"')  # Profile explicitly set providers
 else:
     print('PROFILE_PROVIDERS=""')
+    print('PROFILE_HAS_PROVIDERS="false"')  # Use global config
 
 # write_batch_size - records to buffer before Delta write (default 500000)
 write_batch_size = profile.get('write_batch_size', 500000)
@@ -247,16 +250,20 @@ PYTHON_ARGS=""
 [ -n "$STORAGE_PATH" ] && PYTHON_ARGS="$PYTHON_ARGS --storage-path $STORAGE_PATH"
 
 # Check if Alpha Vantage is enabled - respect profile's providers list
-if [ -n "$PROFILE_PROVIDERS" ]; then
-    # Profile specifies explicit provider list - check if alpha_vantage is in it
-    if echo "$PROFILE_PROVIDERS" | grep -qw "alpha_vantage"; then
+if [ "$PROFILE_HAS_PROVIDERS" = "true" ]; then
+    # Profile explicitly defines providers list - use only those (may be empty)
+    if [ -n "$PROFILE_PROVIDERS" ] && echo "$PROFILE_PROVIDERS" | grep -qw "alpha_vantage"; then
         ALPHA_VANTAGE_ENABLED="true"
     else
         ALPHA_VANTAGE_ENABLED="false"
-        echo -e "${YELLOW}Alpha Vantage not in profile providers list: $PROFILE_PROVIDERS${NC}"
+        if [ -z "$PROFILE_PROVIDERS" ]; then
+            echo -e "${YELLOW}Profile has no providers (silver-only mode)${NC}"
+        else
+            echo -e "${YELLOW}Alpha Vantage not in profile providers: $PROFILE_PROVIDERS${NC}"
+        fi
     fi
 else
-    # No profile providers list - fall back to global enabled flag
+    # No profile providers defined - fall back to global enabled flag
     ALPHA_VANTAGE_ENABLED=$(python3 -c "
 import json
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
@@ -470,8 +477,8 @@ fi
 # ==============================================================================
 if [ "$SKIP_INGEST" = false ]; then
     # Determine which bulk providers to run
-    if [ -n "$PROFILE_PROVIDERS" ]; then
-        # Use profile's providers list (filter to bulk providers only)
+    if [ "$PROFILE_HAS_PROVIDERS" = "true" ]; then
+        # Profile explicitly defines providers - use only those (filter to bulk providers)
         BULK_PROVIDERS=""
         for p in $PROFILE_PROVIDERS; do
             if [ "$p" = "chicago" ] || [ "$p" = "cook_county" ]; then
@@ -480,7 +487,7 @@ if [ "$SKIP_INGEST" = false ]; then
         done
         BULK_PROVIDERS=$(echo "$BULK_PROVIDERS" | xargs)  # trim whitespace
     else
-        # Fall back to global enabled flags
+        # No profile providers defined - fall back to global enabled flags
         BULK_PROVIDERS=$(python3 -c "
 import json
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
@@ -641,7 +648,8 @@ print(' '.join(models))
 
     echo -e "Building models: ${GREEN}${MODELS:-all discovered}${NC}"
 
-    python -m scripts.build.build_models $BUILD_ARGS --verbose
+    # Use spark-submit via submit-job.sh wrapper for proper Spark cluster execution
+    "$REPO_ROOT/scripts/spark-cluster/submit-job.sh" "$REPO_ROOT/scripts/build/build_models.py" $BUILD_ARGS --verbose
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}✓ Silver build completed${NC}"

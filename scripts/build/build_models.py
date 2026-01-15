@@ -98,19 +98,18 @@ def load_storage_config(repo_root: Path, storage_root: Optional[Path] = None) ->
 
 
 def discover_builders(repo_root: Path) -> None:
-    """Discover and register all model builders from foundation and domain."""
-    # Discover from both foundation (temporal) and domain (company, stocks, etc.)
-    for subdir in ["foundation", "domain"]:
-        models_path = repo_root / "models" / subdir
-        if models_path.exists():
-            BuilderRegistry.discover(models_path)
-            logger.debug(f"Discovered builders from models/{subdir}")
+    """Discover and register all model builders from the unified domains directory."""
+    # New unified structure: models/domains/{category}/{model}/builder.py
+    domains_path = repo_root / "models" / "domains"
+    if domains_path.exists():
+        BuilderRegistry.discover(domains_path)
+        logger.debug(f"Discovered builders from models/domains")
 
     total = len(BuilderRegistry.all())
     if total > 0:
         logger.info(f"Discovered {total} builders: {', '.join(BuilderRegistry.all().keys())}")
     else:
-        logger.warning("No builders discovered. Check models/foundation/*/builder.py and models/domain/*/builder.py")
+        logger.warning("No builders discovered. Check models/domains/*/builder.py")
 
 
 def build_models(
@@ -152,7 +151,7 @@ def build_models(
     available_builders = BuilderRegistry.all()
 
     if not available_builders:
-        logger.error("No builders discovered. Check models/domain/*/builder.py files.")
+        logger.error("No builders discovered. Check models/domains/*/builder.py files.")
         return {}
 
     if models:

@@ -40,7 +40,12 @@ shift
 
 # Check if it's a Python file or module
 if [[ "$SCRIPT" == *.py ]]; then
-    SCRIPT_PATH="$PROJECT_ROOT/$SCRIPT"
+    # If absolute path provided, use it directly; otherwise prepend PROJECT_ROOT
+    if [[ "$SCRIPT" == /* ]]; then
+        SCRIPT_PATH="$SCRIPT"
+    else
+        SCRIPT_PATH="$PROJECT_ROOT/$SCRIPT"
+    fi
     if [ ! -f "$SCRIPT_PATH" ]; then
         echo "ERROR: Script not found: $SCRIPT_PATH"
         exit 1
@@ -61,7 +66,10 @@ echo "Driver Memory: $SPARK_DRIVER_MEMORY"
 echo "Executor Memory: $SPARK_EXECUTOR_MEMORY"
 echo ""
 
-source "$VENV_PATH/bin/activate"
+# Activate venv if it exists (not all environments require it)
+if [ -f "$VENV_PATH/bin/activate" ]; then
+    source "$VENV_PATH/bin/activate"
+fi
 
 # Submit to cluster
 exec spark-submit \
