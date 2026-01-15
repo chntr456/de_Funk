@@ -486,33 +486,170 @@ class SocrataClient:
 
         raise RuntimeError(f"CSV download failed after {self.MAX_RETRIES} attempts: {url}")
 
+    def _download_csv_gzip(
+        self,
+        url: str,
+        output_file: "Path",
+        log_name: str,
+        backoff_base: float
+    ) -> int:
+        """
+        Download CSV with gzip compression, then decompress.
+
+        This is significantly faster for large files (3-10x smaller download).
+        Note: Does not support resume - restarts if interrupted.
+        """
+        import gzip as gzip_module
+        import shutil
+        from pathlib import Path
+
+        gz_path = output_file.with_suffix('.csv.gz')
+        temp_gz_path = output_file.with_suffix('.csv.gz.tmp')
+
+        logger.info(f"Starting GZIP CSV download for {log_name}")
+        logger.info(f"  URL: {url}")
+        logger.info(f"  Compressed: {gz_path}")
+        logger.info(f"  Final: {output_file}")
+
+        for attempt in range(self.MAX_RETRIES):
+            self._throttle()
+
+            try:
+                # Request gzip-compressed response
+                req_headers = {
+                    **self.headers,
+                    "Accept": "text/csv",
+                    "Accept-Encoding": "gzip"
+                }
+                req = urllib.request.Request(url, headers=req_headers, method="GET")
+
+                # Use longer timeout for CSV downloads
+                csv_timeout = max(self.timeout, 1800)  # At least 30 minutes
+
+                with urllib.request.urlopen(req, timeout=csv_timeout) as resp:
+                    # Check if response is actually gzipped
+                    content_encoding = resp.headers.get('Content-Encoding', '')
+                    is_gzipped = 'gzip' in content_encoding.lower()
+
+                    content_length = resp.headers.get('Content-Length')
+                    if content_length:
+                        logger.info(f"CSV {log_name}: downloading {int(content_length):,} bytes (gzip={is_gzipped})")
+
+                    # Stream to temp file
+                    bytes_downloaded = 0
+                    with open(temp_gz_path, 'wb') as f:
+                        while True:
+                            chunk = resp.read(8192 * 16)  # 128KB chunks
+                            if not chunk:
+                                break
+                            f.write(chunk)
+                            bytes_downloaded += len(chunk)
+
+                            # Log progress every 50MB
+                            if bytes_downloaded % (50 * 1024 * 1024) < 8192 * 16:
+                                logger.info(f"CSV {log_name}: downloaded {bytes_downloaded:,} bytes")
+
+                logger.info(f"CSV {log_name}: download complete ({bytes_downloaded:,} bytes)")
+
+                # Decompress if gzipped
+                if is_gzipped:
+                    logger.info(f"CSV {log_name}: decompressing...")
+                    with gzip_module.open(temp_gz_path, 'rb') as f_in:
+                        with open(output_file, 'wb') as f_out:
+                            shutil.copyfileobj(f_in, f_out, length=1024*1024)  # 1MB buffer
+
+                    final_size = output_file.stat().st_size
+                    ratio = final_size / bytes_downloaded if bytes_downloaded > 0 else 0
+                    logger.info(f"CSV {log_name}: decompressed to {final_size:,} bytes (ratio: {ratio:.1f}x)")
+
+                    # Clean up compressed file
+                    temp_gz_path.unlink()
+                else:
+                    # Server didn't gzip - just rename
+                    logger.info(f"CSV {log_name}: server did not gzip, using raw response")
+                    shutil.move(str(temp_gz_path), str(output_file))
+
+                return bytes_downloaded
+
+            except HTTPError as e:
+                body = None
+                try:
+                    body = e.read().decode("utf-8")[:500]
+                except (IOError, UnicodeDecodeError):
+                    pass
+
+                if e.code == 429:
+                    wait = min(120.0, backoff_base ** attempt)
+                    logger.warning(f"CSV GZIP download rate limited (429): waiting {wait:.1f}s")
+                    time.sleep(wait)
+                    continue
+
+                if 500 <= e.code < 600:
+                    wait = min(60.0, backoff_base ** attempt)
+                    logger.warning(f"CSV GZIP download server error ({e.code}): waiting {wait:.1f}s")
+                    time.sleep(wait)
+                    continue
+
+                # Clean up temp file on client error
+                if temp_gz_path.exists():
+                    try:
+                        temp_gz_path.unlink()
+                    except OSError:
+                        pass
+                logger.error(f"CSV GZIP download client error ({e.code}): {body}")
+                raise RuntimeError(f"CSV GZIP download HTTP {e.code}: {body}") from e
+
+            except (URLError, TimeoutError, socket.timeout, ConnectionError) as e:
+                error_type = type(e).__name__
+                if attempt < self.MAX_RETRIES - 1:
+                    wait = min(120.0, backoff_base ** (attempt + 1))
+                    logger.warning(f"CSV GZIP download {error_type}: {e}. Retrying in {wait:.1f}s")
+                    time.sleep(wait)
+                    continue
+                logger.error(f"CSV GZIP download {error_type} after {self.MAX_RETRIES} attempts: {e}")
+                raise RuntimeError(f"CSV GZIP download failed: {e}") from e
+
+        # Clean up temp file on failure
+        if temp_gz_path.exists():
+            try:
+                temp_gz_path.unlink()
+            except OSError:
+                pass
+
+        raise RuntimeError(f"CSV GZIP download failed after {self.MAX_RETRIES} attempts")
+
     def download_csv_to_file(
         self,
         resource_id: str,
         output_path: str,
         label: Optional[str] = None,
-        resume: bool = False
+        resume: bool = False,
+        use_gzip: bool = True
     ) -> int:
         """
-        Download CSV to a file on disk with resumable download support.
+        Download CSV to a file on disk with optional gzip compression.
 
         This is more reliable than streaming for very large datasets because:
         - File can be verified before processing
         - No memory pressure during download
         - Can be retried independently of Bronze ingestion
-        - Supports HTTP Range headers for resumable downloads on connection errors
+        - With gzip=True, downloads are significantly faster (3-10x smaller)
+        - With gzip=False, supports HTTP Range headers for resumable downloads
 
         Args:
             resource_id: The 4x4 resource identifier (view_id)
             output_path: Path to save the CSV file
             label: Optional label for logging
             resume: If True, skip download if file exists with content (default: False, re-download)
+            use_gzip: If True, request gzip compression and decompress after download (default: True)
+                      Note: gzip mode doesn't support resume (restarts if interrupted)
 
         Returns:
             Number of bytes downloaded (0 if skipped due to existing file)
         """
         from pathlib import Path
         import shutil
+        import gzip as gzip_module
 
         url = f"{self.base_url}/api/views/{resource_id}/rows.csv?accessType=DOWNLOAD"
         log_name = f"{label} ({resource_id})" if label else resource_id
@@ -528,6 +665,12 @@ class SocrataClient:
 
         # Ensure parent directory exists
         output_file.parent.mkdir(parents=True, exist_ok=True)
+
+        # Gzip mode: download compressed, then decompress
+        if use_gzip:
+            return self._download_csv_gzip(url, output_file, log_name, backoff_base)
+
+        # Non-gzip mode: resumable download
         temp_path = output_file.with_suffix('.csv.tmp')
 
         logger.info(f"Starting CSV download to file for {log_name}")
