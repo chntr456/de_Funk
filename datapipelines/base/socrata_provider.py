@@ -423,8 +423,8 @@ class SocrataBaseProvider(BaseProvider):
                 df = df.withColumnRenamed(field_def.source, field_def.name)
 
         # If 'year' is needed for partitioning but not in DataFrame, derive from date column
-        partitions = endpoint.partitions or []
-        date_col = endpoint.date_column
+        partitions = (endpoint.bronze.partitions if endpoint.bronze else []) or []
+        date_col = endpoint.bronze.date_column if endpoint.bronze else None
         if 'year' in partitions and 'year' not in df.columns:
             # Try to derive year from date column
             if date_col and date_col in df.columns:
@@ -729,8 +729,8 @@ class SocrataBaseProvider(BaseProvider):
                 df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
 
         # If 'year' is needed for partitioning but is null/missing, derive from date column
-        partitions = endpoint.partitions or []
-        date_col = endpoint.date_column
+        partitions = (endpoint.bronze.partitions if endpoint.bronze else []) or []
+        date_col = endpoint.bronze.date_column if endpoint.bronze else None
         if 'year' in partitions and 'year' in df.columns:
             # Check if year column is mostly null (meaning alias didn't work)
             # In that case, derive from date column
