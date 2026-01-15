@@ -3,32 +3,35 @@
 # Unified Pipeline Test Script
 # ==============================================================================
 # Tests the full pipeline using IngestorEngine paradigm on Spark cluster.
-# Configuration loaded from markdown documentation (single source of truth).
+# Configuration loaded from run_config.json profiles.
 #
 # Usage:
-#   ./scripts/test/test_pipeline.sh [OPTIONS]
+#   ./scripts/test/test_pipeline.sh --profile <PROFILE> [OPTIONS]
 #
 # Options:
-#   --profile PROFILE    Use named profile (quick_test, dev, staging, production)
+#   --profile PROFILE    Use named profile (quick_test, dev, silver_only, staging, production)
+#   --models MODELS      Specify models to build (space-separated, e.g., "temporal stocks")
 #   --max-tickers N      Override max tickers to process
 #   --skip-seed          Skip ticker seeding (use existing Bronze data)
 #   --force-seed         Force re-seed even if ticker data exists
 #   --skip-ingest        Skip Bronze ingestion
-#   --skip-silver        Skip Silver model building
-#   --models MODELS      Specify models to build (space-separated, e.g., "temporal stocks")
 #   --with-financials    Include company financials (income, balance, cash flow, earnings)
 #   --with-reference     Include reference data (COMPANY_OVERVIEW - for market_cap updates)
 #   --storage-path PATH  Override storage path (default: from run_config.json)
 #   --local              Run locally (ignore SPARK_MASTER_URL)
 #   --help               Show this help message
 #
+# Profiles (defined in run_config.json):
+#   dev          - Bronze only: alpha_vantage + chicago + cook_county
+#   silver_only  - Silver only: build models from existing bronze data
+#   staging      - Full pipeline: bronze + silver (500 tickers)
+#   production   - Full pipeline: all tickers
+#
 # Examples:
-#   ./scripts/test/test_pipeline.sh --profile dev               # Full test (Bronze + Silver)
-#   ./scripts/test/test_pipeline.sh --profile dev --skip-silver # Bronze only
-#   ./scripts/test/test_pipeline.sh --profile dev --skip-ingest --skip-seed  # Silver only (skip Bronze)
-#   ./scripts/test/test_pipeline.sh --profile dev --skip-ingest --skip-seed --models temporal stocks  # Specific models only
-#   ./scripts/test/test_pipeline.sh --with-financials           # Include financial statements
-#   ./scripts/test/test_pipeline.sh --profile production --skip-seed
+#   ./scripts/test/test_pipeline.sh --profile dev                    # Bronze ingestion only
+#   ./scripts/test/test_pipeline.sh --profile silver_only            # Build silver from existing bronze
+#   ./scripts/test/test_pipeline.sh --profile silver_only --models temporal  # Build specific model
+#   ./scripts/test/test_pipeline.sh --profile staging                # Full pipeline
 #
 # Author: de_Funk Team
 # ==============================================================================
@@ -48,7 +51,7 @@ MAX_TICKERS=""
 SKIP_SEED=false
 FORCE_SEED=false
 SKIP_INGEST=false
-SKIP_SILVER=false     # Test everything by default
+BUILD_SILVER=false     # Test everything by default
 MODELS=""             # Empty = build all discovered models
 WITH_FINANCIALS=false  # Skip financials by default (saves API calls)
 WITH_REFERENCE=false   # Skip reference by default (seed has basic info, only need for market_cap)
@@ -77,10 +80,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-ingest)
             SKIP_INGEST=true
-            shift
-            ;;
-        --skip-silver)
-            SKIP_SILVER=true
             shift
             ;;
         --models)
@@ -128,7 +127,7 @@ fi
 
 # Load profile settings from run_config.json if profile is specified
 PROFILE_PROVIDERS=""
-PROFILE_SKIP_SILVER=""
+PROFILE_BUILD_SILVER=""
 if [ -n "$PROFILE" ] && [ -f "$REPO_ROOT/configs/pipelines/run_config.json" ]; then
     # Export for Python heredoc
     export REPO_ROOT PROFILE
@@ -159,11 +158,11 @@ if profile.get('with_financials'):
 else:
     print('PROFILE_WITH_FINANCIALS="false"')
 
-# skip_silver from profile
-if profile.get('skip_silver'):
-    print('PROFILE_SKIP_SILVER="true"')
+# build_silver from profile
+if profile.get('build_silver'):
+    print('PROFILE_BUILD_SILVER="true"')
 else:
-    print('PROFILE_SKIP_SILVER="false"')
+    print('PROFILE_BUILD_SILVER="false"')
 
 # providers list - if set, use only these providers
 providers = profile.get('providers', [])
@@ -182,16 +181,13 @@ PYEOF
     [ -z "$MAX_TICKERS" ] && [ -n "$PROFILE_MAX_TICKERS" ] && MAX_TICKERS="$PROFILE_MAX_TICKERS"
     [ "$WITH_FINANCIALS" = false ] && [ "$PROFILE_WITH_FINANCIALS" = "true" ] && WITH_FINANCIALS=true
 
-    # Only apply profile's skip_silver when doing full pipeline (not silver-only mode)
-    # Silver-only mode = both --skip-ingest and --skip-seed are passed
-    if [ "$SKIP_INGEST" = false ] || [ "$SKIP_SEED" = false ]; then
-        [ "$SKIP_SILVER" = false ] && [ "$PROFILE_SKIP_SILVER" = "true" ] && SKIP_SILVER=true
-    fi
+    # Apply profile's build_silver setting
+    [ "$PROFILE_BUILD_SILVER" = "true" ] && BUILD_SILVER=true
 fi
 
-# If --models is specified, we want to build them regardless of any skip_silver setting
+# If --models is specified, we want to build them
 if [ -n "$MODELS" ]; then
-    SKIP_SILVER=false
+    BUILD_SILVER=true
 fi
 
 # Print header
@@ -238,7 +234,7 @@ echo -e "${YELLOW}Configuration:${NC}"
 [ -n "$STORAGE_PATH" ] && echo "  Storage path: $STORAGE_PATH"
 echo "  Skip seed: $SKIP_SEED"
 echo "  Skip ingest: $SKIP_INGEST"
-echo "  Build silver: $([ "$SKIP_SILVER" = false ] && echo 'yes' || echo 'no')"
+echo "  Build silver: $([ "$BUILD_SILVER" = true ] && echo 'yes' || echo 'no')"
 [ -n "$MODELS" ] && echo "  Models to build: $MODELS"
 echo "  With financials: $WITH_FINANCIALS"
 echo "  With reference: $WITH_REFERENCE"
@@ -621,7 +617,7 @@ fi
 # ==============================================================================
 # Task 3: Silver Build
 # ==============================================================================
-if [ "$SKIP_SILVER" = false ]; then
+if [ "$BUILD_SILVER" = true ]; then
     echo -e "${BLUE}============================================================${NC}"
     echo -e "${BLUE}Testing task: silver model build${NC}"
     echo -e "${BLUE}============================================================${NC}"
@@ -669,6 +665,6 @@ echo "Results:"
 [ "$SKIP_INGEST" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ] && echo "  ✓ Bronze data ingested (Alpha Vantage: prices$([ "$WITH_FINANCIALS" = true ] && echo ', financials'))"
 [ "$SKIP_INGEST" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "false" ] && echo "  ○ Alpha Vantage ingestion skipped (disabled)"
 [ "$SKIP_INGEST" = false ] && [ -n "$BULK_PROVIDERS" ] && echo "  ✓ Bulk providers ingested ($BULK_PROVIDERS)"
-[ "$SKIP_SILVER" = false ] && echo "  ✓ Silver models built"
-[ "$SKIP_SILVER" = true ] && echo "  ○ Silver build skipped (--skip-silver)"
+[ "$BUILD_SILVER" = true ] && echo "  ✓ Silver models built"
+[ "$BUILD_SILVER" = false ] && echo "  ○ Silver build skipped"
 echo ""

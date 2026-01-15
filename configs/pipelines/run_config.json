@@ -7,10 +7,8 @@
     "_days_comment": "Number of days of historical data to fetch",
     "dry_run": false,
     "_dry_run_comment": "If true, simulate API calls without making real requests",
-    "skip_bronze": false,
-    "_skip_bronze_comment": "If true, skip bronze layer ingestion",
-    "skip_silver": false,
-    "_skip_silver_comment": "If true, skip silver layer model building",
+    "build_silver": true,
+    "_build_silver_comment": "If true, build silver layer models after ingestion",
     "log_level": "INFO",
     "_log_level_comment": "Logging level: DEBUG, INFO, WARNING, ERROR",
     "storage_path": "/shared/storage",
@@ -90,15 +88,12 @@
     }
   },
   "silver_models": {
-    "enabled": true,
     "models": [
       "temporal",
       "company",
       "stocks"
     ],
-    "_models_comment": "Models to build after bronze ingestion. Order matters (dependencies). Supported: temporal, company, stocks",
-    "skip_on_dry_run": true,
-    "_skip_on_dry_run_comment": "If true, skip silver build during dry runs (default: true - no data to build from)"
+    "_models_comment": "Models to build. Order matters (dependencies)."
   },
   "cluster": {
     "spark_master": "auto",
@@ -139,9 +134,8 @@
       "with_financials": true,
       "write_batch_size": 10000,
       "dry_run": false,
-      "skip_silver": true,
       "log_level": "DEBUG",
-      "_comment": "Quick smoke test: 3 tickers + 50k records per Socrata endpoint. Tests all providers."
+      "_comment": "Quick smoke test: 3 tickers + 50k records per Socrata endpoint. Bronze only."
     },
     "dev": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
@@ -150,36 +144,36 @@
       "with_financials": true,
       "write_batch_size": 500000,
       "dry_run": false,
-      "skip_silver": true,
       "log_level": "DEBUG",
-      "_comment": "Full run: alpha_vantage (10 tickers) + chicago (24 endpoints) + cook_county (13 endpoints). Streams to Delta in 500k batches."
+      "_comment": "Full bronze run: alpha_vantage (10 tickers) + chicago (24 endpoints) + cook_county (13 endpoints)."
     },
     "dev_municipal": {
       "providers": ["chicago", "cook_county"],
       "max_records_per_endpoint": 10000,
       "dry_run": false,
-      "skip_silver": true,
       "log_level": "DEBUG",
-      "_comment": "Municipal/county data only - no securities"
+      "_comment": "Municipal/county data only - no securities. Bronze only."
+    },
+    "silver_only": {
+      "providers": [],
+      "build_silver": true,
+      "log_level": "DEBUG",
+      "_comment": "Build silver models only from existing bronze data. No ingestion."
     },
     "staging": {
       "max_tickers": 500,
       "with_financials": true,
       "dry_run": false,
-      "skip_silver": false
+      "build_silver": true,
+      "_comment": "Full pipeline: bronze + silver"
     },
     "production": {
       "max_tickers": null,
       "with_financials": true,
       "dry_run": false,
-      "skip_silver": false,
-      "log_level": "WARNING"
-    },
-    "silver_only": {
-      "providers": [],
-      "skip_silver": false,
-      "log_level": "DEBUG",
-      "_comment": "Build silver models only from existing bronze data. No ingestion."
+      "build_silver": true,
+      "log_level": "WARNING",
+      "_comment": "Full pipeline: all tickers, bronze + silver"
     }
   }
 }
