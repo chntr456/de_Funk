@@ -108,6 +108,7 @@ class EndpointConfig:
     domain: str = ""
     data_tags: List[str] = field(default_factory=list)
     status: str = "active"
+    enabled: bool = True  # Set to false to skip during ingestion
     # View ID mapping for multi-year datasets (year -> view_id)
     view_ids: Dict[str, str] = field(default_factory=dict)
     # Download method: "json" (default API pagination) or "csv" (bulk download)
@@ -457,6 +458,7 @@ class MarkdownConfigLoader:
             domain=frontmatter.get('domain', ''),
             data_tags=frontmatter.get('data_tags', []) or [],
             status=frontmatter.get('status', 'active'),
+            enabled=frontmatter.get('enabled', True),
             view_ids=view_ids,
             download_method=frontmatter.get('download_method', 'json'),
             raw=frontmatter
@@ -527,6 +529,9 @@ class MarkdownConfigLoader:
 
                 endpoint = self.load_endpoint(md_file)
                 if endpoint:
+                    if not endpoint.enabled:
+                        logger.debug(f"Skipping disabled endpoint: {endpoint.endpoint_id}")
+                        continue
                     endpoints[endpoint.endpoint_id] = endpoint
                     logger.debug(
                         f"Loaded endpoint: {endpoint.endpoint_id} "
