@@ -626,16 +626,24 @@ if [ "$SKIP_SILVER" = false ]; then
     echo -e "${BLUE}Testing task: silver model build${NC}"
     echo -e "${BLUE}============================================================${NC}"
 
+    # Get models to build: CLI --models overrides silver_models.models from config
+    if [ -z "$MODELS" ]; then
+        # Read from silver_models.models in run_config.json
+        MODELS=$(python3 -c "
+import json
+with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
+    cfg = json.load(f)
+models = cfg.get('silver_models', {}).get('models', [])
+print(' '.join(models))
+" 2>/dev/null || echo "")
+    fi
+
     # Build arguments for build_models.py
     BUILD_ARGS=""
     [ -n "$STORAGE_PATH" ] && BUILD_ARGS="$BUILD_ARGS --storage-root $STORAGE_PATH"
     [ -n "$MODELS" ] && BUILD_ARGS="$BUILD_ARGS --models $MODELS"
 
-    if [ -n "$MODELS" ]; then
-        echo -e "Building models: ${GREEN}$MODELS${NC}"
-    else
-        echo -e "Building: ${GREEN}all discovered models${NC}"
-    fi
+    echo -e "Building models: ${GREEN}${MODELS:-all discovered}${NC}"
 
     python -m scripts.build.build_models $BUILD_ARGS --verbose
 
