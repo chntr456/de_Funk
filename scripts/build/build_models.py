@@ -29,6 +29,13 @@ from pathlib import Path
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict
 
+# Add repo root to path BEFORE importing project modules
+# This is needed when running via spark-submit where the path isn't pre-configured
+_script_dir = Path(__file__).resolve().parent
+_repo_root = _script_dir.parent.parent  # scripts/build -> scripts -> repo_root
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
