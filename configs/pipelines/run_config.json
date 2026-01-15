@@ -184,9 +184,9 @@
       "load_from_raw": true,
       "dry_run": false,
       "skip_silver": true,
-      "write_batch_size": 100000,
+      "write_batch_size": 1000000,
       "log_level": "DEBUG",
-      "_comment": "Fill missing data: Cook County (all endpoints) + Chicago traffic_congestion. Uses 100k batch size to reduce memory pressure. Loads from raw CSVs if available."
+      "_comment": "Fill missing data: Cook County (all endpoints) + Chicago traffic_congestion. Loads from raw CSVs if available."
     },
     "dev_reload_raw": {
       "providers": ["cook_county", "chicago"],
@@ -197,9 +197,9 @@
       "load_from_raw": true,
       "dry_run": false,
       "skip_silver": true,
-      "write_batch_size": 100000,
+      "write_batch_size": 1000000,
       "log_level": "DEBUG",
-      "_comment": "Reload from existing raw CSVs (skip download). Uses 100k batch size to reduce memory pressure."
+      "_comment": "Reload from existing raw CSVs (skip download)."
     }
   }
 }

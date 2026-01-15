@@ -363,35 +363,14 @@ class SocrataBaseProvider(BaseProvider):
 
     def supports_dataframe_fetch(self, work_item: str) -> bool:
         """
-        Check if endpoint supports direct DataFrame fetch (faster for medium CSVs).
+        Check if endpoint supports direct DataFrame fetch via spark.read.csv().
 
-        Returns False for very large files to avoid memory exhaustion.
-        The streaming batch approach with write_batch_size is safer for large files.
+        For cluster deployments, Spark distributes large files across workers.
         """
         endpoint = self._endpoints.get(work_item)
         if not endpoint:
             return False
-        if endpoint.download_method != 'csv' or self._storage_path is None:
-            return False
-
-        # Check if raw file exists and its size
-        resource_id = self._get_resource_id(endpoint)
-        if not resource_id:
-            return False
-
-        raw_path = self._get_raw_path(work_item, resource_id)
-        if raw_path and raw_path.exists():
-            # Max 500MB for fast path - larger files use streaming batch mode
-            max_size_bytes = 500 * 1024 * 1024  # 500MB
-            file_size = raw_path.stat().st_size
-            if file_size > max_size_bytes:
-                logger.info(
-                    f"File too large for fast path ({file_size / 1024 / 1024:.0f}MB > 500MB), "
-                    f"using streaming batch mode for {work_item}"
-                )
-                return False
-
-        return True
+        return endpoint.download_method == 'csv' and self._storage_path is not None
 
     def read_csv_with_spark(self, csv_path: str, work_item: str) -> DataFrame:
         """
@@ -422,6 +401,19 @@ class SocrataBaseProvider(BaseProvider):
         # Log actual CSV columns for debugging
         csv_columns = df.columns
         logger.info(f"Spark CSV read {work_item}: {len(csv_columns)} columns: {csv_columns[:20]}{'...' if len(csv_columns) > 20 else ''}")
+
+        # For large files, repartition to distribute across cluster workers
+        # This prevents single-node bottlenecks on cluster deployments
+        try:
+            file_size_mb = Path(csv_path).stat().st_size / (1024 * 1024)
+            if file_size_mb > 100:  # Files > 100MB get repartitioned
+                # Aim for ~100MB per partition for efficient cluster distribution
+                num_partitions = max(int(file_size_mb / 100), df.rdd.getNumPartitions())
+                if num_partitions > df.rdd.getNumPartitions():
+                    logger.info(f"Repartitioning {work_item} from {df.rdd.getNumPartitions()} to {num_partitions} partitions for cluster distribution")
+                    df = df.repartition(num_partitions)
+        except Exception as e:
+            logger.debug(f"Could not check file size for repartitioning: {e}")
 
         if not endpoint or not endpoint.schema:
             return df
