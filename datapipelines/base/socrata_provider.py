@@ -294,6 +294,148 @@ class SocrataBaseProvider(BaseProvider):
 
         return self._create_dataframe(records, endpoint)
 
+    def fetch_dataframe(
+        self,
+        work_item: str,
+        max_records: Optional[int] = None,
+        **kwargs
+    ) -> Optional[DataFrame]:
+        """
+        Fetch data as a Spark DataFrame directly (bypasses Python batching).
+
+        Uses spark.read.csv() for raw files, which is much faster than
+        Python csv.DictReader for large files.
+
+        Args:
+            work_item: Endpoint ID
+            max_records: Optional limit on records
+            **kwargs: Additional options
+
+        Returns:
+            Spark DataFrame, or None if not supported for this endpoint
+        """
+        endpoint = self._endpoints.get(work_item)
+        if not endpoint:
+            return None
+
+        # Only use for CSV endpoints with raw layer
+        if endpoint.download_method != 'csv':
+            return None
+
+        resource_id = self._get_resource_id(endpoint)
+        if not resource_id:
+            return None
+
+        raw_path = self._get_raw_path(work_item, resource_id)
+        if not raw_path:
+            return None
+
+        # Download if needed
+        if self._load_from_raw and raw_path.exists():
+            logger.info(f"Spark CSV: loading from existing raw file for {work_item}")
+        elif self._load_from_raw and not raw_path.exists():
+            logger.warning(f"load_from_raw=True but no raw file for {work_item}, downloading...")
+            self.client.download_csv_to_file(
+                resource_id=resource_id,
+                output_path=str(raw_path),
+                label=work_item
+            )
+        else:
+            logger.info(f"Spark CSV: downloading {work_item}")
+            self.client.download_csv_to_file(
+                resource_id=resource_id,
+                output_path=str(raw_path),
+                label=work_item
+            )
+
+        # Read with Spark
+        df = self.read_csv_with_spark(str(raw_path), work_item)
+
+        # Apply max_records limit
+        if max_records and df.count() > max_records:
+            df = df.limit(max_records)
+
+        # Cleanup if not preserving
+        if not self._preserve_raw:
+            self._cleanup_raw_file(raw_path, work_item)
+
+        return df
+
+    def supports_dataframe_fetch(self, work_item: str) -> bool:
+        """Check if endpoint supports direct DataFrame fetch (faster for large CSVs)."""
+        endpoint = self._endpoints.get(work_item)
+        if not endpoint:
+            return False
+        return endpoint.download_method == 'csv' and self._storage_path is not None
+
+    def read_csv_with_spark(self, csv_path: str, work_item: str) -> DataFrame:
+        """
+        Read CSV file directly with Spark (much faster than Python csv module).
+
+        Uses spark.read.csv() for parallelized reading, then applies schema
+        transformations (column renames, type casting) based on endpoint config.
+
+        Args:
+            csv_path: Path to CSV file
+            work_item: Endpoint ID for schema lookup
+
+        Returns:
+            Spark DataFrame with schema applied
+        """
+        endpoint = self._endpoints.get(work_item)
+
+        # Read CSV with Spark - all columns as strings initially
+        df = self.spark.read.csv(
+            csv_path,
+            header=True,
+            inferSchema=False,  # Keep as strings, we'll cast manually
+            mode="PERMISSIVE",
+            multiLine=True,
+            escape='"'
+        )
+
+        logger.info(f"Spark CSV read {work_item}: {df.count():,} rows, {len(df.columns)} columns")
+
+        if not endpoint or not endpoint.schema:
+            return df
+
+        # Rename columns from source names to target names
+        for field_def in endpoint.schema:
+            if field_def.source in df.columns and field_def.source != field_def.name:
+                df = df.withColumnRenamed(field_def.source, field_def.name)
+
+        # Select only schema columns (drop extra columns from CSV)
+        schema_cols = [f.name for f in endpoint.schema]
+        available_cols = [c for c in schema_cols if c in df.columns]
+        df = df.select(available_cols)
+
+        # Cast columns to target types
+        for field_def in endpoint.schema:
+            if field_def.name not in df.columns:
+                continue
+
+            target_type = field_def.type.lower()
+            if target_type == 'string':
+                continue
+            elif target_type in ('int', 'long'):
+                df = df.withColumn(field_def.name,
+                    F.col(field_def.name).cast('double').cast(target_type))
+            elif target_type in ('double', 'float'):
+                df = df.withColumn(field_def.name, F.col(field_def.name).cast('double'))
+            elif target_type == 'date':
+                df = df.withColumn(field_def.name,
+                    self._safe_parse_date(F.col(field_def.name)))
+            elif target_type == 'timestamp':
+                df = df.withColumn(field_def.name,
+                    self._safe_parse_timestamp(F.col(field_def.name)))
+            elif target_type == 'boolean':
+                df = df.withColumn(field_def.name,
+                    F.when(F.lower(F.col(field_def.name)).isin('true', '1', 'yes'), True)
+                    .when(F.lower(F.col(field_def.name)).isin('false', '0', 'no'), False)
+                    .otherwise(None).cast('boolean'))
+
+        return df
+
     def get_table_name(self, work_item: str) -> str:
         """Get Bronze table name for an endpoint."""
         endpoint = self._endpoints.get(work_item)

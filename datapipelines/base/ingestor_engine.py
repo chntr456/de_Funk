@@ -409,6 +409,17 @@ class IngestorEngine:
             table_name = self.provider.get_table_name(work_item)
             partitions = self.provider.get_partitions(work_item)
 
+            # Check if provider supports fast DataFrame fetch (e.g., Spark CSV reading)
+            if hasattr(self.provider, 'supports_dataframe_fetch') and \
+               self.provider.supports_dataframe_fetch(work_item):
+                return self._ingest_work_item_dataframe(
+                    work_item=work_item,
+                    table_name=table_name,
+                    partitions=partitions,
+                    max_records=max_records,
+                    **kwargs
+                )
+
             # Get shared executor
             executor = self.get_executor(self.writer_threads)
 
@@ -519,6 +530,82 @@ class IngestorEngine:
 
         except Exception as e:
             logger.error(f"Failed to ingest {work_item}: {e}", exc_info=True)
+            return WorkItemResult(
+                work_item=work_item,
+                success=False,
+                error=str(e)[:200]
+            )
+
+    def _ingest_work_item_dataframe(
+        self,
+        work_item: str,
+        table_name: str,
+        partitions: Optional[List[str]],
+        max_records: Optional[int] = None,
+        **kwargs
+    ) -> WorkItemResult:
+        """
+        Ingest work item using direct DataFrame fetch (fast path for large CSVs).
+
+        Uses provider.fetch_dataframe() which reads CSV with spark.read.csv()
+        instead of Python csv.DictReader. Much faster for large files.
+
+        Args:
+            work_item: Work item identifier
+            table_name: Target Bronze table name
+            partitions: Partition columns
+            max_records: Max records to fetch
+            **kwargs: Provider-specific options
+
+        Returns:
+            WorkItemResult with status and record count
+        """
+        try:
+            logger.info(f"Using fast DataFrame path for {work_item}")
+
+            # Get DataFrame directly from provider
+            df = self.provider.fetch_dataframe(work_item, max_records=max_records, **kwargs)
+
+            if df is None:
+                logger.warning(f"fetch_dataframe returned None for {work_item}, falling back to batch mode")
+                # This shouldn't happen if supports_dataframe_fetch returned True
+                return WorkItemResult(
+                    work_item=work_item,
+                    success=False,
+                    error="fetch_dataframe returned None"
+                )
+
+            # Validate partitions
+            validated_partitions = self._validate_partitions(partitions, df.columns, work_item)
+
+            # Get record count (triggers Spark action)
+            total_records = df.count()
+            logger.info(f"{work_item}: DataFrame ready with {total_records:,} records")
+
+            if total_records == 0:
+                return WorkItemResult(
+                    work_item=work_item,
+                    success=True,
+                    record_count=0,
+                    table_path=str(self.sink.cfg["roots"]["bronze"]) + "/" + table_name
+                )
+
+            # Write to Delta Lake
+            self.sink.overwrite(df, table_name, partitions=validated_partitions)
+            logger.info(f"{work_item}: wrote {total_records:,} records to {table_name}")
+
+            # Force cleanup of Spark memory
+            self._cleanup_spark_memory()
+
+            return WorkItemResult(
+                work_item=work_item,
+                success=True,
+                record_count=total_records,
+                table_path=str(self.sink.cfg["roots"]["bronze"]) + "/" + table_name
+            )
+
+        except Exception as e:
+            logger.error(f"DataFrame ingest failed for {work_item}: {e}", exc_info=True)
             return WorkItemResult(
                 work_item=work_item,
                 success=False,
