@@ -140,10 +140,20 @@ class BaseModelBuilder(ABC):
                     except Exception as e:
                         logger.debug(f"Failed to load from domains: {e}")
 
-            # Fall back to configs/models/ (legacy structure)
+            # Fall back to configs/models/ (legacy structure - DEPRECATED)
             configs_dir = self.repo_root / "configs" / "models"
-            loader = ModelConfigLoader(configs_dir)
-            self._model_config = loader.load_model_config(self.model_name)
+            if configs_dir.exists():
+                logger.warning(
+                    f"⚠️ DEPRECATED: Loading '{self.model_name}' config from configs/models/. "
+                    f"Move to models/domains/{{category}}/{self.model_name}/"
+                )
+                loader = ModelConfigLoader(configs_dir)
+                self._model_config = loader.load_model_config(self.model_name)
+            else:
+                raise FileNotFoundError(
+                    f"Model config not found for '{self.model_name}'. "
+                    f"Expected at models/domains/{{category}}/{self.model_name}/"
+                )
 
         return self._model_config
 
