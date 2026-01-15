@@ -139,12 +139,12 @@
     "dev": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
       "max_tickers": 10,
-      "max_records_per_endpoint": null,
+      "max_records_per_endpoint": 100000,
       "with_financials": true,
       "write_batch_size": 50000,
       "dry_run": false,
       "log_level": "DEBUG",
-      "_comment": "Dev run: alpha_vantage (10 tickers) + chicago + cook_county. 50k batch size for memory safety."
+      "_comment": "Dev run: 10 tickers + 100k records per Socrata endpoint. Uses JSON API (not full CSV)."
     },
     "dev_municipal": {
       "providers": ["chicago", "cook_county"],
