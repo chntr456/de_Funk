@@ -89,8 +89,9 @@ def load_storage_config(repo_root: Path, storage_root: Optional[Path] = None) ->
 
     # Load config from ConfigLoader (reads run_config.json storage_path)
     # ConfigLoader will raise ValueError if storage_path not configured
+    # skip_apis=True because silver build doesn't need provider/API configs
     loader = ConfigLoader(repo_root=repo_root)
-    config = loader.load()
+    config = loader.load(skip_apis=True)
     storage_cfg = config.storage  # Already resolved from run_config.json
 
     # CLI override for testing only
