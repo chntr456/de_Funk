@@ -1,0 +1,60 @@
+# Forecast Model Configuration
+# This file is loaded by scripts/forecast/run_forecasts.py
+# The authoritative domain config is in domains/securities/forecast/forecast.md
+
+model: forecast
+version: 3.0
+description: "Time series forecasting for securities"
+
+depends_on:
+  - temporal
+  - stocks
+
+# ML Model Configurations
+ml_models:
+  arima_7d:
+    type: arima
+    target: [close]
+    lookback_days: 60
+    forecast_horizon: 7
+    day_of_week_adj: true
+    seasonal: false
+    auto_arima: true
+
+  arima_30d:
+    type: arima
+    target: [close]
+    lookback_days: 180
+    forecast_horizon: 30
+    day_of_week_adj: true
+    seasonal: true
+    auto_arima: true
+
+  prophet_7d:
+    type: prophet
+    target: [close]
+    lookback_days: 90
+    forecast_horizon: 7
+    day_of_week_adj: true
+    seasonality_mode: multiplicative
+
+  prophet_30d:
+    type: prophet
+    target: [close]
+    lookback_days: 365
+    forecast_horizon: 30
+    day_of_week_adj: true
+    seasonality_mode: multiplicative
+
+  random_forest_14d:
+    type: random_forest
+    target: [close]
+    lookback_days: 90
+    forecast_horizon: 14
+    n_estimators: 100
+    max_depth: 10
+
+# Storage configuration
+storage:
+  root: storage/silver/forecast
+  format: delta
