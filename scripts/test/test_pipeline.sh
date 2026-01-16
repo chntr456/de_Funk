@@ -340,10 +340,12 @@ from pathlib import Path
 import json
 
 storage_path = '${STORAGE_PATH:-/shared/storage}'
-max_tickers = ${MAX_TICKERS:-10}
+# Handle null/empty max_tickers - None means no limit
+max_tickers_str = '${MAX_TICKERS}'
+max_tickers = int(max_tickers_str) if max_tickers_str.strip() else None
 
 logger.info(f'Storage path: {storage_path}')
-logger.info(f'Max tickers: {max_tickers}')
+logger.info(f'Max tickers: {max_tickers if max_tickers else "ALL"}')
 
 docs_path = Path('$REPO_ROOT')
 spark = get_spark(app_name='test_pipeline_ingest')
@@ -383,7 +385,11 @@ if not tickers:
             df = spark.read.format('delta').load(str(ticker_seed_path))
         else:
             df = spark.read.parquet(str(ticker_seed_path))
-        tickers = [row.ticker for row in df.select('ticker').distinct().limit(max_tickers).collect()]
+        # Apply limit only if max_tickers is set
+        ticker_df = df.select('ticker').distinct()
+        if max_tickers:
+            ticker_df = ticker_df.limit(max_tickers)
+        tickers = [row.ticker for row in ticker_df.collect()]
         logger.info(f'Loaded {len(tickers)} tickers from ticker_seed')
     else:
         logger.error('No tickers found. Run seed first.')
