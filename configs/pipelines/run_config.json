@@ -151,15 +151,15 @@
     },
     "dev_fill": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
-      "max_tickers": 3,
-      "max_records_per_endpoint": 1000,
-      "write_batch_size": 10000,
+      "max_tickers": null,
+      "max_records_per_endpoint": null,
+      "write_batch_size": 500000,
       "max_pending_writes": 0,
       "_max_pending_writes_comment": "0 = synchronous writes. Ensures each batch completes and memory is freed before next batch.",
       "build_silver": false,
       "dry_run": false,
-      "log_level": "DEBUG",
-      "_comment": "Small test: 3 tickers + 1k records per endpoint. Verify new provider/dataset paths."
+      "log_level": "INFO",
+      "_comment": "Full fill: all tickers + all records. Synchronous writes to detect memory leaks."
     },
     "silver_only": {
       "providers": [],
