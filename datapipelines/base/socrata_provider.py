@@ -157,8 +157,8 @@ class SocrataBaseProvider(BaseProvider):
                     label=endpoint_id
                 ):
                     yield batch
-                # Cleanup: delete raw CSV after Bronze write
-                self._cleanup_raw_file(raw_path, endpoint_id)
+                # Preserve raw CSV for verification
+                # self._cleanup_raw_file(raw_path, endpoint_id)
             else:
                 # Streaming approach (no storage path configured)
                 logger.info(f"Using CSV streaming for {endpoint_id}")
@@ -226,8 +226,8 @@ class SocrataBaseProvider(BaseProvider):
                         for record in batch:
                             record['year'] = year
                         yield batch
-                    # Cleanup: delete raw CSV after Bronze write
-                    self._cleanup_raw_file(raw_path, year_label)
+                    # Preserve raw CSV for verification
+                    # self._cleanup_raw_file(raw_path, year_label)
                 else:
                     # Streaming approach (no storage path configured)
                     for batch in self.client.fetch_csv(
