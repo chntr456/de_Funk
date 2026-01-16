@@ -570,6 +570,10 @@ for provider_name in bulk_providers:
 
         logger.info(f'{provider_name}: {results.completed_work_items}/{results.total_work_items} work items, {results.total_records:,} total records')
 
+        # Shutdown executor between providers to release thread-local memory
+        IngestorEngine.shutdown_executor()
+        logger.info(f'Shutdown ThreadPoolExecutor after {provider_name}')
+
     except Exception as e:
         logger.error(f'Error processing {provider_name}: {e}', exc_info=True)
         raise

@@ -290,6 +290,11 @@ class IngestorEngine:
 
         results.elapsed_seconds = time.time() - start_time
 
+        # Final cleanup after all work items complete
+        # Critical when multiple providers share same Spark session
+        self._cleanup_spark_memory()
+        logger.info(f"Final cleanup complete for {self.provider.provider_id}")
+
         if not silent:
             results.print_summary()
 
@@ -328,7 +333,7 @@ class IngestorEngine:
         """
         Force cleanup of Spark memory after a work item completes.
 
-        Clears Spark's in-memory cache and triggers Python GC.
+        Clears Spark's in-memory cache, Delta Lake cache, and triggers GC.
         Critical for large endpoints like crimes (8M+ records).
         """
         try:
@@ -336,15 +341,32 @@ class IngestorEngine:
             from pyspark.sql import SparkSession
             spark = SparkSession.getActiveSession()
             if spark:
+                # Clear user-facing cache
                 spark.catalog.clearCache()
-                # Force JVM garbage collection
+
+                # Clear Delta Lake's internal cache
+                try:
+                    spark.sql("CLEAR CACHE")
+                except Exception:
+                    pass  # May fail if no cached tables
+
+                # Clear Spark SQL's internal state
+                try:
+                    spark._jsparkSession.sharedState().cacheManager().clearCache()
+                except Exception:
+                    pass  # May not be available in all Spark versions
+
+                # Force JVM garbage collection (call twice for thorough cleanup)
                 spark._jvm.System.gc()
-                logger.debug("Cleared Spark cache and triggered JVM GC")
+                spark._jvm.System.gc()
+                logger.debug("Cleared Spark/Delta cache and triggered JVM GC")
         except Exception as e:
             logger.debug(f"Spark cleanup (non-critical): {e}")
 
-        # Python garbage collection
-        gc.collect()
+        # Python garbage collection (full collection across all generations)
+        gc.collect(0)
+        gc.collect(1)
+        gc.collect(2)
 
     def _async_write(
         self,
