@@ -5,6 +5,9 @@ version: 3.0
 description: "Master calendar dimension - foundation for all time-series joins"
 tags: [calendar, dates, foundation, shared]
 
+# Inheritance - extends base calendar template
+extends: _base.temporal.calendar
+
 # Dependencies
 depends_on: []  # Foundation model - no dependencies
 

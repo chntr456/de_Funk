@@ -5,6 +5,9 @@ version: 3.0
 description: "Geographic and location dimensions - foundation for spatial analysis"
 tags: [geography, location, foundation, shared]
 
+# Inheritance - extends base geospatial template
+extends: _base.geospatial.geospatial
+
 # Dependencies
 depends_on: []  # Foundation model - no dependencies
 
