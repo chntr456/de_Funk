@@ -124,7 +124,16 @@ class GraphBuilder:
                 # Loading from bronze: bronze.table_name
                 layer, table = from_spec.split('.', 1)
                 assert layer == 'bronze', f"Node {node_id} must load from bronze, got {layer}"
-                df = self._load_bronze_table(table)
+                try:
+                    df = self._load_bronze_table(table)
+                except Exception as e:
+                    # Check if this node is marked as optional
+                    if node_config.get('optional', False):
+                        logger.warning(f"Skipping optional node {node_id}: bronze table '{table}' not found")
+                        continue
+                    else:
+                        # Re-raise the error for required nodes
+                        raise
             else:
                 # Loading from another node (must already be built)
                 parent_node = from_spec

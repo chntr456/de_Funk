@@ -86,10 +86,9 @@ class StocksBuilder(BaseModelBuilder):
         try:
             from scripts.build.compute_technicals import compute_technicals
 
-            # Compute technicals in batches (default 500 tickers per batch)
+            # Compute technicals using native Spark windowing (no batching needed)
             rows_processed = compute_technicals(
                 storage_path=storage_root,
-                batch_size=500,
                 dry_run=False
             )
 

@@ -252,6 +252,7 @@ graph:
 
     fact_earnings:
       from: bronze.company_earnings
+      optional: true  # Skip if bronze table doesn't exist yet
       select:
         # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
