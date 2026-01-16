@@ -5,26 +5,27 @@ nodes:
   _dim_security_base:
     from: bronze.company_reference
     filters:
-      # Override in child: - "type = 'Common Stock'"
-      # Use 'type' column (raw Alpha Vantage value) rather than derived 'asset_type'
-      # 'type' values: 'Common Stock', 'ETF', 'Mutual Fund', etc.
-      - "is_active = true"
+      # Override in child: - "AssetType = 'Common Stock'"
+      # Use 'AssetType' column (raw Alpha Vantage value)
+      # 'AssetType' values: 'Stock', 'Common Stock', 'ETF', etc.
+      []
     select:
       ticker: ticker
-      security_name: security_name  # Bronze column name (Alpha Vantage)
-      security_type: type  # Raw Alpha Vantage type (Common Stock, ETF, etc.)
-      exchange_code: primary_exchange  # Bronze column name
+      security_name: company_name  # Bronze column name (Alpha Vantage)
+      security_type: AssetType  # Raw Alpha Vantage type (Stock, ETF, etc.)
+      exchange_code: exchange_code  # Bronze column name
       currency: currency
-      is_active: is_active  # Bronze column name (already boolean)
     derive:
-      security_id: "sha1(ticker)"
+      security_id: "CONCAT(AssetType, '_', ticker)"
+      is_active: "true"
+    primary_key: [security_id]
     unique_key: [ticker]  # Dedup by ticker - ignores snapshot_dt
     tags: [dim, entity]
 
   _fact_prices_base:
     from: bronze.securities_prices_daily
     filters:
-      # Override in child: - "asset_type = 'stocks'"
+      # Override in child if needed
       - "trade_date IS NOT NULL"
       - "ticker IS NOT NULL"
     select:
@@ -36,6 +37,9 @@ nodes:
       close: close
       volume: volume
       adjusted_close: adjusted_close
+    derive:
+      price_id: "CONCAT(ticker, '_', trade_date)"
+    primary_key: [price_id]
     unique_key: [ticker, trade_date]  # Dedup by ticker+date - ignores snapshot_dt
     tags: [fact, prices]
 

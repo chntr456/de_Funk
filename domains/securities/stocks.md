@@ -68,7 +68,9 @@ graph:
         sector: sector
         industry: industry
       derive:
-        company_id: "CONCAT('COMPANY_', cik)"
+        stock_id: "CONCAT('STOCK_', ticker)"
+        company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
+      primary_key: [stock_id]
       unique_key: [ticker]
       tags: [dim, stock]
 
@@ -78,13 +80,20 @@ graph:
       filters:
         - "trade_date IS NOT NULL"
         - "ticker IS NOT NULL"
+      derive:
+        price_id: "CONCAT(ticker, '_', trade_date)"
+        stock_id: "CONCAT('STOCK_', ticker)"
+      primary_key: [price_id]
       unique_key: [ticker, trade_date]
+      foreign_keys:
+        - {column: stock_id, references: dim_stock.stock_id}
+        - {column: trade_date, references: temporal.dim_calendar.date}
       tags: [fact, prices, stocks]
 
   edges:
     stock_to_company:
       from: dim_stock
-      to: company.dim_company
+      to: corporate.dim_company
       on: [company_id=company_id]
       type: many_to_one
       description: "Stock belongs to a company"
@@ -92,7 +101,7 @@ graph:
     prices_to_stock:
       from: fact_stock_prices
       to: dim_stock
-      on: [ticker=ticker]
+      on: [stock_id=stock_id]
       type: many_to_one
       description: "Prices belong to a stock"
 

@@ -136,36 +136,91 @@ graph:
         company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
         incorporation_country: "'US'"
         is_active: "true"
+      primary_key: [company_id]
       unique_key: [ticker]
       tags: [dim, entity, corporate]
 
     fact_income_statement:
       from: bronze.company_income_statements
+      select:
+        ticker: ticker
+        fiscal_date_ending: fiscal_date_ending
+        report_type: report_type
+        total_revenue: total_revenue
+        gross_profit: gross_profit
+        operating_income: operating_income
+        net_income: net_income
+        ebitda: ebitda
       derive:
         company_id: "CONCAT('COMPANY_', ticker)"
         report_date: "fiscal_date_ending"
+        income_statement_id: "CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)"
+      primary_key: [income_statement_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
+      foreign_keys:
+        - {column: company_id, references: dim_company.company_id}
+        - {column: report_date, references: temporal.dim_calendar.date}
 
     fact_balance_sheet:
       from: bronze.company_balance_sheets
+      select:
+        ticker: ticker
+        fiscal_date_ending: fiscal_date_ending
+        report_type: report_type
+        total_assets: total_assets
+        total_liabilities: total_liabilities
+        total_shareholder_equity: total_shareholder_equity
+        cash_and_equivalents: cash_and_equivalents
+        long_term_debt: long_term_debt
       derive:
         company_id: "CONCAT('COMPANY_', ticker)"
         report_date: "fiscal_date_ending"
+        balance_sheet_id: "CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)"
+      primary_key: [balance_sheet_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
+      foreign_keys:
+        - {column: company_id, references: dim_company.company_id}
+        - {column: report_date, references: temporal.dim_calendar.date}
 
     fact_cash_flow:
       from: bronze.company_cash_flows
+      select:
+        ticker: ticker
+        fiscal_date_ending: fiscal_date_ending
+        report_type: report_type
+        operating_cashflow: operating_cashflow
+        cashflow_from_investment: cashflow_from_investment
+        cashflow_from_financing: cashflow_from_financing
+        free_cash_flow: free_cash_flow
       derive:
         company_id: "CONCAT('COMPANY_', ticker)"
         report_date: "fiscal_date_ending"
+        cash_flow_id: "CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)"
+      primary_key: [cash_flow_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
+      foreign_keys:
+        - {column: company_id, references: dim_company.company_id}
+        - {column: report_date, references: temporal.dim_calendar.date}
 
     fact_earnings:
       from: bronze.company_earnings
+      select:
+        ticker: ticker
+        fiscal_date_ending: fiscal_date_ending
+        report_type: report_type
+        reported_eps: reported_eps
+        estimated_eps: estimated_eps
+        surprise: surprise
+        surprise_percentage: surprise_percentage
       derive:
         company_id: "CONCAT('COMPANY_', ticker)"
         report_date: "fiscal_date_ending"
+        earnings_id: "CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)"
+      primary_key: [earnings_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
+      foreign_keys:
+        - {column: company_id, references: dim_company.company_id}
+        - {column: report_date, references: temporal.dim_calendar.date}
 
   edges:
     company_to_stock:

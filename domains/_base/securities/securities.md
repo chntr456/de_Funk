@@ -54,6 +54,7 @@ graph:
       derive:
         security_id: "CONCAT(AssetType, '_', ticker)"
         is_active: "true"
+      primary_key: [security_id]
       unique_key: [ticker]
 
     _fact_prices_base:
@@ -68,6 +69,10 @@ graph:
         close: close
         volume: volume
         adjusted_close: adjusted_close
+      derive:
+        price_id: "CONCAT(ticker, '_', trade_date)"
+      primary_key: [price_id]
+      unique_key: [ticker, trade_date]
 
   edges:
     _prices_to_security:
