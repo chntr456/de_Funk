@@ -15,7 +15,7 @@
 #   --skip-seed          Skip ticker seeding (use existing Bronze data)
 #   --force-seed         Force re-seed even if ticker data exists
 #   --skip-ingest        Skip Bronze ingestion
-#   --with-financials    Include company financials (income, balance, cash flow, earnings)
+#   --skip-financials    Skip company financials (included by default)
 #   --with-reference     Include reference data (COMPANY_OVERVIEW - for market_cap updates)
 #   --storage-path PATH  Override storage path (default: from run_config.json)
 #   --local              Run locally (ignore SPARK_MASTER_URL)
@@ -53,7 +53,7 @@ FORCE_SEED=false
 SKIP_INGEST=false
 BUILD_SILVER=false     # Test everything by default
 MODELS=""             # Empty = build all discovered models
-WITH_FINANCIALS=false  # Skip financials by default (saves API calls)
+WITH_FINANCIALS=true   # Include financials by default
 WITH_REFERENCE=false   # Skip reference by default (seed has basic info, only need for market_cap)
 STORAGE_PATH=""
 RUN_LOCAL=false
@@ -86,8 +86,8 @@ while [[ $# -gt 0 ]]; do
             MODELS="$2"
             shift 2
             ;;
-        --with-financials)
-            WITH_FINANCIALS=true
+        --skip-financials)
+            WITH_FINANCIALS=false
             shift
             ;;
         --with-reference)
@@ -153,11 +153,11 @@ if max_tickers:
 else:
     print('PROFILE_MAX_TICKERS=""')
 
-# with_financials
-if profile.get('with_financials'):
-    print('PROFILE_WITH_FINANCIALS="true"')
-else:
+# with_financials - default is true, only set false if explicitly disabled
+if profile.get('with_financials') is False:
     print('PROFILE_WITH_FINANCIALS="false"')
+else:
+    print('PROFILE_WITH_FINANCIALS="true"')
 
 # build_silver from profile
 if profile.get('build_silver'):
@@ -182,7 +182,7 @@ PYEOF
 
     # Apply profile settings if not overridden by CLI
     [ -z "$MAX_TICKERS" ] && [ -n "$PROFILE_MAX_TICKERS" ] && MAX_TICKERS="$PROFILE_MAX_TICKERS"
-    [ "$WITH_FINANCIALS" = false ] && [ "$PROFILE_WITH_FINANCIALS" = "true" ] && WITH_FINANCIALS=true
+    [ "$PROFILE_WITH_FINANCIALS" = "false" ] && WITH_FINANCIALS=false
 
     # Apply profile's build_silver setting
     [ "$PROFILE_BUILD_SILVER" = "true" ] && BUILD_SILVER=true
