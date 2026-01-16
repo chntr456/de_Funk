@@ -9,10 +9,17 @@ tags: [stocks, equities, securities]
 extends: _base.finance.securities
 depends_on: [temporal, corporate]
 
-# Storage
+# Storage - provider/dataset for bronze, domain hierarchy for silver
 storage:
-  root: storage/silver/stocks
   format: delta
+  bronze:
+    provider: alpha_vantage
+    tables:
+      securities_reference: alpha_vantage/securities_reference
+      securities_prices_daily: alpha_vantage/securities_prices_daily
+      company_reference: alpha_vantage/company_reference
+  silver:
+    root: storage/silver/securities/stocks
 
 # Build
 build:
@@ -89,7 +96,7 @@ graph:
 
   nodes:
     dim_stock:
-      from: bronze.securities_reference
+      from: bronze.alpha_vantage.securities_reference
       type: dimension
       # Note: securities_reference comes from LISTING_STATUS (bulk ticker list)
       # This gives us ALL tickers (~12,499), not just those with company data (~197)

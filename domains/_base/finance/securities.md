@@ -6,6 +6,17 @@ description: "Base template for all tradable securities (stocks, options, ETFs, 
 # Dependencies - base securities requires temporal for date_id FK pattern
 depends_on: [temporal]
 
+# Storage - provider/dataset for bronze, domain hierarchy for silver
+storage:
+  format: delta
+  bronze:
+    provider: alpha_vantage
+    tables:
+      securities_reference: alpha_vantage/securities_reference
+      securities_prices_daily: alpha_vantage/securities_prices_daily
+  silver:
+    root: storage/silver/securities
+
 # Base Tables
 tables:
   dim_security:
@@ -96,7 +107,7 @@ tables:
 graph:
   nodes:
     dim_security:
-      from: bronze.securities_reference
+      from: bronze.alpha_vantage.securities_reference
       type: dimension
       # Note: securities_reference comes from LISTING_STATUS (bulk ticker list)
       # This has ALL securities, not just the ones we've called OVERVIEW on
@@ -115,7 +126,7 @@ graph:
       tags: [dim, master, security]
 
     _fact_prices_base:
-      from: bronze.securities_prices_daily
+      from: bronze.alpha_vantage.securities_prices_daily
       type: fact
       select:
         ticker: ticker

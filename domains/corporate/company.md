@@ -8,10 +8,19 @@ tags: [company, corporate, fundamentals]
 # Dependencies
 depends_on: [temporal]
 
-# Storage
+# Storage - provider/dataset for bronze, domain hierarchy for silver
 storage:
-  root: storage/silver/company
   format: delta
+  bronze:
+    provider: alpha_vantage
+    tables:
+      company_reference: alpha_vantage/company_reference
+      income_statements: alpha_vantage/income_statements
+      balance_sheets: alpha_vantage/balance_sheets
+      cash_flows: alpha_vantage/cash_flows
+      earnings: alpha_vantage/earnings
+  silver:
+    root: storage/silver/corporate
 
 # Build
 build:
@@ -151,7 +160,7 @@ tables:
 graph:
   nodes:
     dim_company:
-      from: bronze.company_reference
+      from: bronze.alpha_vantage.company_reference
       # Note: company_reference_facet normalizes columns to snake_case
       # No filter needed - company_reference only contains companies with CIK
       select:
@@ -175,7 +184,7 @@ graph:
       tags: [dim, entity, corporate]
 
     fact_income_statement:
-      from: bronze.company_income_statements
+      from: bronze.alpha_vantage.income_statements
       select:
         # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
@@ -200,7 +209,7 @@ graph:
         - {column: date_id, references: temporal.dim_calendar.date_id}
 
     fact_balance_sheet:
-      from: bronze.company_balance_sheets
+      from: bronze.alpha_vantage.balance_sheets
       select:
         # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
@@ -225,7 +234,7 @@ graph:
         - {column: date_id, references: temporal.dim_calendar.date_id}
 
     fact_cash_flow:
-      from: bronze.company_cash_flows
+      from: bronze.alpha_vantage.cash_flows
       select:
         # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
@@ -251,7 +260,7 @@ graph:
         - {column: date_id, references: temporal.dim_calendar.date_id}
 
     fact_earnings:
-      from: bronze.company_earnings
+      from: bronze.alpha_vantage.earnings
       optional: true  # Skip if bronze table doesn't exist yet
       select:
         # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
