@@ -14,8 +14,7 @@
 
     "_comment_domains": "Domain-based silver roots",
     "securities_silver": "storage/silver/securities",
-    "municipal_silver": "storage/silver/municipal",
-    "economic_silver": "storage/silver/economic"
+    "municipal_silver": "storage/silver/municipal"
   },
   "tables": {
     "_comment_seeds": "Seed tables (not provider-specific)",
@@ -31,9 +30,6 @@
     "alpha_vantage/cash_flows": { "root": "bronze", "rel": "alpha_vantage/cash_flows", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"] },
     "alpha_vantage/earnings": { "root": "bronze", "rel": "alpha_vantage/earnings", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"] },
     "alpha_vantage/historical_options": { "root": "bronze", "rel": "alpha_vantage/historical_options", "partitions": ["underlying_ticker", "expiration_date"] },
-
-    "_comment_bls": "Bureau of Labor Statistics provider tables",
-    "bls/timeseries": { "root": "bronze", "rel": "bls/timeseries", "partitions": ["series_id"], "write_strategy": "upsert", "key_columns": ["series_id", "year", "period"] },
 
     "_comment_chicago": "Chicago Data Portal provider tables (config in endpoint markdown)",
     "_note_chicago": "Tables defined in Data Sources/Endpoints/Chicago Data Portal/*.md",

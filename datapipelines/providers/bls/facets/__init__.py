@@ -1,3 +1,0 @@
-"""
-BLS Facets - Pending rebuild.
-"""
