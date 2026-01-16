@@ -288,7 +288,9 @@ class AlphaVantageProvider(BaseProvider):
         if data_type == DataType.REFERENCE:
             if isinstance(data, dict):
                 record = dict(data)
-                record['ticker'] = ticker
+                # Only add ticker if Symbol not in response (Symbol gets renamed to ticker)
+                if 'Symbol' not in record:
+                    record['ticker'] = ticker
                 records.append(record)
 
         elif data_type == DataType.PRICES:
