@@ -19,6 +19,8 @@
       "enabled": true,
       "rate_limit_per_sec": 1.25,
       "_rate_limit_comment": "Pro tier: 75 calls/min = 1.25 calls/sec",
+      "ticker_source": "market_cap",
+      "_ticker_source_comment": "How to select tickers: 'market_cap' = ranked by market cap from company_reference, 'seed' = use ticker_seed table",
       "endpoints": [
         "time_series_daily",
         "company_overview",

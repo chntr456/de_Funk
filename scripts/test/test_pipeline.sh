@@ -308,15 +308,19 @@ if [ "$SKIP_INGEST" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ]; then
     echo -e "${BLUE}Testing task: bronze ingestion (Alpha Vantage)${NC}"
     echo -e "${BLUE}============================================================${NC}"
 
-    # Get endpoints from config
-    AV_ENDPOINTS=$(python3 -c "
+    # Get config from run_config.json
+    eval $(python3 -c "
 import json
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     cfg = json.load(f)
-endpoints = cfg.get('providers', {}).get('alpha_vantage', {}).get('endpoints', [])
-print(' '.join(endpoints))
-" 2>/dev/null || echo "time_series_daily")
+av = cfg.get('providers', {}).get('alpha_vantage', {})
+endpoints = av.get('endpoints', [])
+ticker_source = av.get('ticker_source', 'market_cap')
+print(f'AV_ENDPOINTS=\"{\" \".join(endpoints)}\"')
+print(f'AV_TICKER_SOURCE=\"{ticker_source}\"')
+" 2>/dev/null)
 
+    echo -e "Ticker source: ${GREEN}$AV_TICKER_SOURCE${NC}"
     echo -e "Endpoints: ${GREEN}$AV_ENDPOINTS${NC}"
 
     python -c "
@@ -354,14 +358,27 @@ with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
 provider = create_alpha_vantage_provider(spark=spark, docs_path=docs_path)
 engine = IngestorEngine(provider, storage_cfg)
 
-# Get tickers by market cap from company_reference
-tickers = provider.get_tickers_by_market_cap(max_tickers=max_tickers, storage_cfg=storage_cfg)
+# Get ticker_source from config: 'market_cap' or 'seed'
+av_config = run_config.get('providers', {}).get('alpha_vantage', {})
+ticker_source = av_config.get('ticker_source', 'market_cap')
+logger.info(f'Ticker source: {ticker_source}')
 
-# Fall back to ticker_seed if no market cap data
+tickers = []
+
+if ticker_source == 'market_cap':
+    # Try to get tickers ranked by market cap from company_reference
+    tickers = provider.get_tickers_by_market_cap(max_tickers=max_tickers, storage_cfg=storage_cfg)
+    if tickers:
+        logger.info(f'Loaded {len(tickers)} tickers ranked by market cap')
+
+# Fall back to seed if market_cap returned nothing, or if ticker_source is 'seed'
 if not tickers:
     ticker_seed_path = Path(storage_cfg['roots']['bronze']) / 'ticker_seed'
     if ticker_seed_path.exists():
-        logger.info('No market cap data yet - reading from ticker_seed')
+        if ticker_source == 'market_cap':
+            logger.info('No market cap data yet - falling back to ticker_seed')
+        else:
+            logger.info('Using ticker_seed as configured')
         if (ticker_seed_path / '_delta_log').exists():
             df = spark.read.format('delta').load(str(ticker_seed_path))
         else:
