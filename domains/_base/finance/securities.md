@@ -96,18 +96,19 @@ tables:
 graph:
   nodes:
     dim_security:
-      from: bronze.company_reference
+      from: bronze.securities_reference
       type: dimension
-      # Note: company_reference_facet normalizes to snake_case columns
+      # Note: securities_reference comes from LISTING_STATUS (bulk ticker list)
+      # This has ALL securities, not just the ones we've called OVERVIEW on
       select:
         ticker: ticker
-        security_name: company_name
+        security_name: security_name
         exchange_code: exchange_code
-        currency: currency
+        asset_type: asset_type
       derive:
         security_id: "ABS(HASH(ticker))"
-        # company_reference doesn't have asset_type - default to Stock
-        asset_type: "'Stock'"
+        # Default currency and is_active
+        currency: "'USD'"
         is_active: "true"
       primary_key: [security_id]
       unique_key: [ticker]

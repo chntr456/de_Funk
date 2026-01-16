@@ -39,13 +39,16 @@ tables:
       # Inherited from base (for reference)
       - [ticker, string, false, "Natural key - trading symbol", {unique: true}]
 
-      # Stock-specific attributes
-      - [cik, string, true, "SEC Central Index Key", {pattern: "^[0-9]{10}$", transform: "zfill(10)"}]
+      # Stock-specific attributes (from securities_reference / LISTING_STATUS)
       - [stock_type, string, true, "Type of stock", {enum: [common, preferred, adr, rights, units, warrants], default: "common"}]
-      - [shares_outstanding, long, true, "Current shares outstanding", {coerce: long}]
-      - [market_cap, double, true, "Market capitalization", {coerce: double}]
-      - [sector, string, true, "GICS Sector"]
-      - [industry, string, true, "GICS Industry"]
+
+      # Company enrichment fields (from company_reference / OVERVIEW - may be NULL)
+      # These are only available for stocks that have been processed through COMPANY_OVERVIEW
+      - [cik, string, true, "SEC Central Index Key (from company_reference)", {pattern: "^[0-9]{10}$", transform: "zfill(10)"}]
+      - [shares_outstanding, long, true, "Current shares outstanding (from company_reference)", {coerce: long}]
+      - [market_cap, double, true, "Market capitalization (from company_reference)", {coerce: double}]
+      - [sector, string, true, "GICS Sector (from company_reference)"]
+      - [industry, string, true, "GICS Industry (from company_reference)"]
 
     # Measures on the table
     measures:
@@ -86,24 +89,32 @@ graph:
 
   nodes:
     dim_stock:
-      from: bronze.company_reference
+      from: bronze.securities_reference
       type: dimension
-      # Note: company_reference_facet normalizes to snake_case columns
+      # Note: securities_reference comes from LISTING_STATUS (bulk ticker list)
+      # This gives us ALL tickers (~12,499), not just those with company data (~197)
+      # Company-specific fields (cik, sector, industry, market_cap) are enriched
+      # via LEFT JOIN to company_reference in a subsequent step or left NULL
       select:
         ticker: ticker
-        cik: cik
-        market_cap: market_cap
-        sector: sector
-        industry: industry
+        security_name: security_name
+        exchange_code: exchange_code
+        asset_type: asset_type
+      filters:
+        - "asset_type = 'stocks'"  # Only stock securities, not ETFs
       derive:
         stock_id: "ABS(HASH(CONCAT('STOCK_', ticker)))"
         security_id: "ABS(HASH(ticker))"
-        company_id: "ABS(HASH(CONCAT('COMPANY_', COALESCE(cik, ticker))))"
+        # company_id derived from ticker - will match company if CIK exists
+        # For stocks without company data, company_id still derived from ticker
+        company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
+        # Default stock_type - can be overridden via enrichment
+        stock_type: "'common'"
       primary_key: [stock_id]
       unique_key: [ticker]
       foreign_keys:
         - {column: security_id, references: dim_security.security_id}
-        - {column: company_id, references: corporate.dim_company.company_id}
+        - {column: company_id, references: corporate.dim_company.company_id, optional: true}
       tags: [dim, stock]
 
     fact_stock_prices:
@@ -238,14 +249,17 @@ They are calculated during the build process by `StocksBuilder.post_build()`.
 
 ### Data Sources
 
-| Source | Provider |
-|--------|----------|
-| company_reference | Alpha Vantage |
-| securities_prices_daily | Alpha Vantage |
+| Source | Provider | Endpoint | Description |
+|--------|----------|----------|-------------|
+| securities_reference | Alpha Vantage | LISTING_STATUS | All US tickers (~12,499), bulk listing |
+| securities_prices_daily | Alpha Vantage | TIME_SERIES_DAILY | OHLCV price data |
+| company_reference | Alpha Vantage | COMPANY_OVERVIEW | Company fundamentals (per-ticker, subset) |
 
 ### Notes
 
+- **dim_stock** loads from `securities_reference` (LISTING_STATUS) for full ticker coverage
+- Company-specific fields (cik, sector, industry, market_cap) may be NULL - only populated for tickers with company_reference data
 - Inherits OHLCV schema from `_base.finance.securities`
 - Technical indicators are computed columns, not a separate table
-- Company linkage via integer `company_id`
+- Company linkage via integer `company_id` (optional FK)
 - All date filtering through `dim_calendar` join
