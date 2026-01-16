@@ -139,22 +139,13 @@ graph:
         - {column: date_id, references: temporal.dim_calendar.date_id}
       tags: [fact, prices, stocks]
 
-    fact_stock_technicals:
-      extends: _base.finance.securities._fact_technicals_base
-      filter_by_dimension: dim_stock
-      filters:
-        - "trade_date IS NOT NULL"
-        - "ticker IS NOT NULL"
-      derive:
-        technical_id: "ABS(HASH(CONCAT(ticker, '_', trade_date)))"
-        security_id: "ABS(HASH(ticker))"
-        date_id: "CAST(DATE_FORMAT(trade_date, 'yyyyMMdd') AS INT)"
-      primary_key: [technical_id]
-      unique_key: [ticker, trade_date]
-      foreign_keys:
-        - {column: security_id, references: dim_security.security_id}
-        - {column: date_id, references: temporal.dim_calendar.date_id}
-      tags: [fact, technicals, stocks]
+    # NOTE: fact_stock_technicals is defined in tables section but NOT in graph nodes
+    # because bronze.securities_technicals doesn't exist yet. When technicals bronze
+    # data is available, add the node here with:
+    #   fact_stock_technicals:
+    #     extends: _base.finance.securities._fact_technicals_base
+    #     from: bronze.securities_technicals
+    #     ...
 
   edges:
     stock_to_security:
@@ -181,24 +172,12 @@ graph:
       on: [date_id=date_id]
       type: many_to_one
 
-    technicals_to_stock:
-      from: fact_stock_technicals
-      to: dim_stock
-      on: [security_id=security_id]
-      type: many_to_one
-
-    technicals_to_calendar:
-      from: fact_stock_technicals
-      to: temporal.dim_calendar
-      on: [date_id=date_id]
-      type: many_to_one
-
-    technicals_to_prices:
-      from: fact_stock_technicals
-      to: fact_stock_prices
-      on: [security_id=security_id, date_id=date_id]
-      type: one_to_one
-      description: "Technical indicators align with price data"
+    # NOTE: technicals edges commented out - bronze.securities_technicals doesn't exist
+    # technicals_to_stock:
+    #   from: fact_stock_technicals
+    #   to: dim_stock
+    #   on: [security_id=security_id]
+    #   type: many_to_one
 
   paths:
     company_to_prices:
@@ -206,12 +185,6 @@ graph:
       steps:
         - {from: corporate.dim_company, to: dim_stock, via: company_id}
         - {from: dim_stock, to: fact_stock_prices, via: security_id}
-
-    company_to_technicals:
-      description: "Enable company filter to technicals"
-      steps:
-        - {from: corporate.dim_company, to: dim_stock, via: company_id}
-        - {from: dim_stock, to: fact_stock_technicals, via: security_id}
 
 # Metadata
 metadata:

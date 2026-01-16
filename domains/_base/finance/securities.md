@@ -154,44 +154,22 @@ graph:
         - {column: security_id, references: dim_security.security_id}
         - {column: date_id, references: temporal.dim_calendar.date_id}
 
-    _fact_technicals_base:
-      from: bronze.securities_technicals
-      type: fact
-      select:
-        ticker: ticker
-        trade_date: trade_date
-        # Moving Averages
-        sma_20: sma_20
-        sma_50: sma_50
-        sma_200: sma_200
-        ema_12: ema_12
-        ema_26: ema_26
-        # Momentum
-        rsi_14: rsi_14
-        macd: macd
-        macd_signal: macd_signal
-        macd_histogram: macd_histogram
-        # Volatility
-        bollinger_upper: bollinger_upper
-        bollinger_middle: bollinger_middle
-        bollinger_lower: bollinger_lower
-        atr_14: atr_14
-        # Volume
-        obv: obv
-        vwap: vwap
-        # Trend
-        adx_14: adx_14
-        plus_di: plus_di
-        minus_di: minus_di
-      derive:
-        security_id: "ABS(HASH(ticker))"
-        date_id: "CAST(DATE_FORMAT(trade_date, 'yyyyMMdd') AS INT)"
-        technical_id: "ABS(HASH(CONCAT(ticker, '_', trade_date)))"
-      primary_key: [technical_id]
-      unique_key: [ticker, trade_date]
-      foreign_keys:
-        - {column: security_id, references: dim_security.security_id}
-        - {column: date_id, references: temporal.dim_calendar.date_id}
+    # NOTE: _fact_technicals_base graph node is commented out because
+    # bronze.securities_technicals doesn't exist yet. The table schema is
+    # defined above in tables section. When technicals bronze data is available,
+    # uncomment this node and the related edges below.
+    #
+    # _fact_technicals_base:
+    #   from: bronze.securities_technicals
+    #   type: fact
+    #   select: [ticker, trade_date, sma_20, sma_50, sma_200, ema_12, ema_26,
+    #            rsi_14, macd, macd_signal, macd_histogram,
+    #            bollinger_upper, bollinger_middle, bollinger_lower, atr_14,
+    #            obv, vwap, adx_14, plus_di, minus_di]
+    #   derive:
+    #     security_id: "ABS(HASH(ticker))"
+    #     date_id: "CAST(DATE_FORMAT(trade_date, 'yyyyMMdd') AS INT)"
+    #     technical_id: "ABS(HASH(CONCAT(ticker, '_', trade_date)))"
 
   edges:
     prices_to_security:
@@ -206,26 +184,6 @@ graph:
       on: [date_id=date_id]
       type: many_to_one
       cross_model: temporal
-
-    technicals_to_security:
-      from: _fact_technicals_base
-      to: dim_security
-      on: [security_id=security_id]
-      type: many_to_one
-
-    technicals_to_calendar:
-      from: _fact_technicals_base
-      to: temporal.dim_calendar
-      on: [date_id=date_id]
-      type: many_to_one
-      cross_model: temporal
-
-    technicals_to_prices:
-      from: _fact_technicals_base
-      to: _fact_prices_base
-      on: [security_id=security_id, date_id=date_id]
-      type: one_to_one
-      description: "Technical indicators align with price data"
 
 # Metadata
 domain: securities

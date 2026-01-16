@@ -176,9 +176,9 @@ graph:
     fact_income_statement:
       from: bronze.company_income_statements
       select:
-        # Map camelCase bronze columns to snake_case silver columns
+        # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
-        fiscal_date_ending: fiscalDateEnding
+        fiscal_date_ending: fiscal_date_ending
         report_type: report_type
         total_revenue: totalRevenue
         gross_profit: grossProfit
@@ -187,9 +187,9 @@ graph:
         ebitda: ebitda
         reported_currency: reportedCurrency
       derive:
-        income_statement_id: "ABS(HASH(CONCAT(ticker, '_', fiscalDateEnding, '_', report_type)))"
+        income_statement_id: "ABS(HASH(CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscalDateEnding, 'yyyyMMdd') AS INT)"
+        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
       primary_key: [income_statement_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -199,9 +199,9 @@ graph:
     fact_balance_sheet:
       from: bronze.company_balance_sheets
       select:
-        # Map camelCase bronze columns to snake_case silver columns
+        # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
-        fiscal_date_ending: fiscalDateEnding
+        fiscal_date_ending: fiscal_date_ending
         report_type: report_type
         total_assets: totalAssets
         total_liabilities: totalLiabilities
@@ -210,9 +210,9 @@ graph:
         long_term_debt: longTermDebt
         reported_currency: reportedCurrency
       derive:
-        balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', fiscalDateEnding, '_', report_type)))"
+        balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscalDateEnding, 'yyyyMMdd') AS INT)"
+        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
       primary_key: [balance_sheet_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -222,18 +222,18 @@ graph:
     fact_cash_flow:
       from: bronze.company_cash_flows
       select:
-        # Map camelCase bronze columns to snake_case silver columns
+        # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
-        fiscal_date_ending: fiscalDateEnding
+        fiscal_date_ending: fiscal_date_ending
         report_type: report_type
         operating_cashflow: operatingCashflow
         cashflow_from_investment: cashflowFromInvestment
         cashflow_from_financing: cashflowFromFinancing
         reported_currency: reportedCurrency
       derive:
-        cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', fiscalDateEnding, '_', report_type)))"
+        cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscalDateEnding, 'yyyyMMdd') AS INT)"
+        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
         # Free cash flow = operating - capex (approximation)
         free_cash_flow: "operatingCashflow - ABS(COALESCE(capitalExpenditures, 0))"
       primary_key: [cash_flow_id]
@@ -245,18 +245,18 @@ graph:
     fact_earnings:
       from: bronze.company_earnings
       select:
-        # Map camelCase bronze columns to snake_case silver columns
+        # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
-        fiscal_date_ending: fiscalDateEnding
+        fiscal_date_ending: fiscal_date_ending
         report_type: report_type
         reported_eps: reportedEPS
         estimated_eps: estimatedEPS
         surprise: surprise
         surprise_percentage: surprisePercentage
       derive:
-        earnings_id: "ABS(HASH(CONCAT(ticker, '_', fiscalDateEnding, '_', report_type)))"
+        earnings_id: "ABS(HASH(CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscalDateEnding, 'yyyyMMdd') AS INT)"
+        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
       primary_key: [earnings_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
