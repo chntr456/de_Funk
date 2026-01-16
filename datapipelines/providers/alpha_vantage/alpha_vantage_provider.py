@@ -567,9 +567,11 @@ class AlphaVantageProvider(BaseProvider):
             logger.warning("No storage config provided for market cap ranking")
             return []
 
-        bronze_path = Path(storage_cfg["roots"]["bronze"]) / "securities_reference"
+        # Market cap is in company_reference (from COMPANY_OVERVIEW), not securities_reference
+        bronze_path = Path(storage_cfg["roots"]["bronze"]) / "company_reference"
 
         if not bronze_path.exists():
+            logger.debug(f"company_reference not found at {bronze_path}")
             return []
 
         try:
