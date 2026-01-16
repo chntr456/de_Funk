@@ -31,7 +31,7 @@ last_reviewed:
 notes: "Multiple view_ids by year - iterate over view_id table below"
 
 # Storage Configuration
-bronze: chicago/budget_appropriations
+bronze: chicago
 partitions: [year]
 write_strategy: upsert
 key_columns: [fund_code, department_code, appropriation_account]

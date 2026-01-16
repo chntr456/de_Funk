@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Adult arrests only (18+). Up to 4 charges per record, ordered by severity."
 
 # Storage Configuration
-bronze: chicago/arrests
+bronze: chicago
 partitions: [year]
 write_strategy: upsert
 key_columns: [cb_no]

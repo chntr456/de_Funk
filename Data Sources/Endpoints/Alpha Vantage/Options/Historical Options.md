@@ -31,7 +31,7 @@ last_reviewed:
 notes: "Premium endpoint - requires paid subscription"
 
 # Storage Configuration
-bronze: alpha_vantage/historical_options
+bronze: alpha_vantage
 partitions: [underlying_ticker, expiration_date]
 write_strategy: upsert
 key_columns: [contract_id, trade_date]

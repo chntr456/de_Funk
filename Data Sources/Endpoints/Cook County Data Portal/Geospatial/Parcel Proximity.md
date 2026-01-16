@@ -32,7 +32,7 @@ last_reviewed:
 notes: "10-digit parcels with distances to spatial features. Available mostly after 2012."
 
 # Storage Configuration
-bronze: cook_county/parcel_proximity
+bronze: cook_county
 partitions: []
 write_strategy: overwrite
 key_columns: [pin10]

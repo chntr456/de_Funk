@@ -32,7 +32,7 @@ last_reviewed:
 notes: "Assessor appeals 1999-present with pre/post values. Includes open appeals."
 
 # Storage Configuration
-bronze: cook_county/appeals
+bronze: cook_county
 partitions: [year]
 write_strategy: upsert
 key_columns: [pin, year]

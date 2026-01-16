@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Assessed values 1999-present. Three stages: mailed, certified, BOR certified."
 
 # Storage Configuration
-bronze: cook_county/assessed_values
+bronze: cook_county
 partitions: [year]
 write_strategy: upsert
 key_columns: [pin, year, stage_name]

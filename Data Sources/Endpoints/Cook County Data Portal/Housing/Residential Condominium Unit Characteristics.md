@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Condo unit characteristics 1999-present. Unit-level data. First 10 digits = building PIN."
 
 # Storage Configuration
-bronze: cook_county/condo_chars
+bronze: cook_county
 partitions: [year]
 write_strategy: upsert
 key_columns: [pin, year]

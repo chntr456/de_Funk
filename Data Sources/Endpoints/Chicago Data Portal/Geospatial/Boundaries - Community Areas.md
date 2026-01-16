@@ -31,7 +31,7 @@ last_reviewed:
 notes: "77 Chicago community area boundaries. Stable since 1920s."
 
 # Storage Configuration
-bronze: chicago/community_areas
+bronze: chicago
 partitions: []
 write_strategy: overwrite
 key_columns: [area_numbe]

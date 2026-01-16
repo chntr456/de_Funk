@@ -228,14 +228,22 @@ class AlphaVantageProvider(BaseProvider):
         return self.spark.createDataFrame(records, samplingRatio=1.0)
 
     def get_table_name(self, work_item: str) -> str:
-        """Get Bronze table name from endpoint config."""
+        """Get Bronze table name from endpoint config.
+
+        If bronze.table is just the provider name (no slash), appends the endpoint_id.
+        e.g., bronze: alpha_vantage + endpoint_id: prices_daily -> alpha_vantage/prices_daily
+        """
         data_type = self._get_data_type(work_item)
         if data_type:
             endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
             if endpoint_id:
                 endpoint = self._endpoints.get(endpoint_id)
                 if endpoint and endpoint.bronze:
-                    return endpoint.bronze.table
+                    table = endpoint.bronze.table
+                    # If table is just provider name (no slash), append endpoint name
+                    if '/' not in table:
+                        return f"{table}/{endpoint_id}"
+                    return table
         return f"alpha_vantage_{work_item}"
 
     def get_partitions(self, work_item: str) -> Optional[List[str]]:

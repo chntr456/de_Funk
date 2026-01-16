@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Full history (20+ years) in single call with outputsize=full"
 
 # Storage Configuration
-bronze: alpha_vantage/prices_daily
+bronze: alpha_vantage
 partitions: []
 write_strategy: append
 key_columns: [ticker, trade_date]

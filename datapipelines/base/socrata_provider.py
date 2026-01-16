@@ -269,10 +269,18 @@ class SocrataBaseProvider(BaseProvider):
         return self._create_dataframe(records, endpoint)
 
     def get_table_name(self, work_item: str) -> str:
-        """Get Bronze table name for an endpoint."""
+        """Get Bronze table name for an endpoint.
+
+        If bronze.table is just the provider name (no slash), appends the work_item.
+        e.g., bronze: chicago + work_item: crimes -> chicago/crimes
+        """
         endpoint = self._endpoints.get(work_item)
         if endpoint and endpoint.bronze:
-            return endpoint.bronze.table
+            table = endpoint.bronze.table
+            # If table is just provider name (no slash), append endpoint name
+            if '/' not in table:
+                return f"{table}/{work_item}"
+            return table
         return f"{self.provider_id}_{work_item}"
 
     # =========================================================================

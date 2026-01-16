@@ -31,7 +31,7 @@ last_reviewed:
 notes: "Reference table of 311 service request types. Links to sr_type in service_requests_311."
 
 # Storage Configuration
-bronze: chicago/311_request_types
+bronze: chicago
 partitions: []
 write_strategy: overwrite
 key_columns: [sr_type]

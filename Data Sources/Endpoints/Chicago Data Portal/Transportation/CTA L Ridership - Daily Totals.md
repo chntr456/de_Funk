@@ -32,7 +32,7 @@ last_reviewed:
 notes: "Daily L station ridership since 2001. W=Weekday, A=Saturday, U=Sunday/Holiday."
 
 # Storage Configuration
-bronze: chicago/cta_l_ridership
+bronze: chicago
 partitions: [year]
 write_strategy: upsert
 key_columns: [station_id, date]

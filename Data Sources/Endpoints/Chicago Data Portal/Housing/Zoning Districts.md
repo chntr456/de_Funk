@@ -31,7 +31,7 @@ last_reviewed:
 notes: "Zoning district boundaries based on Chicago Zoning Ordinance."
 
 # Storage Configuration
-bronze: chicago/zoning_districts
+bronze: chicago
 partitions: []
 write_strategy: overwrite
 key_columns: [zone_type, zone_class]

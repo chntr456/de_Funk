@@ -33,7 +33,7 @@ last_reviewed:
 notes: "311 requests since 12/18/2018 (new system). LEGACY_RECORD indicates old system data."
 
 # Storage Configuration
-bronze: chicago/311_requests
+bronze: chicago
 partitions: [year]
 write_strategy: upsert
 key_columns: [sr_number]

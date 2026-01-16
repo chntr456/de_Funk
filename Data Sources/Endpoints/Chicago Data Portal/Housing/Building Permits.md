@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Building permits from 2006-present. Excludes voided/revoked permits."
 
 # Storage Configuration
-bronze: chicago/building_permits
+bronze: chicago
 partitions: [year]
 write_strategy: upsert
 key_columns: [id]

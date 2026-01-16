@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Building violations from 2006-present. Historical data, not for real estate transactions."
 
 # Storage Configuration
-bronze: chicago/building_violations
+bronze: chicago
 partitions: [year]
 write_strategy: upsert
 key_columns: [id]

@@ -31,7 +31,7 @@ last_reviewed:
 notes: "Current police beat boundaries. Historical beat boundaries available separately."
 
 # Storage Configuration
-bronze: chicago/police_beats
+bronze: chicago
 partitions: []
 write_strategy: overwrite
 key_columns: [beat_num]

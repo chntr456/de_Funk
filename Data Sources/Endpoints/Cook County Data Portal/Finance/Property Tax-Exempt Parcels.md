@@ -31,7 +31,7 @@ last_reviewed:
 notes: "Tax-exempt parcels from Tax Year 2022+. Religious, charitable, educational, government."
 
 # Storage Configuration
-bronze: cook_county/tax_exempt
+bronze: cook_county
 partitions: [year]
 write_strategy: upsert
 key_columns: [pin, year]

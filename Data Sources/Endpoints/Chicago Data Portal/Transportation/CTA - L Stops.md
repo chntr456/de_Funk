@@ -31,7 +31,7 @@ last_reviewed:
 notes: "L stop locations with station names and service availability."
 
 # Storage Configuration
-bronze: chicago/cta_l_stops
+bronze: chicago
 partitions: []
 write_strategy: overwrite
 key_columns: [stop_id]

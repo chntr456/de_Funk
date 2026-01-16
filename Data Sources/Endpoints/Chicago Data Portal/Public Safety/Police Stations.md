@@ -31,7 +31,7 @@ last_reviewed:
 notes: "Police district station locations and contact information."
 
 # Storage Configuration
-bronze: chicago/police_stations
+bronze: chicago
 partitions: []
 write_strategy: overwrite
 key_columns: [district]
