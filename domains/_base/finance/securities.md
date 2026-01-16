@@ -33,18 +33,19 @@ tables:
 
   _fact_prices_base:
     type: fact
-    description: "Base OHLCV price data template"
+    description: "Base OHLCV price data with technical indicators"
     primary_key: [price_id]
     partition_by: [date_id]
 
     # Schema: [column, type, nullable, description, {options}]
+    # NOTE: Technical indicators are computed post-build by scripts/build/compute_technicals.py
     schema:
       # Keys - all integers
       - [price_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT(security_id, '_', date_id)))"}]
       - [security_id, integer, false, "FK to dim_security", {fk: dim_security.security_id}]
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
 
-      # Price data
+      # Price data (from bronze)
       - [open, double, true, "Opening price"]
       - [high, double, true, "High price"]
       - [low, double, true, "Low price"]
@@ -52,8 +53,32 @@ tables:
       - [volume, long, true, "Trading volume"]
       - [adjusted_close, double, true, "Split/dividend adjusted close"]
 
+      # Technical Indicators (computed by scripts/build/compute_technicals.py)
+      # Moving Averages
+      - [sma_20, double, true, "20-day Simple Moving Average", {computed: true}]
+      - [sma_50, double, true, "50-day Simple Moving Average", {computed: true}]
+      - [sma_200, double, true, "200-day Simple Moving Average", {computed: true}]
+
+      # Returns & Volatility
+      - [daily_return, double, true, "Daily return percentage", {computed: true}]
+      - [volatility_20d, double, true, "20-day annualized volatility", {computed: true}]
+      - [volatility_60d, double, true, "60-day annualized volatility", {computed: true}]
+
+      # Momentum Indicators
+      - [rsi_14, double, true, "14-day Relative Strength Index", {computed: true, range: [0, 100]}]
+
+      # Bollinger Bands
+      - [bollinger_upper, double, true, "Bollinger Band Upper (SMA20 + 2*StdDev)", {computed: true}]
+      - [bollinger_middle, double, true, "Bollinger Band Middle (SMA20)", {computed: true}]
+      - [bollinger_lower, double, true, "Bollinger Band Lower (SMA20 - 2*StdDev)", {computed: true}]
+
+      # Volume Indicators
+      - [volume_sma_20, double, true, "20-day volume SMA", {computed: true}]
+      - [volume_ratio, double, true, "Volume ratio (current/SMA20)", {computed: true}]
+
     # Measures on the table
     measures:
+      # Price measures
       - [avg_close, avg, close, "Average closing price", {format: "$#,##0.00"}]
       - [total_volume, sum, volume, "Total trading volume", {format: "#,##0"}]
       - [max_high, max, high, "Maximum high price", {format: "$#,##0.00"}]
@@ -61,52 +86,9 @@ tables:
       - [price_range, expression, "AVG(high - low)", "Average price range", {format: "$#,##0.00"}]
       - [intraday_return, expression, "AVG((close - open) / open * 100)", "Average intraday return %", {format: "#,##0.00%"}]
 
-  _fact_technicals_base:
-    type: fact
-    description: "Base technical indicators template"
-    primary_key: [technical_id]
-    partition_by: [date_id]
-
-    # Schema: [column, type, nullable, description, {options}]
-    schema:
-      # Keys - all integers
-      - [technical_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT(security_id, '_', date_id)))"}]
-      - [security_id, integer, false, "FK to dim_security", {fk: dim_security.security_id}]
-      - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
-
-      # Moving Averages
-      - [sma_20, double, true, "20-day Simple Moving Average"]
-      - [sma_50, double, true, "50-day Simple Moving Average"]
-      - [sma_200, double, true, "200-day Simple Moving Average"]
-      - [ema_12, double, true, "12-day Exponential Moving Average"]
-      - [ema_26, double, true, "26-day Exponential Moving Average"]
-
-      # Momentum Indicators
-      - [rsi_14, double, true, "14-day Relative Strength Index", {range: [0, 100]}]
-      - [macd, double, true, "MACD Line (EMA12 - EMA26)"]
-      - [macd_signal, double, true, "MACD Signal Line (9-day EMA of MACD)"]
-      - [macd_histogram, double, true, "MACD Histogram (MACD - Signal)"]
-
-      # Volatility Indicators
-      - [bollinger_upper, double, true, "Bollinger Band Upper (SMA20 + 2*StdDev)"]
-      - [bollinger_middle, double, true, "Bollinger Band Middle (SMA20)"]
-      - [bollinger_lower, double, true, "Bollinger Band Lower (SMA20 - 2*StdDev)"]
-      - [atr_14, double, true, "14-day Average True Range"]
-
-      # Volume Indicators
-      - [obv, double, true, "On-Balance Volume"]
-      - [vwap, double, true, "Volume Weighted Average Price"]
-
-      # Trend Indicators
-      - [adx_14, double, true, "14-day Average Directional Index", {range: [0, 100]}]
-      - [plus_di, double, true, "+DI (Positive Directional Indicator)"]
-      - [minus_di, double, true, "-DI (Negative Directional Indicator)"]
-
-    # Measures on the table
-    measures:
+      # Technical indicator measures
       - [avg_rsi, avg, rsi_14, "Average RSI", {format: "#,##0.00"}]
-      - [avg_macd, avg, macd, "Average MACD", {format: "#,##0.0000"}]
-      - [avg_atr, avg, atr_14, "Average ATR", {format: "$#,##0.00"}]
+      - [avg_volatility, avg, volatility_20d, "Average 20-day volatility", {format: "#,##0.00%"}]
       - [overbought_days, expression, "SUM(CASE WHEN rsi_14 > 70 THEN 1 ELSE 0 END)", "Days RSI > 70", {format: "#,##0"}]
       - [oversold_days, expression, "SUM(CASE WHEN rsi_14 < 30 THEN 1 ELSE 0 END)", "Days RSI < 30", {format: "#,##0"}]
 
@@ -154,22 +136,8 @@ graph:
         - {column: security_id, references: dim_security.security_id}
         - {column: date_id, references: temporal.dim_calendar.date_id}
 
-    # NOTE: _fact_technicals_base graph node is commented out because
-    # bronze.securities_technicals doesn't exist yet. The table schema is
-    # defined above in tables section. When technicals bronze data is available,
-    # uncomment this node and the related edges below.
-    #
-    # _fact_technicals_base:
-    #   from: bronze.securities_technicals
-    #   type: fact
-    #   select: [ticker, trade_date, sma_20, sma_50, sma_200, ema_12, ema_26,
-    #            rsi_14, macd, macd_signal, macd_histogram,
-    #            bollinger_upper, bollinger_middle, bollinger_lower, atr_14,
-    #            obv, vwap, adx_14, plus_di, minus_di]
-    #   derive:
-    #     security_id: "ABS(HASH(ticker))"
-    #     date_id: "CAST(DATE_FORMAT(trade_date, 'yyyyMMdd') AS INT)"
-    #     technical_id: "ABS(HASH(CONCAT(ticker, '_', trade_date)))"
+    # NOTE: Technical indicators are computed post-build by scripts/build/compute_technicals.py
+    # and added as columns to _fact_prices_base. There is no separate technicals table.
 
   edges:
     prices_to_security:
@@ -209,43 +177,46 @@ All keys are **integers** for storage efficiency:
 | `security_id` | integer | `ABS(HASH(ticker))` |
 | `date_id` | integer | `YYYYMMDD` format |
 | `price_id` | integer | `ABS(HASH(ticker + date))` |
-| `technical_id` | integer | `ABS(HASH(ticker + date))` |
 
 ### No Date Columns on Facts
 
 Facts have `date_id` (integer FK), not date columns:
 
 ```sql
--- Join to get actual date
-SELECT c.date AS trade_date, p.close, t.rsi_14
+-- Join to get actual date and technicals (all on same table)
+SELECT c.date AS trade_date, p.close, p.rsi_14, p.sma_50
 FROM fact_stock_prices p
 JOIN temporal.dim_calendar c ON p.date_id = c.date_id
-LEFT JOIN fact_stock_technicals t ON p.security_id = t.security_id AND p.date_id = t.date_id
+WHERE p.rsi_14 < 30  -- oversold condition
 ```
 
 ### Technical Indicators
 
-The `_fact_technicals_base` template includes:
+Technical indicators are **computed columns** on `_fact_prices_base`, not a separate table.
+They are calculated post-build by `scripts/build/compute_technicals.py`.
 
 **Moving Averages:**
 - SMA (20, 50, 200 day)
-- EMA (12, 26 day)
+
+**Returns & Volatility:**
+- Daily return percentage
+- 20-day and 60-day annualized volatility
 
 **Momentum:**
 - RSI (14 day)
-- MACD (12/26/9)
 
-**Volatility:**
-- Bollinger Bands (20 day, 2 std dev)
-- ATR (14 day)
+**Bollinger Bands:**
+- Upper, Middle, Lower (20 day, 2 std dev)
 
 **Volume:**
-- OBV (On-Balance Volume)
-- VWAP
+- 20-day volume SMA
+- Volume ratio (current/SMA)
 
-**Trend:**
-- ADX (14 day)
-- +DI / -DI
+### Build Workflow
+
+1. Main silver build creates `fact_stock_prices` with OHLCV data
+2. `scripts/build/compute_technicals.py` runs post-build to add technical columns
+3. Technical columns are computed in batches to avoid OOM on large datasets
 
 ### Inheritance
 
@@ -262,9 +233,9 @@ tables:
       - [cik, string, true, "SEC Central Index Key"]
       - [market_cap, double, true, "Market capitalization"]
 
-  fact_stock_technicals:
-    extends: _base.finance.securities._fact_technicals_base
-    # Inherits all technical indicator columns
+  fact_stock_prices:
+    extends: _base.finance.securities._fact_prices_base
+    # Inherits OHLCV + technical indicator columns
 ```
 
 ### Models Using This Base

@@ -57,11 +57,12 @@ tables:
   fact_stock_prices:
     type: fact
     extends: _base.finance.securities._fact_prices_base
-    description: "Daily stock prices"
+    description: "Daily stock prices with technical indicators"
     primary_key: [price_id]
     partition_by: [date_id]
 
     # Schema: [column, type, nullable, description, {options}]
+    # NOTE: Technical indicators are computed post-build by scripts/build/compute_technicals.py
     schema:
       # Keys - all integers (NO trade_date column - use date_id)
       - [price_id, integer, false, "PK - Integer surrogate"]
@@ -69,32 +70,15 @@ tables:
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
 
       # Inherited from base: open, high, low, close, volume, adjusted_close
+      # Inherited technicals: sma_20, sma_50, sma_200, rsi_14, bollinger_*, volatility_*, volume_sma_20, volume_ratio
 
     # Measures on the table (inherits base measures + stock-specific)
     measures:
       # Inherited: avg_close, total_volume, max_high, min_low, price_range, intraday_return
+      # Inherited: avg_rsi, avg_volatility, overbought_days, oversold_days
       - [avg_dollar_volume, expression, "AVG(close * volume)", "Average dollar volume", {format: "$#,##0.00M"}]
-
-  fact_stock_technicals:
-    type: fact
-    extends: _base.finance.securities._fact_technicals_base
-    description: "Daily stock technical indicators"
-    primary_key: [technical_id]
-    partition_by: [date_id]
-
-    # Schema: Inherited from base
-    # - Moving Averages: sma_20, sma_50, sma_200, ema_12, ema_26
-    # - Momentum: rsi_14, macd, macd_signal, macd_histogram
-    # - Volatility: bollinger_upper/middle/lower, atr_14
-    # - Volume: obv, vwap
-    # - Trend: adx_14, plus_di, minus_di
-
-    # Stock-specific measures (in addition to base measures)
-    measures:
-      # Inherited: avg_rsi, avg_macd, avg_atr, overbought_days, oversold_days
       - [golden_cross_days, expression, "SUM(CASE WHEN sma_50 > sma_200 THEN 1 ELSE 0 END)", "Days with Golden Cross (SMA50 > SMA200)", {format: "#,##0"}]
       - [death_cross_days, expression, "SUM(CASE WHEN sma_50 < sma_200 THEN 1 ELSE 0 END)", "Days with Death Cross (SMA50 < SMA200)", {format: "#,##0"}]
-      - [macd_bullish_days, expression, "SUM(CASE WHEN macd > macd_signal THEN 1 ELSE 0 END)", "Days MACD bullish", {format: "#,##0"}]
 
 # Graph
 graph:
@@ -139,13 +123,8 @@ graph:
         - {column: date_id, references: temporal.dim_calendar.date_id}
       tags: [fact, prices, stocks]
 
-    # NOTE: fact_stock_technicals is defined in tables section but NOT in graph nodes
-    # because bronze.securities_technicals doesn't exist yet. When technicals bronze
-    # data is available, add the node here with:
-    #   fact_stock_technicals:
-    #     extends: _base.finance.securities._fact_technicals_base
-    #     from: bronze.securities_technicals
-    #     ...
+    # NOTE: Technical indicators are computed post-build by StocksBuilder.post_build()
+    # and added as columns to fact_stock_prices. There is no separate technicals table.
 
   edges:
     stock_to_security:
@@ -171,13 +150,6 @@ graph:
       to: temporal.dim_calendar
       on: [date_id=date_id]
       type: many_to_one
-
-    # NOTE: technicals edges commented out - bronze.securities_technicals doesn't exist
-    # technicals_to_stock:
-    #   from: fact_stock_technicals
-    #   to: dim_stock
-    #   on: [security_id=security_id]
-    #   type: many_to_one
 
   paths:
     company_to_prices:
@@ -209,28 +181,25 @@ All keys are integers for storage efficiency:
 | `company_id` | integer | `HASH('COMPANY_' + cik)` |
 | `date_id` | integer | `YYYYMMDD` format |
 | `price_id` | integer | `HASH(ticker + date)` |
-| `technical_id` | integer | `HASH(ticker + date)` |
 
 ### No trade_date Column
 
-Prices and technicals have `date_id` FK, not `trade_date`:
+Prices have `date_id` FK, not `trade_date`:
 
 ```sql
--- Get prices with technicals and actual dates
+-- Get prices with technicals and actual dates (all on same table)
 SELECT
     c.date AS trade_date,
     c.day_of_week_name,
     s.ticker,
     p.close,
     p.volume,
-    t.rsi_14,
-    t.macd,
-    t.sma_50,
-    t.sma_200
+    p.rsi_14,
+    p.sma_50,
+    p.sma_200
 FROM fact_stock_prices p
 JOIN temporal.dim_calendar c ON p.date_id = c.date_id
 JOIN dim_stock s ON p.security_id = s.security_id
-LEFT JOIN fact_stock_technicals t ON p.security_id = t.security_id AND p.date_id = t.date_id
 WHERE c.year = 2025
   AND c.is_trading_day = true
   AND s.ticker = 'AAPL'
@@ -238,27 +207,31 @@ WHERE c.year = 2025
 
 ### Technical Indicators
 
-Inherited from `_base.finance.securities._fact_technicals_base`:
+Technical indicators are **computed columns** on `fact_stock_prices`, not a separate table.
+They are calculated during the build process by `StocksBuilder.post_build()`.
 
 **Moving Averages:**
 - SMA (20, 50, 200 day)
-- EMA (12, 26 day)
+
+**Returns & Volatility:**
+- Daily return percentage
+- 20-day and 60-day annualized volatility
 
 **Momentum:**
 - RSI (14 day)
-- MACD (12/26/9)
 
-**Volatility:**
-- Bollinger Bands (20 day, 2 std dev)
-- ATR (14 day)
+**Bollinger Bands:**
+- Upper, Middle, Lower (20 day, 2 std dev)
 
 **Volume:**
-- OBV (On-Balance Volume)
-- VWAP
+- 20-day volume SMA
+- Volume ratio (current/SMA)
 
-**Trend:**
-- ADX (14 day)
-- +DI / -DI
+### Build Workflow
+
+1. `StocksBuilder.build()` creates `dim_stock` and `fact_stock_prices` with OHLCV data
+2. `StocksBuilder.post_build()` computes technical indicators in batches
+3. Technical columns are added to `fact_stock_prices`
 
 ### Data Sources
 
@@ -266,11 +239,10 @@ Inherited from `_base.finance.securities._fact_technicals_base`:
 |--------|----------|
 | company_reference | Alpha Vantage |
 | securities_prices_daily | Alpha Vantage |
-| securities_technicals | Alpha Vantage (computed) |
 
 ### Notes
 
 - Inherits OHLCV schema from `_base.finance.securities`
-- Inherits technical indicators from `_base.finance.securities`
+- Technical indicators are computed columns, not a separate table
 - Company linkage via integer `company_id`
 - All date filtering through `dim_calendar` join
