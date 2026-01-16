@@ -155,7 +155,7 @@
     },
     "dev_fill": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
-      "max_tickers": 200,
+      "max_tickers": 10,
       "max_records_per_endpoint": 50000,
       "write_batch_size": 500000,
       "max_pending_writes": 0,
@@ -163,7 +163,7 @@
       "build_silver": true,
       "dry_run": false,
       "log_level": "DEBUG",
-      "_comment": "Top 200 by market cap + Chicago/Cook County (50k limit) + silver build."
+      "_comment": "Top 10 by market cap + Chicago/Cook County (50k limit) + silver build."
     },
     "silver_only": {
       "providers": [],
