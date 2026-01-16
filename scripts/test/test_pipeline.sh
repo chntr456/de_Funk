@@ -247,7 +247,7 @@ fi
 if [ "$SKIP_SEED" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ]; then
     SEED_PATH="${STORAGE_PATH:-/shared/storage}/bronze/ticker_seed"
     if [ -d "$SEED_PATH/_delta_log" ] && [ "$FORCE_SEED" != "true" ]; then
-        echo -e "${YELLOW}○ Ticker seed exists at $SEED_PATH - skipping (use --force-seed to override)${NC}"
+        echo -e "${YELLOW}○ Ticker seed exists at $SEED_PATH - skipping${NC}"
     else
         echo -e "${BLUE}============================================================${NC}"
         echo -e "${BLUE}Testing task: seed tickers${NC}"
