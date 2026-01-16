@@ -1,31 +1,32 @@
 #!/usr/bin/env python3
 """
-Compute Technical Indicators in Batches.
+Compute Technical Indicators using Native Spark Window Functions.
 
 This script adds technical indicators (SMA, RSI, Bollinger Bands, etc.) to
-fact_stock_prices in batches to avoid OOM on large datasets.
-
-The main stocks build now writes raw OHLCV data. This script runs after
-to add derived technical columns in memory-efficient batches.
+fact_stock_prices using Spark's native window functions. Spark handles
+memory management automatically via partitioning - NO Python-level batching needed.
 
 Usage:
     python -m scripts.build.compute_technicals
-    python -m scripts.build.compute_technicals --batch-size 500 --storage-path /shared/storage
+    python -m scripts.build.compute_technicals --storage-path /shared/storage
 
 Architecture Note:
-    Each batch processes N tickers at a time, computing all window functions
-    for just those tickers. This keeps memory bounded regardless of total
-    ticker count.
+    Spark's window functions with partitionBy("ticker") handle memory automatically.
+    Each partition is processed independently, allowing Spark to spill to disk
+    if needed. This scales to millions of rows without manual batching.
+
+Note:
+    This script reads from Delta format (the default silver layer format).
+    If the table was written as Delta, it will be read as Delta.
 
 Author: de_Funk Team
-Date: December 2025
+Date: January 2026 (rewritten to remove unnecessary batching)
 """
 from __future__ import annotations
 
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional
 
 # Setup imports
 project_root = Path(__file__).parent.parent.parent
@@ -36,59 +37,115 @@ from config.logging import setup_logging, get_logger
 logger = get_logger(__name__)
 
 
-def get_all_security_ids(spark, prices_path: Path) -> List[int]:
-    """Get list of all unique security_ids from prices table."""
-    df = spark.read.parquet(str(prices_path))
-    security_ids = [row.security_id for row in df.select("security_id").distinct().collect()]
-    return sorted(security_ids)
-
-
-def compute_technicals_for_batch(
-    spark,
-    prices_path: Path,
-    output_path: Path,
-    security_ids: List[int],
-    batch_num: int,
-    total_batches: int
+def compute_technicals(
+    storage_path: Path,
+    dry_run: bool = False
 ) -> int:
     """
-    Compute technical indicators for a batch of securities.
+    Compute technical indicators for all stocks using native Spark windowing.
+
+    Spark handles memory automatically via partitioning. No Python batching needed.
 
     Args:
-        security_ids: List of security_id values to process in this batch
+        storage_path: Root storage path
+        dry_run: If True, just show what would be done
 
-    Returns number of rows processed.
+    Returns:
+        Total rows processed
     """
+    setup_logging()
+
     from pyspark.sql import functions as F
     from pyspark.sql.window import Window
+    from orchestration.common.spark_session import get_spark
 
-    logger.info(f"  Batch {batch_num}/{total_batches}: Processing {len(security_ids)} securities...")
+    # Paths - fact_stock_prices is in silver layer
+    # After the derive/drop refactor, this table has:
+    # - price_id, security_id, date_id (FK columns)
+    # - open, high, low, close, volume, adjusted_close (price data)
+    # NOTE: ticker and trade_date are DROPPED - use security_id and date_id
+    silver_root = storage_path / "silver" / "stocks" / "facts"
+    prices_path = silver_root / "fact_stock_prices"
 
-    # Read only this batch's securities
-    # Silver layer has: security_id, date_id, price_id, open, high, low, close, volume, adjusted_close
-    # (no ticker or trade_date - those were dropped after deriving FKs)
-    required_cols = ["date_id", "security_id", "price_id", "open", "high", "low", "close", "volume", "adjusted_close"]
-    df = spark.read.parquet(str(prices_path)).select(*required_cols)
-    df = df.filter(F.col("security_id").isin(security_ids))
-
-    row_count = df.count()
-    if row_count == 0:
-        logger.warning(f"    No data for batch {batch_num}")
+    if not prices_path.exists():
+        logger.error(f"Prices table not found: {prices_path}")
         return 0
 
-    # Define window spec for each security ordered by date_id (integer YYYYMMDD format)
-    # Note: Silver layer uses security_id (FK to dim_security) and date_id (FK to dim_calendar)
-    security_window = Window.partitionBy("security_id").orderBy("date_id")
+    print("=" * 70)
+    print("Computing Technical Indicators (Native Spark)")
+    print("=" * 70)
+    print()
+    print(f"Input/Output: {prices_path}")
+    print()
+
+    # Check if Delta or Parquet
+    is_delta = (prices_path / "_delta_log").exists()
+    format_type = "delta" if is_delta else "parquet"
+    print(f"Format: {format_type}")
+
+    # Initialize Spark (memory is handled by Spark automatically)
+    spark = get_spark("TechnicalsCompute")
+
+    # Read the prices table
+    logger.info("Loading price data...")
+    if is_delta:
+        df = spark.read.format("delta").load(str(prices_path))
+    else:
+        df = spark.read.parquet(str(prices_path))
+
+    # Show schema for debugging
+    print("\nInput schema:")
+    df.printSchema()
+
+    # Check what columns we have
+    cols = df.columns
+    print(f"\nColumns: {cols}")
+
+    # Determine the partition column and order column
+    # New schema (post-refactor): security_id, date_id
+    # Old schema (pre-refactor): ticker, trade_date
+    if 'security_id' in cols and 'date_id' in cols:
+        partition_col = "security_id"
+        order_col = "date_id"
+        print(f"\nUsing new schema: partition by {partition_col}, order by {order_col}")
+    elif 'ticker' in cols and 'trade_date' in cols:
+        partition_col = "ticker"
+        order_col = "trade_date"
+        print(f"\nUsing legacy schema: partition by {partition_col}, order by {order_col}")
+    else:
+        logger.error(f"Cannot determine partition/order columns from schema: {cols}")
+        spark.stop()
+        return 0
+
+    row_count = df.count()
+    distinct_count = df.select(partition_col).distinct().count()
+
+    print(f"\nTotal rows: {row_count:,}")
+    print(f"Distinct {partition_col}s: {distinct_count:,}")
+    print()
+
+    if dry_run:
+        print("DRY RUN - would compute technicals for all securities")
+        spark.stop()
+        return 0
+
+    logger.info("Computing technical indicators...")
+
+    # Define window specs - Spark handles partitioning automatically
+    # Each partition (ticker/security_id) is processed independently
+    security_window = Window.partitionBy(partition_col).orderBy(order_col)
 
     # Rolling windows of different sizes
+    window_14 = security_window.rowsBetween(-13, 0)
     window_20 = security_window.rowsBetween(-19, 0)
     window_50 = security_window.rowsBetween(-49, 0)
-    window_200 = security_window.rowsBetween(-199, 0)
-    window_14 = security_window.rowsBetween(-13, 0)
     window_60 = security_window.rowsBetween(-59, 0)
+    window_200 = security_window.rowsBetween(-199, 0)
 
-    # Compute technicals step by step to manage memory
+    # ===========================================
     # Step 1: Daily return and price change
+    # ===========================================
+    print("  Computing returns...")
     df = df.withColumn(
         "prev_close",
         F.lag("close", 1).over(security_window)
@@ -102,188 +159,114 @@ def compute_technicals_for_batch(
         F.col("close") - F.col("prev_close")
     )
 
+    # ===========================================
     # Step 2: Simple Moving Averages
-    df = df.withColumn("sma_20", F.avg("close").over(window_20))
-    df = df.withColumn("sma_50", F.avg("close").over(window_50))
-    df = df.withColumn("sma_200", F.avg("close").over(window_200))
-
-    # Step 3: RSI components
-    df = df.withColumn(
-        "gain",
-        F.when(F.col("price_change") > 0, F.col("price_change")).otherwise(0)
-    ).withColumn(
-        "loss",
-        F.when(F.col("price_change") < 0, F.abs(F.col("price_change"))).otherwise(0)
+    # ===========================================
+    print("  Computing SMAs (20, 50, 200)...")
+    df = (df
+        .withColumn("sma_20", F.avg("close").over(window_20))
+        .withColumn("sma_50", F.avg("close").over(window_50))
+        .withColumn("sma_200", F.avg("close").over(window_200))
     )
 
-    df = df.withColumn("avg_gain_14", F.avg("gain").over(window_14))
-    df = df.withColumn("avg_loss_14", F.avg("loss").over(window_14))
-
-    df = df.withColumn(
-        "rs_14",
-        F.when(F.col("avg_loss_14") != 0, F.col("avg_gain_14") / F.col("avg_loss_14"))
-        .otherwise(None)
-    ).withColumn(
-        "rsi_14",
-        F.when(F.col("rs_14").isNotNull(), 100 - (100 / (1 + F.col("rs_14"))))
-        .otherwise(50)  # Neutral RSI when undefined
+    # ===========================================
+    # Step 3: RSI (Relative Strength Index)
+    # ===========================================
+    print("  Computing RSI...")
+    df = (df
+        .withColumn(
+            "gain",
+            F.when(F.col("price_change") > 0, F.col("price_change")).otherwise(0)
+        )
+        .withColumn(
+            "loss",
+            F.when(F.col("price_change") < 0, F.abs(F.col("price_change"))).otherwise(0)
+        )
+        .withColumn("avg_gain_14", F.avg("gain").over(window_14))
+        .withColumn("avg_loss_14", F.avg("loss").over(window_14))
+        .withColumn(
+            "rs_14",
+            F.when(F.col("avg_loss_14") != 0, F.col("avg_gain_14") / F.col("avg_loss_14"))
+            .otherwise(None)
+        )
+        .withColumn(
+            "rsi_14",
+            F.when(F.col("rs_14").isNotNull(), 100 - (100 / (1 + F.col("rs_14"))))
+            .otherwise(50)  # Neutral RSI when undefined
+        )
     )
 
+    # ===========================================
     # Step 4: Volatility
-    df = df.withColumn("volatility_20d", F.stddev("daily_return").over(window_20) * (252 ** 0.5))
-    df = df.withColumn("volatility_60d", F.stddev("daily_return").over(window_60) * (252 ** 0.5))
-
-    # Step 5: Bollinger Bands
-    df = df.withColumn("bollinger_middle", F.col("sma_20"))
-    std_20 = F.stddev("close").over(window_20)
-    df = df.withColumn("bollinger_upper", F.col("sma_20") + (2 * std_20))
-    df = df.withColumn("bollinger_lower", F.col("sma_20") - (2 * std_20))
-
-    # Step 6: Volume indicators
-    df = df.withColumn("volume_sma_20", F.avg("volume").over(window_20))
-    df = df.withColumn(
-        "volume_ratio",
-        F.when(F.col("volume_sma_20") != 0, F.col("volume") / F.col("volume_sma_20"))
-        .otherwise(None)
+    # ===========================================
+    print("  Computing volatility...")
+    df = (df
+        .withColumn("volatility_20d", F.stddev("daily_return").over(window_20) * (252 ** 0.5))
+        .withColumn("volatility_60d", F.stddev("daily_return").over(window_60) * (252 ** 0.5))
     )
 
+    # ===========================================
+    # Step 5: Bollinger Bands
+    # ===========================================
+    print("  Computing Bollinger Bands...")
+    std_20 = F.stddev("close").over(window_20)
+    df = (df
+        .withColumn("bollinger_middle", F.col("sma_20"))
+        .withColumn("bollinger_upper", F.col("sma_20") + (2 * std_20))
+        .withColumn("bollinger_lower", F.col("sma_20") - (2 * std_20))
+    )
+
+    # ===========================================
+    # Step 6: Volume indicators
+    # ===========================================
+    print("  Computing volume indicators...")
+    df = (df
+        .withColumn("volume_sma_20", F.avg("volume").over(window_20))
+        .withColumn(
+            "volume_ratio",
+            F.when(F.col("volume_sma_20") != 0, F.col("volume") / F.col("volume_sma_20"))
+            .otherwise(None)
+        )
+    )
+
+    # ===========================================
     # Drop intermediate columns
+    # ===========================================
     df = df.drop("prev_close", "price_change", "gain", "loss", "avg_gain_14", "avg_loss_14", "rs_14")
 
-    # Write batch (append mode for subsequent batches)
-    mode = "overwrite" if batch_num == 1 else "append"
-    df.coalesce(1).write.mode(mode).parquet(str(output_path))
+    # ===========================================
+    # Write back to same location (overwrite)
+    # ===========================================
+    print("\n  Writing results...")
+    logger.info(f"Writing {row_count:,} rows with technical indicators...")
 
-    logger.info(f"    ✓ {row_count:,} rows processed")
-    return row_count
-
-
-def compute_technicals(
-    storage_path: Path,
-    batch_size: int = 500,
-    dry_run: bool = False
-) -> int:
-    """
-    Compute technical indicators for all stocks in batches.
-
-    Args:
-        storage_path: Root storage path
-        batch_size: Number of tickers per batch
-        dry_run: If True, just show what would be done
-
-    Returns:
-        Total rows processed
-    """
-    setup_logging()
-
-    from orchestration.common.spark_session import get_spark
-
-    prices_path = storage_path / "silver" / "stocks" / "facts" / "fact_stock_prices"
-    output_path = storage_path / "silver" / "stocks" / "facts" / "fact_stock_prices_with_technicals"
-
-    if not prices_path.exists():
-        logger.error(f"Prices table not found: {prices_path}")
-        return 0
-
-    print("=" * 70)
-    print("Computing Technical Indicators (Batched)")
-    print("=" * 70)
-    print()
-    print(f"Input:  {prices_path}")
-    print(f"Output: {output_path}")
-    print(f"Batch size: {batch_size} tickers")
-    print()
-
-    # Initialize Spark with modest memory (we're batching)
-    spark = get_spark("TechnicalsCompute", config={
-        "spark.driver.memory": "4g",
-        "spark.executor.memory": "4g",
-    })
-
-    # Get all security_ids (silver layer uses security_id not ticker)
-    logger.info("Discovering securities...")
-    all_security_ids = get_all_security_ids(spark, prices_path)
-    total_securities = len(all_security_ids)
-    logger.info(f"Found {total_securities:,} securities")
-
-    # Calculate batches
-    num_batches = (total_securities + batch_size - 1) // batch_size
-
-    print(f"Total securities: {total_securities:,}")
-    print(f"Batches: {num_batches}")
-    print()
-
-    if dry_run:
-        print("DRY RUN - would process:")
-        for i in range(min(3, num_batches)):
-            start = i * batch_size
-            end = min(start + batch_size, total_securities)
-            print(f"  Batch {i+1}: securities {start+1}-{end}")
-        if num_batches > 3:
-            print(f"  ... and {num_batches - 3} more batches")
-        spark.stop()
-        return 0
-
-    # Process batches
-    total_rows = 0
-    for i in range(num_batches):
-        start = i * batch_size
-        end = min(start + batch_size, total_securities)
-        batch_security_ids = all_security_ids[start:end]
-
-        rows = compute_technicals_for_batch(
-            spark=spark,
-            prices_path=prices_path,
-            output_path=output_path,
-            security_ids=batch_security_ids,
-            batch_num=i + 1,
-            total_batches=num_batches
-        )
-        total_rows += rows
-
-    # Swap tables: move computed to original location
-    import shutil
-
-    logger.info("Finalizing...")
-    backup_path = storage_path / "silver" / "stocks" / "facts" / "fact_stock_prices_backup"
-
-    # Backup original
-    if prices_path.exists():
-        if backup_path.exists():
-            shutil.rmtree(backup_path)
-        shutil.move(str(prices_path), str(backup_path))
-
-    # Move new to original location
-    shutil.move(str(output_path), str(prices_path))
-
-    # Remove backup
-    if backup_path.exists():
-        shutil.rmtree(backup_path)
+    # Use Delta format if original was Delta, otherwise parquet
+    if is_delta:
+        df.write.format("delta").mode("overwrite").option("overwriteSchema", "true").save(str(prices_path))
+    else:
+        df.write.mode("overwrite").parquet(str(prices_path))
 
     print()
     print("=" * 70)
-    print("✓ Technical Indicators Complete")
+    print("Technical Indicators Complete")
     print("=" * 70)
-    print(f"Total rows: {total_rows:,}")
+    print(f"Total rows: {row_count:,}")
+    print(f"Securities: {distinct_count:,}")
     print(f"Output: {prices_path}")
 
     spark.stop()
-    return total_rows
+    return row_count
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Compute technical indicators in batches")
+    parser = argparse.ArgumentParser(
+        description="Compute technical indicators using native Spark windowing"
+    )
     parser.add_argument(
         "--storage-path",
         type=str,
         default="/shared/storage",
         help="Storage root path"
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=500,
-        help="Number of tickers per batch (default: 500)"
     )
     parser.add_argument(
         "--dry-run",
@@ -293,7 +276,7 @@ def main():
     args = parser.parse_args()
 
     storage_path = Path(args.storage_path)
-    compute_technicals(storage_path, batch_size=args.batch_size, dry_run=args.dry_run)
+    compute_technicals(storage_path, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

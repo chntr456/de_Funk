@@ -149,17 +149,24 @@ class GraphBuilder:
 
             # Apply derive (computed columns)
             if 'derive' in node_config and node_config['derive']:
+                logger.info(f"Applying {len(node_config['derive'])} derive expressions to {node_id}")
                 for out_name, expr in node_config['derive'].items():
                     try:
+                        logger.debug(f"  Deriving '{out_name}' = {expr}")
                         df = self._apply_derive(df, out_name, expr, node_id)
+                        logger.debug(f"  ✓ Derived '{out_name}' successfully")
                     except Exception as e:
-                        # Log warning and skip this derived column
+                        # Log ERROR (not just warning) and skip this derived column
                         # Common reasons: unsupported expressions, nested window functions
-                        logger.warning(
-                            f"Skipping derived column '{out_name}' in node '{node_id}': {e}"
+                        logger.error(
+                            f"FAILED to derive column '{out_name}' in node '{node_id}': {e}",
+                            exc_info=True
                         )
                         # Continue with other columns
                         continue
+                # Log resulting columns after derive
+                if self.backend == 'spark':
+                    logger.info(f"  Columns after derive: {df.columns}")
 
             # Enforce unique_key constraint (deduplication)
             if 'unique_key' in node_config and node_config['unique_key']:
@@ -182,7 +189,9 @@ class GraphBuilder:
             # Drop columns specified in 'drop' config (removes natural keys after deriving FKs)
             if 'drop' in node_config and node_config['drop']:
                 drop_cols = node_config['drop']
-                logger.debug(f"Dropping columns from {node_id}: {drop_cols}")
+                logger.info(f"Dropping columns from {node_id}: {drop_cols}")
+                if self.backend == 'spark':
+                    logger.info(f"  Columns before drop: {df.columns}")
                 if self.backend == 'spark':
                     df = df.drop(*drop_cols)
                 else:
