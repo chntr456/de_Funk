@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Single/multi-family (<7 units) characteristics 1999-present. Improvement-level (per building)."
 
 # Storage Configuration
-bronze: cook_county_residential_chars
+bronze: cook_county/residential_chars
 partitions: [year]
 write_strategy: upsert
 key_columns: [pin, year, improvement_number]

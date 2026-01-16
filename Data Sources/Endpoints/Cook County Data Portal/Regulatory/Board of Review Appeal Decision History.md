@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Board of Review appeal decisions 2010-present. Final stage of appeal process."
 
 # Storage Configuration
-bronze: cook_county_bor_appeals
+bronze: cook_county/bor_appeals
 partitions: [tax_year]
 write_strategy: upsert
 key_columns: [pin, tax_year]

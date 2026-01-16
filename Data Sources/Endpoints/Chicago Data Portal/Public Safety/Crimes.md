@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Crime incidents 2001-present, minus most recent 7 days. Block-level only."
 
 # Storage Configuration
-bronze: chicago_crimes
+bronze: chicago/crimes
 partitions: [year]
 write_strategy: upsert
 key_columns: [id]

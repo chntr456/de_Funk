@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Traffic congestion by segment. Multiple view_ids for date ranges. 10-min updates."
 
 # Storage Configuration
-bronze: chicago_traffic_congestion
+bronze: chicago/traffic_congestion
 partitions: [year]
 write_strategy: upsert
 key_columns: [segmentid, time]

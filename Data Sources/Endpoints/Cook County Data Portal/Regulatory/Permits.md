@@ -32,7 +32,7 @@ last_reviewed:
 notes: "Historical permit data from municipalities. Includes open/pending permits."
 
 # Storage Configuration
-bronze: cook_county_permits
+bronze: cook_county/permits
 partitions: [year]
 write_strategy: upsert
 key_columns: [pin, permit_number, date_issued]

@@ -31,7 +31,7 @@ last_reviewed:
 notes: "City contracts and modifications since 1993"
 
 # Storage Configuration
-bronze: chicago_contracts
+bronze: chicago/contracts
 partitions: []
 write_strategy: upsert
 key_columns: [contract_number, specification_number]

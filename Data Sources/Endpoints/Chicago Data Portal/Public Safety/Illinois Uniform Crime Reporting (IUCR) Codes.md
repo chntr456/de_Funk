@@ -31,7 +31,7 @@ last_reviewed:
 notes: "IUCR codes used by CPD. 400+ codes divided into Index and Non-Index offenses."
 
 # Storage Configuration
-bronze: chicago_iucr_codes
+bronze: chicago/iucr_codes
 partitions: []
 write_strategy: overwrite
 key_columns: [iucr]

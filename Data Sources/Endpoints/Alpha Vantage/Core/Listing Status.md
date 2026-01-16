@@ -32,7 +32,7 @@ last_reviewed:
 notes: "Single API call returns all US tickers - CSV format"
 
 # Storage Configuration
-bronze: securities_reference
+bronze: alpha_vantage/securities_reference
 partitions: [asset_type]
 write_strategy: upsert
 key_columns: [ticker]

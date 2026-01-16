@@ -31,7 +31,7 @@ last_reviewed:
 notes: "50 Chicago ward boundaries. Changes after Census redistricting. Multiple view_ids."
 
 # Storage Configuration
-bronze: chicago_wards
+bronze: chicago/wards
 partitions: []
 write_strategy: overwrite
 key_columns: [ward]

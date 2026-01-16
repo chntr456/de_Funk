@@ -32,7 +32,7 @@ last_reviewed:
 notes: "Restaurant/food establishment inspections from 2010-present. CDPH Food Protection Program."
 
 # Storage Configuration
-bronze: chicago_food_inspections
+bronze: chicago/food_inspections
 partitions: [year]
 write_strategy: upsert
 key_columns: [inspection_id]

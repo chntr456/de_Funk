@@ -31,7 +31,7 @@ last_reviewed:
 notes: "11,000+ CTA bus stops. Stop ID used for Bus Tracker. Also available as KMZ."
 
 # Storage Configuration
-bronze: chicago_cta_bus_stops
+bronze: chicago/cta_bus_stops
 partitions: []
 write_strategy: overwrite
 key_columns: [stop_id]

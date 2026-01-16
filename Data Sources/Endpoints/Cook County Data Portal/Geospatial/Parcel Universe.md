@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Complete historic parcel universe with geographic, governmental, spatial data."
 
 # Storage Configuration
-bronze: cook_county_parcel_universe
+bronze: cook_county/parcel_universe
 partitions: [year]
 write_strategy: upsert
 key_columns: [pin, year]

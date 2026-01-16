@@ -32,7 +32,7 @@ last_reviewed:
 notes: "All vendor payments 1996-present. Pre-2002 data rolled up to 2002."
 
 # Storage Configuration
-bronze: chicago_payments
+bronze: chicago/payments
 partitions: [year]
 write_strategy: upsert
 key_columns: [voucher_number]

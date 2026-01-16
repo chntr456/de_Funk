@@ -31,7 +31,7 @@ last_reviewed:
 notes: "Assessor neighborhood polygons. Represent housing submarkets, NOT Chicago community areas."
 
 # Storage Configuration
-bronze: cook_county_neighborhoods
+bronze: cook_county/neighborhoods
 partitions: []
 write_strategy: overwrite
 key_columns: [neighborhood_id]

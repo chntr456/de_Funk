@@ -31,7 +31,7 @@ last_reviewed:
 notes: "One API call per ticker - no bulk endpoint"
 
 # Storage Configuration
-bronze: company_reference
+bronze: alpha_vantage/company_reference
 partitions: []
 write_strategy: upsert
 key_columns: [cik]

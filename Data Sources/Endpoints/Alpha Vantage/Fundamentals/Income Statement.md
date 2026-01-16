@@ -31,7 +31,7 @@ last_reviewed:
 notes: "Returns both annualReports and quarterlyReports arrays"
 
 # Storage Configuration
-bronze: company_income_statements
+bronze: alpha_vantage/income_statements
 partitions: [report_type]
 write_strategy: upsert
 key_columns: [ticker, fiscal_date_ending, report_type]

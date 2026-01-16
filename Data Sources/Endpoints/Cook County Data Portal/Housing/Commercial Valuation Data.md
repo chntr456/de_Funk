@@ -32,7 +32,7 @@ last_reviewed:
 notes: "Commercial property valuation 2021-present. KeyPIN = commercial entity (may span multiple PINs)."
 
 # Storage Configuration
-bronze: cook_county_commercial_valuation
+bronze: cook_county/commercial_valuation
 partitions: [year]
 write_strategy: upsert
 key_columns: [keypin, year]

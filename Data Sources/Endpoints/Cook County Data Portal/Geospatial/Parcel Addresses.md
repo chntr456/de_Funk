@@ -32,7 +32,7 @@ last_reviewed:
 notes: "Situs and mailing addresses. WARNING: Mailing addresses not updated since 2017."
 
 # Storage Configuration
-bronze: cook_county_parcel_addresses
+bronze: cook_county/parcel_addresses
 partitions: [year]
 write_strategy: upsert
 key_columns: [pin, year]

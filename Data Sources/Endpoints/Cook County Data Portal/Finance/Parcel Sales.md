@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Parcel sales 1999-present. PIN must be zero-padded to 14 digits."
 
 # Storage Configuration
-bronze: cook_county_parcel_sales
+bronze: cook_county/parcel_sales
 partitions: [year]
 write_strategy: upsert
 key_columns: [pin, sale_document_num]

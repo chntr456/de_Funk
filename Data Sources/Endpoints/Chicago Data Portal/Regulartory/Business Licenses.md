@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Business licenses from 2002-present. Large dataset - use CSV export."
 
 # Storage Configuration
-bronze: chicago_business_licenses
+bronze: chicago/business_licenses
 partitions: [year]
 write_strategy: upsert
 key_columns: [id]

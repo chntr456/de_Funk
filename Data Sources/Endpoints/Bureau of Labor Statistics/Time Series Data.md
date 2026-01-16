@@ -31,7 +31,7 @@ notes: "POST request with JSON body containing series IDs and date range"
 
 # Bronze Layer Configuration
 bronze:
-  table: bls_timeseries
+  table: bls/timeseries
   partitions: [series_id]
   write_strategy: upsert
   key_columns: [series_id, year, period]

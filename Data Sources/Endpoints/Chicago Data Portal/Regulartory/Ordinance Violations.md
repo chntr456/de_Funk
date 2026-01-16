@@ -33,7 +33,7 @@ last_reviewed:
 notes: "Ordinance violations filed with Dept of Administrative Hearings. Currently includes Dept of Buildings violations."
 
 # Storage Configuration
-bronze: chicago_ordinance_violations
+bronze: chicago/ordinance_violations
 partitions: [year]
 write_strategy: upsert
 key_columns: [case_id, violation_code]
