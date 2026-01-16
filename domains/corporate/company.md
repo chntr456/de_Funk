@@ -118,7 +118,8 @@ tables:
       - [operating_cashflow, double, true, "Operating cash flow", {coerce: double}]
       - [cashflow_from_investment, double, true, "Investing cash flow", {coerce: double}]
       - [cashflow_from_financing, double, true, "Financing cash flow", {coerce: double}]
-      - [free_cash_flow, double, true, "Free cash flow", {coerce: double}]
+      - [capital_expenditures, double, true, "Capital expenditures", {coerce: double}]
+      - [free_cash_flow, double, true, "Free cash flow (operating - capex)", {coerce: double, derived: "operating_cashflow - ABS(COALESCE(capital_expenditures, 0))"}]
       - [reported_currency, string, true, "Reporting currency"]
 
     measures:
@@ -229,13 +230,14 @@ graph:
         operating_cashflow: operatingCashflow
         cashflow_from_investment: cashflowFromInvestment
         cashflow_from_financing: cashflowFromFinancing
+        capital_expenditures: capitalExpenditures
         reported_currency: reportedCurrency
       derive:
         cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
-        # Free cash flow = operating - capex (approximation)
-        free_cash_flow: "operatingCashflow - ABS(COALESCE(capitalExpenditures, 0))"
+        # Free cash flow = operating - capex (use snake_case column names after select)
+        free_cash_flow: "operating_cashflow - ABS(COALESCE(capital_expenditures, 0))"
       primary_key: [cash_flow_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:

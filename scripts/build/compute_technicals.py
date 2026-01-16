@@ -62,7 +62,9 @@ def compute_technicals_for_batch(
     logger.info(f"  Batch {batch_num}/{total_batches}: Processing {len(tickers)} tickers...")
 
     # Read only this batch's tickers
-    df = spark.read.parquet(str(prices_path))
+    # Select only the columns we need to avoid schema conflicts with trade_date
+    required_cols = ["ticker", "date_id", "security_id", "price_id", "open", "high", "low", "close", "volume", "adjusted_close"]
+    df = spark.read.parquet(str(prices_path)).select(*required_cols)
     df = df.filter(F.col("ticker").isin(tickers))
 
     row_count = df.count()
@@ -70,8 +72,9 @@ def compute_technicals_for_batch(
         logger.warning(f"    No data for batch {batch_num}")
         return 0
 
-    # Define window spec for each ticker ordered by date
-    ticker_window = Window.partitionBy("ticker").orderBy("trade_date")
+    # Define window spec for each ticker ordered by date_id (integer YYYYMMDD format)
+    # Note: Silver layer uses date_id (FK to dim_calendar), not trade_date
+    ticker_window = Window.partitionBy("ticker").orderBy("date_id")
 
     # Rolling windows of different sizes
     window_20 = ticker_window.rowsBetween(-19, 0)
