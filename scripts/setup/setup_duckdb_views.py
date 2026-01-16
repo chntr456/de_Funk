@@ -220,25 +220,25 @@ SELECT * FROM {read_sql};
             dry_run=dry_run
         )
 
-    def create_geography_views(self, dry_run: bool = False):
-        """Create views for geography model (US location dimensions)."""
+    def create_geospatial_views(self, dry_run: bool = False):
+        """Create views for geospatial model (geographic dimensions)."""
         logger.info("\n" + "="*80)
-        logger.info("GEOGRAPHY MODEL VIEWS")
+        logger.info("GEOSPATIAL MODEL VIEWS")
         logger.info("="*80)
 
-        silver_path = self.get_silver_path('geography')
+        silver_path = self.get_silver_path('geospatial')
 
-        # Dimensions
+        # Dimensions (v3.0 schema)
         dimensions = [
+            'dim_location',
             'dim_state',
             'dim_county',
-            'dim_city',
-            'dim_zip'
+            'dim_city'
         ]
 
         for dim in dimensions:
             self.create_view(
-                schema='geography',
+                schema='geospatial',
                 table=dim,
                 table_path=silver_path / 'dims' / dim,
                 dry_run=dry_run
@@ -252,10 +252,9 @@ SELECT * FROM {read_sql};
 
         silver_path = self.get_silver_path('company')
 
-        # Dimensions
+        # Dimensions (v3.0 schema)
         dimensions = [
-            'dim_company',
-            'dim_exchange'
+            'dim_company'
         ]
 
         for dim in dimensions:
@@ -266,10 +265,12 @@ SELECT * FROM {read_sql};
                 dry_run=dry_run
             )
 
-        # Facts
+        # Facts (v3.0 schema - financial statement facts)
         facts = [
-            'fact_company_fundamentals',
-            'fact_company_metrics'
+            'fact_income_statement',
+            'fact_balance_sheet',
+            'fact_cash_flow',
+            'fact_earnings'
         ]
 
         for fact in facts:
@@ -288,7 +289,7 @@ SELECT * FROM {read_sql};
 
         silver_path = self.get_silver_path('stocks')
 
-        # Dimensions
+        # Dimensions (v3.0 schema)
         dimensions = [
             'dim_stock'
         ]
@@ -301,11 +302,9 @@ SELECT * FROM {read_sql};
                 dry_run=dry_run
             )
 
-        # Facts
+        # Facts (v3.0 schema - OHLCV prices)
         facts = [
-            'fact_stock_prices',
-            'fact_stock_technicals',
-            'fact_stock_fundamentals'
+            'fact_stock_prices'
         ]
 
         for fact in facts:
@@ -507,6 +506,42 @@ CREATE OR REPLACE VIEW futures.dim_security AS
             except Exception as e:
                 logger.warning(f"⚠ Could not create alias views: {e}")
 
+    def create_forecast_views(self, dry_run: bool = False):
+        """Create views for forecast model."""
+        logger.info("\n" + "="*80)
+        logger.info("FORECAST MODEL VIEWS")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('forecast')
+
+        # Dimensions (v3.0 schema)
+        dimensions = [
+            'dim_model_registry'
+        ]
+
+        for dim in dimensions:
+            self.create_view(
+                schema='forecast',
+                table=dim,
+                table_path=silver_path / 'dims' / dim,
+                dry_run=dry_run
+            )
+
+        # Facts (v3.0 schema)
+        facts = [
+            'fact_forecast_price',
+            'fact_forecast_volume',
+            'fact_forecast_metrics'
+        ]
+
+        for fact in facts:
+            self.create_view(
+                schema='forecast',
+                table=fact,
+                table_path=silver_path / 'facts' / fact,
+                dry_run=dry_run
+            )
+
     def create_bronze_views(self, dry_run: bool = False):
         """
         Create views for all Bronze layer tables.
@@ -677,11 +712,12 @@ LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
             if include_bronze:
                 self.create_bronze_views(dry_run=dry_run)
 
-            # v2.0 Silver models
+            # v3.0 Silver models
             self.create_temporal_views(dry_run=dry_run)
-            self.create_geography_views(dry_run=dry_run)
+            self.create_geospatial_views(dry_run=dry_run)
             self.create_company_views(dry_run=dry_run)
             self.create_stocks_views(dry_run=dry_run)
+            self.create_forecast_views(dry_run=dry_run)
             self.create_options_views(dry_run=dry_run)
             self.create_etfs_views(dry_run=dry_run)
             self.create_futures_views(dry_run=dry_run)
