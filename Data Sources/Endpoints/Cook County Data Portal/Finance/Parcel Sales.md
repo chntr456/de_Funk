@@ -45,7 +45,7 @@ schema:
   - [year, int, year, true, "Sale year"]
   - [township_code, string, township_code, true, "Township code"]
   - [class, string, class, true, "Property class code"]
-  - [sale_date, date, sale_date, true, "Sale date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [sale_date, date, sale_date, true, "Sale date"]
   - [sale_price, double, sale_price, true, "Sale price", {coerce: double}]
   - [sale_document_num, string, sale_document_num, true, "Clerk document number"]
   - [deed_type, string, deed_type, true, "Deed type"]

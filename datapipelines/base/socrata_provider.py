@@ -355,11 +355,13 @@ class SocrataBaseProvider(BaseProvider):
         - ISO timestamp: 2025-02-26T00:00:00.000 -> 2025-02-26
         - ISO date: 2025-02-26 (no change)
         - US date: 01/16/2025 or 1/6/2025 -> 2025-01-16
+        - Month name: October 01 2019 -> 2019-10-01
         - Year only: 2020 -> 2020-01-01
         - NULL/empty: NULL
         """
         trimmed = F.trim(col_val)
 
+        # US date format: MM/DD/YYYY
         parts = F.split(trimmed, "/")
         us_date_formatted = F.concat(
             parts[2],
@@ -367,6 +369,31 @@ class SocrataBaseProvider(BaseProvider):
             F.lpad(parts[0], 2, "0"),
             F.lit("-"),
             F.lpad(parts[1], 2, "0")
+        )
+
+        # Month name format: "October 01 2019" -> "2019-10-01"
+        # Split by space: ["October", "01", "2019"]
+        space_parts = F.split(trimmed, " ")
+        month_name = F.lower(space_parts[0])
+        month_num = (
+            F.when(month_name == "january", "01")
+            .when(month_name == "february", "02")
+            .when(month_name == "march", "03")
+            .when(month_name == "april", "04")
+            .when(month_name == "may", "05")
+            .when(month_name == "june", "06")
+            .when(month_name == "july", "07")
+            .when(month_name == "august", "08")
+            .when(month_name == "september", "09")
+            .when(month_name == "october", "10")
+            .when(month_name == "november", "11")
+            .when(month_name == "december", "12")
+            .otherwise(None)
+        )
+        month_name_formatted = F.concat(
+            space_parts[2], F.lit("-"),  # year
+            month_num, F.lit("-"),       # month
+            F.lpad(space_parts[1], 2, "0")  # day
         )
 
         normalized = (
@@ -379,6 +406,10 @@ class SocrataBaseProvider(BaseProvider):
             ).when(
                 trimmed.contains("/"),
                 us_date_formatted
+            ).when(
+                # Month name format: starts with letter, has 2 spaces
+                (F.size(space_parts) == 3) & month_num.isNotNull(),
+                month_name_formatted
             ).when(
                 F.length(trimmed) == 4,
                 F.concat(trimmed, F.lit("-01-01"))
