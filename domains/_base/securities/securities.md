@@ -43,7 +43,7 @@ schema:
 graph:
   nodes:
     _dim_security_base:
-      from: bronze.securities_reference
+      from: bronze.company_reference
       type: dimension
       select:
         ticker: ticker

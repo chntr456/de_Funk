@@ -121,7 +121,7 @@ schema:
 graph:
   nodes:
     dim_company:
-      from: bronze.securities_reference
+      from: bronze.company_reference
       filters:
         - "type IN ('Stock', 'Common Stock', 'Preferred Stock')"
         - "is_active = true"
