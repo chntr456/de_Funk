@@ -205,6 +205,11 @@ class ModelConfigLoader:
             template_config = self._load_template(config['schema_template'])
             config = self._deep_merge(template_config, config)
 
+        # Resolve inherits_from if present (alias for extends)
+        if 'inherits_from' in config:
+            parent_config = self._load_extends(config['inherits_from'])
+            config = self._deep_merge(parent_config, config)
+
         # Resolve extends if present (top-level)
         if 'extends' in config:
             parent_config = self._load_extends(config['extends'])
@@ -254,17 +259,35 @@ class ModelConfigLoader:
         Load configuration from extends path.
 
         Args:
-            extends_path: Path like '_base/securities/securities.md' or model name
+            extends_path: Path like '_base/securities/securities.md', '_base.securities', or model name
 
         Returns:
             Extended configuration
         """
-        # Check if it's a path or a model name
+        file_path = None
+
+        # Check if it's a path with slashes
         if '/' in extends_path or extends_path.endswith('.md'):
             # It's a path
             if not extends_path.endswith('.md'):
                 extends_path += '.md'
             file_path = self.domains_dir / extends_path
+
+        # Check if it's dot notation (e.g., _base.securities)
+        elif '.' in extends_path:
+            # Convert dots to slashes and look for directory with main file
+            # _base.securities -> _base/securities/securities.md
+            path_parts = extends_path.split('.')
+            dir_path = self.domains_dir / '/'.join(path_parts)
+            if dir_path.is_dir():
+                main_file = dir_path / f"{path_parts[-1]}.md"
+                if main_file.exists():
+                    file_path = main_file
+
+            # Also try as direct file path: _base/securities.md
+            if file_path is None or not file_path.exists():
+                file_path = self.domains_dir / f"{'/'.join(path_parts)}.md"
+
         else:
             # It's a model name - look it up
             if extends_path in self._model_to_path:
@@ -284,12 +307,24 @@ class ModelConfigLoader:
         Resolve extends directives in nested structures.
 
         Handles extends in:
+        - graph.extends (section-level)
+        - schema.extends (section-level)
+        - tables.{table_name}.extends
         - schema.dimensions.{dim_name}.extends
         - schema.facts.{fact_name}.extends
         - graph.nodes.{node_name}.extends
         - etc.
         """
-        # Sections that can have nested extends
+        # Handle section-level extends (e.g., graph.extends: _base.securities.graph)
+        sections_with_section_extends = ['graph', 'schema', 'measures']
+        for section in sections_with_section_extends:
+            if section in config and isinstance(config[section], dict):
+                if 'extends' in config[section]:
+                    parent = self._resolve_extends_reference(config[section]['extends'])
+                    section_without_extends = {k: v for k, v in config[section].items() if k != 'extends'}
+                    config[section] = self._deep_merge(parent, section_without_extends)
+
+        # Sections that can have nested extends (subsection items)
         sections_with_extends = [
             ('schema', 'dimensions'),
             ('schema', 'facts'),
@@ -395,10 +430,12 @@ class ModelConfigLoader:
             return current if isinstance(current, dict) else {}
 
         # If direct navigation failed, try common locations for the last part
+        # Note: graph.nodes comes BEFORE tables because node configs have 'from' clause
+        # while tables only have schema definitions
         item_name = nav_path[-1]
         search_paths = [
-            ['tables', item_name],  # NEW FORMAT: tables.{table_name}
-            ['graph', 'nodes', item_name],
+            ['graph', 'nodes', item_name],  # Graph nodes have transform config (from, select, derive)
+            ['tables', item_name],  # Tables have schema definitions
             ['schema', 'dimensions', item_name],
             ['schema', 'facts', item_name],
             ['measures', 'simple', item_name],
