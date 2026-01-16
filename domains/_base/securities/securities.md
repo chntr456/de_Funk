@@ -6,45 +6,43 @@ description: "Base template for all tradable securities (stocks, options, ETFs, 
 # Base Schema Templates
 schema:
   dimensions:
-    _dim_security:
-      description: "Base dimension for all tradable securities"
-      primary_key: [ticker]
+    dim_security:
+      description: "Master dimension for all tradable securities - OWNS ticker uniqueness"
+      primary_key: [security_id]
       columns:
-        ticker: {type: string, description: "Trading symbol", required: true}
+        security_id: {type: string, description: "PK - Surrogate key (e.g., STOCK_AAPL)", required: true}
+        ticker: {type: string, description: "Trading symbol - UNIQUE natural key", required: true, unique: true}
         security_name: {type: string, description: "Display name"}
-        asset_type: {type: string, description: "Type of asset", enum: [stocks, options, etfs, futures, crypto]}
-        asset_class: {type: string, description: "Asset class", enum: [stocks, options, indices, forex, crypto, commodities]}
+        asset_type: {type: string, description: "Type of asset", enum: [Stock, ETF, Mutual Fund, Option, Future]}
         exchange_code: {type: string, description: "Primary exchange (NYSE, NASDAQ)"}
         currency: {type: string, description: "Trading currency", default: "USD"}
         is_active: {type: boolean, description: "Currently trading", default: true}
-        listing_date: {type: date, description: "Date first listed"}
-        delisting_date: {type: date, description: "Date delisted (null if active)"}
-        last_updated: {type: timestamp, description: "Last metadata update"}
-      tags: [dim, entity, security]
+      tags: [dim, entity, security, master]
 
   facts:
     _fact_prices:
       description: "Base OHLCV price data for all securities"
-      primary_key: [ticker, trade_date]
+      primary_key: [price_id]
       partitions: [trade_date]
       columns:
-        ticker: {type: string, description: "FK to dim_security", required: true}
+        price_id: {type: string, description: "PK - Surrogate key (ticker_date)", required: true}
+        security_id: {type: string, description: "FK to dim_security.security_id", required: true}
         trade_date: {type: date, description: "Trading date", required: true}
         open: {type: double, description: "Opening price"}
         high: {type: double, description: "Highest price"}
         low: {type: double, description: "Lowest price"}
         close: {type: double, description: "Closing price", required: true}
         volume: {type: double, description: "Trading volume"}
-        volume_weighted: {type: double, description: "VWAP"}
-        transactions: {type: long, description: "Number of transactions"}
+        adjusted_close: {type: double, description: "Split/dividend adjusted close"}
       tags: [fact, prices, timeseries, ohlcv]
 
 # Base Graph Templates
 graph:
   nodes:
-    _dim_security_base:
+    dim_security:
       from: bronze.company_reference
       type: dimension
+      description: "Master security dimension - OWNS ticker uniqueness"
       select:
         ticker: ticker
         security_name: company_name
@@ -52,10 +50,11 @@ graph:
         exchange_code: exchange_code
         currency: currency
       derive:
-        security_id: "CONCAT(AssetType, '_', ticker)"
+        security_id: "CONCAT(COALESCE(AssetType, 'UNKNOWN'), '_', ticker)"
         is_active: "true"
       primary_key: [security_id]
       unique_key: [ticker]
+      tags: [dim, master, security]
 
     _fact_prices_base:
       from: bronze.securities_prices_daily
@@ -71,18 +70,22 @@ graph:
         adjusted_close: adjusted_close
       derive:
         price_id: "CONCAT(ticker, '_', trade_date)"
+        security_id: "CONCAT('Stock_', ticker)"
       primary_key: [price_id]
       unique_key: [ticker, trade_date]
+      foreign_keys:
+        - {column: security_id, references: dim_security.security_id}
+        - {column: trade_date, references: temporal.dim_calendar.date}
 
   edges:
-    _prices_to_security:
+    prices_to_security:
       from: _fact_prices
-      to: _dim_security
-      on: [ticker=ticker]
+      to: dim_security
+      on: [security_id=security_id]
       type: many_to_one
-      description: "Prices belong to a security"
+      description: "Prices belong to a security via security_id"
 
-    _prices_to_calendar:
+    prices_to_calendar:
       from: _fact_prices
       to: temporal.dim_calendar
       on: [trade_date=date]
@@ -130,7 +133,7 @@ measures:
 
     security_count:
       description: "Number of securities"
-      source: _dim_security.ticker
+      source: dim_security.security_id
       aggregation: count_distinct
       format: "#,##0"
       tags: [count, core]

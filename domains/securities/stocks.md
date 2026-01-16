@@ -27,29 +27,31 @@ schema:
 
   dimensions:
     dim_stock:
-      extends: _base.securities._dim_security
-      description: "Stock equity dimension"
-      primary_key: [ticker]
+      description: "Stock equity dimension - extends dim_security with stock-specific attributes"
+      primary_key: [stock_id]
       columns:
-        # Inherited: ticker, security_name, asset_type, asset_class,
-        #            exchange_code, currency, is_active, listing_date, delisting_date
+        stock_id: {type: string, description: "PK - Surrogate key (STOCK_ticker)", required: true}
+        security_id: {type: string, description: "FK to dim_security.security_id", required: true}
         company_id: {type: string, description: "FK to company.dim_company", required: true}
+        ticker: {type: string, description: "Ticker (denormalized from dim_security)"}
         cik: {type: string, description: "SEC Central Index Key", pattern: "^[0-9]{10}$"}
         stock_type: {type: string, description: "Type of stock", enum: [common, preferred, adr, rights, units, warrants], default: common}
         shares_outstanding: {type: long, description: "Current shares outstanding"}
         market_cap: {type: double, description: "Latest market capitalization"}
-        beta: {type: double, description: "Beta vs. SPY (500-day rolling)"}
         sector: {type: string, description: "GICS Sector (denormalized)"}
         industry: {type: string, description: "GICS Industry (denormalized)"}
-      tags: [dim, entity, stock, security]
+      tags: [dim, entity, stock]
 
   facts:
     fact_stock_prices:
       extends: _base.securities._fact_prices
-      description: "Daily stock prices (filtered from unified bronze table)"
-      # Inherits: ticker, trade_date, open, high, low, close, volume, volume_weighted
-      primary_key: [ticker, trade_date]
+      description: "Daily stock prices"
+      primary_key: [price_id]
       partitions: [trade_date]
+      columns:
+        price_id: {type: string, description: "PK - Surrogate key (ticker_date)", required: true}
+        security_id: {type: string, description: "FK to dim_security.security_id", required: true}
+        trade_date: {type: date, description: "Trading date", required: true}
       tags: [fact, prices, stocks]
 
 # Graph
@@ -57,21 +59,33 @@ graph:
   extends: _base.securities.graph
 
   nodes:
+    # Stocks-specific filter for dim_security (inherited from base)
+    dim_security:
+      extends: _base.securities.dim_security
+      filters:
+        - "AssetType IN ('Stock', 'Common Stock', 'Preferred Stock')"
+      tags: [dim, master, security, stocks]
+
     dim_stock:
-      extends: _base.securities._dim_security_base
+      from: bronze.company_reference
+      type: dimension
       filters:
         - "AssetType IN ('Stock', 'Common Stock', 'Preferred Stock')"
       select:
-        security_type: AssetType
+        ticker: ticker
         cik: cik
         market_cap: market_cap
         sector: sector
         industry: industry
       derive:
         stock_id: "CONCAT('STOCK_', ticker)"
+        security_id: "CONCAT('Stock_', ticker)"
         company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
       primary_key: [stock_id]
       unique_key: [ticker]
+      foreign_keys:
+        - {column: security_id, references: dim_security.security_id}
+        - {column: company_id, references: corporate.dim_company.company_id}
       tags: [dim, stock]
 
     fact_stock_prices:
@@ -82,15 +96,22 @@ graph:
         - "ticker IS NOT NULL"
       derive:
         price_id: "CONCAT(ticker, '_', trade_date)"
-        stock_id: "CONCAT('STOCK_', ticker)"
+        security_id: "CONCAT('Stock_', ticker)"
       primary_key: [price_id]
       unique_key: [ticker, trade_date]
       foreign_keys:
-        - {column: stock_id, references: dim_stock.stock_id}
+        - {column: security_id, references: dim_security.security_id}
         - {column: trade_date, references: temporal.dim_calendar.date}
       tags: [fact, prices, stocks]
 
   edges:
+    stock_to_security:
+      from: dim_stock
+      to: dim_security
+      on: [security_id=security_id]
+      type: many_to_one
+      description: "Stock references master security dimension"
+
     stock_to_company:
       from: dim_stock
       to: corporate.dim_company
@@ -98,12 +119,12 @@ graph:
       type: many_to_one
       description: "Stock belongs to a company"
 
-    prices_to_stock:
+    prices_to_security:
       from: fact_stock_prices
-      to: dim_stock
-      on: [stock_id=stock_id]
+      to: dim_security
+      on: [security_id=security_id]
       type: many_to_one
-      description: "Prices belong to a stock"
+      description: "Prices reference master security dimension"
 
     prices_to_calendar:
       from: fact_stock_prices
@@ -113,11 +134,12 @@ graph:
       description: "Join prices to calendar"
 
   paths:
-    company_ticker_to_prices:
-      description: "Enable ticker filter from company to prices"
+    company_to_prices:
+      description: "Enable company filter to prices via security"
       steps:
-        - {from: company.dim_company, to: dim_stock, via: ticker}
-        - {from: dim_stock, to: fact_stock_prices, via: ticker}
+        - {from: corporate.dim_company, to: dim_stock, via: company_id}
+        - {from: dim_stock, to: dim_security, via: security_id}
+        - {from: dim_security, to: fact_stock_prices, via: security_id}
 
 # Measures
 measures:
@@ -140,8 +162,8 @@ measures:
 
     stock_count:
       description: "Number of stocks"
-      source: dim_stock.ticker
-      aggregation: count
+      source: dim_stock.stock_id
+      aggregation: count_distinct
       format: "#,##0"
       tags: [count]
 

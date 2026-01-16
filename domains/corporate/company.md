@@ -25,90 +25,79 @@ schema:
   dimensions:
     dim_company:
       description: "Corporate entity master - from securities_reference"
-      primary_key: [ticker]
+      primary_key: [company_id]
       columns:
-        company_id: {type: string, description: "PK - Internal ID", required: true}
+        company_id: {type: string, description: "PK - Surrogate key (COMPANY_cik or COMPANY_ticker)", required: true}
+        security_id: {type: string, description: "FK to dim_security.security_id (for publicly traded)"}
         cik: {type: string, description: "SEC Central Index Key (10 digits)", pattern: "^[0-9]{10}$"}
         company_name: {type: string, description: "Company name", required: true}
-        legal_name: {type: string, description: "Legal entity name"}
-        ticker_primary: {type: string, description: "Primary trading symbol", required: true}
-        ticker: {type: string, description: "Ticker symbol", required: true}
+        ticker: {type: string, description: "Ticker symbol (denormalized)", unique: true}
         exchange_code: {type: string, description: "Primary exchange code"}
         is_active: {type: boolean, description: "Currently active", default: true}
         sector: {type: string, description: "GICS Sector"}
         industry: {type: string, description: "GICS Industry"}
         market_cap: {type: double, description: "Market capitalization"}
-        shares_outstanding: {type: long, description: "Shares outstanding"}
-        pe_ratio: {type: double, description: "Price to earnings ratio"}
-        eps: {type: double, description: "Earnings per share"}
-        dividend_yield: {type: double, description: "Dividend yield"}
         incorporation_country: {type: string, description: "Country of incorporation", default: "US"}
       tags: [dim, entity, corporate]
 
   facts:
     fact_income_statement:
       description: "Income statement data from SEC filings"
-      primary_key: [ticker, fiscal_date_ending, report_type]
+      primary_key: [income_statement_id]
       partitions: [fiscal_date_ending]
       columns:
-        ticker: {type: string, required: true}
+        income_statement_id: {type: string, description: "PK - Surrogate key", required: true}
+        company_id: {type: string, description: "FK to dim_company.company_id", required: true}
         fiscal_date_ending: {type: date, required: true}
         report_type: {type: string, description: "annual or quarterly"}
         total_revenue: {type: double}
-        cost_of_revenue: {type: double}
         gross_profit: {type: double}
         operating_income: {type: double}
         net_income: {type: double}
-        ebit: {type: double}
         ebitda: {type: double}
-        operating_expenses: {type: double}
-        research_and_development: {type: double}
-        interest_expense: {type: double}
         reported_currency: {type: string}
       tags: [fact, financials, income_statement]
 
     fact_balance_sheet:
       description: "Balance sheet data from SEC filings"
-      primary_key: [ticker, fiscal_date_ending, report_type]
+      primary_key: [balance_sheet_id]
       partitions: [fiscal_date_ending]
       columns:
-        ticker: {type: string, required: true}
+        balance_sheet_id: {type: string, description: "PK - Surrogate key", required: true}
+        company_id: {type: string, description: "FK to dim_company.company_id", required: true}
         fiscal_date_ending: {type: date, required: true}
         report_type: {type: string}
         total_assets: {type: double}
-        total_current_assets: {type: double}
-        cash_and_equivalents: {type: double}
         total_liabilities: {type: double}
-        total_current_liabilities: {type: double}
-        long_term_debt: {type: double}
         total_shareholder_equity: {type: double}
-        retained_earnings: {type: double}
+        cash_and_equivalents: {type: double}
+        long_term_debt: {type: double}
         reported_currency: {type: string}
       tags: [fact, financials, balance_sheet]
 
     fact_cash_flow:
       description: "Cash flow statement data"
-      primary_key: [ticker, fiscal_date_ending, report_type]
+      primary_key: [cash_flow_id]
       partitions: [fiscal_date_ending]
       columns:
-        ticker: {type: string, required: true}
+        cash_flow_id: {type: string, description: "PK - Surrogate key", required: true}
+        company_id: {type: string, description: "FK to dim_company.company_id", required: true}
         fiscal_date_ending: {type: date, required: true}
         report_type: {type: string}
         operating_cashflow: {type: double}
         cashflow_from_investment: {type: double}
-        capital_expenditures: {type: double}
         cashflow_from_financing: {type: double}
-        dividend_payout: {type: double}
         free_cash_flow: {type: double}
         reported_currency: {type: string}
       tags: [fact, financials, cash_flow]
 
     fact_earnings:
       description: "Earnings data (EPS actual vs estimate)"
-      primary_key: [ticker, fiscal_date_ending, report_type]
+      primary_key: [earnings_id]
       partitions: [fiscal_date_ending]
       columns:
-        ticker: {type: string, required: true}
+        earnings_id: {type: string, description: "PK - Surrogate key", required: true}
+        company_id: {type: string, description: "FK to dim_company.company_id", required: true}
         fiscal_date_ending: {type: date, required: true}
         report_type: {type: string}
         reported_eps: {type: double}
@@ -134,10 +123,13 @@ graph:
         market_cap: market_cap
       derive:
         company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
+        security_id: "CONCAT('Stock_', ticker)"
         incorporation_country: "'US'"
         is_active: "true"
       primary_key: [company_id]
       unique_key: [ticker]
+      foreign_keys:
+        - {column: security_id, references: securities.dim_security.security_id}
       tags: [dim, entity, corporate]
 
     fact_income_statement:
@@ -223,42 +215,67 @@ graph:
         - {column: report_date, references: temporal.dim_calendar.date}
 
   edges:
+    company_to_security:
+      from: dim_company
+      to: securities.dim_security
+      on: [security_id=security_id]
+      type: one_to_one
+      description: "Company's primary security (for publicly traded)"
+
     company_to_stock:
       from: dim_company
       to: stocks.dim_stock
-      on: [ticker=ticker]
+      on: [company_id=company_id]
       type: one_to_one
       description: "Company's primary stock listing"
 
     income_statement_to_company:
       from: fact_income_statement
       to: dim_company
-      on: [ticker=ticker]
-      type: left
+      on: [company_id=company_id]
+      type: many_to_one
 
     balance_sheet_to_company:
       from: fact_balance_sheet
       to: dim_company
-      on: [ticker=ticker]
-      type: left
+      on: [company_id=company_id]
+      type: many_to_one
 
     cash_flow_to_company:
       from: fact_cash_flow
       to: dim_company
-      on: [ticker=ticker]
-      type: left
+      on: [company_id=company_id]
+      type: many_to_one
 
     earnings_to_company:
       from: fact_earnings
       to: dim_company
-      on: [ticker=ticker]
-      type: left
+      on: [company_id=company_id]
+      type: many_to_one
 
     # Calendar joins for time-series
     income_statement_to_calendar:
       from: fact_income_statement
       to: temporal.dim_calendar
-      on: [report_date=date]
+      on: [fiscal_date_ending=date]
+      type: left
+
+    balance_sheet_to_calendar:
+      from: fact_balance_sheet
+      to: temporal.dim_calendar
+      on: [fiscal_date_ending=date]
+      type: left
+
+    cash_flow_to_calendar:
+      from: fact_cash_flow
+      to: temporal.dim_calendar
+      on: [fiscal_date_ending=date]
+      type: left
+
+    earnings_to_calendar:
+      from: fact_earnings
+      to: temporal.dim_calendar
+      on: [fiscal_date_ending=date]
       type: left
 
 # Measures
@@ -266,7 +283,7 @@ measures:
   simple:
     company_count:
       description: "Number of companies"
-      source: dim_company.ticker
+      source: dim_company.company_id
       aggregation: count_distinct
       format: "#,##0"
 
