@@ -529,13 +529,17 @@ for provider_name in bulk_providers:
 
         engine = IngestorEngine(provider, storage_cfg)
 
-        work_items = provider_cfg.get('endpoints', []) or None
+        # Check for profile-specific endpoint override (e.g., cook_county_endpoints in dev_fill)
+        profile_cfg = run_config.get('profiles', {}).get('${PROFILE}', {})
+        profile_endpoints_key = f'{provider_name}_endpoints'
+        work_items = profile_cfg.get(profile_endpoints_key) or provider_cfg.get('endpoints', []) or None
         if work_items:
-            logger.info(f'Work items from config: {len(work_items)} endpoints')
+            if profile_endpoints_key in profile_cfg:
+                logger.info(f'Work items from profile override: {work_items}')
+            else:
+                logger.info(f'Work items from global config: {len(work_items)} endpoints')
         else:
             logger.info('Work items: auto-discover from provider')
-
-        profile_cfg = run_config.get('profiles', {}).get('${PROFILE}', {})
         max_records = profile_cfg.get('max_records_per_endpoint')
 
         if max_records is None:
