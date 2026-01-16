@@ -249,7 +249,7 @@ fi
 # Task 1: Seed Tickers (Alpha Vantage)
 # ==============================================================================
 if [ "$SKIP_SEED" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ]; then
-    SEED_PATH="${STORAGE_PATH:-/shared/storage}/bronze/ticker_seed"
+    SEED_PATH="${STORAGE_PATH:-/shared/storage}/bronze/seeds/tickers"
     if [ -d "$SEED_PATH/_delta_log" ] && [ "$FORCE_SEED" != "true" ]; then
         echo -e "${YELLOW}○ Ticker seed exists at $SEED_PATH - skipping${NC}"
     else
@@ -381,7 +381,7 @@ if ticker_source == 'market_cap':
 
 # Fall back to seed if market_cap returned nothing, or if ticker_source is 'seed'
 if not tickers:
-    ticker_seed_path = Path(storage_cfg['roots']['bronze']) / 'ticker_seed'
+    ticker_seed_path = Path(storage_cfg['roots']['bronze']) / 'seeds' / 'tickers'
     if ticker_seed_path.exists():
         if ticker_source == 'market_cap':
             logger.info('No market cap data yet - falling back to ticker_seed')

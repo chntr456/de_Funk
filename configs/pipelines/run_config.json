@@ -110,7 +110,7 @@
     "_securities_reference_comment": "Ticker reference from LISTING_STATUS (bulk listing)",
     "company_reference_path": "bronze/alpha_vantage/company_reference",
     "_company_reference_comment": "Company data from OVERVIEW (has CIK, sector, etc.)",
-    "securities_prices_path": "bronze/alpha_vantage/securities_prices_daily",
+    "securities_prices_path": "bronze/alpha_vantage/prices_daily",
     "_securities_prices_comment": "Daily OHLCV data",
     "filter_us_exchanges": true,
     "_filter_us_exchanges_comment": "Only include tickers from US exchanges (NYSE, NASDAQ, etc.)"
