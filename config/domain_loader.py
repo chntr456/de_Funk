@@ -299,6 +299,14 @@ class ModelConfigLoader:
             ('measures', 'computed'),
         ]
 
+        # NEW FORMAT: Handle extends directly in tables.{table_name}
+        if 'tables' in config and isinstance(config['tables'], dict):
+            for table_name, table_config in config['tables'].items():
+                if isinstance(table_config, dict) and 'extends' in table_config:
+                    parent = self._resolve_extends_reference(table_config['extends'])
+                    table_without_extends = {k: v for k, v in table_config.items() if k != 'extends'}
+                    config['tables'][table_name] = self._deep_merge(parent, table_without_extends)
+
         for section, subsection in sections_with_extends:
             if section in config and isinstance(config[section], dict):
                 if subsection in config[section] and isinstance(config[section][subsection], dict):
@@ -389,6 +397,7 @@ class ModelConfigLoader:
         # If direct navigation failed, try common locations for the last part
         item_name = nav_path[-1]
         search_paths = [
+            ['tables', item_name],  # NEW FORMAT: tables.{table_name}
             ['graph', 'nodes', item_name],
             ['schema', 'dimensions', item_name],
             ['schema', 'facts', item_name],

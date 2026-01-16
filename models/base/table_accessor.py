@@ -181,6 +181,15 @@ class TableAccessor:
                 logger.debug(f"Could not get DuckDB schema for {self.model_name}.{table_name}: {e}")
 
         # Fall back to YAML config (may miss derived columns defined in graph.yaml)
+
+        # NEW FORMAT: tables.{table_name}.schema as flat array
+        tables_config = self.model_cfg.get('tables', {})
+        if table_name in tables_config:
+            schema_array = tables_config[table_name].get('schema', [])
+            if schema_array:
+                return self._parse_schema_array(schema_array)
+
+        # OLD FORMAT: schema.dimensions/facts.{table_name}.columns as dict
         schema_config = self.model_cfg.get('schema', {})
 
         # Check dimensions
@@ -204,6 +213,94 @@ class TableAccessor:
             pass
 
         raise KeyError(f"Table '{table_name}' not found in model schema")
+
+    def _parse_schema_array(self, schema_array: List) -> Dict[str, str]:
+        """
+        Parse flat schema array format to column->type dict.
+
+        Schema array format: [column, type, nullable, description, {options}]
+
+        Args:
+            schema_array: List of column definitions
+
+        Returns:
+            Dictionary mapping column_name -> data_type
+        """
+        result = {}
+        for item in schema_array:
+            if not item or len(item) < 2:
+                continue
+            col_name = item[0]
+            col_type = item[1]
+            result[col_name] = col_type
+        return result
+
+    def get_table_config(self, table_name: str) -> Dict[str, Any]:
+        """
+        Get full table configuration including schema, measures, keys.
+
+        Args:
+            table_name: Name of the table
+
+        Returns:
+            Full table config dict or empty dict if not found
+        """
+        # NEW FORMAT: tables.{table_name}
+        tables_config = self.model_cfg.get('tables', {})
+        if table_name in tables_config:
+            return tables_config[table_name]
+
+        # OLD FORMAT: check schema.dimensions and schema.facts
+        schema_config = self.model_cfg.get('schema', {})
+        if table_name in schema_config.get('dimensions', {}):
+            return schema_config['dimensions'][table_name]
+        if table_name in schema_config.get('facts', {}):
+            return schema_config['facts'][table_name]
+
+        return {}
+
+    def get_derived_expressions(self, table_name: str) -> Dict[str, str]:
+        """
+        Get derived column expressions from schema.
+
+        Extracts {derived: "..."} from schema array options.
+
+        Args:
+            table_name: Name of the table
+
+        Returns:
+            Dictionary mapping column_name -> derivation_expression
+        """
+        derivations = {}
+
+        # NEW FORMAT: tables.{table_name}.schema array
+        tables_config = self.model_cfg.get('tables', {})
+        if table_name in tables_config:
+            schema_array = tables_config[table_name].get('schema', [])
+            for item in schema_array:
+                if len(item) >= 5 and isinstance(item[4], dict):
+                    options = item[4]
+                    if 'derived' in options:
+                        derivations[item[0]] = options['derived']
+
+        return derivations
+
+    def get_table_measures(self, table_name: str) -> List[Dict[str, Any]]:
+        """
+        Get measures defined on a table.
+
+        Measures format: [name, aggregation, column, description, {options}]
+
+        Args:
+            table_name: Name of the table
+
+        Returns:
+            List of measure definitions
+        """
+        tables_config = self.model_cfg.get('tables', {})
+        if table_name in tables_config:
+            return tables_config[table_name].get('measures', [])
+        return []
 
     def get_relations(self) -> Dict[str, List[str]]:
         """
