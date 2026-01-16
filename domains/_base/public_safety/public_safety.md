@@ -1,9 +1,9 @@
 ---
 type: domain-base
-base_name: crime
+base_name: public_safety
 version: 3.0
-description: "Base template for crime/public safety data across jurisdictions"
-tags: [crime, public-safety, base, template]
+description: "Base template for public safety/crime data across jurisdictions"
+tags: [public-safety, crime, base, template]
 
 # Base Tables
 tables:

@@ -6,7 +6,7 @@ description: "Chicago crime and arrest data - extends base crime domain"
 tags: [crime, public-safety, chicago, municipal]
 
 # Inheritance
-extends: _base.crime
+extends: _base.public_safety
 
 # Dependencies
 depends_on:
@@ -42,18 +42,18 @@ sources:
 # Tables - extend base crime tables with Chicago-specific additions
 tables:
   dim_crime_type:
-    extends: _base.crime.dim_crime_type
+    extends: _base.public_safety.dim_crime_type
     # Inherits: crime_type_id, iucr_code, fbi_code, primary_type, description,
     #           crime_category, crime_subcategory, is_index_crime
     # No additional columns needed - base schema is sufficient
 
   dim_location_type:
-    extends: _base.crime.dim_location_type
+    extends: _base.public_safety.dim_location_type
     # Inherits: location_type_id, location_description, location_category
     # No additional columns needed
 
   fact_crimes:
-    extends: _base.crime._fact_crimes_base
+    extends: _base.public_safety._fact_crimes_base
     type: fact
     description: "Chicago crime incidents fact table"
     primary_key: [incident_id]
@@ -95,7 +95,7 @@ tables:
       - [arrest_rate, expression, "100.0 * SUM(CASE WHEN arrest_made THEN 1 ELSE 0 END) / COUNT(*)", "Arrest rate %", {format: "#,##0.0%"}]
 
   fact_arrests:
-    extends: _base.crime._fact_arrests_base
+    extends: _base.public_safety._fact_arrests_base
     type: fact
     description: "Chicago arrest records fact table"
     primary_key: [arrest_id]
@@ -122,11 +122,11 @@ tables:
 
 # Graph - extend base with Chicago-specific sources and edges
 graph:
-  extends: _base.crime.graph
+  extends: _base.public_safety.graph
 
   nodes:
     dim_crime_type:
-      extends: _base.crime.dim_crime_type
+      extends: _base.public_safety.dim_crime_type
       from: bronze.chicago_iucr_codes
       type: dimension
       derive:
@@ -137,7 +137,7 @@ graph:
       tags: [dim, crime, chicago]
 
     dim_location_type:
-      extends: _base.crime.dim_location_type
+      extends: _base.public_safety.dim_location_type
       from: bronze.chicago_crimes
       type: dimension
       transform: distinct
@@ -149,7 +149,7 @@ graph:
       tags: [dim, location, chicago]
 
     fact_crimes:
-      extends: _base.crime._fact_crimes_base
+      extends: _base.public_safety._fact_crimes_base
       from: bronze.chicago_crimes
       type: fact
       derive:
@@ -166,7 +166,7 @@ graph:
       tags: [fact, crime, chicago]
 
     fact_arrests:
-      extends: _base.crime._fact_arrests_base
+      extends: _base.public_safety._fact_arrests_base
       from: bronze.chicago_arrests
       type: fact
       derive:

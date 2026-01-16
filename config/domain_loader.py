@@ -288,6 +288,30 @@ class ModelConfigLoader:
             if file_path is None or not file_path.exists():
                 file_path = self.domains_dir / f"{'/'.join(path_parts)}.md"
 
+            # Path aliasing for reorganized _base structure:
+            # _base.securities -> _base/finance/securities
+            # _base.crime -> _base/public_safety
+            if file_path is None or not file_path.exists():
+                path_aliases = {
+                    '_base.securities': '_base/finance/securities',
+                    '_base.crime': '_base/public_safety',
+                }
+                for old_prefix, new_prefix in path_aliases.items():
+                    if extends_path.startswith(old_prefix):
+                        aliased_path = extends_path.replace(old_prefix, new_prefix.replace('/', '.'), 1)
+                        aliased_parts = aliased_path.split('.')
+                        aliased_dir = self.domains_dir / '/'.join(aliased_parts)
+                        if aliased_dir.is_dir():
+                            aliased_file = aliased_dir / f"{aliased_parts[-1]}.md"
+                            if aliased_file.exists():
+                                file_path = aliased_file
+                                break
+                        # Also try as direct file
+                        aliased_file = self.domains_dir / f"{'/'.join(aliased_parts)}.md"
+                        if aliased_file.exists():
+                            file_path = aliased_file
+                            break
+
         else:
             # It's a model name - look it up
             if extends_path in self._model_to_path:
@@ -400,9 +424,44 @@ class ModelConfigLoader:
                 break
 
         if base_config is None:
-            # Fallback: first part is file, rest is navigation
-            base_config = self._load_extends(parts[0])
-            nav_start_idx = 1
+            # Try path aliasing for reorganized _base structure
+            path_aliases = {
+                '_base.securities': '_base.finance.securities',
+                '_base.crime': '_base.public_safety',
+            }
+            aliased_ref = extends_ref
+            for old_prefix, new_prefix in path_aliases.items():
+                if extends_ref.startswith(old_prefix):
+                    aliased_ref = extends_ref.replace(old_prefix, new_prefix, 1)
+                    break
+
+            if aliased_ref != extends_ref:
+                # Try again with aliased path
+                aliased_parts = aliased_ref.split('.')
+                for i in range(len(aliased_parts) - 1, 0, -1):
+                    path_parts = aliased_parts[:i]
+                    path_str = '/'.join(path_parts)
+                    dir_path = self.domains_dir / path_str
+                    if dir_path.is_dir():
+                        main_file = dir_path / f"{path_parts[-1]}.md"
+                        if main_file.exists():
+                            base_config = self._parse_front_matter(main_file)
+                            # IMPORTANT: Update parts to use aliased version for navigation
+                            parts = aliased_parts
+                            nav_start_idx = i
+                            break
+                    file_path = self.domains_dir / f"{path_str}.md"
+                    if file_path.exists():
+                        base_config = self._parse_front_matter(file_path)
+                        # IMPORTANT: Update parts to use aliased version for navigation
+                        parts = aliased_parts
+                        nav_start_idx = i
+                        break
+
+        if base_config is None:
+            # Fallback: use _load_extends which also has aliasing
+            base_config = self._load_extends('.'.join(parts[:2]) if len(parts) >= 2 else parts[0])
+            nav_start_idx = 2 if len(parts) >= 2 else 1
 
         if not base_config:
             logger.warning(f"Could not resolve extends: {extends_ref}")
