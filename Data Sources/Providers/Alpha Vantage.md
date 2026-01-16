@@ -21,8 +21,21 @@ default_headers: {}
 
 # Provider-specific settings
 provider_settings:
+  ticker_source: seed
+  ticker_source_options: [market_cap, seed]
+  ticker_source_comment: "How to select tickers: 'market_cap' = ranked by market cap from company_reference, 'seed' = use ticker_seed table"
   us_exchanges: [NYSE, NASDAQ, NYSEAMERICAN, NYSEMKT, BATS, NYSEARCA]
   us_exchanges_comment: "Filter to US exchanges for company data. Foreign exchanges may lack OVERVIEW data."
+
+# Endpoints to ingest (configured in run_config.json)
+endpoints:
+  - time_series_daily
+  - company_overview
+  - income_statement
+  - balance_sheet
+  - cash_flow
+  - earnings
+endpoints_comment: "Available: time_series_daily, time_series_daily_adjusted, company_overview, global_quote, income_statement, balance_sheet, cash_flow, earnings"
 
 # Models Fed (Silver layer)
 models:
