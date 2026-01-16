@@ -302,9 +302,19 @@ class AlphaVantageProvider(BaseProvider):
                     records.append(record)
 
         elif data_type in (DataType.INCOME_STATEMENT, DataType.BALANCE_SHEET,
-                          DataType.CASH_FLOW, DataType.EARNINGS):
+                          DataType.CASH_FLOW):
             if isinstance(data, dict):
                 for report_type in ['annualReports', 'quarterlyReports']:
+                    for report in data.get(report_type, []):
+                        record = dict(report)
+                        record['ticker'] = ticker
+                        record['report_type'] = 'annual' if 'annual' in report_type.lower() else 'quarterly'
+                        records.append(record)
+
+        elif data_type == DataType.EARNINGS:
+            # EARNINGS API uses different keys: annualEarnings, quarterlyEarnings
+            if isinstance(data, dict):
+                for report_type in ['annualEarnings', 'quarterlyEarnings']:
                     for report in data.get(report_type, []):
                         record = dict(report)
                         record['ticker'] = ticker
