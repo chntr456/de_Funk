@@ -158,6 +158,10 @@ else:
 # write_batch_size
 write_batch_size = profile.get('write_batch_size', 500000)
 print(f'PROFILE_WRITE_BATCH_SIZE="{write_batch_size}"')
+
+# max_pending_writes (0 = synchronous, 2 = default async)
+max_pending_writes = profile.get('max_pending_writes', 2)
+print(f'PROFILE_MAX_PENDING_WRITES="{max_pending_writes}"')
 PYEOF
 )
 
@@ -358,7 +362,9 @@ with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     run_config = json.load(f)
 
 provider = create_alpha_vantage_provider(spark=spark, docs_path=docs_path)
-engine = IngestorEngine(provider, storage_cfg)
+max_pending_writes = int('${PROFILE_MAX_PENDING_WRITES:-2}')
+engine = IngestorEngine(provider, storage_cfg, max_pending_writes=max_pending_writes)
+logger.info(f'Max pending writes: {max_pending_writes} (0=sync, 2=async)')
 
 # Get ticker_source from config: 'market_cap' or 'seed'
 av_config = run_config.get('providers', {}).get('alpha_vantage', {})
@@ -533,7 +539,8 @@ for provider_name in bulk_providers:
         provider = factory(spark=spark, docs_path=docs_path, storage_path=storage_path)
         logger.info(f'Created provider: {provider.provider_id}')
 
-        engine = IngestorEngine(provider, storage_cfg)
+        max_pending_writes = int('${PROFILE_MAX_PENDING_WRITES:-2}')
+        engine = IngestorEngine(provider, storage_cfg, max_pending_writes=max_pending_writes)
 
         # Check for profile-specific endpoint override (e.g., cook_county_endpoints in dev_fill)
         profile_cfg = run_config.get('profiles', {}).get('${PROFILE}', {})
