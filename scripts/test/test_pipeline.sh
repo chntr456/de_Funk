@@ -345,7 +345,7 @@ max_tickers_str = '${MAX_TICKERS}'
 max_tickers = int(max_tickers_str) if max_tickers_str.strip() else None
 
 logger.info(f'Storage path: {storage_path}')
-logger.info(f'Max tickers: {max_tickers if max_tickers else "ALL (no limit)"}')
+logger.info(f'Max tickers: {max_tickers if max_tickers else \"ALL (no limit)\"}')
 
 docs_path = Path('$REPO_ROOT')
 spark = get_spark(app_name='test_pipeline_ingest')
