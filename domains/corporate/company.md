@@ -151,21 +151,20 @@ graph:
   nodes:
     dim_company:
       from: bronze.company_reference
-      filters:
-        - "AssetType IN ('Stock', 'Common Stock', 'Preferred Stock')"
+      # Note: company_reference_facet normalizes columns to snake_case
+      # No filter needed - company_reference only contains companies with CIK
       select:
-        # Map Alpha Vantage COMPANY_OVERVIEW column names to silver schema
-        cik: CIK
-        company_name: Name
-        ticker: Symbol
-        exchange_code: Exchange
-        sector: Sector
-        industry: Industry
-        market_cap: MarketCapitalization
-        currency: Currency
+        cik: cik
+        company_name: company_name
+        ticker: ticker
+        exchange_code: exchange_code
+        sector: sector
+        industry: industry
+        market_cap: market_cap
+        currency: currency
       derive:
-        company_id: "ABS(HASH(CONCAT('COMPANY_', COALESCE(CIK, Symbol))))"
-        security_id: "ABS(HASH(Symbol))"
+        company_id: "ABS(HASH(CONCAT('COMPANY_', COALESCE(cik, ticker))))"
+        security_id: "ABS(HASH(ticker))"
         country: "'US'"
         is_active: "true"
       primary_key: [company_id]
@@ -175,7 +174,7 @@ graph:
       tags: [dim, entity, corporate]
 
     fact_income_statement:
-      from: bronze.income_statements
+      from: bronze.company_income_statements
       select:
         # Map camelCase bronze columns to snake_case silver columns
         ticker: ticker
@@ -198,7 +197,7 @@ graph:
         - {column: date_id, references: temporal.dim_calendar.date_id}
 
     fact_balance_sheet:
-      from: bronze.balance_sheets
+      from: bronze.company_balance_sheets
       select:
         # Map camelCase bronze columns to snake_case silver columns
         ticker: ticker
@@ -221,7 +220,7 @@ graph:
         - {column: date_id, references: temporal.dim_calendar.date_id}
 
     fact_cash_flow:
-      from: bronze.cash_flows
+      from: bronze.company_cash_flows
       select:
         # Map camelCase bronze columns to snake_case silver columns
         ticker: ticker
@@ -244,7 +243,7 @@ graph:
         - {column: date_id, references: temporal.dim_calendar.date_id}
 
     fact_earnings:
-      from: bronze.earnings
+      from: bronze.company_earnings
       select:
         # Map camelCase bronze columns to snake_case silver columns
         ticker: ticker
@@ -257,7 +256,7 @@ graph:
       derive:
         earnings_id: "ABS(HASH(CONCAT(ticker, '_', fiscalDateEnding, '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        date_id: "CAST(DATE_FORMAT(fiscalDateEnding, 'yyyyMMdd') AS INT)"
       primary_key: [earnings_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:

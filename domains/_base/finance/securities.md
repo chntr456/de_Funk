@@ -64,14 +64,16 @@ graph:
     dim_security:
       from: bronze.company_reference
       type: dimension
+      # Note: company_reference_facet normalizes to snake_case columns
       select:
         ticker: ticker
         security_name: company_name
-        asset_type: AssetType
         exchange_code: exchange_code
         currency: currency
       derive:
         security_id: "ABS(HASH(ticker))"
+        # company_reference doesn't have asset_type - default to Stock
+        asset_type: "'Stock'"
         is_active: "true"
       primary_key: [security_id]
       unique_key: [ticker]

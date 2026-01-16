@@ -83,8 +83,8 @@ graph:
     dim_stock:
       from: bronze.company_reference
       type: dimension
-      filters:
-        - "AssetType IN ('Stock', 'Common Stock', 'Preferred Stock')"
+      # Note: company_reference_facet normalizes to snake_case columns
+      # No filter needed - company_reference only contains companies with CIK
       select:
         ticker: ticker
         cik: cik
