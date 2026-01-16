@@ -1,8 +1,8 @@
 # Company graph definition
 #
-# v2.2: Updated to read from securities_reference (bulk listing)
-# No longer requires CIK (bulk LISTING_STATUS doesn't provide it)
-# Financial statements link via ticker directly
+# v2.3: Updated to read from company_reference (COMPANY_OVERVIEW data)
+# This provides rich company data: sector, industry, market_cap, CIK, etc.
+# Financial statements link via ticker directly.
 #
 # CIK-based linking is optional - when available, it enables company-level
 # reporting even when tickers change. Without CIK, we use ticker-based joins.
@@ -12,7 +12,7 @@ nodes:
   # DIMENSIONS
   # ===========================================================================
   dim_company:
-    from: bronze.securities_reference
+    from: bronze.company_reference
     filters:
       # Only include active stocks (not ETFs, options, etc.)
       # LISTING_STATUS returns 'Stock', OVERVIEW returns 'Common Stock'

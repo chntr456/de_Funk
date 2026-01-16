@@ -3,7 +3,7 @@
 
 nodes:
   _dim_security_base:
-    from: bronze.securities_reference
+    from: bronze.company_reference
     filters:
       # Override in child: - "type = 'Common Stock'"
       # Use 'type' column (raw Alpha Vantage value) rather than derived 'asset_type'
