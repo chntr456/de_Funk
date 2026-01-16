@@ -1,16 +1,18 @@
 ---
 type: domain-model
 model: chicago_public_safety
-version: 1.0
-description: "Chicago crime and arrest data"
+version: 3.0
+description: "Chicago crime and arrest data - extends base crime domain"
+tags: [crime, public-safety, chicago, municipal]
 
+# Inheritance
+extends: _base.crime
 
 # Dependencies
 depends_on:
+  - temporal
+  - geospatial
   - chicago_geospatial
-
-# Schema Template Reference
-schema_template: _schema/crime.md
 
 # Storage
 storage:
@@ -20,6 +22,7 @@ storage:
 # Build
 build:
   partitions: [year]
+  sort_by: [date_id, incident_id]
   optimize: true
 
 # Sources
@@ -27,15 +30,6 @@ sources:
   crimes:
     bronze_table: chicago_crimes
     description: "Crime incidents 2001-present"
-    column_mappings:
-      incident_id: id
-      incident_date: date
-      crime_type: primary_type
-      crime_subtype: description
-      iucr_code: iucr
-      fbi_code: fbi_code
-      arrest_made: arrest
-      domestic: domestic
 
   arrests:
     bronze_table: chicago_arrests
@@ -45,103 +39,151 @@ sources:
     bronze_table: chicago_iucr_codes
     description: "Illinois Uniform Crime Reporting codes"
 
-# Schema
-schema:
-  dimensions:
-    dim_crime_type:
-      description: "Crime type dimension (IUCR + FBI codes)"
-      primary_key: [crime_type_id]
-      columns:
-        crime_type_id: {type: string, required: true, description: "Composite key"}
-        iucr_code: {type: string, description: "Illinois UCR code"}
-        fbi_code: {type: string, description: "FBI UCR code"}
-        primary_type: {type: string, description: "Primary crime type"}
-        description: {type: string, description: "Crime description"}
-        crime_category: {type: string, description: "Taxonomy level 1 (VIOLENT, PROPERTY, etc.)"}
-        crime_subcategory: {type: string, description: "Taxonomy level 2"}
-        is_index_crime: {type: boolean, description: "FBI Part I crime"}
+# Tables - extend base crime tables with Chicago-specific additions
+tables:
+  dim_crime_type:
+    extends: _base.crime.dim_crime_type
+    # Inherits: crime_type_id, iucr_code, fbi_code, primary_type, description,
+    #           crime_category, crime_subcategory, is_index_crime
+    # No additional columns needed - base schema is sufficient
 
-    dim_location_type:
-      description: "Location type dimension"
-      primary_key: [location_type_id]
-      columns:
-        location_type_id: {type: string, required: true}
-        location_description: {type: string}
-        location_category: {type: string, description: "Grouped location type"}
+  dim_location_type:
+    extends: _base.crime.dim_location_type
+    # Inherits: location_type_id, location_description, location_category
+    # No additional columns needed
 
-  facts:
-    fact_crimes:
-      description: "Crime incidents fact table"
-      primary_key: [incident_id]
-      columns:
-        incident_id: {type: string, required: true, description: "Unique crime identifier"}
-        case_number: {type: string, description: "CPD case number"}
-        incident_date: {type: timestamp, description: "Date/time of incident"}
-        year: {type: int, description: "Year of incident"}
-        crime_type_id: {type: string, description: "FK to dim_crime_type"}
-        location_type_id: {type: string, description: "FK to dim_location_type"}
-        block: {type: string, description: "Block-level address"}
-        beat: {type: string, description: "Police beat"}
-        district: {type: string, description: "Police district"}
-        ward: {type: int, description: "City ward"}
-        community_area: {type: int, description: "Community area number"}
-        arrest_made: {type: boolean, description: "Whether arrest was made"}
-        domestic: {type: boolean, description: "Domestic-related incident"}
-        latitude: {type: double}
-        longitude: {type: double}
+  fact_crimes:
+    extends: _base.crime._fact_crimes_base
+    type: fact
+    description: "Chicago crime incidents fact table"
+    primary_key: [incident_id]
+    partition_by: [year]
 
-    fact_arrests:
-      description: "Arrest records fact table"
-      primary_key: [arrest_id]
-      columns:
-        arrest_id: {type: string, required: true}
-        arrest_date: {type: timestamp}
-        crime_type_id: {type: string}
-        beat: {type: string}
-        district: {type: string}
-        community_area: {type: int}
+    # Schema extends base with Chicago-specific columns
+    schema:
+      # Keys - inherited from base
+      - [incident_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(case_number))"}]
+      - [crime_type_id, integer, false, "FK to dim_crime_type", {fk: dim_crime_type.crime_type_id}]
+      - [location_type_id, integer, true, "FK to dim_location_type", {fk: dim_location_type.location_type_id}]
+      - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+      - [location_id, integer, true, "FK to geospatial.dim_location", {fk: geospatial.dim_location.location_id}]
 
-# Graph
+      # Chicago-specific identifiers
+      - [case_number, string, true, "CPD case number", {unique: true}]
+      - [year, integer, false, "Incident year (for partitioning)"]
+
+      # Chicago geographic (inherited pattern from base)
+      - [block, string, true, "Block-level address"]
+      - [beat, string, true, "Police beat"]
+      - [district, string, true, "Police district"]
+      - [ward, integer, true, "City ward"]
+      - [community_area, integer, true, "Community area number"]
+      - [latitude, double, true, "Latitude coordinate"]
+      - [longitude, double, true, "Longitude coordinate"]
+
+      # Flags (inherited from base)
+      - [arrest_made, boolean, true, "Whether arrest was made", {default: false}]
+      - [domestic, boolean, true, "Domestic-related incident", {default: false}]
+
+      # Chicago-specific additions
+      - [updated_on, timestamp, true, "Last data update timestamp"]
+
+    measures:
+      - [crime_count, count_distinct, incident_id, "Total crime incidents", {format: "#,##0"}]
+      - [arrest_count, expression, "SUM(CASE WHEN arrest_made THEN 1 ELSE 0 END)", "Crimes with arrest", {format: "#,##0"}]
+      - [domestic_count, expression, "SUM(CASE WHEN domestic THEN 1 ELSE 0 END)", "Domestic crimes", {format: "#,##0"}]
+      - [arrest_rate, expression, "100.0 * SUM(CASE WHEN arrest_made THEN 1 ELSE 0 END) / COUNT(*)", "Arrest rate %", {format: "#,##0.0%"}]
+
+  fact_arrests:
+    extends: _base.crime._fact_arrests_base
+    type: fact
+    description: "Chicago arrest records fact table"
+    primary_key: [arrest_id]
+    partition_by: [year]
+
+    schema:
+      - [arrest_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(arrest_key))"}]
+      - [incident_id, integer, true, "FK to fact_crimes", {fk: fact_crimes.incident_id}]
+      - [crime_type_id, integer, false, "FK to dim_crime_type", {fk: dim_crime_type.crime_type_id}]
+      - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+      - [location_id, integer, true, "FK to geospatial.dim_location", {fk: geospatial.dim_location.location_id}]
+
+      # Chicago geographic
+      - [beat, string, true, "Police beat"]
+      - [district, string, true, "Police district"]
+      - [community_area, integer, true, "Community area number"]
+      - [year, integer, false, "Arrest year (for partitioning)"]
+
+      # Arrest-specific
+      - [arrest_key, string, true, "Unique arrest identifier", {unique: true}]
+
+    measures:
+      - [total_arrests, count_distinct, arrest_id, "Total arrests", {format: "#,##0"}]
+
+# Graph - extend base with Chicago-specific sources and edges
 graph:
+  extends: _base.crime.graph
+
   nodes:
     dim_crime_type:
+      extends: _base.crime.dim_crime_type
       from: bronze.chicago_iucr_codes
       type: dimension
       derive:
-        crime_type_id: "CONCAT(iucr, '_', COALESCE(fbi_code, 'UNK'))"
+        crime_type_id: "ABS(HASH(CONCAT(iucr, '_', COALESCE(fbi_code, 'UNK'))))"
         crime_category: "CASE WHEN primary_type IN ('HOMICIDE', 'ASSAULT', 'BATTERY', 'ROBBERY') THEN 'VIOLENT' WHEN primary_type IN ('THEFT', 'BURGLARY', 'MOTOR VEHICLE THEFT') THEN 'PROPERTY' ELSE 'OTHER' END"
-      unique_key: [crime_type_id]
+      primary_key: [crime_type_id]
+      unique_key: [iucr_code, fbi_code]
+      tags: [dim, crime, chicago]
 
     dim_location_type:
+      extends: _base.crime.dim_location_type
       from: bronze.chicago_crimes
       type: dimension
       transform: distinct
       columns: [location_description]
       derive:
-        location_type_id: "MD5(COALESCE(location_description, 'UNKNOWN'))"
-      unique_key: [location_type_id]
+        location_type_id: "ABS(HASH(COALESCE(location_description, 'UNKNOWN')))"
+      primary_key: [location_type_id]
+      unique_key: [location_description]
+      tags: [dim, location, chicago]
 
     fact_crimes:
+      extends: _base.crime._fact_crimes_base
       from: bronze.chicago_crimes
       type: fact
       derive:
-        crime_type_id: "CONCAT(iucr, '_', COALESCE(fbi_code, 'UNK'))"
-        location_type_id: "MD5(COALESCE(location_description, 'UNKNOWN'))"
-      unique_key: [incident_id]
+        incident_id: "ABS(HASH(case_number))"
+        crime_type_id: "ABS(HASH(CONCAT(iucr, '_', COALESCE(fbi_code, 'UNK'))))"
+        location_type_id: "ABS(HASH(COALESCE(location_description, 'UNKNOWN')))"
+        date_id: "CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT)"
+      primary_key: [incident_id]
+      unique_key: [case_number]
+      foreign_keys:
+        - {column: crime_type_id, references: dim_crime_type.crime_type_id}
+        - {column: location_type_id, references: dim_location_type.location_type_id}
+        - {column: date_id, references: temporal.dim_calendar.date_id}
+      tags: [fact, crime, chicago]
+
+    fact_arrests:
+      extends: _base.crime._fact_arrests_base
+      from: bronze.chicago_arrests
+      type: fact
+      derive:
+        arrest_id: "ABS(HASH(arrest_key))"
+        date_id: "CAST(DATE_FORMAT(arrest_date, 'yyyyMMdd') AS INT)"
+        crime_type_id: "ABS(HASH(CONCAT(iucr, '_', COALESCE(fbi_code, 'UNK'))))"
+      primary_key: [arrest_id]
+      unique_key: [arrest_key]
+      foreign_keys:
+        - {column: crime_type_id, references: dim_crime_type.crime_type_id}
+        - {column: date_id, references: temporal.dim_calendar.date_id}
+      tags: [fact, arrest, chicago]
 
   edges:
-    crime_to_type:
-      from: fact_crimes
-      to: dim_crime_type
-      on: [crime_type_id=crime_type_id]
-      type: many_to_one
+    # Inherited from base: crime_to_type, crime_to_location_type, crime_to_calendar
 
-    crime_to_location_type:
-      from: fact_crimes
-      to: dim_location_type
-      on: [location_type_id=location_type_id]
-      type: many_to_one
-
+    # Chicago-specific edges
     crime_to_community_area:
       from: fact_crimes
       to: chicago_geospatial.dim_community_area
@@ -149,13 +191,40 @@ graph:
       type: many_to_one
       description: "Crime to community area"
 
-# Measures
+    crime_to_ward:
+      from: fact_crimes
+      to: chicago_geospatial.dim_ward
+      on: [ward=ward_number]
+      type: many_to_one
+      description: "Crime to ward"
+
+    crime_to_district:
+      from: fact_crimes
+      to: chicago_geospatial.dim_police_district
+      on: [district=district_number]
+      type: many_to_one
+      description: "Crime to police district"
+
+    arrest_to_crime_type:
+      from: fact_arrests
+      to: dim_crime_type
+      on: [crime_type_id=crime_type_id]
+      type: many_to_one
+
+    arrest_to_calendar:
+      from: fact_arrests
+      to: temporal.dim_calendar
+      on: [date_id=date_id]
+      type: many_to_one
+      cross_model: temporal
+
+# Measures - extend base measures with Chicago-specific
 measures:
   simple:
     crime_count:
       description: "Total crime incidents"
       source: fact_crimes.incident_id
-      aggregation: count
+      aggregation: count_distinct
       format: "#,##0"
 
     arrest_count:
@@ -174,28 +243,44 @@ measures:
         - "domestic = true"
       format: "#,##0"
 
+    total_arrests:
+      description: "Total arrest records"
+      source: fact_arrests.arrest_id
+      aggregation: count_distinct
+      format: "#,##0"
+
   computed:
     arrest_rate:
       description: "Percentage of crimes resulting in arrest"
       formula: "arrest_count / crime_count * 100"
-      format: "#,##0.0%"
+      format: "#,##0.1%"
 
     domestic_rate:
       description: "Percentage of domestic-related crimes"
       formula: "domestic_crime_count / crime_count * 100"
-      format: "#,##0.0%"
+      format: "#,##0.1%"
 
 # Metadata
 metadata:
-  domain: city
+  domain: municipal
   entity: chicago
   subdomain: public_safety
+  owner: data_engineering
+  sla_hours: 24
 status: active
 ---
 
 ## Chicago Public Safety Model
 
-Crime and arrest data for the City of Chicago.
+Crime and arrest data for the City of Chicago, extending the base crime domain.
+
+### Inheritance
+
+This model extends `_base.crime` to reuse standard crime data structures:
+- Integer surrogate keys (`crime_type_id`, `incident_id`, etc.)
+- Standard crime taxonomy (VIOLENT, PROPERTY, OTHER)
+- Base measures (crime_count, arrest_rate)
+- FK pattern using `date_id` instead of date columns
 
 ### Data Sources
 
@@ -213,7 +298,7 @@ Chicago uses dual classification:
 
 ### Crime Taxonomy
 
-Uses `_schema/crime.md` template with Chicago-specific mappings:
+Standard taxonomy from base crime domain:
 
 ```
 VIOLENT
@@ -226,7 +311,18 @@ PROPERTY
 ├── THEFT (IUCR 0810-0870)
 ├── BURGLARY (IUCR 0610-0650)
 └── MOTOR VEHICLE THEFT (IUCR 0910-0930)
+
+OTHER
+└── All remaining types
 ```
+
+### Chicago-Specific Extensions
+
+This model adds Chicago geographic dimensions:
+- **Community Areas** (77) - Stable neighborhood boundaries
+- **Wards** (50) - Political districts
+- **Police Districts** (22) - CPD administrative areas
+- **Police Beats** (~280) - Patrol areas
 
 ### Privacy Notes
 
@@ -245,7 +341,8 @@ SELECT
 FROM fact_crimes c
 JOIN dim_crime_type ct ON c.crime_type_id = ct.crime_type_id
 JOIN chicago_geospatial.dim_community_area ca ON c.community_area = ca.area_number
-WHERE c.year = 2023
+JOIN temporal.dim_calendar d ON c.date_id = d.date_id
+WHERE d.calendar_year = 2023
 GROUP BY ca.community_name, ct.crime_category;
 
 -- Arrest rate by crime type
@@ -258,4 +355,21 @@ FROM fact_crimes c
 JOIN dim_crime_type ct ON c.crime_type_id = ct.crime_type_id
 GROUP BY ct.primary_type
 ORDER BY total_crimes DESC;
+
+-- Monthly crime trends
+SELECT
+    d.year_month,
+    ct.crime_category,
+    COUNT(*) as incidents
+FROM fact_crimes c
+JOIN temporal.dim_calendar d ON c.date_id = d.date_id
+JOIN dim_crime_type ct ON c.crime_type_id = ct.crime_type_id
+GROUP BY d.year_month, ct.crime_category
+ORDER BY d.year_month;
 ```
+
+### Related Models
+
+- **chicago_geospatial** - Geographic dimensions (community areas, wards, districts)
+- **temporal** - Calendar dimension for time-series analysis
+- **geospatial** - Foundation geographic model
