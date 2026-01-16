@@ -144,12 +144,15 @@ class SocrataBaseProvider(BaseProvider):
 
             if raw_path:
                 # Raw layer approach: download to file, then read
-                logger.info(f"Using CSV raw layer for {endpoint_id}")
-                self.client.download_csv_to_file(
-                    resource_id=resource_id,
-                    output_path=str(raw_path),
-                    label=endpoint_id
-                )
+                if raw_path.exists():
+                    logger.info(f"Using existing CSV for {endpoint_id}: {raw_path}")
+                else:
+                    logger.info(f"Downloading CSV for {endpoint_id}")
+                    self.client.download_csv_to_file(
+                        resource_id=resource_id,
+                        output_path=str(raw_path),
+                        label=endpoint_id
+                    )
                 for batch in self.client.fetch_csv_from_file(
                     file_path=str(raw_path),
                     batch_size=self._default_limit,
@@ -210,12 +213,15 @@ class SocrataBaseProvider(BaseProvider):
 
                 if raw_path:
                     # Raw layer approach: download to file, then read
-                    logger.info(f"Using CSV raw layer for {year_label}")
-                    self.client.download_csv_to_file(
-                        resource_id=resource_id,
-                        output_path=str(raw_path),
-                        label=year_label
-                    )
+                    if raw_path.exists():
+                        logger.info(f"Using existing CSV for {year_label}: {raw_path}")
+                    else:
+                        logger.info(f"Downloading CSV for {year_label}")
+                        self.client.download_csv_to_file(
+                            resource_id=resource_id,
+                            output_path=str(raw_path),
+                            label=year_label
+                        )
                     for batch in self.client.fetch_csv_from_file(
                         file_path=str(raw_path),
                         batch_size=self._default_limit,
