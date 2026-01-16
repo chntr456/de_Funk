@@ -1,9 +1,9 @@
 ---
 type: domain-base
-base_name: temporal
+base_name: calendar
 version: 3.0
-description: "Base template for calendar/time dimensions"
-tags: [calendar, dates, temporal, base, template]
+description: "Base template for daily calendar dimension (date_id = YYYYMMDD)"
+tags: [calendar, daily, temporal, base, template]
 
 # Base Tables
 tables:
