@@ -154,27 +154,16 @@
       "_comment": "Municipal/county data only - no securities. Bronze only."
     },
     "dev_fill": {
-      "providers": ["alpha_vantage", "cook_county"],
-      "max_tickers": null,
-      "max_records_per_endpoint": null,
-      "write_batch_size": 500000,
-      "max_pending_writes": 0,
-      "_max_pending_writes_comment": "0 = synchronous writes. Ensures each batch completes and memory is freed before next batch.",
-      "dry_run": false,
-      "log_level": "DEBUG",
-      "cook_county_endpoints": ["parcel_sales", "bor_appeal_decisions"],
-      "_comment": "Fill run: Alpha Vantage (ALL tickers, all endpoints) + Cook County failed tables only."
-    },
-    "top200": {
       "providers": ["alpha_vantage"],
       "max_tickers": 200,
       "max_records_per_endpoint": null,
       "write_batch_size": 500000,
       "max_pending_writes": 0,
+      "_max_pending_writes_comment": "0 = synchronous writes. Ensures each batch completes and memory is freed before next batch.",
       "build_silver": true,
       "dry_run": false,
       "log_level": "DEBUG",
-      "_comment": "Top 200 by market cap + silver build. Use after initial bronze load."
+      "_comment": "Top 200 by market cap + silver build."
     },
     "silver_only": {
       "providers": [],
