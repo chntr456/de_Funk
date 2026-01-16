@@ -60,12 +60,10 @@ graph:
     dim_stock:
       extends: _base.securities._dim_security_base
       filters:
-        - "type IN ('Stock', 'Common Stock', 'Preferred Stock')"
-        - "is_active = true"
+        - "AssetType IN ('Stock', 'Common Stock', 'Preferred Stock')"
       select:
-        security_type: type
+        security_type: AssetType
         cik: cik
-        shares_outstanding: shares_outstanding
         market_cap: market_cap
         sector: sector
         industry: industry

@@ -123,20 +123,19 @@ graph:
     dim_company:
       from: bronze.company_reference
       filters:
-        - "type IN ('Stock', 'Common Stock', 'Preferred Stock')"
-        - "is_active = true"
+        - "AssetType IN ('Stock', 'Common Stock', 'Preferred Stock')"
       select:
         cik: cik
-        company_name: security_name
+        company_name: company_name
         ticker: ticker
         exchange_code: exchange_code
-        is_active: is_active
         sector: sector
         industry: industry
         market_cap: market_cap
       derive:
         company_id: "CONCAT('COMPANY_', COALESCE(cik, ticker))"
         incorporation_country: "'US'"
+        is_active: "true"
       unique_key: [ticker]
       tags: [dim, entity, corporate]
 

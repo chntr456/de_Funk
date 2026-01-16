@@ -47,13 +47,13 @@ graph:
       type: dimension
       select:
         ticker: ticker
-        security_name: security_name
-        asset_type: asset_type
+        security_name: company_name
+        asset_type: AssetType
         exchange_code: exchange_code
-        currency: "'USD'"
-        is_active: is_active
+        currency: currency
       derive:
-        security_id: "CONCAT(asset_type, '_', ticker)"
+        security_id: "CONCAT(AssetType, '_', ticker)"
+        is_active: "true"
       unique_key: [ticker]
 
     _fact_prices_base:
