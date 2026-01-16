@@ -137,12 +137,12 @@
     },
     "dev": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
-      "max_tickers": null,
+      "max_tickers": 3000,
       "max_records_per_endpoint": null,
       "write_batch_size": 500000,
       "dry_run": false,
       "log_level": "DEBUG",
-      "_comment": "Dev run: all tickers + full CSV downloads for Chicago/Cook County."
+      "_comment": "Dev run: top 3000 companies by market cap + full CSV downloads for Chicago/Cook County."
     },
     "dev_municipal": {
       "providers": ["chicago", "cook_county"],
