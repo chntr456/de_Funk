@@ -36,58 +36,62 @@ from config.logging import setup_logging, get_logger
 logger = get_logger(__name__)
 
 
-def get_all_tickers(spark, prices_path: Path) -> List[str]:
-    """Get list of all unique tickers from prices table."""
+def get_all_security_ids(spark, prices_path: Path) -> List[int]:
+    """Get list of all unique security_ids from prices table."""
     df = spark.read.parquet(str(prices_path))
-    tickers = [row.ticker for row in df.select("ticker").distinct().collect()]
-    return sorted(tickers)
+    security_ids = [row.security_id for row in df.select("security_id").distinct().collect()]
+    return sorted(security_ids)
 
 
 def compute_technicals_for_batch(
     spark,
     prices_path: Path,
     output_path: Path,
-    tickers: List[str],
+    security_ids: List[int],
     batch_num: int,
     total_batches: int
 ) -> int:
     """
-    Compute technical indicators for a batch of tickers.
+    Compute technical indicators for a batch of securities.
+
+    Args:
+        security_ids: List of security_id values to process in this batch
 
     Returns number of rows processed.
     """
     from pyspark.sql import functions as F
     from pyspark.sql.window import Window
 
-    logger.info(f"  Batch {batch_num}/{total_batches}: Processing {len(tickers)} tickers...")
+    logger.info(f"  Batch {batch_num}/{total_batches}: Processing {len(security_ids)} securities...")
 
-    # Read only this batch's tickers
-    # Select only the columns we need to avoid schema conflicts with trade_date
-    required_cols = ["ticker", "date_id", "security_id", "price_id", "open", "high", "low", "close", "volume", "adjusted_close"]
+    # Read only this batch's securities
+    # Silver layer has: security_id, date_id, price_id, open, high, low, close, volume, adjusted_close
+    # (no ticker or trade_date - those were dropped after deriving FKs)
+    required_cols = ["date_id", "security_id", "price_id", "open", "high", "low", "close", "volume", "adjusted_close"]
     df = spark.read.parquet(str(prices_path)).select(*required_cols)
-    df = df.filter(F.col("ticker").isin(tickers))
+    df = df.filter(F.col("security_id").isin(security_ids))
 
     row_count = df.count()
     if row_count == 0:
         logger.warning(f"    No data for batch {batch_num}")
         return 0
 
-    # Define window spec for each ticker ordered by date_id (integer YYYYMMDD format)
-    # Note: Silver layer uses date_id (FK to dim_calendar), not trade_date
-    ticker_window = Window.partitionBy("ticker").orderBy("date_id")
+    # Define window spec for each security ordered by date_id (integer YYYYMMDD format)
+    # Note: Silver layer uses security_id (FK to dim_security) and date_id (FK to dim_calendar)
+    security_window = Window.partitionBy("security_id").orderBy("date_id")
 
     # Rolling windows of different sizes
-    window_20 = ticker_window.rowsBetween(-19, 0)
-    window_50 = ticker_window.rowsBetween(-49, 0)
-    window_200 = ticker_window.rowsBetween(-199, 0)
-    window_14 = ticker_window.rowsBetween(-13, 0)
-    window_60 = ticker_window.rowsBetween(-59, 0)
+    window_20 = security_window.rowsBetween(-19, 0)
+    window_50 = security_window.rowsBetween(-49, 0)
+    window_200 = security_window.rowsBetween(-199, 0)
+    window_14 = security_window.rowsBetween(-13, 0)
+    window_60 = security_window.rowsBetween(-59, 0)
 
     # Compute technicals step by step to manage memory
     # Step 1: Daily return and price change
     df = df.withColumn(
         "prev_close",
-        F.lag("close", 1).over(ticker_window)
+        F.lag("close", 1).over(security_window)
     ).withColumn(
         "daily_return",
         F.when(F.col("prev_close").isNotNull() & (F.col("prev_close") != 0),
@@ -196,16 +200,16 @@ def compute_technicals(
         "spark.executor.memory": "4g",
     })
 
-    # Get all tickers
-    logger.info("Discovering tickers...")
-    all_tickers = get_all_tickers(spark, prices_path)
-    total_tickers = len(all_tickers)
-    logger.info(f"Found {total_tickers:,} tickers")
+    # Get all security_ids (silver layer uses security_id not ticker)
+    logger.info("Discovering securities...")
+    all_security_ids = get_all_security_ids(spark, prices_path)
+    total_securities = len(all_security_ids)
+    logger.info(f"Found {total_securities:,} securities")
 
     # Calculate batches
-    num_batches = (total_tickers + batch_size - 1) // batch_size
+    num_batches = (total_securities + batch_size - 1) // batch_size
 
-    print(f"Total tickers: {total_tickers:,}")
+    print(f"Total securities: {total_securities:,}")
     print(f"Batches: {num_batches}")
     print()
 
@@ -213,8 +217,8 @@ def compute_technicals(
         print("DRY RUN - would process:")
         for i in range(min(3, num_batches)):
             start = i * batch_size
-            end = min(start + batch_size, total_tickers)
-            print(f"  Batch {i+1}: tickers {start+1}-{end}")
+            end = min(start + batch_size, total_securities)
+            print(f"  Batch {i+1}: securities {start+1}-{end}")
         if num_batches > 3:
             print(f"  ... and {num_batches - 3} more batches")
         spark.stop()
@@ -224,14 +228,14 @@ def compute_technicals(
     total_rows = 0
     for i in range(num_batches):
         start = i * batch_size
-        end = min(start + batch_size, total_tickers)
-        batch_tickers = all_tickers[start:end]
+        end = min(start + batch_size, total_securities)
+        batch_security_ids = all_security_ids[start:end]
 
         rows = compute_technicals_for_batch(
             spark=spark,
             prices_path=prices_path,
             output_path=output_path,
-            tickers=batch_tickers,
+            security_ids=batch_security_ids,
             batch_num=i + 1,
             total_batches=num_batches
         )

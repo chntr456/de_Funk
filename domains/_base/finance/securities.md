@@ -126,10 +126,15 @@ graph:
         volume: volume
         adjusted_close: adjusted_close
       derive:
-        # Integer keys
+        # Integer surrogate keys - facts use FKs, not natural keys
+        # security_id: FK to dim_security (derived from ticker)
         security_id: "ABS(HASH(ticker))"
-        date_id: "CAST(DATE_FORMAT(trade_date, 'yyyyMMdd') AS INT)"
-        price_id: "ABS(HASH(CONCAT(ticker, '_', trade_date)))"
+        # date_id: FK to dim_calendar (YYYYMMDD format, works with both DATE and STRING)
+        date_id: "CAST(REGEXP_REPLACE(CAST(trade_date AS STRING), '-', '') AS INT)"
+        # price_id: PK (surrogate from ticker + date)
+        price_id: "ABS(HASH(CONCAT(ticker, '_', CAST(trade_date AS STRING))))"
+      # Drop natural keys after deriving FKs - facts should only have surrogate/FK columns
+      drop: [ticker, trade_date]
       primary_key: [price_id]
       unique_key: [ticker, trade_date]
       foreign_keys:

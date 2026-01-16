@@ -188,9 +188,11 @@ graph:
         ebitda: ebitda
         reported_currency: reportedCurrency
       derive:
-        income_statement_id: "ABS(HASH(CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)))"
+        income_statement_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
+      # Drop natural keys - fact tables have only FK columns
+      drop: [ticker, fiscal_date_ending]
       primary_key: [income_statement_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -211,9 +213,11 @@ graph:
         long_term_debt: longTermDebt
         reported_currency: reportedCurrency
       derive:
-        balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)))"
+        balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
+      # Drop natural keys - fact tables have only FK columns
+      drop: [ticker, fiscal_date_ending]
       primary_key: [balance_sheet_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -233,11 +237,13 @@ graph:
         capital_expenditures: capitalExpenditures
         reported_currency: reportedCurrency
       derive:
-        cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)))"
+        cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
         # Free cash flow = operating - capex (use snake_case column names after select)
         free_cash_flow: "operating_cashflow - ABS(COALESCE(capital_expenditures, 0))"
+      # Drop natural keys - fact tables have only FK columns
+      drop: [ticker, fiscal_date_ending]
       primary_key: [cash_flow_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -256,9 +262,11 @@ graph:
         surprise: surprise
         surprise_percentage: surprisePercentage
       derive:
-        earnings_id: "ABS(HASH(CONCAT(ticker, '_', fiscal_date_ending, '_', report_type)))"
+        earnings_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
+      # Drop natural keys - fact tables have only FK columns
+      drop: [ticker, fiscal_date_ending]
       primary_key: [earnings_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:

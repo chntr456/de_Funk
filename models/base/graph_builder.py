@@ -179,6 +179,27 @@ class GraphBuilder:
                     pdf = pdf.drop_duplicates(subset=unique_cols, keep='last')
                     df = self.connection.conn.from_df(pdf)
 
+            # Drop columns specified in 'drop' config (removes natural keys after deriving FKs)
+            if 'drop' in node_config and node_config['drop']:
+                drop_cols = node_config['drop']
+                logger.debug(f"Dropping columns from {node_id}: {drop_cols}")
+                if self.backend == 'spark':
+                    df = df.drop(*drop_cols)
+                else:
+                    # DuckDB/pandas - drop columns
+                    import pandas as pd
+                    if hasattr(df, 'df'):
+                        pdf = df.df()
+                    elif isinstance(df, pd.DataFrame):
+                        pdf = df
+                    else:
+                        pdf = df
+                    pdf = pdf.drop(columns=[c for c in drop_cols if c in pdf.columns], errors='ignore')
+                    if hasattr(self.connection, 'conn'):
+                        df = self.connection.conn.from_df(pdf)
+                    else:
+                        df = pdf
+
             nodes[node_id] = df
 
         return nodes

@@ -113,9 +113,12 @@ graph:
         - "trade_date IS NOT NULL"
         - "ticker IS NOT NULL"
       derive:
-        price_id: "ABS(HASH(CONCAT(ticker, '_', trade_date)))"
+        # Integer surrogate keys - facts use FKs only, no natural keys
         security_id: "ABS(HASH(ticker))"
-        date_id: "CAST(DATE_FORMAT(trade_date, 'yyyyMMdd') AS INT)"
+        date_id: "CAST(REGEXP_REPLACE(CAST(trade_date AS STRING), '-', '') AS INT)"
+        price_id: "ABS(HASH(CONCAT(ticker, '_', CAST(trade_date AS STRING))))"
+      # Drop natural keys - fact tables have only FK columns (no ticker, trade_date)
+      drop: [ticker, trade_date]
       primary_key: [price_id]
       unique_key: [ticker, trade_date]
       foreign_keys:
