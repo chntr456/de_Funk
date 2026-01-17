@@ -314,13 +314,17 @@ if [ "$SKIP_INGEST" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ]; then
     echo -e "${BLUE}Testing task: bronze ingestion (Alpha Vantage)${NC}"
     echo -e "${BLUE}============================================================${NC}"
 
-    # Get config from run_config.json
+    # Get config from run_config.json (with profile override support)
     eval $(python3 -c "
 import json
+import os
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     cfg = json.load(f)
+profile_name = os.environ.get('PROFILE', '$PROFILE')
+profile = cfg.get('profiles', {}).get(profile_name, {})
 av = cfg.get('providers', {}).get('alpha_vantage', {})
-endpoints = av.get('endpoints', [])
+# Use profile-specific endpoints if defined, otherwise default
+endpoints = profile.get('alpha_vantage_endpoints', av.get('endpoints', []))
 ticker_source = av.get('ticker_source', 'market_cap')
 print(f'AV_ENDPOINTS=\"{\" \".join(endpoints)}\"')
 print(f'AV_TICKER_SOURCE=\"{ticker_source}\"')
@@ -410,11 +414,16 @@ if not tickers:
 logger.info(f'Found {len(tickers)} tickers for ingestion')
 provider.set_tickers(tickers)
 
-# Get endpoints from config - this is the list of data types to fetch
-endpoints = run_config.get('providers', {}).get('alpha_vantage', {}).get('endpoints', ['time_series_daily'])
-logger.info(f'Endpoints from config: {endpoints}')
+# Get endpoints from config - check profile override first
+profile_name = '${PROFILE}'
+profile = run_config.get('profiles', {}).get(profile_name, {})
+av_config_endpoints = run_config.get('providers', {}).get('alpha_vantage', {}).get('endpoints', ['time_series_daily'])
+# Profile-specific endpoints override the default
+endpoints = profile.get('alpha_vantage_endpoints', av_config_endpoints)
+logger.info(f'Endpoints from config (profile={profile_name}): {endpoints}')
 
 # Map endpoint names to work item types
+# Note: listing_status is a BULK endpoint (handled in Task 1), not per-ticker
 endpoint_to_work_item = {
     'time_series_daily': 'prices',
     'time_series_daily_adjusted': 'prices',
@@ -423,6 +432,7 @@ endpoint_to_work_item = {
     'balance_sheet': 'balance',
     'cash_flow': 'cashflow',
     'earnings': 'earnings',
+    # listing_status is NOT here - it's a bulk endpoint seeded in Task 1
 }
 
 work_items = []
@@ -432,6 +442,11 @@ for ep in endpoints:
         work_items.append(work_item)
 
 logger.info(f'Work items: {work_items}')
+
+if not work_items:
+    logger.info('No per-ticker endpoints to ingest (only bulk endpoints like listing_status). Skipping Task 2.')
+    spark.stop()
+    sys.exit(0)
 
 write_batch_size = int('${PROFILE_WRITE_BATCH_SIZE:-500000}')
 logger.info(f'write_batch_size: {write_batch_size}')
