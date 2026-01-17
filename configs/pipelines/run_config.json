@@ -159,6 +159,15 @@
       "log_level": "INFO",
       "_comment": "Ingest all US tickers from LISTING_STATUS (single bulk API call). Run this first to populate ticker reference."
     },
+    "prices": {
+      "providers": ["alpha_vantage"],
+      "alpha_vantage_endpoints": ["time_series_daily"],
+      "max_tickers": null,
+      "build_silver": false,
+      "dry_run": false,
+      "log_level": "INFO",
+      "_comment": "Ingest daily OHLCV prices for all tickers. Uses append strategy to preserve existing data."
+    },
     "dev_fill": {
       "providers": ["cook_county"],
       "cook_county_endpoints": ["parcel_universe", "assessor_appeals"],

@@ -191,16 +191,17 @@ graph:
         ticker: ticker
         fiscal_date_ending: fiscal_date_ending
         report_type: report_type
-        total_revenue: totalRevenue
-        gross_profit: grossProfit
-        operating_income: operatingIncome
-        net_income: netIncome
-        ebitda: ebitda
         reported_currency: reportedCurrency
       derive:
         income_statement_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
+        # Cast string fields to double (Bronze has all strings from Alpha Vantage API)
+        total_revenue: "TRY_CAST(totalRevenue AS DOUBLE)"
+        gross_profit: "TRY_CAST(grossProfit AS DOUBLE)"
+        operating_income: "TRY_CAST(operatingIncome AS DOUBLE)"
+        net_income: "TRY_CAST(netIncome AS DOUBLE)"
+        ebitda: "TRY_CAST(ebitda AS DOUBLE)"
       # Drop natural keys - fact tables have only FK columns
       drop: [ticker, fiscal_date_ending]
       primary_key: [income_statement_id]
@@ -216,16 +217,17 @@ graph:
         ticker: ticker
         fiscal_date_ending: fiscal_date_ending
         report_type: report_type
-        total_assets: totalAssets
-        total_liabilities: totalLiabilities
-        total_shareholder_equity: totalShareholderEquity
-        cash_and_equivalents: cashAndCashEquivalentsAtCarryingValue
-        long_term_debt: longTermDebt
         reported_currency: reportedCurrency
       derive:
         balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
+        # Cast string fields to double (Bronze has all strings from Alpha Vantage API)
+        total_assets: "TRY_CAST(totalAssets AS DOUBLE)"
+        total_liabilities: "TRY_CAST(totalLiabilities AS DOUBLE)"
+        total_shareholder_equity: "TRY_CAST(totalShareholderEquity AS DOUBLE)"
+        cash_and_equivalents: "TRY_CAST(cashAndCashEquivalentsAtCarryingValue AS DOUBLE)"
+        long_term_debt: "TRY_CAST(longTermDebt AS DOUBLE)"
       # Drop natural keys - fact tables have only FK columns
       drop: [ticker, fiscal_date_ending]
       primary_key: [balance_sheet_id]
@@ -241,18 +243,18 @@ graph:
         ticker: ticker
         fiscal_date_ending: fiscal_date_ending
         report_type: report_type
-        operating_cashflow: operatingCashflow
-        cashflow_from_investment: cashflowFromInvestment
-        cashflow_from_financing: cashflowFromFinancing
-        capital_expenditures: capitalExpenditures
         reported_currency: reportedCurrency
       derive:
         cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
-        # Free cash flow = operating - capex
-        # Use TRY_CAST to handle 'None' string values in bronze data (returns NULL on failure)
-        free_cash_flow: "TRY_CAST(operating_cashflow AS DOUBLE) - ABS(COALESCE(TRY_CAST(capital_expenditures AS DOUBLE), 0))"
+        # Cast string fields to double (Bronze has all strings from Alpha Vantage API)
+        operating_cashflow: "TRY_CAST(operatingCashflow AS DOUBLE)"
+        cashflow_from_investment: "TRY_CAST(cashflowFromInvestment AS DOUBLE)"
+        cashflow_from_financing: "TRY_CAST(cashflowFromFinancing AS DOUBLE)"
+        capital_expenditures: "TRY_CAST(capitalExpenditures AS DOUBLE)"
+        # Free cash flow = operating - capex (computed from cast values)
+        free_cash_flow: "TRY_CAST(operatingCashflow AS DOUBLE) - ABS(COALESCE(TRY_CAST(capitalExpenditures AS DOUBLE), 0))"
       # Drop natural keys - fact tables have only FK columns
       drop: [ticker, fiscal_date_ending]
       primary_key: [cash_flow_id]
@@ -269,14 +271,15 @@ graph:
         ticker: ticker
         fiscal_date_ending: fiscal_date_ending
         report_type: report_type
-        reported_eps: reportedEPS
-        estimated_eps: estimatedEPS
-        surprise: surprise
-        surprise_percentage: surprisePercentage
       derive:
         earnings_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
+        # Cast string fields to double (Bronze has all strings from Alpha Vantage API)
+        reported_eps: "TRY_CAST(reportedEPS AS DOUBLE)"
+        estimated_eps: "TRY_CAST(estimatedEPS AS DOUBLE)"
+        surprise: "TRY_CAST(surprise AS DOUBLE)"
+        surprise_percentage: "TRY_CAST(surprisePercentage AS DOUBLE)"
       # Drop natural keys - fact tables have only FK columns
       drop: [ticker, fiscal_date_ending]
       primary_key: [earnings_id]
