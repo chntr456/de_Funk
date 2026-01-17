@@ -36,8 +36,8 @@ notes:
 # ============================================
 bronze:                                 # Bronze table name (e.g., "company_reference")
 partitions: []                          # Partition columns (e.g., [asset_type])
-write_strategy: upsert                  # upsert | append | overwrite
-key_columns: []                         # Primary key columns for upsert (e.g., [ticker])
+write_strategy: append                  # append (preserves data) | upsert (merge) | overwrite
+key_columns: []                         # Primary key columns for deduplication (e.g., [ticker])
 date_column:                            # Date column for incremental loads
 
 # ============================================

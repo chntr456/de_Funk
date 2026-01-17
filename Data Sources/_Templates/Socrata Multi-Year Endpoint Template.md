@@ -34,8 +34,8 @@ notes: "Multiple view_ids for different date ranges."
 # Storage Configuration
 bronze:                                 # Bronze table name (e.g., "chicago_traffic_congestion")
 partitions: [year]                      # Partition by year for multi-year data
-write_strategy: upsert                  # upsert | append | overwrite
-key_columns: []                         # Primary key for upsert
+write_strategy: append                  # append (preserves data) | upsert (merge) | overwrite
+key_columns: []                         # Primary key for deduplication
 date_column:                            # Date column for partitioning
 
 # Schema

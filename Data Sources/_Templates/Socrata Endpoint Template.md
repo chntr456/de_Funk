@@ -35,8 +35,8 @@ notes: ""
 # Storage Configuration
 bronze:                                 # Bronze table name (e.g., "chicago_crimes")
 partitions: [year]                      # Common: [year] for time-series data
-write_strategy: upsert                  # upsert | append | overwrite
-key_columns: []                         # Primary key for upsert (e.g., [id])
+write_strategy: append                  # append (preserves data) | upsert (merge) | overwrite
+key_columns: []                         # Primary key for deduplication (e.g., [id])
 date_column:                            # Date column for incremental loads
 
 # Schema
