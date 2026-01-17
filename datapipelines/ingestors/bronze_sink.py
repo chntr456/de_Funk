@@ -100,9 +100,8 @@ class BronzeSink:
         from pyspark.sql.functions import lit, row_number, col, max as spark_max, min as spark_min
         from pyspark.sql.window import Window
 
-        # Get base path for table
-        table_cfg = self._table_cfg(table)
-        base_path = Path(self.cfg["roots"]["bronze"]) / table_cfg["rel"]
+        # Get base path for table - use table name directly (no storage.json lookup)
+        base_path = Path(self.cfg["roots"]["bronze"]) / table
 
         # Deduplicate source DataFrame by key columns
         if key_columns:
@@ -213,9 +212,8 @@ class BronzeSink:
         from pyspark.sql.functions import lit, row_number, col
         from pyspark.sql.window import Window
 
-        # Get base path for table
-        table_cfg = self._table_cfg(table)
-        base_path = Path(self.cfg["roots"]["bronze"]) / table_cfg["rel"]
+        # Get base path for table - use table name directly (no storage.json lookup)
+        base_path = Path(self.cfg["roots"]["bronze"]) / table
 
         spark = df.sparkSession
 
