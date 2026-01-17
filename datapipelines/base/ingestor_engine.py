@@ -404,6 +404,72 @@ class IngestorEngine:
             # Force Python GC to release any remaining references
             gc.collect()
 
+    def _ingest_with_spark_csv(
+        self,
+        work_item: str,
+        table_name: str,
+        partitions: Optional[List[str]]
+    ) -> WorkItemResult:
+        """
+        Ingest work item using Spark's native CSV reader.
+
+        This is the fast path for large CSV files:
+        - CSV parsing is distributed across all executors
+        - No data flows through Python/driver
+        - Single DataFrame write to Delta
+
+        Args:
+            work_item: Work item identifier
+            table_name: Target table name
+            partitions: Partition columns
+
+        Returns:
+            WorkItemResult with status and record count
+        """
+        try:
+            # Get DataFrame directly from provider (Spark CSV read)
+            df = self.provider.fetch_as_dataframe(work_item)
+
+            if df is None:
+                logger.warning(f"{work_item}: Spark CSV path returned None, falling back")
+                return None  # Signal to use fallback path
+
+            # Validate partitions
+            validated_partitions = self._validate_partitions(
+                partitions, df.columns, work_item
+            )
+
+            # Write directly to Delta (single operation, distributed)
+            logger.info(f"{work_item}: Writing to Delta with Spark")
+            self.sink.overwrite(df, table_name, partitions=validated_partitions)
+
+            # Get count after write (avoids counting twice)
+            total_records = df.count()
+
+            logger.info(f"{work_item}: Spark CSV complete - {total_records:,} records")
+
+            # Cleanup
+            try:
+                df.unpersist()
+            except Exception:
+                pass
+            self._cleanup_spark_memory()
+
+            return WorkItemResult(
+                work_item=work_item,
+                success=True,
+                record_count=total_records,
+                table_path=str(self.sink.cfg["roots"]["bronze"]) + "/" + table_name
+            )
+
+        except Exception as e:
+            logger.error(f"Spark CSV failed for {work_item}: {e}", exc_info=True)
+            return WorkItemResult(
+                work_item=work_item,
+                success=False,
+                error=str(e)[:200]
+            )
+
     def _ingest_work_item_async(
         self,
         work_item: str,
@@ -416,6 +482,9 @@ class IngestorEngine:
 
         Collects records up to write_batch_size, queues async write, continues.
         Memory stays bounded while overlapping fetch and write operations.
+
+        If the provider supports Spark CSV reading (fetch_as_dataframe), uses that
+        path for distributed CSV parsing instead of Python batching.
 
         Args:
             work_item: Work item identifier
@@ -430,6 +499,14 @@ class IngestorEngine:
             # Get table configuration from provider
             table_name = self.provider.get_table_name(work_item)
             partitions = self.provider.get_partitions(work_item)
+
+            # Try Spark CSV path first (distributed, no Python batching)
+            if (max_records is None and
+                hasattr(self.provider, 'supports_spark_csv') and
+                self.provider.supports_spark_csv(work_item)):
+
+                logger.info(f"{work_item}: Using Spark CSV path (distributed)")
+                return self._ingest_with_spark_csv(work_item, table_name, partitions)
 
             # Get shared executor
             executor = self.get_executor(self.writer_threads)

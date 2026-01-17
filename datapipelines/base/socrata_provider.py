@@ -547,3 +547,149 @@ class SocrataBaseProvider(BaseProvider):
                     df = df.withColumn('year', F.year(F.col(date_col)))
 
         return df
+
+    def read_csv_with_spark(
+        self,
+        csv_path: Path,
+        endpoint: EndpointConfig
+    ) -> DataFrame:
+        """
+        Read CSV file directly with Spark (distributed across executors).
+
+        This is much faster than Python csv.DictReader for large files because:
+        - CSV parsing is distributed across all executors
+        - No data flows through the driver
+        - Memory pressure is distributed
+
+        Args:
+            csv_path: Path to CSV file (must be on shared storage)
+            endpoint: Endpoint configuration with schema
+
+        Returns:
+            Spark DataFrame with schema applied
+        """
+        logger.info(f"Reading CSV with Spark: {csv_path}")
+
+        # Read CSV with Spark - all columns as strings initially
+        df = self.spark.read.csv(
+            str(csv_path),
+            header=True,
+            inferSchema=False,  # Keep as strings, we'll cast
+            multiLine=True,     # Handle quoted newlines
+            escape='"',
+            quote='"'
+        )
+
+        logger.info(f"Spark CSV read complete: {df.count():,} rows, {len(df.columns)} columns")
+
+        if not endpoint.schema:
+            return df
+
+        # Apply schema: rename source columns to target names
+        source_to_target = {f.source: f.name for f in endpoint.schema if f.source}
+
+        # Select and rename columns based on schema
+        select_exprs = []
+        for field_def in endpoint.schema:
+            source_col = field_def.source or field_def.name
+            if source_col in df.columns:
+                select_exprs.append(F.col(source_col).alias(field_def.name))
+            else:
+                # Column doesn't exist in CSV - create null column
+                select_exprs.append(F.lit(None).cast(StringType()).alias(field_def.name))
+
+        df = df.select(select_exprs)
+
+        # Cast columns to target types (same logic as _create_dataframe)
+        for field_def in endpoint.schema:
+            target_type = field_def.type.lower()
+            if target_type == 'string':
+                continue
+            elif target_type in ('int', 'long'):
+                df = df.withColumn(field_def.name,
+                    F.col(field_def.name).try_cast('double').cast(target_type))
+            elif target_type in ('double', 'float'):
+                df = df.withColumn(field_def.name, F.col(field_def.name).try_cast('double'))
+            elif target_type == 'date':
+                df = df.withColumn(field_def.name,
+                    self._safe_parse_date(F.col(field_def.name)))
+            elif target_type == 'timestamp':
+                df = df.withColumn(field_def.name,
+                    self._safe_parse_timestamp(F.col(field_def.name)))
+            elif target_type == 'boolean':
+                df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
+
+        # Derive year partition from date_column if needed
+        if endpoint.bronze and endpoint.bronze.partitions and 'year' in endpoint.bronze.partitions:
+            date_col = endpoint.bronze.date_column
+            if date_col and date_col in df.columns:
+                if 'year' in df.columns:
+                    df = df.withColumn(
+                        'year',
+                        F.coalesce(F.col('year'), F.year(F.col(date_col)))
+                    )
+                else:
+                    df = df.withColumn('year', F.year(F.col(date_col)))
+
+        return df
+
+    def fetch_as_dataframe(
+        self,
+        work_item: str,
+        **kwargs
+    ) -> Optional[DataFrame]:
+        """
+        Fetch work item directly as a Spark DataFrame (no Python batching).
+
+        Uses Spark's native CSV reader for distributed parsing.
+        Only works for CSV downloads with raw files on shared storage.
+
+        Args:
+            work_item: Work item identifier
+
+        Returns:
+            DataFrame if Spark CSV path is available, None otherwise
+        """
+        endpoint = self._endpoints.get(work_item)
+        if not endpoint:
+            return None
+
+        # Only use Spark CSV for full CSV downloads with storage path
+        if endpoint.download_method != 'csv' or not self._storage_path:
+            return None
+
+        resource_id = self._get_resource_id(endpoint)
+        if not resource_id:
+            return None
+
+        raw_path = self._get_raw_path(work_item, resource_id)
+        if not raw_path:
+            return None
+
+        # Download CSV if not exists
+        if not raw_path.exists():
+            logger.info(f"Downloading CSV for Spark: {work_item}")
+            raw_path.parent.mkdir(parents=True, exist_ok=True)
+            self.client.download_csv_to_file(
+                resource_id=resource_id,
+                output_path=str(raw_path),
+                label=work_item
+            )
+
+        if not raw_path.exists():
+            logger.warning(f"CSV download failed for {work_item}")
+            return None
+
+        # Read with Spark
+        return self.read_csv_with_spark(raw_path, endpoint)
+
+    def supports_spark_csv(self, work_item: str) -> bool:
+        """Check if work item can use Spark CSV path."""
+        endpoint = self._endpoints.get(work_item)
+        if not endpoint:
+            return False
+        return (
+            endpoint.download_method == 'csv' and
+            self._storage_path is not None and
+            not endpoint.view_ids  # Multi-year not yet supported
+        )
