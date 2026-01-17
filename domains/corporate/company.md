@@ -250,8 +250,9 @@ graph:
         cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
-        # Free cash flow = operating - capex (use snake_case column names after select)
-        free_cash_flow: "operating_cashflow - ABS(COALESCE(capital_expenditures, 0))"
+        # Free cash flow = operating - capex
+        # Use TRY_CAST to handle 'None' string values in bronze data (returns NULL on failure)
+        free_cash_flow: "TRY_CAST(operating_cashflow AS DOUBLE) - ABS(COALESCE(TRY_CAST(capital_expenditures AS DOUBLE), 0))"
       # Drop natural keys - fact tables have only FK columns
       drop: [ticker, fiscal_date_ending]
       primary_key: [cash_flow_id]
