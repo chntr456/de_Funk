@@ -22,6 +22,7 @@
       "ticker_source": "market_cap",
       "_ticker_source_comment": "How to select tickers: 'market_cap' = ranked by market cap from company_reference, 'seed' = use ticker_seed table",
       "endpoints": [
+        "listing_status",
         "time_series_daily",
         "company_overview",
         "income_statement",
@@ -29,7 +30,7 @@
         "cash_flow",
         "earnings"
       ],
-      "_endpoints_comment": "Endpoints to ingest. Available: time_series_daily, time_series_daily_adjusted, company_overview, global_quote, income_statement, balance_sheet, cash_flow, earnings"
+      "_endpoints_comment": "Endpoints to ingest. listing_status first for ticker discovery. Available: listing_status, time_series_daily, time_series_daily_adjusted, company_overview, global_quote, income_statement, balance_sheet, cash_flow, earnings"
     },
     "chicago": {
       "enabled": true,
@@ -148,6 +149,15 @@
       "dry_run": false,
       "log_level": "DEBUG",
       "_comment": "Municipal/county data only - no securities. Bronze only."
+    },
+    "listing_status": {
+      "providers": ["alpha_vantage"],
+      "alpha_vantage_endpoints": ["listing_status"],
+      "max_tickers": null,
+      "build_silver": false,
+      "dry_run": false,
+      "log_level": "INFO",
+      "_comment": "Ingest all US tickers from LISTING_STATUS (single bulk API call). Run this first to populate ticker reference."
     },
     "dev_fill": {
       "providers": ["cook_county"],

@@ -249,12 +249,12 @@ fi
 # Task 1: Seed Tickers (Alpha Vantage)
 # ==============================================================================
 if [ "$SKIP_SEED" = false ] && [ "$ALPHA_VANTAGE_ENABLED" = "true" ]; then
-    SEED_PATH="${STORAGE_PATH:-/shared/storage}/bronze/seeds/tickers"
-    if [ -d "$SEED_PATH/_delta_log" ] && [ "$FORCE_SEED" != "true" ]; then
-        echo -e "${YELLOW}○ Ticker seed exists at $SEED_PATH - skipping${NC}"
+    LISTING_STATUS_PATH="${STORAGE_PATH:-/shared/storage}/bronze/alpha_vantage/listing_status"
+    if [ -d "$LISTING_STATUS_PATH/_delta_log" ] && [ "$FORCE_SEED" != "true" ]; then
+        echo -e "${YELLOW}○ Listing status exists at $LISTING_STATUS_PATH - skipping${NC}"
     else
         echo -e "${BLUE}============================================================${NC}"
-        echo -e "${BLUE}Testing task: seed tickers${NC}"
+        echo -e "${BLUE}Testing task: ingest listing_status (ticker reference)${NC}"
         echo -e "${BLUE}============================================================${NC}"
 
         python -c "
@@ -265,7 +265,7 @@ from config.logging import setup_logging, get_logger
 setup_logging()
 logger = get_logger('test_pipeline')
 
-logger.info('Testing task: seed tickers')
+logger.info('Testing task: ingest listing_status')
 
 from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 from datapipelines.ingestors.bronze_sink import BronzeSink
@@ -277,9 +277,10 @@ storage_path = '${STORAGE_PATH:-/shared/storage}'
 logger.info(f'Storage path: {storage_path}')
 
 docs_path = Path('$REPO_ROOT')
-spark = get_spark(app_name='test_pipeline_seed')
+spark = get_spark(app_name='test_pipeline_listing_status')
 provider = create_alpha_vantage_provider(spark=spark, docs_path=docs_path)
 
+# Use seed_tickers method to get all US tickers from LISTING_STATUS endpoint
 df = provider.seed_tickers(state='active', filter_us_exchanges=True)
 
 with open('$REPO_ROOT/configs/storage.json') as f:
@@ -287,10 +288,11 @@ with open('$REPO_ROOT/configs/storage.json') as f:
 storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in storage_cfg['roots'].items()}
 
 sink = BronzeSink(storage_cfg)
-table_cfg = storage_cfg['tables'].get('ticker_seed', {})
-sink.write(df, 'ticker_seed', partitions=table_cfg.get('partitions'), mode='overwrite')
+# Write to alpha_vantage/listing_status (the proper endpoint-based path)
+table_cfg = storage_cfg['tables'].get('alpha_vantage/listing_status', {})
+sink.write(df, 'alpha_vantage/listing_status', partitions=table_cfg.get('partitions'), mode='overwrite')
 
-logger.info(f'Seeded {df.count()} tickers to Bronze layer')
+logger.info(f'Ingested {df.count()} tickers to alpha_vantage/listing_status')
 spark.stop()
 "
 
