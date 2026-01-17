@@ -1,42 +1,27 @@
 """
-Base facet for Alpha Vantage API data transformations.
+Alpha Vantage Base Facet - Thin wrapper over base Facet for AV-specific cleaning.
 
-Alpha Vantage uses a different API structure than Polygon:
-- Single base URL with function parameter
-- API key passed as query parameter
-- Response format varies by endpoint (some nested, some flat)
-- Rate limits are more restrictive (5 calls/min for free tier)
+v2.8: Simplified - All markdown loading is now in base Facet class.
+This class only adds Alpha Vantage-specific data cleaning:
+- Handle literal "None" strings (AV returns "None" instead of null)
 
-Schema Loading (v2.6 - Markdown-Driven):
-    Facets load schema from markdown endpoint files by setting ENDPOINT_ID:
+All schema, coercion, field mappings come from endpoint markdown.
 
-        class MyFacet(AlphaVantageFacet):
-            ENDPOINT_ID = "balance_sheet"  # Loads from Data Sources/Endpoints/Alpha Vantage/.../Balance Sheet.md
-
-    The base class will automatically:
-    - Load schema from markdown
-    - Derive NUMERIC_COERCE from fields with coerce option
-    - Derive FINAL_COLUMNS from schema fields
-    - Generate field mappings (source -> output)
-
-Legacy Support:
-    INPUT_SCHEMA_KEY still works for facets not yet migrated to markdown.
+Usage:
+    class MyAVFacet(AlphaVantageFacet):
+        ENDPOINT_ID = "balance_sheet"
+        # That's it! Config comes from markdown.
 """
 from __future__ import annotations
 
-from typing import Optional, Dict, List, Tuple, Any
-from datetime import datetime
+from typing import Any
 import pandas as pd
-from pyspark.sql.types import (
-    StructType, StructField, StringType, DoubleType, LongType,
-    IntegerType, BooleanType, DateType, TimestampType
-)
 
 from datapipelines.base.facet import Facet
-from config.schema_loader import SchemaLoader
-from config.markdown_loader import get_markdown_loader
-from utils.repo import get_repo_root
 
+
+# ---------- Safe type conversion helpers ----------
+# Kept for backwards compatibility with existing facets
 
 def safe_long(series: pd.Series) -> list:
     """
@@ -44,12 +29,6 @@ def safe_long(series: pd.Series) -> list:
 
     Avoids Spark CANNOT_DETERMINE_TYPE errors by using Python native types
     instead of pandas Int64/float64 which fail when all values are NaN.
-
-    Args:
-        series: pandas Series to convert
-
-    Returns:
-        List of Python int or None values
     """
     if series is None:
         return []
@@ -60,14 +39,7 @@ def safe_double(series: pd.Series) -> list:
     """
     Convert pandas Series to list of Python float or None.
 
-    Avoids Spark CANNOT_DETERMINE_TYPE errors by using Python native types
-    instead of pandas Int64/float64 which fail when all values are NaN.
-
-    Args:
-        series: pandas Series to convert
-
-    Returns:
-        List of Python float or None values
+    Avoids Spark CANNOT_DETERMINE_TYPE errors by using Python native types.
     """
     if series is None:
         return []
@@ -77,12 +49,6 @@ def safe_double(series: pd.Series) -> list:
 def safe_string(series: pd.Series) -> list:
     """
     Convert pandas Series to list of Python str or None.
-
-    Args:
-        series: pandas Series to convert
-
-    Returns:
-        List of Python str or None values
     """
     if series is None:
         return []
@@ -93,312 +59,66 @@ class AlphaVantageFacet(Facet):
     """
     Base facet for Alpha Vantage data providers.
 
-    Key Differences from Polygon:
-    - API key in query params (not headers)
-    - Function-based endpoint selection
-    - Varied response structures
-    - Lower rate limits
+    Adds Alpha Vantage-specific data cleaning to the base Facet:
+    - Handle literal "None" strings (AV returns "None" instead of null)
+    - Handle "N/A" and "-" markers
+
+    All configuration (schema, coercion, field mappings) comes from
+    endpoint markdown frontmatter via the base Facet class.
 
     Attributes:
-        ENDPOINT_ID: Endpoint ID in markdown (e.g., "balance_sheet")
-        INPUT_SCHEMA_KEY: Legacy schema key in configs/schemas/alpha_vantage.yaml
-        tickers: List of ticker symbols to fetch
-        date_from: Start date for time series data
-        date_to: End date for time series data
-        extra: Additional parameters (interval, outputsize, etc.)
+        PROVIDER_ID: Set to "alpha_vantage" by default
+        ENDPOINT_ID: Override in subclass to load endpoint-specific config
+
+    Usage:
+        class BalanceSheetFacet(AlphaVantageFacet):
+            ENDPOINT_ID = "balance_sheet"
+            # That's it! All config comes from markdown.
+
+        facet = BalanceSheetFacet(spark)
+        df = facet.normalize(raw_data)
     """
 
-    # Set in subclass to load schema from markdown endpoint file
-    ENDPOINT_ID: Optional[str] = None
+    PROVIDER_ID = "alpha_vantage"
 
-    # Legacy: Schema key in configs/schemas/alpha_vantage.yaml (for facets not yet migrated)
-    INPUT_SCHEMA_KEY: Optional[str] = None
-
-    # Cache for markdown-derived schema info
-    _md_schema_cache: Optional[Dict[str, Any]] = None
-
-    @classmethod
-    def _load_markdown_schema(cls) -> Dict[str, Any]:
-        """
-        Load and cache schema information from markdown endpoint file.
-
-        Returns dict with:
-            - schema: List of SchemaField dicts
-            - coerce_rules: Dict[source_field, type]
-            - final_columns: List[(output_name, type)]
-            - field_mappings: Dict[source_field, output_name]
-            - computed_fields: List of computed field defs
-        """
-        if cls._md_schema_cache is not None:
-            return cls._md_schema_cache
-
-        if not cls.ENDPOINT_ID:
-            cls._md_schema_cache = {}
-            return cls._md_schema_cache
-
-        try:
-            repo_root = get_repo_root()
-            loader = get_markdown_loader(repo_root)
-
-            # Get full schema
-            schema = loader.get_endpoint_schema(cls.ENDPOINT_ID)
-            if not schema:
-                cls._md_schema_cache = {}
-                return cls._md_schema_cache
-
-            # Derive coercion rules (source_field -> type)
-            coerce_rules = {}
-            for f in schema:
-                if f.get('coerce') and f.get('source') not in ('_computed', '_generated', '_param', '_key', '_na'):
-                    coerce_rules[f['source']] = f['coerce']
-
-            # Derive final columns (output_name, type)
-            final_columns = []
-            for f in schema:
-                final_columns.append((f['name'], f['type']))
-
-            # Derive field mappings (source -> output)
-            field_mappings = {}
-            for f in schema:
-                src = f.get('source')
-                if src and src not in ('_computed', '_generated', '_param', '_key', '_na'):
-                    field_mappings[src] = f['name']
-
-            # Get computed fields
-            computed = []
-            for f in schema:
-                if f.get('source') == '_computed' and f.get('expr'):
-                    computed.append({
-                        'name': f['name'],
-                        'type': f['type'],
-                        'expr': f['expr'],
-                        'default': f.get('default'),
-                    })
-
-            cls._md_schema_cache = {
-                'schema': schema,
-                'coerce_rules': coerce_rules,
-                'final_columns': final_columns,
-                'field_mappings': field_mappings,
-                'computed_fields': computed,
-            }
-            return cls._md_schema_cache
-
-        except Exception as e:
-            # Log but don't fail - allow fallback to legacy
-            import logging
-            logging.getLogger(__name__).warning(f"Could not load markdown schema for {cls.ENDPOINT_ID}: {e}")
-            cls._md_schema_cache = {}
-            return cls._md_schema_cache
-
-    @classmethod
-    def get_coerce_rules(cls) -> Dict[str, str]:
-        """Get source field -> type coercion rules from markdown schema."""
-        md_info = cls._load_markdown_schema()
-        return md_info.get('coerce_rules', {})
-
-    @classmethod
-    def get_final_columns(cls) -> List[Tuple[str, str]]:
-        """Get final columns list from markdown schema."""
-        md_info = cls._load_markdown_schema()
-        return md_info.get('final_columns', [])
-
-    @classmethod
-    def get_field_mappings(cls) -> Dict[str, str]:
-        """Get source -> output field name mappings from markdown schema."""
-        md_info = cls._load_markdown_schema()
-        return md_info.get('field_mappings', {})
-
-    @classmethod
-    def get_computed_fields(cls) -> List[Dict[str, Any]]:
-        """Get computed field definitions from markdown schema."""
-        md_info = cls._load_markdown_schema()
-        return md_info.get('computed_fields', [])
-
-    @classmethod
-    def get_spark_casts(cls) -> Dict[str, str]:
-        """
-        Get Spark cast rules from markdown schema (output_name -> type).
-
-        Derives from schema fields that have {coerce: type} option.
-        Used by _apply_final_casts() to enforce types in Spark.
-
-        This is the single source of truth for type coercion -
-        defined in endpoint markdown frontmatter.
-        """
-        md_info = cls._load_markdown_schema()
-        schema = md_info.get('schema', [])
-        casts = {}
-        for f in schema:
-            # Any field with coerce option needs a Spark cast
-            if f.get('coerce'):
-                casts[f['name']] = f['coerce']
-        return casts
-
-    def __init__(self, spark, tickers=None, date_from=None, date_to=None, **extra):
+    def __init__(self, spark, tickers=None, date_from=None, date_to=None, **kwargs):
         """
         Initialize Alpha Vantage facet.
 
         Args:
             spark: SparkSession
-            tickers: List of ticker symbols (optional)
-            date_from: Start date for time series (YYYY-MM-DD)
-            date_to: End date for time series (YYYY-MM-DD)
-            **extra: Additional parameters:
-                - interval: Time interval for intraday/technical indicators
-                - outputsize: 'compact' (100 days) or 'full' (20+ years)
-                - adjusted: Whether to use adjusted prices
+            tickers: List of ticker symbols (optional, for legacy facets)
+            date_from: Start date for time series (optional, for legacy facets)
+            date_to: End date for time series (optional, for legacy facets)
+            **kwargs: Additional parameters (endpoint_id, etc.)
         """
-        super().__init__(spark)
+        # Pass endpoint_id if provided in kwargs
+        endpoint_id = kwargs.pop('endpoint_id', None) or self.ENDPOINT_ID
+        super().__init__(spark, provider_id=self.PROVIDER_ID, endpoint_id=endpoint_id, **kwargs)
+
+        # Legacy attributes for backwards compatibility
         self.tickers = tickers or []
         self.date_from = date_from
         self.date_to = date_to
-        self.extra = extra
+        self.extra = kwargs
 
-    def calls(self):
+    def _clean_raw_value(self, value: Any) -> Any:
         """
-        Generate API calls for this facet.
+        Clean a single raw value from Alpha Vantage API response.
 
-        Must be implemented by subclass.
-        Returns iterable of dicts with ep_name and params.
+        Alpha Vantage-specific handling:
+        - Literal "None" string -> None (AV returns "None" for missing values)
+        - "N/A", "-", empty string -> None
+        - Strip whitespace from strings
         """
-        raise NotImplementedError
+        if value is None:
+            return None
 
-    def _type_str_to_spark_type(self, type_str: str):
-        """Convert type string to Spark type."""
-        type_map = {
-            "string": StringType(),
-            "double": DoubleType(),
-            "float": DoubleType(),
-            "int": IntegerType(),
-            "integer": IntegerType(),
-            "long": LongType(),
-            "bigint": LongType(),
-            "boolean": BooleanType(),
-            "date": DateType(),
-            "timestamp": TimestampType(),
-        }
-        return type_map.get(type_str.lower(), StringType())
+        if isinstance(value, str):
+            cleaned = value.strip()
+            # Alpha Vantage returns literal "None" for missing values
+            if cleaned in ("None", "N/A", "-", ""):
+                return None
+            return cleaned
 
-    def get_input_schema(self) -> Optional[StructType]:
-        """
-        Get the input schema for this facet's API response.
-
-        Priority:
-        1. ENDPOINT_ID (markdown) - New v2.6 approach
-        2. INPUT_SCHEMA_KEY (YAML) - Legacy approach
-        3. None - Let Spark infer
-
-        This prevents CANNOT_DETERMINE_TYPE errors when columns have all NULL values.
-
-        Schema-driven type handling:
-        - Fields with source starting with '_' (generated/computed/na) use declared type
-        - Fields with API source names use StringType for dates (API returns strings)
-
-        Returns:
-            pyspark.sql.types.StructType or None
-        """
-        # Try markdown schema first (v2.6)
-        if self.ENDPOINT_ID:
-            md_info = self._load_markdown_schema()
-            schema = md_info.get('schema', [])
-            if schema:
-                fields = []
-                for field_def in schema:
-                    name = field_def['name']
-                    type_str = field_def['type']
-                    source = field_def.get('source', '')
-
-                    # Check if this is a generated/computed/na field (source starts with '_')
-                    is_generated = source.startswith('_') if source else False
-
-                    # Date fields from API come as strings - need conversion in postprocess
-                    # Generated/computed date fields are already date objects
-                    if type_str == 'date' and not is_generated:
-                        fields.append(StructField(name, StringType(), True))
-                    else:
-                        fields.append(StructField(name, self._type_str_to_spark_type(type_str), True))
-                return StructType(fields)
-
-        # Fallback to legacy YAML schema
-        if self.INPUT_SCHEMA_KEY:
-            return SchemaLoader.load("alpha_vantage", self.INPUT_SCHEMA_KEY)
-
-        return None
-
-    def normalize(self, raw_batches):
-        """
-        Override normalize to clean Alpha Vantage data at Python level.
-
-        Alpha Vantage data quality issues:
-        - Returns literal string "None" for missing values
-        - Uses "N/A" and "-" for unavailable data
-        - Sometimes has extra whitespace
-        - Empty strings for missing data
-
-        This method performs bronze layer cleaning:
-        - Replace invalid markers ("None", "N/A", "-") with Python None (becomes NULL)
-        - Strip whitespace from all string values
-        - Convert empty strings to None
-        - Preserve valid data as-is
-        """
-        # Clean the raw data at Python level
-        cleaned_batches = []
-        for batch in raw_batches:
-            cleaned_batch = []
-            for item in batch:
-                if isinstance(item, dict):
-                    # Clean each field value
-                    cleaned_item = {}
-                    for key, value in item.items():
-                        # Handle None/null values
-                        if value is None:
-                            cleaned_item[key] = None
-                        # Handle string values
-                        elif isinstance(value, str):
-                            # Strip whitespace
-                            cleaned_value = value.strip()
-                            # Replace invalid markers with None
-                            if cleaned_value in ("None", "N/A", "-", ""):
-                                cleaned_item[key] = None
-                            else:
-                                cleaned_item[key] = cleaned_value
-                        # Keep non-string values as-is
-                        else:
-                            cleaned_item[key] = value
-                    cleaned_batch.append(cleaned_item)
-                else:
-                    cleaned_batch.append(item)
-            cleaned_batches.append(cleaned_batch)
-
-        # Flatten batches into single list
-        rows = [item for batch in cleaned_batches for item in batch]
-
-        # Get schema if provided by subclass
-        schema = self.get_input_schema()
-
-        # Create DataFrame with explicit schema (avoids type inference issues)
-        if schema:
-            df = self.spark.createDataFrame(rows, schema=schema)
-        else:
-            df = self.spark.createDataFrame(rows, samplingRatio=1.0)
-
-        # Apply postprocessing
-        df = self.postprocess(df)
-
-        # Apply type coercion from markdown schema
-        # This uses the {coerce: type} options in endpoint frontmatter
-        spark_casts = self.get_spark_casts()
-        if spark_casts:
-            from pyspark.sql import functions as F
-            for col_name, cast_type in spark_casts.items():
-                if col_name in df.columns:
-                    df = df.withColumn(col_name, F.col(col_name).cast(cast_type))
-
-        # Apply final column selection from markdown schema
-        final_cols = self.get_final_columns()
-        if final_cols:
-            self.FINAL_COLUMNS = final_cols
-            df = self._apply_final_columns(df)
-
-        return df
+        return value
