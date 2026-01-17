@@ -65,6 +65,13 @@ def get_spark(
             # Reduce memory pressure from storage
             "spark.memory.fraction": "0.6",
             "spark.memory.storageFraction": "0.3",
+            # Adaptive Query Execution - runtime optimization based on actual data
+            "spark.sql.adaptive.enabled": "true",
+            "spark.sql.adaptive.coalescePartitions.enabled": "true",
+            "spark.sql.adaptive.skewJoin.enabled": "true",
+            "spark.sql.adaptive.localShuffleReader.enabled": "true",
+            # Auto-tune shuffle partitions based on data size (target 64MB per partition)
+            "spark.sql.adaptive.advisoryPartitionSizeInBytes": "67108864",
         }
 
     # Build Spark session with config
