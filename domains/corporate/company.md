@@ -8,17 +8,18 @@ tags: [company, corporate, fundamentals]
 # Dependencies
 depends_on: [temporal]
 
-# Storage - provider/dataset for bronze, domain hierarchy for silver
+# Storage - provider/endpoint_id for bronze, domain hierarchy for silver
 storage:
   format: delta
   bronze:
     provider: alpha_vantage
     tables:
-      company_reference: alpha_vantage/company_reference
-      income_statements: alpha_vantage/income_statements
-      balance_sheets: alpha_vantage/balance_sheets
-      cash_flows: alpha_vantage/cash_flows
-      earnings: alpha_vantage/earnings
+      # Table names match endpoint_id from API config
+      company_overview: alpha_vantage/company_overview  # Company fundamentals (COMPANY_OVERVIEW)
+      income_statement: alpha_vantage/income_statement  # Income statement (INCOME_STATEMENT)
+      balance_sheet: alpha_vantage/balance_sheet  # Balance sheet (BALANCE_SHEET)
+      cash_flow: alpha_vantage/cash_flow  # Cash flow (CASH_FLOW)
+      earnings: alpha_vantage/earnings  # Earnings (EARNINGS)
   silver:
     root: storage/silver/corporate
 

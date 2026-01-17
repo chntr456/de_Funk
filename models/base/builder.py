@@ -173,11 +173,56 @@ class BaseModelBuilder(ABC):
 
         return self._model_instance
 
+    def get_required_bronze_tables(self) -> List[str]:
+        """
+        Get required bronze table paths from model config.
+
+        Reads from storage.bronze.tables in the markdown front matter.
+        Returns list of table paths like ['alpha_vantage/listing_status'].
+
+        Returns:
+            List of bronze table paths (relative to bronze root)
+        """
+        config = self.get_model_config()
+        storage = config.get('storage', {})
+        bronze = storage.get('bronze', {})
+        tables = bronze.get('tables', {})
+
+        # Tables is a dict: {logical_name: path}
+        # Return the paths (values)
+        return list(tables.values()) if isinstance(tables, dict) else []
+
+    def validate_bronze_tables(self) -> Tuple[bool, List[str]]:
+        """
+        Validate that required bronze tables exist.
+
+        Returns:
+            Tuple of (all_exist, list of missing paths)
+        """
+        bronze_root = Path(self.storage_config["roots"]["bronze"])
+        required = self.get_required_bronze_tables()
+        missing = []
+
+        for table_path in required:
+            full_path = bronze_root / table_path
+            if not full_path.exists():
+                missing.append(str(full_path))
+
+        return len(missing) == 0, missing
+
     def pre_build(self) -> None:
         """
-        Hook called before build. Override for custom pre-build logic.
+        Default pre-build: validate bronze tables exist.
+
+        Reads required tables from storage.bronze.tables in model config.
+        Override in subclass for additional pre-build logic.
         """
-        pass
+        if self.context.verbose:
+            logger.info(f"  Checking bronze data for {self.model_name}...")
+
+        all_exist, missing = self.validate_bronze_tables()
+        if not all_exist and not self.context.dry_run:
+            logger.warning(f"  Missing bronze data: {missing}")
 
     def post_build(self, result: BuildResult) -> None:
         """

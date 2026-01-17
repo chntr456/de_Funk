@@ -2,11 +2,11 @@
 StocksBuilder - Builder for the Stocks model.
 
 Builds the stocks silver layer from bronze securities data.
-Independent of other models - company linkage is at query time via ticker.
+Bronze tables are defined in domains/securities/stocks.md storage.bronze.tables.
 
 Build includes:
-1. dim_stock dimension from bronze.alpha_vantage.listing_status (LISTING_STATUS endpoint)
-2. fact_stock_prices from bronze.alpha_vantage.time_series_daily_adjusted (TIME_SERIES_DAILY_ADJUSTED endpoint)
+1. dim_stock dimension from listing_status (LISTING_STATUS endpoint)
+2. fact_stock_prices from time_series_daily_adjusted (TIME_SERIES_DAILY_ADJUSTED endpoint)
 3. Technical indicators computed on fact_stock_prices (SMA, RSI, Bollinger Bands, etc.)
 """
 
@@ -33,6 +33,10 @@ class StocksBuilder(BaseModelBuilder):
     Dependencies:
     - temporal: For date dimension joins
 
+    Required bronze tables (from domains/securities/stocks.md):
+    - alpha_vantage/listing_status
+    - alpha_vantage/time_series_daily_adjusted
+
     Technical Indicators:
     The post_build step computes technical indicators (SMA, RSI, Bollinger Bands, etc.)
     and adds them as columns to fact_stock_prices.
@@ -46,23 +50,7 @@ class StocksBuilder(BaseModelBuilder):
         from models.domains.securities.stocks.model import StocksModel
         return StocksModel
 
-    def pre_build(self) -> None:
-        """Validate bronze data exists before building."""
-        if self.context.verbose:
-            logger.info(f"  Checking bronze data for {self.model_name}...")
-
-        # Check for required bronze tables (use storage_config from context)
-        # Bronze structure: bronze/{provider}/{endpoint}
-        bronze_root = Path(self.context.storage_config["roots"]["bronze"])
-
-        required_paths = [
-            bronze_root / "alpha_vantage" / "listing_status",  # Ticker listings (LISTING_STATUS)
-            bronze_root / "alpha_vantage" / "time_series_daily_adjusted",  # Daily OHLCV
-        ]
-
-        missing = [p for p in required_paths if not p.exists()]
-        if missing and not self.context.dry_run:
-            logger.warning(f"  Missing bronze data: {[str(p) for p in missing]}")
+    # pre_build inherited from BaseModelBuilder - reads required tables from config
 
     def post_build(self, result: BuildResult) -> None:
         """

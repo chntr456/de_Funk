@@ -2,7 +2,7 @@
 CompanyBuilder - Builder for the Company model.
 
 Builds the company silver layer from bronze company overview data.
-Uses bronze.alpha_vantage.company_overview (COMPANY_OVERVIEW endpoint).
+Bronze tables are defined in domains/corporate/company.md storage.bronze.tables.
 """
 
 from __future__ import annotations
@@ -25,6 +25,9 @@ class CompanyBuilder(BaseModelBuilder):
 
     Dependencies:
     - temporal: For date dimension joins
+
+    Required bronze tables (from domains/corporate/company.md):
+    - alpha_vantage/company_overview
     """
 
     model_name = "company"
@@ -35,24 +38,7 @@ class CompanyBuilder(BaseModelBuilder):
         from models.domains.corporate.company.model import CompanyModel
         return CompanyModel
 
-    def pre_build(self) -> None:
-        """Validate bronze data exists before building."""
-        if self.context.verbose:
-            logger.info(f"  Checking bronze data for {self.model_name}...")
-
-        # Check for required bronze tables (use storage_config from context)
-        # Bronze structure: bronze/{provider}/{endpoint}
-        from pathlib import Path
-        bronze_root = Path(self.context.storage_config["roots"]["bronze"])
-
-        # Reads from company_overview (COMPANY_OVERVIEW endpoint with rich attributes)
-        required_paths = [
-            bronze_root / "alpha_vantage" / "company_overview",  # Company data from COMPANY_OVERVIEW
-        ]
-
-        missing = [p for p in required_paths if not p.exists()]
-        if missing and not self.context.dry_run:
-            logger.warning(f"  Missing bronze data: {[str(p) for p in missing]}")
+    # pre_build inherited from BaseModelBuilder - reads required tables from config
 
     def post_build(self, result: BuildResult) -> None:
         """Log build statistics after completion."""
