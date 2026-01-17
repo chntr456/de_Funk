@@ -50,12 +50,21 @@ def get_spark(
         # Cluster workers may have less memory than local machine
         driver_memory = os.environ.get("SPARK_DRIVER_MEMORY", "8g")
         executor_memory = os.environ.get("SPARK_EXECUTOR_MEMORY", "8g")
+        # Memory overhead for off-heap (Python, Delta, etc.) - default 10% is often too low
+        executor_memory_overhead = os.environ.get("SPARK_EXECUTOR_MEMORY_OVERHEAD", "2g")
 
         base_config = {
             "spark.sql.session.timeZone": "UTC",
             "spark.sql.shuffle.partitions": "200",
             "spark.driver.memory": driver_memory,
             "spark.executor.memory": executor_memory,
+            "spark.executor.memoryOverhead": executor_memory_overhead,
+            # Prevent premature executor death during long operations
+            "spark.network.timeout": "600s",
+            "spark.executor.heartbeatInterval": "60s",
+            # Reduce memory pressure from storage
+            "spark.memory.fraction": "0.6",
+            "spark.memory.storageFraction": "0.3",
         }
 
     # Build Spark session with config
