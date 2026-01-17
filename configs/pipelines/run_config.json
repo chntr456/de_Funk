@@ -102,16 +102,16 @@
   },
   "ticker_source": {
     "priority": [
-      "securities_reference",
-      "company_reference"
+      "listing_status",
+      "company_overview"
     ],
     "_priority_comment": "Order of sources to try for ticker discovery. NO HARDCODED FALLBACKS.",
-    "securities_reference_path": "bronze/alpha_vantage/securities_reference",
-    "_securities_reference_comment": "Ticker reference from LISTING_STATUS (bulk listing)",
-    "company_reference_path": "bronze/alpha_vantage/company_reference",
-    "_company_reference_comment": "Company data from OVERVIEW (has CIK, sector, etc.)",
-    "securities_prices_path": "bronze/alpha_vantage/prices_daily",
-    "_securities_prices_comment": "Daily OHLCV data",
+    "listing_status_path": "bronze/alpha_vantage/listing_status",
+    "_listing_status_comment": "Ticker reference from LISTING_STATUS endpoint (bulk listing)",
+    "company_overview_path": "bronze/alpha_vantage/company_overview",
+    "_company_overview_comment": "Company data from COMPANY_OVERVIEW endpoint (has CIK, sector, etc.)",
+    "time_series_daily_path": "bronze/alpha_vantage/time_series_daily_adjusted",
+    "_time_series_daily_comment": "Daily OHLCV data from TIME_SERIES_DAILY_ADJUSTED endpoint",
     "filter_us_exchanges": true,
     "_filter_us_exchanges_comment": "Only include tickers from US exchanges (NYSE, NASDAQ, etc.)"
   },

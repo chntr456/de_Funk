@@ -1,9 +1,11 @@
 # Base graph patterns for securities
 # Models can extend and override these patterns
+# Bronze paths use provider/endpoint_id format: bronze.{provider}.{endpoint_id}
+# Table names match Alpha Vantage endpoint IDs (e.g., company_overview, listing_status)
 
 nodes:
   _dim_security_base:
-    from: bronze.company_reference
+    from: bronze.alpha_vantage.company_overview
     filters:
       # Override in child: - "AssetType = 'Common Stock'"
       # Use 'AssetType' column (raw Alpha Vantage value)
@@ -23,7 +25,7 @@ nodes:
     tags: [dim, entity]
 
   _fact_prices_base:
-    from: bronze.securities_prices_daily
+    from: bronze.alpha_vantage.time_series_daily_adjusted
     filters:
       # Override in child if needed
       - "trade_date IS NOT NULL"

@@ -5,8 +5,8 @@ Builds the stocks silver layer from bronze securities data.
 Independent of other models - company linkage is at query time via ticker.
 
 Build includes:
-1. dim_stock dimension from bronze.company_reference
-2. fact_stock_prices from bronze.securities_prices_daily
+1. dim_stock dimension from bronze.alpha_vantage.listing_status (LISTING_STATUS endpoint)
+2. fact_stock_prices from bronze.alpha_vantage.time_series_daily_adjusted (TIME_SERIES_DAILY_ADJUSTED endpoint)
 3. Technical indicators computed on fact_stock_prices (SMA, RSI, Bollinger Bands, etc.)
 """
 
@@ -52,10 +52,12 @@ class StocksBuilder(BaseModelBuilder):
             logger.info(f"  Checking bronze data for {self.model_name}...")
 
         # Check for required bronze tables (use storage_config from context)
+        # Bronze structure: bronze/{provider}/{endpoint}
         bronze_root = Path(self.context.storage_config["roots"]["bronze"])
 
         required_paths = [
-            bronze_root / "securities_prices_daily",  # Daily OHLCV
+            bronze_root / "alpha_vantage" / "listing_status",  # Ticker listings (LISTING_STATUS)
+            bronze_root / "alpha_vantage" / "time_series_daily_adjusted",  # Daily OHLCV
         ]
 
         missing = [p for p in required_paths if not p.exists()]

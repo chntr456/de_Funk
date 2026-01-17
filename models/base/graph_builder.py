@@ -352,11 +352,18 @@ class GraphBuilder:
         Auto-detects format based on presence of _delta_log directory.
 
         Args:
-            table_name: Logical table name (from storage config)
+            table_name: Logical table name from graph config.
+                       Can use dot notation (alpha_vantage.securities_reference)
+                       or slash notation (alpha_vantage/securities_reference).
 
         Returns:
             DataFrame with merged schema
         """
+        # Normalize table name: graph uses dots, storage.json uses slashes
+        # e.g., "alpha_vantage.securities_reference" -> "alpha_vantage/securities_reference"
+        normalized_table = table_name.replace('.', '/')
+        logger.debug(f"Loading bronze table: {table_name} -> {normalized_table}")
+
         # Use backend type to determine how to load
         if self.backend == 'spark':
             from models.api.dal import BronzeTable
@@ -364,11 +371,11 @@ class GraphBuilder:
             # When using Spark directly, self.connection IS the SparkSession
             # When using a wrapper, it may have a .spark attribute
             spark = getattr(self.connection, 'spark', self.connection)
-            bronze = BronzeTable(spark, self.storage_router, table_name)
+            bronze = BronzeTable(spark, self.storage_router, normalized_table)
             return bronze.read(merge_schema=True)
         else:
             # DuckDB - use read_table which auto-detects Delta/Parquet
-            path = self.storage_router.bronze_path(table_name)
+            path = self.storage_router.bronze_path(normalized_table)
             return self.connection.read_table(path)
 
     def _apply_derive(self, df: DataFrame, col_name: str, expr: str, node_id: str) -> DataFrame:

@@ -9,15 +9,16 @@ tags: [stocks, equities, securities]
 extends: _base.finance.securities
 depends_on: [temporal, corporate]
 
-# Storage - provider/dataset for bronze, domain hierarchy for silver
+# Storage - provider/endpoint_id for bronze, domain hierarchy for silver
 storage:
   format: delta
   bronze:
     provider: alpha_vantage
     tables:
-      securities_reference: alpha_vantage/securities_reference
-      securities_prices_daily: alpha_vantage/securities_prices_daily
-      company_reference: alpha_vantage/company_reference
+      # Table names match endpoint_id from API config
+      listing_status: alpha_vantage/listing_status  # All tickers from LISTING_STATUS
+      time_series_daily_adjusted: alpha_vantage/time_series_daily_adjusted  # Daily OHLCV
+      company_overview: alpha_vantage/company_overview  # Company fundamentals
   silver:
     root: storage/silver/securities/stocks
 
@@ -96,12 +97,12 @@ graph:
 
   nodes:
     dim_stock:
-      from: bronze.alpha_vantage.securities_reference
+      from: bronze.alpha_vantage.listing_status
       type: dimension
-      # Note: securities_reference comes from LISTING_STATUS (bulk ticker list)
+      # Note: listing_status comes from LISTING_STATUS endpoint (bulk ticker list)
       # This gives us ALL tickers (~12,499), not just those with company data (~197)
       # Company-specific fields (cik, sector, industry, market_cap) are enriched
-      # via LEFT JOIN to company_reference in a subsequent step or left NULL
+      # via LEFT JOIN to company_overview in a subsequent step or left NULL
       select:
         ticker: ticker
         security_name: security_name

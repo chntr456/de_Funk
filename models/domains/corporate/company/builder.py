@@ -2,7 +2,7 @@
 CompanyBuilder - Builder for the Company model.
 
 Builds the company silver layer from bronze company overview data.
-This is a foundational model with no dependencies.
+Uses bronze.alpha_vantage.company_overview (COMPANY_OVERVIEW endpoint).
 """
 
 from __future__ import annotations
@@ -41,12 +41,13 @@ class CompanyBuilder(BaseModelBuilder):
             logger.info(f"  Checking bronze data for {self.model_name}...")
 
         # Check for required bronze tables (use storage_config from context)
+        # Bronze structure: bronze/{provider}/{endpoint}
         from pathlib import Path
         bronze_root = Path(self.context.storage_config["roots"]["bronze"])
 
-        # Reads from company_reference (COMPANY_OVERVIEW data with rich attributes)
+        # Reads from company_overview (COMPANY_OVERVIEW endpoint with rich attributes)
         required_paths = [
-            bronze_root / "company_reference",  # Company data from OVERVIEW calls
+            bronze_root / "alpha_vantage" / "company_overview",  # Company data from COMPANY_OVERVIEW
         ]
 
         missing = [p for p in required_paths if not p.exists()]
