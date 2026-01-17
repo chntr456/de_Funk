@@ -12,8 +12,9 @@ storage:
   bronze:
     provider: alpha_vantage
     tables:
-      securities_reference: alpha_vantage/securities_reference
-      securities_prices_daily: alpha_vantage/securities_prices_daily
+      # Table names match endpoint_id from API config
+      listing_status: alpha_vantage/listing_status  # All tickers from LISTING_STATUS
+      time_series_daily_adjusted: alpha_vantage/time_series_daily_adjusted  # Daily OHLCV
   silver:
     root: storage/silver/securities
 
@@ -107,9 +108,9 @@ tables:
 graph:
   nodes:
     dim_security:
-      from: bronze.alpha_vantage.securities_reference
+      from: bronze.alpha_vantage.listing_status
       type: dimension
-      # Note: securities_reference comes from LISTING_STATUS (bulk ticker list)
+      # Note: listing_status comes from LISTING_STATUS endpoint (bulk ticker list)
       # This has ALL securities, not just the ones we've called OVERVIEW on
       select:
         ticker: ticker
@@ -126,7 +127,7 @@ graph:
       tags: [dim, master, security]
 
     _fact_prices_base:
-      from: bronze.alpha_vantage.securities_prices_daily
+      from: bronze.alpha_vantage.time_series_daily_adjusted
       type: fact
       select:
         ticker: ticker
