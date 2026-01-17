@@ -373,7 +373,10 @@ class IngestorEngine:
         df,
         table_name: str,
         partitions: Optional[List[str]],
-        mode: str = "overwrite"
+        mode: str = "overwrite",
+        write_strategy: str = "append",
+        key_columns: Optional[List[str]] = None,
+        date_column: Optional[str] = None
     ) -> int:
         """
         Write DataFrame to Delta Lake (runs in background thread).
@@ -382,18 +385,33 @@ class IngestorEngine:
             df: Spark DataFrame to write
             table_name: Target table name
             partitions: Partition columns
-            mode: Write mode - "overwrite" or "append"
+            mode: Write mode - "overwrite" or "append" (for upsert strategy)
+            write_strategy: "append" (preserves existing) or "upsert" (overwrites first chunk)
+            key_columns: Columns for deduplication (required for append strategy)
+            date_column: Date column for append_immutable (optional)
 
         Returns:
             Number of records written
         """
         try:
             count = df.count()
-            if mode == "append":
+
+            if write_strategy == "append" and key_columns:
+                # Use append_immutable for time series data - preserves existing records
+                self.sink.append_immutable(
+                    df, table_name,
+                    key_columns=key_columns,
+                    partitions=partitions,
+                    date_column=date_column or "trade_date"
+                )
+                logger.info(f"Wrote {table_name}: {count:,} records (append_immutable)")
+            elif mode == "append":
                 self.sink.append(df, table_name, partitions=partitions)
+                logger.info(f"Wrote {table_name}: {count:,} records (mode=append)")
             else:
                 self.sink.overwrite(df, table_name, partitions=partitions)
-            logger.info(f"Wrote {table_name}: {count:,} records (mode={mode})")
+                logger.info(f"Wrote {table_name}: {count:,} records (mode=overwrite)")
+
             return count
         finally:
             # CRITICAL: Release Spark memory after write completes
@@ -408,7 +426,10 @@ class IngestorEngine:
         self,
         work_item: str,
         table_name: str,
-        partitions: Optional[List[str]]
+        partitions: Optional[List[str]],
+        write_strategy: str = "append",
+        key_columns: Optional[List[str]] = None,
+        date_column: Optional[str] = None
     ) -> WorkItemResult:
         """
         Ingest work item using Spark's native CSV reader.
@@ -422,6 +443,9 @@ class IngestorEngine:
             work_item: Work item identifier
             table_name: Target table name
             partitions: Partition columns
+            write_strategy: "append" (preserves existing) or "upsert" (overwrites)
+            key_columns: Columns for deduplication (for append strategy)
+            date_column: Date column for append_immutable
 
         Returns:
             WorkItemResult with status and record count
@@ -439,9 +463,17 @@ class IngestorEngine:
                 partitions, df.columns, work_item
             )
 
-            # Write directly to Delta (single operation, distributed)
-            logger.info(f"{work_item}: Writing to Delta with Spark")
-            self.sink.overwrite(df, table_name, partitions=validated_partitions)
+            # Write using appropriate strategy
+            logger.info(f"{work_item}: Writing to Delta with Spark (strategy={write_strategy})")
+            if write_strategy == "append" and key_columns:
+                self.sink.append_immutable(
+                    df, table_name,
+                    key_columns=key_columns,
+                    partitions=validated_partitions,
+                    date_column=date_column or "trade_date"
+                )
+            else:
+                self.sink.overwrite(df, table_name, partitions=validated_partitions)
 
             # Get count after write (avoids counting twice)
             total_records = df.count()
@@ -499,6 +531,11 @@ class IngestorEngine:
             # Get table configuration from provider
             table_name = self.provider.get_table_name(work_item)
             partitions = self.provider.get_partitions(work_item)
+            write_strategy = self.provider.get_write_strategy(work_item)
+            key_columns = self.provider.get_key_columns(work_item)
+            date_column = self.provider.get_date_column(work_item)
+
+            logger.info(f"{work_item}: write_strategy={write_strategy}, table={table_name}")
 
             # Try Spark CSV path first (distributed, no Python batching)
             if (max_records is None and
@@ -506,7 +543,10 @@ class IngestorEngine:
                 self.provider.supports_spark_csv(work_item)):
 
                 logger.info(f"{work_item}: Using Spark CSV path (distributed)")
-                return self._ingest_with_spark_csv(work_item, table_name, partitions)
+                return self._ingest_with_spark_csv(
+                    work_item, table_name, partitions,
+                    write_strategy, key_columns, date_column
+                )
 
             # Get shared executor
             executor = self.get_executor(self.writer_threads)
@@ -541,8 +581,13 @@ class IngestorEngine:
                             partitions, df.columns, work_item
                         )
 
-                    # First chunk overwrites, subsequent chunks append
-                    mode = "overwrite" if chunk_count == 0 else "append"
+                    # Determine write mode based on strategy
+                    # append strategy: always append (append_immutable handles dedup)
+                    # upsert strategy: overwrite first chunk, then append
+                    if write_strategy == "append":
+                        mode = "append"  # append_immutable will handle dedup
+                    else:
+                        mode = "overwrite" if chunk_count == 0 else "append"
 
                     # Queue async write
                     future = executor.submit(
@@ -550,7 +595,10 @@ class IngestorEngine:
                         df,
                         table_name,
                         validated_partitions,
-                        mode
+                        mode,
+                        write_strategy,
+                        key_columns,
+                        date_column
                     )
                     self._pending_futures.append(future)
 
@@ -563,7 +611,7 @@ class IngestorEngine:
                     chunk_count += 1
                     logger.info(
                         f"{work_item}: queued chunk {chunk_count} "
-                        f"({len(buffer):,} records, mode={mode})"
+                        f"({len(buffer):,} records, strategy={write_strategy})"
                     )
 
                     # Clear buffer and free memory
@@ -581,14 +629,21 @@ class IngestorEngine:
                         partitions, df.columns, work_item
                     )
 
-                mode = "overwrite" if chunk_count == 0 else "append"
+                # Determine write mode based on strategy
+                if write_strategy == "append":
+                    mode = "append"  # append_immutable will handle dedup
+                else:
+                    mode = "overwrite" if chunk_count == 0 else "append"
 
                 future = executor.submit(
                     self._async_write,
                     df,
                     table_name,
                     validated_partitions,
-                    mode
+                    mode,
+                    write_strategy,
+                    key_columns,
+                    date_column
                 )
                 self._pending_futures.append(future)
 
@@ -596,7 +651,7 @@ class IngestorEngine:
                 chunk_count += 1
                 logger.info(
                     f"{work_item}: queued final chunk {chunk_count} "
-                    f"({len(buffer):,} records, mode={mode})"
+                    f"({len(buffer):,} records, strategy={write_strategy})"
                 )
 
             # Wait for all pending writes for this work item to complete

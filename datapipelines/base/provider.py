@@ -310,6 +310,36 @@ class BaseProvider(ABC):
             return endpoint.bronze.key_columns or []
         return []
 
+    def get_write_strategy(self, work_item: str) -> str:
+        """
+        Get write strategy from endpoint config.
+
+        Args:
+            work_item: Work item identifier
+
+        Returns:
+            Write strategy: "append" or "upsert" (default: "append")
+        """
+        endpoint = self._endpoints.get(work_item)
+        if endpoint and endpoint.bronze:
+            return endpoint.bronze.write_strategy or "append"
+        return "append"  # Default to append to preserve existing data
+
+    def get_date_column(self, work_item: str) -> Optional[str]:
+        """
+        Get date column for append_immutable strategy.
+
+        Args:
+            work_item: Work item identifier
+
+        Returns:
+            Date column name or None
+        """
+        endpoint = self._endpoints.get(work_item)
+        if endpoint and endpoint.bronze:
+            return endpoint.bronze.date_column
+        return None
+
     def get_response_key(self, work_item: str) -> Optional[str]:
         """
         Get response key for extracting data from API response.
