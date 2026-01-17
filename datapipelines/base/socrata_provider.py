@@ -60,7 +60,6 @@ class SocrataBaseProvider(BaseProvider):
             storage_path: Path to storage root (for raw layer)
         """
         self._storage_path = Path(storage_path) if storage_path else None
-        self._raw_save_enabled = True  # Default: save raw CSVs if storage_path is set
         # Initialize base (loads markdown config)
         super().__init__(provider_id, spark, docs_path)
 
@@ -76,17 +75,18 @@ class SocrataBaseProvider(BaseProvider):
 
         Args:
             storage_path: Base storage path (optional - updates storage_path if provided)
-            enabled: Whether to enable raw saving
+            enabled: Whether to enable raw saving (sets storage_path to None if False)
         """
-        self._raw_save_enabled = enabled
         if storage_path:
-            self._storage_path = Path(storage_path)
+            self._storage_path = Path(storage_path) if enabled else None
+        elif not enabled:
+            self._storage_path = None
 
-        if enabled and self._storage_path:
+        if self._storage_path:
             raw_dir = self._storage_path / 'raw' / self.provider_id
             raw_dir.mkdir(parents=True, exist_ok=True)
             logger.info(f"Raw data dump enabled: {raw_dir}")
-        elif not enabled:
+        else:
             logger.info(f"Raw data dump disabled for {self.provider_id}")
 
     def _setup(self) -> None:
@@ -327,9 +327,9 @@ class SocrataBaseProvider(BaseProvider):
             year: Optional year for multi-year endpoints
 
         Returns:
-            Path to raw CSV file, or None if raw save disabled or storage_path not configured
+            Path to raw CSV file, or None if storage_path not configured
         """
-        if not self._raw_save_enabled or not self._storage_path:
+        if not self._storage_path:
             return None
 
         raw_dir = self._storage_path / 'raw' / self.provider_id

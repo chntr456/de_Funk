@@ -15,7 +15,7 @@
 #   --skip-seed          Skip ticker seeding (use existing Bronze data)
 #   --force-seed         Force re-seed even if ticker data exists
 #   --skip-ingest        Skip Bronze ingestion
-#   --save-raw           Save raw API responses to bronze/_raw/ before transformation
+#   --save-raw           Save raw API responses to raw/{provider}/ before transformation
 #   --storage-path PATH  Override storage path (default: from run_config.json)
 #   --local              Run locally (ignore SPARK_MASTER_URL)
 #   --help               Show this help message
@@ -375,13 +375,12 @@ storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     run_config = json.load(f)
 
-provider = create_alpha_vantage_provider(spark=spark, docs_path=docs_path)
-
-# Enable raw data dump if requested
+# Pass storage_path to enable raw layer (automatic when set, like Socrata)
 save_raw = '${SAVE_RAW}' == 'true'
+raw_storage = Path(storage_path) if save_raw else None
+provider = create_alpha_vantage_provider(spark=spark, docs_path=docs_path, storage_path=raw_storage)
 if save_raw:
-    provider.enable_raw_save(Path(storage_path), enabled=True)
-    logger.info(f'Raw data dump ENABLED: {storage_path}/bronze/_raw/alpha_vantage/')
+    logger.info(f'Raw data dump ENABLED: {storage_path}/raw/alpha_vantage/')
 
 max_pending_writes = int('${PROFILE_MAX_PENDING_WRITES:-2}')
 engine = IngestorEngine(provider, storage_cfg, max_pending_writes=max_pending_writes)
@@ -568,13 +567,12 @@ for provider_name in bulk_providers:
             logger.warning(f'Unknown provider: {provider_name} - skipping')
             continue
 
-        provider = factory(spark=spark, docs_path=docs_path, storage_path=storage_path)
-        logger.info(f'Created provider: {provider.provider_id}')
-
-        # Enable raw data dump if requested (saves CSV files to raw/{provider}/)
+        # Pass storage_path to enable raw layer (automatic when set, like Alpha Vantage)
         save_raw = '${SAVE_RAW}' == 'true'
+        raw_storage = storage_path if save_raw else None
+        provider = factory(spark=spark, docs_path=docs_path, storage_path=raw_storage)
+        logger.info(f'Created provider: {provider.provider_id}')
         if save_raw:
-            provider.enable_raw_save(Path(storage_path), enabled=True)
             logger.info(f'Raw data dump ENABLED: {storage_path}/raw/{provider_name}/')
 
         max_pending_writes = int('${PROFILE_MAX_PENDING_WRITES:-2}')
@@ -688,7 +686,7 @@ echo "Results:"
 if [ "$SAVE_RAW" = true ]; then
     echo ""
     echo "Raw data locations:"
-    [ "$ALPHA_VANTAGE_ENABLED" = "true" ] && echo "  Alpha Vantage: ${STORAGE_PATH:-/shared/storage}/bronze/_raw/alpha_vantage/"
+    [ "$ALPHA_VANTAGE_ENABLED" = "true" ] && echo "  Alpha Vantage: ${STORAGE_PATH:-/shared/storage}/raw/alpha_vantage/"
     [ -n "$BULK_PROVIDERS" ] && echo "  Bulk providers: ${STORAGE_PATH:-/shared/storage}/raw/{chicago,cook_county}/"
 fi
 echo ""

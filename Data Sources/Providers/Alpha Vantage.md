@@ -27,7 +27,7 @@ provider_settings:
   us_exchanges: [NYSE, NASDAQ, NYSEAMERICAN, NYSEMKT, BATS, NYSEARCA]
   us_exchanges_comment: "Filter to US exchanges for company data. Foreign exchanges may lack OVERVIEW data."
   save_raw: false
-  save_raw_comment: "Save raw API responses to bronze/_raw/alpha_vantage/{endpoint}/{ticker}.json before transformation"
+  save_raw_comment: "Save raw API responses to raw/alpha_vantage/{endpoint}/{ticker}.json before transformation"
 
 # Endpoints to ingest (configured in run_config.json)
 endpoints:
@@ -100,12 +100,13 @@ To save raw API responses before transformation (useful for debugging or reproce
 
 ```python
 from datapipelines.providers.alpha_vantage import create_alpha_vantage_provider
+from pathlib import Path
 
-provider = create_alpha_vantage_provider(spark, repo_root)
-provider.enable_raw_save(storage_path="/shared/storage", enabled=True)
+# Pass storage_path to constructor to enable raw layer (automatic when set)
+provider = create_alpha_vantage_provider(spark, repo_root, storage_path=Path("/shared/storage"))
 provider.set_tickers(["AAPL", "MSFT"])
 
-# Responses saved to: /shared/storage/bronze/_raw/alpha_vantage/{endpoint}/{ticker}.json
+# Responses saved to: /shared/storage/raw/alpha_vantage/{endpoint}/{ticker}.json
 ```
 
 Or via ingestion script:

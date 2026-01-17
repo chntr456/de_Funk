@@ -25,7 +25,7 @@ Endpoints (work item names):
 
 Raw Data Dump:
     Use --save-raw to save raw API responses before transformation.
-    Saved to: {storage_path}/bronze/_raw/alpha_vantage/{endpoint}/{ticker}.json
+    Saved to: {storage_path}/raw/alpha_vantage/{endpoint}/{ticker}.json
 """
 
 from __future__ import annotations
@@ -118,16 +118,14 @@ def main():
             for k, v in storage_cfg['roots'].items()
         }
 
-        # Initialize provider
+        # Initialize provider (pass storage_path for raw layer when --save-raw)
         from datapipelines.providers.alpha_vantage import create_alpha_vantage_provider
         from datapipelines.base.ingestor_engine import IngestorEngine
 
-        provider = create_alpha_vantage_provider(spark=spark, docs_path=repo_root)
-
-        # Enable raw save if requested
+        raw_storage = storage_path if args.save_raw else None
+        provider = create_alpha_vantage_provider(spark=spark, docs_path=repo_root, storage_path=raw_storage)
         if args.save_raw:
-            provider.enable_raw_save(storage_path, enabled=True)
-            logger.info(f"Raw data dump path: {storage_path}/bronze/_raw/alpha_vantage/")
+            logger.info(f"Raw data dump path: {storage_path}/raw/alpha_vantage/")
 
         # Get tickers
         if args.tickers:

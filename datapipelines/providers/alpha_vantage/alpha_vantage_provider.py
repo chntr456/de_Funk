@@ -71,7 +71,8 @@ class AlphaVantageProvider(BaseProvider):
     def __init__(
         self,
         spark=None,
-        docs_path: Optional[Path] = None
+        docs_path: Optional[Path] = None,
+        storage_path: Optional[Path] = None
     ):
         """
         Initialize Alpha Vantage provider.
@@ -79,9 +80,13 @@ class AlphaVantageProvider(BaseProvider):
         Args:
             spark: SparkSession
             docs_path: Path to repo root
+            storage_path: Path to storage root (for raw layer - automatic like Socrata)
         """
         # Tickers to process (set via set_tickers() before running)
         self._tickers: List[str] = []
+
+        # Raw layer storage (automatic when storage_path is set, like Socrata)
+        self._storage_path = Path(storage_path) if storage_path else None
 
         # Initialize base (loads markdown config)
         super().__init__(
@@ -126,37 +131,58 @@ class AlphaVantageProvider(BaseProvider):
             ["NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"]
         )
 
-        # Raw data dump settings (disabled by default)
-        self._raw_save_enabled = self.get_provider_setting('save_raw', False)
-        self._raw_save_path: Optional[Path] = None
-
         logger.info(
             f"AlphaVantageProvider initialized: {len(self._endpoints)} endpoints, "
             f"rate_limit={self.rate_limit}"
         )
+        if self._storage_path:
+            logger.info(f"Raw layer enabled: {self._storage_path}/raw/alpha_vantage/")
 
     # =========================================================================
-    # RAW DATA DUMP
+    # RAW DATA DUMP (automatic when storage_path is set, like Socrata)
     # =========================================================================
 
-    def enable_raw_save(self, storage_path: Path, enabled: bool = True) -> None:
+    def enable_raw_save(self, storage_path: Path = None, enabled: bool = True) -> None:
         """
-        Enable saving raw API responses before transformation.
+        Enable/disable saving raw API responses (JSON files) before transformation.
 
-        Raw responses are saved to: {storage_path}/bronze/_raw/alpha_vantage/{endpoint_id}/{ticker}.json
+        Raw responses are saved to: {storage_path}/raw/alpha_vantage/{endpoint_id}/{ticker}.json
 
         Args:
-            storage_path: Base storage path (e.g., /shared/storage)
+            storage_path: Base storage path (optional - updates storage_path if provided)
             enabled: Whether to enable raw saving
         """
-        self._raw_save_enabled = enabled
-        if enabled:
-            self._raw_save_path = Path(storage_path) / "bronze" / "_raw" / "alpha_vantage"
-            self._raw_save_path.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Raw data dump enabled: {self._raw_save_path}")
+        if storage_path:
+            self._storage_path = Path(storage_path) if enabled else None
+        elif not enabled:
+            self._storage_path = None
+
+        if self._storage_path:
+            raw_dir = self._storage_path / 'raw' / 'alpha_vantage'
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Raw data dump enabled: {raw_dir}")
         else:
-            self._raw_save_path = None
             logger.info("Raw data dump disabled")
+
+    def _get_raw_path(self, endpoint_id: str, ticker: str) -> Optional[Path]:
+        """
+        Get the raw layer file path for a JSON response.
+
+        Raw layer structure (consistent with Socrata):
+            storage/raw/alpha_vantage/{endpoint_id}/{ticker}.json
+
+        Args:
+            endpoint_id: API endpoint identifier
+            ticker: Ticker symbol
+
+        Returns:
+            Path to raw JSON file, or None if storage_path not configured
+        """
+        if not self._storage_path:
+            return None
+
+        raw_dir = self._storage_path / 'raw' / 'alpha_vantage' / endpoint_id
+        return raw_dir / f"{ticker}.json"
 
     def _save_raw_response(
         self,
@@ -168,9 +194,6 @@ class AlphaVantageProvider(BaseProvider):
         """
         Save raw API response to JSON file.
 
-        File path: {raw_save_path}/{endpoint_id}/{ticker}.json
-        (Overwrites existing file for same ticker/endpoint - keeps only latest)
-
         Args:
             ticker: Ticker symbol
             endpoint_id: API endpoint identifier
@@ -178,18 +201,15 @@ class AlphaVantageProvider(BaseProvider):
             timestamp: Optional timestamp (defaults to now)
 
         Returns:
-            Path to saved file, or None if saving disabled/failed
+            Path to saved file, or None if storage_path not configured
         """
-        if not self._raw_save_enabled or not self._raw_save_path:
+        file_path = self._get_raw_path(endpoint_id, ticker)
+        if not file_path:
             return None
 
         try:
             # Create endpoint directory
-            endpoint_dir = self._raw_save_path / endpoint_id
-            endpoint_dir.mkdir(parents=True, exist_ok=True)
-
-            # Save as {ticker}.json (latest only, no timestamp in filename)
-            file_path = endpoint_dir / f"{ticker}.json"
+            file_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Add metadata wrapper
             ts = timestamp or datetime.now()
@@ -585,8 +605,8 @@ class AlphaVantageProvider(BaseProvider):
             with self._http_lock:
                 payload = self.http.request("core", "", params, "GET")
 
-            # Save raw response before any transformation
-            if self._raw_save_enabled:
+            # Save raw response before any transformation (automatic when storage_path set)
+            if self._storage_path:
                 self._save_raw_response(ticker, endpoint_id, payload)
 
             # Check for API errors
@@ -813,7 +833,8 @@ class AlphaVantageProvider(BaseProvider):
 
 def create_alpha_vantage_provider(
     spark=None,
-    docs_path: Optional[Path] = None
+    docs_path: Optional[Path] = None,
+    storage_path: Optional[Path] = None
 ) -> AlphaVantageProvider:
     """
     Factory function to create an AlphaVantageProvider.
@@ -821,8 +842,9 @@ def create_alpha_vantage_provider(
     Args:
         spark: SparkSession
         docs_path: Path to repo root
+        storage_path: Path to storage root (enables raw layer when set)
 
     Returns:
         Configured AlphaVantageProvider
     """
-    return AlphaVantageProvider(spark=spark, docs_path=docs_path)
+    return AlphaVantageProvider(spark=spark, docs_path=docs_path, storage_path=storage_path)
