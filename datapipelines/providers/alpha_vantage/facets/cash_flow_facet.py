@@ -72,11 +72,26 @@ class CashFlowFacet(AlphaVantageFacet):
         if not all_reports:
             return self._empty_df()
 
-        # Create DataFrame with explicit schema from markdown
-        schema = self.get_input_schema()
-        df = self.spark.createDataFrame(all_reports, schema=schema)
+        # Create DataFrame - start with string types for numeric fields
+        # (API returns all values as strings)
+        df = self.spark.createDataFrame(all_reports, samplingRatio=1.0)
         df = self.postprocess(df)
-        df = self._apply_final_casts(df)
+
+        # Apply type coercion from markdown schema {coerce: type} options
+        # This is the single source of truth for Bronze types
+        spark_casts = self.get_spark_casts()
+        if spark_casts:
+            for col_name, cast_type in spark_casts.items():
+                if col_name in df.columns:
+                    df = df.withColumn(col_name, F.col(col_name).cast(cast_type))
+
+        # Compute free_cash_flow after type casting
+        # free_cash_flow = operating_cashflow - abs(capital_expenditures)
+        if "operating_cashflow" in df.columns and "capital_expenditures" in df.columns:
+            df = df.withColumn(
+                "free_cash_flow",
+                F.col("operating_cashflow") - F.abs(F.coalesce(F.col("capital_expenditures"), F.lit(0)))
+            )
 
         # Apply final columns from markdown
         final_cols = self.get_final_columns()
@@ -87,16 +102,18 @@ class CashFlowFacet(AlphaVantageFacet):
         return df
 
     def _transform_report(self, report: dict, ticker: str, report_type: str) -> dict:
-        """Transform a single report using markdown schema mappings."""
+        """
+        Transform a single report using markdown schema mappings.
 
-        def safe_long(val):
-            """Convert to long, handling None and 'None' strings."""
+        Type coercion is NOT done here - it's handled by Spark casts
+        from the endpoint markdown frontmatter {coerce: type} options.
+        This keeps Python code simple and markdown as single source of truth.
+        """
+        def clean_value(val):
+            """Clean string value, converting 'None'/empty to None."""
             if val is None or val == "None" or val == "":
                 return None
-            try:
-                return int(float(val))
-            except (ValueError, TypeError):
-                return None
+            return val
 
         now = datetime.now()
 
@@ -112,6 +129,7 @@ class CashFlowFacet(AlphaVantageFacet):
         }
 
         # Map all other fields from API response using markdown schema
+        # Pass raw string values - Spark will cast based on markdown schema
         for api_field, output_field in mappings.items():
             # Skip already handled fields
             if output_field in result:
@@ -119,18 +137,11 @@ class CashFlowFacet(AlphaVantageFacet):
             if api_field in ('symbol', 'fiscalDateEnding', 'reportedCurrency'):
                 continue
 
-            # Get value and apply coercion for numeric fields
+            # Get value and clean (but don't coerce type - let Spark do that)
             val = report.get(api_field)
-            result[output_field] = safe_long(val)
+            result[output_field] = clean_value(val)
 
-        # Compute free_cash_flow = operating_cashflow - abs(capital_expenditures)
-        # Note: This is a derived field not in the API response
-        operating_cf = result.get('operating_cashflow')
-        capex = result.get('capital_expenditures')
-        if operating_cf is not None and capex is not None:
-            result['free_cash_flow'] = operating_cf - abs(capex)
-        else:
-            result['free_cash_flow'] = None
+        # Note: free_cash_flow is computed in Spark after type casting
 
         # Add metadata
         result["ingestion_timestamp"] = now

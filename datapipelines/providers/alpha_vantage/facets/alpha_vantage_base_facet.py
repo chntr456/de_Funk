@@ -215,6 +215,26 @@ class AlphaVantageFacet(Facet):
         md_info = cls._load_markdown_schema()
         return md_info.get('computed_fields', [])
 
+    @classmethod
+    def get_spark_casts(cls) -> Dict[str, str]:
+        """
+        Get Spark cast rules from markdown schema (output_name -> type).
+
+        Derives from schema fields that have {coerce: type} option.
+        Used by _apply_final_casts() to enforce types in Spark.
+
+        This is the single source of truth for type coercion -
+        defined in endpoint markdown frontmatter.
+        """
+        md_info = cls._load_markdown_schema()
+        schema = md_info.get('schema', [])
+        casts = {}
+        for f in schema:
+            # Any field with coerce option needs a Spark cast
+            if f.get('coerce'):
+                casts[f['name']] = f['coerce']
+        return casts
+
     def __init__(self, spark, tickers=None, date_from=None, date_to=None, **extra):
         """
         Initialize Alpha Vantage facet.
@@ -365,5 +385,20 @@ class AlphaVantageFacet(Facet):
 
         # Apply postprocessing
         df = self.postprocess(df)
+
+        # Apply type coercion from markdown schema
+        # This uses the {coerce: type} options in endpoint frontmatter
+        spark_casts = self.get_spark_casts()
+        if spark_casts:
+            from pyspark.sql import functions as F
+            for col_name, cast_type in spark_casts.items():
+                if col_name in df.columns:
+                    df = df.withColumn(col_name, F.col(col_name).cast(cast_type))
+
+        # Apply final column selection from markdown schema
+        final_cols = self.get_final_columns()
+        if final_cols:
+            self.FINAL_COLUMNS = final_cols
+            df = self._apply_final_columns(df)
 
         return df

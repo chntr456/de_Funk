@@ -186,22 +186,21 @@ graph:
 
     fact_income_statement:
       from: bronze.alpha_vantage.income_statement
+      # Bronze columns are now snake_case and properly typed (via endpoint markdown coerce rules)
       select:
-        # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
         fiscal_date_ending: fiscal_date_ending
         report_type: report_type
-        reported_currency: reportedCurrency
+        reported_currency: reported_currency
+        total_revenue: total_revenue
+        gross_profit: gross_profit
+        operating_income: operating_income
+        net_income: net_income
+        ebitda: ebitda
       derive:
         income_statement_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
-        # Cast string fields to double (Bronze has all strings from Alpha Vantage API)
-        total_revenue: "TRY_CAST(totalRevenue AS DOUBLE)"
-        gross_profit: "TRY_CAST(grossProfit AS DOUBLE)"
-        operating_income: "TRY_CAST(operatingIncome AS DOUBLE)"
-        net_income: "TRY_CAST(netIncome AS DOUBLE)"
-        ebitda: "TRY_CAST(ebitda AS DOUBLE)"
       # Drop natural keys - fact tables have only FK columns
       drop: [ticker, fiscal_date_ending]
       primary_key: [income_statement_id]
@@ -212,22 +211,21 @@ graph:
 
     fact_balance_sheet:
       from: bronze.alpha_vantage.balance_sheet
+      # Bronze columns are now snake_case and properly typed (via endpoint markdown coerce rules)
       select:
-        # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
         fiscal_date_ending: fiscal_date_ending
         report_type: report_type
-        reported_currency: reportedCurrency
+        reported_currency: reported_currency
+        total_assets: total_assets
+        total_liabilities: total_liabilities
+        total_shareholder_equity: total_shareholder_equity
+        cash_and_equivalents: cash_and_equivalents
+        long_term_debt: long_term_debt
       derive:
         balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
-        # Cast string fields to double (Bronze has all strings from Alpha Vantage API)
-        total_assets: "TRY_CAST(totalAssets AS DOUBLE)"
-        total_liabilities: "TRY_CAST(totalLiabilities AS DOUBLE)"
-        total_shareholder_equity: "TRY_CAST(totalShareholderEquity AS DOUBLE)"
-        cash_and_equivalents: "TRY_CAST(cashAndCashEquivalentsAtCarryingValue AS DOUBLE)"
-        long_term_debt: "TRY_CAST(longTermDebt AS DOUBLE)"
       # Drop natural keys - fact tables have only FK columns
       drop: [ticker, fiscal_date_ending]
       primary_key: [balance_sheet_id]
@@ -238,23 +236,22 @@ graph:
 
     fact_cash_flow:
       from: bronze.alpha_vantage.cash_flow
+      # Bronze columns are now snake_case and properly typed (via endpoint markdown coerce rules)
+      # free_cash_flow is computed in Bronze facet
       select:
-        # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
         fiscal_date_ending: fiscal_date_ending
         report_type: report_type
-        reported_currency: reportedCurrency
+        reported_currency: reported_currency
+        operating_cashflow: operating_cashflow
+        cashflow_from_investment: cashflow_from_investment
+        cashflow_from_financing: cashflow_from_financing
+        capital_expenditures: capital_expenditures
+        free_cash_flow: free_cash_flow
       derive:
         cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
-        # Cast string fields to double (Bronze has all strings from Alpha Vantage API)
-        operating_cashflow: "TRY_CAST(operatingCashflow AS DOUBLE)"
-        cashflow_from_investment: "TRY_CAST(cashflowFromInvestment AS DOUBLE)"
-        cashflow_from_financing: "TRY_CAST(cashflowFromFinancing AS DOUBLE)"
-        capital_expenditures: "TRY_CAST(capitalExpenditures AS DOUBLE)"
-        # Free cash flow = operating - capex (computed from cast values)
-        free_cash_flow: "TRY_CAST(operatingCashflow AS DOUBLE) - ABS(COALESCE(TRY_CAST(capitalExpenditures AS DOUBLE), 0))"
       # Drop natural keys - fact tables have only FK columns
       drop: [ticker, fiscal_date_ending]
       primary_key: [cash_flow_id]
@@ -266,20 +263,20 @@ graph:
     fact_earnings:
       from: bronze.alpha_vantage.earnings
       optional: true  # Skip if bronze table doesn't exist yet
+      # Bronze columns are now snake_case and properly typed (via endpoint markdown coerce rules)
+      # beat_estimate is computed in Bronze facet
       select:
-        # Bronze columns: fiscal_date_ending is snake_case, others are camelCase
         ticker: ticker
         fiscal_date_ending: fiscal_date_ending
         report_type: report_type
+        reported_eps: reported_eps
+        estimated_eps: estimated_eps
+        surprise: surprise
+        surprise_percentage: surprise_percentage
       derive:
         earnings_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
-        # Cast string fields to double (Bronze has all strings from Alpha Vantage API)
-        reported_eps: "TRY_CAST(reportedEPS AS DOUBLE)"
-        estimated_eps: "TRY_CAST(estimatedEPS AS DOUBLE)"
-        surprise: "TRY_CAST(surprise AS DOUBLE)"
-        surprise_percentage: "TRY_CAST(surprisePercentage AS DOUBLE)"
       # Drop natural keys - fact tables have only FK columns
       drop: [ticker, fiscal_date_ending]
       primary_key: [earnings_id]

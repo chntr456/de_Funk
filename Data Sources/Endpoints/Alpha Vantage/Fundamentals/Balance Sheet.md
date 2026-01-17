@@ -37,6 +37,16 @@ write_strategy: upsert
 key_columns: [ticker, fiscal_date_ending, report_type]
 date_column: fiscal_date_ending
 
+# Facet Configuration - drives generic facet behavior
+facet_config:
+  response_arrays:
+    annualReports: annual
+    quarterlyReports: quarterly
+  fixed_fields:
+    ticker: symbol
+    fiscal_date_ending: fiscalDateEnding
+    reported_currency: reportedCurrency
+
 # Schema
 # Format: [field_name, type, source_field, nullable, description, {options}]
 # Options: transform, coerce, expr, default

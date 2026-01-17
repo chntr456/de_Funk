@@ -37,6 +37,19 @@ write_strategy: upsert
 key_columns: [ticker, fiscal_date_ending, report_type]
 date_column: fiscal_date_ending
 
+# Facet Configuration - drives generic facet behavior
+# No need for endpoint-specific facet code
+facet_config:
+  # Response arrays to extract and their report_type values
+  response_arrays:
+    annualReports: annual
+    quarterlyReports: quarterly
+  # Fixed fields not in schema mappings
+  fixed_fields:
+    ticker: symbol  # From response root
+    fiscal_date_ending: fiscalDateEnding  # From report
+    reported_currency: reportedCurrency  # From report
+
 # Schema
 # Format: [field_name, type, source_field, nullable, description, {options}]
 # Options: transform, coerce, expr, default

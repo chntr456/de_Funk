@@ -72,11 +72,26 @@ class EarningsFacet(AlphaVantageFacet):
         if not all_reports:
             return self._empty_df()
 
-        # Create DataFrame with explicit schema from markdown
-        schema = self.get_input_schema()
-        df = self.spark.createDataFrame(all_reports, schema=schema)
+        # Create DataFrame - start with string types for numeric fields
+        # (API returns all values as strings)
+        df = self.spark.createDataFrame(all_reports, samplingRatio=1.0)
         df = self.postprocess(df)
-        df = self._apply_final_casts(df)
+
+        # Apply type coercion from markdown schema {coerce: type} options
+        # This is the single source of truth for Bronze types
+        spark_casts = self.get_spark_casts()
+        if spark_casts:
+            for col_name, cast_type in spark_casts.items():
+                if col_name in df.columns:
+                    df = df.withColumn(col_name, F.col(col_name).cast(cast_type))
+
+        # Compute beat_estimate after type casting
+        # beat_estimate = reported_eps > estimated_eps
+        if "reported_eps" in df.columns and "estimated_eps" in df.columns:
+            df = df.withColumn(
+                "beat_estimate",
+                F.col("reported_eps") > F.col("estimated_eps")
+            )
 
         # Apply final columns from markdown
         final_cols = self.get_final_columns()
@@ -87,16 +102,18 @@ class EarningsFacet(AlphaVantageFacet):
         return df
 
     def _transform_report(self, report: dict, ticker: str, report_type: str) -> dict:
-        """Transform a single earnings report using markdown schema mappings."""
+        """
+        Transform a single earnings report using markdown schema mappings.
 
-        def safe_double(val):
-            """Convert to double, handling None and 'None' strings."""
+        Type coercion is NOT done here - it's handled by Spark casts
+        from the endpoint markdown frontmatter {coerce: type} options.
+        This keeps Python code simple and markdown as single source of truth.
+        """
+        def clean_value(val):
+            """Clean string value, converting 'None'/empty to None."""
             if val is None or val == "None" or val == "":
                 return None
-            try:
-                return float(val)
-            except (ValueError, TypeError):
-                return None
+            return val
 
         now = datetime.now()
 
@@ -112,6 +129,7 @@ class EarningsFacet(AlphaVantageFacet):
         }
 
         # Map all other fields from API response using markdown schema
+        # Pass raw string values - Spark will cast based on markdown schema
         for api_field, output_field in mappings.items():
             # Skip already handled fields
             if output_field in result:
@@ -119,18 +137,11 @@ class EarningsFacet(AlphaVantageFacet):
             if api_field in ('symbol', 'fiscalDateEnding', 'reportedDate'):
                 continue
 
-            # Get value and apply coercion for double fields
+            # Get value and clean (but don't coerce type - let Spark do that)
             val = report.get(api_field)
-            result[output_field] = safe_double(val)
+            result[output_field] = clean_value(val)
 
-        # Compute beat_estimate = reported_eps > estimated_eps
-        # Note: This is a computed field marked in markdown schema
-        reported_eps = result.get('reported_eps')
-        estimated_eps = result.get('estimated_eps')
-        if reported_eps is not None and estimated_eps is not None:
-            result['beat_estimate'] = reported_eps > estimated_eps
-        else:
-            result['beat_estimate'] = None
+        # Note: beat_estimate is computed in Spark after type casting
 
         # Add metadata
         result["ingestion_timestamp"] = now
