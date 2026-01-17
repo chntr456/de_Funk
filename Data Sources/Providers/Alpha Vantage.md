@@ -26,6 +26,8 @@ provider_settings:
   ticker_source_comment: "How to select tickers: 'market_cap' = ranked by market cap from company_reference, 'seed' = use ticker_seed table"
   us_exchanges: [NYSE, NASDAQ, NYSEAMERICAN, NYSEMKT, BATS, NYSEARCA]
   us_exchanges_comment: "Filter to US exchanges for company data. Foreign exchanges may lack OVERVIEW data."
+  save_raw: false
+  save_raw_comment: "Save raw API responses to bronze/_raw/alpha_vantage/{endpoint}/{ticker}.json before transformation"
 
 # Endpoints to ingest (configured in run_config.json)
 endpoints:
@@ -91,6 +93,25 @@ Alpha Vantage provides stock market data including real-time and historical pric
 - **Ticker Discovery**: Use `listing_status` endpoint first to get all active US tickers
 - **CIK Extraction**: OVERVIEW endpoint provides SEC CIK for company linkage
 - **Retry Strategy**: Exponential backoff on rate limit errors (429-equivalent in JSON)
+
+### Raw Data Dump
+
+To save raw API responses before transformation (useful for debugging or reprocessing):
+
+```python
+from datapipelines.providers.alpha_vantage import create_alpha_vantage_provider
+
+provider = create_alpha_vantage_provider(spark, repo_root)
+provider.enable_raw_save(storage_path="/shared/storage", enabled=True)
+provider.set_tickers(["AAPL", "MSFT"])
+
+# Responses saved to: /shared/storage/bronze/_raw/alpha_vantage/{endpoint}/{ticker}.json
+```
+
+Or via ingestion script:
+```bash
+python -m scripts.ingest.run_bronze_ingestion --save-raw --max-tickers 10
+```
 
 ## Known Quirks
 

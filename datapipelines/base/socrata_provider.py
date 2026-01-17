@@ -60,8 +60,34 @@ class SocrataBaseProvider(BaseProvider):
             storage_path: Path to storage root (for raw layer)
         """
         self._storage_path = Path(storage_path) if storage_path else None
+        self._raw_save_enabled = True  # Default: save raw CSVs if storage_path is set
         # Initialize base (loads markdown config)
         super().__init__(provider_id, spark, docs_path)
+
+    # =========================================================================
+    # RAW DATA DUMP
+    # =========================================================================
+
+    def enable_raw_save(self, storage_path: Path = None, enabled: bool = True) -> None:
+        """
+        Enable/disable saving raw API responses (CSV files) before transformation.
+
+        Raw CSVs are saved to: {storage_path}/raw/{provider_id}/{endpoint}_{resource_id}.csv
+
+        Args:
+            storage_path: Base storage path (optional - updates storage_path if provided)
+            enabled: Whether to enable raw saving
+        """
+        self._raw_save_enabled = enabled
+        if storage_path:
+            self._storage_path = Path(storage_path)
+
+        if enabled and self._storage_path:
+            raw_dir = self._storage_path / 'raw' / self.provider_id
+            raw_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Raw data dump enabled: {raw_dir}")
+        elif not enabled:
+            logger.info(f"Raw data dump disabled for {self.provider_id}")
 
     def _setup(self) -> None:
         """Setup Socrata client using config from markdown."""
@@ -301,9 +327,9 @@ class SocrataBaseProvider(BaseProvider):
             year: Optional year for multi-year endpoints
 
         Returns:
-            Path to raw CSV file, or None if storage_path not configured
+            Path to raw CSV file, or None if raw save disabled or storage_path not configured
         """
-        if not self._storage_path:
+        if not self._raw_save_enabled or not self._storage_path:
             return None
 
         raw_dir = self._storage_path / 'raw' / self.provider_id

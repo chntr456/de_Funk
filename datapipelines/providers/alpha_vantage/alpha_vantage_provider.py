@@ -28,8 +28,10 @@ Author: de_Funk Team
 
 from __future__ import annotations
 
+import json
 import os
 import threading
+from datetime import datetime
 from typing import List, Optional, Any, Dict, Generator
 from pathlib import Path
 
@@ -124,10 +126,92 @@ class AlphaVantageProvider(BaseProvider):
             ["NYSE", "NASDAQ", "NYSEAMERICAN", "NYSEMKT", "BATS", "NYSEARCA"]
         )
 
+        # Raw data dump settings (disabled by default)
+        self._raw_save_enabled = self.get_provider_setting('save_raw', False)
+        self._raw_save_path: Optional[Path] = None
+
         logger.info(
             f"AlphaVantageProvider initialized: {len(self._endpoints)} endpoints, "
             f"rate_limit={self.rate_limit}"
         )
+
+    # =========================================================================
+    # RAW DATA DUMP
+    # =========================================================================
+
+    def enable_raw_save(self, storage_path: Path, enabled: bool = True) -> None:
+        """
+        Enable saving raw API responses before transformation.
+
+        Raw responses are saved to: {storage_path}/bronze/_raw/alpha_vantage/{endpoint_id}/{ticker}.json
+
+        Args:
+            storage_path: Base storage path (e.g., /shared/storage)
+            enabled: Whether to enable raw saving
+        """
+        self._raw_save_enabled = enabled
+        if enabled:
+            self._raw_save_path = Path(storage_path) / "bronze" / "_raw" / "alpha_vantage"
+            self._raw_save_path.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Raw data dump enabled: {self._raw_save_path}")
+        else:
+            self._raw_save_path = None
+            logger.info("Raw data dump disabled")
+
+    def _save_raw_response(
+        self,
+        ticker: str,
+        endpoint_id: str,
+        payload: Any,
+        timestamp: datetime = None
+    ) -> Optional[Path]:
+        """
+        Save raw API response to JSON file.
+
+        File path: {raw_save_path}/{endpoint_id}/{ticker}.json
+        (Overwrites existing file for same ticker/endpoint - keeps only latest)
+
+        Args:
+            ticker: Ticker symbol
+            endpoint_id: API endpoint identifier
+            payload: Raw API response (dict or list)
+            timestamp: Optional timestamp (defaults to now)
+
+        Returns:
+            Path to saved file, or None if saving disabled/failed
+        """
+        if not self._raw_save_enabled or not self._raw_save_path:
+            return None
+
+        try:
+            # Create endpoint directory
+            endpoint_dir = self._raw_save_path / endpoint_id
+            endpoint_dir.mkdir(parents=True, exist_ok=True)
+
+            # Save as {ticker}.json (latest only, no timestamp in filename)
+            file_path = endpoint_dir / f"{ticker}.json"
+
+            # Add metadata wrapper
+            ts = timestamp or datetime.now()
+            raw_data = {
+                "_meta": {
+                    "ticker": ticker,
+                    "endpoint_id": endpoint_id,
+                    "fetched_at": ts.isoformat(),
+                    "provider": "alpha_vantage"
+                },
+                "response": payload
+            }
+
+            with open(file_path, 'w') as f:
+                json.dump(raw_data, f, indent=2, default=str)
+
+            logger.debug(f"Saved raw response: {file_path}")
+            return file_path
+
+        except Exception as e:
+            logger.warning(f"Failed to save raw response for {ticker}/{endpoint_id}: {e}")
+            return None
 
     # =========================================================================
     # TICKER MANAGEMENT
@@ -500,6 +584,10 @@ class AlphaVantageProvider(BaseProvider):
             # Make request
             with self._http_lock:
                 payload = self.http.request("core", "", params, "GET")
+
+            # Save raw response before any transformation
+            if self._raw_save_enabled:
+                self._save_raw_response(ticker, endpoint_id, payload)
 
             # Check for API errors
             if isinstance(payload, dict):

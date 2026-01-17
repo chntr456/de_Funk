@@ -15,6 +15,7 @@
 #   --skip-seed          Skip ticker seeding (use existing Bronze data)
 #   --force-seed         Force re-seed even if ticker data exists
 #   --skip-ingest        Skip Bronze ingestion
+#   --save-raw           Save raw API responses to bronze/_raw/ before transformation
 #   --storage-path PATH  Override storage path (default: from run_config.json)
 #   --local              Run locally (ignore SPARK_MASTER_URL)
 #   --help               Show this help message
@@ -32,6 +33,7 @@
 #   ./scripts/test/test_pipeline.sh --profile silver_only            # Build silver from existing bronze
 #   ./scripts/test/test_pipeline.sh --profile silver_only --models temporal  # Build specific model
 #   ./scripts/test/test_pipeline.sh --profile staging                # Full pipeline
+#   ./scripts/test/test_pipeline.sh --profile dev --save-raw         # Save raw API responses
 #
 # Author: de_Funk Team
 # ==============================================================================
@@ -55,6 +57,7 @@ BUILD_SILVER=false
 MODELS=""
 STORAGE_PATH=""
 RUN_LOCAL=false
+SAVE_RAW=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -77,6 +80,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-ingest)
             SKIP_INGEST=true
+            shift
+            ;;
+        --save-raw)
+            SAVE_RAW=true
             shift
             ;;
         --models)
@@ -216,6 +223,7 @@ echo -e "${YELLOW}Configuration:${NC}"
 [ -n "$STORAGE_PATH" ] && echo "  Storage path: $STORAGE_PATH"
 echo "  Skip seed: $SKIP_SEED"
 echo "  Skip ingest: $SKIP_INGEST"
+echo "  Save raw: $SAVE_RAW"
 echo "  Build silver: $([ "$BUILD_SILVER" = true ] && echo 'yes' || echo 'no')"
 [ -n "$MODELS" ] && echo "  Models to build: $MODELS"
 echo ""
@@ -368,6 +376,13 @@ with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     run_config = json.load(f)
 
 provider = create_alpha_vantage_provider(spark=spark, docs_path=docs_path)
+
+# Enable raw data dump if requested
+save_raw = '${SAVE_RAW}' == 'true'
+if save_raw:
+    provider.enable_raw_save(Path(storage_path), enabled=True)
+    logger.info(f'Raw data dump ENABLED: {storage_path}/bronze/_raw/alpha_vantage/')
+
 max_pending_writes = int('${PROFILE_MAX_PENDING_WRITES:-2}')
 engine = IngestorEngine(provider, storage_cfg, max_pending_writes=max_pending_writes)
 logger.info(f'Max pending writes: {max_pending_writes} (0=sync, 2=async)')
@@ -556,6 +571,12 @@ for provider_name in bulk_providers:
         provider = factory(spark=spark, docs_path=docs_path, storage_path=storage_path)
         logger.info(f'Created provider: {provider.provider_id}')
 
+        # Enable raw data dump if requested (saves CSV files to raw/{provider}/)
+        save_raw = '${SAVE_RAW}' == 'true'
+        if save_raw:
+            provider.enable_raw_save(Path(storage_path), enabled=True)
+            logger.info(f'Raw data dump ENABLED: {storage_path}/raw/{provider_name}/')
+
         max_pending_writes = int('${PROFILE_MAX_PENDING_WRITES:-2}')
         engine = IngestorEngine(provider, storage_cfg, max_pending_writes=max_pending_writes)
 
@@ -664,4 +685,10 @@ echo "Results:"
 [ "$SKIP_INGEST" = false ] && [ -n "$BULK_PROVIDERS" ] && echo "  ✓ Bulk providers ingested ($BULK_PROVIDERS)"
 [ "$BUILD_SILVER" = true ] && echo "  ✓ Silver models built"
 [ "$BUILD_SILVER" = false ] && echo "  ○ Silver build skipped"
+if [ "$SAVE_RAW" = true ]; then
+    echo ""
+    echo "Raw data locations:"
+    [ "$ALPHA_VANTAGE_ENABLED" = "true" ] && echo "  Alpha Vantage: ${STORAGE_PATH:-/shared/storage}/bronze/_raw/alpha_vantage/"
+    [ -n "$BULK_PROVIDERS" ] && echo "  Bulk providers: ${STORAGE_PATH:-/shared/storage}/raw/{chicago,cook_county}/"
+fi
 echo ""
