@@ -10,8 +10,27 @@ class StorageRouter:
     repo_root: Optional[Path] = None  # Optional repo root for absolute paths
 
     def bronze_path(self, logical_table: str) -> str:
+        """
+        Resolve bronze table path.
+
+        First checks storage.json tables dict for explicit mapping.
+        If not found, constructs path from normalized table name (dots → slashes).
+
+        Examples:
+            - 'calendar_seed' → looks up in tables → 'storage/bronze/seeds/calendar'
+            - 'alpha_vantage.listing_status' → constructs → 'storage/bronze/alpha_vantage/listing_status'
+        """
         root = self.storage_cfg["roots"]["bronze"].rstrip("/")
-        rel = self.storage_cfg["tables"][logical_table]["rel"]
+
+        # First try explicit table mapping in storage.json
+        tables = self.storage_cfg.get("tables", {})
+        if logical_table in tables and isinstance(tables[logical_table], dict):
+            rel = tables[logical_table]["rel"]
+        else:
+            # Construct path from normalized table name (dots → slashes)
+            # e.g., 'alpha_vantage.listing_status' → 'alpha_vantage/listing_status'
+            rel = logical_table.replace(".", "/")
+
         path = f"{root}/{rel}"
 
         # Convert to absolute path if repo_root provided

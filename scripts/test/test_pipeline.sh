@@ -289,8 +289,8 @@ storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in
 
 sink = BronzeSink(storage_cfg)
 # Write to alpha_vantage/listing_status (the proper endpoint-based path)
-table_cfg = storage_cfg['tables'].get('alpha_vantage/listing_status', {})
-sink.write(df, 'alpha_vantage/listing_status', partitions=table_cfg.get('partitions'), mode='overwrite')
+# Partitions from endpoint markdown: Data Sources/Endpoints/Alpha Vantage/Core/Listing Status.md
+sink.overwrite(df, 'alpha_vantage/listing_status', partitions=['asset_type'])
 
 logger.info(f'Ingested {df.count()} tickers to alpha_vantage/listing_status')
 spark.stop()
