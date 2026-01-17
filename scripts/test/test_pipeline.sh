@@ -547,6 +547,11 @@ for provider_name in bulk_providers:
         profile_endpoints_key = f'{provider_name}_endpoints'
         work_items = profile_cfg.get(profile_endpoints_key) or provider_cfg.get('endpoints', []) or None
         if work_items:
+            # Filter out #-prefixed endpoints (comments)
+            skipped = [w for w in work_items if w.startswith('#')]
+            work_items = [w for w in work_items if not w.startswith('#')]
+            if skipped:
+                logger.info(f'Skipping commented endpoints: {skipped}')
             if profile_endpoints_key in profile_cfg:
                 logger.info(f'Work items from profile override: {work_items}')
             else:
