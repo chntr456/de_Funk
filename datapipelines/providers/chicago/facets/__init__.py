@@ -1,3 +1,0 @@
-"""
-Chicago Facets - Pending rebuild.
-"""
