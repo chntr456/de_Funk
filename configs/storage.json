@@ -22,7 +22,7 @@
     "ticker_seed": { "root": "bronze", "rel": "seeds/tickers", "partitions": [], "write_strategy": "overwrite", "comment": "Seeded tickers from LISTING_STATUS API" },
 
     "_comment_alpha_vantage": "Alpha Vantage provider tables (v2.7 - provider/endpoint_id format)",
-    "alpha_vantage/listing_status": { "root": "bronze", "rel": "alpha_vantage/listing_status", "partitions": ["asset_type"], "write_strategy": "upsert", "key_columns": ["ticker"], "comment": "Ticker listings from LISTING_STATUS endpoint" },
+    "alpha_vantage/listing_status": { "root": "bronze", "rel": "seeds/tickers", "partitions": [], "write_strategy": "overwrite", "key_columns": ["ticker"], "comment": "Ticker listings from LISTING_STATUS - stored in seeds/tickers" },
     "alpha_vantage/company_overview": { "root": "bronze", "rel": "alpha_vantage/company_overview", "partitions": [], "write_strategy": "upsert", "key_columns": ["cik"], "comment": "Company fundamentals from COMPANY_OVERVIEW endpoint" },
     "alpha_vantage/time_series_daily_adjusted": { "root": "bronze", "rel": "alpha_vantage/time_series_daily_adjusted", "partitions": [], "write_strategy": "append", "key_columns": ["ticker", "trade_date"], "date_column": "trade_date", "comment": "Daily OHLCV from TIME_SERIES_DAILY_ADJUSTED endpoint" },
     "alpha_vantage/income_statement": { "root": "bronze", "rel": "alpha_vantage/income_statement", "partitions": ["report_type"], "write_strategy": "upsert", "key_columns": ["ticker", "fiscal_date_ending", "report_type"], "comment": "Income statement from INCOME_STATEMENT endpoint" },
