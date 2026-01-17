@@ -151,7 +151,7 @@
     },
     "dev_fill": {
       "providers": ["cook_county"],
-      "cook_county_endpoints": ["parcel_universe"],
+      "cook_county_endpoints": ["parcel_universe", "assessor_appeals"],
       "max_tickers": null,
       "max_records_per_endpoint": null,
       "write_batch_size": 500000,
@@ -160,7 +160,7 @@
       "build_silver": false,
       "dry_run": false,
       "log_level": "INFO",
-      "_comment": "Testing parcel_universe with new memory configs. Use #endpoint_name to skip endpoints."
+      "_comment": "Testing parcel_universe + assessor_appeals with new memory configs. Use #endpoint_name to skip endpoints."
     },
     "silver_only": {
       "providers": [],
