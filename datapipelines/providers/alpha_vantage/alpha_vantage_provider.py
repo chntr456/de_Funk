@@ -498,10 +498,17 @@ class AlphaVantageProvider(BaseProvider):
         elif data_type == DataType.PRICES:
             if isinstance(data, dict):
                 for date_str, ohlcv in data.items():
-                    record = dict(ohlcv)
-                    record['ticker'] = ticker
-                    record['trade_date'] = date_str
-                    records.append(record)
+                    try:
+                        # ohlcv should be a dict with OHLCV values
+                        if not isinstance(ohlcv, dict):
+                            logger.debug(f"Skipping malformed OHLCV for {ticker}/{date_str}: not a dict")
+                            continue
+                        record = dict(ohlcv)
+                        record['ticker'] = ticker
+                        record['trade_date'] = date_str
+                        records.append(record)
+                    except (ValueError, TypeError) as e:
+                        logger.debug(f"Skipping malformed OHLCV for {ticker}/{date_str}: {e}")
 
         elif data_type in (DataType.INCOME_STATEMENT, DataType.BALANCE_SHEET,
                           DataType.CASH_FLOW):
@@ -630,15 +637,17 @@ class AlphaVantageProvider(BaseProvider):
         pdf = pdf.rename(columns=rename_map)
 
         # Apply type coercions from schema
+        # NOTE: We use float64 for all numeric types to handle NaN values consistently.
+        # Delta Lake's schema evolution handles type promotion (Double → Long) at write time.
         coerced_count = 0
         for field_name, coerce_type in type_coercions.items():
             if field_name in pdf.columns:
                 coerced_count += 1
-                if coerce_type in ('long', 'int', 'integer'):
-                    pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('Int64')
-                elif coerce_type in ('double', 'float'):
+                if coerce_type in ('long', 'int', 'integer', 'double', 'float'):
+                    # Convert all numeric types to float64 - handles NaN naturally
+                    # Don't force Int64 which fails on NaN/inf values
                     pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('float64')
-        logger.info(f"[{endpoint_id}] coerced {coerced_count} columns")
+        logger.info(f"[{endpoint_id}] coerced {coerced_count} columns to float64")
 
         # Add metadata
         pdf['asset_type'] = 'stocks'
@@ -682,13 +691,12 @@ class AlphaVantageProvider(BaseProvider):
         pdf = pdf.rename(columns=rename_map)
 
         # Apply type coercions
+        # NOTE: Keep all numeric fields as float64 to handle NaN values consistently.
+        # This avoids Double → Long casting issues in BronzeSink.
         for field_name, coerce_type in type_coercions.items():
             if field_name in pdf.columns:
-                if coerce_type in ('long', 'int', 'integer'):
-                    # Round before casting to handle float values safely
-                    numeric_vals = pd.to_numeric(pdf[field_name], errors='coerce')
-                    pdf[field_name] = numeric_vals.round().astype('Int64')
-                elif coerce_type in ('double', 'float'):
+                if coerce_type in ('long', 'int', 'integer', 'double', 'float'):
+                    # Convert all numeric types to float64 - handles NaN naturally
                     pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('float64')
 
         # Parse date fields

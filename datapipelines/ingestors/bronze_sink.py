@@ -186,6 +186,34 @@ class BronzeSink:
 
         return str(base_path)
 
+    def _resolve_key_columns(self, df, key_columns: List[str]) -> List[str]:
+        """
+        Resolve key column names with case-insensitive matching.
+
+        If a key column doesn't exist in the DataFrame, try to find a
+        case-insensitive match (e.g., 'cik' matches 'CIK').
+
+        Returns the resolved list of column names that exist in the DataFrame.
+        """
+        df_columns = df.columns
+        df_columns_lower = {c.lower(): c for c in df_columns}
+
+        resolved = []
+        for key_col in key_columns:
+            if key_col in df_columns:
+                # Exact match
+                resolved.append(key_col)
+            elif key_col.lower() in df_columns_lower:
+                # Case-insensitive match
+                actual_col = df_columns_lower[key_col.lower()]
+                logger.info(f"Key column '{key_col}' resolved to '{actual_col}' (case-insensitive)")
+                resolved.append(actual_col)
+            else:
+                # Column not found - skip it with warning
+                logger.warning(f"Key column '{key_col}' not found in DataFrame columns: {df_columns[:10]}...")
+
+        return resolved
+
     def upsert(
         self,
         df,
@@ -226,6 +254,9 @@ class BronzeSink:
 
         spark = df.sparkSession
 
+        # Resolve key columns with case-insensitive matching
+        resolved_key_columns = self._resolve_key_columns(df, key_columns) if key_columns else []
+
         # Check if table exists
         is_existing = self._is_delta_table(base_path)
 
@@ -234,8 +265,8 @@ class BronzeSink:
             base_path.parent.mkdir(parents=True, exist_ok=True)
 
             # Deduplicate new data
-            if key_columns:
-                window = Window.partitionBy(*key_columns).orderBy(lit(1))
+            if resolved_key_columns:
+                window = Window.partitionBy(*resolved_key_columns).orderBy(lit(1))
                 df = (df
                       .withColumn("_row_num", row_number().over(window))
                       .filter("_row_num = 1")
@@ -254,13 +285,26 @@ class BronzeSink:
 
             # Cast new df columns to match existing schema to avoid type conflicts
             # (e.g., shares_outstanding: string vs long)
+            # Use try_cast via when/otherwise to handle NaN values that can't cast to BIGINT
+            from pyspark.sql.functions import when, isnan
+            from pyspark.sql.types import LongType, IntegerType, DoubleType, FloatType
+
             existing_schema = {f.name: f.dataType for f in existing_df.schema.fields}
             for field in df.schema.fields:
                 if field.name in existing_schema:
                     existing_type = existing_schema[field.name]
                     if field.dataType != existing_type:
-                        # Cast to existing type to maintain schema consistency
-                        df = df.withColumn(field.name, col(field.name).cast(existing_type))
+                        logger.info(f"Casting {field.name} from {field.dataType} to {existing_type}")
+                        # Handle NaN values when casting from Double to Long/Int (NaN → NULL)
+                        if isinstance(field.dataType, (DoubleType, FloatType)) and \
+                           isinstance(existing_type, (LongType, IntegerType)):
+                            df = df.withColumn(
+                                field.name,
+                                when(isnan(col(field.name)), None)
+                                .otherwise(col(field.name).cast(existing_type))
+                            )
+                        else:
+                            df = df.withColumn(field.name, col(field.name).cast(existing_type))
 
             # Add a source marker to handle update_existing logic
             existing_df = existing_df.withColumn("_source", lit(0))  # 0 = existing
@@ -272,9 +316,11 @@ class BronzeSink:
             # Deduplicate by key columns
             # If update_existing=True, prefer new data (source=1)
             # If update_existing=False, prefer existing data (source=0)
-            if key_columns:
+            # Re-resolve key columns for combined DataFrame (may have different columns after union)
+            combined_key_columns = self._resolve_key_columns(combined, key_columns) if key_columns else []
+            if combined_key_columns:
                 order_col = col("_source").desc() if update_existing else col("_source").asc()
-                window = Window.partitionBy(*key_columns).orderBy(order_col)
+                window = Window.partitionBy(*combined_key_columns).orderBy(order_col)
                 combined = (combined
                            .withColumn("_row_num", row_number().over(window))
                            .filter("_row_num = 1")
