@@ -638,10 +638,13 @@ class AlphaVantageProvider(BaseProvider):
         df = df.filter(F.col("_data_map").isNotNull())
 
         # Explode the map: each (date_key, value_struct) becomes a row
+        # explode() on a Map creates columns named 'key' and 'value'
         df = df.select(
             "ticker",
-            F.explode(F.col("_data_map")).alias("trade_date", "_ohlcv")
+            F.explode(F.col("_data_map"))
         )
+        # Rename the generated columns to meaningful names
+        df = df.withColumnRenamed("key", "trade_date").withColumnRenamed("value", "_ohlcv")
 
         # Flatten the OHLCV struct - get all field names dynamically
         ohlcv_schema = df.schema["_ohlcv"].dataType

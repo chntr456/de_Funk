@@ -64,6 +64,10 @@ class IngestionResults:
 
     def add_result(self, result: WorkItemResult) -> None:
         """Add a work item result."""
+        if result is None:
+            logger.warning("add_result called with None - this is a bug in the caller")
+            return
+
         self.results[result.work_item] = result
         self.work_items.append(result.work_item)
 
@@ -562,10 +566,15 @@ class IngestorEngine:
                 self.provider.supports_spark_json(work_item)):
 
                 logger.info(f"{work_item}: Using Spark JSON path (distributed)")
-                return self._ingest_with_spark_native(
+                result = self._ingest_with_spark_native(
                     work_item, table_name, partitions,
                     write_strategy, key_columns, date_column
                 )
+                # If Spark native returned a result (success or failure), use it
+                # If it returned None, fall through to Python batching
+                if result is not None:
+                    return result
+                logger.info(f"{work_item}: Falling back to Python batching")
 
             # Get shared executor
             executor = self.get_executor(self.writer_threads)
