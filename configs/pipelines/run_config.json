@@ -212,6 +212,36 @@
       "log_level": "DEBUG",
       "_comment": "Build silver models only from existing bronze data. No ingestion."
     },
+    "silver_with_forecast": {
+      "providers": [],
+      "build_silver": true,
+      "build_forecast": true,
+      "forecast_tickers": 50,
+      "_forecast_tickers_comment": "Number of tickers to forecast (top by market cap)",
+      "forecast_models": ["arima_7d", "prophet_7d"],
+      "_forecast_models_comment": "Fast models for pipeline testing",
+      "log_level": "INFO",
+      "_comment": "Build silver models then run forecasts. No ingestion."
+    },
+    "forecast_only": {
+      "providers": [],
+      "build_silver": false,
+      "build_forecast": true,
+      "forecast_tickers": 100,
+      "forecast_models": ["arima_7d", "arima_30d", "prophet_7d", "prophet_30d"],
+      "log_level": "INFO",
+      "_comment": "Run forecasts only on existing silver data."
+    },
+    "full_forecast": {
+      "providers": [],
+      "build_silver": false,
+      "build_forecast": true,
+      "forecast_tickers": null,
+      "_forecast_tickers_comment": "null = all available tickers",
+      "forecast_models": ["arima_7d", "arima_30d", "prophet_7d", "prophet_30d", "random_forest_14d"],
+      "log_level": "INFO",
+      "_comment": "Full forecast run: all tickers, all models. Long running."
+    },
     "staging": {
       "max_tickers": 500,
       "dry_run": false,
