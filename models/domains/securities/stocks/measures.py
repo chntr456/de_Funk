@@ -4,50 +4,29 @@ Complex measures for stocks model.
 These functions are referenced from stocks/measures.yaml via python_measures.
 Each function receives the model instance and can access all model data.
 
-Version: 2.1 - Backend-agnostic via UniversalSession methods
+Version: 2.2 - Inherits from DomainMeasures base class
 """
 
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, Optional, List
-import logging
 
-logger = logging.getLogger(__name__)
+from models.measures import DomainMeasures
 
 
-class StocksMeasures:
+class StocksMeasures(DomainMeasures):
     """
     Complex measure calculations for stocks.
     Each method is referenced from stocks/measures.yaml.
 
-    Backend-agnostic: uses session.to_pandas() for DataFrame conversion.
+    Inherits from DomainMeasures which provides:
+    - get_table(): Backend-agnostic data access with filtering
+    - _to_pandas(): DataFrame conversion
+    - rolling_apply(): Grouped rolling calculations
+    - normalize_to_range(): Normalization utilities
+    - calculate_returns(): Return calculations
+    - log_start/log_result: Logging helpers
     """
-
-    def __init__(self, model):
-        """
-        Initialize with model instance.
-
-        Args:
-            model: StocksModel instance (provides access to data and session)
-        """
-        self.model = model
-
-    def _to_pandas(self, df) -> pd.DataFrame:
-        """
-        Convert DataFrame to pandas using session if available.
-
-        This helper ensures consistent conversion regardless of backend.
-        """
-        if self.model.session:
-            return self.model.session.to_pandas(df)
-        elif self.model.backend == 'spark':
-            return df.toPandas()
-        elif hasattr(df, 'df'):
-            return df.df()
-        elif isinstance(df, pd.DataFrame):
-            return df
-        else:
-            return pd.DataFrame(df)
 
     def calculate_sharpe_ratio(
         self,
