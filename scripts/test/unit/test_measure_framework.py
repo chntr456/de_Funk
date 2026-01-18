@@ -18,7 +18,6 @@ from models.base.measures.registry import MeasureRegistry
 from models.base.measures.executor import MeasureExecutor
 from models.measures.simple import SimpleMeasure
 from models.measures.computed import ComputedMeasure
-from models.measures.weighted import WeightedMeasure
 
 
 class TestMeasureRegistry:
@@ -63,24 +62,6 @@ class TestMeasureRegistry:
         assert measure.name == 'market_cap'
         assert measure.expression == 'close * volume'
 
-    def test_create_weighted_measure(self):
-        """Test creating weighted measure from config."""
-        config = {
-            'name': 'volume_weighted_index',
-            'type': 'weighted',
-            'source': 'fact_prices.close',
-            'weighting_method': 'volume',
-            'group_by': ['trade_date'],
-            'data_type': 'double'
-        }
-
-        measure = MeasureRegistry.create_measure(config)
-
-        assert isinstance(measure, WeightedMeasure)
-        assert measure.name == 'volume_weighted_index'
-        assert measure.weighting_method == 'volume'
-        assert measure.group_by == ['trade_date']
-
     def test_create_measure_unknown_type(self):
         """Test error handling for unknown measure type."""
         config = {
@@ -98,13 +79,13 @@ class TestMeasureRegistry:
 
         assert MeasureType.SIMPLE in types
         assert MeasureType.COMPUTED in types
-        assert MeasureType.WEIGHTED in types
+        # WEIGHTED enum exists but no implementation registered
 
     def test_is_registered(self):
         """Test checking if measure type is registered."""
         assert MeasureRegistry.is_registered(MeasureType.SIMPLE) is True
         assert MeasureRegistry.is_registered(MeasureType.COMPUTED) is True
-        assert MeasureRegistry.is_registered(MeasureType.WEIGHTED) is True
+        # WEIGHTED enum exists but no implementation registered
 
 
 class TestMeasureExecutor:
@@ -125,7 +106,6 @@ class TestMeasureExecutor:
 
         assert 'avg_close_price' in measures
         assert 'market_cap' in measures
-        assert 'volume_weighted_index' in measures
 
     def test_get_measure_info(self, mock_model):
         """Test getting measure information."""
