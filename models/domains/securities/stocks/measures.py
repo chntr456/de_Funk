@@ -1,30 +1,34 @@
 """
-Complex measures for stocks model.
+Complex measures for stocks model - Spark-first implementation.
 
 These functions are referenced from stocks/measures.yaml via python_measures.
-Each function receives the model instance and can access all model data.
+All calculations use Spark DataFrames and window functions.
+Only convert to pandas at the final step if needed for UI.
 
-Version: 2.2 - Inherits from DomainMeasures base class
+Version: 2.3 - Spark-first refactor
 """
 
-import pandas as pd
-import numpy as np
 from typing import Dict, Any, Optional, List
+import logging
+
+from pyspark.sql import DataFrame as SparkDataFrame
+from pyspark.sql import functions as F
+from pyspark.sql.window import Window
 
 from models.measures import DomainMeasures
+
+logger = logging.getLogger(__name__)
 
 
 class StocksMeasures(DomainMeasures):
     """
-    Complex measure calculations for stocks.
-    Each method is referenced from stocks/measures.yaml.
+    Complex measure calculations for stocks using Spark.
 
     Inherits from DomainMeasures which provides:
-    - get_table(): Backend-agnostic data access with filtering
-    - _to_pandas(): DataFrame conversion
-    - rolling_apply(): Grouped rolling calculations
-    - normalize_to_range(): Normalization utilities
-    - calculate_returns(): Return calculations
+    - get_table(): Returns Spark DataFrame
+    - ticker_window(), rolling_window(): Window helpers
+    - add_returns(), add_rolling_mean(), add_rolling_std(): Calculation helpers
+    - to_pandas(): Final conversion (use sparingly)
     - log_start/log_result: Logging helpers
     """
 
@@ -34,263 +38,94 @@ class StocksMeasures(DomainMeasures):
         filters: Optional[List[Dict]] = None,
         risk_free_rate: float = 0.045,
         window_days: int = 252,
+        as_pandas: bool = False,
         **kwargs
-    ) -> pd.DataFrame:
+    ) -> SparkDataFrame:
         """
-        Calculate Sharpe ratio for stocks.
-
-        Referenced in YAML as:
-          function: "stocks.measures.calculate_sharpe_ratio"
+        Calculate Sharpe ratio for stocks using Spark window functions.
 
         Args:
             ticker: Specific ticker (optional, calculates for all if None)
             filters: Additional filters to apply
             risk_free_rate: Annual risk-free rate (e.g., 0.045 = 4.5%)
             window_days: Rolling window for calculation
+            as_pandas: Convert result to pandas (default: False)
 
         Returns:
-            DataFrame with columns: [ticker, trade_date, sharpe_ratio]
+            Spark DataFrame with columns: [ticker, trade_date, sharpe_ratio]
         """
-        logger.info(f"Calculating Sharpe ratio (window={window_days}, rf={risk_free_rate})")
+        self.log_start("sharpe_ratio", ticker=ticker, window=window_days, rf=risk_free_rate)
 
-        # Get price data
-        prices_df = self.model.get_table('fact_stock_prices')
+        # Get price data as Spark DataFrame
+        df = self.get_table('fact_stock_prices', ticker=ticker, filters=filters)
 
-        # Convert to pandas (backend-agnostic)
-        prices_df = self._to_pandas(prices_df)
+        # Add returns
+        df = self.add_returns(df, price_col='close')
 
-        # Apply filters
-        if ticker:
-            prices_df = prices_df[prices_df['ticker'] == ticker]
-        if filters:
-            # Apply filters using model's filter engine
-            prices_df = self.model.session.apply_filters(prices_df, filters)
+        # Create rolling window
+        window = self.rolling_window(window_size=window_days)
 
-        # Sort by ticker and date
-        prices_df = prices_df.sort_values(['ticker', 'trade_date'])
-
-        # Calculate returns
-        prices_df['return'] = prices_df.groupby('ticker')['close'].pct_change()
-
-        # Calculate rolling Sharpe ratio
+        # Calculate rolling mean and std of returns
         daily_rf = (1 + risk_free_rate) ** (1/252) - 1
 
-        def sharpe_for_window(returns):
-            """Calculate Sharpe ratio for a window of returns"""
-            if len(returns) < 2 or returns.std() == 0:
-                return 0
-            excess_return = returns.mean() - daily_rf
-            return (excess_return / returns.std()) * np.sqrt(252)
-
-        # Calculate rolling Sharpe
-        sharpe_values = []
-        for ticker_val in prices_df['ticker'].unique():
-            ticker_data = prices_df[prices_df['ticker'] == ticker_val].copy()
-            ticker_data['sharpe_ratio'] = ticker_data['return'].rolling(
-                window=window_days, min_periods=window_days
-            ).apply(sharpe_for_window, raw=False)
-            sharpe_values.append(ticker_data[['ticker', 'trade_date', 'sharpe_ratio']])
-
-        result_df = pd.concat(sharpe_values, ignore_index=True)
-        return result_df.dropna()
-
-    def calculate_correlation_matrix(
-        self,
-        tickers: Optional[List[str]] = None,
-        filters: Optional[List[Dict]] = None,
-        window_days: int = 60,
-        min_periods: int = 30,
-        **kwargs
-    ) -> pd.DataFrame:
-        """
-        Calculate rolling correlation matrix between stocks.
-
-        Args:
-            tickers: List of tickers (optional, uses all if None)
-            filters: Additional filters
-            window_days: Rolling window size
-            min_periods: Minimum periods required
-
-        Returns:
-            DataFrame with columns: [ticker_1, ticker_2, correlation, as_of_date]
-        """
-        logger.info(f"Calculating correlation matrix (window={window_days})")
-
-        prices_df = self.model.get_table('fact_stock_prices')
-
-        # Convert to pandas (backend-agnostic)
-        prices_df = self._to_pandas(prices_df)
-
-        # Apply filters
-        if tickers:
-            prices_df = prices_df[prices_df['ticker'].isin(tickers)]
-        if filters:
-            prices_df = self.model.session.apply_filters(prices_df, filters)
-
-        # Pivot to wide format (tickers as columns)
-        prices_wide = prices_df.pivot(
-            index='trade_date',
-            columns='ticker',
-            values='close'
+        df = (df
+            .withColumn('rolling_mean', F.avg('returns').over(window))
+            .withColumn('rolling_std', F.stddev('returns').over(window))
+            .withColumn(
+                'sharpe_ratio',
+                F.when(
+                    (F.col('rolling_std').isNotNull()) & (F.col('rolling_std') != 0),
+                    ((F.col('rolling_mean') - daily_rf) / F.col('rolling_std')) * F.sqrt(F.lit(252))
+                ).otherwise(None)
+            )
+            .select('ticker', 'trade_date', 'sharpe_ratio')
+            .filter(F.col('sharpe_ratio').isNotNull())
         )
 
-        # Calculate returns
-        returns = prices_wide.pct_change()
+        self.log_result("sharpe_ratio", df)
 
-        # Calculate rolling correlation
-        correlations = []
-        dates = returns.index[window_days:]
+        if as_pandas:
+            return self.to_pandas(df)
+        return df
 
-        for date in dates:
-            window_data = returns.loc[:date].tail(window_days)
-
-            if len(window_data) >= min_periods:
-                corr_matrix = window_data.corr()
-
-                # Convert to long format (only upper triangle to avoid duplicates)
-                for i, ticker_1 in enumerate(corr_matrix.columns):
-                    for ticker_2 in corr_matrix.columns[i+1:]:
-                        correlations.append({
-                            'ticker_1': ticker_1,
-                            'ticker_2': ticker_2,
-                            'correlation': corr_matrix.loc[ticker_1, ticker_2],
-                            'as_of_date': date
-                        })
-
-        return pd.DataFrame(correlations)
-
-    def calculate_momentum_score(
+    def calculate_drawdown(
         self,
         ticker: Optional[str] = None,
         filters: Optional[List[Dict]] = None,
-        weights: Optional[Dict[str, float]] = None,
+        window_days: int = 252,
+        as_pandas: bool = False,
         **kwargs
-    ) -> pd.DataFrame:
+    ) -> SparkDataFrame:
         """
-        Calculate composite momentum score from multiple factors.
+        Calculate maximum drawdown from peak using Spark.
 
         Args:
             ticker: Specific ticker
             filters: Additional filters
-            weights: Dict of factor weights (e.g., {'rsi': 0.3, 'macd': 0.3, ...})
+            window_days: Rolling window for peak calculation
+            as_pandas: Convert result to pandas
 
         Returns:
-            DataFrame with columns: [ticker, trade_date, momentum_score, ...]
+            Spark DataFrame with columns: [ticker, trade_date, drawdown, peak_price]
         """
-        if weights is None:
-            weights = {'rsi': 0.3, 'macd': 0.3, 'price_trend': 0.4}
+        self.log_start("drawdown", ticker=ticker, window=window_days)
 
-        logger.info(f"Calculating momentum score with weights: {weights}")
+        df = self.get_table('fact_stock_prices', ticker=ticker, filters=filters)
 
-        # Get technical data (includes RSI, MACD, etc.)
-        technicals_df = self.model.get_table('fact_stock_technicals')
+        # Add rolling max (peak price)
+        df = self.add_rolling_max(df, 'close', window_days, result_col='peak_price')
 
-        # Convert to pandas (backend-agnostic)
-        technicals_df = self._to_pandas(technicals_df)
+        # Calculate drawdown as % from peak
+        df = df.withColumn(
+            'drawdown',
+            ((F.col('close') - F.col('peak_price')) / F.col('peak_price')) * 100
+        ).select('ticker', 'trade_date', 'drawdown', 'peak_price')
 
-        # Apply filters
-        if ticker:
-            technicals_df = technicals_df[technicals_df['ticker'] == ticker]
-        if filters:
-            technicals_df = self.model.session.apply_filters(technicals_df, filters)
+        self.log_result("drawdown", df)
 
-        # Normalize factors to 0-1 scale
-        df = technicals_df.copy()
-
-        # RSI is already 0-100, normalize to 0-1
-        df['rsi_norm'] = df['rsi_14'] / 100
-
-        # MACD: Normalize by price (to make comparable across stocks)
-        # Then scale to 0-1 using min-max
-        if 'macd' in df.columns:
-            df['macd_pct'] = df['macd'] / df['close']
-            df['macd_norm'] = (df['macd_pct'] - df['macd_pct'].min()) / (
-                df['macd_pct'].max() - df['macd_pct'].min() + 1e-10
-            )
-        else:
-            df['macd_norm'] = 0.5  # Neutral if not available
-
-        # Price trend: % above/below 50-day SMA
-        if 'sma_50' in df.columns:
-            df['price_trend'] = (df['close'] - df['sma_50']) / df['sma_50']
-            # Clip to [-1, 1] and scale to [0, 1]
-            df['price_trend'] = df['price_trend'].clip(-1, 1)
-            df['price_trend_norm'] = (df['price_trend'] + 1) / 2
-        else:
-            df['price_trend_norm'] = 0.5  # Neutral
-
-        # Calculate weighted score
-        df['momentum_score'] = (
-            df['rsi_norm'].fillna(0.5) * weights.get('rsi', 0) +
-            df['macd_norm'].fillna(0.5) * weights.get('macd', 0) +
-            df['price_trend_norm'].fillna(0.5) * weights.get('price_trend', 0)
-        )
-
-        # Clip to [0, 1] range
-        df['momentum_score'] = df['momentum_score'].clip(0, 1)
-
-        return df[['ticker', 'trade_date', 'momentum_score',
-                   'rsi_norm', 'macd_norm', 'price_trend_norm']]
-
-    def calculate_sector_rotation(
-        self,
-        filters: Optional[List[Dict]] = None,
-        lookback_days: int = 20,
-        threshold: float = 0.1,
-        **kwargs
-    ) -> pd.DataFrame:
-        """
-        Calculate sector rotation signals.
-
-        Args:
-            filters: Additional filters
-            lookback_days: Lookback period for momentum
-            threshold: Threshold for signal generation (10% = 0.1)
-
-        Returns:
-            DataFrame with columns: [sector, trade_date, signal, momentum]
-        """
-        logger.info(f"Calculating sector rotation (lookback={lookback_days})")
-
-        # Get stock dimension (for sector) and prices
-        dim_stock = self.model.get_table('dim_stock')
-        prices_df = self.model.get_table('fact_stock_prices')
-
-        # Convert to pandas (backend-agnostic)
-        dim_stock = self._to_pandas(dim_stock)
-        prices_df = self._to_pandas(prices_df)
-
-        # Merge to get sector for each ticker
-        df = prices_df.merge(dim_stock[['ticker', 'sector']], on='ticker', how='inner')
-
-        # Apply filters
-        if filters:
-            df = self.model.session.apply_filters(df, filters)
-
-        # Remove rows without sector
-        df = df[df['sector'].notna()]
-
-        # Sort by sector, ticker, date
-        df = df.sort_values(['sector', 'ticker', 'trade_date'])
-
-        # Calculate returns for each stock
-        df['return'] = df.groupby(['sector', 'ticker'])['close'].pct_change()
-
-        # Aggregate to sector level (equal-weighted within sector)
-        sector_returns = df.groupby(['sector', 'trade_date'])['return'].mean().reset_index()
-
-        # Calculate rolling momentum for each sector
-        sector_returns = sector_returns.sort_values(['sector', 'trade_date'])
-        sector_returns['momentum'] = sector_returns.groupby('sector')['return'].rolling(
-            window=lookback_days, min_periods=lookback_days
-        ).mean().reset_index(drop=True)
-
-        # Generate signals based on momentum
-        sector_returns['signal'] = 'HOLD'
-        sector_returns.loc[sector_returns['momentum'] > threshold, 'signal'] = 'BUY'
-        sector_returns.loc[sector_returns['momentum'] < -threshold, 'signal'] = 'SELL'
-
-        return sector_returns[['sector', 'trade_date', 'signal', 'momentum']].dropna()
+        if as_pandas:
+            return self.to_pandas(df)
+        return df
 
     def calculate_rolling_beta(
         self,
@@ -298,123 +133,324 @@ class StocksMeasures(DomainMeasures):
         filters: Optional[List[Dict]] = None,
         market_ticker: str = 'SPY',
         window_days: int = 252,
+        as_pandas: bool = False,
         **kwargs
-    ) -> pd.DataFrame:
+    ) -> SparkDataFrame:
         """
-        Calculate rolling beta vs. market index.
+        Calculate rolling beta vs. market index using Spark.
 
         Args:
             ticker: Specific ticker
             filters: Additional filters
             market_ticker: Market index ticker (default: SPY)
             window_days: Rolling window size
+            as_pandas: Convert result to pandas
 
         Returns:
-            DataFrame with columns: [ticker, trade_date, beta]
+            Spark DataFrame with columns: [ticker, trade_date, beta]
         """
-        logger.info(f"Calculating rolling beta vs. {market_ticker} (window={window_days})")
+        self.log_start("rolling_beta", ticker=ticker, market=market_ticker, window=window_days)
 
-        prices_df = self.model.get_table('fact_stock_prices')
+        # Get all prices
+        df = self.get_table('fact_stock_prices', filters=filters)
 
-        # Convert to pandas (backend-agnostic)
-        prices_df = self._to_pandas(prices_df)
+        # Add returns for all tickers
+        df = self.add_returns(df, price_col='close')
 
-        # Apply filters
+        # Separate market returns
+        market_df = (df
+            .filter(F.col('ticker') == market_ticker)
+            .select(
+                F.col('trade_date'),
+                F.col('returns').alias('market_returns')
+            )
+        )
+
+        # Get stock returns (excluding market ticker or specific ticker)
         if ticker:
-            prices_df = prices_df[prices_df['ticker'] == ticker]
-        if filters:
-            prices_df = self.model.session.apply_filters(prices_df, filters)
-
-        # Get market returns
-        market_prices = prices_df[prices_df['ticker'] == market_ticker].copy()
-        market_prices = market_prices.sort_values('trade_date')
-        market_prices['market_return'] = market_prices['close'].pct_change()
-
-        # Get stock returns
-        stock_tickers = prices_df[prices_df['ticker'] != market_ticker]['ticker'].unique()
-
-        beta_results = []
-        for stock_ticker in stock_tickers:
-            stock_prices = prices_df[prices_df['ticker'] == stock_ticker].copy()
-            stock_prices = stock_prices.sort_values('trade_date')
-            stock_prices['stock_return'] = stock_prices['close'].pct_change()
-
-            # Merge with market returns
-            merged = stock_prices[['trade_date', 'stock_return']].merge(
-                market_prices[['trade_date', 'market_return']],
-                on='trade_date',
-                how='inner'
-            )
-
-            # Calculate rolling beta
-            def calc_beta(window_data):
-                """Calculate beta for a window"""
-                if len(window_data) < 30:
-                    return np.nan
-                cov = np.cov(window_data['stock_return'], window_data['market_return'])[0, 1]
-                var = np.var(window_data['market_return'])
-                return cov / var if var > 0 else np.nan
-
-            merged = merged.sort_values('trade_date')
-            merged['beta'] = merged.rolling(window=window_days, min_periods=30).apply(
-                lambda w: calc_beta(merged.iloc[w.index]), raw=False
-            )
-
-            merged['ticker'] = stock_ticker
-            beta_results.append(merged[['ticker', 'trade_date', 'beta']])
-
-        if beta_results:
-            return pd.concat(beta_results, ignore_index=True).dropna()
+            stock_df = df.filter(F.col('ticker') == ticker)
         else:
-            return pd.DataFrame(columns=['ticker', 'trade_date', 'beta'])
+            stock_df = df.filter(F.col('ticker') != market_ticker)
 
-    def calculate_drawdown(
+        stock_df = stock_df.select('ticker', 'trade_date', F.col('returns').alias('stock_returns'))
+
+        # Join market returns to stock returns
+        merged = stock_df.join(market_df, on='trade_date', how='inner')
+
+        # Calculate rolling covariance and variance using window
+        window = self.rolling_window(window_size=window_days)
+
+        # For beta = cov(stock, market) / var(market)
+        # We need to calculate these in a rolling window
+        merged = (merged
+            .withColumn('product', F.col('stock_returns') * F.col('market_returns'))
+            .withColumn('market_sq', F.col('market_returns') * F.col('market_returns'))
+            .withColumn('rolling_product_mean', F.avg('product').over(window))
+            .withColumn('rolling_stock_mean', F.avg('stock_returns').over(window))
+            .withColumn('rolling_market_mean', F.avg('market_returns').over(window))
+            .withColumn('rolling_market_sq_mean', F.avg('market_sq').over(window))
+            # Covariance = E[XY] - E[X]*E[Y]
+            .withColumn(
+                'covariance',
+                F.col('rolling_product_mean') - (F.col('rolling_stock_mean') * F.col('rolling_market_mean'))
+            )
+            # Variance = E[X^2] - E[X]^2
+            .withColumn(
+                'market_variance',
+                F.col('rolling_market_sq_mean') - (F.col('rolling_market_mean') * F.col('rolling_market_mean'))
+            )
+            # Beta = Cov / Var
+            .withColumn(
+                'beta',
+                F.when(F.col('market_variance') > 0, F.col('covariance') / F.col('market_variance'))
+                .otherwise(None)
+            )
+            .select('ticker', 'trade_date', 'beta')
+            .filter(F.col('beta').isNotNull())
+        )
+
+        self.log_result("rolling_beta", merged)
+
+        if as_pandas:
+            return self.to_pandas(merged)
+        return merged
+
+    def calculate_momentum_score(
         self,
         ticker: Optional[str] = None,
         filters: Optional[List[Dict]] = None,
-        window_days: int = 252,
+        weights: Optional[Dict[str, float]] = None,
+        as_pandas: bool = False,
         **kwargs
-    ) -> pd.DataFrame:
+    ) -> SparkDataFrame:
         """
-        Calculate maximum drawdown from peak.
+        Calculate composite momentum score from multiple factors using Spark.
 
         Args:
             ticker: Specific ticker
             filters: Additional filters
-            window_days: Rolling window for peak calculation
+            weights: Dict of factor weights (e.g., {'rsi': 0.3, 'macd': 0.3, ...})
+            as_pandas: Convert result to pandas
 
         Returns:
-            DataFrame with columns: [ticker, trade_date, drawdown, peak_price]
+            Spark DataFrame with momentum score and components
         """
-        logger.info(f"Calculating drawdown (window={window_days})")
+        if weights is None:
+            weights = {'rsi': 0.3, 'macd': 0.3, 'price_trend': 0.4}
 
-        prices_df = self.model.get_table('fact_stock_prices')
+        self.log_start("momentum_score", ticker=ticker, weights=weights)
 
-        # Convert to pandas (backend-agnostic)
-        prices_df = self._to_pandas(prices_df)
+        # Get technical data (includes RSI, MACD, etc.)
+        df = self.get_table('fact_stock_prices', ticker=ticker, filters=filters)
 
-        # Apply filters
+        # RSI normalization (already 0-100, normalize to 0-1)
+        df = df.withColumn(
+            'rsi_norm',
+            F.when(F.col('rsi_14').isNotNull(), F.col('rsi_14') / 100)
+            .otherwise(0.5)
+        )
+
+        # Price trend: % above/below 50-day SMA, normalized to [0, 1]
+        df = df.withColumn(
+            'price_trend_raw',
+            F.when(
+                (F.col('sma_50').isNotNull()) & (F.col('sma_50') != 0),
+                (F.col('close') - F.col('sma_50')) / F.col('sma_50')
+            ).otherwise(0)
+        ).withColumn(
+            'price_trend_norm',
+            # Clip to [-1, 1] then scale to [0, 1]
+            (F.greatest(F.least(F.col('price_trend_raw'), F.lit(1)), F.lit(-1)) + 1) / 2
+        )
+
+        # MACD normalization (if available)
+        # MACD as % of price, then normalize
+        df = df.withColumn(
+            'macd_pct',
+            F.when(
+                (F.col('close').isNotNull()) & (F.col('close') != 0),
+                F.coalesce(F.col('macd'), F.lit(0)) / F.col('close')
+            ).otherwise(0)
+        )
+
+        # Normalize MACD within each ticker using window
+        ticker_window = Window.partitionBy('ticker')
+        df = df.withColumn(
+            'macd_min', F.min('macd_pct').over(ticker_window)
+        ).withColumn(
+            'macd_max', F.max('macd_pct').over(ticker_window)
+        ).withColumn(
+            'macd_norm',
+            F.when(
+                F.col('macd_max') != F.col('macd_min'),
+                (F.col('macd_pct') - F.col('macd_min')) / (F.col('macd_max') - F.col('macd_min'))
+            ).otherwise(0.5)
+        )
+
+        # Calculate weighted score
+        rsi_weight = weights.get('rsi', 0.3)
+        macd_weight = weights.get('macd', 0.3)
+        trend_weight = weights.get('price_trend', 0.4)
+
+        df = df.withColumn(
+            'momentum_score',
+            F.greatest(
+                F.least(
+                    (F.col('rsi_norm') * rsi_weight) +
+                    (F.col('macd_norm') * macd_weight) +
+                    (F.col('price_trend_norm') * trend_weight),
+                    F.lit(1.0)
+                ),
+                F.lit(0.0)
+            )
+        ).select(
+            'ticker', 'trade_date', 'momentum_score',
+            'rsi_norm', 'macd_norm', 'price_trend_norm'
+        )
+
+        self.log_result("momentum_score", df)
+
+        if as_pandas:
+            return self.to_pandas(df)
+        return df
+
+    def calculate_volatility_regime(
+        self,
+        ticker: Optional[str] = None,
+        filters: Optional[List[Dict]] = None,
+        short_window: int = 20,
+        long_window: int = 60,
+        as_pandas: bool = False,
+        **kwargs
+    ) -> SparkDataFrame:
+        """
+        Classify volatility regime (low/normal/high) using Spark.
+
+        Args:
+            ticker: Specific ticker
+            filters: Additional filters
+            short_window: Short-term volatility window
+            long_window: Long-term volatility window
+            as_pandas: Convert result to pandas
+
+        Returns:
+            Spark DataFrame with volatility metrics and regime classification
+        """
+        self.log_start("volatility_regime", ticker=ticker, short=short_window, long=long_window)
+
+        df = self.get_table('fact_stock_prices', ticker=ticker, filters=filters)
+
+        # Add returns
+        df = self.add_returns(df, price_col='close')
+
+        # Calculate short and long term volatility
+        df = self.add_rolling_std(df, 'returns', short_window, result_col='vol_short')
+        df = self.add_rolling_std(df, 'returns', long_window, result_col='vol_long')
+
+        # Annualize
+        df = (df
+            .withColumn('vol_short_ann', F.col('vol_short') * F.sqrt(F.lit(252)))
+            .withColumn('vol_long_ann', F.col('vol_long') * F.sqrt(F.lit(252)))
+        )
+
+        # Calculate volatility ratio
+        df = df.withColumn(
+            'vol_ratio',
+            F.when(F.col('vol_long_ann') > 0, F.col('vol_short_ann') / F.col('vol_long_ann'))
+            .otherwise(1.0)
+        )
+
+        # Classify regime
+        df = df.withColumn(
+            'regime',
+            F.when(F.col('vol_ratio') < 0.8, 'LOW')
+            .when(F.col('vol_ratio') > 1.2, 'HIGH')
+            .otherwise('NORMAL')
+        ).select(
+            'ticker', 'trade_date',
+            'vol_short_ann', 'vol_long_ann', 'vol_ratio', 'regime'
+        ).filter(
+            F.col('vol_long_ann').isNotNull()
+        )
+
+        self.log_result("volatility_regime", df)
+
+        if as_pandas:
+            return self.to_pandas(df)
+        return df
+
+    def calculate_relative_strength(
+        self,
+        ticker: Optional[str] = None,
+        filters: Optional[List[Dict]] = None,
+        benchmark_ticker: str = 'SPY',
+        window_days: int = 20,
+        as_pandas: bool = False,
+        **kwargs
+    ) -> SparkDataFrame:
+        """
+        Calculate relative strength vs benchmark using Spark.
+
+        Args:
+            ticker: Specific ticker
+            filters: Additional filters
+            benchmark_ticker: Benchmark ticker (default: SPY)
+            window_days: Rolling window for comparison
+            as_pandas: Convert result to pandas
+
+        Returns:
+            Spark DataFrame with relative strength metrics
+        """
+        self.log_start("relative_strength", ticker=ticker, benchmark=benchmark_ticker, window=window_days)
+
+        df = self.get_table('fact_stock_prices', filters=filters)
+
+        # Add returns
+        df = self.add_returns(df, price_col='close')
+
+        # Separate benchmark
+        benchmark_df = (df
+            .filter(F.col('ticker') == benchmark_ticker)
+            .select(
+                F.col('trade_date'),
+                F.col('returns').alias('benchmark_returns')
+            )
+        )
+
+        # Get stock returns
         if ticker:
-            prices_df = prices_df[prices_df['ticker'] == ticker]
-        if filters:
-            prices_df = self.model.session.apply_filters(prices_df, filters)
+            stock_df = df.filter(F.col('ticker') == ticker)
+        else:
+            stock_df = df.filter(F.col('ticker') != benchmark_ticker)
 
-        # Sort by ticker and date
-        prices_df = prices_df.sort_values(['ticker', 'trade_date'])
+        stock_df = stock_df.select('ticker', 'trade_date', F.col('returns').alias('stock_returns'))
 
-        # Calculate rolling peak and drawdown for each ticker
-        drawdown_results = []
-        for ticker_val in prices_df['ticker'].unique():
-            ticker_data = prices_df[prices_df['ticker'] == ticker_val].copy()
+        # Join
+        merged = stock_df.join(benchmark_df, on='trade_date', how='inner')
 
-            # Calculate rolling peak
-            ticker_data['peak_price'] = ticker_data['close'].rolling(
-                window=window_days, min_periods=1
-            ).max()
+        # Calculate rolling cumulative returns
+        window = self.rolling_window(window_size=window_days)
 
-            # Calculate drawdown as % from peak
-            ticker_data['drawdown'] = (ticker_data['close'] - ticker_data['peak_price']) / ticker_data['peak_price'] * 100
+        merged = (merged
+            .withColumn('cum_stock', F.sum('stock_returns').over(window))
+            .withColumn('cum_benchmark', F.sum('benchmark_returns').over(window))
+            .withColumn(
+                'relative_strength',
+                F.when(
+                    F.col('cum_benchmark').isNotNull(),
+                    F.col('cum_stock') - F.col('cum_benchmark')
+                ).otherwise(None)
+            )
+            .withColumn(
+                'outperforming',
+                F.when(F.col('relative_strength') > 0, True).otherwise(False)
+            )
+            .select('ticker', 'trade_date', 'relative_strength', 'outperforming')
+            .filter(F.col('relative_strength').isNotNull())
+        )
 
-            drawdown_results.append(ticker_data[['ticker', 'trade_date', 'drawdown', 'peak_price']])
+        self.log_result("relative_strength", merged)
 
-        return pd.concat(drawdown_results, ignore_index=True)
+        if as_pandas:
+            return self.to_pandas(merged)
+        return merged
