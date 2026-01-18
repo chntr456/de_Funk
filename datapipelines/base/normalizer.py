@@ -218,6 +218,9 @@ class SparkNormalizer:
         TRY_CAST returns NULL for invalid values instead of failing.
         All numeric types are cast to DoubleType for consistency
         (avoids NaN → BIGINT overflow issues).
+
+        Uses try_cast() to handle malformed values like 'None' strings -
+        returns NULL instead of failing.
         """
         df_columns = df.columns
         coerced_count = 0
@@ -228,14 +231,14 @@ class SparkNormalizer:
 
             target_type_lower = target_type.lower()
 
-            # Use DoubleType for all numeric types for NaN safety
+            # Use try_cast for safe conversion - returns NULL for malformed values
+            # (e.g., Alpha Vantage returns literal "None" strings)
             if target_type_lower in ('double', 'float', 'decimal'):
-                df = df.withColumn(column, F.col(column).cast(DoubleType()))
+                df = df.withColumn(column, F.col(column).try_cast(DoubleType()))
                 coerced_count += 1
             elif target_type_lower in ('long', 'bigint', 'int', 'integer'):
-                # Cast to double first for NaN safety, then to target
-                # Note: Keeping as double avoids NaN → Long overflow
-                df = df.withColumn(column, F.col(column).cast(DoubleType()))
+                # Cast to double for NaN safety (keeps as double, not long)
+                df = df.withColumn(column, F.col(column).try_cast(DoubleType()))
                 coerced_count += 1
             elif target_type_lower == 'string':
                 df = df.withColumn(column, F.col(column).cast(StringType()))
