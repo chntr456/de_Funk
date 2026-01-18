@@ -180,6 +180,32 @@
       "log_level": "INFO",
       "_comment": "Alpha Vantage full ingestion with synchronous writes. All tickers, all endpoints."
     },
+    "raw_to_bronze": {
+      "providers": ["alpha_vantage"],
+      "max_tickers": null,
+      "max_records_per_endpoint": null,
+      "write_batch_size": 500000,
+      "max_pending_writes": 0,
+      "use_raw_cache": true,
+      "_use_raw_cache_comment": "Reads from storage/raw/alpha_vantage/{endpoint}/*.json instead of API calls",
+      "build_silver": false,
+      "dry_run": false,
+      "log_level": "INFO",
+      "_comment": "Reprocess raw JSON files to bronze. No API calls - uses cached raw layer."
+    },
+    "raw_to_silver": {
+      "providers": ["alpha_vantage"],
+      "max_tickers": null,
+      "max_records_per_endpoint": null,
+      "write_batch_size": 500000,
+      "max_pending_writes": 0,
+      "use_raw_cache": true,
+      "_use_raw_cache_comment": "Reads from storage/raw/alpha_vantage/{endpoint}/*.json instead of API calls",
+      "build_silver": true,
+      "dry_run": false,
+      "log_level": "INFO",
+      "_comment": "Full reprocess: raw JSON → bronze → silver. No API calls."
+    },
     "silver_only": {
       "providers": [],
       "build_silver": true,

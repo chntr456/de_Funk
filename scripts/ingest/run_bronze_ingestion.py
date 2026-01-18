@@ -13,7 +13,13 @@ Usage:
     python -m scripts.ingest.run_bronze_ingestion --max-tickers 100
     python -m scripts.ingest.run_bronze_ingestion --endpoints prices
     python -m scripts.ingest.run_bronze_ingestion --endpoints reference,income_statement
-    python -m scripts.ingest.run_bronze_ingestion --save-raw --max-tickers 10
+
+Raw Layer Caching (default behavior):
+    By default, raw API responses are cached to storage/raw/alpha_vantage/{endpoint}/{ticker}.json
+    On subsequent runs, cached raw files are used instead of making API calls.
+
+    --force-api         Force API calls even if cache exists (refresh data)
+    --no-raw-cache      Disable raw layer entirely (no read, no write)
 
 Endpoints (work item names):
     prices             - Daily OHLCV prices (time_series_daily_adjusted)
@@ -22,10 +28,6 @@ Endpoints (work item names):
     balance_sheet      - Balance sheets (balance)
     cash_flow          - Cash flow statements (cashflow)
     earnings           - Earnings reports
-
-Raw Data Dump:
-    Use --save-raw to save raw API responses before transformation.
-    Saved to: {storage_path}/raw/alpha_vantage/{endpoint}/{ticker}.json
 """
 
 from __future__ import annotations
@@ -72,10 +74,15 @@ def main():
                         help='Comma-separated endpoints (default: prices,reference)')
     parser.add_argument('--use-market-cap', action='store_true',
                         help='Select tickers by market cap instead of alphabetically')
-    parser.add_argument('--save-raw', action='store_true',
-                        help='Save raw API responses before transformation')
+    parser.add_argument('--force-api', action='store_true',
+                        help='Force API calls even if raw cache exists (refresh data)')
+    parser.add_argument('--no-raw-cache', action='store_true',
+                        help='Disable raw layer entirely (no read, no write)')
     parser.add_argument('--tickers', type=str,
                         help='Comma-separated list of specific tickers to process')
+    # Legacy alias for backward compatibility
+    parser.add_argument('--save-raw', action='store_true',
+                        help=argparse.SUPPRESS)  # Hidden, now default behavior
 
     args = parser.parse_args()
     setup_logging()
@@ -97,13 +104,23 @@ def main():
         logger.error("No valid endpoints specified")
         return 1
 
+    # Determine raw layer behavior
+    use_raw_layer = not args.no_raw_cache
+    force_api = args.force_api
+
     logger.info("Starting Bronze ingestion")
     logger.info(f"Storage path: {storage_path}")
     logger.info(f"Work items: {work_items}")
     if args.max_tickers:
         logger.info(f"Max tickers: {args.max_tickers}")
-    if args.save_raw:
-        logger.info("Raw data dump ENABLED")
+
+    if use_raw_layer:
+        if force_api:
+            logger.info("Raw layer: ENABLED (write-only, forcing API calls)")
+        else:
+            logger.info("Raw layer: ENABLED (read from cache if available, write new)")
+    else:
+        logger.info("Raw layer: DISABLED")
 
     try:
         # Initialize Spark
@@ -118,14 +135,15 @@ def main():
             for k, v in storage_cfg['roots'].items()
         }
 
-        # Initialize provider (pass storage_path for raw layer when --save-raw)
+        # Initialize provider
+        # Pass storage_path to enable raw layer (caching)
         from datapipelines.providers.alpha_vantage import create_alpha_vantage_provider
         from datapipelines.base.ingestor_engine import IngestorEngine
 
-        raw_storage = storage_path if args.save_raw else None
+        raw_storage = storage_path if use_raw_layer else None
         provider = create_alpha_vantage_provider(spark=spark, docs_path=repo_root, storage_path=raw_storage)
-        if args.save_raw:
-            logger.info(f"Raw data dump path: {storage_path}/raw/alpha_vantage/")
+        if use_raw_layer:
+            logger.info(f"Raw cache path: {storage_path}/raw/alpha_vantage/")
 
         # Get tickers
         if args.tickers:
@@ -149,7 +167,7 @@ def main():
 
         # Create engine and run
         engine = IngestorEngine(provider, storage_cfg)
-        results = engine.run(work_items=work_items, silent=False)
+        results = engine.run(work_items=work_items, silent=False, force_api=force_api)
 
         spark.stop()
 
