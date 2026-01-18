@@ -19,6 +19,10 @@ required_params: [symbol]
 pagination_type: none
 bulk_download: false
 
+# Spark JSON Reading
+json_structure: array_reports
+json_structure_comment: "Contains annualReports and quarterlyReports arrays. Requires union + explode in Spark."
+
 # Metadata
 domain: finance
 legal_entity_type: vendor

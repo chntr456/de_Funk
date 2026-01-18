@@ -21,6 +21,10 @@ required_params: [symbol]
 pagination_type: none
 bulk_download: false
 
+# Spark JSON Reading
+json_structure: nested_map
+json_structure_comment: "Date strings as keys → OHLCV objects as values. Requires explode() for Spark reading."
+
 # Metadata
 domain: securities
 legal_entity_type: vendor

@@ -113,6 +113,12 @@ class EndpointConfig:
     view_ids: Dict[str, str] = field(default_factory=dict)
     # Download method: "json" (default API pagination) or "csv" (bulk download)
     download_method: str = "json"
+    # JSON structure type for Spark JSON reading:
+    #   "nested_map" - Keys are dates/IDs → values are objects (e.g., prices)
+    #   "object" - Single flat object (e.g., company_overview)
+    #   "array_reports" - Contains annualReports/quarterlyReports arrays (e.g., financials)
+    #   "array" - Simple array of objects
+    json_structure: str = "object"
     # Raw config dict for additional fields
     raw: Dict[str, Any] = field(default_factory=dict)
 
@@ -461,6 +467,7 @@ class MarkdownConfigLoader:
             enabled=frontmatter.get('enabled', True),
             view_ids=view_ids,
             download_method=frontmatter.get('download_method', 'json'),
+            json_structure=frontmatter.get('json_structure', 'object'),
             raw=frontmatter
         )
 

@@ -19,6 +19,10 @@ required_params: [symbol]
 pagination_type: none
 bulk_download: false
 
+# Spark JSON Reading
+json_structure: object
+json_structure_comment: "Flat object with company fields. Direct struct access in Spark."
+
 # Metadata
 domain: securities
 legal_entity_type: vendor

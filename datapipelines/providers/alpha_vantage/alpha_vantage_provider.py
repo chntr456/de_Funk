@@ -477,6 +477,419 @@ class AlphaVantageProvider(BaseProvider):
         return ["ticker"]
 
     # =========================================================================
+    # SPARK JSON READING (Distributed)
+    # =========================================================================
+
+    def supports_spark_json(self, work_item: str) -> bool:
+        """
+        Check if work item can use Spark JSON path for distributed reading.
+
+        Returns True if:
+        - Raw layer is enabled (storage_path set)
+        - Raw JSON files exist for this endpoint
+        - Endpoint has json_structure configured in markdown
+
+        Args:
+            work_item: Work item identifier (e.g., 'prices', 'reference')
+
+        Returns:
+            True if Spark JSON reading is supported
+        """
+        if not self._storage_path:
+            return False
+
+        data_type = self._get_data_type(work_item)
+        if not data_type:
+            return False
+
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+        if not endpoint_id:
+            return False
+
+        endpoint = self._endpoints.get(endpoint_id)
+        if not endpoint:
+            return False
+
+        # Check if raw JSON files exist
+        raw_dir = self._storage_path / "raw" / "alpha_vantage" / endpoint_id
+        if not raw_dir.exists():
+            return False
+
+        json_files = list(raw_dir.glob("*.json"))
+        if not json_files:
+            return False
+
+        logger.debug(f"{work_item}: Spark JSON supported ({len(json_files)} files)")
+        return True
+
+    def fetch_as_dataframe(self, work_item: str, **kwargs) -> Optional[DataFrame]:
+        """
+        Read all raw JSON files with Spark and return a single DataFrame.
+
+        This is the fast path for bulk ingestion:
+        - JSON parsing distributed across all Spark executors
+        - No data flows through Python driver
+        - Much faster than sequential file reads
+
+        Args:
+            work_item: Work item identifier
+            **kwargs: Additional options
+
+        Returns:
+            Spark DataFrame with normalized data, or None if not supported
+        """
+        if not self.supports_spark_json(work_item):
+            return None
+
+        data_type = self._get_data_type(work_item)
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+        endpoint = self._endpoints.get(endpoint_id)
+
+        # Get json_structure from endpoint config
+        json_structure = endpoint.json_structure if endpoint else "object"
+        response_key = endpoint.response_key if endpoint else None
+
+        raw_dir = self._storage_path / "raw" / "alpha_vantage" / endpoint_id
+        json_pattern = str(raw_dir / "*.json")
+
+        logger.info(f"{work_item}: Reading with Spark JSON (structure={json_structure})")
+
+        try:
+            if json_structure == "nested_map":
+                df = self._read_nested_map_json(json_pattern, response_key, data_type)
+            elif json_structure == "array_reports":
+                df = self._read_array_reports_json(json_pattern, data_type)
+            elif json_structure == "object":
+                df = self._read_object_json(json_pattern, data_type)
+            else:
+                logger.warning(f"Unknown json_structure: {json_structure}, falling back to object")
+                df = self._read_object_json(json_pattern, data_type)
+
+            if df is not None:
+                count = df.count()
+                logger.info(f"{work_item}: Spark JSON read {count:,} records")
+
+            return df
+
+        except Exception as e:
+            logger.error(f"Spark JSON reading failed for {work_item}: {e}", exc_info=True)
+            return None
+
+    def _read_nested_map_json(
+        self,
+        json_pattern: str,
+        response_key: str,
+        data_type: DataType
+    ) -> Optional[DataFrame]:
+        """
+        Read JSON files with nested map structure (date keys → value objects).
+
+        Used for: time_series_daily (prices)
+
+        Structure:
+            {"Time Series (Daily)": {"2024-01-15": {"1. open": "123", ...}, ...}}
+
+        Strategy:
+            1. Read all JSON files with Spark
+            2. Extract response_key field
+            3. Explode map to (date, struct) rows
+            4. Flatten struct fields
+
+        Args:
+            json_pattern: Glob pattern for JSON files
+            response_key: Key containing the nested map (e.g., "Time Series (Daily)")
+            data_type: DataType for normalization
+
+        Returns:
+            DataFrame with flattened records
+        """
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import MapType, StringType, StructType
+
+        # Read all JSON files - Spark infers schema
+        df = self.spark.read.option("multiline", True).json(json_pattern)
+
+        if df.isEmpty():
+            return None
+
+        # Extract ticker from input file path
+        df = df.withColumn("_file", F.input_file_name())
+        df = df.withColumn(
+            "ticker",
+            F.regexp_extract(F.col("_file"), r"/([A-Z0-9\-\.]+)\.json$", 1)
+        )
+
+        # Handle wrapped structure: {"response": {...}, "metadata": {...}}
+        if "response" in df.columns:
+            df = df.withColumn("_payload", F.col("response"))
+        else:
+            df = df.withColumn("_payload", F.struct(*[c for c in df.columns if c not in ["_file", "ticker"]]))
+
+        # Extract the nested map using response_key
+        # The response_key may have special chars like "Time Series (Daily)"
+        if response_key:
+            safe_key = f"`{response_key}`"
+            df = df.withColumn("_data_map", F.col(f"_payload.{safe_key}"))
+        else:
+            # If no response_key, assume the payload IS the map
+            df = df.withColumn("_data_map", F.col("_payload"))
+
+        # Filter out rows where the map is null
+        df = df.filter(F.col("_data_map").isNotNull())
+
+        # Explode the map: each (date_key, value_struct) becomes a row
+        df = df.select(
+            "ticker",
+            F.explode(F.col("_data_map")).alias("trade_date", "_ohlcv")
+        )
+
+        # Flatten the OHLCV struct - get all field names dynamically
+        ohlcv_schema = df.schema["_ohlcv"].dataType
+        if isinstance(ohlcv_schema, StructType):
+            for field in ohlcv_schema.fields:
+                df = df.withColumn(field.name, F.col(f"_ohlcv.`{field.name}`"))
+        df = df.drop("_ohlcv")
+
+        # Now normalize using SparkNormalizer
+        return self._normalize_spark_df(df, data_type)
+
+    def _read_object_json(
+        self,
+        json_pattern: str,
+        data_type: DataType
+    ) -> Optional[DataFrame]:
+        """
+        Read JSON files with flat object structure.
+
+        Used for: company_overview (reference)
+
+        Structure:
+            {"Symbol": "AAPL", "Name": "Apple Inc", "MarketCap": "3000000000000", ...}
+
+        Strategy:
+            1. Read all JSON files with Spark
+            2. Each file becomes one row
+            3. Extract ticker from filename
+
+        Args:
+            json_pattern: Glob pattern for JSON files
+            data_type: DataType for normalization
+
+        Returns:
+            DataFrame with one row per file
+        """
+        from pyspark.sql import functions as F
+
+        # Read all JSON files
+        df = self.spark.read.option("multiline", True).json(json_pattern)
+
+        if df.isEmpty():
+            return None
+
+        # Handle wrapped structure: {"response": {...}, "metadata": {...}}
+        if "response" in df.columns:
+            # Extract fields from response struct
+            response_schema = df.schema["response"].dataType
+            if hasattr(response_schema, 'fields'):
+                for field in response_schema.fields:
+                    df = df.withColumn(field.name, F.col(f"response.`{field.name}`"))
+            df = df.drop("response", "metadata")
+
+        # Add ticker from filename if not in data
+        df = df.withColumn("_file", F.input_file_name())
+        if "Symbol" not in df.columns and "ticker" not in df.columns:
+            df = df.withColumn(
+                "ticker",
+                F.regexp_extract(F.col("_file"), r"/([A-Z0-9\-\.]+)\.json$", 1)
+            )
+        df = df.drop("_file")
+
+        # Normalize
+        return self._normalize_spark_df(df, data_type)
+
+    def _read_array_reports_json(
+        self,
+        json_pattern: str,
+        data_type: DataType
+    ) -> Optional[DataFrame]:
+        """
+        Read JSON files with annual/quarterly report arrays.
+
+        Used for: income_statement, balance_sheet, cash_flow, earnings
+
+        Structure:
+            {"annualReports": [...], "quarterlyReports": [...]}
+            or {"annualEarnings": [...], "quarterlyEarnings": [...]}
+
+        Strategy:
+            1. Read all JSON files with Spark
+            2. Explode annualReports and quarterlyReports arrays
+            3. Union with report_type column
+
+        Args:
+            json_pattern: Glob pattern for JSON files
+            data_type: DataType for normalization
+
+        Returns:
+            DataFrame with all reports
+        """
+        from pyspark.sql import functions as F
+
+        # Read all JSON files
+        df = self.spark.read.option("multiline", True).json(json_pattern)
+
+        if df.isEmpty():
+            return None
+
+        # Handle wrapped structure
+        if "response" in df.columns:
+            response_schema = df.schema["response"].dataType
+            if hasattr(response_schema, 'fields'):
+                for field in response_schema.fields:
+                    df = df.withColumn(field.name, F.col(f"response.`{field.name}`"))
+            df = df.drop("response", "metadata")
+
+        # Add ticker from filename
+        df = df.withColumn("_file", F.input_file_name())
+        df = df.withColumn(
+            "ticker",
+            F.regexp_extract(F.col("_file"), r"/([A-Z0-9\-\.]+)\.json$", 1)
+        )
+
+        # Determine array column names based on data type
+        if data_type == DataType.EARNINGS:
+            annual_col = "annualEarnings"
+            quarterly_col = "quarterlyEarnings"
+        else:
+            annual_col = "annualReports"
+            quarterly_col = "quarterlyReports"
+
+        dfs = []
+
+        # Explode annual reports
+        if annual_col in df.columns:
+            df_annual = df.filter(F.col(annual_col).isNotNull())
+            if not df_annual.isEmpty():
+                df_annual = df_annual.select(
+                    "ticker",
+                    F.explode(F.col(annual_col)).alias("_report")
+                )
+                df_annual = df_annual.withColumn("report_type", F.lit("annual"))
+                # Flatten report struct
+                report_schema = df_annual.schema["_report"].dataType
+                if hasattr(report_schema, 'fields'):
+                    for field in report_schema.fields:
+                        df_annual = df_annual.withColumn(field.name, F.col(f"_report.`{field.name}`"))
+                df_annual = df_annual.drop("_report")
+                dfs.append(df_annual)
+
+        # Explode quarterly reports
+        if quarterly_col in df.columns:
+            df_quarterly = df.filter(F.col(quarterly_col).isNotNull())
+            if not df_quarterly.isEmpty():
+                df_quarterly = df_quarterly.select(
+                    "ticker",
+                    F.explode(F.col(quarterly_col)).alias("_report")
+                )
+                df_quarterly = df_quarterly.withColumn("report_type", F.lit("quarterly"))
+                # Flatten report struct
+                report_schema = df_quarterly.schema["_report"].dataType
+                if hasattr(report_schema, 'fields'):
+                    for field in report_schema.fields:
+                        df_quarterly = df_quarterly.withColumn(field.name, F.col(f"_report.`{field.name}`"))
+                df_quarterly = df_quarterly.drop("_report")
+                dfs.append(df_quarterly)
+
+        if not dfs:
+            return None
+
+        # Union all reports
+        result = dfs[0]
+        for df_part in dfs[1:]:
+            result = result.unionByName(df_part, allowMissingColumns=True)
+
+        # Normalize
+        return self._normalize_spark_df(result, data_type)
+
+    def _normalize_spark_df(self, df: DataFrame, data_type: DataType) -> DataFrame:
+        """
+        Apply normalization to a Spark DataFrame using SparkNormalizer.
+
+        Uses the same field mappings and type coercions as the Python path.
+
+        Args:
+            df: Raw Spark DataFrame
+            data_type: DataType for getting endpoint config
+
+        Returns:
+            Normalized DataFrame
+        """
+        from datapipelines.base.normalizer import SparkNormalizer
+
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+        endpoint = self._endpoints.get(endpoint_id) if endpoint_id else None
+
+        if not endpoint:
+            return df
+
+        # Get field mappings and type coercions from markdown config
+        field_mappings = self._get_field_mappings_for_endpoint(endpoint_id)
+        type_coercions = self._get_type_coercions_for_endpoint(endpoint_id)
+
+        normalizer = SparkNormalizer(self.spark)
+
+        # Apply field renaming
+        for source_col, target_col in field_mappings.items():
+            if source_col in df.columns and source_col != target_col:
+                df = df.withColumnRenamed(source_col, target_col)
+
+        # Apply type coercions using SparkNormalizer's safe casting
+        df = normalizer._apply_type_coercions(df, type_coercions)
+
+        # Apply date parsing for date columns
+        date_columns = self._get_date_columns_for_endpoint(endpoint_id)
+        df = normalizer._apply_date_parsing(df, date_columns, [])
+
+        return df
+
+    def _get_field_mappings_for_endpoint(self, endpoint_id: str) -> Dict[str, str]:
+        """Get source → target field mappings from endpoint schema."""
+        endpoint = self._endpoints.get(endpoint_id)
+        if not endpoint or not endpoint.schema:
+            return {}
+
+        mappings = {}
+        for field in endpoint.schema:
+            if field.source and field.source not in ('_computed', '_generated', '_key', '_param', '_na'):
+                mappings[field.source] = field.name
+        return mappings
+
+    def _get_type_coercions_for_endpoint(self, endpoint_id: str) -> Dict[str, str]:
+        """Get field → type coercions from endpoint schema."""
+        endpoint = self._endpoints.get(endpoint_id)
+        if not endpoint or not endpoint.schema:
+            return {}
+
+        coercions = {}
+        for field in endpoint.schema:
+            if field.coerce:
+                # Use target field name for coercion
+                coercions[field.name] = field.coerce
+        return coercions
+
+    def _get_date_columns_for_endpoint(self, endpoint_id: str) -> List[str]:
+        """Get date column names from endpoint schema."""
+        endpoint = self._endpoints.get(endpoint_id)
+        if not endpoint or not endpoint.schema:
+            return []
+
+        date_cols = []
+        for field in endpoint.schema:
+            if field.type == 'date' or (field.transform and 'to_date' in field.transform):
+                date_cols.append(field.name)
+        return date_cols
+
+    # =========================================================================
     # HELPER METHODS
     # =========================================================================
 

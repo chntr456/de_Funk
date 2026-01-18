@@ -422,7 +422,7 @@ class IngestorEngine:
             # Force Python GC to release any remaining references
             gc.collect()
 
-    def _ingest_with_spark_csv(
+    def _ingest_with_spark_native(
         self,
         work_item: str,
         table_name: str,
@@ -432,12 +432,14 @@ class IngestorEngine:
         date_column: Optional[str] = None
     ) -> WorkItemResult:
         """
-        Ingest work item using Spark's native CSV reader.
+        Ingest work item using Spark's native file readers (CSV or JSON).
 
-        This is the fast path for large CSV files:
-        - CSV parsing is distributed across all executors
+        This is the fast path for bulk ingestion:
+        - File parsing distributed across all executors
         - No data flows through Python/driver
         - Single DataFrame write to Delta
+
+        Works with any provider that implements fetch_as_dataframe().
 
         Args:
             work_item: Work item identifier
@@ -451,11 +453,11 @@ class IngestorEngine:
             WorkItemResult with status and record count
         """
         try:
-            # Get DataFrame directly from provider (Spark CSV read)
+            # Get DataFrame directly from provider (Spark native read)
             df = self.provider.fetch_as_dataframe(work_item)
 
             if df is None:
-                logger.warning(f"{work_item}: Spark CSV path returned None, falling back")
+                logger.warning(f"{work_item}: Spark native path returned None, falling back")
                 return None  # Signal to use fallback path
 
             # Validate partitions
@@ -478,7 +480,7 @@ class IngestorEngine:
             # Get count after write (avoids counting twice)
             total_records = df.count()
 
-            logger.info(f"{work_item}: Spark CSV complete - {total_records:,} records")
+            logger.info(f"{work_item}: Spark native complete - {total_records:,} records")
 
             # Cleanup
             try:
@@ -495,12 +497,17 @@ class IngestorEngine:
             )
 
         except Exception as e:
-            logger.error(f"Spark CSV failed for {work_item}: {e}", exc_info=True)
+            logger.error(f"Spark native failed for {work_item}: {e}", exc_info=True)
             return WorkItemResult(
                 work_item=work_item,
                 success=False,
                 error=str(e)[:200]
             )
+
+    # Alias for backward compatibility
+    def _ingest_with_spark_csv(self, *args, **kwargs) -> WorkItemResult:
+        """Alias for _ingest_with_spark_native (backward compatibility)."""
+        return self._ingest_with_spark_native(*args, **kwargs)
 
     def _ingest_work_item_async(
         self,
@@ -537,13 +544,25 @@ class IngestorEngine:
 
             logger.info(f"{work_item}: write_strategy={write_strategy}, table={table_name}")
 
-            # Try Spark CSV path first (distributed, no Python batching)
+            # Try Spark native reading first (distributed, no Python batching)
+            # Check for CSV support (Socrata providers)
             if (max_records is None and
                 hasattr(self.provider, 'supports_spark_csv') and
                 self.provider.supports_spark_csv(work_item)):
 
                 logger.info(f"{work_item}: Using Spark CSV path (distributed)")
                 return self._ingest_with_spark_csv(
+                    work_item, table_name, partitions,
+                    write_strategy, key_columns, date_column
+                )
+
+            # Check for JSON support (Alpha Vantage provider)
+            if (max_records is None and
+                hasattr(self.provider, 'supports_spark_json') and
+                self.provider.supports_spark_json(work_item)):
+
+                logger.info(f"{work_item}: Using Spark JSON path (distributed)")
+                return self._ingest_with_spark_native(
                     work_item, table_name, partitions,
                     write_strategy, key_columns, date_column
                 )
