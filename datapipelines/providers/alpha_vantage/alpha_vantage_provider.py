@@ -530,18 +530,25 @@ class AlphaVantageProvider(BaseProvider):
         field_mappings = self.get_field_mappings(endpoint_id) if endpoint_id else {}
         type_coercions = self.get_type_coercions(endpoint_id) if endpoint_id else {}
 
+        # Debug logging
+        logger.info(f"[{endpoint_id}] field_mappings: {len(field_mappings)}, type_coercions: {len(type_coercions)}")
+
         # Apply field mappings from schema (source -> target)
         rename_map = {src: tgt for src, tgt in field_mappings.items()
                       if src in pdf.columns}
+        logger.info(f"[{endpoint_id}] rename_map applied: {len(rename_map)} columns")
         pdf = pdf.rename(columns=rename_map)
 
         # Apply type coercions from schema
+        coerced_count = 0
         for field_name, coerce_type in type_coercions.items():
             if field_name in pdf.columns:
+                coerced_count += 1
                 if coerce_type in ('long', 'int', 'integer'):
                     pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('Int64')
                 elif coerce_type in ('double', 'float'):
                     pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('float64')
+        logger.info(f"[{endpoint_id}] coerced {coerced_count} columns")
 
         # Add metadata
         pdf['asset_type'] = 'stocks'
@@ -567,6 +574,17 @@ class AlphaVantageProvider(BaseProvider):
         # Get field mappings and coercions from markdown schema
         field_mappings = self.get_field_mappings(endpoint_id)
         type_coercions = self.get_type_coercions(endpoint_id)
+
+        # Debug: log what we got
+        logger.info(f"[{endpoint_id}] field_mappings count: {len(field_mappings)}, type_coercions count: {len(type_coercions)}")
+        if not field_mappings:
+            logger.warning(f"[{endpoint_id}] No field mappings found - check if endpoint schema is loaded")
+            # Check if endpoint exists
+            endpoint = self._endpoints.get(endpoint_id)
+            if endpoint:
+                logger.info(f"[{endpoint_id}] Endpoint found, schema fields: {len(endpoint.schema) if endpoint.schema else 0}")
+            else:
+                logger.warning(f"[{endpoint_id}] Endpoint NOT found in _endpoints. Available: {list(self._endpoints.keys())[:5]}")
 
         # Apply field mappings (source -> target)
         rename_map = {src: tgt for src, tgt in field_mappings.items()
