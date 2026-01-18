@@ -595,7 +595,9 @@ class AlphaVantageProvider(BaseProvider):
         for field_name, coerce_type in type_coercions.items():
             if field_name in pdf.columns:
                 if coerce_type in ('long', 'int', 'integer'):
-                    pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('Int64')
+                    # Round before casting to handle float values safely
+                    numeric_vals = pd.to_numeric(pdf[field_name], errors='coerce')
+                    pdf[field_name] = numeric_vals.round().astype('Int64')
                 elif coerce_type in ('double', 'float'):
                     pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('float64')
 
