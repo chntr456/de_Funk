@@ -64,6 +64,13 @@ class AlphaVantageProvider(BaseProvider):
     Configuration loaded from:
     - Data Sources/Providers/Alpha Vantage.md
     - Data Sources/Endpoints/Alpha Vantage/**/*.md
+
+    Features:
+    - Raw layer caching: When storage_path is set, raw API responses are saved
+      as JSON files to storage/raw/alpha_vantage/{endpoint}/{ticker}.json
+    - On subsequent runs, cached raw files are used instead of making API calls
+    - This mirrors the Socrata CSV caching pattern used by Chicago/Cook County providers
+    - Use force_api=True to bypass cache and always hit the API
     """
 
     PROVIDER_NAME = "Alpha Vantage"
@@ -80,7 +87,10 @@ class AlphaVantageProvider(BaseProvider):
         Args:
             spark: SparkSession
             docs_path: Path to repo root
-            storage_path: Path to storage root (for raw layer - automatic like Socrata)
+            storage_path: Path to storage root. When set, enables raw layer caching:
+                - Raw API responses saved to: {storage_path}/raw/alpha_vantage/{endpoint}/{ticker}.json
+                - On re-runs, cached raw files are used instead of API calls
+                - This avoids hitting rate limits when re-processing raw → bronze
         """
         # Tickers to process (set via set_tickers() before running)
         self._tickers: List[str] = []
@@ -233,6 +243,56 @@ class AlphaVantageProvider(BaseProvider):
             logger.warning(f"Failed to save raw response for {ticker}/{endpoint_id}: {e}")
             return None
 
+    def _load_raw_response(
+        self,
+        ticker: str,
+        endpoint_id: str
+    ) -> Optional[Any]:
+        """
+        Load raw API response from JSON file if it exists.
+
+        This enables re-processing from raw → bronze without hitting the API again.
+        Pattern mirrors Socrata CSV caching.
+
+        Args:
+            ticker: Ticker symbol
+            endpoint_id: API endpoint identifier
+
+        Returns:
+            Raw API response payload, or None if file doesn't exist
+        """
+        file_path = self._get_raw_path(endpoint_id, ticker)
+        if not file_path or not file_path.exists():
+            return None
+
+        try:
+            with open(file_path, 'r') as f:
+                raw_data = json.load(f)
+
+            # Extract the response payload (unwrap metadata wrapper)
+            payload = raw_data.get("response", raw_data)
+
+            logger.debug(f"Loaded raw response: {file_path}")
+            return payload
+
+        except Exception as e:
+            logger.warning(f"Failed to load raw response for {ticker}/{endpoint_id}: {e}")
+            return None
+
+    def has_raw_data(self, ticker: str, endpoint_id: str) -> bool:
+        """
+        Check if raw data exists for a ticker/endpoint combination.
+
+        Args:
+            ticker: Ticker symbol
+            endpoint_id: API endpoint identifier
+
+        Returns:
+            True if raw JSON file exists
+        """
+        file_path = self._get_raw_path(endpoint_id, ticker)
+        return file_path is not None and file_path.exists()
+
     # =========================================================================
     # TICKER MANAGEMENT
     # =========================================================================
@@ -266,12 +326,21 @@ class AlphaVantageProvider(BaseProvider):
         self,
         work_item: str,
         max_records: Optional[int] = None,
+        force_api: bool = False,
         **kwargs
     ) -> Generator[List[Dict], None, None]:
         """
         Fetch data for a data type, yielding batches of records.
 
         Iterates through tickers and fetches the specified data type for each.
+        If raw layer is enabled, will use cached raw JSON files when available
+        (similar to Socrata CSV caching pattern).
+
+        Args:
+            work_item: Data type to fetch (e.g., 'prices', 'reference')
+            max_records: Maximum records to return
+            force_api: If True, always hit API even if raw cache exists
+            **kwargs: Additional parameters passed to _fetch_single
         """
         data_type = self._get_data_type(work_item)
         if not data_type:
@@ -287,15 +356,29 @@ class AlphaVantageProvider(BaseProvider):
             logger.warning(f"No endpoint configured for: {work_item}")
             return
 
-        logger.info(f"Fetching {work_item} for {len(self._tickers)} tickers")
+        # Log cache status
+        if self._storage_path and not force_api:
+            cached_count = sum(1 for t in self._tickers if self.has_raw_data(t, endpoint_id))
+            logger.info(
+                f"Fetching {work_item} for {len(self._tickers)} tickers "
+                f"({cached_count} cached, {len(self._tickers) - cached_count} need API)"
+            )
+        else:
+            logger.info(f"Fetching {work_item} for {len(self._tickers)} tickers (API mode)")
 
         total_records = 0
+        from_cache = 0
+        from_api = 0
+
         for ticker in self._tickers:
             if max_records and total_records >= max_records:
                 logger.info(f"Reached max_records limit ({max_records})")
                 break
 
-            result = self._fetch_single(ticker, data_type, **kwargs)
+            # Track whether this came from cache
+            had_cache = self._storage_path and self.has_raw_data(ticker, endpoint_id) and not force_api
+
+            result = self._fetch_single(ticker, data_type, force_api=force_api, **kwargs)
 
             if not result.success:
                 logger.warning(f"Failed to fetch {work_item} for {ticker}: {result.error}")
@@ -305,9 +388,16 @@ class AlphaVantageProvider(BaseProvider):
                 records = self._convert_to_records(ticker, data_type, result.data)
                 if records:
                     total_records += len(records)
+                    if had_cache:
+                        from_cache += 1
+                    else:
+                        from_api += 1
                     yield records
 
-        logger.info(f"Fetched {total_records} records for {work_item}")
+        logger.info(
+            f"Fetched {total_records} records for {work_item} "
+            f"(from cache: {from_cache}, from API: {from_api})"
+        )
 
     def normalize(self, records: List[Dict], work_item: str) -> DataFrame:
         """Normalize raw records to a Spark DataFrame."""
@@ -619,9 +709,25 @@ class AlphaVantageProvider(BaseProvider):
         self,
         ticker: str,
         data_type: DataType,
+        force_api: bool = False,
         **kwargs
     ) -> FetchResult:
-        """Fetch a single data type for a ticker."""
+        """
+        Fetch a single data type for a ticker.
+
+        If raw layer is enabled (storage_path set), will check for existing
+        raw JSON files before making API calls. This mirrors the Socrata
+        CSV caching pattern.
+
+        Args:
+            ticker: Ticker symbol
+            data_type: Type of data to fetch
+            force_api: If True, always hit API even if raw exists
+            **kwargs: Additional parameters (outputsize, etc.)
+
+        Returns:
+            FetchResult with data or error
+        """
         endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
         if not endpoint_id:
             return FetchResult(
@@ -641,6 +747,26 @@ class AlphaVantageProvider(BaseProvider):
             )
 
         try:
+            # Check if raw data already exists (like Socrata CSV caching)
+            # This avoids hitting the API when re-processing raw → bronze
+            if self._storage_path and not force_api:
+                cached_payload = self._load_raw_response(ticker, endpoint_id)
+                if cached_payload is not None:
+                    logger.debug(f"Using cached raw for {ticker}/{endpoint_id}")
+                    # Extract data using response key from config
+                    response_key = endpoint.response_key
+                    if response_key:
+                        data = cached_payload.get(response_key, cached_payload)
+                    else:
+                        data = cached_payload
+                    return FetchResult(
+                        ticker=ticker,
+                        data_type=data_type,
+                        success=True,
+                        data=data
+                    )
+
+            # No cached data - make API request
             # Build query params from endpoint config
             params = dict(endpoint.default_query or {})
             params["symbol"] = ticker
@@ -891,9 +1017,33 @@ def create_alpha_vantage_provider(
     Args:
         spark: SparkSession
         docs_path: Path to repo root
-        storage_path: Path to storage root (enables raw layer when set)
+        storage_path: Path to storage root. When set, enables raw layer caching:
+            - First run: Fetches from API, saves raw JSON to storage/raw/alpha_vantage/
+            - Subsequent runs: Reads from cached raw JSON (no API calls)
+            - Use force_api=True on fetch() to bypass cache
 
     Returns:
         Configured AlphaVantageProvider
+
+    Example:
+        # With raw caching enabled
+        provider = create_alpha_vantage_provider(
+            spark=spark,
+            docs_path=repo_root,
+            storage_path=Path("/shared/storage")
+        )
+        provider.set_tickers(["AAPL", "MSFT"])
+
+        # First run: hits API, saves raw JSON
+        for batch in provider.fetch("prices"):
+            process(batch)
+
+        # Second run: reads from cached raw JSON (no API calls)
+        for batch in provider.fetch("prices"):
+            process(batch)
+
+        # Force API call even with cache
+        for batch in provider.fetch("prices", force_api=True):
+            process(batch)
     """
     return AlphaVantageProvider(spark=spark, docs_path=docs_path, storage_path=storage_path)
