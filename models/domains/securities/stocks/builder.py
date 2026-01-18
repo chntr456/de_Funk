@@ -74,7 +74,7 @@ class StocksBuilder(BaseModelBuilder):
         logger.info("  Computing technical indicators...")
 
         try:
-            from scripts.build.compute_technicals import compute_technicals
+            from models.domains.securities.stocks.technicals import compute_technicals
 
             # Compute technicals using native Spark windowing (no batching needed)
             rows_processed = compute_technicals(
