@@ -122,7 +122,7 @@ class BronzeSink:
                 writer = writer.partitionBy(*partitions)
             writer.save(str(base_path))
         else:
-            # Table exists - filter out dates that already exist
+            # Table exists - filter out records that already exist
             spark = df.sparkSession
 
             # Read existing schema and align new data to match types
@@ -137,24 +137,33 @@ class BronzeSink:
                         logger.info(f"Casting {field.name} from {field.dataType} to {existing_type}")
                         df = df.withColumn(field.name, col(field.name).cast(existing_type))
 
-            # Get date range of incoming data
-            date_stats = df.agg(
-                spark_min(col(date_column)).alias("min_date"),
-                spark_max(col(date_column)).alias("max_date")
-            ).collect()[0]
+            # Check if date_column exists for date-range optimization
+            has_date_column = date_column in df.columns
 
-            if date_stats["min_date"] is None:
-                # Empty DataFrame, nothing to append
-                return str(base_path)
+            if has_date_column:
+                # Use date-range optimization for time-series data
+                date_stats = df.agg(
+                    spark_min(col(date_column)).alias("min_date"),
+                    spark_max(col(date_column)).alias("max_date")
+                ).collect()[0]
 
-            # Read existing data for this date range to find what's new
-            existing_for_dedup = (existing_df
-                          .filter(
-                              (col(date_column) >= date_stats["min_date"]) &
-                              (col(date_column) <= date_stats["max_date"])
-                          )
-                          .select(*key_columns)
-                          .distinct())
+                if date_stats["min_date"] is None:
+                    # Empty DataFrame, nothing to append
+                    return str(base_path)
+
+                # Read existing data for this date range to find what's new
+                existing_for_dedup = (existing_df
+                              .filter(
+                                  (col(date_column) >= date_stats["min_date"]) &
+                                  (col(date_column) <= date_stats["max_date"])
+                              )
+                              .select(*key_columns)
+                              .distinct())
+            else:
+                # No date column - use simple key-based deduplication
+                # This handles endpoints like company_overview, income_statement, etc.
+                logger.debug(f"No date_column '{date_column}' found, using key-based deduplication")
+                existing_for_dedup = existing_df.select(*key_columns).distinct()
 
             # Anti-join to find only new records
             new_records = df.join(existing_for_dedup, on=key_columns, how="left_anti")
