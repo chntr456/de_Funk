@@ -38,17 +38,14 @@ key_columns: [ticker, fiscal_date_ending, report_type]
 date_column: fiscal_date_ending
 
 # Facet Configuration - drives generic facet behavior
-# No need for endpoint-specific facet code
 facet_config:
-  # Response arrays to extract and their report_type values
   response_arrays:
     annualReports: annual
     quarterlyReports: quarterly
-  # Fixed fields not in schema mappings
   fixed_fields:
-    ticker: symbol  # From response root
-    fiscal_date_ending: fiscalDateEnding  # From report
-    reported_currency: reportedCurrency  # From report
+    ticker: symbol
+    fiscal_date_ending: fiscalDateEnding
+    reported_currency: reportedCurrency
 
 # Schema
 # Format: [field_name, type, source_field, nullable, description, {options}]
@@ -60,7 +57,7 @@ schema:
   - [report_type, string, _generated, false, "annual or quarterly"]
   - [reported_currency, string, reportedCurrency, true, "Reporting currency"]
 
-  # Revenue and gross profit (require coercion from string)
+  # Revenue and gross profit
   - [gross_profit, long, grossProfit, true, "Gross profit", {coerce: long}]
   - [total_revenue, long, totalRevenue, true, "Total revenue", {coerce: long}]
   - [cost_of_revenue, long, costOfRevenue, true, "Cost of revenue", {coerce: long}]
@@ -71,11 +68,23 @@ schema:
   - [sg_and_a, long, sellingGeneralAndAdministrative, true, "SG&A expenses", {coerce: long}]
   - [research_and_development, long, researchAndDevelopment, true, "R&D expenses", {coerce: long}]
   - [operating_expenses, long, operatingExpenses, true, "Total operating expenses", {coerce: long}]
+  - [depreciation, long, depreciation, true, "Depreciation", {coerce: long}]
+  - [depreciation_and_amortization, long, depreciationAndAmortization, true, "D&A", {coerce: long}]
+
+  # Interest and investment income
+  - [investment_income_net, long, investmentIncomeNet, true, "Net investment income", {coerce: long}]
+  - [net_interest_income, long, netInterestIncome, true, "Net interest income", {coerce: long}]
+  - [interest_income, long, interestIncome, true, "Interest income", {coerce: long}]
   - [interest_expense, long, interestExpense, true, "Interest expense", {coerce: long}]
+  - [non_interest_income, long, nonInterestIncome, true, "Non-interest income", {coerce: long}]
+  - [other_non_operating_income, long, otherNonOperatingIncome, true, "Other non-op income", {coerce: long}]
+  - [interest_and_debt_expense, long, interestAndDebtExpense, true, "Interest and debt expense", {coerce: long}]
 
   # Net income
   - [income_before_tax, long, incomeBeforeTax, true, "Pre-tax income", {coerce: long}]
   - [income_tax_expense, long, incomeTaxExpense, true, "Income tax expense", {coerce: long}]
+  - [net_income_from_continuing_ops, long, netIncomeFromContinuingOperations, true, "Net income from continuing ops", {coerce: long}]
+  - [comprehensive_income, long, comprehensiveIncomeNetOfTax, true, "Comprehensive income", {coerce: long}]
   - [net_income, long, netIncome, true, "Net income", {coerce: long}]
 
   # EBIT/EBITDA

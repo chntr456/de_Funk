@@ -525,29 +525,33 @@ class AlphaVantageProvider(BaseProvider):
         if pdf.empty:
             return self.spark.createDataFrame([], samplingRatio=1.0)
 
-        # Get field mappings from endpoint schema
+        # Get field mappings and coercions from endpoint schema
         endpoint_id = DATATYPE_TO_ENDPOINT.get(DataType.REFERENCE)
         field_mappings = self.get_field_mappings(endpoint_id) if endpoint_id else {}
+        type_coercions = self.get_type_coercions(endpoint_id) if endpoint_id else {}
+
+        # Apply field mappings from schema (source -> target)
+        rename_map = {src: tgt for src, tgt in field_mappings.items()
+                      if src in pdf.columns}
+        pdf = pdf.rename(columns=rename_map)
+
+        # Apply type coercions from schema
+        for field_name, coerce_type in type_coercions.items():
+            if field_name in pdf.columns:
+                if coerce_type in ('long', 'int', 'integer'):
+                    pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('Int64')
+                elif coerce_type in ('double', 'float'):
+                    pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('float64')
 
         # Add metadata
         pdf['asset_type'] = 'stocks'
         pdf['snapshot_date'] = datetime.now().date()
         pdf['ingestion_timestamp'] = datetime.now()
 
-        # Apply field mappings from schema
-        rename_map = {src: tgt for src, tgt in field_mappings.items()
-                      if src in pdf.columns}
-        pdf = pdf.rename(columns=rename_map)
-
-        # Convert numeric fields
-        for field in ['market_cap', 'shares_outstanding']:
-            if field in pdf.columns:
-                pdf[field] = pd.to_numeric(pdf[field], errors='coerce')
-
         return self.spark.createDataFrame(pdf, samplingRatio=1.0)
 
     def _normalize_financials(self, records: List[Dict], data_type: DataType) -> DataFrame:
-        """Normalize financial statement records."""
+        """Normalize financial statement records using schema from markdown."""
         import pandas as pd
         from datetime import datetime
 
@@ -555,10 +559,35 @@ class AlphaVantageProvider(BaseProvider):
         if pdf.empty:
             return self.spark.createDataFrame([], samplingRatio=1.0)
 
-        pdf['ingestion_timestamp'] = datetime.now()
+        # Get endpoint config
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+        if not endpoint_id:
+            return self.spark.createDataFrame(pdf, samplingRatio=1.0)
 
-        if 'fiscalDateEnding' in pdf.columns:
-            pdf = pdf.rename(columns={'fiscalDateEnding': 'fiscal_date_ending'})
+        # Get field mappings and coercions from markdown schema
+        field_mappings = self.get_field_mappings(endpoint_id)
+        type_coercions = self.get_type_coercions(endpoint_id)
+
+        # Apply field mappings (source -> target)
+        rename_map = {src: tgt for src, tgt in field_mappings.items()
+                      if src in pdf.columns}
+        pdf = pdf.rename(columns=rename_map)
+
+        # Apply type coercions
+        for field_name, coerce_type in type_coercions.items():
+            if field_name in pdf.columns:
+                if coerce_type in ('long', 'int', 'integer'):
+                    pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('Int64')
+                elif coerce_type in ('double', 'float'):
+                    pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('float64')
+
+        # Parse date fields
+        if 'fiscal_date_ending' in pdf.columns:
+            pdf['fiscal_date_ending'] = pd.to_datetime(pdf['fiscal_date_ending'], errors='coerce')
+
+        # Add metadata
+        pdf['ingestion_timestamp'] = datetime.now()
+        pdf['snapshot_date'] = datetime.now().date()
 
         return self.spark.createDataFrame(pdf, samplingRatio=1.0)
 

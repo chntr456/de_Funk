@@ -374,3 +374,26 @@ class BaseProvider(ABC):
             if field.source and field.source not in ('_computed', '_generated'):
                 mappings[field.source] = field.name
         return mappings
+
+    def get_type_coercions(self, work_item: str) -> Dict[str, str]:
+        """
+        Get type coercion rules from endpoint schema.
+
+        Returns mapping of target field name to coercion type (e.g., 'long', 'double').
+        Only includes fields with explicit {coerce: type} in schema.
+
+        Args:
+            work_item: Work item identifier
+
+        Returns:
+            Dict mapping field names to coercion types
+        """
+        endpoint = self._endpoints.get(work_item)
+        if not endpoint or not endpoint.schema:
+            return {}
+
+        coercions = {}
+        for field in endpoint.schema:
+            if field.coerce:
+                coercions[field.name] = field.coerce
+        return coercions

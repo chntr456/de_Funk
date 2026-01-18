@@ -57,9 +57,10 @@ schema:
   - [report_type, string, _generated, false, "annual or quarterly"]
   - [reported_currency, string, reportedCurrency, true, "Reporting currency"]
 
-  # Operating activities (require coercion from string)
+  # Operating activities
   - [operating_cashflow, long, operatingCashflow, true, "Cash from operations", {coerce: long}]
   - [payments_for_operating_activities, long, paymentsForOperatingActivities, true, "Operating payments", {coerce: long}]
+  - [proceeds_from_operating_activities, long, proceedsFromOperatingActivities, true, "Operating proceeds", {coerce: long}]
   - [change_in_operating_liabilities, long, changeInOperatingLiabilities, true, "Change in op liabilities", {coerce: long}]
   - [change_in_operating_assets, long, changeInOperatingAssets, true, "Change in op assets", {coerce: long}]
   - [depreciation_depletion_amortization, long, depreciationDepletionAndAmortization, true, "D&A", {coerce: long}]
@@ -73,14 +74,23 @@ schema:
 
   # Financing activities
   - [cashflow_from_financing, long, cashflowFromFinancing, true, "Cash from financing", {coerce: long}]
+  - [proceeds_from_short_term_debt, long, proceedsFromRepaymentsOfShortTermDebt, true, "Short-term debt proceeds", {coerce: long}]
+  - [payments_for_repurchase_common, long, paymentsForRepurchaseOfCommonStock, true, "Buyback payments", {coerce: long}]
+  - [payments_for_repurchase_equity, long, paymentsForRepurchaseOfEquity, true, "Equity repurchase", {coerce: long}]
+  - [payments_for_repurchase_preferred, long, paymentsForRepurchaseOfPreferredStock, true, "Preferred repurchase", {coerce: long}]
   - [dividend_payout, long, dividendPayout, true, "Dividends paid", {coerce: long}]
   - [dividend_payout_common, long, dividendPayoutCommonStock, true, "Common dividends", {coerce: long}]
   - [dividend_payout_preferred, long, dividendPayoutPreferredStock, true, "Preferred dividends", {coerce: long}]
-  - [proceeds_from_stock_issuance, long, proceedsFromIssuanceOfCommonStock, true, "Stock issuance proceeds", {coerce: long}]
-  - [proceeds_from_stock_repurchase, long, paymentsForRepurchaseOfCommonStock, true, "Buyback payments", {coerce: long}]
+  - [proceeds_from_common_stock, long, proceedsFromIssuanceOfCommonStock, true, "Stock issuance proceeds", {coerce: long}]
+  - [proceeds_from_long_term_debt, long, proceedsFromIssuanceOfLongTermDebtAndCapitalSecuritiesNet, true, "LT debt proceeds", {coerce: long}]
+  - [proceeds_from_preferred_stock, long, proceedsFromIssuanceOfPreferredStock, true, "Preferred stock proceeds", {coerce: long}]
+  - [proceeds_from_repurchase_equity, long, proceedsFromRepurchaseOfEquity, true, "Equity repurchase proceeds", {coerce: long}]
+  - [proceeds_from_treasury_stock, long, proceedsFromSaleOfTreasuryStock, true, "Treasury stock proceeds", {coerce: long}]
 
   # Net change
   - [net_change_in_cash, long, changeInCashAndCashEquivalents, true, "Net change in cash", {coerce: long}]
+  - [change_in_exchange_rate, long, changeInExchangeRate, true, "FX impact", {coerce: long}]
+  - [net_income, long, netIncome, true, "Net income", {coerce: long}]
 
   # Computed fields
   - [free_cash_flow, long, _computed, true, "Operating cash flow minus CapEx", {expr: "operating_cashflow - abs(capital_expenditures)"}]
