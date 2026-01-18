@@ -400,7 +400,15 @@ class AlphaVantageProvider(BaseProvider):
         )
 
     def normalize(self, records: List[Dict], work_item: str) -> DataFrame:
-        """Normalize raw records to a Spark DataFrame."""
+        """
+        Normalize raw records to a Spark DataFrame.
+
+        Uses SparkNormalizer for standard operations (field mapping, type coercion,
+        date parsing, metadata). This is the same pattern used by Chicago, Cook County,
+        and other providers.
+        """
+        from datapipelines.base.normalizer import SparkNormalizer
+
         if not records:
             return self.spark.createDataFrame([], samplingRatio=1.0)
 
@@ -408,14 +416,24 @@ class AlphaVantageProvider(BaseProvider):
         if not data_type:
             return self.spark.createDataFrame(records, samplingRatio=1.0)
 
+        # Get endpoint config for field mappings and type coercions
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+        field_mappings = self.get_field_mappings(endpoint_id) if endpoint_id else {}
+        type_coercions = self.get_type_coercions(endpoint_id) if endpoint_id else {}
+
+        logger.info(f"[{endpoint_id}] field_mappings: {len(field_mappings)}, type_coercions: {len(type_coercions)}")
+
+        # Use standard normalizer
+        normalizer = SparkNormalizer(self.spark)
+
         try:
             if data_type == DataType.PRICES:
-                return self._normalize_prices(records, work_item)
+                return self._normalize_prices(normalizer, records, field_mappings, type_coercions)
             elif data_type == DataType.REFERENCE:
-                return self._normalize_reference(records, work_item)
+                return self._normalize_reference(normalizer, records, field_mappings, type_coercions)
             elif data_type in (DataType.INCOME_STATEMENT, DataType.BALANCE_SHEET,
                               DataType.CASH_FLOW, DataType.EARNINGS):
-                return self._normalize_financials(records, data_type)
+                return self._normalize_financials(normalizer, records, field_mappings, type_coercions)
         except Exception as e:
             logger.warning(f"Failed to normalize {work_item}: {e}", exc_info=True)
 
@@ -536,171 +554,93 @@ class AlphaVantageProvider(BaseProvider):
     # NORMALIZATION METHODS
     # =========================================================================
 
-    def _normalize_prices(self, records: List[Dict], work_item: str) -> DataFrame:
-        """Normalize price records using pure Spark (no pandas)."""
-        from pyspark.sql.types import (
-            StructType, StructField, StringType, DateType, DoubleType,
-            LongType, BooleanType, IntegerType
+    def _normalize_prices(
+        self,
+        normalizer,
+        records: List[Dict],
+        field_mappings: Dict[str, str],
+        type_coercions: Dict[str, str]
+    ) -> DataFrame:
+        """Normalize price records using SparkNormalizer."""
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import LongType, DoubleType
+
+        # Standard numeric fields for prices
+        price_coercions = {
+            'open': 'double', 'high': 'double', 'low': 'double', 'close': 'double',
+            'adjusted_close': 'double', 'volume': 'double',
+            'dividend_amount': 'double', 'split_coefficient': 'double'
+        }
+        # Merge with endpoint-defined coercions
+        all_coercions = {**price_coercions, **type_coercions}
+
+        # Computed columns for prices
+        computed = {
+            'year': 'year(trade_date)',
+            'month': 'month(trade_date)',
+            'volume_weighted': '(high + low + close) / 3.0'
+        }
+
+        # Normalize with standard utility
+        df = normalizer.normalize(
+            records,
+            field_mappings=field_mappings,
+            type_coercions=all_coercions,
+            date_columns=['trade_date'],
+            computed_columns=computed,
+            add_metadata=False,  # Prices don't need ingestion metadata
+            metadata_columns={'asset_type': 'stocks'}
         )
-        from pyspark.sql.functions import (
-            col, lit, to_date, year, month
-        )
 
-        if not records:
-            return self.spark.createDataFrame([], samplingRatio=1.0)
+        # Add missing fields specific to prices schema
+        df = df.withColumn('transactions', F.lit(None).cast(LongType()))
+        df = df.withColumn('otc', F.lit(False))
 
-        # Create Spark DataFrame directly from records
-        df = self.spark.createDataFrame(records)
-
-        # Get field mappings from endpoint schema
-        endpoint_id = DATATYPE_TO_ENDPOINT.get(DataType.PRICES)
-        field_mappings = self.get_field_mappings(endpoint_id) if endpoint_id else {}
-
-        # Apply field mappings (rename columns)
-        df_columns = df.columns
-        for src, tgt in field_mappings.items():
-            if src in df_columns:
-                df = df.withColumnRenamed(src, tgt)
-
-        # Parse trade_date and extract year/month
-        df = (df
-              .withColumn('trade_date', to_date(col('trade_date')))
-              .withColumn('year', year(col('trade_date')))
-              .withColumn('month', month(col('trade_date'))))
-
-        # Convert numeric fields to DoubleType
-        df_columns = df.columns
-        numeric_fields = ['open', 'high', 'low', 'close', 'adjusted_close',
-                         'volume', 'dividend_amount', 'split_coefficient']
-        for field in numeric_fields:
-            if field in df_columns:
-                df = df.withColumn(field, col(field).cast(DoubleType()))
-
-        # Calculate VWAP approximation (typical price)
-        df_columns = df.columns
-        if all(f in df_columns for f in ['high', 'low', 'close']):
-            df = df.withColumn('volume_weighted',
-                              ((col('high') + col('low') + col('close')) / lit(3.0)).cast(DoubleType()))
-        else:
-            df = df.withColumn('volume_weighted', lit(None).cast(DoubleType()))
-
-        # Add missing fields
-        df = df.withColumn('transactions', lit(None).cast(LongType()))
-        df = df.withColumn('otc', lit(False))
-        if 'asset_type' not in df.columns:
-            df = df.withColumn('asset_type', lit('stocks'))
-
-        # Select final columns in order, adding any missing as null
+        # Final column selection
         final_cols = ['trade_date', 'ticker', 'asset_type', 'year', 'month',
                       'open', 'high', 'low', 'close', 'volume', 'volume_weighted',
                       'transactions', 'otc', 'adjusted_close', 'dividend_amount',
                       'split_coefficient']
-        df_columns = df.columns
+
         for c in final_cols:
-            if c not in df_columns:
-                df = df.withColumn(c, lit(None))
+            if c not in df.columns:
+                df = df.withColumn(c, F.lit(None))
 
         return df.select(*final_cols)
 
-    def _normalize_reference(self, records: List[Dict], work_item: str) -> DataFrame:
-        """Normalize reference/overview records using pure Spark (no pandas)."""
-        from pyspark.sql.functions import col, lit, current_timestamp, current_date
-        from pyspark.sql.types import DoubleType
+    def _normalize_reference(
+        self,
+        normalizer,
+        records: List[Dict],
+        field_mappings: Dict[str, str],
+        type_coercions: Dict[str, str]
+    ) -> DataFrame:
+        """Normalize reference/overview records using SparkNormalizer."""
+        # Use standard normalizer with endpoint-defined mappings
+        return normalizer.normalize(
+            records,
+            field_mappings=field_mappings,
+            type_coercions=type_coercions,
+            add_metadata=True,
+            metadata_columns={'asset_type': 'stocks'}
+        )
 
-        if not records:
-            return self.spark.createDataFrame([], samplingRatio=1.0)
-
-        # Create Spark DataFrame directly from records
-        df = self.spark.createDataFrame(records)
-
-        # Get field mappings and coercions from endpoint schema
-        endpoint_id = DATATYPE_TO_ENDPOINT.get(DataType.REFERENCE)
-        field_mappings = self.get_field_mappings(endpoint_id) if endpoint_id else {}
-        type_coercions = self.get_type_coercions(endpoint_id) if endpoint_id else {}
-
-        logger.info(f"[{endpoint_id}] field_mappings: {len(field_mappings)}, type_coercions: {len(type_coercions)}")
-
-        # Apply field mappings (rename columns)
-        df_columns = df.columns
-        rename_count = 0
-        for src, tgt in field_mappings.items():
-            if src in df_columns:
-                df = df.withColumnRenamed(src, tgt)
-                rename_count += 1
-        logger.info(f"[{endpoint_id}] renamed {rename_count} columns")
-
-        # Apply type coercions - cast to DoubleType for all numeric fields
-        # Spark cast() handles nulls/invalid values gracefully (returns null)
-        df_columns = df.columns  # Refresh after renames
-        coerced_count = 0
-        for field_name, coerce_type in type_coercions.items():
-            if field_name in df_columns:
-                if coerce_type in ('long', 'int', 'integer', 'double', 'float'):
-                    df = df.withColumn(field_name, col(field_name).cast(DoubleType()))
-                    coerced_count += 1
-        logger.info(f"[{endpoint_id}] coerced {coerced_count} columns to DoubleType")
-
-        # Add metadata
-        df = (df
-              .withColumn('asset_type', lit('stocks'))
-              .withColumn('snapshot_date', current_date())
-              .withColumn('ingestion_timestamp', current_timestamp()))
-
-        return df
-
-    def _normalize_financials(self, records: List[Dict], data_type: DataType) -> DataFrame:
-        """Normalize financial statement records using pure Spark (no pandas)."""
-        from pyspark.sql.functions import col, lit, current_timestamp, current_date, to_date
-        from pyspark.sql.types import DoubleType, DateType
-
-        if not records:
-            return self.spark.createDataFrame([], samplingRatio=1.0)
-
-        # Get endpoint config
-        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
-        if not endpoint_id:
-            return self.spark.createDataFrame(records)
-
-        # Create Spark DataFrame directly from records
-        df = self.spark.createDataFrame(records)
-
-        # Get field mappings and coercions from markdown schema
-        field_mappings = self.get_field_mappings(endpoint_id)
-        type_coercions = self.get_type_coercions(endpoint_id)
-
-        logger.info(f"[{endpoint_id}] field_mappings count: {len(field_mappings)}, type_coercions count: {len(type_coercions)}")
-
-        # Apply field mappings (rename columns)
-        df_columns = df.columns
-        rename_count = 0
-        for src, tgt in field_mappings.items():
-            if src in df_columns:
-                df = df.withColumnRenamed(src, tgt)
-                rename_count += 1
-        logger.info(f"[{endpoint_id}] renamed {rename_count} columns")
-
-        # Apply type coercions - cast to DoubleType for all numeric fields
-        # Spark cast() handles nulls/invalid values gracefully (returns null)
-        df_columns = df.columns  # Refresh after renames
-        coerced_count = 0
-        for field_name, coerce_type in type_coercions.items():
-            if field_name in df_columns:
-                if coerce_type in ('long', 'int', 'integer', 'double', 'float'):
-                    df = df.withColumn(field_name, col(field_name).cast(DoubleType()))
-                    coerced_count += 1
-        logger.info(f"[{endpoint_id}] coerced {coerced_count} columns to DoubleType")
-
-        # Parse date fields using Spark to_date
-        df_columns = df.columns
-        if 'fiscal_date_ending' in df_columns:
-            df = df.withColumn('fiscal_date_ending', to_date(col('fiscal_date_ending')))
-
-        # Add metadata
-        df = (df
-              .withColumn('ingestion_timestamp', current_timestamp())
-              .withColumn('snapshot_date', current_date()))
-
-        return df
+    def _normalize_financials(
+        self,
+        normalizer,
+        records: List[Dict],
+        field_mappings: Dict[str, str],
+        type_coercions: Dict[str, str]
+    ) -> DataFrame:
+        """Normalize financial statement records using SparkNormalizer."""
+        # Use standard normalizer with endpoint-defined mappings
+        return normalizer.normalize(
+            records,
+            field_mappings=field_mappings,
+            type_coercions=type_coercions,
+            date_columns=['fiscal_date_ending'],
+            add_metadata=True
+        )
 
     # =========================================================================
     # API REQUEST HELPERS
