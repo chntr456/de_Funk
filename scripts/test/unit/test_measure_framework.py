@@ -13,9 +13,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
-from models.base.measures.base_measure import BaseMeasure, MeasureType
-from models.base.measures.registry import MeasureRegistry
-from models.base.measures.executor import MeasureExecutor
+from models.measures.base_measure import BaseMeasure, MeasureType
+from models.measures.registry import MeasureRegistry
+from models.measures.executor import MeasureExecutor
 from models.measures.simple import SimpleMeasure
 from models.measures.computed import ComputedMeasure
 

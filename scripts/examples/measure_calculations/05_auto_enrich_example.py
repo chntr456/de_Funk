@@ -45,7 +45,7 @@ def example_simple_auto_enrich():
     equity_model = session.get_model_instance('equity')
 
     # Create measure executor
-    from models.base.measures.executor import MeasureExecutor
+    from models.measures.executor import MeasureExecutor
     executor = MeasureExecutor(equity_model, backend='duckdb')
 
     print("Executing: avg_close_by_exchange")
@@ -87,7 +87,7 @@ def example_computed_auto_enrich():
 
     equity_model = session.get_model_instance('equity')
 
-    from models.base.measures.executor import MeasureExecutor
+    from models.measures.executor import MeasureExecutor
     executor = MeasureExecutor(equity_model, backend='duckdb')
 
     print("Executing: market_cap_by_exchange")
@@ -130,7 +130,7 @@ def example_multi_column_enrich():
 
     equity_model = session.get_model_instance('equity')
 
-    from models.base.measures.executor import MeasureExecutor
+    from models.measures.executor import MeasureExecutor
     executor = MeasureExecutor(equity_model, backend='duckdb')
 
     print("Executing: avg_volume_by_company")
@@ -195,7 +195,7 @@ def example_inspect_enrichment():
     print()
 
     # Show measure configuration
-    from models.base.measures.executor import MeasureExecutor
+    from models.measures.executor import MeasureExecutor
     executor = MeasureExecutor(equity_model, backend='duckdb')
 
     measure_info = executor.get_measure_info('avg_close_by_exchange')

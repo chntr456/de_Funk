@@ -16,7 +16,7 @@ repo_root = get_repo_root()
 
 from core.context import RepoContext
 from models.api.session import UniversalSession
-from models.base.measures.executor import MeasureExecutor
+from models.measures.executor import MeasureExecutor
 
 
 def demo_measure_config():

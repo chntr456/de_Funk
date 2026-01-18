@@ -6,8 +6,8 @@ Handles measures that require custom expressions before aggregation.
 
 from typing import Dict, Any
 
-from models.base.measures.base_measure import BaseMeasure, MeasureType
-from models.base.measures.registry import MeasureRegistry
+from models.measures.base_measure import BaseMeasure, MeasureType
+from models.measures.registry import MeasureRegistry
 from models.base.backend.sql_builder import SQLBuilder
 
 

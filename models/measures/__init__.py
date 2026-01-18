@@ -1,15 +1,24 @@
 """
-General-purpose measure implementations.
+Measure Framework - Unified measure system.
 
-Contains measure types that apply across all domains:
-- SimpleMeasure: Direct aggregations (avg, sum, min, max, count)
-- ComputedMeasure: Expression-based calculations
+Contains:
+- Base classes: BaseMeasure, MeasureType enum
+- Registry: MeasureRegistry for dynamic type registration
+- Executor: MeasureExecutor for running measures
+- Implementations: SimpleMeasure, ComputedMeasure
 """
 
+from .base_measure import BaseMeasure, MeasureType
+from .registry import MeasureRegistry
+from .executor import MeasureExecutor
 from .simple import SimpleMeasure
 from .computed import ComputedMeasure
 
 __all__ = [
+    'BaseMeasure',
+    'MeasureType',
+    'MeasureRegistry',
+    'MeasureExecutor',
     'SimpleMeasure',
     'ComputedMeasure',
 ]

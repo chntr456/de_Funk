@@ -6,8 +6,8 @@ Handles basic aggregation functions: AVG, SUM, MIN, MAX, COUNT, etc.
 
 from typing import Dict, Any, List
 
-from models.base.measures.base_measure import BaseMeasure, MeasureType
-from models.base.measures.registry import MeasureRegistry
+from models.measures.base_measure import BaseMeasure, MeasureType
+from models.measures.registry import MeasureRegistry
 from models.base.backend.sql_builder import SQLBuilder
 
 

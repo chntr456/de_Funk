@@ -142,7 +142,7 @@ class BaseModel:
         all types of measures (simple, computed, weighted, etc.).
         """
         if self._measure_executor is None:
-            from models.base.measures.executor import MeasureExecutor
+            from models.measures.executor import MeasureExecutor
             self._measure_executor = MeasureExecutor(self, backend=self.backend)
         return self._measure_executor
 
