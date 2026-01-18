@@ -510,6 +510,9 @@ class SocrataBaseProvider(BaseProvider):
         """
         Create Spark DataFrame from records using endpoint schema.
 
+        Uses SparkNormalizer for core operations (field mapping, type coercion)
+        with Socrata-specific date parsing.
+
         Args:
             records: List of record dicts from API
             endpoint: Endpoint configuration with schema
@@ -517,42 +520,48 @@ class SocrataBaseProvider(BaseProvider):
         Returns:
             Spark DataFrame
         """
+        from datapipelines.base.normalizer import SparkNormalizer
+
         if not endpoint.schema:
             return self.spark.createDataFrame(records, samplingRatio=1.0)
 
-        # Map source fields to target fields (keep as strings initially)
-        transformed_records = []
-        for record in records:
-            transformed = {}
-            for field_def in endpoint.schema:
-                source_val = record.get(field_def.source)
-                transformed[field_def.name] = str(source_val) if source_val is not None else None
-            transformed_records.append(transformed)
+        # Extract field mappings and type coercions from endpoint schema
+        field_mappings = {}
+        type_coercions = {}
+        date_columns = []
+        timestamp_columns = []
 
-        # Create DataFrame with all strings first
-        string_schema = StructType([
-            StructField(f.name, StringType(), True) for f in endpoint.schema
-        ])
-        df = self.spark.createDataFrame(transformed_records, string_schema)
-
-        # Cast columns to target types
         for field_def in endpoint.schema:
+            # Field mapping (source -> target)
+            if field_def.source:
+                field_mappings[field_def.source] = field_def.name
+
+            # Type coercion (for non-string, non-date types)
             target_type = field_def.type.lower()
-            if target_type == 'string':
-                continue
-            elif target_type in ('int', 'long'):
-                df = df.withColumn(field_def.name,
-                    F.col(field_def.name).try_cast('double').cast(target_type))
-            elif target_type in ('double', 'float'):
-                df = df.withColumn(field_def.name, F.col(field_def.name).try_cast('double'))
+            if target_type in ('int', 'long', 'double', 'float'):
+                type_coercions[field_def.name] = target_type
             elif target_type == 'date':
-                df = df.withColumn(field_def.name,
-                    self._safe_parse_date(F.col(field_def.name)))
+                date_columns.append(field_def.name)
             elif target_type == 'timestamp':
-                df = df.withColumn(field_def.name,
-                    self._safe_parse_timestamp(F.col(field_def.name)))
-            elif target_type == 'boolean':
-                df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
+                timestamp_columns.append(field_def.name)
+
+        # Use SparkNormalizer for core operations
+        normalizer = SparkNormalizer(self.spark)
+        df = normalizer.normalize(
+            records,
+            field_mappings=field_mappings,
+            type_coercions=type_coercions,
+            add_metadata=False  # Socrata data doesn't need ingestion metadata
+        )
+
+        # Apply Socrata-specific date parsing (handles US, ISO, month name formats)
+        for col_name in date_columns:
+            if col_name in df.columns:
+                df = df.withColumn(col_name, self._safe_parse_date(F.col(col_name)))
+
+        for col_name in timestamp_columns:
+            if col_name in df.columns:
+                df = df.withColumn(col_name, self._safe_parse_timestamp(F.col(col_name)))
 
         # Derive year partition from date_column if year is NULL/missing
         # This fixes the __HIVE_DEFAULT_PARTITION__ issue for year partitions
@@ -570,6 +579,61 @@ class SocrataBaseProvider(BaseProvider):
                     )
                 else:
                     # No year column - derive from date
+                    df = df.withColumn('year', F.year(F.col(date_col)))
+
+        return df
+
+    def _apply_schema_types(self, df: DataFrame, endpoint: EndpointConfig) -> DataFrame:
+        """
+        Apply Socrata-specific type casting and date parsing to a DataFrame.
+
+        This handles:
+        - Numeric type casting via try_cast
+        - Socrata date format parsing (US, ISO, month names)
+        - Year partition derivation from date columns
+
+        Args:
+            df: DataFrame with string columns
+            endpoint: Endpoint configuration with schema
+
+        Returns:
+            DataFrame with proper types
+        """
+        if not endpoint.schema:
+            return df
+
+        # Cast columns to target types with Socrata-specific date handling
+        for field_def in endpoint.schema:
+            if field_def.name not in df.columns:
+                continue
+
+            target_type = field_def.type.lower()
+            if target_type == 'string':
+                continue
+            elif target_type in ('int', 'long'):
+                df = df.withColumn(field_def.name,
+                    F.col(field_def.name).try_cast('double').cast(target_type))
+            elif target_type in ('double', 'float'):
+                df = df.withColumn(field_def.name, F.col(field_def.name).try_cast('double'))
+            elif target_type == 'date':
+                df = df.withColumn(field_def.name,
+                    self._safe_parse_date(F.col(field_def.name)))
+            elif target_type == 'timestamp':
+                df = df.withColumn(field_def.name,
+                    self._safe_parse_timestamp(F.col(field_def.name)))
+            elif target_type == 'boolean':
+                df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
+
+        # Derive year partition from date_column if needed
+        if endpoint.bronze and endpoint.bronze.partitions and 'year' in endpoint.bronze.partitions:
+            date_col = endpoint.bronze.date_column
+            if date_col and date_col in df.columns:
+                if 'year' in df.columns:
+                    df = df.withColumn(
+                        'year',
+                        F.coalesce(F.col('year'), F.year(F.col(date_col)))
+                    )
+                else:
                     df = df.withColumn('year', F.year(F.col(date_col)))
 
         return df
@@ -611,9 +675,6 @@ class SocrataBaseProvider(BaseProvider):
         if not endpoint.schema:
             return df
 
-        # Apply schema: rename source columns to target names
-        source_to_target = {f.source: f.name for f in endpoint.schema if f.source}
-
         # Select and rename columns based on schema
         select_exprs = []
         for field_def in endpoint.schema:
@@ -626,38 +687,8 @@ class SocrataBaseProvider(BaseProvider):
 
         df = df.select(select_exprs)
 
-        # Cast columns to target types (same logic as _create_dataframe)
-        for field_def in endpoint.schema:
-            target_type = field_def.type.lower()
-            if target_type == 'string':
-                continue
-            elif target_type in ('int', 'long'):
-                df = df.withColumn(field_def.name,
-                    F.col(field_def.name).try_cast('double').cast(target_type))
-            elif target_type in ('double', 'float'):
-                df = df.withColumn(field_def.name, F.col(field_def.name).try_cast('double'))
-            elif target_type == 'date':
-                df = df.withColumn(field_def.name,
-                    self._safe_parse_date(F.col(field_def.name)))
-            elif target_type == 'timestamp':
-                df = df.withColumn(field_def.name,
-                    self._safe_parse_timestamp(F.col(field_def.name)))
-            elif target_type == 'boolean':
-                df = df.withColumn(field_def.name, F.col(field_def.name).cast('boolean'))
-
-        # Derive year partition from date_column if needed
-        if endpoint.bronze and endpoint.bronze.partitions and 'year' in endpoint.bronze.partitions:
-            date_col = endpoint.bronze.date_column
-            if date_col and date_col in df.columns:
-                if 'year' in df.columns:
-                    df = df.withColumn(
-                        'year',
-                        F.coalesce(F.col('year'), F.year(F.col(date_col)))
-                    )
-                else:
-                    df = df.withColumn('year', F.year(F.col(date_col)))
-
-        return df
+        # Apply Socrata-specific type casting and date parsing
+        return self._apply_schema_types(df, endpoint)
 
     def fetch_as_dataframe(
         self,
