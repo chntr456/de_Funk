@@ -375,12 +375,10 @@ storage_cfg['roots'] = {k: v.replace('storage/', f'{storage_path}/') for k, v in
 with open('$REPO_ROOT/configs/pipelines/run_config.json') as f:
     run_config = json.load(f)
 
-# Pass storage_path to enable raw layer (automatic when set, like Socrata)
-save_raw = '${SAVE_RAW}' == 'true'
-raw_storage = Path(storage_path) if save_raw else None
-provider = create_alpha_vantage_provider(spark=spark, docs_path=docs_path, storage_path=raw_storage)
-if save_raw:
-    logger.info(f'Raw data dump ENABLED: {storage_path}/raw/alpha_vantage/')
+# Always pass storage_path so provider can read from raw cache
+# Raw cache is checked automatically - use --force-api to bypass
+provider = create_alpha_vantage_provider(spark=spark, docs_path=docs_path, storage_path=Path(storage_path))
+logger.info(f'Raw cache path: {storage_path}/raw/alpha_vantage/')
 
 max_pending_writes = int('${PROFILE_MAX_PENDING_WRITES:-2}')
 engine = IngestorEngine(provider, storage_cfg, max_pending_writes=max_pending_writes)
