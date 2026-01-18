@@ -537,177 +537,170 @@ class AlphaVantageProvider(BaseProvider):
     # =========================================================================
 
     def _normalize_prices(self, records: List[Dict], work_item: str) -> DataFrame:
-        """Normalize price records using schema from markdown."""
+        """Normalize price records using pure Spark (no pandas)."""
         from pyspark.sql.types import (
             StructType, StructField, StringType, DateType, DoubleType,
             LongType, BooleanType, IntegerType
         )
-        import pandas as pd
+        from pyspark.sql.functions import (
+            col, lit, to_date, year, month
+        )
 
-        pdf = pd.DataFrame(records)
-        if pdf.empty:
+        if not records:
             return self.spark.createDataFrame([], samplingRatio=1.0)
+
+        # Create Spark DataFrame directly from records
+        df = self.spark.createDataFrame(records)
 
         # Get field mappings from endpoint schema
         endpoint_id = DATATYPE_TO_ENDPOINT.get(DataType.PRICES)
         field_mappings = self.get_field_mappings(endpoint_id) if endpoint_id else {}
 
-        # Parse trade_date - keep as datetime64 for proper Spark DateType conversion
-        pdf['trade_date'] = pd.to_datetime(pdf['trade_date'], errors='coerce')
-        pdf['year'] = pdf['trade_date'].dt.year.astype('Int32')
-        pdf['month'] = pdf['trade_date'].dt.month.astype('Int32')
-        # Normalize to midnight (date only) but keep as datetime64 for Spark compatibility
-        pdf['trade_date'] = pdf['trade_date'].dt.normalize()
+        # Apply field mappings (rename columns)
+        df_columns = df.columns
+        for src, tgt in field_mappings.items():
+            if src in df_columns:
+                df = df.withColumnRenamed(src, tgt)
 
-        # Apply field mappings from schema (source -> target)
-        # Reverse mapping for renaming: source_name -> target_name
-        rename_map = {src: tgt for src, tgt in field_mappings.items()
-                      if src in pdf.columns}
-        pdf = pdf.rename(columns=rename_map)
+        # Parse trade_date and extract year/month
+        df = (df
+              .withColumn('trade_date', to_date(col('trade_date')))
+              .withColumn('year', year(col('trade_date')))
+              .withColumn('month', month(col('trade_date'))))
 
-        # Convert numeric fields
+        # Convert numeric fields to DoubleType
+        df_columns = df.columns
         numeric_fields = ['open', 'high', 'low', 'close', 'adjusted_close',
                          'volume', 'dividend_amount', 'split_coefficient']
         for field in numeric_fields:
-            if field in pdf.columns:
-                pdf[field] = pd.to_numeric(pdf[field], errors='coerce').astype('float64')
+            if field in df_columns:
+                df = df.withColumn(field, col(field).cast(DoubleType()))
 
-        # Calculate VWAP approximation
-        if all(f in pdf.columns for f in ['high', 'low', 'close']):
-            pdf['volume_weighted'] = ((pdf['high'] + pdf['low'] + pdf['close']) / 3.0).astype('float64')
+        # Calculate VWAP approximation (typical price)
+        df_columns = df.columns
+        if all(f in df_columns for f in ['high', 'low', 'close']):
+            df = df.withColumn('volume_weighted',
+                              ((col('high') + col('low') + col('close')) / lit(3.0)).cast(DoubleType()))
+        else:
+            df = df.withColumn('volume_weighted', lit(None).cast(DoubleType()))
 
         # Add missing fields
-        pdf['transactions'] = None
-        pdf['otc'] = False
-        if 'asset_type' not in pdf.columns:
-            pdf['asset_type'] = 'stocks'
+        df = df.withColumn('transactions', lit(None).cast(LongType()))
+        df = df.withColumn('otc', lit(False))
+        if 'asset_type' not in df.columns:
+            df = df.withColumn('asset_type', lit('stocks'))
 
-        # Select final columns
+        # Select final columns in order, adding any missing as null
         final_cols = ['trade_date', 'ticker', 'asset_type', 'year', 'month',
                       'open', 'high', 'low', 'close', 'volume', 'volume_weighted',
                       'transactions', 'otc', 'adjusted_close', 'dividend_amount',
                       'split_coefficient']
-        for col in final_cols:
-            if col not in pdf.columns:
-                pdf[col] = None
-        pdf = pdf[final_cols]
+        df_columns = df.columns
+        for c in final_cols:
+            if c not in df_columns:
+                df = df.withColumn(c, lit(None))
 
-        schema = StructType([
-            StructField("trade_date", DateType(), True),
-            StructField("ticker", StringType(), True),
-            StructField("asset_type", StringType(), True),
-            StructField("year", IntegerType(), True),
-            StructField("month", IntegerType(), True),
-            StructField("open", DoubleType(), True),
-            StructField("high", DoubleType(), True),
-            StructField("low", DoubleType(), True),
-            StructField("close", DoubleType(), True),
-            StructField("volume", DoubleType(), True),
-            StructField("volume_weighted", DoubleType(), True),
-            StructField("transactions", LongType(), True),
-            StructField("otc", BooleanType(), True),
-            StructField("adjusted_close", DoubleType(), True),
-            StructField("dividend_amount", DoubleType(), True),
-            StructField("split_coefficient", DoubleType(), True)
-        ])
-
-        return self.spark.createDataFrame(pdf, schema=schema)
+        return df.select(*final_cols)
 
     def _normalize_reference(self, records: List[Dict], work_item: str) -> DataFrame:
-        """Normalize reference/overview records using schema from markdown."""
-        import pandas as pd
-        from datetime import datetime
+        """Normalize reference/overview records using pure Spark (no pandas)."""
+        from pyspark.sql.functions import col, lit, current_timestamp, current_date
+        from pyspark.sql.types import DoubleType
 
-        pdf = pd.DataFrame(records)
-        if pdf.empty:
+        if not records:
             return self.spark.createDataFrame([], samplingRatio=1.0)
+
+        # Create Spark DataFrame directly from records
+        df = self.spark.createDataFrame(records)
 
         # Get field mappings and coercions from endpoint schema
         endpoint_id = DATATYPE_TO_ENDPOINT.get(DataType.REFERENCE)
         field_mappings = self.get_field_mappings(endpoint_id) if endpoint_id else {}
         type_coercions = self.get_type_coercions(endpoint_id) if endpoint_id else {}
 
-        # Debug logging
         logger.info(f"[{endpoint_id}] field_mappings: {len(field_mappings)}, type_coercions: {len(type_coercions)}")
 
-        # Apply field mappings from schema (source -> target)
-        rename_map = {src: tgt for src, tgt in field_mappings.items()
-                      if src in pdf.columns}
-        logger.info(f"[{endpoint_id}] rename_map applied: {len(rename_map)} columns")
-        pdf = pdf.rename(columns=rename_map)
+        # Apply field mappings (rename columns)
+        df_columns = df.columns
+        rename_count = 0
+        for src, tgt in field_mappings.items():
+            if src in df_columns:
+                df = df.withColumnRenamed(src, tgt)
+                rename_count += 1
+        logger.info(f"[{endpoint_id}] renamed {rename_count} columns")
 
-        # Apply type coercions from schema
-        # NOTE: We use float64 for all numeric types to handle NaN values consistently.
-        # Delta Lake's schema evolution handles type promotion (Double → Long) at write time.
+        # Apply type coercions - cast to DoubleType for all numeric fields
+        # Spark cast() handles nulls/invalid values gracefully (returns null)
+        df_columns = df.columns  # Refresh after renames
         coerced_count = 0
         for field_name, coerce_type in type_coercions.items():
-            if field_name in pdf.columns:
-                coerced_count += 1
+            if field_name in df_columns:
                 if coerce_type in ('long', 'int', 'integer', 'double', 'float'):
-                    # Convert all numeric types to float64 - handles NaN naturally
-                    # Don't force Int64 which fails on NaN/inf values
-                    pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('float64')
-        logger.info(f"[{endpoint_id}] coerced {coerced_count} columns to float64")
+                    df = df.withColumn(field_name, col(field_name).cast(DoubleType()))
+                    coerced_count += 1
+        logger.info(f"[{endpoint_id}] coerced {coerced_count} columns to DoubleType")
 
         # Add metadata
-        pdf['asset_type'] = 'stocks'
-        pdf['snapshot_date'] = datetime.now().date()
-        pdf['ingestion_timestamp'] = datetime.now()
+        df = (df
+              .withColumn('asset_type', lit('stocks'))
+              .withColumn('snapshot_date', current_date())
+              .withColumn('ingestion_timestamp', current_timestamp()))
 
-        return self.spark.createDataFrame(pdf, samplingRatio=1.0)
+        return df
 
     def _normalize_financials(self, records: List[Dict], data_type: DataType) -> DataFrame:
-        """Normalize financial statement records using schema from markdown."""
-        import pandas as pd
-        from datetime import datetime
+        """Normalize financial statement records using pure Spark (no pandas)."""
+        from pyspark.sql.functions import col, lit, current_timestamp, current_date, to_date
+        from pyspark.sql.types import DoubleType, DateType
 
-        pdf = pd.DataFrame(records)
-        if pdf.empty:
+        if not records:
             return self.spark.createDataFrame([], samplingRatio=1.0)
 
         # Get endpoint config
         endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
         if not endpoint_id:
-            return self.spark.createDataFrame(pdf, samplingRatio=1.0)
+            return self.spark.createDataFrame(records)
+
+        # Create Spark DataFrame directly from records
+        df = self.spark.createDataFrame(records)
 
         # Get field mappings and coercions from markdown schema
         field_mappings = self.get_field_mappings(endpoint_id)
         type_coercions = self.get_type_coercions(endpoint_id)
 
-        # Debug: log what we got
         logger.info(f"[{endpoint_id}] field_mappings count: {len(field_mappings)}, type_coercions count: {len(type_coercions)}")
-        if not field_mappings:
-            logger.warning(f"[{endpoint_id}] No field mappings found - check if endpoint schema is loaded")
-            # Check if endpoint exists
-            endpoint = self._endpoints.get(endpoint_id)
-            if endpoint:
-                logger.info(f"[{endpoint_id}] Endpoint found, schema fields: {len(endpoint.schema) if endpoint.schema else 0}")
-            else:
-                logger.warning(f"[{endpoint_id}] Endpoint NOT found in _endpoints. Available: {list(self._endpoints.keys())[:5]}")
 
-        # Apply field mappings (source -> target)
-        rename_map = {src: tgt for src, tgt in field_mappings.items()
-                      if src in pdf.columns}
-        pdf = pdf.rename(columns=rename_map)
+        # Apply field mappings (rename columns)
+        df_columns = df.columns
+        rename_count = 0
+        for src, tgt in field_mappings.items():
+            if src in df_columns:
+                df = df.withColumnRenamed(src, tgt)
+                rename_count += 1
+        logger.info(f"[{endpoint_id}] renamed {rename_count} columns")
 
-        # Apply type coercions
-        # NOTE: Keep all numeric fields as float64 to handle NaN values consistently.
-        # This avoids Double → Long casting issues in BronzeSink.
+        # Apply type coercions - cast to DoubleType for all numeric fields
+        # Spark cast() handles nulls/invalid values gracefully (returns null)
+        df_columns = df.columns  # Refresh after renames
+        coerced_count = 0
         for field_name, coerce_type in type_coercions.items():
-            if field_name in pdf.columns:
+            if field_name in df_columns:
                 if coerce_type in ('long', 'int', 'integer', 'double', 'float'):
-                    # Convert all numeric types to float64 - handles NaN naturally
-                    pdf[field_name] = pd.to_numeric(pdf[field_name], errors='coerce').astype('float64')
+                    df = df.withColumn(field_name, col(field_name).cast(DoubleType()))
+                    coerced_count += 1
+        logger.info(f"[{endpoint_id}] coerced {coerced_count} columns to DoubleType")
 
-        # Parse date fields
-        if 'fiscal_date_ending' in pdf.columns:
-            pdf['fiscal_date_ending'] = pd.to_datetime(pdf['fiscal_date_ending'], errors='coerce')
+        # Parse date fields using Spark to_date
+        df_columns = df.columns
+        if 'fiscal_date_ending' in df_columns:
+            df = df.withColumn('fiscal_date_ending', to_date(col('fiscal_date_ending')))
 
         # Add metadata
-        pdf['ingestion_timestamp'] = datetime.now()
-        pdf['snapshot_date'] = datetime.now().date()
+        df = (df
+              .withColumn('ingestion_timestamp', current_timestamp())
+              .withColumn('snapshot_date', current_date()))
 
-        return self.spark.createDataFrame(pdf, samplingRatio=1.0)
+        return df
 
     # =========================================================================
     # API REQUEST HELPERS
