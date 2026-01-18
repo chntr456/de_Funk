@@ -359,20 +359,18 @@ class DomainMeasures(ABC):
         return df.withColumn(result_col, normalized)
 
     # ============================================================
-    # FINAL CONVERSION (Use sparingly, only for UI)
+    # FINAL CONVERSION (for UI layer)
     # ============================================================
 
     def to_pandas(self, df: SparkDataFrame, limit: Optional[int] = None):
         """
-        Convert Spark DataFrame to pandas (USE SPARINGLY).
+        Convert Spark DataFrame to pandas.
 
-        Only use this at the final step when:
-        - Displaying in UI (Streamlit, Plotly)
-        - Result set is small (after filtering/aggregation)
+        Use when result is needed for UI (Streamlit, Plotly).
 
         Args:
             df: Spark DataFrame
-            limit: Optional row limit (RECOMMENDED for large results)
+            limit: Optional row limit (applies before conversion)
 
         Returns:
             pandas DataFrame
@@ -384,15 +382,6 @@ class DomainMeasures(ABC):
 
         if limit:
             df = df.limit(limit)
-            self._logger.debug(f"Converting to pandas with limit={limit}")
-        else:
-            # Warn if converting large DataFrame
-            count = df.count()
-            if count > 10000:
-                self._logger.warning(
-                    f"Converting {count:,} rows to pandas. "
-                    "Consider using limit parameter or keeping as Spark."
-                )
 
         return df.toPandas()
 

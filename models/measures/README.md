@@ -265,13 +265,13 @@ df = self.add_cumulative_max(df, 'close')
 df = self.normalize_column(df, 'rsi', min_val=0, max_val=1)
 ```
 
-### Final Conversion (Use Sparingly)
+### Final Conversion (for UI)
 
 ```python
-# Only when needed for UI (Plotly, Streamlit)
+# When needed for UI (Streamlit, Plotly)
 pandas_df = self.to_pandas(spark_df)
 
-# With limit (recommended for large results)
+# With optional limit
 pandas_df = self.to_pandas(spark_df, limit=1000)
 ```
 
@@ -334,7 +334,7 @@ return df.select('ticker', 'trade_date', 'measure_value')
 
 # Only convert to pandas when caller needs it for UI
 if as_pandas:
-    return self.to_pandas(df, limit=10000)
+    return self.to_pandas(df)
 return df
 ```
 

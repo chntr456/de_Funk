@@ -15,7 +15,6 @@ from .registry import MeasureRegistry
 # This ensures all measure types are registered before create_measure() is called
 import models.measures.simple
 import models.measures.computed
-import models.measures.weighted
 
 
 class MeasureExecutor:
