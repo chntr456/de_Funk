@@ -209,26 +209,20 @@
     "pipeline_test": {
       "providers": ["alpha_vantage"],
       "max_tickers": 10,
-      "endpoints": ["prices", "reference", "income_statement", "balance_sheet", "cash_flow", "earnings"],
-      "_endpoints_comment": "Full Alpha Vantage coverage: prices (time_series_daily), reference (listing_status, company_overview), and all financial statements",
-      "use_raw_cache": true,
+      "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings"],
+      "_endpoints_comment": "Full Alpha Vantage coverage: prices, reference, and all financial statements",
       "build_silver": true,
-      "build_forecast": true,
-      "forecast_models": ["arima_7d", "prophet_7d"],
       "log_level": "INFO",
-      "_comment": "Full pipeline test: raw → bronze → silver → forecast. 10 tickers with complete data coverage."
+      "_comment": "Full pipeline test: seed → bronze → silver. 10 tickers with complete data coverage."
     },
     "pipeline_test_50": {
       "providers": ["alpha_vantage"],
       "max_tickers": 50,
-      "endpoints": ["prices", "reference", "income_statement", "balance_sheet", "cash_flow", "earnings"],
+      "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings"],
       "_endpoints_comment": "Full Alpha Vantage coverage: prices, reference, and all financial statements",
-      "use_raw_cache": true,
       "build_silver": true,
-      "build_forecast": true,
-      "forecast_models": ["arima_7d", "prophet_7d"],
       "log_level": "INFO",
-      "_comment": "Full pipeline test: raw → bronze → silver → forecast. 50 tickers with complete data coverage."
+      "_comment": "Full pipeline test: seed → bronze → silver. 50 tickers with complete data coverage."
     },
     "silver_only": {
       "providers": [],
