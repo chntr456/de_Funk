@@ -208,12 +208,16 @@
     },
     "pipeline_test": {
       "providers": ["alpha_vantage"],
-      "max_tickers": 10,
+      "max_tickers": null,
       "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings"],
       "_endpoints_comment": "Full Alpha Vantage coverage: prices, reference, and all financial statements",
+      "write_batch_size": 500000,
+      "max_pending_writes": 0,
+      "use_raw_cache": true,
+      "_use_raw_cache_comment": "Reads from cached raw JSON files - NO API calls",
       "build_silver": true,
       "log_level": "INFO",
-      "_comment": "Full pipeline test: seed → bronze → silver. 10 tickers with complete data coverage."
+      "_comment": "Full pipeline: raw → bronze → silver. All tickers, no API calls (uses cached raw JSON)."
     },
     "pipeline_test_50": {
       "providers": ["alpha_vantage"],
