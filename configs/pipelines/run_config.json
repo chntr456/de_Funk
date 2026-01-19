@@ -207,7 +207,7 @@
       "_comment": "Full reprocess: raw JSON → bronze → silver. No API calls."
     },
     "pipeline_test": {
-      "providers": ["alpha_vantage"],
+      "providers": ["alpha_vantage", "chicago", "cook_county"],
       "max_tickers": null,
       "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings"],
       "_endpoints_comment": "Full Alpha Vantage coverage: prices, reference, and all financial statements",
@@ -217,7 +217,7 @@
       "_use_raw_cache_comment": "Reads from cached raw JSON files - NO API calls",
       "build_silver": true,
       "log_level": "INFO",
-      "_comment": "Full pipeline: raw → bronze → silver. All tickers, no API calls (uses cached raw JSON)."
+      "_comment": "Full pipeline: all providers → bronze → silver. Chicago/Cook County bronze-only (no silver builders yet)."
     },
     "pipeline_test_50": {
       "providers": ["alpha_vantage"],

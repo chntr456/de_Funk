@@ -165,18 +165,69 @@ graph:
       # Note: company_overview facet normalizes columns to snake_case
       # No filter needed - company_reference only contains companies with CIK
       select:
+        # Identity
         cik: cik
-        company_name: company_name
         ticker: ticker
+        company_name: company_name
+        description: description
+        # Classification
+        asset_type: asset_type
         exchange_code: exchange_code
         sector: sector
         industry: industry
-        market_cap: market_cap
+        country: country
         currency: currency
+        # Contact/Info
+        address: address
+        official_site: official_site
+        fiscal_year_end: fiscal_year_end
+        # Valuation metrics
+        market_cap: market_cap
+        ebitda: ebitda
+        pe_ratio: pe_ratio
+        peg_ratio: peg_ratio
+        book_value: book_value
+        eps: eps
+        trailing_pe: trailing_pe
+        forward_pe: forward_pe
+        price_to_sales: price_to_sales
+        price_to_book: price_to_book
+        ev_to_revenue: ev_to_revenue
+        ev_to_ebitda: ev_to_ebitda
+        # Profitability
+        profit_margin: profit_margin
+        operating_margin: operating_margin
+        return_on_assets: return_on_assets
+        return_on_equity: return_on_equity
+        revenue_ttm: revenue_ttm
+        gross_profit_ttm: gross_profit_ttm
+        # Growth
+        quarterly_earnings_growth: quarterly_earnings_growth
+        quarterly_revenue_growth: quarterly_revenue_growth
+        # Risk & Volatility
+        beta: beta
+        week_52_high: week_52_high
+        week_52_low: week_52_low
+        # Shares
+        shares_outstanding: shares_outstanding
+        shares_float: shares_float
+        percent_insiders: percent_insiders
+        percent_institutions: percent_institutions
+        # Dividends
+        dividend_per_share: dividend_per_share
+        dividend_yield: dividend_yield
+        dividend_date: dividend_date
+        ex_dividend_date: ex_dividend_date
+        # Analyst
+        analyst_target_price: analyst_target_price
+        analyst_rating_strong_buy: analyst_rating_strong_buy
+        analyst_rating_buy: analyst_rating_buy
+        analyst_rating_hold: analyst_rating_hold
+        analyst_rating_sell: analyst_rating_sell
+        analyst_rating_strong_sell: analyst_rating_strong_sell
       derive:
         company_id: "ABS(HASH(CONCAT('COMPANY_', COALESCE(cik, ticker))))"
         security_id: "ABS(HASH(ticker))"
-        country: "'US'"
         is_active: "true"
       primary_key: [company_id]
       unique_key: [ticker]
