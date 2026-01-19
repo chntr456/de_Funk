@@ -212,28 +212,58 @@ class BaseModel:
 
         raise ValueError(f"Unknown connection type: {connection_type}")
 
-    def _ensure_active_spark_session(self):
+    def _ensure_active_spark_session(self) -> bool:
         """
         Ensure Spark session is registered as active for Delta Lake 4.x.
 
         Delta Lake 4.x internally calls SparkSession.active() which requires
         the session to be registered in thread-local storage. This can become
         unregistered between operations.
+
+        Returns:
+            True if session is active after registration, False otherwise
         """
         if self.backend != 'spark':
-            return
+            return True
 
         try:
-            # Get the actual SparkSession from the connection
+            # Get the actual SparkSession from the connection wrapper
             spark = getattr(self.connection, 'spark', None) or self.connection
 
-            # Re-register with JVM thread-local storage
+            if spark is None:
+                logger.error("SPARK SESSION IS NONE - cannot register")
+                return False
+
+            # Check if spark has required attributes
+            if not hasattr(spark, '_jvm') or not hasattr(spark, '_jsparkSession'):
+                logger.error(f"Invalid SparkSession object: {type(spark)}")
+                return False
+
             jvm = spark._jvm
-            jvm.org.apache.spark.sql.SparkSession.setActiveSession(spark._jsparkSession)
-            jvm.org.apache.spark.sql.SparkSession.setDefaultSession(spark._jsparkSession)
+            jss = spark._jsparkSession
+
+            # Check state BEFORE registration
+            before_active = jvm.org.apache.spark.sql.SparkSession.getActiveSession()
+            before_state = "PRESENT" if before_active.isDefined() else "EMPTY"
+
+            # Re-register with JVM thread-local storage
+            jvm.org.apache.spark.sql.SparkSession.setActiveSession(jss)
+            jvm.org.apache.spark.sql.SparkSession.setDefaultSession(jss)
+
+            # Verify state AFTER registration
+            after_active = jvm.org.apache.spark.sql.SparkSession.getActiveSession()
+            after_state = "PRESENT" if after_active.isDefined() else "EMPTY"
+
+            if after_state == "EMPTY":
+                logger.error(f"Session registration FAILED: before={before_state}, after={after_state}")
+                return False
+
+            logger.debug(f"Session state: before={before_state}, after={after_state}")
+            return True
+
         except Exception as e:
-            # Log but don't fail - the session might still work
-            logger.debug(f"Could not re-register Spark session: {e}")
+            logger.error(f"Failed to register Spark session: {e}", exc_info=True)
+            return False
 
     def set_session(self, session):
         """
@@ -394,28 +424,60 @@ class BaseModel:
             return False
 
     def _read_silver_table(self, path: str):
-        """Read a table from Silver layer (auto-detects Delta/Parquet)."""
+        """
+        Read a table from Silver layer (auto-detects Delta/Parquet).
+
+        For Spark backend, ensures the session is registered as active
+        before attempting any Delta reads.
+
+        Args:
+            path: Path to the table directory
+
+        Returns:
+            DataFrame or None if read fails
+        """
         from pathlib import Path
 
         table_path = Path(path)
         is_delta = (table_path / "_delta_log").exists()
+        format_type = "delta" if is_delta else "parquet"
+
+        logger.debug(f"Reading Silver table: {path} (format={format_type})")
 
         try:
             if self.backend == 'spark':
-                # Re-register session RIGHT BEFORE Delta read
+                # CRITICAL: Re-register session RIGHT BEFORE Delta read
                 # Delta Lake 4.x requires active session in JVM thread-local storage
-                self._ensure_active_spark_session()
+                session_ok = self._ensure_active_spark_session()
+                if not session_ok:
+                    logger.error(f"Session registration failed before reading {path}")
+                    # Still try to read - maybe it will work anyway
 
                 spark = getattr(self.connection, 'spark', self.connection)
+
                 if is_delta:
-                    return spark.read.format("delta").load(path)
+                    df = spark.read.format("delta").load(path)
                 else:
-                    return spark.read.parquet(path)
+                    df = spark.read.parquet(path)
+
+                logger.debug(f"  Successfully read {path}")
+                return df
             else:
                 # DuckDB
                 return self.connection.read_table(path)
+
         except Exception as e:
-            logger.warning(f"Failed to read Silver table {path}: {e}")
+            error_msg = str(e)
+            if "No active or default Spark session found" in error_msg:
+                # This is the specific error we're trying to diagnose
+                logger.error(
+                    f"SPARK SESSION ERROR reading {path}: {error_msg}\n"
+                    f"  Connection type: {type(self.connection)}\n"
+                    f"  Backend: {self.backend}\n"
+                    f"  Has .spark attr: {hasattr(self.connection, 'spark')}"
+                )
+            else:
+                logger.warning(f"Failed to read Silver table {path}: {e}")
             return None
 
     # ============================================================

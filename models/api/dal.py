@@ -129,7 +129,7 @@ class Table:
         delta_log = Path(path) / "_delta_log"
         return delta_log.exists()
 
-    def _ensure_active_session(self) -> None:
+    def _ensure_active_session(self) -> bool:
         """
         Ensure Spark session is active for Delta Lake 4.x.
 
@@ -138,16 +138,40 @@ class Table:
         any Delta read operation.
 
         Sets both active session (thread-local) and default session (global).
+
+        Returns:
+            True if session is active after registration, False otherwise
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         try:
             jvm = self.spark._jvm
             jss = self.spark._jsparkSession
+
+            # Check state BEFORE registration
+            before_active = jvm.org.apache.spark.sql.SparkSession.getActiveSession()
+            before_state = "PRESENT" if before_active.isDefined() else "EMPTY"
+
             # Set as active (thread-local)
             jvm.org.apache.spark.sql.SparkSession.setActiveSession(jss)
             # Also set as default (global fallback)
             jvm.org.apache.spark.sql.SparkSession.setDefaultSession(jss)
-        except Exception:
-            pass  # Best effort - some environments may not support this
+
+            # Verify state AFTER registration
+            after_active = jvm.org.apache.spark.sql.SparkSession.getActiveSession()
+            after_state = "PRESENT" if after_active.isDefined() else "EMPTY"
+
+            if after_state == "EMPTY":
+                logger.error(f"TABLE: Session registration FAILED: before={before_state}, after={after_state}")
+                return False
+
+            logger.debug(f"TABLE: Session state: before={before_state}, after={after_state}")
+            return True
+
+        except Exception as e:
+            logger.error(f"TABLE: Failed to ensure active session: {e}")
+            return False
 
     def read(self, merge_schema: bool = True) -> DataFrame:
         """

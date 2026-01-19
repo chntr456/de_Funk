@@ -256,7 +256,7 @@ class BaseModelBuilder(ABC):
 
         return len(errors) == 0, errors
 
-    def _ensure_active_session(self) -> None:
+    def _ensure_active_session(self) -> bool:
         """
         Ensure Spark session is registered as active for Delta Lake 4.x.
 
@@ -266,16 +266,41 @@ class BaseModelBuilder(ABC):
 
         Uses JVM bridge to call Scala's setActiveSession() and setDefaultSession()
         directly since PySpark doesn't expose these methods.
+
+        Returns:
+            True if session is active after registration, False otherwise
         """
+        if self.spark is None:
+            logger.error("BUILDER: spark is None - cannot ensure active session")
+            return False
+
         try:
             jvm = self.spark._jvm
             jss = self.spark._jsparkSession
+
+            # Check state BEFORE registration
+            before_active = jvm.org.apache.spark.sql.SparkSession.getActiveSession()
+            before_state = "PRESENT" if before_active.isDefined() else "EMPTY"
+
             # Set as active (thread-local)
             jvm.org.apache.spark.sql.SparkSession.setActiveSession(jss)
             # Also set as default (global fallback)
             jvm.org.apache.spark.sql.SparkSession.setDefaultSession(jss)
+
+            # Verify state AFTER registration
+            after_active = jvm.org.apache.spark.sql.SparkSession.getActiveSession()
+            after_state = "PRESENT" if after_active.isDefined() else "EMPTY"
+
+            if after_state == "EMPTY":
+                logger.error(f"BUILDER: Session registration FAILED: before={before_state}, after={after_state}")
+                return False
+
+            logger.debug(f"BUILDER: Session state: before={before_state}, after={after_state}")
+            return True
+
         except Exception as e:
-            logger.debug(f"Could not set active session via JVM: {e}")
+            logger.error(f"BUILDER: Could not set active session via JVM: {e}", exc_info=True)
+            return False
 
     def build(self) -> BuildResult:
         """
