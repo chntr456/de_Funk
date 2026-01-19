@@ -1,8 +1,16 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, Optional, Tuple
-from pyspark.sql import DataFrame, SparkSession
+from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
+
+# Conditional PySpark import for environments without Spark
+try:
+    from pyspark.sql import DataFrame, SparkSession
+    PYSPARK_AVAILABLE = True
+except ImportError:
+    PYSPARK_AVAILABLE = False
+    DataFrame = Any  # type: ignore
+    SparkSession = Any  # type: ignore
 
 
 @dataclass(frozen=True)
