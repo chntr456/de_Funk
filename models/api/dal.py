@@ -1,42 +1,73 @@
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Any, Optional, Literal
+from typing import Dict, Any, Optional, Tuple
 from pyspark.sql import DataFrame, SparkSession
-
-Layer = Literal["bronze", "silver"]
 
 
 @dataclass(frozen=True)
 class StorageRouter:
-    storage_cfg: Dict[str, Any]
-    repo_root: Optional[Path] = None  # Optional repo root for absolute paths
+    """
+    Resolves table paths from config-style references.
 
-    def resolve_path(self, layer: Layer, logical_name: str) -> str:
+    Supports:
+        - Config refs: "bronze.alpha_vantage.listing_status" → parses layer + path
+        - Direct paths: "stocks/dims/dim_stock" with explicit layer
+        - Absolute paths: "/shared/storage/..." passed through
+    """
+    storage_cfg: Dict[str, Any]
+    repo_root: Optional[Path] = None
+
+    def parse_table_ref(self, table_ref: str) -> Tuple[str, str]:
         """
-        Resolve table path for any layer.
+        Parse a table reference into (layer, path).
 
         Args:
-            layer: "bronze" or "silver"
-            logical_name: Table identifier (e.g., 'alpha_vantage.listing_status' or 'stocks/dims/dim_stock')
+            table_ref: Config-style reference like "bronze.alpha_vantage.listing_status"
+                      or "silver.stocks/dims/dim_stock"
 
         Returns:
-            Absolute or relative path to the table
+            Tuple of (layer, relative_path)
+
+        Examples:
+            "bronze.alpha_vantage.listing_status" → ("bronze", "alpha_vantage/listing_status")
+            "silver.stocks/dims/dim_stock" → ("silver", "stocks/dims/dim_stock")
         """
+        if table_ref.startswith("bronze."):
+            return "bronze", table_ref[7:].replace(".", "/")
+        elif table_ref.startswith("silver."):
+            return "silver", table_ref[7:]
+        else:
+            # Default to silver if no prefix (backward compat)
+            return "silver", table_ref
+
+    def resolve(self, table_ref: str) -> str:
+        """
+        Resolve a table reference to a filesystem path.
+
+        Args:
+            table_ref: Config-style reference like "bronze.alpha_vantage.listing_status"
+
+        Returns:
+            Absolute or relative filesystem path
+        """
+        # Absolute paths pass through
+        if table_ref.startswith("/"):
+            return table_ref
+
+        layer, rel_path = self.parse_table_ref(table_ref)
         root = self.storage_cfg["roots"][layer].rstrip("/")
 
+        # For bronze, check explicit table mapping in storage.json
         if layer == "bronze":
-            # Bronze: check explicit table mapping first, then normalize dots→slashes
             tables = self.storage_cfg.get("tables", {})
-            if logical_name in tables and isinstance(tables[logical_name], dict):
-                rel = tables[logical_name]["rel"]
-            else:
-                rel = logical_name.replace(".", "/")
-        else:
-            # Silver: direct path
-            rel = logical_name
+            # rel_path might be like "alpha_vantage/listing_status"
+            # Check if there's a mapping for it
+            table_key = rel_path.replace("/", ".")
+            if table_key in tables and isinstance(tables[table_key], dict):
+                rel_path = tables[table_key]["rel"]
 
-        path = f"{root}/{rel}"
+        path = f"{root}/{rel_path}"
 
         if self.repo_root:
             return str(self.repo_root / path)
@@ -44,36 +75,46 @@ class StorageRouter:
 
     # Legacy methods for backward compatibility
     def bronze_path(self, logical_table: str) -> str:
-        return self.resolve_path("bronze", logical_table)
+        return self.resolve(f"bronze.{logical_table}")
 
     def silver_path(self, logical_rel: str) -> str:
-        return self.resolve_path("silver", logical_rel)
+        return self.resolve(f"silver.{logical_rel}")
 
 
 class Table:
     """
-    Unified table reader for Bronze and Silver layers.
+    Unified table reader.
+
+    Takes a config-style table reference like "bronze.alpha_vantage.listing_status"
+    or "silver.stocks/dims/dim_stock" and resolves it to a filesystem path.
 
     Auto-detects Delta Lake vs Parquet format.
     Supports schema merging and in-memory DataFrame override.
+
+    Usage:
+        # From graph config "from:" field
+        table = Table(spark, router, "bronze.alpha_vantage.listing_status")
+        df = table.read()
+
+        # Or with direct path
+        table = Table(spark, router, "silver.stocks/dims/dim_stock")
+        df = table.read()
     """
 
     def __init__(
         self,
         spark: SparkSession,
         router: StorageRouter,
-        logical_name: str,
-        layer: Layer = "silver"
+        table_ref: str,
     ):
         self.spark = spark
         self.router = router
-        self.logical_name = logical_name
-        self.layer = layer
+        self.table_ref = table_ref
         self._override_df: Optional[DataFrame] = None
 
     @property
     def path(self) -> str:
-        return self.router.resolve_path(self.layer, self.logical_name)
+        return self.router.resolve(self.table_ref)
 
     def _is_delta_table(self, path: str) -> bool:
         """Check if path contains a Delta table."""
@@ -117,14 +158,20 @@ class Table:
 
 # Backward-compatible aliases
 class BronzeTable(Table):
-    """Reads Bronze layer tables. Alias for Table(layer='bronze')."""
+    """Reads Bronze layer tables. Alias for Table with 'bronze.' prefix."""
 
     def __init__(self, spark: SparkSession, router: StorageRouter, logical_table: str):
-        super().__init__(spark, router, logical_table, layer="bronze")
+        # Prepend bronze. if not already present
+        if not logical_table.startswith("bronze."):
+            logical_table = f"bronze.{logical_table}"
+        super().__init__(spark, router, logical_table)
 
 
 class SilverPath(Table):
-    """Reads Silver layer tables. Alias for Table(layer='silver')."""
+    """Reads Silver layer tables. Alias for Table with 'silver.' prefix."""
 
     def __init__(self, spark: SparkSession, router: StorageRouter, logical_rel: str):
-        super().__init__(spark, router, logical_rel, layer="silver")
+        # Prepend silver. if not already present
+        if not logical_rel.startswith("silver."):
+            logical_rel = f"silver.{logical_rel}"
+        super().__init__(spark, router, logical_rel)
