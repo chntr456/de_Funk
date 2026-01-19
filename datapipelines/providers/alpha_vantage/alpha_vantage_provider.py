@@ -666,8 +666,12 @@ class AlphaVantageProvider(BaseProvider):
         from pyspark.sql import functions as F
         from pyspark.sql.types import MapType, StringType, StructType
 
-        # Read all JSON files - Spark infers schema
-        df = self.spark.read.option("multiline", True).json(json_pattern)
+        # Read all JSON files - use sampling to reduce schema inference overhead
+        # samplingRatio=0.01 samples ~1% of files for schema inference (faster for many small files)
+        df = (self.spark.read
+              .option("multiline", True)
+              .option("samplingRatio", "0.01")
+              .json(json_pattern))
 
         if df.isEmpty():
             return None
@@ -722,6 +726,11 @@ class AlphaVantageProvider(BaseProvider):
         # Rename the generated columns to meaningful names
         df = df.withColumnRenamed("key", "trade_date").withColumnRenamed("value", "_ohlcv")
 
+        # Repartition to distribute work across workers (one partition per file is inefficient)
+        # Use 200 partitions to match spark.sql.shuffle.partitions default
+        num_partitions = int(self.spark.conf.get("spark.sql.shuffle.partitions", "200"))
+        df = df.repartition(num_partitions, "ticker")
+
         # Flatten the OHLCV struct - get all field names dynamically
         ohlcv_schema = df.schema["_ohlcv"].dataType
         if isinstance(ohlcv_schema, StructType):
@@ -759,8 +768,11 @@ class AlphaVantageProvider(BaseProvider):
         """
         from pyspark.sql import functions as F
 
-        # Read all JSON files
-        df = self.spark.read.option("multiline", True).json(json_pattern)
+        # Read all JSON files - use sampling to reduce schema inference overhead
+        df = (self.spark.read
+              .option("multiline", True)
+              .option("samplingRatio", "0.01")
+              .json(json_pattern))
 
         if df.isEmpty():
             return None
@@ -814,8 +826,11 @@ class AlphaVantageProvider(BaseProvider):
         """
         from pyspark.sql import functions as F
 
-        # Read all JSON files
-        df = self.spark.read.option("multiline", True).json(json_pattern)
+        # Read all JSON files - use sampling to reduce schema inference overhead
+        df = (self.spark.read
+              .option("multiline", True)
+              .option("samplingRatio", "0.01")
+              .json(json_pattern))
 
         if df.isEmpty():
             return None
