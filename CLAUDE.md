@@ -329,16 +329,20 @@ de_Funk/
 
 ### Model Architecture Pattern
 
-**v2.0 Modular YAML Pattern** (Recommended):
+**v3.0 Markdown Config Pattern** (Current):
 
-Models split across multiple files for clarity and inheritance:
+Models are defined in markdown files with YAML front matter in `domains/`:
 
 ```
-configs/models/stocks/
-├── model.yaml          # Metadata & composition
-├── schema.yaml         # Table definitions (extends base)
-├── graph.yaml          # Graph structure (extends base)
-└── measures.yaml       # Measure definitions (YAML + Python)
+domains/
+├── corporate/
+│   └── company.md      # Company model (YAML front matter + docs)
+├── securities/
+│   └── stocks.md       # Stocks model
+├── foundation/
+│   └── temporal.md     # Calendar dimension
+└── municipal/
+    └── city_finance.md # City finance model
 ```
 
 **model.yaml**:
@@ -468,33 +472,33 @@ Tier 3: etf (→ etfs), forecast
 
 ## v2.0 Model Architecture (November 2025)
 
-### Modular YAML Structure
+### Markdown Config Structure
 
-**Philosophy**: Split large monolithic YAMLs into logical components for maintainability.
+**Philosophy**: Combine model documentation and configuration in one place.
 
 **Structure**:
 ```
-configs/models/{model}/
-├── model.yaml      # Metadata, dependencies, composition
-├── schema.yaml     # Dimensions, facts, columns
-├── graph.yaml      # Nodes, edges, paths
-└── measures.yaml   # Simple + Python measures
+domains/
+├── corporate/company.md     # Company model config + docs
+├── securities/stocks.md     # Stocks model config + docs
+├── foundation/temporal.md   # Calendar dimension
+└── municipal/city_finance.md
 ```
 
-**Loading**: `ModelConfigLoader` (`config/model_loader.py`) handles:
-- Discovering modular YAML files
-- Resolving `extends` and `inherits_from` keywords
+**Loading**: `ModelConfigLoader` (`config/domain_loader.py`) handles:
+- Discovering markdown files with YAML front matter
+- Resolving `extends` and `schema_template` keywords
 - Deep merging configurations with override semantics
 - Auto-discovering Python measure modules
 
 **Example Usage**:
 ```python
-from config.model_loader import ModelConfigLoader
+from config.domain_loader import ModelConfigLoader
 from pathlib import Path
 
-loader = ModelConfigLoader(Path("configs/models"))
-config = loader.load_model_config("stocks")
-# Returns fully merged config with inherited schemas/measures
+loader = ModelConfigLoader(Path("domains"))
+config = loader.load_model_config("company")
+# Returns config from domains/corporate/company.md front matter
 ```
 
 ### YAML Inheritance System
@@ -832,12 +836,13 @@ with repo_imports() as repo_root:
 
 When creating a new model or modifying an existing one:
 
-1. **Create/Update YAML Configuration**
-   - Location: `/configs/models/{model_name}.yaml`
-   - Define schema (dimensions, facts, columns)
+1. **Create/Update Markdown Configuration**
+   - Location: `/domains/{category}/{model_name}.md`
+   - Define schema (dimensions, facts, columns) in YAML front matter
    - Define graph (nodes, edges, paths)
    - Define measures (simple, computed, weighted)
    - Specify dependencies
+   - Add documentation in markdown body
 
 2. **Implement Model Class**
    - Location: `/models/implemented/{model_name}/`
@@ -1333,10 +1338,10 @@ If queries are slow:
 | `.env` | API keys and environment configuration |
 | `configs/storage.json` | Storage paths and table mappings |
 | `configs/pipelines/*.json` | API endpoint configurations (auto-discovered) |
-| `configs/models/*.yaml` | Model definitions (v2.0 modular architecture) |
+| `domains/**/*.md` | Model definitions (markdown with YAML front matter) |
 | `configs/notebooks/*.md` | Notebook definitions |
 
-**Note**: With the new ConfigLoader system, API configs are auto-discovered from `configs/pipelines/*_endpoints.json` files. No manual registration needed!
+**Note**: Model configs are now in `domains/` directory as markdown files with YAML front matter. API configs are auto-discovered from `configs/pipelines/*_endpoints.json` files.
 
 ### Critical Documentation Files
 
@@ -1456,7 +1461,7 @@ If queries are slow:
 
 ### When Exploring Code
 
-1. **Start with YAML configs**: Models defined in `/configs/models/`
+1. **Start with domain configs**: Models defined in `/domains/` (markdown with YAML front matter)
 2. **Check documentation**: Review relevant `.md` files first
 3. **Use examples**: Look at `/scripts/examples/` for usage patterns
 4. **Follow imports**: Trace from high-level to implementation
@@ -2133,8 +2138,8 @@ Which approach would you prefer?
 
 1. **Add to appropriate location**:
    - Environment secret → `.env` (never commit)
-   - API endpoint → `configs/{provider}_endpoints.json`
-   - Model config → `configs/models/{model}/*.yaml`
+   - API endpoint → `configs/pipelines/{provider}_endpoints.json`
+   - Model config → `domains/{category}/{model}.md` (YAML front matter)
    - App setting → `config/constants.py`
 
 2. **Add type-safe access**:
