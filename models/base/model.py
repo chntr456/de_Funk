@@ -297,16 +297,122 @@ class BaseModel:
         return self._dims, self._facts
 
     def ensure_built(self):
-        """Lazy build pattern - only build when needed."""
+        """
+        Lazy build pattern - only build when needed.
+
+        First tries to load from Silver layer (if it exists).
+        Falls back to building from Bronze if Silver doesn't exist.
+        """
         if not self._is_built:
             # Ensure Spark session is active before Delta reads
             self._ensure_active_spark_session()
 
+            # Try loading from Silver first (faster, no Bronze transformation)
+            if self._load_from_silver():
+                self._is_built = True
+                return
+
+            # Fall back to building from Bronze
             if self._graph_builder is None:
                 from models.base.graph_builder import GraphBuilder
                 self._graph_builder = GraphBuilder(self)
             self._dims, self._facts = self._graph_builder.build()
             self._is_built = True
+
+    def _get_silver_root(self) -> str:
+        """Get the Silver layer root path for this model."""
+        model_silver_key = f"{self.model_name}_silver"
+        roots = self.storage_cfg.get('roots', {})
+
+        if model_silver_key in roots:
+            return roots[model_silver_key]
+
+        # Fallback to generic silver root
+        silver_root = roots.get('silver', 'storage/silver')
+        return f"{silver_root}/{self.model_name}"
+
+    def _load_from_silver(self) -> bool:
+        """
+        Try to load model tables directly from Silver layer.
+
+        Returns:
+            True if successfully loaded from Silver, False otherwise
+        """
+        from pathlib import Path
+
+        silver_root = self._get_silver_root()
+        silver_path = Path(silver_root)
+
+        # Check if silver path exists
+        if not silver_path.exists():
+            logger.debug(f"Silver path does not exist: {silver_path}")
+            return False
+
+        dims_path = silver_path / "dims"
+        facts_path = silver_path / "facts"
+
+        # Check if we have at least dims or facts directory
+        if not dims_path.exists() and not facts_path.exists():
+            logger.debug(f"No dims or facts directories in Silver: {silver_path}")
+            return False
+
+        logger.info(f"Loading {self.model_name} from Silver layer: {silver_path}")
+
+        self._dims = {}
+        self._facts = {}
+
+        try:
+            # Load dimensions
+            if dims_path.exists():
+                for table_dir in dims_path.iterdir():
+                    if table_dir.is_dir():
+                        table_name = table_dir.name
+                        df = self._read_silver_table(str(table_dir))
+                        if df is not None:
+                            self._dims[table_name] = df
+                            logger.debug(f"  Loaded dim: {table_name}")
+
+            # Load facts
+            if facts_path.exists():
+                for table_dir in facts_path.iterdir():
+                    if table_dir.is_dir():
+                        table_name = table_dir.name
+                        df = self._read_silver_table(str(table_dir))
+                        if df is not None:
+                            self._facts[table_name] = df
+                            logger.debug(f"  Loaded fact: {table_name}")
+
+            if self._dims or self._facts:
+                logger.info(f"  Loaded from Silver: {len(self._dims)} dims, {len(self._facts)} facts")
+                return True
+            else:
+                logger.warning(f"  Silver layer exists but no tables found")
+                return False
+
+        except Exception as e:
+            logger.warning(f"Failed to load from Silver layer: {e}")
+            return False
+
+    def _read_silver_table(self, path: str):
+        """Read a table from Silver layer (auto-detects Delta/Parquet)."""
+        from pathlib import Path
+
+        table_path = Path(path)
+        is_delta = (table_path / "_delta_log").exists()
+
+        try:
+            if self.backend == 'spark':
+                spark = getattr(self.connection, 'spark', self.connection)
+                if is_delta:
+                    return spark.read.format("delta").load(path)
+                else:
+                    return spark.read.parquet(path)
+            else:
+                # DuckDB
+                return self.connection.read_table(path)
+        except Exception as e:
+            logger.warning(f"Failed to read Silver table {path}: {e}")
+            return None
 
     # ============================================================
     # TABLE ACCESS (delegated to TableAccessor)
