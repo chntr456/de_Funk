@@ -402,6 +402,10 @@ class BaseModel:
 
         try:
             if self.backend == 'spark':
+                # Re-register session RIGHT BEFORE Delta read
+                # Delta Lake 4.x requires active session in JVM thread-local storage
+                self._ensure_active_spark_session()
+
                 spark = getattr(self.connection, 'spark', self.connection)
                 if is_delta:
                     return spark.read.format("delta").load(path)
