@@ -156,7 +156,7 @@ def reingest_bronze(ctx, date_from: str, date_to: str, max_tickers: int = None):
 
 def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
     """Rebuild silver layer models using v2.0 modular architecture."""
-    from config.model_loader import ModelConfigLoader
+    from config.domain_loader import ModelConfigLoader
     from models.domains.corporate.company import CompanyModel
     from models.domains.securities.stocks import StocksModel
     from models.api.session import UniversalSession
@@ -167,9 +167,9 @@ def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
     print()
 
     try:
-        # Initialize model config loader
-        models_dir = ctx.repo / "configs" / "models"
-        loader = ModelConfigLoader(models_dir)
+        # Initialize model config loader (from domains/ directory)
+        domains_dir = ctx.repo / "domains"
+        loader = ModelConfigLoader(domains_dir)
 
         # Create session for cross-model references
         session = UniversalSession(ctx.connection, ctx.storage, ctx.repo)

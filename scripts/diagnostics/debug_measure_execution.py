@@ -34,8 +34,8 @@ def test_inherited_measure():
     print("\n[1] LOADING CONFIGURATION")
     print("-" * 80)
 
-    from config.model_loader import ModelConfigLoader
-    loader = ModelConfigLoader(Path("configs/models"))
+    from config.domain_loader import ModelConfigLoader
+    loader = ModelConfigLoader(Path("domains"))
     config = loader.load_model_config("stocks")
 
     print(f"✓ Loaded stocks model config")

@@ -264,7 +264,7 @@ class ModelRegistry:
     """
     Registry of available data models.
 
-    Discovers models from configs/models/ directory.
+    Discovers models from domains/ directory (markdown with YAML front matter).
     Provides model metadata, validation, and querying.
     Also maintains a registry of model classes for dynamic instantiation.
     """
@@ -274,7 +274,7 @@ class ModelRegistry:
         Initialize model registry.
 
         Args:
-            models_dir: Directory containing model YAML files
+            models_dir: Directory containing model definitions (domains/ directory)
         """
         self.models_dir = Path(models_dir)
         self.models: Dict[str, ModelConfig] = {}
@@ -283,43 +283,26 @@ class ModelRegistry:
         self._register_default_model_classes()
 
     def _load_models(self):
-        """Discover and load all model configurations."""
+        """Discover and load all model configurations from domains/ directory."""
         if not self.models_dir.exists():
             raise ValueError(f"Models directory not found: {self.models_dir}")
 
-        # Try to use ModelConfigLoader for modular YAML support
+        # Use domain_loader for markdown-based configs
         try:
-            from config.model_loader import ModelConfigLoader
-            use_modular_loader = True
-        except ImportError:
-            use_modular_loader = False
-
-        # First, try to load modular models (subdirectories with model.yaml)
-        if use_modular_loader:
+            from config.domain_loader import ModelConfigLoader
             loader = ModelConfigLoader(self.models_dir)
-            for model_dir in self.models_dir.iterdir():
-                if model_dir.is_dir() and not model_dir.name.startswith('_'):
-                    model_yaml = model_dir / 'model.yaml'
-                    if model_yaml.exists():
-                        try:
-                            # Use ModelConfigLoader to get merged config
-                            config_dict = loader.load_model_config(model_dir.name)
-                            model = ModelConfig(config_dict)
-                            self.models[model.name] = model
-                        except Exception as e:
-                            print(f"Warning: Failed to load modular model from {model_dir}: {e}")
 
-        # Also load legacy single-file YAMLs (backward compatibility)
-        for yaml_file in self.models_dir.glob("*.yaml"):
-            try:
-                config_dict = yaml.safe_load(yaml_file.read_text())
-                model_name = config_dict.get('model')
-                # Only load if not already loaded from modular structure
-                if model_name and model_name not in self.models:
+            # Load all discovered domain models
+            for model_name in loader.list_models():
+                try:
+                    config_dict = loader.load_model_config(model_name)
                     model = ModelConfig(config_dict)
                     self.models[model.name] = model
-            except Exception as e:
-                print(f"Warning: Failed to load model from {yaml_file}: {e}")
+                except Exception as e:
+                    print(f"Warning: Failed to load model '{model_name}': {e}")
+
+        except ImportError as e:
+            print(f"Warning: Could not import domain_loader: {e}")
 
     def list_models(self) -> List[str]:
         """List all available model names."""
@@ -489,7 +472,7 @@ class ModelRegistry:
         """
         Get raw model configuration dictionary (for model instantiation).
 
-        Supports both modular and single-file YAML configurations.
+        Loads from domains/ directory (markdown with YAML front matter).
 
         Args:
             model_name: Name of the model
@@ -497,21 +480,10 @@ class ModelRegistry:
         Returns:
             Dictionary with model configuration
         """
-        model_config = self.get_model(model_name)
+        # Verify model exists in registry
+        self.get_model(model_name)
 
-        # Try modular structure first
-        model_dir = self.models_dir / model_name
-        if model_dir.exists() and (model_dir / 'model.yaml').exists():
-            try:
-                from config.model_loader import ModelConfigLoader
-                loader = ModelConfigLoader(self.models_dir)
-                return loader.load_model_config(model_name)
-            except Exception:
-                pass  # Fall back to single file
-
-        # Fall back to single-file YAML (legacy)
-        config_path = self.models_dir / f"{model_name}.yaml"
-        if config_path.exists():
-            return yaml.safe_load(config_path.read_text())
-        else:
-            raise ValueError(f"Model config file not found: {config_path} or {model_dir}")
+        # Load full config from domain_loader
+        from config.domain_loader import ModelConfigLoader
+        loader = ModelConfigLoader(self.models_dir)
+        return loader.load_model_config(model_name)

@@ -172,11 +172,12 @@ class BaseModel:
     def _load_python_measures(self):
         """Load Python measures module for this model."""
         try:
-            from config.model_loader import ModelConfigLoader
+            from config.domain_loader import ModelConfigLoader
             from pathlib import Path
 
-            models_dir = self.storage_cfg.get('models_dir', 'configs/models')
-            loader = ModelConfigLoader(Path(models_dir))
+            # Use domains/ directory (markdown with YAML front matter)
+            domains_dir = self.storage_cfg.get('domains_dir', 'domains')
+            loader = ModelConfigLoader(Path(domains_dir))
             measures_instance = loader.load_python_measures(self.model_name, model_instance=self)
 
             if measures_instance:
