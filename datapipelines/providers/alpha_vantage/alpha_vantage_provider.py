@@ -927,7 +927,8 @@ class AlphaVantageProvider(BaseProvider):
 
         # Apply date parsing for date columns
         date_columns = self._get_date_columns_for_endpoint(endpoint_id)
-        df = normalizer._apply_date_parsing(df, date_columns, [])
+        if date_columns:
+            df = normalizer._parse_dates(df, date_columns)
 
         return df
 

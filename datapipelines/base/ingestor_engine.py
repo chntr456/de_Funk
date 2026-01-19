@@ -575,10 +575,15 @@ class IngestorEngine:
 
                 if raw_path:
                     logger.info(f"{work_item}: BULK path - {raw_path}")
-                    return self._ingest_bulk_from_raw(
+                    result = self._ingest_bulk_from_raw(
                         work_item, raw_path, table_name, partitions,
                         write_strategy, key_columns, date_column
                     )
+                    # If BULK succeeded, return result
+                    # If it returned None, fall through to INCREMENTAL
+                    if result is not None:
+                        return result
+                    logger.warning(f"{work_item}: BULK failed, falling back to INCREMENTAL")
 
             # =========================================================================
             # PATH 2: INCREMENTAL (fetch and stream)
