@@ -129,57 +129,9 @@ class Table:
         delta_log = Path(path) / "_delta_log"
         return delta_log.exists()
 
-    def _ensure_active_session(self) -> bool:
-        """
-        Ensure Spark session is active for Delta Lake 4.x.
-
-        Delta Lake calls SparkSession.active() internally which requires
-        the session in thread-local storage. Must be called right before
-        any Delta read operation.
-
-        Sets both active session (thread-local) and default session (global).
-
-        Returns:
-            True if session is active after registration, False otherwise
-        """
-        import logging
-        logger = logging.getLogger(__name__)
-
-        try:
-            jvm = self.spark._jvm
-            jss = self.spark._jsparkSession
-
-            # Check state BEFORE registration
-            before_active = jvm.org.apache.spark.sql.SparkSession.getActiveSession()
-            before_state = "PRESENT" if before_active.isDefined() else "EMPTY"
-
-            # Set as active (thread-local)
-            jvm.org.apache.spark.sql.SparkSession.setActiveSession(jss)
-            # Also set as default (global fallback)
-            jvm.org.apache.spark.sql.SparkSession.setDefaultSession(jss)
-
-            # Verify state AFTER registration
-            after_active = jvm.org.apache.spark.sql.SparkSession.getActiveSession()
-            after_state = "PRESENT" if after_active.isDefined() else "EMPTY"
-
-            if after_state == "EMPTY":
-                logger.error(f"TABLE: Session registration FAILED: before={before_state}, after={after_state}")
-                return False
-
-            logger.debug(f"TABLE: Session state: before={before_state}, after={after_state}")
-            return True
-
-        except Exception as e:
-            logger.error(f"TABLE: Failed to ensure active session: {e}")
-            return False
-
     def read(self, merge_schema: bool = True) -> DataFrame:
         """
         Read table (auto-detects Delta Lake or Parquet).
-
-        For Delta tables, uses DeltaTable API which takes SparkSession
-        as an explicit parameter, avoiding thread-local session issues
-        in Delta Lake 4.x.
 
         Args:
             merge_schema: If True, merges schemas across partitions.
@@ -188,33 +140,18 @@ class Table:
         Returns:
             DataFrame with table data
         """
-        import logging
-        logger = logging.getLogger(__name__)
-
         if self._override_df is not None:
             return self._override_df
 
         path = self.path
 
         if self._is_delta_table(path):
-            # Use DeltaTable API which takes session explicitly
-            # This avoids thread-local session issues in Delta Lake 4.x
-            try:
-                from delta.tables import DeltaTable
-                dt = DeltaTable.forPath(self.spark, path)
-                df = dt.toDF()
-                logger.debug(f"Read Delta table via DeltaTable API: {path}")
-                return df
-            except Exception as delta_err:
-                # If DeltaTable API fails, try with session registration
-                logger.debug(f"DeltaTable API failed, trying read API: {delta_err}")
-                self._ensure_active_session()
-                return (
-                    self.spark.read
-                    .format("delta")
-                    .option("mergeSchema", str(merge_schema).lower())
-                    .load(path)
-                )
+            return (
+                self.spark.read
+                .format("delta")
+                .option("mergeSchema", str(merge_schema).lower())
+                .load(path)
+            )
 
         return (
             self.spark.read

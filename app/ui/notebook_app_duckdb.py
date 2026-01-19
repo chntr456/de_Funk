@@ -94,7 +94,7 @@ if 'repo_context' not in st.session_state:
 
 if 'model_registry' not in st.session_state:
     ctx = st.session_state.repo_context
-    st.session_state.model_registry = ModelRegistry(ctx.repo / "configs" / "models")
+    st.session_state.model_registry = ModelRegistry(ctx.repo / "domains")
 
 if 'universal_session' not in st.session_state:
     ctx = st.session_state.repo_context

@@ -324,6 +324,9 @@ class StocksModel(BaseModel):
         """
         Get top stocks by market capitalization.
 
+        If market_cap column doesn't exist, calculates it from latest price
+        and shares_outstanding.
+
         Args:
             limit: Number of top stocks to return
 
@@ -332,12 +335,55 @@ class StocksModel(BaseModel):
         """
         dim_stock = self.get_table('dim_stock')
 
-        if self.session:
-            return self.session.top_n_by(dim_stock, limit, 'market_cap', ascending=False)
-        elif self.backend == 'spark':
-            return dim_stock.orderBy(dim_stock.market_cap.desc()).limit(limit)
+        # Check if market_cap column exists
+        has_market_cap = 'market_cap' in dim_stock.columns
+
+        if has_market_cap:
+            # Use existing market_cap column
+            if self.session:
+                return self.session.top_n_by(dim_stock, limit, 'market_cap', ascending=False)
+            elif self.backend == 'spark':
+                return dim_stock.orderBy(dim_stock.market_cap.desc()).limit(limit)
+            else:
+                return dim_stock.nlargest(limit, 'market_cap')
         else:
-            return dim_stock.nlargest(limit, 'market_cap')
+            # Calculate market_cap from latest prices and shares_outstanding
+            if self.backend == 'spark':
+                from pyspark.sql import functions as F
+
+                # Get latest prices per ticker
+                fact_prices = self.get_table('fact_stock_prices')
+                latest_prices = (
+                    fact_prices
+                    .groupBy('ticker')
+                    .agg(F.max('trade_date').alias('latest_date'))
+                )
+                latest_prices = (
+                    fact_prices.alias('p')
+                    .join(latest_prices.alias('l'),
+                          (F.col('p.ticker') == F.col('l.ticker')) &
+                          (F.col('p.trade_date') == F.col('l.latest_date')))
+                    .select('p.ticker', F.col('p.close').alias('latest_close'))
+                )
+
+                # Join with dim_stock and calculate market_cap
+                if 'shares_outstanding' in dim_stock.columns:
+                    result = (
+                        dim_stock.alias('d')
+                        .join(latest_prices.alias('lp'), 'd.ticker == lp.ticker', 'left')
+                        .withColumn('calc_market_cap',
+                                    F.col('d.shares_outstanding') * F.col('lp.latest_close'))
+                        .orderBy(F.col('calc_market_cap').desc())
+                        .limit(limit)
+                        .select('d.*')
+                    )
+                    return result
+                else:
+                    # No shares data - just return top by alphabetical
+                    return dim_stock.orderBy('ticker').limit(limit)
+            else:
+                # DuckDB/pandas fallback - return first N tickers
+                return dim_stock.head(limit)
 
     # Complex measures are accessed via calculate_measure()
     # Example:

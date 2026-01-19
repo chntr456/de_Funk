@@ -458,9 +458,6 @@ class BaseModel:
         """
         Read a table from Silver layer (auto-detects Delta/Parquet).
 
-        For Spark backend with Delta Lake 4.x, uses DeltaTable API which
-        takes SparkSession as explicit parameter, avoiding thread-local issues.
-
         Args:
             path: Path to the table directory
 
@@ -477,65 +474,25 @@ class BaseModel:
 
         try:
             if self.backend == 'spark':
-                # Get SparkSession from connection
                 spark = self._get_spark_session()
                 if spark is None:
                     logger.error(f"Could not get SparkSession for reading {path}")
                     return None
 
-                # For Delta tables, use DeltaTable API which takes session explicitly
-                # This avoids the thread-local session issues in Delta Lake 4.x
                 if is_delta:
-                    try:
-                        from delta.tables import DeltaTable
-                        # DeltaTable.forPath takes spark session explicitly
-                        dt = DeltaTable.forPath(spark, path)
-                        df = dt.toDF()
-                        logger.debug(f"  Successfully read {path} via DeltaTable API")
-                        return df
-                    except Exception as delta_err:
-                        # If DeltaTable API fails, try registering session and using read API
-                        logger.debug(f"DeltaTable API failed, trying read API: {delta_err}")
-                        self._force_session_registration(spark)
-                        df = spark.read.format("delta").load(path)
-                        logger.debug(f"  Successfully read {path} via read API")
-                        return df
+                    df = spark.read.format("delta").load(path)
                 else:
                     df = spark.read.parquet(path)
-                    logger.debug(f"  Successfully read {path}")
-                    return df
+
+                logger.debug(f"  Successfully read {path}")
+                return df
             else:
                 # DuckDB
                 return self.connection.read_table(path)
 
         except Exception as e:
-            error_msg = str(e)
             logger.warning(f"Failed to read Silver table {path}: {e}")
             return None
-
-    def _force_session_registration(self, spark):
-        """
-        Force registration of SparkSession in JVM thread-local storage.
-
-        Delta Lake 4.x requires the session to be registered. This method
-        forces the registration using direct JVM calls.
-
-        Args:
-            spark: SparkSession to register
-        """
-        try:
-            if spark is None or not hasattr(spark, '_jvm'):
-                return
-
-            jvm = spark._jvm
-            jss = spark._jsparkSession
-
-            # Set both active and default session
-            jvm.org.apache.spark.sql.SparkSession.setActiveSession(jss)
-            jvm.org.apache.spark.sql.SparkSession.setDefaultSession(jss)
-
-        except Exception as e:
-            logger.debug(f"Session registration failed: {e}")
 
     # ============================================================
     # TABLE ACCESS (delegated to TableAccessor)
