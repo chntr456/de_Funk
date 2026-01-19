@@ -508,11 +508,6 @@ class IngestorEngine:
                 error=str(e)[:200]
             )
 
-    # Alias for backward compatibility
-    def _ingest_with_spark_csv(self, *args, **kwargs) -> WorkItemResult:
-        """Alias for _ingest_with_spark_native (backward compatibility)."""
-        return self._ingest_with_spark_native(*args, **kwargs)
-
     def _ingest_work_item_async(
         self,
         work_item: str,
@@ -521,18 +516,24 @@ class IngestorEngine:
         **kwargs
     ) -> WorkItemResult:
         """
-        Ingest a single work item with chunked async writes.
+        Ingest a single work item using the best available method.
 
-        Collects records up to write_batch_size, queues async write, continues.
-        Memory stays bounded while overlapping fetch and write operations.
+        Method selection (in order of preference):
+        1. SPARK-NATIVE PATH (if provider has fetch_as_dataframe):
+           - Optionally calls populate_raw_cache() first (Alpha Vantage: API → raw JSON)
+           - Spark reads all files at once (CSV or JSON)
+           - Single DataFrame write to Delta
+           - 10-50x faster for large datasets
 
-        If the provider supports Spark CSV reading (fetch_as_dataframe), uses that
-        path for distributed CSV parsing instead of Python batching.
+        2. PYTHON BATCHING (fallback for providers without fetch_as_dataframe):
+           - Fetches records in batches via provider.fetch()
+           - Normalizes with provider.normalize()
+           - Async writes to Delta
 
         Args:
             work_item: Work item identifier
-            write_batch_size: Records to buffer before each write
-            max_records: Max records to fetch
+            write_batch_size: Records to buffer before each write (Python path only)
+            max_records: Max records to fetch (disables Spark-native path if set)
             **kwargs: Provider-specific options
 
         Returns:
@@ -548,38 +549,40 @@ class IngestorEngine:
 
             logger.info(f"{work_item}: write_strategy={write_strategy}, table={table_name}")
 
-            # Try Spark native reading first (distributed, no Python batching)
-            # Check for CSV support (Socrata providers)
-            if (max_records is None and
-                hasattr(self.provider, 'supports_spark_csv') and
-                self.provider.supports_spark_csv(work_item)):
+            # =========================================================================
+            # SPARK-NATIVE PATH (unified for CSV/JSON)
+            # =========================================================================
+            # Use Spark-native path if provider has fetch_as_dataframe()
+            # This works for both:
+            #   - Socrata (CSV): downloads CSV, Spark reads
+            #   - Alpha Vantage (JSON): API → raw JSON, Spark reads
+            if max_records is None and hasattr(self.provider, 'fetch_as_dataframe'):
 
-                logger.info(f"{work_item}: Using Spark CSV path (distributed)")
-                return self._ingest_with_spark_csv(
+                # Phase 1: Populate raw cache if provider supports it
+                # (Alpha Vantage: API → raw JSON files)
+                # (Socrata: handled inside fetch_as_dataframe)
+                if hasattr(self.provider, 'populate_raw_cache'):
+                    logger.info(f"{work_item}: Populating raw cache")
+                    cache_stats = self.provider.populate_raw_cache(work_item, **kwargs)
+                    logger.info(
+                        f"{work_item}: Cache stats - "
+                        f"cached: {cache_stats.get('cached', 0)}, "
+                        f"fetched: {cache_stats.get('fetched', 0)}, "
+                        f"failed: {cache_stats.get('failed', 0)}"
+                    )
+
+                # Phase 2: Spark reads all files at once
+                logger.info(f"{work_item}: Spark-native read (distributed)")
+                result = self._ingest_with_spark_native(
                     work_item, table_name, partitions,
                     write_strategy, key_columns, date_column
                 )
 
-            # Spark-native JSON flow (Alpha Vantage): populate raw cache → Spark reads
-            if (max_records is None and
-                hasattr(self.provider, 'populate_raw_cache') and
-                hasattr(self.provider, 'fetch_as_dataframe')):
-
-                # Phase 1: Populate raw JSON cache (API → raw files)
-                logger.info(f"{work_item}: Phase 1 - Populating raw JSON cache")
-                cache_stats = self.provider.populate_raw_cache(work_item, **kwargs)
-                logger.info(
-                    f"{work_item}: Raw cache stats - "
-                    f"cached: {cache_stats['cached']}, fetched: {cache_stats['fetched']}, "
-                    f"failed: {cache_stats['failed']}"
-                )
-
-                # Phase 2: Spark reads all raw JSON at once
-                logger.info(f"{work_item}: Phase 2 - Spark reading raw JSON (distributed)")
-                return self._ingest_with_spark_native(
-                    work_item, table_name, partitions,
-                    write_strategy, key_columns, date_column
-                )
+                # If Spark-native succeeded, return result
+                # If it returned None, fall through to Python batching
+                if result is not None:
+                    return result
+                logger.warning(f"{work_item}: Spark-native returned None, falling back to Python batching")
 
             # Get shared executor
             executor = self.get_executor(self.writer_threads)
