@@ -190,16 +190,20 @@ class ForecastBuilder(BaseModelBuilder):
             # Create forecast model instance
             from models.domains.securities.forecast import ForecastModel
             from models.api.session import UniversalSession
+            from core.connection import get_spark_connection
+
+            # Create connection wrapper for Spark session
+            connection = get_spark_connection(self.spark)
 
             # Create session for cross-model access
             session = UniversalSession(
-                spark=self.spark,
+                connection=connection,
                 storage_cfg=self.storage_config,
                 repo_root=self.repo_root
             )
 
             forecast_model = ForecastModel(
-                connection=self.spark,
+                connection=connection,
                 storage_cfg=self.storage_config,
                 model_cfg=model_config,
                 repo_root=self.repo_root,
