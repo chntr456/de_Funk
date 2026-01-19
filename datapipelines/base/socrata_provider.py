@@ -385,8 +385,8 @@ class SocrataBaseProvider(BaseProvider):
         """
         Normalize date strings to yyyy-MM-dd format for ANSI-safe parsing.
 
-        Uses try_to_date to gracefully handle malformed data by returning NULL
-        instead of throwing an error.
+        Uses try_to_timestamp (then cast to date) to gracefully handle malformed
+        data by returning NULL instead of throwing an error.
 
         Handles Socrata date formats:
         - ISO timestamp: 2025-02-26T00:00:00.000 -> 2025-02-26
@@ -455,8 +455,9 @@ class SocrataBaseProvider(BaseProvider):
             )
         )
 
-        # Use try_to_date to return NULL for malformed dates instead of throwing errors
-        return F.try_to_date(normalized, F.lit("yyyy-MM-dd"))
+        # Use try_to_timestamp and cast to date (try_to_date not available in PySpark)
+        # This returns NULL for malformed dates instead of throwing errors
+        return F.try_to_timestamp(normalized, F.lit("yyyy-MM-dd")).cast("date")
 
     def _safe_parse_timestamp(self, col_val):
         """
