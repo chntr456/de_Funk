@@ -96,10 +96,11 @@ class ForecastBuilder(BaseModelBuilder):
                 return []
 
         try:
-            # CRITICAL: Set the passed-in session as active for Delta Lake compatibility
+            # CRITICAL: Ensure session is active for Delta Lake compatibility
             # Spark 4.x Delta Lake internally calls SparkSession.active() which requires
-            # the session to be registered in thread-local storage
-            SparkSession.setActiveSession(self.spark)
+            # the session to be registered in thread-local storage.
+            # Use getOrCreate() which returns existing session AND registers it as active.
+            SparkSession.builder.getOrCreate()
 
             # Read with Delta or Parquet
             if (stocks_path / "_delta_log").exists():
