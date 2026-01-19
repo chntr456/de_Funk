@@ -250,32 +250,54 @@ class SparkNormalizer:
         return df
 
     def _parse_dates(self, df: DataFrame, date_columns: List[str]) -> DataFrame:
-        """Parse string columns as dates. Handles 'None' strings as NULL."""
+        """Parse string columns as dates. Handles invalid values as NULL.
+
+        Invalid values include:
+        - 'None' string (Alpha Vantage returns this instead of null)
+        - '0000-00-00' (invalid placeholder date)
+        - Empty strings
+        """
         df_columns = df.columns
 
         for column in date_columns:
             if column in df_columns:
-                # Replace 'None' string with null, then parse date
+                # Replace invalid date values with null, then parse date
                 df = df.withColumn(
                     column,
                     F.to_date(
-                        F.when(F.col(column) == "None", None).otherwise(F.col(column))
+                        F.when(
+                            (F.col(column) == "None") |
+                            (F.col(column) == "0000-00-00") |
+                            (F.col(column) == ""),
+                            None
+                        ).otherwise(F.col(column))
                     )
                 )
 
         return df
 
     def _parse_timestamps(self, df: DataFrame, timestamp_columns: List[str]) -> DataFrame:
-        """Parse string columns as timestamps. Handles 'None' strings as NULL."""
+        """Parse string columns as timestamps. Handles invalid values as NULL.
+
+        Invalid values include:
+        - 'None' string (Alpha Vantage returns this instead of null)
+        - '0000-00-00' variants (invalid placeholder dates)
+        - Empty strings
+        """
         df_columns = df.columns
 
         for column in timestamp_columns:
             if column in df_columns:
-                # Replace 'None' string with null, then parse timestamp
+                # Replace invalid timestamp values with null, then parse timestamp
                 df = df.withColumn(
                     column,
                     F.to_timestamp(
-                        F.when(F.col(column) == "None", None).otherwise(F.col(column))
+                        F.when(
+                            (F.col(column) == "None") |
+                            (F.col(column).startswith("0000-00-00")) |
+                            (F.col(column) == ""),
+                            None
+                        ).otherwise(F.col(column))
                     )
                 )
 

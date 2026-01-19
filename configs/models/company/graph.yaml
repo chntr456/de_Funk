@@ -133,16 +133,13 @@ nodes:
       cashflow_from_financing: cashflow_from_financing
       dividend_payout: dividend_payout
       dividend_payout_common: dividend_payout_common
-      proceeds_from_stock_repurchase: proceeds_from_stock_repurchase
-      proceeds_from_stock_issuance: proceeds_from_stock_issuance
-      # Summary
-      net_change_in_cash: net_change_in_cash
-      free_cash_flow: free_cash_flow
       # Metadata
       reported_currency: reported_currency
     derive:
       company_id: "CONCAT('COMPANY_', ticker)"
       report_date: "fiscal_date_ending"
+      # Free cash flow = operating cash flow - capital expenditures
+      free_cash_flow: "COALESCE(operating_cashflow, 0) - COALESCE(capital_expenditures, 0)"
     tags: [fact, financials, cash_flow]
     unique_key: [ticker, fiscal_date_ending, report_type]
 
