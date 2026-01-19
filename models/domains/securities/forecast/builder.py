@@ -83,14 +83,18 @@ class ForecastBuilder(BaseModelBuilder):
             stocks_model = self._get_stocks_model()
 
             if limit:
-                # Get top stocks by market cap
-                top_stocks = stocks_model.get_top_by_market_cap(limit=limit)
-                if self.spark:
-                    # Spark DataFrame
-                    return [row["ticker"] for row in top_stocks.select("ticker").collect()]
-                else:
-                    # Pandas/DuckDB
-                    return top_stocks["ticker"].tolist()
+                # Try to get top stocks by market cap
+                try:
+                    top_stocks = stocks_model.get_top_by_market_cap(limit=limit)
+                    if self.spark:
+                        return [row["ticker"] for row in top_stocks.select("ticker").collect()]
+                    else:
+                        return top_stocks["ticker"].tolist()
+                except Exception as market_cap_err:
+                    # market_cap column may not exist - fall back to random sample
+                    logger.warning(f"market_cap not available, using random sample: {market_cap_err}")
+                    all_tickers = stocks_model.list_tickers(active_only=False)
+                    return all_tickers[:limit] if len(all_tickers) > limit else all_tickers
             else:
                 # Get all tickers
                 return stocks_model.list_tickers(active_only=False)
