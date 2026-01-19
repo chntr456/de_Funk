@@ -532,17 +532,27 @@ class SocrataBaseProvider(BaseProvider):
         Returns:
             Spark DataFrame
         """
+        import json as json_module
         from datapipelines.base.normalizer import SparkNormalizer
 
         # Normalize record keys: "Case Number" -> "case_number"
         # This ensures CSV column names match schema source definitions
+        # Also handle the_geom fields - convert complex types to JSON strings
+        # (Socrata geom fields can be string/WKT, array/coords, or dict/GeoJSON)
         if records:
             normalized_records = []
             for record in records:
-                normalized_record = {
-                    self._normalize_column_name(k): v
-                    for k, v in record.items()
-                }
+                normalized_record = {}
+                for k, v in record.items():
+                    norm_key = self._normalize_column_name(k)
+                    # Convert geom/location fields to JSON string if they're complex types
+                    # Socrata geom fields can be string (WKT), array (coords), or dict (GeoJSON)
+                    # Common names: the_geom, location, shape, geometry
+                    is_geom_field = norm_key in ('the_geom', 'location', 'shape', 'geometry') or norm_key.endswith('_geom')
+                    if is_geom_field and isinstance(v, (dict, list)):
+                        normalized_record[norm_key] = json_module.dumps(v)
+                    else:
+                        normalized_record[norm_key] = v
                 normalized_records.append(normalized_record)
             records = normalized_records
 
