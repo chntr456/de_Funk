@@ -15,7 +15,7 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
   - Removed Ray-based cluster scripts (migrated to pure Spark)
   - Consolidated build scripts to `build_models.py`
   - Consolidated ingest scripts to `run_bronze_ingestion.py`
-  - Main test script: `test_full_pipeline_spark.sh`
+  - Main test script: `test_pipeline.sh`
 - **✅ Foundation vs Domain Models**: `models/foundation/` for base models (temporal), `models/domain/` for domain-specific
   - BuilderRegistry discovers from both directories
   - TemporalBuilder moved from domain/ to foundation/
@@ -240,7 +240,7 @@ de_Funk/
 │   ├── spark-cluster/       # Spark cluster management
 │   ├── maintenance/         # Cleanup and migration scripts
 │   └── test/                # Test scripts
-│       └── test_full_pipeline_spark.sh  # Main pipeline test script (v2.6)
+│       └── test_pipeline.sh             # Main pipeline test script
 ├── storage/                 # Data storage (or /shared/storage on cluster)
 │   ├── bronze/              # Raw ingested data (Delta Lake)
 │   │   ├── securities_reference/    # All tickers from LISTING_STATUS
@@ -1101,17 +1101,17 @@ streamlit run app/ui/notebook_app_duckdb.py
 
 **Full Pipeline Test** (recommended - tests ingestion + build):
 ```bash
-# Run full pipeline with dev profile (50 tickers)
-./scripts/test/test_full_pipeline_spark.sh --profile dev
+# Run full pipeline with dev profile
+./scripts/test/test_pipeline.sh --profile dev
 
-# Quick test (10 tickers)
-./scripts/test/test_full_pipeline_spark.sh --profile quick_test
+# Quick test
+./scripts/test/test_pipeline.sh --profile quick_test
 
 # Production (all tickers)
-./scripts/test/test_full_pipeline_spark.sh --profile production
+./scripts/test/test_pipeline.sh --profile production
 
 # Override ticker count
-./scripts/test/test_full_pipeline_spark.sh --max-tickers 100
+./scripts/test/test_pipeline.sh --max-tickers 100
 ```
 
 **Seeding Data** (run before pipeline if needed):
@@ -1389,11 +1389,10 @@ If queries are slow:
 | Script | Purpose |
 |--------|---------|
 | `run_app.py` / `run_app.sh` | Launch Streamlit UI |
-| `scripts/test/test_full_pipeline_spark.sh` | **Main pipeline test** - ingestion + build (v2.6) |
-| `scripts/build/build_models.py` | Build Silver layer models (v2.6) |
+| `scripts/test/test_pipeline.sh` | **Main pipeline test** - ingestion + build |
+| `scripts/build/build_models.py` | Build Silver layer models |
 | `scripts/build/rebuild_model.py` | Rebuild specific model |
-| `scripts/ingest/run_bronze_ingestion.py` | Bronze ingestion (v2.6) |
-| `run_full_pipeline.py` | Legacy orchestrator (use test_full_pipeline_spark.sh instead) |
+| `scripts/ingest/run_bronze_ingestion.py` | Bronze ingestion |
 
 ---
 
