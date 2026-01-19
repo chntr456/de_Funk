@@ -256,6 +256,24 @@ class BaseModelBuilder(ABC):
 
         return len(errors) == 0, errors
 
+    def _ensure_active_session(self) -> None:
+        """
+        Ensure Spark session is registered as active for Delta Lake 4.x.
+
+        Delta Lake internally calls SparkSession.active() which requires
+        the session to be registered in thread-local storage. Between
+        builder executions, the session can become unregistered.
+
+        Uses JVM bridge to call Scala's setActiveSession() directly since
+        PySpark doesn't expose this method.
+        """
+        try:
+            self.spark._jvm.org.apache.spark.sql.SparkSession.setActiveSession(
+                self.spark._jsparkSession
+            )
+        except Exception as e:
+            logger.debug(f"Could not set active session via JVM: {e}")
+
     def build(self) -> BuildResult:
         """
         Execute the model build.
@@ -264,6 +282,9 @@ class BaseModelBuilder(ABC):
             BuildResult with build outcome
         """
         start_time = datetime.now()
+
+        # Ensure Spark session is active for Delta Lake 4.x compatibility
+        self._ensure_active_session()
 
         # Validate first
         is_valid, errors = self.validate()

@@ -78,15 +78,8 @@ class ForecastBuilder(BaseModelBuilder):
         from pyspark.sql.window import Window
         from pathlib import Path
 
-        # CRITICAL: Set session as active for Delta Lake 4.x compatibility
-        # Delta Lake internally calls SparkSession.active() which requires
-        # the session to be registered in thread-local storage via JVM
-        try:
-            self.spark._jvm.org.apache.spark.sql.SparkSession.setActiveSession(
-                self.spark._jsparkSession
-            )
-        except Exception as e:
-            logger.debug(f"Could not set active session via JVM: {e}")
+        # Ensure session is active for Delta Lake 4.x (uses inherited helper)
+        self._ensure_active_session()
 
         silver_root = self.storage_config["roots"].get("silver", "storage/silver")
 
@@ -184,6 +177,9 @@ class ForecastBuilder(BaseModelBuilder):
         - Stores forecasts and metrics to Silver layer
         """
         start_time = datetime.now()
+
+        # Ensure Spark session is active for Delta Lake 4.x
+        self._ensure_active_session()
 
         if self.context.dry_run:
             return BuildResult(
