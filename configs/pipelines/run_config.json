@@ -169,6 +169,14 @@
       "log_level": "INFO",
       "_comment": "Chicago + Cook County - one endpoint each for testing BULK ingestion."
     },
+    "municipal_all": {
+      "providers": ["chicago", "cook_county"],
+      "max_records_per_endpoint": null,
+      "write_batch_size": 500000,
+      "dry_run": false,
+      "log_level": "INFO",
+      "_comment": "All Chicago + Cook County endpoints. Auto-discovers from provider (CSV for large tables, JSON API for small)."
+    },
     "listing_status": {
       "providers": ["alpha_vantage"],
       "alpha_vantage_endpoints": ["listing_status"],
