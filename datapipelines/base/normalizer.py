@@ -250,22 +250,34 @@ class SparkNormalizer:
         return df
 
     def _parse_dates(self, df: DataFrame, date_columns: List[str]) -> DataFrame:
-        """Parse string columns as dates."""
+        """Parse string columns as dates. Handles 'None' strings as NULL."""
         df_columns = df.columns
 
         for column in date_columns:
             if column in df_columns:
-                df = df.withColumn(column, F.to_date(F.col(column)))
+                # Replace 'None' string with null, then parse date
+                df = df.withColumn(
+                    column,
+                    F.to_date(
+                        F.when(F.col(column) == "None", None).otherwise(F.col(column))
+                    )
+                )
 
         return df
 
     def _parse_timestamps(self, df: DataFrame, timestamp_columns: List[str]) -> DataFrame:
-        """Parse string columns as timestamps."""
+        """Parse string columns as timestamps. Handles 'None' strings as NULL."""
         df_columns = df.columns
 
         for column in timestamp_columns:
             if column in df_columns:
-                df = df.withColumn(column, F.to_timestamp(F.col(column)))
+                # Replace 'None' string with null, then parse timestamp
+                df = df.withColumn(
+                    column,
+                    F.to_timestamp(
+                        F.when(F.col(column) == "None", None).otherwise(F.col(column))
+                    )
+                )
 
         return df
 
