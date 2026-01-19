@@ -78,6 +78,16 @@ class ForecastBuilder(BaseModelBuilder):
         from pyspark.sql.window import Window
         from pathlib import Path
 
+        # CRITICAL: Set session as active for Delta Lake 4.x compatibility
+        # Delta Lake internally calls SparkSession.active() which requires
+        # the session to be registered in thread-local storage via JVM
+        try:
+            self.spark._jvm.org.apache.spark.sql.SparkSession.setActiveSession(
+                self.spark._jsparkSession
+            )
+        except Exception as e:
+            logger.debug(f"Could not set active session via JVM: {e}")
+
         silver_root = self.storage_config["roots"].get("silver", "storage/silver")
 
         # Strategy 1: Get tickers from dim_stock dimension (new schema)
