@@ -212,6 +212,29 @@ class BaseModel:
 
         raise ValueError(f"Unknown connection type: {connection_type}")
 
+    def _ensure_active_spark_session(self):
+        """
+        Ensure Spark session is registered as active for Delta Lake 4.x.
+
+        Delta Lake 4.x internally calls SparkSession.active() which requires
+        the session to be registered in thread-local storage. This can become
+        unregistered between operations.
+        """
+        if self.backend != 'spark':
+            return
+
+        try:
+            # Get the actual SparkSession from the connection
+            spark = getattr(self.connection, 'spark', None) or self.connection
+
+            # Re-register with JVM thread-local storage
+            jvm = spark._jvm
+            jvm.org.apache.spark.sql.SparkSession.setActiveSession(spark._jsparkSession)
+            jvm.org.apache.spark.sql.SparkSession.setDefaultSession(spark._jsparkSession)
+        except Exception as e:
+            # Log but don't fail - the session might still work
+            logger.debug(f"Could not re-register Spark session: {e}")
+
     def set_session(self, session):
         """
         Inject session reference for cross-model access.
@@ -263,6 +286,9 @@ class BaseModel:
 
     def build(self) -> Tuple[Dict[str, DataFrame], Dict[str, DataFrame]]:
         """Build model tables from Bronze layer."""
+        # Ensure Spark session is active before Delta reads
+        self._ensure_active_spark_session()
+
         if self._graph_builder is None:
             from models.base.graph_builder import GraphBuilder
             self._graph_builder = GraphBuilder(self)
@@ -273,6 +299,9 @@ class BaseModel:
     def ensure_built(self):
         """Lazy build pattern - only build when needed."""
         if not self._is_built:
+            # Ensure Spark session is active before Delta reads
+            self._ensure_active_spark_session()
+
             if self._graph_builder is None:
                 from models.base.graph_builder import GraphBuilder
                 self._graph_builder = GraphBuilder(self)
