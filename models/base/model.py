@@ -423,12 +423,45 @@ class BaseModel:
             logger.warning(f"Failed to load from Silver layer: {e}")
             return False
 
+    def _get_spark_session(self):
+        """
+        Get SparkSession with multiple fallback strategies.
+
+        Strategy order:
+        1. Get from connection wrapper (self.connection.spark)
+        2. Use connection directly if it's a SparkSession
+        3. Use SparkSession.builder.getOrCreate() as final fallback
+
+        Returns:
+            SparkSession or None
+        """
+        # Strategy 1: Get from connection wrapper
+        spark = getattr(self.connection, 'spark', None)
+        if spark is not None and hasattr(spark, '_jvm'):
+            return spark
+
+        # Strategy 2: Connection might be SparkSession directly
+        if hasattr(self.connection, '_jvm'):
+            return self.connection
+
+        # Strategy 3: getOrCreate() - always works if a session exists
+        try:
+            from pyspark.sql import SparkSession
+            spark = SparkSession.builder.getOrCreate()
+            logger.debug("Using SparkSession.builder.getOrCreate() fallback")
+            return spark
+        except Exception as e:
+            logger.error(f"All SparkSession retrieval strategies failed: {e}")
+            return None
+
     def _read_silver_table(self, path: str):
         """
         Read a table from Silver layer (auto-detects Delta/Parquet).
 
-        For Spark backend, ensures the session is registered as active
-        before attempting any Delta reads.
+        For Spark backend, uses multiple strategies to ensure a valid
+        SparkSession is available:
+        1. Re-register session in JVM thread-local storage
+        2. Fall back to SparkSession.builder.getOrCreate() if needed
 
         Args:
             path: Path to the table directory
@@ -449,11 +482,22 @@ class BaseModel:
                 # CRITICAL: Re-register session RIGHT BEFORE Delta read
                 # Delta Lake 4.x requires active session in JVM thread-local storage
                 session_ok = self._ensure_active_spark_session()
-                if not session_ok:
-                    logger.error(f"Session registration failed before reading {path}")
-                    # Still try to read - maybe it will work anyway
 
-                spark = getattr(self.connection, 'spark', self.connection)
+                # Get SparkSession using robust retrieval
+                spark = self._get_spark_session()
+                if spark is None:
+                    logger.error(f"Could not get SparkSession for reading {path}")
+                    return None
+
+                # If registration failed but we have a session, try registering again
+                if not session_ok:
+                    logger.warning(f"Session registration failed, attempting direct registration")
+                    try:
+                        jvm = spark._jvm
+                        jvm.org.apache.spark.sql.SparkSession.setActiveSession(spark._jsparkSession)
+                        jvm.org.apache.spark.sql.SparkSession.setDefaultSession(spark._jsparkSession)
+                    except Exception as e:
+                        logger.debug(f"Direct registration also failed: {e}")
 
                 if is_delta:
                     df = spark.read.format("delta").load(path)
@@ -476,6 +520,17 @@ class BaseModel:
                     f"  Backend: {self.backend}\n"
                     f"  Has .spark attr: {hasattr(self.connection, 'spark')}"
                 )
+                # Last resort: try with getOrCreate directly
+                try:
+                    from pyspark.sql import SparkSession
+                    spark = SparkSession.builder.getOrCreate()
+                    logger.warning(f"Retrying read with getOrCreate() fallback")
+                    if is_delta:
+                        return spark.read.format("delta").load(path)
+                    else:
+                        return spark.read.parquet(path)
+                except Exception as retry_err:
+                    logger.error(f"Retry with getOrCreate also failed: {retry_err}")
             else:
                 logger.warning(f"Failed to read Silver table {path}: {e}")
             return None
