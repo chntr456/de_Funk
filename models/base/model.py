@@ -327,6 +327,194 @@ class BaseModel:
         """Return relationship graph from edges config."""
         return self._get_table_accessor().get_relations()
 
+    def get_denormalized(
+        self,
+        fact_table: str,
+        include_dims: Optional[List[str]] = None,
+        columns: Optional[List[str]] = None
+    ) -> DataFrame:
+        """
+        Get fact table with dimension columns joined in.
+
+        Joins the specified fact table with its related dimension tables
+        based on graph edges, returning a denormalized view with natural
+        keys (ticker, trade_date) instead of just foreign keys (security_id, date_id).
+
+        Args:
+            fact_table: Name of fact table (e.g., 'fact_stock_prices')
+            include_dims: Dimension tables to join. If None, auto-detects
+                         from graph edges connected to the fact table.
+            columns: Specific columns to include. If None, includes all columns
+                    from fact and joined dimensions.
+
+        Returns:
+            DataFrame with fact + dimension columns joined
+
+        Example:
+            # Get stock prices with ticker, sector, exchange from dim_stock
+            df = model.get_denormalized('fact_stock_prices')
+
+            # Get prices with only specific dimensions
+            df = model.get_denormalized('fact_stock_prices', include_dims=['dim_stock'])
+
+            # Get prices with only specific columns
+            df = model.get_denormalized('fact_stock_prices', columns=['ticker', 'trade_date', 'close', 'sector'])
+        """
+        self.ensure_built()
+
+        # Get the fact table
+        fact_df = self.get_table(fact_table)
+
+        # Get graph edges to find dimension relationships
+        graph_config = self.model_cfg.get('graph', {})
+        edges_config = graph_config.get('edges', {})
+
+        # Handle both v1.x (list) and v2.0 (dict) edge formats
+        if isinstance(edges_config, dict):
+            edges = list(edges_config.values())
+        else:
+            edges = edges_config
+
+        # Find edges FROM this fact table TO dimension tables
+        dim_joins = []
+        for edge in edges:
+            edge_from = edge.get('from', '')
+            edge_to = edge.get('to', '')
+
+            # Skip if not from our fact table
+            if edge_from != fact_table:
+                continue
+
+            # Skip cross-model edges (e.g., "core.dim_calendar")
+            if '.' in edge_to:
+                continue
+
+            # Skip if include_dims specified and this dim not in list
+            if include_dims is not None and edge_to not in include_dims:
+                continue
+
+            # Only join dimension tables (dim_*)
+            if not edge_to.startswith('dim_'):
+                continue
+
+            # Parse join condition
+            on_conditions = edge.get('on', [])
+            if on_conditions:
+                join_cols = self._parse_join_conditions(on_conditions)
+                dim_joins.append({
+                    'dim_table': edge_to,
+                    'join_cols': join_cols
+                })
+
+        # Execute joins
+        result_df = fact_df
+
+        if self.backend == 'spark':
+            for join_info in dim_joins:
+                dim_table = join_info['dim_table']
+                join_cols = join_info['join_cols']
+
+                try:
+                    dim_df = self.get_table(dim_table)
+
+                    # Build join condition
+                    join_cond = None
+                    for left_col, right_col in join_cols:
+                        cond = result_df[left_col] == dim_df[right_col]
+                        join_cond = cond if join_cond is None else join_cond & cond
+
+                    # Drop duplicate join columns from dim to avoid ambiguity
+                    dim_cols_to_drop = [rc for lc, rc in join_cols if lc == rc]
+                    if dim_cols_to_drop:
+                        dim_df = dim_df.drop(*dim_cols_to_drop)
+
+                    result_df = result_df.join(dim_df, join_cond, 'left')
+                    logger.debug(f"Joined {fact_table} with {dim_table}")
+                except Exception as e:
+                    logger.warning(f"Failed to join {dim_table}: {e}")
+        else:
+            # DuckDB backend
+            for join_info in dim_joins:
+                dim_table = join_info['dim_table']
+                join_cols = join_info['join_cols']
+
+                try:
+                    dim_df = self.get_table(dim_table)
+
+                    # For DuckDB/pandas, use merge
+                    import pandas as pd
+
+                    # Convert to pandas if needed
+                    if hasattr(result_df, 'df'):
+                        result_pdf = result_df.df()
+                    elif isinstance(result_df, pd.DataFrame):
+                        result_pdf = result_df
+                    else:
+                        result_pdf = result_df
+
+                    if hasattr(dim_df, 'df'):
+                        dim_pdf = dim_df.df()
+                    elif isinstance(dim_df, pd.DataFrame):
+                        dim_pdf = dim_df
+                    else:
+                        dim_pdf = dim_df
+
+                    # Build merge keys
+                    left_keys = [lc for lc, rc in join_cols]
+                    right_keys = [rc for lc, rc in join_cols]
+
+                    # Drop duplicate columns from dim before merge
+                    dim_cols_to_drop = [rc for lc, rc in join_cols if lc == rc and rc in dim_pdf.columns]
+                    if dim_cols_to_drop:
+                        dim_pdf = dim_pdf.drop(columns=dim_cols_to_drop)
+
+                    result_pdf = result_pdf.merge(
+                        dim_pdf,
+                        left_on=left_keys,
+                        right_on=right_keys,
+                        how='left',
+                        suffixes=('', f'_{dim_table}')
+                    )
+                    result_df = result_pdf
+                    logger.debug(f"Joined {fact_table} with {dim_table}")
+                except Exception as e:
+                    logger.warning(f"Failed to join {dim_table}: {e}")
+
+        # Filter to specific columns if requested
+        if columns is not None:
+            if self.backend == 'spark':
+                available = set(result_df.columns)
+                valid_cols = [c for c in columns if c in available]
+                if valid_cols:
+                    result_df = result_df.select(*valid_cols)
+            else:
+                import pandas as pd
+                if isinstance(result_df, pd.DataFrame):
+                    available = set(result_df.columns)
+                    valid_cols = [c for c in columns if c in available]
+                    if valid_cols:
+                        result_df = result_df[valid_cols]
+
+        return result_df
+
+    def _parse_join_conditions(self, conditions: List[str]) -> List[Tuple[str, str]]:
+        """
+        Parse join conditions from graph edge config.
+
+        Args:
+            conditions: List of conditions like ["security_id=security_id"]
+
+        Returns:
+            List of (left_col, right_col) tuples
+        """
+        result = []
+        for cond in conditions:
+            if '=' in cond:
+                parts = cond.split('=')
+                if len(parts) == 2:
+                    result.append((parts[0].strip(), parts[1].strip()))
+        return result
+
     def get_metadata(self) -> Dict[str, Any]:
         """Return model metadata."""
         return self._get_table_accessor().get_metadata()
