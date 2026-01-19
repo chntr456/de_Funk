@@ -385,6 +385,9 @@ class SocrataBaseProvider(BaseProvider):
         """
         Normalize date strings to yyyy-MM-dd format for ANSI-safe parsing.
 
+        Uses try_to_date to gracefully handle malformed data by returning NULL
+        instead of throwing an error.
+
         Handles Socrata date formats:
         - ISO timestamp: 2025-02-26T00:00:00.000 -> 2025-02-26
         - ISO date: 2025-02-26 (no change)
@@ -452,11 +455,15 @@ class SocrataBaseProvider(BaseProvider):
             )
         )
 
-        return F.to_date(normalized, "yyyy-MM-dd")
+        # Use try_to_date to return NULL for malformed dates instead of throwing errors
+        return F.try_to_date(normalized, F.lit("yyyy-MM-dd"))
 
     def _safe_parse_timestamp(self, col_val):
         """
         Normalize timestamp strings for ANSI-safe parsing.
+
+        Uses try_to_timestamp to gracefully handle malformed data by returning NULL
+        instead of throwing an error (e.g., '2022 03:39:00 AM-07-29 00:00:00').
 
         Handles formats:
         - ISO: 2025-02-26T14:30:00.000 -> 2025-02-26 14:30:00
@@ -500,7 +507,8 @@ class SocrataBaseProvider(BaseProvider):
             )
         )
 
-        return F.to_timestamp(normalized, "yyyy-MM-dd HH:mm:ss")
+        # Use try_to_timestamp to return NULL for malformed dates instead of throwing errors
+        return F.try_to_timestamp(normalized, F.lit("yyyy-MM-dd HH:mm:ss"))
 
     def _create_dataframe(
         self,
