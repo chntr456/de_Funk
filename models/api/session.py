@@ -24,10 +24,10 @@ if TYPE_CHECKING:
 else:
     SparkDataFrame = Any
 
-# Import StorageRouter from canonical location (models/api/dal.py)
+# Import StorageRouter and Table from canonical location (models/api/dal.py)
 # Fallback only exists for DuckDB-only environments without pyspark
 try:
-    from models.api.dal import StorageRouter, BronzeTable
+    from models.api.dal import StorageRouter, Table
 except ImportError:
     from dataclasses import dataclass
     from typing import Dict, Any as DictAny
@@ -36,25 +36,31 @@ except ImportError:
     class StorageRouter:
         """Fallback StorageRouter for DuckDB-only environments."""
         storage_cfg: Dict[DictAny, DictAny]
-        repo_root: Optional[Path] = None  # Added for consistency with dal.py
+        repo_root: Optional[Path] = None
 
-        def bronze_path(self, logical_table: str) -> str:
-            root = self.storage_cfg["roots"]["bronze"].rstrip("/")
-            rel = self.storage_cfg["tables"][logical_table]["rel"]
+        def resolve(self, table_ref: str) -> str:
+            """Resolve config-style table reference to path."""
+            if table_ref.startswith("bronze."):
+                layer, rel = "bronze", table_ref[7:].replace(".", "/")
+            elif table_ref.startswith("silver."):
+                layer, rel = "silver", table_ref[7:]
+            else:
+                layer, rel = "silver", table_ref
+
+            root = self.storage_cfg["roots"][layer].rstrip("/")
             path = f"{root}/{rel}"
-            # ConfigLoader should resolve paths to absolute, but handle relative just in case
             if self.repo_root and not Path(path).is_absolute():
                 return str(self.repo_root / path)
             return path
+
+        # Legacy compatibility
+        def bronze_path(self, logical_table: str) -> str:
+            return self.resolve(f"bronze.{logical_table}")
 
         def silver_path(self, logical_rel: str) -> str:
-            root = self.storage_cfg["roots"]["silver"].rstrip("/")
-            path = f"{root}/{logical_rel}"
-            if self.repo_root and not Path(path).is_absolute():
-                return str(self.repo_root / path)
-            return path
+            return self.resolve(f"silver.{logical_rel}")
 
-    BronzeTable = None
+    Table = None
 
 from core.session.filters import FilterEngine
 

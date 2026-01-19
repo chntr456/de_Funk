@@ -33,9 +33,9 @@ except ImportError:
     SparkDataFrame = None
     F = None
 
-# Import StorageRouter (with fallback if pyspark not available)
+# Import StorageRouter and Table (with fallback if pyspark not available)
 try:
-    from models.api.dal import StorageRouter, BronzeTable
+    from models.api.dal import StorageRouter, Table
 except ImportError:
     # Fallback for DuckDB-only environments
     @dataclass(frozen=True)
@@ -43,22 +43,29 @@ except ImportError:
         storage_cfg: Dict[str, Any]
         repo_root: Optional[Path] = None
 
-        def bronze_path(self, logical_table: str) -> str:
-            root = self.storage_cfg["roots"]["bronze"].rstrip("/")
-            rel = self.storage_cfg["tables"][logical_table]["rel"]
+        def resolve(self, table_ref: str) -> str:
+            """Resolve config-style table reference to path."""
+            if table_ref.startswith("bronze."):
+                layer, rel = "bronze", table_ref[7:].replace(".", "/")
+            elif table_ref.startswith("silver."):
+                layer, rel = "silver", table_ref[7:]
+            else:
+                layer, rel = "silver", table_ref
+
+            root = self.storage_cfg["roots"][layer].rstrip("/")
             path = f"{root}/{rel}"
             if self.repo_root:
                 return str(self.repo_root / path)
             return path
 
-        def silver_path(self, logical_rel: str) -> str:
-            root = self.storage_cfg["roots"]["silver"].rstrip("/")
-            path = f"{root}/{logical_rel}"
-            if self.repo_root:
-                return str(self.repo_root / path)
-            return path
+        # Legacy compatibility
+        def bronze_path(self, logical_table: str) -> str:
+            return self.resolve(f"bronze.{logical_table}")
 
-    BronzeTable = None  # Not needed for DuckDB
+        def silver_path(self, logical_rel: str) -> str:
+            return self.resolve(f"silver.{logical_rel}")
+
+    Table = None  # Not needed for DuckDB
 
 # Type alias for DataFrame (can be Spark or DuckDB)
 DataFrame = Any

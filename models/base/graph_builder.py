@@ -359,23 +359,19 @@ class GraphBuilder:
         Returns:
             DataFrame with merged schema
         """
-        # Normalize table name: graph uses dots, storage.json uses slashes
-        # e.g., "alpha_vantage.securities_reference" -> "alpha_vantage/securities_reference"
-        normalized_table = table_name.replace('.', '/')
-        logger.debug(f"Loading bronze table: {table_name} -> {normalized_table}")
+        # Build config-style table reference: "bronze.alpha_vantage.listing_status"
+        table_ref = f"bronze.{table_name}"
+        logger.debug(f"Loading table: {table_ref}")
 
         # Use backend type to determine how to load
         if self.backend == 'spark':
-            from models.api.dal import BronzeTable
-            # BronzeTable expects SparkSession
-            # When using Spark directly, self.connection IS the SparkSession
-            # When using a wrapper, it may have a .spark attribute
+            from models.api.dal import Table
             spark = getattr(self.connection, 'spark', self.connection)
-            bronze = BronzeTable(spark, self.storage_router, normalized_table)
-            return bronze.read(merge_schema=True)
+            table = Table(spark, self.storage_router, table_ref)
+            return table.read(merge_schema=True)
         else:
             # DuckDB - use read_table which auto-detects Delta/Parquet
-            path = self.storage_router.bronze_path(normalized_table)
+            path = self.storage_router.resolve(table_ref)
             return self.connection.read_table(path)
 
     def _apply_derive(self, df: DataFrame, col_name: str, expr: str, node_id: str) -> DataFrame:

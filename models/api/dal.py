@@ -154,24 +154,3 @@ class Table:
     def set_df(self, df: DataFrame):
         """Override with in-memory DataFrame (useful for testing)."""
         self._override_df = df
-
-
-# Backward-compatible aliases
-class BronzeTable(Table):
-    """Reads Bronze layer tables. Alias for Table with 'bronze.' prefix."""
-
-    def __init__(self, spark: SparkSession, router: StorageRouter, logical_table: str):
-        # Prepend bronze. if not already present
-        if not logical_table.startswith("bronze."):
-            logical_table = f"bronze.{logical_table}"
-        super().__init__(spark, router, logical_table)
-
-
-class SilverPath(Table):
-    """Reads Silver layer tables. Alias for Table with 'silver.' prefix."""
-
-    def __init__(self, spark: SparkSession, router: StorageRouter, logical_rel: str):
-        # Prepend silver. if not already present
-        if not logical_rel.startswith("silver."):
-            logical_rel = f"silver.{logical_rel}"
-        super().__init__(spark, router, logical_rel)
