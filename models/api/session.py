@@ -120,7 +120,8 @@ class UniversalSession:
 
         # Model registry for dynamic loading
         from models.registry import ModelRegistry
-        models_dir = repo_root / "configs" / "models"
+        # Models are in domains/ directory (v2.0+ architecture)
+        models_dir = repo_root / "domains"
         self.registry = ModelRegistry(models_dir)
 
         # Cache loaded models
