@@ -637,6 +637,22 @@ class AlphaVantageProvider(BaseProvider):
         # Filter out rows where the map is null
         df = df.filter(F.col("_data_map").isNotNull())
 
+        # Spark infers date-keyed JSON as a Struct (not a Map).
+        # explode() only works on Maps, so we need to convert Struct -> Map first.
+        data_map_schema = df.schema["_data_map"].dataType
+        if isinstance(data_map_schema, StructType):
+            # Get the value type (OHLCV struct) from the first field
+            if not data_map_schema.fields:
+                logger.warning("_data_map struct has no fields")
+                return None
+            value_type = data_map_schema.fields[0].dataType
+            map_type = MapType(StringType(), value_type)
+
+            # Convert: Struct -> JSON string -> Map type
+            df = df.withColumn("_data_json", F.to_json(F.col("_data_map")))
+            df = df.withColumn("_data_map", F.from_json(F.col("_data_json"), map_type))
+            df = df.drop("_data_json")
+
         # Explode the map: each (date_key, value_struct) becomes a row
         # explode() on a Map creates columns named 'key' and 'value'
         df = df.select(
