@@ -102,6 +102,36 @@ def force_register_session(spark):
         print(f"  Registration failed: {e}")
 
 
+def find_stocks_silver(storage_root: Path) -> Path | None:
+    """Search for stocks Silver layer in various possible locations."""
+    candidates = [
+        storage_root / "silver" / "securities" / "stocks",
+        storage_root / "silver" / "stocks",
+        storage_root / "silver" / "securities",
+    ]
+
+    print("Searching for stocks Silver layer...")
+    for candidate in candidates:
+        print(f"  Checking: {candidate}")
+        if candidate.exists():
+            # Check if it has dim_stock or fact_stock_prices
+            if (candidate / "dim_stock").exists() or (candidate / "fact_stock_prices").exists():
+                print(f"  FOUND stocks at: {candidate}")
+                return candidate
+            # List what's there
+            contents = list(candidate.iterdir()) if candidate.is_dir() else []
+            print(f"    Contents: {[c.name for c in contents[:10]]}")
+
+    # Also scan silver directory directly
+    silver_root = storage_root / "silver"
+    if silver_root.exists():
+        print(f"\n  Scanning {silver_root}...")
+        for item in silver_root.iterdir():
+            print(f"    {item.name}/ : {[c.name for c in item.iterdir()][:5] if item.is_dir() else 'file'}")
+
+    return None
+
+
 def main():
     print_section("DEBUG: Forecast Stocks Read Issue")
 
@@ -110,13 +140,21 @@ def main():
     if not storage_root.exists():
         storage_root = repo_root / "storage"
 
-    # Stocks is under securities subdirectory
-    stocks_silver = storage_root / "silver" / "securities" / "stocks"
+    print(f"Storage root: {storage_root}")
+    print(f"Storage root exists: {storage_root.exists()}")
+
+    # Find where stocks actually is
+    stocks_silver = find_stocks_silver(storage_root)
+
+    if stocks_silver is None:
+        print("\nERROR: Could not find stocks Silver layer!")
+        print("Please run: ls -la /shared/storage/silver/")
+        return
+
     dim_stock_path = stocks_silver / "dim_stock"
     fact_prices_path = stocks_silver / "fact_stock_prices"
 
-    print(f"Storage root: {storage_root}")
-    print(f"Stocks silver: {stocks_silver}")
+    print(f"\nStocks silver: {stocks_silver}")
     print(f"dim_stock exists: {dim_stock_path.exists()}")
     print(f"fact_prices exists: {fact_prices_path.exists()}")
 
@@ -173,9 +211,32 @@ def main():
 
     check_session_state(spark, "After SparkConnection created")
 
-    print("\nCreating StocksModel...")
+    print("\nCreating StocksModel (exactly like ForecastBuilder does)...")
     from models.domains.securities.stocks.model import StocksModel
-    stocks_model = StocksModel(connection=connection, storage_root=storage_root)
+    from config.domain_loader import ModelConfigLoader
+
+    # Load model config the same way ForecastBuilder does
+    domains_dir = repo_root / "domains"
+    print(f"  Loading config from: {domains_dir}")
+    loader = ModelConfigLoader(domains_dir)
+    stocks_config = loader.load_model_config("stocks")
+    print(f"  stocks_config loaded: {list(stocks_config.keys()) if stocks_config else 'None'}")
+
+    # Build storage_cfg - this is what ForecastBuilder uses
+    storage_cfg = {
+        'root': str(storage_root),
+        'silver_root': str(storage_root / 'silver'),
+        'bronze_root': str(storage_root / 'bronze'),
+    }
+    print(f"  storage_cfg: {storage_cfg}")
+
+    stocks_model = StocksModel(
+        connection=connection,
+        storage_cfg=storage_cfg,
+        model_cfg=stocks_config,
+        params={},
+        repo_root=repo_root
+    )
     print(f"  StocksModel: {stocks_model}")
     print(f"  stocks_model.connection: {stocks_model.connection}")
     print(f"  stocks_model.backend: {stocks_model.backend}")
