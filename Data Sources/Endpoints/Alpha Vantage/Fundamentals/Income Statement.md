@@ -23,6 +23,37 @@ bulk_download: false
 json_structure: array_reports
 json_structure_comment: "Contains annualReports and quarterlyReports arrays. Requires union + explode in Spark."
 
+# Raw JSON Schema for explicit Spark reading (avoids schema inference)
+# Format: [field_name, type] - defines the report record fields (inside arrays)
+# All fields are strings since Alpha Vantage returns strings (type coercion happens in normalization)
+raw_schema:
+  - [fiscalDateEnding, string]
+  - [reportedCurrency, string]
+  - [grossProfit, string]
+  - [totalRevenue, string]
+  - [costOfRevenue, string]
+  - [costofGoodsAndServicesSold, string]
+  - [operatingIncome, string]
+  - [sellingGeneralAndAdministrative, string]
+  - [researchAndDevelopment, string]
+  - [operatingExpenses, string]
+  - [depreciation, string]
+  - [depreciationAndAmortization, string]
+  - [investmentIncomeNet, string]
+  - [netInterestIncome, string]
+  - [interestIncome, string]
+  - [interestExpense, string]
+  - [nonInterestIncome, string]
+  - [otherNonOperatingIncome, string]
+  - [interestAndDebtExpense, string]
+  - [incomeBeforeTax, string]
+  - [incomeTaxExpense, string]
+  - [netIncomeFromContinuingOperations, string]
+  - [comprehensiveIncomeNetOfTax, string]
+  - [netIncome, string]
+  - [ebit, string]
+  - [ebitda, string]
+
 # Metadata
 domain: finance
 legal_entity_type: vendor

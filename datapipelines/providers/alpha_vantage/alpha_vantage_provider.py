@@ -598,6 +598,9 @@ class AlphaVantageProvider(BaseProvider):
         - object: Flat JSON (company overview)
         - array_reports: Nested arrays (financials)
 
+        If endpoint has raw_schema defined, uses explicit schema instead of inference.
+        This significantly improves performance for large file sets.
+
         Args:
             work_item: Work item identifier
             raw_path: Glob pattern to raw JSON files
@@ -612,18 +615,23 @@ class AlphaVantageProvider(BaseProvider):
         json_structure = endpoint.json_structure if endpoint else "object"
         response_key = endpoint.response_key if endpoint else None
 
-        logger.info(f"{work_item}: Reading raw JSON (structure={json_structure})")
+        # Check for explicit raw_schema
+        has_raw_schema = endpoint and endpoint.raw_schema
+        if has_raw_schema:
+            logger.info(f"{work_item}: Reading raw JSON with explicit schema (structure={json_structure})")
+        else:
+            logger.info(f"{work_item}: Reading raw JSON with schema inference (structure={json_structure})")
 
         try:
             if json_structure == "nested_map":
-                df = self._read_nested_map_json(raw_path, response_key, data_type)
+                df = self._read_nested_map_json(raw_path, response_key, data_type, endpoint)
             elif json_structure == "array_reports":
-                df = self._read_array_reports_json(raw_path, data_type)
+                df = self._read_array_reports_json(raw_path, data_type, endpoint)
             elif json_structure == "object":
-                df = self._read_object_json(raw_path, data_type)
+                df = self._read_object_json(raw_path, data_type, endpoint)
             else:
                 logger.warning(f"Unknown json_structure: {json_structure}, falling back to object")
-                df = self._read_object_json(raw_path, data_type)
+                df = self._read_object_json(raw_path, data_type, endpoint)
 
             if df is not None:
                 count = df.count()
@@ -639,7 +647,8 @@ class AlphaVantageProvider(BaseProvider):
         self,
         json_pattern: str,
         response_key: str,
-        data_type: DataType
+        data_type: DataType,
+        endpoint=None
     ) -> Optional[DataFrame]:
         """
         Read JSON files with nested map structure (date keys → value objects).
@@ -650,7 +659,7 @@ class AlphaVantageProvider(BaseProvider):
             {"Time Series (Daily)": {"2024-01-15": {"1. open": "123", ...}, ...}}
 
         Strategy:
-            1. Read all JSON files with Spark
+            1. Read all JSON files with Spark (with explicit schema if available)
             2. Extract response_key field
             3. Explode map to (date, struct) rows
             4. Flatten struct fields
@@ -659,19 +668,59 @@ class AlphaVantageProvider(BaseProvider):
             json_pattern: Glob pattern for JSON files
             response_key: Key containing the nested map (e.g., "Time Series (Daily)")
             data_type: DataType for normalization
+            endpoint: Optional EndpointConfig with raw_schema for explicit schema
 
         Returns:
             DataFrame with flattened records
         """
         from pyspark.sql import functions as F
-        from pyspark.sql.types import MapType, StringType, StructType
+        from pyspark.sql.types import MapType, StringType, StructType, StructField
 
-        # Read all JSON files - use sampling to reduce schema inference overhead
-        # samplingRatio=0.01 samples ~1% of files for schema inference (faster for many small files)
-        df = (self.spark.read
-              .option("multiline", True)
-              .option("samplingRatio", "0.01")
-              .json(json_pattern))
+        # Build file schema if raw_schema is defined
+        # For nested_map, raw_schema defines the VALUE schema (OHLCV fields)
+        file_schema = None
+        if endpoint and endpoint.raw_schema:
+            value_schema = endpoint.get_spark_raw_schema()
+            if value_schema:
+                # Build full file schema with wrapper:
+                # {"_meta": {...}, "response": {"Meta Data": {...}, "Time Series (Daily)": {<date>: <value_schema>}}}
+                meta_schema = StructType([
+                    StructField("ticker", StringType(), True),
+                    StructField("endpoint_id", StringType(), True),
+                    StructField("fetched_at", StringType(), True),
+                    StructField("provider", StringType(), True)
+                ])
+                # The nested map becomes MapType(StringType, value_schema)
+                map_type = MapType(StringType(), value_schema)
+                # Response has Meta Data + the time series map
+                response_fields = [StructField("Meta Data", StructType([
+                    StructField("1. Information", StringType(), True),
+                    StructField("2. Symbol", StringType(), True),
+                    StructField("3. Last Refreshed", StringType(), True),
+                    StructField("4. Output Size", StringType(), True),
+                    StructField("5. Time Zone", StringType(), True),
+                ]), True)]
+                if response_key:
+                    response_fields.append(StructField(response_key, map_type, True))
+                response_schema = StructType(response_fields)
+                file_schema = StructType([
+                    StructField("_meta", meta_schema, True),
+                    StructField("response", response_schema, True)
+                ])
+                logger.debug(f"Using explicit schema with {len(value_schema.fields)} value fields")
+
+        # Read all JSON files - use explicit schema if available, otherwise sampling
+        if file_schema:
+            df = (self.spark.read
+                  .option("multiline", True)
+                  .schema(file_schema)
+                  .json(json_pattern))
+        else:
+            # samplingRatio=0.01 samples ~1% of files for schema inference (faster for many small files)
+            df = (self.spark.read
+                  .option("multiline", True)
+                  .option("samplingRatio", "0.01")
+                  .json(json_pattern))
 
         if df.isEmpty():
             return None
@@ -744,7 +793,8 @@ class AlphaVantageProvider(BaseProvider):
     def _read_object_json(
         self,
         json_pattern: str,
-        data_type: DataType
+        data_type: DataType,
+        endpoint=None
     ) -> Optional[DataFrame]:
         """
         Read JSON files with flat object structure.
@@ -755,24 +805,53 @@ class AlphaVantageProvider(BaseProvider):
             {"Symbol": "AAPL", "Name": "Apple Inc", "MarketCap": "3000000000000", ...}
 
         Strategy:
-            1. Read all JSON files with Spark
+            1. Read all JSON files with Spark (with explicit schema if available)
             2. Each file becomes one row
             3. Extract ticker from filename
 
         Args:
             json_pattern: Glob pattern for JSON files
             data_type: DataType for normalization
+            endpoint: Optional EndpointConfig with raw_schema for explicit schema
 
         Returns:
             DataFrame with one row per file
         """
         from pyspark.sql import functions as F
+        from pyspark.sql.types import StructType, StructField, StringType
 
-        # Read all JSON files - use sampling to reduce schema inference overhead
-        df = (self.spark.read
-              .option("multiline", True)
-              .option("samplingRatio", "0.01")
-              .json(json_pattern))
+        # Build file schema if raw_schema is defined
+        # For object type, raw_schema defines the response object fields
+        file_schema = None
+        if endpoint and endpoint.raw_schema:
+            response_schema = endpoint.get_spark_raw_schema()
+            if response_schema:
+                # Build full file schema with wrapper:
+                # {"_meta": {...}, "response": {<response_schema>}}
+                meta_schema = StructType([
+                    StructField("ticker", StringType(), True),
+                    StructField("endpoint_id", StringType(), True),
+                    StructField("fetched_at", StringType(), True),
+                    StructField("provider", StringType(), True)
+                ])
+                file_schema = StructType([
+                    StructField("_meta", meta_schema, True),
+                    StructField("response", response_schema, True)
+                ])
+                logger.debug(f"Using explicit schema with {len(response_schema.fields)} response fields")
+
+        # Read all JSON files - use explicit schema if available, otherwise sampling
+        if file_schema:
+            df = (self.spark.read
+                  .option("multiline", True)
+                  .schema(file_schema)
+                  .json(json_pattern))
+        else:
+            # Use sampling to reduce schema inference overhead
+            df = (self.spark.read
+                  .option("multiline", True)
+                  .option("samplingRatio", "0.01")
+                  .json(json_pattern))
 
         if df.isEmpty():
             return None
@@ -801,7 +880,8 @@ class AlphaVantageProvider(BaseProvider):
     def _read_array_reports_json(
         self,
         json_pattern: str,
-        data_type: DataType
+        data_type: DataType,
+        endpoint=None
     ) -> Optional[DataFrame]:
         """
         Read JSON files with annual/quarterly report arrays.
@@ -813,24 +893,65 @@ class AlphaVantageProvider(BaseProvider):
             or {"annualEarnings": [...], "quarterlyEarnings": [...]}
 
         Strategy:
-            1. Read all JSON files with Spark
+            1. Read all JSON files with Spark (with explicit schema if available)
             2. Explode annualReports and quarterlyReports arrays
             3. Union with report_type column
 
         Args:
             json_pattern: Glob pattern for JSON files
             data_type: DataType for normalization
+            endpoint: Optional EndpointConfig with raw_schema for explicit schema
 
         Returns:
             DataFrame with all reports
         """
         from pyspark.sql import functions as F
+        from pyspark.sql.types import StructType, StructField, StringType, ArrayType
 
-        # Read all JSON files - use sampling to reduce schema inference overhead
-        df = (self.spark.read
-              .option("multiline", True)
-              .option("samplingRatio", "0.01")
-              .json(json_pattern))
+        # Build file schema if raw_schema is defined
+        # For array_reports, raw_schema defines the report record fields
+        file_schema = None
+        if endpoint and endpoint.raw_schema:
+            report_schema = endpoint.get_spark_raw_schema()
+            if report_schema:
+                # Build full file schema with wrapper:
+                # {"_meta": {...}, "response": {"symbol": "...", "annualReports": [...], "quarterlyReports": [...]}}
+                meta_schema = StructType([
+                    StructField("ticker", StringType(), True),
+                    StructField("endpoint_id", StringType(), True),
+                    StructField("fetched_at", StringType(), True),
+                    StructField("provider", StringType(), True)
+                ])
+                # Determine array column names based on data type
+                if data_type == DataType.EARNINGS:
+                    annual_col = "annualEarnings"
+                    quarterly_col = "quarterlyEarnings"
+                else:
+                    annual_col = "annualReports"
+                    quarterly_col = "quarterlyReports"
+                response_schema = StructType([
+                    StructField("symbol", StringType(), True),
+                    StructField(annual_col, ArrayType(report_schema), True),
+                    StructField(quarterly_col, ArrayType(report_schema), True)
+                ])
+                file_schema = StructType([
+                    StructField("_meta", meta_schema, True),
+                    StructField("response", response_schema, True)
+                ])
+                logger.debug(f"Using explicit schema with {len(report_schema.fields)} report fields")
+
+        # Read all JSON files - use explicit schema if available, otherwise sampling
+        if file_schema:
+            df = (self.spark.read
+                  .option("multiline", True)
+                  .schema(file_schema)
+                  .json(json_pattern))
+        else:
+            # Use sampling to reduce schema inference overhead
+            df = (self.spark.read
+                  .option("multiline", True)
+                  .option("samplingRatio", "0.01")
+                  .json(json_pattern))
 
         if df.isEmpty():
             return None

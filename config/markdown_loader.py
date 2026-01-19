@@ -119,8 +119,51 @@ class EndpointConfig:
     #   "array_reports" - Contains annualReports/quarterlyReports arrays (e.g., financials)
     #   "array" - Simple array of objects
     json_structure: str = "object"
+    # Raw JSON schema for explicit Spark schema (avoids inference)
+    # Format: list of [field_name, type] or [field_name, type, nullable]
+    # Example: [["1. open", "string"], ["2. high", "string"]]
+    raw_schema: List[List[Any]] = field(default_factory=list)
     # Raw config dict for additional fields
     raw: Dict[str, Any] = field(default_factory=dict)
+
+    def get_spark_raw_schema(self):
+        """
+        Convert raw_schema to a Spark StructType for explicit JSON reading.
+
+        Returns:
+            StructType if raw_schema is defined, None otherwise
+        """
+        if not self.raw_schema:
+            return None
+
+        from pyspark.sql.types import (
+            StructType, StructField, StringType, IntegerType, LongType,
+            DoubleType, FloatType, BooleanType, DateType, TimestampType
+        )
+
+        type_mapping = {
+            'string': StringType(),
+            'int': IntegerType(),
+            'integer': IntegerType(),
+            'long': LongType(),
+            'double': DoubleType(),
+            'float': FloatType(),
+            'boolean': BooleanType(),
+            'bool': BooleanType(),
+            'date': DateType(),
+            'timestamp': TimestampType(),
+        }
+
+        fields = []
+        for field_def in self.raw_schema:
+            if len(field_def) >= 2:
+                name = field_def[0]
+                type_str = field_def[1].lower()
+                nullable = field_def[2] if len(field_def) > 2 else True
+                spark_type = type_mapping.get(type_str, StringType())
+                fields.append(StructField(name, spark_type, nullable))
+
+        return StructType(fields) if fields else None
 
 
 @dataclass
@@ -468,6 +511,7 @@ class MarkdownConfigLoader:
             view_ids=view_ids,
             download_method=frontmatter.get('download_method', 'json'),
             json_structure=frontmatter.get('json_structure', 'object'),
+            raw_schema=frontmatter.get('raw_schema', []) or [],
             raw=frontmatter
         )
 

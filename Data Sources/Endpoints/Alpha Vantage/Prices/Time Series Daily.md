@@ -25,6 +25,19 @@ bulk_download: false
 json_structure: nested_map
 json_structure_comment: "Date strings as keys → OHLCV objects as values. Requires explode() for Spark reading."
 
+# Raw JSON Schema for explicit Spark reading (avoids schema inference)
+# Format: [field_name, type] - defines the VALUE schema (OHLCV object fields)
+# All fields are strings since Alpha Vantage returns strings (type coercion happens in normalization)
+raw_schema:
+  - ["1. open", string]
+  - ["2. high", string]
+  - ["3. low", string]
+  - ["4. close", string]
+  - ["5. adjusted close", string]
+  - ["6. volume", string]
+  - ["7. dividend amount", string]
+  - ["8. split coefficient", string]
+
 # Metadata
 domain: securities
 legal_entity_type: vendor
