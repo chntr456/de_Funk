@@ -15,6 +15,7 @@
 #   --skip-seed          Skip ticker seeding (use existing Bronze data)
 #   --force-seed         Force re-seed even if ticker data exists
 #   --skip-ingest        Skip Bronze ingestion
+#   --skip-deps          Skip building model dependencies (assumes they exist in Silver)
 #   --save-raw           Save raw API responses to raw/{provider}/ before transformation
 #   --storage-path PATH  Override storage path (default: from run_config.json)
 #   --local              Run locally (ignore SPARK_MASTER_URL)
@@ -32,6 +33,7 @@
 #   ./scripts/test/test_pipeline.sh --profile dev                    # Bronze ingestion only
 #   ./scripts/test/test_pipeline.sh --profile silver_only            # Build silver from existing bronze
 #   ./scripts/test/test_pipeline.sh --profile silver_only --models temporal  # Build specific model
+#   ./scripts/test/test_pipeline.sh --profile silver_only --models forecast --skip-deps  # Build only forecast
 #   ./scripts/test/test_pipeline.sh --profile staging                # Full pipeline
 #   ./scripts/test/test_pipeline.sh --profile dev --save-raw         # Save raw API responses
 #
@@ -58,6 +60,7 @@ MODELS=""
 STORAGE_PATH=""
 RUN_LOCAL=false
 SAVE_RAW=false
+SKIP_DEPS=false
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -96,6 +99,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --local)
             RUN_LOCAL=true
+            shift
+            ;;
+        --skip-deps)
+            SKIP_DEPS=true
             shift
             ;;
         --help)
@@ -651,8 +658,10 @@ print(' '.join(models))
     BUILD_STORAGE="${STORAGE_PATH:-/shared/storage}"
     BUILD_ARGS="--storage-root $BUILD_STORAGE"
     [ -n "$MODELS" ] && BUILD_ARGS="$BUILD_ARGS --models $MODELS"
+    [ "$SKIP_DEPS" = true ] && BUILD_ARGS="$BUILD_ARGS --skip-deps"
 
     echo -e "Building models: ${GREEN}${MODELS:-all discovered}${NC}"
+    [ "$SKIP_DEPS" = true ] && echo -e "  ${YELLOW}(skipping dependencies)${NC}"
 
     "$REPO_ROOT/scripts/spark-cluster/submit-job.sh" "$REPO_ROOT/scripts/build/build_models.py" $BUILD_ARGS --verbose
 

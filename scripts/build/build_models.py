@@ -125,7 +125,8 @@ def build_models(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     max_tickers: Optional[int] = None,
-    storage_root: Optional[Path] = None
+    storage_root: Optional[Path] = None,
+    skip_deps: bool = False
 ) -> Dict[str, BuildResult]:
     """
     Build specified models (or all) using the builder registry.
@@ -138,6 +139,7 @@ def build_models(
         date_to: End date for data
         max_tickers: Max tickers to process
         storage_root: Optional custom storage root (e.g., /shared/storage for NFS)
+        skip_deps: If True, skip building dependencies (assumes they exist)
 
     Returns:
         Dict mapping model name to BuildResult
@@ -173,9 +175,14 @@ def build_models(
         logger.error("No models to build")
         return {}
 
-    # Get build order (respects dependencies)
-    build_order = BuilderRegistry.get_build_order(models_to_build)
-    logger.info(f"Build order: {' -> '.join(build_order)}")
+    # Get build order (respects dependencies unless skip_deps is True)
+    if skip_deps:
+        # Skip dependency resolution - just build the requested models
+        build_order = models_to_build
+        logger.info(f"Skipping dependencies, building only: {' -> '.join(build_order)}")
+    else:
+        build_order = BuilderRegistry.get_build_order(models_to_build)
+        logger.info(f"Build order: {' -> '.join(build_order)}")
 
     # Initialize Spark
     if not dry_run:
@@ -301,6 +308,12 @@ Examples:
         help='Custom storage root path (e.g., /shared/storage for NFS). '
              'Overrides default repo-local storage paths.'
     )
+    parser.add_argument(
+        '--skip-deps',
+        action='store_true',
+        help='Skip building dependencies, only build specified models. '
+             'Assumes dependencies already exist in Silver layer.'
+    )
 
     args = parser.parse_args()
 
@@ -318,7 +331,8 @@ Examples:
             date_from=args.date_from,
             date_to=args.date_to,
             max_tickers=args.max_tickers,
-            storage_root=storage_root
+            storage_root=storage_root,
+            skip_deps=args.skip_deps
         )
 
         # Exit with error if any builds failed
