@@ -106,6 +106,10 @@ class ForecastBuilder(BaseModelBuilder):
         Returns:
             StocksModel instance configured with current Spark session
         """
+        # CRITICAL: Ensure Spark session is active before any Delta reads
+        # The session may have become unregistered between builder executions
+        self._ensure_active_session()
+
         from models.domains.securities.stocks.model import StocksModel
         from core.connection import get_spark_connection
 
