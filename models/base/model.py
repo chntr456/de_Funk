@@ -458,10 +458,8 @@ class BaseModel:
         """
         Read a table from Silver layer (auto-detects Delta/Parquet).
 
-        For Spark backend, uses multiple strategies to ensure a valid
-        SparkSession is available:
-        1. Re-register session in JVM thread-local storage
-        2. Fall back to SparkSession.builder.getOrCreate() if needed
+        For Spark backend with Delta Lake 4.x, uses DeltaTable API which
+        takes SparkSession as explicit parameter, avoiding thread-local issues.
 
         Args:
             path: Path to the table directory
@@ -479,61 +477,65 @@ class BaseModel:
 
         try:
             if self.backend == 'spark':
-                # CRITICAL: Re-register session RIGHT BEFORE Delta read
-                # Delta Lake 4.x requires active session in JVM thread-local storage
-                session_ok = self._ensure_active_spark_session()
-
-                # Get SparkSession using robust retrieval
+                # Get SparkSession from connection
                 spark = self._get_spark_session()
                 if spark is None:
                     logger.error(f"Could not get SparkSession for reading {path}")
                     return None
 
-                # If registration failed but we have a session, try registering again
-                if not session_ok:
-                    logger.warning(f"Session registration failed, attempting direct registration")
-                    try:
-                        jvm = spark._jvm
-                        jvm.org.apache.spark.sql.SparkSession.setActiveSession(spark._jsparkSession)
-                        jvm.org.apache.spark.sql.SparkSession.setDefaultSession(spark._jsparkSession)
-                    except Exception as e:
-                        logger.debug(f"Direct registration also failed: {e}")
-
+                # For Delta tables, use DeltaTable API which takes session explicitly
+                # This avoids the thread-local session issues in Delta Lake 4.x
                 if is_delta:
-                    df = spark.read.format("delta").load(path)
+                    try:
+                        from delta.tables import DeltaTable
+                        # DeltaTable.forPath takes spark session explicitly
+                        dt = DeltaTable.forPath(spark, path)
+                        df = dt.toDF()
+                        logger.debug(f"  Successfully read {path} via DeltaTable API")
+                        return df
+                    except Exception as delta_err:
+                        # If DeltaTable API fails, try registering session and using read API
+                        logger.debug(f"DeltaTable API failed, trying read API: {delta_err}")
+                        self._force_session_registration(spark)
+                        df = spark.read.format("delta").load(path)
+                        logger.debug(f"  Successfully read {path} via read API")
+                        return df
                 else:
                     df = spark.read.parquet(path)
-
-                logger.debug(f"  Successfully read {path}")
-                return df
+                    logger.debug(f"  Successfully read {path}")
+                    return df
             else:
                 # DuckDB
                 return self.connection.read_table(path)
 
         except Exception as e:
             error_msg = str(e)
-            if "No active or default Spark session found" in error_msg:
-                # This is the specific error we're trying to diagnose
-                logger.error(
-                    f"SPARK SESSION ERROR reading {path}: {error_msg}\n"
-                    f"  Connection type: {type(self.connection)}\n"
-                    f"  Backend: {self.backend}\n"
-                    f"  Has .spark attr: {hasattr(self.connection, 'spark')}"
-                )
-                # Last resort: try with getOrCreate directly
-                try:
-                    from pyspark.sql import SparkSession
-                    spark = SparkSession.builder.getOrCreate()
-                    logger.warning(f"Retrying read with getOrCreate() fallback")
-                    if is_delta:
-                        return spark.read.format("delta").load(path)
-                    else:
-                        return spark.read.parquet(path)
-                except Exception as retry_err:
-                    logger.error(f"Retry with getOrCreate also failed: {retry_err}")
-            else:
-                logger.warning(f"Failed to read Silver table {path}: {e}")
+            logger.warning(f"Failed to read Silver table {path}: {e}")
             return None
+
+    def _force_session_registration(self, spark):
+        """
+        Force registration of SparkSession in JVM thread-local storage.
+
+        Delta Lake 4.x requires the session to be registered. This method
+        forces the registration using direct JVM calls.
+
+        Args:
+            spark: SparkSession to register
+        """
+        try:
+            if spark is None or not hasattr(spark, '_jvm'):
+                return
+
+            jvm = spark._jvm
+            jss = spark._jsparkSession
+
+            # Set both active and default session
+            jvm.org.apache.spark.sql.SparkSession.setActiveSession(jss)
+            jvm.org.apache.spark.sql.SparkSession.setDefaultSession(jss)
+
+        except Exception as e:
+            logger.debug(f"Session registration failed: {e}")
 
     # ============================================================
     # TABLE ACCESS (delegated to TableAccessor)

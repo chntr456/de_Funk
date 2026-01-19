@@ -177,6 +177,10 @@ class Table:
         """
         Read table (auto-detects Delta Lake or Parquet).
 
+        For Delta tables, uses DeltaTable API which takes SparkSession
+        as an explicit parameter, avoiding thread-local session issues
+        in Delta Lake 4.x.
+
         Args:
             merge_schema: If True, merges schemas across partitions.
                          Useful for Bronze tables with schema evolution.
@@ -184,20 +188,33 @@ class Table:
         Returns:
             DataFrame with table data
         """
+        import logging
+        logger = logging.getLogger(__name__)
+
         if self._override_df is not None:
             return self._override_df
 
         path = self.path
 
         if self._is_delta_table(path):
-            # CRITICAL: Ensure session is active right before Delta read
-            self._ensure_active_session()
-            return (
-                self.spark.read
-                .format("delta")
-                .option("mergeSchema", str(merge_schema).lower())
-                .load(path)
-            )
+            # Use DeltaTable API which takes session explicitly
+            # This avoids thread-local session issues in Delta Lake 4.x
+            try:
+                from delta.tables import DeltaTable
+                dt = DeltaTable.forPath(self.spark, path)
+                df = dt.toDF()
+                logger.debug(f"Read Delta table via DeltaTable API: {path}")
+                return df
+            except Exception as delta_err:
+                # If DeltaTable API fails, try with session registration
+                logger.debug(f"DeltaTable API failed, trying read API: {delta_err}")
+                self._ensure_active_session()
+                return (
+                    self.spark.read
+                    .format("delta")
+                    .option("mergeSchema", str(merge_schema).lower())
+                    .load(path)
+                )
 
         return (
             self.spark.read
