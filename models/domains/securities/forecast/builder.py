@@ -74,7 +74,7 @@ class ForecastBuilder(BaseModelBuilder):
         Returns:
             List of ticker symbols
         """
-        from pyspark.sql import functions as F
+        from pyspark.sql import SparkSession, functions as F
         from pyspark.sql.window import Window
         from pathlib import Path
 
@@ -96,6 +96,11 @@ class ForecastBuilder(BaseModelBuilder):
                 return []
 
         try:
+            # CRITICAL: Set the passed-in session as active for Delta Lake compatibility
+            # Spark 4.x Delta Lake internally calls SparkSession.active() which requires
+            # the session to be registered in thread-local storage
+            SparkSession.setActiveSession(self.spark)
+
             # Read with Delta or Parquet
             if (stocks_path / "_delta_log").exists():
                 df = self.spark.read.format("delta").load(str(stocks_path))
