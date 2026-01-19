@@ -121,6 +121,21 @@ class Table:
         delta_log = Path(path) / "_delta_log"
         return delta_log.exists()
 
+    def _ensure_active_session(self) -> None:
+        """
+        Ensure Spark session is active for Delta Lake 4.x.
+
+        Delta Lake calls SparkSession.active() internally which requires
+        the session in thread-local storage. Must be called right before
+        any Delta read operation.
+        """
+        try:
+            self.spark._jvm.org.apache.spark.sql.SparkSession.setActiveSession(
+                self.spark._jsparkSession
+            )
+        except Exception:
+            pass  # Best effort - some environments may not support this
+
     def read(self, merge_schema: bool = True) -> DataFrame:
         """
         Read table (auto-detects Delta Lake or Parquet).
@@ -138,6 +153,8 @@ class Table:
         path = self.path
 
         if self._is_delta_table(path):
+            # CRITICAL: Ensure session is active right before Delta read
+            self._ensure_active_session()
             return (
                 self.spark.read
                 .format("delta")

@@ -76,72 +76,55 @@ class ForecastBuilder(BaseModelBuilder):
         """
         from pyspark.sql import functions as F
         from pyspark.sql.window import Window
-        from pathlib import Path
+        from models.api.dal import Table, StorageRouter
 
-        # Ensure session is active for Delta Lake 4.x (uses inherited helper)
-        self._ensure_active_session()
-
-        silver_root = self.storage_config["roots"].get("silver", "storage/silver")
+        # Create router for table reads (handles Delta session issues)
+        router = StorageRouter(self.storage_config, self.repo_root)
 
         # Strategy 1: Get tickers from dim_stock dimension (new schema)
-        dim_stock_path = Path(silver_root) / "stocks" / "dims" / "dim_stock"
-        if dim_stock_path.exists():
-            try:
-                if (dim_stock_path / "_delta_log").exists():
-                    dim_df = self.spark.read.format("delta").load(str(dim_stock_path))
+        try:
+            dim_table = Table(self.spark, router, "silver.stocks/dims/dim_stock")
+            dim_df = dim_table.read()
+
+            if "ticker" in dim_df.columns:
+                if limit:
+                    # Join with prices to get market cap proxy for sorting
+                    prices_table = Table(self.spark, router, "silver.stocks/facts/fact_stock_prices")
+                    prices_df = prices_table.read()
+
+                    # Join dim_stock with prices using security_id
+                    if "security_id" in dim_df.columns and "security_id" in prices_df.columns:
+                        # Get latest price per security
+                        window = Window.partitionBy("security_id").orderBy(F.col("date_id").desc())
+                        latest_prices = (
+                            prices_df.filter(F.col("close").isNotNull() & F.col("volume").isNotNull())
+                            .withColumn("rn", F.row_number().over(window))
+                            .filter(F.col("rn") == 1)
+                            .withColumn("market_cap_proxy", F.col("close") * F.col("volume"))
+                            .select("security_id", "market_cap_proxy")
+                        )
+
+                        # Join and sort by market cap
+                        tickers_df = (
+                            dim_df.join(latest_prices, "security_id", "inner")
+                            .orderBy(F.col("market_cap_proxy").desc())
+                            .select("ticker")
+                            .limit(limit)
+                        )
+                        return [row["ticker"] for row in tickers_df.collect()]
+
+                    # Fallback: just return first N tickers from dimension
+                    return [row["ticker"] for row in dim_df.select("ticker").limit(limit).collect()]
                 else:
-                    dim_df = self.spark.read.parquet(str(dim_stock_path))
+                    return [row["ticker"] for row in dim_df.select("ticker").distinct().collect()]
 
-                if "ticker" in dim_df.columns:
-                    if limit:
-                        # Join with prices to get market cap proxy for sorting
-                        prices_path = Path(silver_root) / "stocks" / "facts" / "fact_stock_prices"
-                        if prices_path.exists():
-                            if (prices_path / "_delta_log").exists():
-                                prices_df = self.spark.read.format("delta").load(str(prices_path))
-                            else:
-                                prices_df = self.spark.read.parquet(str(prices_path))
-
-                            # Join dim_stock with prices using security_id
-                            if "security_id" in dim_df.columns and "security_id" in prices_df.columns:
-                                # Get latest price per security
-                                window = Window.partitionBy("security_id").orderBy(F.col("date_id").desc())
-                                latest_prices = (
-                                    prices_df.filter(F.col("close").isNotNull() & F.col("volume").isNotNull())
-                                    .withColumn("rn", F.row_number().over(window))
-                                    .filter(F.col("rn") == 1)
-                                    .withColumn("market_cap_proxy", F.col("close") * F.col("volume"))
-                                    .select("security_id", "market_cap_proxy")
-                                )
-
-                                # Join and sort by market cap
-                                tickers_df = (
-                                    dim_df.join(latest_prices, "security_id", "inner")
-                                    .orderBy(F.col("market_cap_proxy").desc())
-                                    .select("ticker")
-                                    .limit(limit)
-                                )
-                                return [row["ticker"] for row in tickers_df.collect()]
-
-                        # Fallback: just return first N tickers from dimension
-                        return [row["ticker"] for row in dim_df.select("ticker").limit(limit).collect()]
-                    else:
-                        return [row["ticker"] for row in dim_df.select("ticker").distinct().collect()]
-
-            except Exception as e:
-                logger.warning(f"Failed to read from dim_stock: {e}")
+        except Exception as e:
+            logger.warning(f"Failed to read from dim_stock: {e}")
 
         # Strategy 2: Fallback to old schema with ticker column in prices
-        stocks_path = Path(silver_root) / "stocks" / "facts" / "fact_stock_prices"
-        if not stocks_path.exists():
-            logger.warning("No price data found for forecasting")
-            return []
-
         try:
-            if (stocks_path / "_delta_log").exists():
-                df = self.spark.read.format("delta").load(str(stocks_path))
-            else:
-                df = self.spark.read.parquet(str(stocks_path))
+            prices_table = Table(self.spark, router, "silver.stocks/facts/fact_stock_prices")
+            df = prices_table.read()
 
             # Check if ticker column exists (old schema)
             if "ticker" not in df.columns:
