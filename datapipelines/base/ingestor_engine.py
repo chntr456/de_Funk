@@ -560,21 +560,26 @@ class IngestorEngine:
                     write_strategy, key_columns, date_column
                 )
 
-            # Check for JSON support (Alpha Vantage provider)
+            # Spark-native JSON flow (Alpha Vantage): populate raw cache → Spark reads
             if (max_records is None and
-                hasattr(self.provider, 'supports_spark_json') and
-                self.provider.supports_spark_json(work_item)):
+                hasattr(self.provider, 'populate_raw_cache') and
+                hasattr(self.provider, 'fetch_as_dataframe')):
 
-                logger.info(f"{work_item}: Using Spark JSON path (distributed)")
-                result = self._ingest_with_spark_native(
+                # Phase 1: Populate raw JSON cache (API → raw files)
+                logger.info(f"{work_item}: Phase 1 - Populating raw JSON cache")
+                cache_stats = self.provider.populate_raw_cache(work_item, **kwargs)
+                logger.info(
+                    f"{work_item}: Raw cache stats - "
+                    f"cached: {cache_stats['cached']}, fetched: {cache_stats['fetched']}, "
+                    f"failed: {cache_stats['failed']}"
+                )
+
+                # Phase 2: Spark reads all raw JSON at once
+                logger.info(f"{work_item}: Phase 2 - Spark reading raw JSON (distributed)")
+                return self._ingest_with_spark_native(
                     work_item, table_name, partitions,
                     write_strategy, key_columns, date_column
                 )
-                # If Spark native returned a result (success or failure), use it
-                # If it returned None, fall through to Python batching
-                if result is not None:
-                    return result
-                logger.info(f"{work_item}: Falling back to Python batching")
 
             # Get shared executor
             executor = self.get_executor(self.writer_threads)

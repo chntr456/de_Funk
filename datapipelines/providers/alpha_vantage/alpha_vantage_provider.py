@@ -322,6 +322,80 @@ class AlphaVantageProvider(BaseProvider):
                 work_items.append(dt.value)
         return work_items
 
+    def populate_raw_cache(
+        self,
+        work_item: str,
+        force_api: bool = False,
+        **kwargs
+    ) -> Dict[str, int]:
+        """
+        Populate raw JSON cache by fetching from API (no transformation).
+
+        This is Phase 1 of the Spark-native pipeline:
+        1. populate_raw_cache() - API → Raw JSON files (this method)
+        2. fetch_as_dataframe() - Spark reads raw JSON → DataFrame
+
+        Only fetches data for tickers missing from cache (unless force_api=True).
+
+        Args:
+            work_item: Data type to fetch (e.g., 'prices', 'reference')
+            force_api: If True, refetch all tickers even if cached
+
+        Returns:
+            Dict with stats: {'cached': N, 'fetched': N, 'failed': N, 'total': N}
+        """
+        data_type = self._get_data_type(work_item)
+        if not data_type:
+            logger.warning(f"Unknown work item: {work_item}")
+            return {'cached': 0, 'fetched': 0, 'failed': 0, 'total': 0}
+
+        if not self._tickers:
+            logger.warning("No tickers set. Call set_tickers() before populate_raw_cache().")
+            return {'cached': 0, 'fetched': 0, 'failed': 0, 'total': 0}
+
+        if not self._storage_path:
+            raise ValueError("storage_path must be set to use populate_raw_cache()")
+
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+        if not endpoint_id or endpoint_id not in self._endpoints:
+            logger.warning(f"No endpoint configured for: {work_item}")
+            return {'cached': 0, 'fetched': 0, 'failed': 0, 'total': 0}
+
+        stats = {'cached': 0, 'fetched': 0, 'failed': 0, 'total': len(self._tickers)}
+
+        # Check which tickers need fetching
+        tickers_to_fetch = []
+        for ticker in self._tickers:
+            if force_api or not self.has_raw_data(ticker, endpoint_id):
+                tickers_to_fetch.append(ticker)
+            else:
+                stats['cached'] += 1
+
+        logger.info(
+            f"populate_raw_cache({work_item}): {stats['cached']} cached, "
+            f"{len(tickers_to_fetch)} to fetch"
+        )
+
+        # Fetch missing tickers
+        for i, ticker in enumerate(tickers_to_fetch):
+            if (i + 1) % 100 == 0:
+                logger.info(f"Progress: {i + 1}/{len(tickers_to_fetch)} tickers fetched")
+
+            result = self._fetch_single(ticker, data_type, force_api=True, **kwargs)
+
+            if result.success and result.data:
+                stats['fetched'] += 1
+            else:
+                stats['failed'] += 1
+                logger.debug(f"Failed to fetch {ticker}: {result.error}")
+
+        logger.info(
+            f"populate_raw_cache({work_item}) complete: "
+            f"{stats['fetched']} fetched, {stats['failed']} failed, {stats['cached']} cached"
+        )
+
+        return stats
+
     def fetch(
         self,
         work_item: str,
