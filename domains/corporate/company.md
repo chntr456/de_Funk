@@ -237,7 +237,7 @@ graph:
     fact_cash_flow:
       from: bronze.alpha_vantage.cash_flow
       # Bronze columns are now snake_case and properly typed (via endpoint markdown coerce rules)
-      # free_cash_flow is computed in Bronze facet
+      # free_cash_flow is computed as derived column (not in Bronze)
       select:
         ticker: ticker
         fiscal_date_ending: fiscal_date_ending
@@ -247,11 +247,11 @@ graph:
         cashflow_from_investment: cashflow_from_investment
         cashflow_from_financing: cashflow_from_financing
         capital_expenditures: capital_expenditures
-        free_cash_flow: free_cash_flow
       derive:
         cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"
+        free_cash_flow: "COALESCE(operating_cashflow, 0) - COALESCE(capital_expenditures, 0)"
       # Drop natural keys - fact tables have only FK columns
       drop: [ticker, fiscal_date_ending]
       primary_key: [cash_flow_id]
