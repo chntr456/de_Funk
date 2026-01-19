@@ -68,87 +68,64 @@ class ForecastBuilder(BaseModelBuilder):
         """
         Get tickers with price data available for forecasting.
 
+        Uses StocksModel to access the normalized silver layer properly,
+        rather than doing raw Delta reads.
+
         Args:
-            limit: Optional limit on number of tickers (top by market cap proxy)
+            limit: Optional limit on number of tickers (top by market cap)
 
         Returns:
             List of ticker symbols
         """
-        from pyspark.sql import functions as F
-        from pyspark.sql.window import Window
-        from models.api.dal import Table, StorageRouter
-
-        # Create router for table reads (handles Delta session issues)
-        router = StorageRouter(self.storage_config, self.repo_root)
-
-        # Strategy 1: Get tickers from dim_stock dimension (new schema)
         try:
-            dim_table = Table(self.spark, router, "silver.stocks/dims/dim_stock")
-            dim_df = dim_table.read()
-
-            if "ticker" in dim_df.columns:
-                if limit:
-                    # Join with prices to get market cap proxy for sorting
-                    prices_table = Table(self.spark, router, "silver.stocks/facts/fact_stock_prices")
-                    prices_df = prices_table.read()
-
-                    # Join dim_stock with prices using security_id
-                    if "security_id" in dim_df.columns and "security_id" in prices_df.columns:
-                        # Get latest price per security
-                        window = Window.partitionBy("security_id").orderBy(F.col("date_id").desc())
-                        latest_prices = (
-                            prices_df.filter(F.col("close").isNotNull() & F.col("volume").isNotNull())
-                            .withColumn("rn", F.row_number().over(window))
-                            .filter(F.col("rn") == 1)
-                            .withColumn("market_cap_proxy", F.col("close") * F.col("volume"))
-                            .select("security_id", "market_cap_proxy")
-                        )
-
-                        # Join and sort by market cap
-                        tickers_df = (
-                            dim_df.join(latest_prices, "security_id", "inner")
-                            .orderBy(F.col("market_cap_proxy").desc())
-                            .select("ticker")
-                            .limit(limit)
-                        )
-                        return [row["ticker"] for row in tickers_df.collect()]
-
-                    # Fallback: just return first N tickers from dimension
-                    return [row["ticker"] for row in dim_df.select("ticker").limit(limit).collect()]
-                else:
-                    return [row["ticker"] for row in dim_df.select("ticker").distinct().collect()]
-
-        except Exception as e:
-            logger.warning(f"Failed to read from dim_stock: {e}")
-
-        # Strategy 2: Fallback to old schema with ticker column in prices
-        try:
-            prices_table = Table(self.spark, router, "silver.stocks/facts/fact_stock_prices")
-            df = prices_table.read()
-
-            # Check if ticker column exists (old schema)
-            if "ticker" not in df.columns:
-                logger.warning("No ticker column in prices and dim_stock not available")
-                return []
+            # Use StocksModel to access the silver layer properly
+            # This handles the normalized schema (security_id/date_id FKs)
+            stocks_model = self._get_stocks_model()
 
             if limit:
-                window = Window.partitionBy("ticker").orderBy(F.col("trade_date").desc())
-                tickers_df = (
-                    df.filter(F.col("close").isNotNull() & F.col("volume").isNotNull())
-                    .withColumn("rn", F.row_number().over(window))
-                    .filter(F.col("rn") == 1)
-                    .withColumn("market_cap_proxy", F.col("close") * F.col("volume"))
-                    .orderBy(F.col("market_cap_proxy").desc())
-                    .select("ticker")
-                    .limit(limit)
-                )
-                return [row["ticker"] for row in tickers_df.collect()]
+                # Get top stocks by market cap
+                top_stocks = stocks_model.get_top_by_market_cap(limit=limit)
+                if self.spark:
+                    # Spark DataFrame
+                    return [row["ticker"] for row in top_stocks.select("ticker").collect()]
+                else:
+                    # Pandas/DuckDB
+                    return top_stocks["ticker"].tolist()
             else:
-                return [row["ticker"] for row in df.select("ticker").distinct().collect()]
+                # Get all tickers
+                return stocks_model.list_tickers(active_only=False)
 
         except Exception as e:
-            logger.error(f"Failed to get tickers: {e}")
+            logger.error(f"Failed to get tickers from StocksModel: {e}")
             return []
+
+    def _get_stocks_model(self):
+        """
+        Get or create a StocksModel instance for reading silver layer.
+
+        Returns:
+            StocksModel instance configured with current Spark session
+        """
+        from models.domains.securities.stocks.model import StocksModel
+        from core.connection import get_spark_connection
+
+        # Create connection wrapper
+        connection = get_spark_connection(self.spark)
+
+        # Load stocks model config
+        from config.domain_loader import ModelConfigLoader
+        domains_dir = self.repo_root / "domains"
+        loader = ModelConfigLoader(domains_dir)
+        stocks_config = loader.load_model_config("stocks")
+
+        # Instantiate model
+        return StocksModel(
+            connection=connection,
+            storage_cfg=self.storage_config,
+            model_cfg=stocks_config,
+            params={},
+            repo_root=self.repo_root
+        )
 
     def build(self) -> BuildResult:
         """
