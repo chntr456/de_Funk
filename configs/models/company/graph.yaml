@@ -1,5 +1,11 @@
 # Company graph definition
 #
+# ⚠️ WARNING: This file is NOT used by the builder.
+# The actual config is loaded from: domains/corporate/company.md
+# The BaseModelBuilder.get_model_config() uses config.domain_loader which
+# reads from the domains/ directory, not configs/models/.
+# This file exists for reference/documentation purposes only.
+#
 # v2.3: Updated to read from company_reference (COMPANY_OVERVIEW data)
 # This provides rich company data: sector, industry, market_cap, CIK, etc.
 # Financial statements link via ticker directly.
