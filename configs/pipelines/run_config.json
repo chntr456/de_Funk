@@ -234,6 +234,19 @@
       "log_level": "INFO",
       "_comment": "Full reprocess: raw JSON → bronze → silver. No API calls."
     },
+    "alpha_vantage_full": {
+      "providers": ["alpha_vantage"],
+      "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings"],
+      "_endpoints_comment": "All Alpha Vantage endpoints: prices, company, and financial statements",
+      "max_tickers": null,
+      "write_batch_size": 500000,
+      "max_pending_writes": 0,
+      "use_raw_cache": true,
+      "_use_raw_cache_comment": "Reads from storage/raw/alpha_vantage/{endpoint}/*.json - NO API calls",
+      "build_silver": true,
+      "log_level": "INFO",
+      "_comment": "Alpha Vantage only: raw → bronze → silver (company, stocks, forecast). No API calls."
+    },
     "pipeline_test": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
       "max_tickers": null,
