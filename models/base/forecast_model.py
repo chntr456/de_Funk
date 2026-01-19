@@ -148,6 +148,8 @@ class TimeSeriesForecastModel(BaseModel):
         Get training data for forecasting.
 
         This is a generic implementation that works for any source model.
+        Uses get_denormalized() to join in dimension columns (like ticker)
+        that may have been removed from normalized fact tables.
 
         Args:
             entity_id: Entity identifier (ticker, indicator_code, etc.)
@@ -169,20 +171,35 @@ class TimeSeriesForecastModel(BaseModel):
             from datetime import datetime, timedelta
             date_from = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
 
-        # Get source table from session (reads from Silver, avoids rebuild)
+        # Get source model and table info
         source_model_name = self.get_source_model_name()
         table_name = self.get_source_table_name()
+        entity_col = self.get_entity_column()
+        date_col = self.get_date_column()
 
-        # Use session.get_table() which reads from Silver layer
-        # This avoids triggering ensure_built() which would rebuild from Bronze
-        df = self.session.get_table(source_model_name, table_name)
+        # Load the source model
+        source_model = self.session.load_model(source_model_name)
+
+        # Check if entity column exists in the fact table
+        # If not, use get_denormalized() to join in dimension columns
+        try:
+            fact_df = source_model.get_table(table_name)
+            fact_columns = set(fact_df.columns) if hasattr(fact_df, 'columns') else set()
+
+            if entity_col not in fact_columns:
+                # Entity column not in fact table - use denormalized view
+                # This joins in dimension tables which have the natural keys (ticker, etc.)
+                df = source_model.get_denormalized(table_name)
+            else:
+                df = fact_df
+        except Exception as e:
+            # Fall back to session.get_table() if model access fails
+            df = self.session.get_table(source_model_name, table_name)
 
         # Filter by entity
-        entity_col = self.get_entity_column()
         df = df.filter(df[entity_col] == entity_id)
 
         # Filter by date
-        date_col = self.get_date_column()
         if date_from:
             df = df.filter(df[date_col] >= date_from)
         if date_to:
