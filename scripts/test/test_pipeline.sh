@@ -565,13 +565,12 @@ for provider_name in bulk_providers:
             logger.warning(f'Unknown provider: {provider_name} - skipping')
             continue
 
-        # Pass storage_path to enable raw layer (automatic when set, like Alpha Vantage)
-        save_raw = '${SAVE_RAW}' == 'true'
-        raw_storage = storage_path if save_raw else None
-        provider = factory(spark=spark, docs_path=docs_path, storage_path=raw_storage)
+        # ALWAYS pass storage_path to enable BULK ingestion path (Spark-native CSV reading)
+        # storage_path is required for get_raw_path() to return a path instead of None
+        # Without it, the provider falls back to INCREMENTAL path with Python CSV streaming
+        provider = factory(spark=spark, docs_path=docs_path, storage_path=Path(storage_path))
         logger.info(f'Created provider: {provider.provider_id}')
-        if save_raw:
-            logger.info(f'Raw data dump ENABLED: {storage_path}/raw/{provider_name}/')
+        logger.info(f'BULK ingestion enabled: raw CSVs at {storage_path}/raw/{provider_name}/')
 
         max_pending_writes = int('${PROFILE_MAX_PENDING_WRITES:-2}')
         engine = IngestorEngine(provider, storage_cfg, max_pending_writes=max_pending_writes)

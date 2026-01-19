@@ -150,6 +150,25 @@
       "log_level": "DEBUG",
       "_comment": "Municipal/county data only - no securities. Bronze only."
     },
+    "chicago_only": {
+      "providers": ["chicago"],
+      "chicago_endpoints": ["crimes"],
+      "max_records_per_endpoint": null,
+      "write_batch_size": 500000,
+      "dry_run": false,
+      "log_level": "INFO",
+      "_comment": "Chicago only - single endpoint for testing BULK ingestion path."
+    },
+    "municipal_only": {
+      "providers": ["chicago", "cook_county"],
+      "chicago_endpoints": ["crimes"],
+      "cook_county_endpoints": ["parcel_sales"],
+      "max_records_per_endpoint": null,
+      "write_batch_size": 500000,
+      "dry_run": false,
+      "log_level": "INFO",
+      "_comment": "Chicago + Cook County - one endpoint each for testing BULK ingestion."
+    },
     "listing_status": {
       "providers": ["alpha_vantage"],
       "alpha_vantage_endpoints": ["listing_status"],

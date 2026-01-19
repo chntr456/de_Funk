@@ -513,6 +513,9 @@ class SocrataBaseProvider(BaseProvider):
         Uses SparkNormalizer for core operations (field mapping, type coercion)
         with Socrata-specific date parsing.
 
+        Record keys are normalized (e.g., "Case Number" -> "case_number") to match
+        schema conventions.
+
         Args:
             records: List of record dicts from API
             endpoint: Endpoint configuration with schema
@@ -521,6 +524,18 @@ class SocrataBaseProvider(BaseProvider):
             Spark DataFrame
         """
         from datapipelines.base.normalizer import SparkNormalizer
+
+        # Normalize record keys: "Case Number" -> "case_number"
+        # This ensures CSV column names match schema source definitions
+        if records:
+            normalized_records = []
+            for record in records:
+                normalized_record = {
+                    self._normalize_column_name(k): v
+                    for k, v in record.items()
+                }
+                normalized_records.append(normalized_record)
+            records = normalized_records
 
         if not endpoint.schema:
             return self.spark.createDataFrame(records, samplingRatio=1.0)
@@ -638,6 +653,30 @@ class SocrataBaseProvider(BaseProvider):
 
         return df
 
+    def _normalize_column_name(self, col_name: str) -> str:
+        """
+        Normalize column name to match schema conventions.
+
+        Converts CSV column names to lowercase with underscores.
+        Example: "Case Number" -> "case_number"
+                 "FBI Code" -> "fbi_code"
+                 "X Coordinate" -> "x_coordinate"
+
+        Args:
+            col_name: Original column name from CSV
+
+        Returns:
+            Normalized column name
+        """
+        import re
+        # Replace spaces and special chars with underscores, convert to lowercase
+        normalized = re.sub(r'[^a-zA-Z0-9_]', '_', col_name.lower())
+        # Remove consecutive underscores
+        normalized = re.sub(r'_+', '_', normalized)
+        # Remove leading/trailing underscores
+        normalized = normalized.strip('_')
+        return normalized
+
     def read_csv_with_spark(
         self,
         csv_path: Path,
@@ -650,6 +689,9 @@ class SocrataBaseProvider(BaseProvider):
         - CSV parsing is distributed across all executors
         - No data flows through the driver
         - Memory pressure is distributed
+
+        Column names are normalized to lowercase with underscores (e.g., "Case Number" -> "case_number")
+        to match schema conventions and Delta Lake requirements.
 
         Args:
             csv_path: Path to CSV file (must be on shared storage)
@@ -669,6 +711,13 @@ class SocrataBaseProvider(BaseProvider):
             escape='"',
             quote='"'
         )
+
+        # Normalize column names: "Case Number" -> "case_number", "FBI Code" -> "fbi_code"
+        # This is required for Delta Lake (doesn't accept spaces) and schema matching
+        original_cols = df.columns
+        normalized_cols = [self._normalize_column_name(c) for c in original_cols]
+        df = df.toDF(*normalized_cols)
+        logger.info(f"Normalized {len(original_cols)} column names (e.g., '{original_cols[0]}' -> '{normalized_cols[0]}')")
 
         logger.info(f"Spark CSV read complete: {df.count():,} rows, {len(df.columns)} columns")
 
