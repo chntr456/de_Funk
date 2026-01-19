@@ -381,11 +381,6 @@ class UniversalSession:
                     logger.debug(f"Reading Silver {'Delta' if is_delta else 'Parquet'} with Spark from {silver_table_path}")
                     try:
                         if is_delta:
-                            # CRITICAL: Ensure session is active for Delta Lake compatibility
-                            # Spark 4.x Delta Lake internally calls SparkSession.active()
-                            # Use getOrCreate() which returns existing session AND registers it as active
-                            from pyspark.sql import SparkSession
-                            SparkSession.builder.getOrCreate()
                             return spark.read.format("delta").load(str(silver_table_path))
                         else:
                             return spark.read.parquet(str(silver_table_path))

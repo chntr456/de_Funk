@@ -82,10 +82,6 @@ class BronzeTable:
 
         # Auto-detect Delta Lake tables
         if self._is_delta_table(path):
-            # CRITICAL: Ensure session is active for Delta Lake compatibility
-            # Spark 4.x Delta Lake internally calls SparkSession.active()
-            # Use getOrCreate() which returns existing session AND registers it as active
-            SparkSession.builder.getOrCreate()
             return (
                 self.spark.read
                 .format("delta")
@@ -132,10 +128,6 @@ class SilverPath:
 
         # Auto-detect Delta Lake tables
         if self._is_delta_table(path):
-            # CRITICAL: Ensure session is active for Delta Lake compatibility
-            # Spark 4.x Delta Lake internally calls SparkSession.active()
-            # Use getOrCreate() which returns existing session AND registers it as active
-            SparkSession.builder.getOrCreate()
             return self.spark.read.format("delta").load(path)
 
         # Fallback to Parquet for legacy tables

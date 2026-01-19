@@ -74,63 +74,91 @@ class ForecastBuilder(BaseModelBuilder):
         Returns:
             List of ticker symbols
         """
-        from pyspark.sql import SparkSession, functions as F
+        from pyspark.sql import functions as F
         from pyspark.sql.window import Window
         from pathlib import Path
 
-        # Get stocks silver path from storage config
         silver_root = self.storage_config["roots"].get("silver", "storage/silver")
-        stocks_path = Path(silver_root) / "stocks" / "facts" / "fact_stock_prices"
 
+        # Strategy 1: Get tickers from dim_stock dimension (new schema)
+        dim_stock_path = Path(silver_root) / "stocks" / "dims" / "dim_stock"
+        if dim_stock_path.exists():
+            try:
+                if (dim_stock_path / "_delta_log").exists():
+                    dim_df = self.spark.read.format("delta").load(str(dim_stock_path))
+                else:
+                    dim_df = self.spark.read.parquet(str(dim_stock_path))
+
+                if "ticker" in dim_df.columns:
+                    if limit:
+                        # Join with prices to get market cap proxy for sorting
+                        prices_path = Path(silver_root) / "stocks" / "facts" / "fact_stock_prices"
+                        if prices_path.exists():
+                            if (prices_path / "_delta_log").exists():
+                                prices_df = self.spark.read.format("delta").load(str(prices_path))
+                            else:
+                                prices_df = self.spark.read.parquet(str(prices_path))
+
+                            # Join dim_stock with prices using security_id
+                            if "security_id" in dim_df.columns and "security_id" in prices_df.columns:
+                                # Get latest price per security
+                                window = Window.partitionBy("security_id").orderBy(F.col("date_id").desc())
+                                latest_prices = (
+                                    prices_df.filter(F.col("close").isNotNull() & F.col("volume").isNotNull())
+                                    .withColumn("rn", F.row_number().over(window))
+                                    .filter(F.col("rn") == 1)
+                                    .withColumn("market_cap_proxy", F.col("close") * F.col("volume"))
+                                    .select("security_id", "market_cap_proxy")
+                                )
+
+                                # Join and sort by market cap
+                                tickers_df = (
+                                    dim_df.join(latest_prices, "security_id", "inner")
+                                    .orderBy(F.col("market_cap_proxy").desc())
+                                    .select("ticker")
+                                    .limit(limit)
+                                )
+                                return [row["ticker"] for row in tickers_df.collect()]
+
+                        # Fallback: just return first N tickers from dimension
+                        return [row["ticker"] for row in dim_df.select("ticker").limit(limit).collect()]
+                    else:
+                        return [row["ticker"] for row in dim_df.select("ticker").distinct().collect()]
+
+            except Exception as e:
+                logger.warning(f"Failed to read from dim_stock: {e}")
+
+        # Strategy 2: Fallback to old schema with ticker column in prices
+        stocks_path = Path(silver_root) / "stocks" / "facts" / "fact_stock_prices"
         if not stocks_path.exists():
-            # Try alternative paths
-            for alt_path in [
-                Path(silver_root) / "securities" / "stocks" / "facts" / "fact_stock_prices",
-                Path(self.storage_config["roots"].get("bronze", "storage/bronze")) / "alpha_vantage" / "time_series_daily_adjusted",
-            ]:
-                if alt_path.exists():
-                    stocks_path = alt_path
-                    break
-            else:
-                logger.warning("No price data found for forecasting")
-                return []
+            logger.warning("No price data found for forecasting")
+            return []
 
         try:
-            # CRITICAL: Ensure session is active for Delta Lake compatibility
-            # Spark 4.x Delta Lake internally calls SparkSession.active() which requires
-            # the session to be registered in thread-local storage.
-            # Use getOrCreate() which returns existing session AND registers it as active.
-            SparkSession.builder.getOrCreate()
-
-            # Read with Delta or Parquet
             if (stocks_path / "_delta_log").exists():
                 df = self.spark.read.format("delta").load(str(stocks_path))
             else:
                 df = self.spark.read.parquet(str(stocks_path))
 
-            # Get tickers with valid price data
-            ticker_col = "ticker" if "ticker" in df.columns else None
-
-            if not ticker_col:
-                logger.warning("No ticker column found in price data")
+            # Check if ticker column exists (old schema)
+            if "ticker" not in df.columns:
+                logger.warning("No ticker column in prices and dim_stock not available")
                 return []
 
             if limit:
-                # Sort by market cap proxy (close × volume)
-                window = Window.partitionBy(ticker_col).orderBy(F.col("trade_date").desc())
-
+                window = Window.partitionBy("ticker").orderBy(F.col("trade_date").desc())
                 tickers_df = (
                     df.filter(F.col("close").isNotNull() & F.col("volume").isNotNull())
                     .withColumn("rn", F.row_number().over(window))
                     .filter(F.col("rn") == 1)
                     .withColumn("market_cap_proxy", F.col("close") * F.col("volume"))
                     .orderBy(F.col("market_cap_proxy").desc())
-                    .select(ticker_col)
+                    .select("ticker")
                     .limit(limit)
                 )
-                return [row[ticker_col] for row in tickers_df.collect()]
+                return [row["ticker"] for row in tickers_df.collect()]
             else:
-                return [row[ticker_col] for row in df.select(ticker_col).distinct().collect()]
+                return [row["ticker"] for row in df.select("ticker").distinct().collect()]
 
         except Exception as e:
             logger.error(f"Failed to get tickers: {e}")
