@@ -690,29 +690,31 @@ class SocrataBaseProvider(BaseProvider):
         # Apply Socrata-specific type casting and date parsing
         return self._apply_schema_types(df, endpoint)
 
-    def fetch_as_dataframe(
-        self,
-        work_item: str,
-        **kwargs
-    ) -> Optional[DataFrame]:
+    def get_raw_path(self, work_item: str) -> Optional[str]:
         """
-        Fetch work item directly as a Spark DataFrame (no Python batching).
+        Get path to raw CSV file for bulk reading.
 
-        Uses Spark's native CSV reader for distributed parsing.
-        Only works for CSV downloads with raw files on shared storage.
+        Returns path if:
+        - Endpoint uses CSV download method
+        - Storage path is configured
+        - Not a multi-year endpoint
 
         Args:
             work_item: Work item identifier
 
         Returns:
-            DataFrame if Spark CSV path is available, None otherwise
+            Path to raw CSV file, or None if INCREMENTAL path should be used
         """
         endpoint = self._endpoints.get(work_item)
         if not endpoint:
             return None
 
-        # Only use Spark CSV for full CSV downloads with storage path
+        # Only use BULK for CSV downloads with storage path
         if endpoint.download_method != 'csv' or not self._storage_path:
+            return None
+
+        # Multi-year endpoints use INCREMENTAL path
+        if endpoint.view_ids:
             return None
 
         resource_id = self._get_resource_id(endpoint)
@@ -720,33 +722,41 @@ class SocrataBaseProvider(BaseProvider):
             return None
 
         raw_path = self._get_raw_path(work_item, resource_id)
-        if not raw_path:
+        return str(raw_path) if raw_path else None
+
+    def read_raw_as_df(self, work_item: str, raw_path: str) -> Optional[DataFrame]:
+        """
+        Read raw CSV file with Spark and return normalized DataFrame.
+
+        Downloads the CSV if it doesn't exist yet.
+
+        Args:
+            work_item: Work item identifier
+            raw_path: Path to raw CSV file
+
+        Returns:
+            Spark DataFrame with normalized data
+        """
+        endpoint = self._endpoints.get(work_item)
+        if not endpoint:
             return None
 
+        raw_path_obj = Path(raw_path)
+        resource_id = self._get_resource_id(endpoint)
+
         # Download CSV if not exists
-        if not raw_path.exists():
-            logger.info(f"Downloading CSV for Spark: {work_item}")
-            raw_path.parent.mkdir(parents=True, exist_ok=True)
+        if not raw_path_obj.exists():
+            logger.info(f"Downloading CSV: {work_item}")
+            raw_path_obj.parent.mkdir(parents=True, exist_ok=True)
             self.client.download_csv_to_file(
                 resource_id=resource_id,
-                output_path=str(raw_path),
+                output_path=raw_path,
                 label=work_item
             )
 
-        if not raw_path.exists():
+        if not raw_path_obj.exists():
             logger.warning(f"CSV download failed for {work_item}")
             return None
 
         # Read with Spark
-        return self.read_csv_with_spark(raw_path, endpoint)
-
-    def supports_spark_csv(self, work_item: str) -> bool:
-        """Check if work item can use Spark CSV path."""
-        endpoint = self._endpoints.get(work_item)
-        if not endpoint:
-            return False
-        return (
-            endpoint.download_method == 'csv' and
-            self._storage_path is not None and
-            not endpoint.view_ids  # Multi-year not yet supported
-        )
+        return self.read_csv_with_spark(raw_path_obj, endpoint)

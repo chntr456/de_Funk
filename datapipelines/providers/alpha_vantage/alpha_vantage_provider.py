@@ -554,90 +554,76 @@ class AlphaVantageProvider(BaseProvider):
     # SPARK JSON READING (Distributed)
     # =========================================================================
 
-    def supports_spark_json(self, work_item: str) -> bool:
+    def get_raw_path(self, work_item: str) -> Optional[str]:
         """
-        Check if work item can use Spark JSON path for distributed reading.
+        Get path to raw JSON files for bulk reading.
 
-        Returns True if:
-        - Raw layer is enabled (storage_path set)
-        - Raw JSON files exist for this endpoint
-        - Endpoint has json_structure configured in markdown
+        Returns glob pattern if raw files exist, None otherwise.
+        Used by IngestorEngine to determine if BULK path should be used.
 
         Args:
             work_item: Work item identifier (e.g., 'prices', 'reference')
 
         Returns:
-            True if Spark JSON reading is supported
+            Glob pattern (e.g., 'storage/raw/alpha_vantage/prices/*.json') or None
         """
         if not self._storage_path:
-            return False
-
-        data_type = self._get_data_type(work_item)
-        if not data_type:
-            return False
-
-        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
-        if not endpoint_id:
-            return False
-
-        endpoint = self._endpoints.get(endpoint_id)
-        if not endpoint:
-            return False
-
-        # Check if raw JSON files exist
-        raw_dir = self._storage_path / "raw" / "alpha_vantage" / endpoint_id
-        if not raw_dir.exists():
-            return False
-
-        json_files = list(raw_dir.glob("*.json"))
-        if not json_files:
-            return False
-
-        logger.debug(f"{work_item}: Spark JSON supported ({len(json_files)} files)")
-        return True
-
-    def fetch_as_dataframe(self, work_item: str, **kwargs) -> Optional[DataFrame]:
-        """
-        Read all raw JSON files with Spark and return a single DataFrame.
-
-        This is the fast path for bulk ingestion:
-        - JSON parsing distributed across all Spark executors
-        - No data flows through Python driver
-        - Much faster than sequential file reads
-
-        Args:
-            work_item: Work item identifier
-            **kwargs: Additional options
-
-        Returns:
-            Spark DataFrame with normalized data, or None if not supported
-        """
-        if not self.supports_spark_json(work_item):
             return None
 
         data_type = self._get_data_type(work_item)
+        if not data_type:
+            return None
+
+        endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
+        if not endpoint_id:
+            return None
+
+        raw_dir = self._storage_path / "raw" / "alpha_vantage" / endpoint_id
+        if not raw_dir.exists():
+            return None
+
+        json_files = list(raw_dir.glob("*.json"))
+        if not json_files:
+            return None
+
+        logger.debug(f"{work_item}: Found {len(json_files)} raw JSON files")
+        return str(raw_dir / "*.json")
+
+    def read_raw_as_df(self, work_item: str, raw_path: str) -> Optional[DataFrame]:
+        """
+        Read raw JSON files with Spark and return normalized DataFrame.
+
+        Handles format-specific details:
+        - nested_map: Date-keyed JSON (prices) - Struct→Map conversion
+        - object: Flat JSON (company overview)
+        - array_reports: Nested arrays (financials)
+
+        Args:
+            work_item: Work item identifier
+            raw_path: Glob pattern to raw JSON files
+
+        Returns:
+            Spark DataFrame with normalized data
+        """
+        data_type = self._get_data_type(work_item)
         endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
         endpoint = self._endpoints.get(endpoint_id)
 
-        # Get json_structure from endpoint config
         json_structure = endpoint.json_structure if endpoint else "object"
         response_key = endpoint.response_key if endpoint else None
 
-        raw_dir = self._storage_path / "raw" / "alpha_vantage" / endpoint_id
-        json_pattern = str(raw_dir / "*.json")
-
-        logger.info(f"{work_item}: Reading with Spark JSON (structure={json_structure})")
+        logger.info(f"{work_item}: Reading raw JSON (structure={json_structure})")
 
         try:
             if json_structure == "nested_map":
-                df = self._read_nested_map_json(json_pattern, response_key, data_type)
+                df = self._read_nested_map_json(raw_path, response_key, data_type)
             elif json_structure == "array_reports":
-                df = self._read_array_reports_json(json_pattern, data_type)
+                df = self._read_array_reports_json(raw_path, data_type)
             elif json_structure == "object":
-                df = self._read_object_json(json_pattern, data_type)
+                df = self._read_object_json(raw_path, data_type)
             else:
                 logger.warning(f"Unknown json_structure: {json_structure}, falling back to object")
-                df = self._read_object_json(json_pattern, data_type)
+                df = self._read_object_json(raw_path, data_type)
 
             if df is not None:
                 count = df.count()

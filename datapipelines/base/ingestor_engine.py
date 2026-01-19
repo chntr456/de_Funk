@@ -426,9 +426,10 @@ class IngestorEngine:
             # Force Python GC to release any remaining references
             gc.collect()
 
-    def _ingest_with_spark_native(
+    def _ingest_bulk_from_raw(
         self,
         work_item: str,
+        raw_path: str,
         table_name: str,
         partitions: Optional[List[str]],
         write_strategy: str = "append",
@@ -436,41 +437,39 @@ class IngestorEngine:
         date_column: Optional[str] = None
     ) -> WorkItemResult:
         """
-        Ingest work item using Spark's native file readers (CSV or JSON).
+        PATH 1: Bulk insert from raw staging files.
 
-        This is the fast path for bulk ingestion:
-        - File parsing distributed across all executors
-        - No data flows through Python/driver
-        - Single DataFrame write to Delta
-
-        Works with any provider that implements fetch_as_dataframe().
+        Reads all raw files at once with Spark, bulk writes to Bronze.
+        Provider handles format-specific reading (CSV vs JSON, nested structures).
 
         Args:
             work_item: Work item identifier
-            table_name: Target table name
+            raw_path: Path or glob pattern to raw files
+            table_name: Target Bronze table
             partitions: Partition columns
-            write_strategy: "append" (preserves existing) or "upsert" (overwrites)
-            key_columns: Columns for deduplication (for append strategy)
+            write_strategy: "append" or "overwrite"
+            key_columns: Columns for deduplication
             date_column: Date column for append_immutable
 
         Returns:
             WorkItemResult with status and record count
         """
         try:
-            # Get DataFrame directly from provider (Spark native read)
-            df = self.provider.fetch_as_dataframe(work_item)
+            # Provider reads raw files and returns DataFrame
+            # (handles format-specific details: CSV/JSON, nested maps, etc.)
+            df = self.provider.read_raw_as_df(work_item, raw_path)
 
             if df is None:
-                logger.warning(f"{work_item}: Spark native path returned None, falling back")
-                return None  # Signal to use fallback path
+                logger.warning(f"{work_item}: read_raw_as_df returned None")
+                return None
 
             # Validate partitions
             validated_partitions = self._validate_partitions(
                 partitions, df.columns, work_item
             )
 
-            # Write using appropriate strategy
-            logger.info(f"{work_item}: Writing to Delta with Spark (strategy={write_strategy})")
+            # Write to Bronze
+            logger.info(f"{work_item}: Writing {table_name} (strategy={write_strategy})")
             if write_strategy == "append" and key_columns:
                 self.sink.append_immutable(
                     df, table_name,
@@ -481,10 +480,8 @@ class IngestorEngine:
             else:
                 self.sink.overwrite(df, table_name, partitions=validated_partitions)
 
-            # Get count after write (avoids counting twice)
             total_records = df.count()
-
-            logger.info(f"{work_item}: Spark native complete - {total_records:,} records")
+            logger.info(f"{work_item}: BULK complete - {total_records:,} records")
 
             # Cleanup
             try:
@@ -501,7 +498,7 @@ class IngestorEngine:
             )
 
         except Exception as e:
-            logger.error(f"Spark native failed for {work_item}: {e}", exc_info=True)
+            logger.error(f"BULK failed for {work_item}: {e}", exc_info=True)
             return WorkItemResult(
                 work_item=work_item,
                 success=False,
@@ -550,41 +547,47 @@ class IngestorEngine:
             logger.info(f"{work_item}: write_strategy={write_strategy}, table={table_name}")
 
             # =========================================================================
-            # SPARK-NATIVE PATH (unified for CSV/JSON)
+            # PATH 1: BULK INSERT (raw staging)
             # =========================================================================
-            # Use Spark-native path if provider has fetch_as_dataframe()
-            # This works for both:
-            #   - Socrata (CSV): downloads CSV, Spark reads
-            #   - Alpha Vantage (JSON): API → raw JSON, Spark reads
-            if max_records is None and hasattr(self.provider, 'fetch_as_dataframe'):
+            # Use when: Raw files as staging ground, Spark reads all at once
+            # Provider implements:
+            #   - populate_raw_cache(work_item) -> downloads raw files (optional)
+            #   - get_raw_path(work_item) -> path/glob pattern
+            #   - read_raw_as_df(work_item, raw_path) -> DataFrame
+            #
+            if max_records is None and hasattr(self.provider, 'get_raw_path'):
 
-                # Phase 1: Populate raw cache if provider supports it
-                # (Alpha Vantage: API → raw JSON files)
-                # (Socrata: handled inside fetch_as_dataframe)
+                # Step 1: Populate raw cache if provider supports it
+                # (Alpha Vantage: API → JSON files, Socrata: API → CSV file)
                 if hasattr(self.provider, 'populate_raw_cache'):
                     logger.info(f"{work_item}: Populating raw cache")
-                    cache_stats = self.provider.populate_raw_cache(work_item, **kwargs)
-                    logger.info(
-                        f"{work_item}: Cache stats - "
-                        f"cached: {cache_stats.get('cached', 0)}, "
-                        f"fetched: {cache_stats.get('fetched', 0)}, "
-                        f"failed: {cache_stats.get('failed', 0)}"
+                    stats = self.provider.populate_raw_cache(work_item, **kwargs)
+                    if stats:
+                        logger.info(
+                            f"{work_item}: Cache - "
+                            f"cached: {stats.get('cached', 0)}, "
+                            f"fetched: {stats.get('fetched', 0)}, "
+                            f"failed: {stats.get('failed', 0)}"
+                        )
+
+                # Step 2: Check if raw files exist
+                raw_path = self.provider.get_raw_path(work_item)
+
+                if raw_path:
+                    logger.info(f"{work_item}: BULK path - {raw_path}")
+                    return self._ingest_bulk_from_raw(
+                        work_item, raw_path, table_name, partitions,
+                        write_strategy, key_columns, date_column
                     )
 
-                # Phase 2: Spark reads all files at once
-                logger.info(f"{work_item}: Spark-native read (distributed)")
-                result = self._ingest_with_spark_native(
-                    work_item, table_name, partitions,
-                    write_strategy, key_columns, date_column
-                )
+            # =========================================================================
+            # PATH 2: INCREMENTAL (fetch and stream)
+            # =========================================================================
+            # Use when: Fetching new/changed records, insert as batches arrive
+            # Provider implements: fetch(work_item) -> yields batches
+            #
+            logger.info(f"{work_item}: INCREMENTAL path - fetching and streaming")
 
-                # If Spark-native succeeded, return result
-                # If it returned None, fall through to Python batching
-                if result is not None:
-                    return result
-                logger.warning(f"{work_item}: Spark-native returned None, falling back to Python batching")
-
-            # Get shared executor
             executor = self.get_executor(self.writer_threads)
 
             # Reset write errors for this work item
