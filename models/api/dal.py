@@ -128,11 +128,16 @@ class Table:
         Delta Lake calls SparkSession.active() internally which requires
         the session in thread-local storage. Must be called right before
         any Delta read operation.
+
+        Sets both active session (thread-local) and default session (global).
         """
         try:
-            self.spark._jvm.org.apache.spark.sql.SparkSession.setActiveSession(
-                self.spark._jsparkSession
-            )
+            jvm = self.spark._jvm
+            jss = self.spark._jsparkSession
+            # Set as active (thread-local)
+            jvm.org.apache.spark.sql.SparkSession.setActiveSession(jss)
+            # Also set as default (global fallback)
+            jvm.org.apache.spark.sql.SparkSession.setDefaultSession(jss)
         except Exception:
             pass  # Best effort - some environments may not support this
 

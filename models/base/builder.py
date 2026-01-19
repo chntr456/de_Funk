@@ -264,13 +264,16 @@ class BaseModelBuilder(ABC):
         the session to be registered in thread-local storage. Between
         builder executions, the session can become unregistered.
 
-        Uses JVM bridge to call Scala's setActiveSession() directly since
-        PySpark doesn't expose this method.
+        Uses JVM bridge to call Scala's setActiveSession() and setDefaultSession()
+        directly since PySpark doesn't expose these methods.
         """
         try:
-            self.spark._jvm.org.apache.spark.sql.SparkSession.setActiveSession(
-                self.spark._jsparkSession
-            )
+            jvm = self.spark._jvm
+            jss = self.spark._jsparkSession
+            # Set as active (thread-local)
+            jvm.org.apache.spark.sql.SparkSession.setActiveSession(jss)
+            # Also set as default (global fallback)
+            jvm.org.apache.spark.sql.SparkSession.setDefaultSession(jss)
         except Exception as e:
             logger.debug(f"Could not set active session via JVM: {e}")
 
