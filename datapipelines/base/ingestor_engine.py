@@ -468,6 +468,25 @@ class IngestorEngine:
                 partitions, df.columns, work_item
             )
 
+            # Repartition large DataFrames for write parallelism
+            # CSV reads often result in a single partition - spread work across executors
+            current_partitions = df.rdd.getNumPartitions()
+            if current_partitions <= 2:
+                # Estimate row count from first partition to avoid full count()
+                # Target ~1M rows per partition for efficient Delta writes
+                target_partitions = max(
+                    int(self.provider.spark.conf.get("spark.sql.shuffle.partitions", "200")),
+                    16  # Minimum parallelism
+                )
+                if validated_partitions:
+                    # Use partition columns for hash-based repartition (more efficient for writes)
+                    logger.info(f"{work_item}: Repartitioning to {target_partitions} partitions by {validated_partitions}")
+                    df = df.repartition(target_partitions, *validated_partitions)
+                else:
+                    # Round-robin repartition
+                    logger.info(f"{work_item}: Repartitioning to {target_partitions} partitions (round-robin)")
+                    df = df.repartition(target_partitions)
+
             # Write to Bronze
             logger.info(f"{work_item}: Writing {table_name} (strategy={write_strategy})")
             if write_strategy == "append" and key_columns:
