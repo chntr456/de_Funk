@@ -579,11 +579,13 @@ class IngestorEngine:
                         work_item, raw_path, table_name, partitions,
                         write_strategy, key_columns, date_column
                     )
-                    # If BULK succeeded, return result
-                    # If it returned None, fall through to INCREMENTAL
-                    if result is not None:
-                        return result
-                    logger.warning(f"{work_item}: BULK failed, falling back to INCREMENTAL")
+                    if result is None:
+                        return WorkItemResult(
+                            work_item=work_item,
+                            success=False,
+                            error="BULK read_raw_as_df returned None"
+                        )
+                    return result
 
             # =========================================================================
             # PATH 2: INCREMENTAL (fetch and stream)
