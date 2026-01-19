@@ -884,7 +884,9 @@ def create_engine(
         from datapipelines.providers.chicago.chicago_provider import (
             create_chicago_provider
         )
-        provider = create_chicago_provider(spark, docs_path)
+        # Pass storage_path to enable BULK path (Spark-native CSV reading)
+        storage_path = Path(storage_cfg.get("roots", {}).get("bronze", "storage/bronze")).parent
+        provider = create_chicago_provider(spark, docs_path, storage_path=storage_path)
         return IngestorEngine(
             provider, storage_cfg,
             max_pending_writes=max_pending_writes,
@@ -895,7 +897,9 @@ def create_engine(
         from datapipelines.providers.cook_county.cook_county_provider import (
             create_cook_county_provider
         )
-        provider = create_cook_county_provider(spark, docs_path)
+        # Pass storage_path to enable BULK path (Spark-native CSV reading)
+        storage_path = Path(storage_cfg.get("roots", {}).get("bronze", "storage/bronze")).parent
+        provider = create_cook_county_provider(spark, docs_path, storage_path=storage_path)
         return IngestorEngine(
             provider, storage_cfg,
             max_pending_writes=max_pending_writes,
