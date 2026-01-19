@@ -5,7 +5,7 @@ Debug script to isolate the Spark session issue when reading stocks from forecas
 This script breaks down the exact sequence of calls to find where the session fails.
 
 Usage:
-    spark-submit scripts/debug/debug_forecast_read.py
+    spark-submit --packages io.delta:delta-spark_2.13:4.0.0 scripts/debug/debug_forecast_read.py
 """
 from __future__ import annotations
 
@@ -110,7 +110,8 @@ def main():
     if not storage_root.exists():
         storage_root = repo_root / "storage"
 
-    stocks_silver = storage_root / "silver" / "stocks"
+    # Stocks is under securities subdirectory
+    stocks_silver = storage_root / "silver" / "securities" / "stocks"
     dim_stock_path = stocks_silver / "dim_stock"
     fact_prices_path = stocks_silver / "fact_stock_prices"
 
@@ -127,14 +128,20 @@ def main():
     print(f"Got spark session: {spark}")
     check_session_state(spark, "Initial")
 
-    # Step 2: Read dim_stock - this should work
-    print_section("Step 2: Read dim_stock (should work)")
+    # Step 2: Read dim_stock - try both methods
+    print_section("Step 2: Read dim_stock")
 
     check_session_state(spark, "Before dim_stock read")
 
-    df1 = test_deltatable_api(spark, str(dim_stock_path))
+    # Try spark.read first
+    df1 = test_direct_delta_read(spark, str(dim_stock_path))
     if df1:
-        print(f"\n  Sample tickers: {[r.ticker for r in df1.select('ticker').limit(5).collect()]}")
+        print(f"\n  Sample tickers (spark.read): {[r.ticker for r in df1.select('ticker').limit(5).collect()]}")
+
+    # Also try DeltaTable API
+    df1b = test_deltatable_api(spark, str(dim_stock_path))
+    if df1b:
+        print(f"\n  Sample tickers (DeltaTable): {[r.ticker for r in df1b.select('ticker').limit(5).collect()]}")
 
     check_session_state(spark, "After dim_stock read")
 
@@ -143,9 +150,15 @@ def main():
 
     check_session_state(spark, "Before fact_prices read")
 
-    df2 = test_deltatable_api(spark, str(fact_prices_path))
+    # Try spark.read first
+    df2 = test_direct_delta_read(spark, str(fact_prices_path))
     if df2:
-        print(f"\n  Row count: {df2.count()}")
+        print(f"\n  Row count (spark.read): {df2.count()}")
+
+    # Also try DeltaTable API
+    df2b = test_deltatable_api(spark, str(fact_prices_path))
+    if df2b:
+        print(f"\n  Row count (DeltaTable): {df2b.count()}")
 
     check_session_state(spark, "After fact_prices read")
 
@@ -161,7 +174,7 @@ def main():
     check_session_state(spark, "After SparkConnection created")
 
     print("\nCreating StocksModel...")
-    from models.domain.stocks.model import StocksModel
+    from models.domains.securities.stocks.model import StocksModel
     stocks_model = StocksModel(connection=connection, storage_root=storage_root)
     print(f"  StocksModel: {stocks_model}")
     print(f"  stocks_model.connection: {stocks_model.connection}")
