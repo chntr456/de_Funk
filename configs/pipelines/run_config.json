@@ -89,7 +89,8 @@
   "silver_models": {
     "models": [
       "company",
-      "stocks"
+      "stocks",
+      "forecast"
     ],
     "_models_comment": "Models to build. Dependencies (like temporal) are auto-resolved."
   },
