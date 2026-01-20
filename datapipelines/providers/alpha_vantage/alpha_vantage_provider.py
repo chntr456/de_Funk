@@ -631,6 +631,8 @@ class AlphaVantageProvider(BaseProvider):
                 df = self._read_nested_map_json(raw_path, response_key, data_type, endpoint)
             elif json_structure == "array_reports":
                 df = self._read_array_reports_json(raw_path, data_type, endpoint)
+            elif json_structure == "array":
+                df = self._read_array_json(raw_path, data_type, endpoint)
             elif json_structure == "object":
                 df = self._read_object_json(raw_path, data_type, endpoint)
             else:
@@ -879,6 +881,106 @@ class AlphaVantageProvider(BaseProvider):
         df = df.drop("_file")
 
         # Normalize
+        return self._normalize_spark_df(df, data_type)
+
+    def _read_array_json(
+        self,
+        json_pattern: str,
+        data_type: DataType,
+        endpoint=None
+    ) -> Optional[DataFrame]:
+        """
+        Read JSON files with simple array response.
+
+        Used for: dividends, splits
+
+        Structure:
+            {"_meta": {"ticker": "AAPL", ...}, "response": [
+                {"ex_dividend_date": "2024-01-15", "amount": "0.25", ...},
+                ...
+            ]}
+
+        Strategy:
+            1. Read all JSON files with Spark
+            2. Extract ticker from _meta
+            3. Explode the response array
+            4. Flatten array elements into columns
+
+        Args:
+            json_pattern: Glob pattern for JSON files
+            data_type: DataType for normalization
+            endpoint: Optional EndpointConfig with raw_schema for explicit schema
+
+        Returns:
+            DataFrame with one row per array element
+        """
+        from pyspark.sql import functions as F
+        from pyspark.sql.types import StructType, StructField, StringType, ArrayType
+
+        # Build file schema if raw_schema is defined
+        file_schema = None
+        if endpoint and endpoint.raw_schema:
+            record_schema = endpoint.get_spark_raw_schema()
+            if record_schema:
+                meta_schema = StructType([
+                    StructField("ticker", StringType(), True),
+                    StructField("endpoint_id", StringType(), True),
+                    StructField("fetched_at", StringType(), True),
+                    StructField("provider", StringType(), True)
+                ])
+                file_schema = StructType([
+                    StructField("_meta", meta_schema, True),
+                    StructField("response", ArrayType(record_schema), True)
+                ])
+                logger.debug(f"Using explicit schema for array JSON")
+
+        # Read all JSON files
+        if file_schema:
+            df = (self.spark.read
+                  .option("multiLine", True)
+                  .option("mode", "PERMISSIVE")
+                  .schema(file_schema)
+                  .json(json_pattern))
+        else:
+            df = (self.spark.read
+                  .option("multiLine", True)
+                  .option("mode", "PERMISSIVE")
+                  .option("samplingRatio", 0.1)
+                  .json(json_pattern))
+
+        if df.isEmpty():
+            logger.warning(f"No data read from {json_pattern}")
+            return None
+
+        # Extract ticker from _meta
+        if "_meta" in df.columns:
+            df = df.withColumn("ticker", F.col("_meta.ticker"))
+            df = df.drop("_meta")
+
+        # Handle response - could be array or null
+        if "response" in df.columns:
+            # Filter out null responses
+            df = df.filter(F.col("response").isNotNull())
+            df = df.filter(F.size(F.col("response")) > 0)
+
+            # Explode the array
+            df = df.select(
+                "ticker",
+                F.explode(F.col("response")).alias("_record")
+            )
+
+            # Flatten the struct - get all field names dynamically
+            # Skip 'ticker' field if it exists in record to avoid duplicate
+            record_schema = df.schema["_record"].dataType
+            if isinstance(record_schema, StructType):
+                for field in record_schema.fields:
+                    # Skip ticker - already extracted from _meta
+                    if field.name.lower() == "ticker":
+                        continue
+                    df = df.withColumn(field.name, F.col(f"_record.`{field.name}`"))
+            df = df.drop("_record")
+
+        # Normalize using SparkNormalizer
         return self._normalize_spark_df(df, data_type)
 
     def _read_array_reports_json(
