@@ -65,6 +65,7 @@ class ModelConfig:
         # Schema
         self._dimensions = {}
         self._facts = {}
+        self._measures = {}  # Initialize early - _load_tables may add measures
 
         # Load from v1.x/v2.x 'schema:' structure
         self._load_schema(config_dict.get('schema', {}))
@@ -73,8 +74,7 @@ class ModelConfig:
         if 'tables' in config_dict:
             self._load_tables(config_dict.get('tables', {}))
 
-        # Measures
-        self._measures = {}
+        # Load top-level measures (v1.x/v2.x format)
         self._load_measures(config_dict.get('measures', {}))
 
         # Graph structure (for visualization)
