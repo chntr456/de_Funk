@@ -218,11 +218,10 @@ class AutoJoinHandler:
         for col in missing_columns:
             if col in column_index:
                 target_tables[col] = column_index[col][0]  # Use first table that has it
-                print(f"  AUTO-JOIN: Column '{col}' found in table '{target_tables[col]}'")
                 logger.debug(f"AUTO-JOIN PLAN: Column '{col}' found in table '{target_tables[col]}'")
             else:
-                print(f"  AUTO-JOIN ERROR: Column '{col}' NOT found in any table!")
-                print(f"  AUTO-JOIN: Available columns in index: {list(column_index.keys())[:20]}...")
+                logger.error(f"AUTO-JOIN PLAN: Column '{col}' NOT found in any table!")
+                logger.error(f"AUTO-JOIN PLAN: Available columns: {list(column_index.keys())[:20]}...")
                 raise ValueError(f"Column '{col}' not found in any table in model {model_name}")
 
         logger.debug(f"AUTO-JOIN PLAN: Target tables: {target_tables}")
@@ -325,8 +324,8 @@ class AutoJoinHandler:
         # For backwards compatibility, also include join_keys in old format
         join_keys = [(j['left_col'], j['right_col']) for j in joins]
 
-        print(f"  AUTO-JOIN PLAN: table_sequence = {table_sequence}")
-        print(f"  AUTO-JOIN PLAN: joins = {joins}")
+        logger.debug(f"AUTO-JOIN PLAN: table_sequence = {table_sequence}")
+        logger.debug(f"AUTO-JOIN PLAN: joins = {joins}")
 
         return {
             'table_sequence': table_sequence,
@@ -957,21 +956,28 @@ class AutoJoinHandler:
 
             # Add WHERE clause for filters - only include columns that exist
             if filters:
-                # Collect available columns from loaded tables
+                # Collect available columns from loaded tables AND build table->columns mapping
+                # This is needed for proper column qualification in WHERE clause
                 available_cols = set()
-                for temp_name in temp_tables.values():
+                table_columns = {}
+                for table_name, temp_name in temp_tables.items():
                     try:
                         cols = self.connection.conn.execute(f"DESCRIBE {temp_name}").fetchall()
-                        available_cols.update(c[0] for c in cols)
+                        col_set = {c[0] for c in cols}
+                        table_columns[table_name] = col_set
+                        available_cols.update(col_set)
                     except Exception:
-                        pass
+                        table_columns[table_name] = set()
 
                 # Translate universal date filters via dim_calendar mapping
                 translated_filters = self.translate_date_filters(
                     model_name, base_table, filters, available_cols
                 )
 
-                where_clause = self._build_where_clause(translated_filters, base_temp, available_cols)
+                where_clause = self._build_where_clause(
+                    translated_filters, base_temp, available_cols,
+                    table_columns=table_columns, temp_tables=temp_tables
+                )
                 if where_clause:
                     sql += f" WHERE {where_clause}"
 
@@ -1063,8 +1069,8 @@ class AutoJoinHandler:
         Uses DESCRIBE on registered temp tables to find column locations.
         Does NOT call model.get_table() which would trigger Bronze reads.
         """
-        print(f"  _build_select_cols: table_sequence={table_sequence}")
-        print(f"  _build_select_cols: temp_tables keys={list(temp_tables.keys())}")
+        logger.debug(f"_build_select_cols: table_sequence={table_sequence}")
+        logger.debug(f"_build_select_cols: temp_tables keys={list(temp_tables.keys())}")
 
         # Build column index from temp tables using DESCRIBE (no Bronze reads!)
         table_columns = {}
@@ -1072,9 +1078,9 @@ class AutoJoinHandler:
             try:
                 cols = self.connection.conn.execute(f"DESCRIBE {temp_name}").fetchall()
                 table_columns[table_name] = {c[0] for c in cols}
-                print(f"  _build_select_cols: {table_name} has {len(table_columns[table_name])} columns")
+                logger.debug(f"_build_select_cols: {table_name} has {len(table_columns[table_name])} columns")
             except Exception as e:
-                print(f"  _build_select_cols: DESCRIBE {temp_name} failed: {e}")
+                logger.warning(f"_build_select_cols: DESCRIBE {temp_name} failed: {e}")
                 table_columns[table_name] = set()
 
         select_cols = []
@@ -1084,11 +1090,11 @@ class AutoJoinHandler:
                 if col in table_columns.get(table_name, set()):
                     select_cols.append(f"{temp_tables[table_name]}.{col}")
                     found = True
-                    print(f"  _build_select_cols: '{col}' found in {table_name}")
+                    logger.debug(f"_build_select_cols: '{col}' found in {table_name}")
                     break
             if not found:
                 # Column not found in any table - add unqualified (will error if missing)
-                print(f"  _build_select_cols: '{col}' NOT FOUND in any table!")
+                logger.warning(f"_build_select_cols: '{col}' NOT FOUND in any table!")
                 select_cols.append(col)
         return select_cols
 
@@ -1096,11 +1102,21 @@ class AutoJoinHandler:
         self,
         filters: Dict[str, Any],
         base_temp: str,
-        available_cols: Optional[set] = None
+        available_cols: Optional[set] = None,
+        table_columns: Optional[Dict[str, set]] = None,
+        temp_tables: Optional[Dict[str, str]] = None
     ) -> str:
         """Build WHERE clause from filters.
 
         Only includes filters for columns that exist in the joined tables.
+        Qualifies columns to the correct table (not always base_temp).
+
+        Args:
+            filters: Filter dict
+            base_temp: Base temp table name (used as fallback)
+            available_cols: Set of all available columns across joined tables
+            table_columns: Dict mapping table_name -> set of columns
+            temp_tables: Dict mapping table_name -> temp_table_name
         """
         where_clauses = []
 
@@ -1110,29 +1126,37 @@ class AutoJoinHandler:
                 logger.debug(f"AUTO-JOIN WHERE: Skipping filter on '{col}' - column not in joined tables")
                 continue
 
+            # Find which table has this column
+            qualified_col = f"{base_temp}.{col}"  # Default to base table
+            if table_columns and temp_tables:
+                for table_name, cols in table_columns.items():
+                    if col in cols:
+                        qualified_col = f"{temp_tables[table_name]}.{col}"
+                        break
+
             if isinstance(filter_val, dict):
                 # Range filter
                 if 'start' in filter_val and 'end' in filter_val:
-                    where_clauses.append(f"{base_temp}.{col} BETWEEN '{filter_val['start']}' AND '{filter_val['end']}'")
+                    where_clauses.append(f"{qualified_col} BETWEEN '{filter_val['start']}' AND '{filter_val['end']}'")
                 elif 'min' in filter_val and 'max' in filter_val:
-                    where_clauses.append(f"{base_temp}.{col} BETWEEN {filter_val['min']} AND {filter_val['max']}")
+                    where_clauses.append(f"{qualified_col} BETWEEN {filter_val['min']} AND {filter_val['max']}")
                 elif 'min' in filter_val:
-                    where_clauses.append(f"{base_temp}.{col} >= {filter_val['min']}")
+                    where_clauses.append(f"{qualified_col} >= {filter_val['min']}")
                 elif 'max' in filter_val:
-                    where_clauses.append(f"{base_temp}.{col} <= {filter_val['max']}")
+                    where_clauses.append(f"{qualified_col} <= {filter_val['max']}")
             elif isinstance(filter_val, list):
                 # IN filter
                 if all(isinstance(v, str) for v in filter_val):
                     vals = "', '".join(filter_val)
-                    where_clauses.append(f"{base_temp}.{col} IN ('{vals}')")
+                    where_clauses.append(f"{qualified_col} IN ('{vals}')")
                 else:
                     vals = ", ".join(str(v) for v in filter_val)
-                    where_clauses.append(f"{base_temp}.{col} IN ({vals})")
+                    where_clauses.append(f"{qualified_col} IN ({vals})")
             else:
                 # Equality filter
                 if isinstance(filter_val, str):
-                    where_clauses.append(f"{base_temp}.{col} = '{filter_val}'")
+                    where_clauses.append(f"{qualified_col} = '{filter_val}'")
                 else:
-                    where_clauses.append(f"{base_temp}.{col} = {filter_val}")
+                    where_clauses.append(f"{qualified_col} = {filter_val}")
 
         return " AND ".join(where_clauses) if where_clauses else ""
