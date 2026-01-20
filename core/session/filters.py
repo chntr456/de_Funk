@@ -40,6 +40,25 @@ class FilterEngine:
     """
 
     @staticmethod
+    def _convert_date_to_date_id(date_str: str) -> int | None:
+        """
+        Convert a date string to date_id integer format (YYYYMMDD).
+
+        Args:
+            date_str: Date string in various formats (YYYY-MM-DD, YYYY/MM/DD, etc.)
+
+        Returns:
+            Integer date_id (e.g., 20260120) or None if conversion fails
+        """
+        import re
+        # Try to extract YYYY, MM, DD from common date formats
+        match = re.match(r'(\d{4})[-/]?(\d{2})[-/]?(\d{2})', str(date_str))
+        if match:
+            year, month, day = match.groups()
+            return int(f"{year}{month}{day}")
+        return None
+
+    @staticmethod
     def _format_sql_value(value: Any) -> str:
         """
         Format a value for SQL, quoting strings but NOT numbers.
@@ -226,13 +245,24 @@ class FilterEngine:
             if available_columns is not None and col_name not in available_columns:
                 continue
 
+            # Check if this is a date_id column (integer YYYYMMDD format)
+            is_date_id_col = col_name == 'date_id'
+
             if isinstance(value, dict):
                 # Range filter - support both min/max AND start/end formats
                 # Date ranges use start/end, numeric ranges use min/max
                 if 'start' in value and 'end' in value:
-                    # Date range format - always quote dates
-                    conditions.append(f"{col_name} >= '{value['start']}'")
-                    conditions.append(f"{col_name} <= '{value['end']}'")
+                    if is_date_id_col:
+                        # Convert date strings to integers for date_id column
+                        start_int = FilterEngine._convert_date_to_date_id(value['start'])
+                        end_int = FilterEngine._convert_date_to_date_id(value['end'])
+                        if start_int and end_int:
+                            conditions.append(f"{col_name} >= {start_int}")
+                            conditions.append(f"{col_name} <= {end_int}")
+                    else:
+                        # Date range format - quote dates as strings
+                        conditions.append(f"{col_name} >= '{value['start']}'")
+                        conditions.append(f"{col_name} <= '{value['end']}'")
                 elif 'min' in value:
                     # Use _format_sql_value to handle numeric vs string values
                     conditions.append(f"{col_name} >= {FilterEngine._format_sql_value(value['min'])}")

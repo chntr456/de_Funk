@@ -1024,6 +1024,7 @@ class AutoJoinHandler:
         """Build WHERE clause from filters for view-based queries.
 
         Only includes filters for columns that exist in the joined tables.
+        Handles date_id columns by converting date strings to integers.
         """
         where_clauses = []
 
@@ -1033,9 +1034,22 @@ class AutoJoinHandler:
                 logger.debug(f"AUTO-JOIN WHERE: Skipping filter on '{col}' - column not in joined tables")
                 continue
 
+            # Check if this is a date_id column (integer YYYYMMDD format)
+            is_date_id_col = col == 'date_id'
+
             if isinstance(filter_val, dict):
                 if 'start' in filter_val and 'end' in filter_val:
-                    where_clauses.append(f"{base_view}.{col} BETWEEN '{filter_val['start']}' AND '{filter_val['end']}'")
+                    start_val = filter_val['start']
+                    end_val = filter_val['end']
+                    if is_date_id_col:
+                        start_int = self._convert_date_to_date_id(start_val)
+                        end_int = self._convert_date_to_date_id(end_val)
+                        if start_int and end_int:
+                            where_clauses.append(f"{base_view}.{col} BETWEEN {start_int} AND {end_int}")
+                        else:
+                            logger.warning(f"AUTO-JOIN WHERE: Failed to convert date_id filter: {start_val}, {end_val}")
+                    else:
+                        where_clauses.append(f"{base_view}.{col} BETWEEN '{start_val}' AND '{end_val}'")
                 elif 'min' in filter_val and 'max' in filter_val:
                     where_clauses.append(f"{base_view}.{col} BETWEEN {filter_val['min']} AND {filter_val['max']}")
                 elif 'min' in filter_val:
@@ -1043,14 +1057,26 @@ class AutoJoinHandler:
                 elif 'max' in filter_val:
                     where_clauses.append(f"{base_view}.{col} <= {filter_val['max']}")
             elif isinstance(filter_val, list):
-                if all(isinstance(v, str) for v in filter_val):
+                if is_date_id_col:
+                    int_vals = [self._convert_date_to_date_id(v) for v in filter_val]
+                    int_vals = [v for v in int_vals if v is not None]
+                    if int_vals:
+                        vals = ", ".join(str(v) for v in int_vals)
+                        where_clauses.append(f"{base_view}.{col} IN ({vals})")
+                elif all(isinstance(v, str) for v in filter_val):
                     vals = "', '".join(filter_val)
                     where_clauses.append(f"{base_view}.{col} IN ('{vals}')")
                 else:
                     vals = ", ".join(str(v) for v in filter_val)
                     where_clauses.append(f"{base_view}.{col} IN ({vals})")
             else:
-                if isinstance(filter_val, str):
+                if is_date_id_col and isinstance(filter_val, str):
+                    int_val = self._convert_date_to_date_id(filter_val)
+                    if int_val:
+                        where_clauses.append(f"{base_view}.{col} = {int_val}")
+                    else:
+                        where_clauses.append(f"{base_view}.{col} = '{filter_val}'")
+                elif isinstance(filter_val, str):
                     where_clauses.append(f"{base_view}.{col} = '{filter_val}'")
                 else:
                     where_clauses.append(f"{base_view}.{col} = {filter_val}")
@@ -1098,6 +1124,24 @@ class AutoJoinHandler:
                 select_cols.append(col)
         return select_cols
 
+    def _convert_date_to_date_id(self, date_str: str) -> Optional[int]:
+        """Convert a date string to date_id integer format (YYYYMMDD).
+
+        Args:
+            date_str: Date string in various formats (YYYY-MM-DD, YYYY/MM/DD, etc.)
+
+        Returns:
+            Integer date_id (e.g., 20260120) or None if conversion fails
+        """
+        import re
+        # Try to extract YYYY, MM, DD from common date formats
+        # Handles: 2026-01-20, 2026/01/20, 20260120
+        match = re.match(r'(\d{4})[-/]?(\d{2})[-/]?(\d{2})', str(date_str))
+        if match:
+            year, month, day = match.groups()
+            return int(f"{year}{month}{day}")
+        return None
+
     def _build_where_clause(
         self,
         filters: Dict[str, Any],
@@ -1134,10 +1178,26 @@ class AutoJoinHandler:
                         qualified_col = f"{temp_tables[table_name]}.{col}"
                         break
 
+            # Check if this is a date_id column (integer YYYYMMDD format)
+            # Date strings need to be converted to integers for these columns
+            is_date_id_col = col == 'date_id'
+
             if isinstance(filter_val, dict):
                 # Range filter
                 if 'start' in filter_val and 'end' in filter_val:
-                    where_clauses.append(f"{qualified_col} BETWEEN '{filter_val['start']}' AND '{filter_val['end']}'")
+                    start_val = filter_val['start']
+                    end_val = filter_val['end']
+                    if is_date_id_col:
+                        # Convert date strings to integers
+                        start_int = self._convert_date_to_date_id(start_val)
+                        end_int = self._convert_date_to_date_id(end_val)
+                        if start_int and end_int:
+                            where_clauses.append(f"{qualified_col} BETWEEN {start_int} AND {end_int}")
+                            logger.debug(f"AUTO-JOIN WHERE: date_id filter converted: {start_val} -> {start_int}, {end_val} -> {end_int}")
+                        else:
+                            logger.warning(f"AUTO-JOIN WHERE: Failed to convert date_id filter values: {start_val}, {end_val}")
+                    else:
+                        where_clauses.append(f"{qualified_col} BETWEEN '{start_val}' AND '{end_val}'")
                 elif 'min' in filter_val and 'max' in filter_val:
                     where_clauses.append(f"{qualified_col} BETWEEN {filter_val['min']} AND {filter_val['max']}")
                 elif 'min' in filter_val:
@@ -1146,7 +1206,14 @@ class AutoJoinHandler:
                     where_clauses.append(f"{qualified_col} <= {filter_val['max']}")
             elif isinstance(filter_val, list):
                 # IN filter
-                if all(isinstance(v, str) for v in filter_val):
+                if is_date_id_col:
+                    # Convert all date strings to integers
+                    int_vals = [self._convert_date_to_date_id(v) for v in filter_val]
+                    int_vals = [v for v in int_vals if v is not None]
+                    if int_vals:
+                        vals = ", ".join(str(v) for v in int_vals)
+                        where_clauses.append(f"{qualified_col} IN ({vals})")
+                elif all(isinstance(v, str) for v in filter_val):
                     vals = "', '".join(filter_val)
                     where_clauses.append(f"{qualified_col} IN ('{vals}')")
                 else:
@@ -1154,7 +1221,13 @@ class AutoJoinHandler:
                     where_clauses.append(f"{qualified_col} IN ({vals})")
             else:
                 # Equality filter
-                if isinstance(filter_val, str):
+                if is_date_id_col and isinstance(filter_val, str):
+                    int_val = self._convert_date_to_date_id(filter_val)
+                    if int_val:
+                        where_clauses.append(f"{qualified_col} = {int_val}")
+                    else:
+                        where_clauses.append(f"{qualified_col} = '{filter_val}'")
+                elif isinstance(filter_val, str):
                     where_clauses.append(f"{qualified_col} = '{filter_val}'")
                 else:
                     where_clauses.append(f"{qualified_col} = {filter_val}")
