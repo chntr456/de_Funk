@@ -177,7 +177,7 @@ $exhibits${
   type: line_chart
   source: company.fact_balance_sheet
   x: date
-  y: [long_term_debt, total_debt, cash_and_equivalents]
+  y: [long_term_debt, short_long_term_debt_total, cash_and_equivalents]
   color: ticker
   title: Debt vs Cash Position
   height: 350
@@ -188,7 +188,7 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.fact_balance_sheet
-  columns: [ticker, date, report_type, total_assets, total_liabilities, total_shareholder_equity, cash_and_equivalents, total_debt]
+  columns: [ticker, date, report_type, total_assets, total_liabilities, total_shareholder_equity, cash_and_equivalents, short_long_term_debt_total]
   sort_by: date
   sort_order: desc
   page_size: 20
