@@ -218,8 +218,11 @@ class AutoJoinHandler:
         for col in missing_columns:
             if col in column_index:
                 target_tables[col] = column_index[col][0]  # Use first table that has it
+                print(f"  AUTO-JOIN: Column '{col}' found in table '{target_tables[col]}'")
                 logger.debug(f"AUTO-JOIN PLAN: Column '{col}' found in table '{target_tables[col]}'")
             else:
+                print(f"  AUTO-JOIN ERROR: Column '{col}' NOT found in any table!")
+                print(f"  AUTO-JOIN: Available columns in index: {list(column_index.keys())[:20]}...")
                 raise ValueError(f"Column '{col}' not found in any table in model {model_name}")
 
         logger.debug(f"AUTO-JOIN PLAN: Target tables: {target_tables}")
@@ -321,6 +324,9 @@ class AutoJoinHandler:
 
         # For backwards compatibility, also include join_keys in old format
         join_keys = [(j['left_col'], j['right_col']) for j in joins]
+
+        print(f"  AUTO-JOIN PLAN: table_sequence = {table_sequence}")
+        print(f"  AUTO-JOIN PLAN: joins = {joins}")
 
         return {
             'table_sequence': table_sequence,
@@ -1057,13 +1063,18 @@ class AutoJoinHandler:
         Uses DESCRIBE on registered temp tables to find column locations.
         Does NOT call model.get_table() which would trigger Bronze reads.
         """
+        print(f"  _build_select_cols: table_sequence={table_sequence}")
+        print(f"  _build_select_cols: temp_tables keys={list(temp_tables.keys())}")
+
         # Build column index from temp tables using DESCRIBE (no Bronze reads!)
         table_columns = {}
         for table_name, temp_name in temp_tables.items():
             try:
                 cols = self.connection.conn.execute(f"DESCRIBE {temp_name}").fetchall()
                 table_columns[table_name] = {c[0] for c in cols}
-            except Exception:
+                print(f"  _build_select_cols: {table_name} has {len(table_columns[table_name])} columns")
+            except Exception as e:
+                print(f"  _build_select_cols: DESCRIBE {temp_name} failed: {e}")
                 table_columns[table_name] = set()
 
         select_cols = []
@@ -1073,9 +1084,11 @@ class AutoJoinHandler:
                 if col in table_columns.get(table_name, set()):
                     select_cols.append(f"{temp_tables[table_name]}.{col}")
                     found = True
+                    print(f"  _build_select_cols: '{col}' found in {table_name}")
                     break
             if not found:
                 # Column not found in any table - add unqualified (will error if missing)
+                print(f"  _build_select_cols: '{col}' NOT FOUND in any table!")
                 select_cols.append(col)
         return select_cols
 
