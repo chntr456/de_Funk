@@ -323,30 +323,50 @@ class UniversalSession:
                 logger.debug(f"View {view_name} not available ({e})")
 
         # Strategy 2: Try reading Silver files directly
-        # Use self.storage_cfg (resolved from run_config.json) for the absolute silver root
-        # This ensures we use /shared/storage/silver instead of repo-relative paths
-        silver_base = self.storage_cfg.get('roots', {}).get('silver', 'storage/silver')
-        if not Path(silver_base).is_absolute():
-            silver_base = self.repo_root / silver_base if self.repo_root else Path(silver_base)
-        else:
-            silver_base = Path(silver_base)
-        base_silver_path = silver_base / model_name
-
-        # Get the table path from schema config
+        # First check if the model config specifies its own silver root (from domain markdown)
         model_cfg = model.model_cfg if hasattr(model, 'model_cfg') else {}
-        schema_cfg = model_cfg.get('schema', {})
+        model_silver_root = model_cfg.get('storage', {}).get('silver', {}).get('root')
+
+        if model_silver_root:
+            # Domain config specifies explicit path like 'storage/silver/securities/stocks'
+            base_silver_path = Path(model_silver_root)
+            if not base_silver_path.is_absolute():
+                base_silver_path = self.repo_root / base_silver_path if self.repo_root else base_silver_path
+            logger.debug(f"Using model-specific silver root: {base_silver_path}")
+        else:
+            # Fallback: Use global silver root + model_name
+            silver_base = self.storage_cfg.get('roots', {}).get('silver', 'storage/silver')
+            if not Path(silver_base).is_absolute():
+                silver_base = self.repo_root / silver_base if self.repo_root else Path(silver_base)
+            else:
+                silver_base = Path(silver_base)
+            base_silver_path = silver_base / model_name
+            logger.debug(f"Using global silver root + model_name: {base_silver_path}")
+
+        # Get the table path from config
+        # Support both v2.x (schema.facts/dimensions) and v3.0 (tables) formats
         table_path = None
 
-        # Check facts and dimensions for path
-        for table_type in ['facts', 'dimensions']:
-            tables = schema_cfg.get(table_type, {})
-            if table_name in tables:
-                table_path = tables[table_name].get('path', table_name)
-                break
+        # v3.0 format: tables: {table_name: {path: ...}}
+        tables_cfg = model_cfg.get('tables', {})
+        if table_name in tables_cfg:
+            table_path = tables_cfg[table_name].get('path', table_name)
+            logger.debug(f"Found table path in v3.0 'tables' config: {table_path}")
 
-        # If not in schema, try the table name directly
+        # v2.x format: schema.facts/dimensions.{table_name}.path
+        if not table_path:
+            schema_cfg = model_cfg.get('schema', {})
+            for table_type in ['facts', 'dimensions']:
+                tables = schema_cfg.get(table_type, {})
+                if table_name in tables:
+                    table_path = tables[table_name].get('path', table_name)
+                    logger.debug(f"Found table path in v2.x 'schema' config: {table_path}")
+                    break
+
+        # If not in any config, use the table name directly
         if not table_path:
             table_path = table_name
+            logger.debug(f"No config path found, using table name: {table_path}")
 
         # Try multiple possible paths
         # Model writer creates: facts/fact_xxx or dims/dim_xxx
@@ -356,7 +376,11 @@ class UniversalSession:
             base_silver_path / f"dims/{table_name}",   # dims/dim_stock
         ]
 
+        logger.debug(f"Looking for {model_name}.{table_name} in paths: {[str(p) for p in possible_paths]}")
+
         for silver_table_path in possible_paths:
+            exists = silver_table_path.exists()
+            logger.debug(f"  Checking {silver_table_path}: exists={exists}")
             # Check if Silver table exists (Delta or Parquet)
             delta_log_path = silver_table_path / "_delta_log"
             is_delta = delta_log_path.exists()
@@ -395,10 +419,17 @@ class UniversalSession:
                         logger.debug(f"Failed to read from {silver_table_path}: {e}")
                         continue
 
-        # Strategy 3: Check if Silver root exists before expensive build
+        # Strategy 3: None of the paths worked - log detailed info
+        paths_checked = [str(p) for p in possible_paths]
+        logger.warning(
+            f"Table '{model_name}.{table_name}' not found in any of these paths: {paths_checked}. "
+            f"Model silver root: {model_silver_root if model_silver_root else 'not specified (using global)'}"
+        )
+
         if not allow_build:
             raise ValueError(
-                f"Table '{model_name}.{table_name}' not available as view and building is disabled."
+                f"Table '{model_name}.{table_name}' not available as view and building is disabled. "
+                f"Paths checked: {paths_checked}"
             )
 
         if not base_silver_path.exists():
@@ -412,7 +443,8 @@ class UniversalSession:
         # Building from Bronze would load 22M+ rows into memory and crash.
         # If we get here, Silver doesn't exist - raise clear error.
         raise ValueError(
-            f"Table '{model_name}.{table_name}' not available. Silver layer not found at {base_silver_path}. "
+            f"Table '{model_name}.{table_name}' not available. "
+            f"Paths checked: {paths_checked}. "
             f"Run: python -m scripts.build.build_models --models {model_name}"
         )
 
