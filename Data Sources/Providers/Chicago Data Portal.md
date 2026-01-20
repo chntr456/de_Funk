@@ -94,3 +94,74 @@ python -m scripts.ingest.run_bronze_ingestion --provider chicago --endpoints cri
 4. **Floating point timestamps**: Some date fields return as floating point epoch
 5. **Throttling**: Without app token, requests are heavily throttled
 6. **Schema changes**: Field names occasionally change; check `$describe` endpoint
+7. **Block-Level Location**: Crime data shows block-level only (privacy)
+
+## Endpoints by Domain
+
+### Public Safety
+| Endpoint ID | Dataset ID | Description | Records |
+|-------------|------------|-------------|---------|
+| `crimes` | `ijzp-q8t2` | Crime incidents 2001-present | 8M+ |
+| `arrests` | `dpt3-jri9` | Arrests 2014-present | - |
+| `police_beats` | `aerh-rz74` | Police beat boundaries | - |
+| `iucr_codes` | `c7ck-438e` | Crime classification codes | - |
+
+### Finance
+| Endpoint ID | Dataset ID | Description | Notes |
+|-------------|------------|-------------|-------|
+| `budget_appropriations` | varies | Annual budget data | By year |
+| `contracts` | `rsxa-ify5` | City contracts | - |
+| `payments` | `s4vu-giwb` | Vendor payments | - |
+| `budget_revenue` | varies | Revenue projections | By year |
+
+### Transportation
+| Endpoint ID | Dataset ID | Description | Records |
+|-------------|------------|-------------|---------|
+| `cta_l_ridership_daily` | `t2rn-p8d7` | Daily L station entries | 1.2M+ |
+| `cta_bus_ridership_daily` | `jyb9-n7fm` | Daily bus route ridership | 1.5M+ |
+| `cta_l_stops` | `8pix-ypme` | L station locations | - |
+| `traffic_congestion` | `t2qc-9pjd` | Traffic congestion estimates | - |
+
+### Regulatory/Housing
+| Endpoint ID | Dataset ID | Description | Records |
+|-------------|------------|-------------|---------|
+| `building_permits` | `ydr8-5enu` | Building permits | 700K+ |
+| `food_inspections` | `4ijn-s7e5` | Restaurant inspections | 250K+ |
+| `business_licenses` | `r5kz-chrr` | Business licenses | 1M+ |
+| `building_violations` | `22u3-xenr` | Building code violations | - |
+
+### Geospatial
+| Endpoint ID | Dataset ID | Description |
+|-------------|------------|-------------|
+| `boundaries_wards` | `sp34-6z76` | Ward boundaries |
+| `community_areas` | `cauq-8yn6` | Community area boundaries |
+
+## Bronze Tables
+
+| Table | Source Endpoint | Partitions | Key Fields |
+|-------|-----------------|------------|------------|
+| `chicago_crimes` | crimes | `year` | id, case_number, date, primary_type, arrest |
+| `chicago_building_permits` | building_permits | `year` | permit_number, issue_date, work_type |
+| `chicago_business_licenses` | business_licenses | `year` | license_id, account_number, business_activity |
+| `chicago_food_inspections` | food_inspections | `year` | inspection_id, dba_name, results, violations |
+| `chicago_cta_l_ridership` | cta_l_ridership_daily | `year` | station_id, date, rides |
+| `chicago_cta_bus_ridership` | cta_bus_ridership_daily | `year` | route, date, rides |
+
+## Recommended Cadence
+
+| Data Type | Frequency | Notes |
+|-----------|-----------|-------|
+| Crimes | Daily | Updated daily (minus 7-day lag) |
+| Building Permits | Daily | Real-time updates |
+| Business Licenses | Weekly | Less frequent changes |
+| Food Inspections | Daily | Updated as inspections occur |
+| CTA Ridership | Daily | Previous day's data |
+
+## Pagination
+
+Socrata uses offset-based pagination:
+```
+?$limit=50000&$offset=0      # First 50,000 records
+?$limit=50000&$offset=50000  # Next 50,000 records
+```
+Maximum `$limit` per request: **50,000 records**. Provider handles pagination automatically.

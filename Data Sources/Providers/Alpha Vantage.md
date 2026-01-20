@@ -37,7 +37,9 @@ endpoints:
   - balance_sheet
   - cash_flow
   - earnings
-endpoints_comment: "Available: time_series_daily, time_series_daily_adjusted, company_overview, global_quote, income_statement, balance_sheet, cash_flow, earnings"
+  - dividends
+  - splits
+endpoints_comment: "Available: time_series_daily, time_series_daily_adjusted, company_overview, global_quote, income_statement, balance_sheet, cash_flow, earnings, dividends, splits"
 
 # Models Fed (Silver layer)
 models:
@@ -83,9 +85,54 @@ Alpha Vantage provides stock market data including real-time and historical pric
 | Core | company_overview, listing_status, global_quote | company_reference, securities_reference |
 | Prices | time_series_daily, time_series_daily_adjusted | securities_prices_daily |
 | Fundamentals | income_statement, balance_sheet, cash_flow, earnings | income_statements, balance_sheets, cash_flows, earnings |
+| Corporate Actions | dividends, splits | dividends, splits |
 | Options | historical_options, realtime_options | historical_options |
 | ETFs | etf_profile | etf_profiles |
 | Technical | technical_sma, technical_rsi, technical_macd | (computed on demand) |
+
+### Endpoint Details
+
+#### Core Endpoints
+- **listing_status**: Returns CSV of all active US tickers (~12,000+). Use for ticker discovery.
+- **company_overview**: Company fundamentals with SEC CIK for linkage. One call per ticker.
+
+#### Price Endpoints
+- **time_series_daily**: Full historical OHLCV (20+ years). One call per ticker.
+- **time_series_daily_adjusted**: Includes split/dividend adjustments.
+
+#### Fundamental Endpoints
+All return quarterly and annual data. One call per ticker per endpoint.
+
+#### Corporate Action Endpoints
+- **dividends**: Historical and declared dividend distributions
+  - Fields: ex_dividend_date, dividend_amount, record_date, payment_date, declaration_date
+  - API: `function=DIVIDENDS&symbol={ticker}`
+- **splits**: Historical stock split events
+  - Fields: effective_date, split_from, split_to (e.g., 1:4 for 4-for-1)
+  - API: `function=SPLITS&symbol={ticker}`
+
+### Bronze Tables
+
+| Table | Source Endpoint | Partitions | Key Fields |
+|-------|-----------------|------------|------------|
+| `securities_reference` | listing_status | `snapshot_dt`, `asset_type` | ticker, name, exchange, asset_type, cik |
+| `company_reference` | company_overview | `snapshot_dt` | ticker, cik, sector, industry, market_cap |
+| `securities_prices_daily` | time_series_daily | `trade_date`, `asset_type` | ticker, trade_date, open, high, low, close, volume |
+| `income_statements` | income_statement | `fiscal_year` | ticker, fiscal_date, revenue, net_income, eps |
+| `balance_sheets` | balance_sheet | `fiscal_year` | ticker, fiscal_date, total_assets, total_liabilities |
+| `cash_flows` | cash_flow | `fiscal_year` | ticker, fiscal_date, operating_cf, investing_cf |
+| `earnings` | earnings | `fiscal_year` | ticker, fiscal_date, reported_eps, estimated_eps |
+| `dividends` | dividends | `ex_dividend_date` | ticker, ex_dividend_date, dividend_amount, payment_date |
+| `splits` | splits | `effective_date` | ticker, effective_date, split_from, split_to |
+
+### Recommended Cadence
+
+| Data Type | Frequency | Notes |
+|-----------|-----------|-------|
+| Prices | Daily | After market close |
+| Fundamentals | Weekly | New filings irregular |
+| Reference | Weekly | Ticker changes rare |
+| Dividends/Splits | Weekly | Corporate actions less frequent |
 
 ## Homelab Usage Notes
 

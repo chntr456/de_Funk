@@ -28,9 +28,11 @@
         "income_statement",
         "balance_sheet",
         "cash_flow",
-        "earnings"
+        "earnings",
+        "dividends",
+        "splits"
       ],
-      "_endpoints_comment": "Endpoints to ingest. listing_status first for ticker discovery. Available: listing_status, time_series_daily, time_series_daily_adjusted, company_overview, global_quote, income_statement, balance_sheet, cash_flow, earnings"
+      "_endpoints_comment": "Endpoints to ingest. listing_status first for ticker discovery. Available: listing_status, time_series_daily, time_series_daily_adjusted, company_overview, global_quote, income_statement, balance_sheet, cash_flow, earnings, dividends, splits"
     },
     "chicago": {
       "enabled": true,
@@ -127,13 +129,23 @@
     "_comment": "Named profiles for common run scenarios. Use --profile to activate.",
     "_write_batch_size_comment": "Records to buffer before writing to Delta. Default 500k. Prevents memory overflow on large datasets.",
     "quick_test": {
-      "providers": ["alpha_vantage", "chicago", "cook_county"],
-      "max_tickers": 3,
-      "max_records_per_endpoint": 50000,
+      "providers": ["alpha_vantage"],
+      "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings", "dividends", "splits"],
+      "_endpoints_comment": "Full Alpha Vantage coverage: prices, reference, financials, and corporate actions",
+      "max_tickers": 10,
       "write_batch_size": 10000,
+      "use_raw_cache": true,
+      "_use_raw_cache_comment": "Reads from cached raw JSON if available, otherwise hits API",
+      "build_silver": true,
+      "compute_technicals": true,
+      "_compute_technicals_comment": "Compute SMA, RSI, Bollinger, volatility after silver build",
+      "build_forecast": true,
+      "forecast_tickers": 10,
+      "forecast_models": ["arima_7d", "prophet_7d"],
+      "_forecast_models_comment": "Fast models for quick testing",
       "dry_run": false,
       "log_level": "DEBUG",
-      "_comment": "Quick smoke test: 3 tickers + 50k records per Socrata endpoint. Bronze only."
+      "_comment": "Full pipeline test: 10 tickers, all Alpha Vantage endpoints → bronze → silver → technicals → forecast"
     },
     "dev": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
@@ -236,38 +248,46 @@
     },
     "alpha_vantage_full": {
       "providers": ["alpha_vantage"],
-      "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings"],
-      "_endpoints_comment": "All Alpha Vantage endpoints: prices, company, and financial statements",
+      "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings", "dividends", "splits"],
+      "_endpoints_comment": "All Alpha Vantage endpoints: prices, company, financials, and corporate actions",
       "max_tickers": null,
       "write_batch_size": 500000,
       "max_pending_writes": 0,
       "use_raw_cache": true,
       "_use_raw_cache_comment": "Reads from storage/raw/alpha_vantage/{endpoint}/*.json - NO API calls",
       "build_silver": true,
+      "compute_technicals": true,
+      "build_forecast": true,
+      "forecast_models": ["arima_7d", "arima_30d", "prophet_7d", "prophet_30d"],
       "log_level": "INFO",
-      "_comment": "Alpha Vantage only: raw → bronze → silver (company, stocks, forecast). No API calls."
+      "_comment": "Alpha Vantage full: raw → bronze → silver → technicals → forecast. No API calls."
     },
     "pipeline_test": {
       "providers": ["alpha_vantage", "chicago", "cook_county"],
       "max_tickers": null,
-      "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings"],
-      "_endpoints_comment": "Full Alpha Vantage coverage: prices, reference, and all financial statements",
+      "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings", "dividends", "splits"],
+      "_endpoints_comment": "Full Alpha Vantage coverage: prices, reference, financials, and corporate actions",
       "write_batch_size": 500000,
       "max_pending_writes": 0,
       "use_raw_cache": true,
       "_use_raw_cache_comment": "Reads from cached raw JSON files - NO API calls",
       "build_silver": true,
+      "compute_technicals": true,
       "log_level": "INFO",
-      "_comment": "Full pipeline: all providers → bronze → silver. Chicago/Cook County bronze-only (no silver builders yet)."
+      "_comment": "Full pipeline: all providers → bronze → silver → technicals. Chicago/Cook County bronze-only."
     },
     "pipeline_test_50": {
       "providers": ["alpha_vantage"],
       "max_tickers": 50,
-      "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings"],
-      "_endpoints_comment": "Full Alpha Vantage coverage: prices, reference, and all financial statements",
+      "alpha_vantage_endpoints": ["time_series_daily", "company_overview", "income_statement", "balance_sheet", "cash_flow", "earnings", "dividends", "splits"],
+      "_endpoints_comment": "Full Alpha Vantage coverage: prices, reference, financials, and corporate actions",
       "build_silver": true,
+      "compute_technicals": true,
+      "build_forecast": true,
+      "forecast_tickers": 50,
+      "forecast_models": ["arima_7d", "prophet_7d"],
       "log_level": "INFO",
-      "_comment": "Full pipeline test: seed → bronze → silver. 50 tickers with complete data coverage."
+      "_comment": "Full pipeline test: 50 tickers → bronze → silver → technicals → forecast"
     },
     "silver_only": {
       "providers": [],
