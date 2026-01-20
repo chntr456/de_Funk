@@ -33,9 +33,211 @@ def time_operation(name: str, func):
     return result, elapsed
 
 
+def validate_silver_layer():
+    """Validate that the Silver layer exists and has expected structure."""
+    print("=" * 70)
+    print("SILVER LAYER VALIDATION")
+    print("=" * 70)
+    print()
+    print("This test checks what data exists on YOUR machine.")
+    print("Results may differ from what Claude sees on the remote machine.")
+    print()
+
+    import json
+
+    # Check BOTH possible storage paths
+    print("-" * 70)
+    print("STORAGE PATH CHECK")
+    print("-" * 70)
+
+    # Path 1: /shared/storage (cluster NFS mount from run_config.json)
+    shared_storage = Path("/shared/storage")
+    shared_silver = shared_storage / "silver"
+    print(f"\n  Path 1: /shared/storage (cluster NFS mount)")
+    print(f"    /shared/storage exists: {shared_storage.exists()}")
+    print(f"    /shared/storage/silver exists: {shared_silver.exists()}")
+    if shared_silver.exists():
+        models = [p.name for p in shared_silver.iterdir() if p.is_dir()]
+        print(f"    Models found: {models}")
+
+    # Path 2: repo_root/storage (local development)
+    local_storage = repo_root / "storage"
+    local_silver = local_storage / "silver"
+    print(f"\n  Path 2: {local_storage} (local repo)")
+    print(f"    {local_storage} exists: {local_storage.exists()}")
+    print(f"    {local_silver} exists: {local_silver.exists()}")
+    if local_silver.exists():
+        models = [p.name for p in local_silver.iterdir() if p.is_dir()]
+        print(f"    Models found: {models}")
+
+    # Determine which to use
+    if shared_silver.exists():
+        silver_root = shared_silver
+        print(f"\n  => Using cluster path: {silver_root}")
+    elif local_silver.exists():
+        silver_root = local_silver
+        print(f"\n  => Using local path: {silver_root}")
+    else:
+        print(f"\n  => WARNING: No Silver layer found at either path!")
+        silver_root = local_silver  # Default to local for further checks
+
+    # Now load context to verify DuckDB views
+    from core.context import RepoContext
+    ctx = RepoContext.from_repo_root(connection_type="duckdb")
+
+    # Get storage config
+    storage_cfg = ctx.storage
+    print(f"\nStorage config roots:")
+    roots = storage_cfg.get('roots', {})
+    print(f"  bronze: {roots.get('bronze', 'N/A')}")
+    print(f"  silver: {roots.get('silver', 'N/A')}")
+
+    print(f"\nSilver root being used: {silver_root}")
+    print(f"  Exists: {silver_root.exists()}")
+
+    if silver_root.exists():
+        print(f"\n  Models in Silver layer:")
+        for model_dir in sorted(silver_root.iterdir()):
+            if model_dir.is_dir():
+                tables = list(model_dir.glob("*/*"))
+                print(f"    {model_dir.name}/: {len(tables)} table paths")
+
+    # Check temporal model specifically
+    print("\n" + "-" * 70)
+    print("TEMPORAL MODEL CHECK")
+    print("-" * 70)
+
+    temporal_paths = [
+        silver_root / "temporal",
+        silver_root / "temporal" / "dims",
+        silver_root / "temporal" / "dims" / "dim_calendar",
+    ]
+
+    for p in temporal_paths:
+        exists = p.exists()
+        is_dir = p.is_dir() if exists else False
+        contents = list(p.iterdir()) if is_dir else []
+        print(f"  {p.relative_to(silver_root) if p.is_relative_to(silver_root) else p}")
+        print(f"    Exists: {exists}, IsDir: {is_dir}")
+        if contents:
+            print(f"    Contents: {[c.name for c in contents[:10]]}")
+
+    # Check dim_calendar data files
+    calendar_path = silver_root / "temporal" / "dims" / "dim_calendar"
+    if calendar_path.exists():
+        parquet_files = list(calendar_path.glob("*.parquet"))
+        delta_log = calendar_path / "_delta_log"
+        print(f"\n  dim_calendar storage:")
+        print(f"    Parquet files: {len(parquet_files)}")
+        print(f"    Delta log exists: {delta_log.exists()}")
+
+        # Try to read schema
+        if parquet_files or delta_log.exists():
+            try:
+                import pyarrow.parquet as pq
+                if parquet_files:
+                    schema = pq.read_schema(parquet_files[0])
+                    print(f"    Schema columns: {schema.names}")
+                    print(f"    Has date_id: {'date_id' in schema.names}")
+                    print(f"    Has date: {'date' in schema.names}")
+            except Exception as e:
+                print(f"    Schema read error: {e}")
+
+    # Check DuckDB views
+    print("\n" + "-" * 70)
+    print("DUCKDB VIEW CHECK")
+    print("-" * 70)
+
+    try:
+        # Check if temporal schema exists
+        schemas = ctx.connection.conn.execute(
+            "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'temporal'"
+        ).fetchall()
+        print(f"  Temporal schema in DuckDB: {len(schemas) > 0}")
+
+        if schemas:
+            # Check tables/views in temporal schema
+            tables = ctx.connection.conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'temporal'"
+            ).fetchall()
+            print(f"  Tables in temporal schema: {[t[0] for t in tables]}")
+
+            # Check dim_calendar columns
+            cols = ctx.connection.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = 'temporal' AND table_name = 'dim_calendar'"
+            ).fetchall()
+            col_names = [c[0] for c in cols]
+            print(f"  dim_calendar columns: {col_names}")
+            print(f"  Has date_id: {'date_id' in col_names}")
+            print(f"  Has date: {'date' in col_names}")
+
+            # Try to get row count
+            try:
+                count = ctx.connection.conn.execute(
+                    "SELECT COUNT(*) FROM temporal.dim_calendar"
+                ).fetchone()[0]
+                print(f"  dim_calendar row count: {count:,}")
+            except Exception as e:
+                print(f"  dim_calendar query error: {e}")
+
+    except Exception as e:
+        print(f"  DuckDB check error: {e}")
+
+    # Check company model
+    print("\n" + "-" * 70)
+    print("COMPANY MODEL CHECK")
+    print("-" * 70)
+
+    company_path = silver_root / "corporate"  # Note: company model uses 'corporate' directory
+    if not company_path.exists():
+        company_path = silver_root / "company"
+
+    print(f"  Company Silver path: {company_path}")
+    print(f"  Exists: {company_path.exists()}")
+
+    if company_path.exists():
+        for subdir in sorted(company_path.iterdir()):
+            if subdir.is_dir():
+                tables = list(subdir.glob("*"))
+                print(f"    {subdir.name}/: {[t.name for t in tables[:5]]}")
+
+    # Check DuckDB company schema
+    try:
+        schemas = ctx.connection.conn.execute(
+            "SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'company'"
+        ).fetchall()
+        print(f"  Company schema in DuckDB: {len(schemas) > 0}")
+
+        if schemas:
+            tables = ctx.connection.conn.execute(
+                "SELECT table_name FROM information_schema.tables WHERE table_schema = 'company'"
+            ).fetchall()
+            print(f"  Tables in company schema: {[t[0] for t in tables]}")
+
+            # Check fact_income_statement columns
+            cols = ctx.connection.conn.execute(
+                "SELECT column_name FROM information_schema.columns "
+                "WHERE table_schema = 'company' AND table_name = 'fact_income_statement'"
+            ).fetchall()
+            col_names = [c[0] for c in cols]
+            print(f"  fact_income_statement columns: {col_names[:15]}...")
+            print(f"  Has date_id: {'date_id' in col_names}")
+            print(f"  Has company_id: {'company_id' in col_names}")
+
+    except Exception as e:
+        print(f"  Company DuckDB check error: {e}")
+
+    print("\n" + "=" * 70)
+    print("VALIDATION COMPLETE")
+    print("=" * 70)
+
+    return ctx
+
+
 def test_financial_statements_performance():
     """Test the performance of loading financial statements data."""
-    print("=" * 70)
+    print("\n" + "=" * 70)
     print("FINANCIAL STATEMENTS NOTEBOOK - PERFORMANCE TEST")
     print("=" * 70)
 
@@ -193,4 +395,9 @@ def test_financial_statements_performance():
 
 
 if __name__ == "__main__":
+    # Run validation first to check Silver layer status
+    validate_silver_layer()
+
+    # Then run the performance test
+    print("\n\n")
     test_financial_statements_performance()
