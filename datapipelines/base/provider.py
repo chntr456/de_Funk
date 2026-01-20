@@ -52,6 +52,8 @@ class DataType(Enum):
     EARNINGS = "earnings"
     OPTIONS = "options"
     ETF_PROFILE = "etf_profile"
+    DIVIDENDS = "dividends"
+    SPLITS = "splits"
 
 
 @dataclass

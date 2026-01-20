@@ -59,6 +59,8 @@ ENDPOINT_TO_WORK_ITEM = {
     'cash_flow': 'cashflow',
     'cashflow': 'cashflow',
     'earnings': 'earnings',
+    'dividends': 'dividends',
+    'splits': 'splits',
 }
 
 

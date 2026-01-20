@@ -54,6 +54,8 @@ DATATYPE_TO_ENDPOINT = {
     DataType.CASH_FLOW: "cash_flow",
     DataType.EARNINGS: "earnings",
     DataType.OPTIONS: "historical_options",
+    DataType.DIVIDENDS: "dividends",
+    DataType.SPLITS: "splits",
 }
 
 
@@ -508,6 +510,8 @@ class AlphaVantageProvider(BaseProvider):
             elif data_type in (DataType.INCOME_STATEMENT, DataType.BALANCE_SHEET,
                               DataType.CASH_FLOW, DataType.EARNINGS):
                 return self._normalize_financials(normalizer, records, field_mappings, type_coercions)
+            elif data_type in (DataType.DIVIDENDS, DataType.SPLITS):
+                return self._normalize_corporate_actions(normalizer, records, field_mappings, type_coercions)
         except Exception as e:
             logger.warning(f"Failed to normalize {work_item}: {e}", exc_info=True)
 
@@ -1177,6 +1181,22 @@ class AlphaVantageProvider(BaseProvider):
                         record['report_type'] = 'annual' if 'annual' in report_type.lower() else 'quarterly'
                         records.append(record)
 
+        elif data_type == DataType.DIVIDENDS:
+            # DIVIDENDS API returns array in 'data' key
+            if isinstance(data, list):
+                for div in data:
+                    record = dict(div)
+                    record['ticker'] = ticker
+                    records.append(record)
+
+        elif data_type == DataType.SPLITS:
+            # SPLITS API returns array in 'data' key
+            if isinstance(data, list):
+                for split in data:
+                    record = dict(split)
+                    record['ticker'] = ticker
+                    records.append(record)
+
         return records
 
     # =========================================================================
@@ -1270,6 +1290,75 @@ class AlphaVantageProvider(BaseProvider):
             date_columns=['fiscal_date_ending'],
             add_metadata=True
         )
+
+    def _normalize_corporate_actions(
+        self,
+        normalizer,
+        records: List[Dict],
+        field_mappings: Dict[str, str],
+        type_coercions: Dict[str, str]
+    ) -> DataFrame:
+        """
+        Normalize corporate action records (dividends, splits) using SparkNormalizer.
+
+        Dividends schema:
+            - ticker, ex_dividend_date, dividend_amount, record_date, payment_date, declaration_date
+
+        Splits schema:
+            - ticker, effective_date, split_from, split_to, split_ratio (computed)
+        """
+        from pyspark.sql import functions as F
+
+        # Detect type from records to determine date columns
+        is_dividends = any('ex_dividend_date' in r or 'amount' in r for r in records[:5]) if records else False
+        is_splits = any('split_from' in r or 'split_to' in r for r in records[:5]) if records else False
+
+        if is_dividends:
+            # Dividend-specific date columns
+            date_columns = ['ex_dividend_date', 'record_date', 'payment_date', 'declaration_date']
+
+            # Normalize with standard utility
+            df = normalizer.normalize(
+                records,
+                field_mappings=field_mappings,
+                type_coercions=type_coercions,
+                date_columns=date_columns,
+                add_metadata=True
+            )
+            return df
+
+        elif is_splits:
+            # Split-specific normalization
+            date_columns = ['effective_date']
+
+            # Normalize with standard utility
+            df = normalizer.normalize(
+                records,
+                field_mappings=field_mappings,
+                type_coercions=type_coercions,
+                date_columns=date_columns,
+                add_metadata=True
+            )
+
+            # Compute split_ratio if split_from and split_to exist
+            if 'split_from' in df.columns and 'split_to' in df.columns:
+                df = df.withColumn(
+                    'split_ratio',
+                    F.when(
+                        (F.col('split_from').isNotNull()) & (F.col('split_from') != 0),
+                        F.col('split_to').cast('double') / F.col('split_from').cast('double')
+                    ).otherwise(F.lit(None))
+                )
+            return df
+
+        else:
+            # Fallback - just normalize with provided mappings
+            return normalizer.normalize(
+                records,
+                field_mappings=field_mappings,
+                type_coercions=type_coercions,
+                add_metadata=True
+            )
 
     # =========================================================================
     # API REQUEST HELPERS
