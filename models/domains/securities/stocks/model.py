@@ -327,6 +327,9 @@ class StocksModel(BaseModel):
         If market_cap column doesn't exist, calculates it from latest price
         and shares_outstanding.
 
+        Note: fact_stock_prices uses security_id (not ticker) as the FK.
+        We join with dim_stock to get tickers for the calculation.
+
         Args:
             limit: Number of top stocks to return
 
@@ -335,7 +338,7 @@ class StocksModel(BaseModel):
         """
         dim_stock = self.get_table('dim_stock')
 
-        # Check if market_cap column exists
+        # Check if market_cap column exists and has data
         has_market_cap = 'market_cap' in dim_stock.columns
 
         if has_market_cap:
@@ -348,32 +351,34 @@ class StocksModel(BaseModel):
                 return dim_stock.nlargest(limit, 'market_cap')
         else:
             # Calculate market_cap from latest prices and shares_outstanding
+            # Note: fact_stock_prices has security_id (FK), not ticker
             if self.backend == 'spark':
                 from pyspark.sql import functions as F
 
-                # Get latest prices per ticker
                 fact_prices = self.get_table('fact_stock_prices')
+
+                # Get latest prices per security_id (fact_stock_prices uses security_id, not ticker)
                 latest_prices = (
                     fact_prices
-                    .groupBy('ticker')
-                    .agg(F.max('trade_date').alias('latest_date'))
+                    .groupBy('security_id')
+                    .agg(F.max('date_id').alias('latest_date_id'))
                 )
                 latest_prices = (
                     fact_prices.alias('p')
                     .join(latest_prices.alias('l'),
-                          (F.col('p.ticker') == F.col('l.ticker')) &
-                          (F.col('p.trade_date') == F.col('l.latest_date')))
-                    .select('p.ticker', F.col('p.close').alias('latest_close'))
+                          (F.col('p.security_id') == F.col('l.security_id')) &
+                          (F.col('p.date_id') == F.col('l.latest_date_id')))
+                    .select('p.security_id', F.col('p.close').alias('latest_close'))
                 )
 
                 # Join with dim_stock and calculate market_cap
                 if 'shares_outstanding' in dim_stock.columns:
                     result = (
                         dim_stock.alias('d')
-                        .join(latest_prices.alias('lp'), 'd.ticker == lp.ticker', 'left')
+                        .join(latest_prices.alias('lp'), F.col('d.security_id') == F.col('lp.security_id'), 'left')
                         .withColumn('calc_market_cap',
                                     F.col('d.shares_outstanding') * F.col('lp.latest_close'))
-                        .orderBy(F.col('calc_market_cap').desc())
+                        .orderBy(F.col('calc_market_cap').desc_nulls_last())
                         .limit(limit)
                         .select('d.*')
                     )
