@@ -158,7 +158,12 @@ class AppConfig:
 
     @property
     def models_dir(self) -> Path:
-        """Get models configuration directory."""
+        """Get models configuration directory (v3.0 domains/)."""
+        return self.repo_root / "domains"
+
+    @property
+    def legacy_models_dir(self) -> Path:
+        """Get legacy models configuration directory (v1.x/v2.x configs/models/)."""
         return self.repo_root / "configs" / "models"
 
     @property
