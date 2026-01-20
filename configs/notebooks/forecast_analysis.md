@@ -33,7 +33,7 @@ $filter${
   label: Forecast Date
   column: forecast_date
   operator: between
-  default: {start: "2025-01-01", end: "2025-12-31"}
+  default: {start: current_date(), end: current_date() + 365}
   help_text: Filter by when the forecast was generated
 }
 

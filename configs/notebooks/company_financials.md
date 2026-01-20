@@ -44,7 +44,7 @@ $filter${
   label: Fiscal Period
   column: date_id
   operator: between
-  default: {start: "2020-01-01", end: "2025-12-31"}
+  default: {start: "2020-01-01", end: current_date()}
   help_text: Filter by fiscal period end date
 }
 

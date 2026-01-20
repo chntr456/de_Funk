@@ -41,7 +41,7 @@ $filter${
   label: Date Range
   column: date_id
   operator: between
-  default: {start: "2024-01-01", end: "2025-12-05"}
+  default: {start: "2024-01-01", end: current_date()}
   help_text: Filter by trading date range
 }
 
