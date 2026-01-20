@@ -180,6 +180,9 @@ class AutoJoinHandler:
         """
         Plan join sequence to get missing columns using model graph.
 
+        Supports star schemas where a fact table joins to multiple dimensions,
+        not just linear chains.
+
         Args:
             model_name: Model name
             base_table: Starting table
@@ -188,7 +191,7 @@ class AutoJoinHandler:
         Returns:
             Join plan dict with:
                 - table_sequence: List of tables to join
-                - join_keys: List of (left_col, right_col) pairs for each join
+                - joins: List of join info dicts with from_table, to_table, left_col, right_col
                 - target_columns: Which columns come from which table
 
         Raises:
@@ -223,7 +226,7 @@ class AutoJoinHandler:
 
         # Find join path from base_table to target tables
         table_sequence = [base_table]
-        join_keys = []
+        joins = []  # List of {from_table, to_table, left_col, right_col}
         seen_tables = {base_table}
 
         # Handle both v1.x (list) and v2.0 (dict) edge formats
@@ -260,12 +263,18 @@ class AutoJoinHandler:
                     seen_tables.add(edge_to)
                     current_tables.add(edge_to)
 
-                    # Extract join keys
+                    # Extract join keys - track the source table for star schema support
                     on_conditions = edge.get('on', edge.get(True, []))
                     if on_conditions:
                         # Parse "col1=col2" format
-                        join_pair = self._parse_join_condition(on_conditions[0])
-                        join_keys.append(join_pair)
+                        left_col, right_col = self._parse_join_condition(on_conditions[0])
+                        joins.append({
+                            'from_table': edge_from,
+                            'to_table': edge_to,
+                            'left_col': left_col,
+                            'right_col': right_col
+                        })
+                        logger.debug(f"AUTO-JOIN PLAN: Added join {edge_from}.{left_col} = {edge_to}.{right_col}")
 
                     added_table = True
                     break
@@ -276,9 +285,13 @@ class AutoJoinHandler:
                     f"Reached: {seen_tables}, Need: {set(target_tables.values())}"
                 )
 
+        # For backwards compatibility, also include join_keys in old format
+        join_keys = [(j['left_col'], j['right_col']) for j in joins]
+
         return {
             'table_sequence': table_sequence,
-            'join_keys': join_keys,
+            'joins': joins,  # New format with source table info
+            'join_keys': join_keys,  # Legacy format for backwards compatibility
             'target_columns': target_tables
         }
 
@@ -531,44 +544,70 @@ class AutoJoinHandler:
 
         model = self.session.load_model(model_name)
         table_sequence = join_plan['table_sequence']
-        join_keys = join_plan['join_keys']
 
         if self.backend == 'spark':
             return self._execute_spark_joins(
-                model, table_sequence, join_keys, required_columns, filters
+                model, join_plan, required_columns, filters
             )
         else:
             return self._execute_duckdb_joins(
-                model_name, model, table_sequence, join_keys, required_columns, filters
+                model_name, model, join_plan, required_columns, filters
             )
 
     def _execute_spark_joins(
         self,
         model,
-        table_sequence: List[str],
-        join_keys: List[Tuple[str, str]],
+        join_plan: Dict[str, Any],
         required_columns: List[str],
         filters: Optional[Dict[str, Any]]
     ) -> Any:
         """Execute joins using Spark DataFrame API."""
         from core.session.filters import FilterEngine
 
+        table_sequence = join_plan['table_sequence']
+        joins = join_plan.get('joins', [])
+        join_keys = join_plan.get('join_keys', [])
+
+        # Load base table
         df = model.get_table(table_sequence[0])
 
         # Apply filters to base table BEFORE joins (pushdown)
         if filters:
             df = FilterEngine.apply_from_session(df, filters, self.session)
 
-        # Join each subsequent table
-        for i, next_table in enumerate(table_sequence[1:]):
-            # Handle cross-model joins: dim_calendar is in 'temporal' model
-            if next_table == 'dim_calendar':
-                temporal_model = self.session.load_model('temporal')
-                right_df = temporal_model.get_table(next_table)
-            else:
-                right_df = model.get_table(next_table)
-            left_col, right_col = join_keys[i]
-            df = df.join(right_df, df[left_col] == right_df[right_col], 'left')
+        # Track loaded DataFrames for star schema support
+        dfs = {table_sequence[0]: df}
+
+        # Join using new format with source table tracking (star schema support)
+        if joins:
+            for join_info in joins:
+                from_table = join_info['from_table']
+                to_table = join_info['to_table']
+                left_col = join_info['left_col']
+                right_col = join_info['right_col']
+
+                # Handle cross-model joins: dim_calendar is in 'temporal' model
+                if to_table == 'dim_calendar':
+                    temporal_model = self.session.load_model('temporal')
+                    right_df = temporal_model.get_table(to_table)
+                else:
+                    right_df = model.get_table(to_table)
+
+                dfs[to_table] = right_df
+
+                # Join from the correct source table
+                left_df = dfs[from_table]
+                df = df.join(right_df, left_df[left_col] == right_df[right_col], 'left')
+        else:
+            # Fallback to legacy linear chain joins
+            for i, next_table in enumerate(table_sequence[1:]):
+                if next_table == 'dim_calendar':
+                    temporal_model = self.session.load_model('temporal')
+                    right_df = temporal_model.get_table(next_table)
+                else:
+                    right_df = model.get_table(next_table)
+                left_col, right_col = join_keys[i]
+                df = df.join(right_df, df[left_col] == right_df[right_col], 'left')
 
         # Select only required columns
         return self.select_columns(df, required_columns)
@@ -577,8 +616,7 @@ class AutoJoinHandler:
         self,
         model_name: str,
         model,
-        table_sequence: List[str],
-        join_keys: List[Tuple[str, str]],
+        join_plan: Dict[str, Any],
         required_columns: List[str],
         filters: Optional[Dict[str, Any]]
     ) -> Any:
@@ -586,6 +624,7 @@ class AutoJoinHandler:
         from core.session.filters import FilterEngine
         import time
 
+        table_sequence = join_plan['table_sequence']
         base_table = table_sequence[0]
 
         # Strategy 1: Try using DuckDB views directly (most efficient)
@@ -614,7 +653,7 @@ class AutoJoinHandler:
             if views_available:
                 logger.debug(f"AUTO-JOIN DUCKDB: Using views for {len(table_sequence)} tables")
                 return self._execute_duckdb_joins_via_views(
-                    model_name, view_names, table_sequence, join_keys,
+                    model_name, view_names, join_plan,
                     required_columns, filters
                 )
 
@@ -624,20 +663,23 @@ class AutoJoinHandler:
         # Strategy 2: Fall back to loading tables (slower but always works)
         logger.debug(f"AUTO-JOIN DUCKDB: Falling back to table loading for {len(table_sequence)} tables")
         return self._execute_duckdb_joins_via_tables(
-            model_name, model, table_sequence, join_keys, required_columns, filters
+            model_name, model, join_plan, required_columns, filters
         )
 
     def _execute_duckdb_joins_via_views(
         self,
         model_name: str,
         view_names: Dict[str, str],
-        table_sequence: List[str],
-        join_keys: List[Tuple[str, str]],
+        join_plan: Dict[str, Any],
         required_columns: List[str],
         filters: Optional[Dict[str, Any]]
     ) -> Any:
         """Execute joins using DuckDB SQL against pre-registered views."""
         import time
+
+        table_sequence = join_plan['table_sequence']
+        joins = join_plan.get('joins', [])
+        join_keys = join_plan.get('join_keys', [])
 
         base_table = table_sequence[0]
         base_view = view_names[base_table]
@@ -662,12 +704,23 @@ class AutoJoinHandler:
 
         sql = f"SELECT {', '.join(select_cols)} FROM {base_view}"
 
-        # Add joins
-        for i in range(1, len(table_sequence)):
-            left_view = view_names[table_sequence[i - 1]]
-            right_view = view_names[table_sequence[i]]
-            left_col, right_col = join_keys[i - 1]
-            sql += f" LEFT JOIN {right_view} ON {left_view}.{left_col} = {right_view}.{right_col}"
+        # Add joins - use joins list with source table tracking (star schema support)
+        if joins:
+            for join_info in joins:
+                from_table = join_info['from_table']
+                to_table = join_info['to_table']
+                left_col = join_info['left_col']
+                right_col = join_info['right_col']
+                left_view = view_names[from_table]
+                right_view = view_names[to_table]
+                sql += f" LEFT JOIN {right_view} ON {left_view}.{left_col} = {right_view}.{right_col}"
+        else:
+            # Fallback to legacy linear chain format
+            for i in range(1, len(table_sequence)):
+                left_view = view_names[table_sequence[i - 1]]
+                right_view = view_names[table_sequence[i]]
+                left_col, right_col = join_keys[i - 1]
+                sql += f" LEFT JOIN {right_view} ON {left_view}.{left_col} = {right_view}.{right_col}"
 
         # Add WHERE clause - only include filters for columns that exist
         if filters:
@@ -709,14 +762,17 @@ class AutoJoinHandler:
         self,
         model_name: str,
         model,
-        table_sequence: List[str],
-        join_keys: List[Tuple[str, str]],
+        join_plan: Dict[str, Any],
         required_columns: List[str],
         filters: Optional[Dict[str, Any]]
     ) -> Any:
         """Execute joins by loading tables into temp tables (fallback method)."""
         from core.session.filters import FilterEngine
         import time
+
+        table_sequence = join_plan['table_sequence']
+        joins = join_plan.get('joins', [])
+        join_keys = join_plan.get('join_keys', [])
 
         base_table = table_sequence[0]
         temp_tables = {}
@@ -776,12 +832,25 @@ class AutoJoinHandler:
 
             sql = f"SELECT {', '.join(select_cols)} FROM {base_temp}"
 
-            # Add each join
-            for i in range(1, len(table_sequence)):
-                left_temp = temp_tables[table_sequence[i - 1]]
-                right_temp = temp_tables[table_sequence[i]]
-                left_col, right_col = join_keys[i - 1]
-                sql += f" LEFT JOIN {right_temp} ON {left_temp}.{left_col} = {right_temp}.{right_col}"
+            # Add each join - use joins list with source table tracking (star schema support)
+            # This correctly handles star schemas where fact joins to multiple dims
+            if joins:
+                # New format: each join specifies from_table and to_table
+                for join_info in joins:
+                    from_table = join_info['from_table']
+                    to_table = join_info['to_table']
+                    left_col = join_info['left_col']
+                    right_col = join_info['right_col']
+                    left_temp = temp_tables[from_table]
+                    right_temp = temp_tables[to_table]
+                    sql += f" LEFT JOIN {right_temp} ON {left_temp}.{left_col} = {right_temp}.{right_col}"
+            else:
+                # Fallback to legacy format (linear chain assumption)
+                for i in range(1, len(table_sequence)):
+                    left_temp = temp_tables[table_sequence[i - 1]]
+                    right_temp = temp_tables[table_sequence[i]]
+                    left_col, right_col = join_keys[i - 1]
+                    sql += f" LEFT JOIN {right_temp} ON {left_temp}.{left_col} = {right_temp}.{right_col}"
 
             # Add WHERE clause for filters - only include columns that exist
             if filters:
