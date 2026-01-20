@@ -128,6 +128,18 @@ if [ -f "$REPO_ROOT/.env" ]; then
     set +a
 fi
 
+# Auto-detect storage path if not explicitly set
+# Priority: 1) --storage-path arg, 2) /shared/storage (NFS), 3) $REPO_ROOT/storage (local)
+if [ -z "$STORAGE_PATH" ]; then
+    if [ -d "/shared/storage" ]; then
+        STORAGE_PATH="/shared/storage"
+        echo -e "${GREEN}Using NFS storage: /shared/storage${NC}"
+    else
+        STORAGE_PATH="$REPO_ROOT/storage"
+        echo -e "${YELLOW}Using local storage: $REPO_ROOT/storage${NC}"
+    fi
+fi
+
 # Load profile settings from run_config.json if profile is specified
 PROFILE_PROVIDERS=""
 PROFILE_HAS_PROVIDERS="false"

@@ -23,7 +23,21 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Check if caller already set SPARK_MASTER_URL (e.g., test_pipeline.sh --local)
+# If empty or unset, source spark-env.sh to get cluster config
+CALLER_MASTER_URL="${SPARK_MASTER_URL:-}"
+
 source "$SCRIPT_DIR/spark-env.sh"
+
+# If caller explicitly unset SPARK_MASTER_URL, use local mode
+if [ -z "$CALLER_MASTER_URL" ] && [ -z "${USE_CLUSTER:-}" ]; then
+    # Check if cluster is reachable, otherwise fallback to local
+    if ! nc -z -w1 "$SPARK_MASTER_HOST" "$SPARK_MASTER_PORT" 2>/dev/null; then
+        SPARK_MASTER_URL="local[*]"
+        echo "Note: Cluster not reachable, using local[*] mode"
+    fi
+fi
 
 if [ $# -eq 0 ]; then
     echo "Usage: $0 script.py [args...]"
