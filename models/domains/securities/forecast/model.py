@@ -117,6 +117,10 @@ class ForecastModel(TimeSeriesForecastModel):
                 date_to_int = int(date_to.replace('-', ''))
                 df = df.filter(F.col('date_id') <= date_to_int)
 
+            # CRITICAL: Deduplicate by date_id to prevent "duplicate keys" error
+            # This can happen if dim_stock has duplicate security_id entries
+            df = df.dropDuplicates(['date_id'])
+
             # Order by date
             df = df.orderBy('date_id')
 
@@ -159,6 +163,9 @@ class ForecastModel(TimeSeriesForecastModel):
             if date_to:
                 date_to_int = int(date_to.replace('-', ''))
                 df = df[df['date_id'] <= date_to_int]
+
+            # CRITICAL: Deduplicate by date_id to prevent "duplicate keys" error
+            df = df.drop_duplicates(subset=['date_id'])
 
             # Order by date
             df = df.sort_values('date_id')
