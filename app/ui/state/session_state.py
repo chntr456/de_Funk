@@ -112,6 +112,13 @@ def init_app_objects(repo_root: Path):
         ctx = st.session_state.repo_context
         st.session_state.model_registry = ModelRegistry(ctx.repo / "domains")
 
+    # Verify registry has expected models - refresh if stale
+    registry = st.session_state.model_registry
+    if not registry.has_model('company') and not registry.has_model('stocks'):
+        # Registry might be stale (using old configs/models path) - recreate
+        ctx = st.session_state.repo_context
+        st.session_state.model_registry = ModelRegistry(ctx.repo / "domains")
+
     if 'universal_session' not in st.session_state:
         ctx = st.session_state.repo_context
         st.session_state.universal_session = UniversalSession(
