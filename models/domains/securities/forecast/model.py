@@ -42,8 +42,127 @@ class ForecastModel(TimeSeriesForecastModel):
         return 'ticker'
 
     def get_date_column(self) -> str:
-        """Column for the date/timestamp."""
-        return 'trade_date'
+        """
+        Column for the date/timestamp.
+
+        Note: fact_stock_prices uses date_id (integer FK to dim_calendar),
+        not trade_date. The get_training_data method handles conversion.
+        """
+        return 'date_id'
+
+    def get_training_data(self, entity_id: str, date_from=None, date_to=None, lookback_days=None):
+        """
+        Get training data for forecasting.
+
+        Overrides base to handle stocks model specifics:
+        - fact_stock_prices uses security_id/date_id (not ticker/trade_date)
+        - Need to join dim_stock for ticker and convert date_id to trade_date
+
+        Args:
+            entity_id: Ticker symbol to forecast
+            date_from: Start date (optional)
+            date_to: End date (optional)
+            lookback_days: Number of days to look back
+
+        Returns:
+            DataFrame with columns including 'ticker', 'trade_date', 'close', etc.
+        """
+        if not self.session:
+            raise RuntimeError(
+                f"{self.__class__.__name__} requires session for cross-model access. "
+                "Call set_session() first."
+            )
+
+        # Calculate date_from from lookback_days if provided
+        if lookback_days:
+            from datetime import datetime, timedelta
+            date_from = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
+
+        # Load stocks model
+        source_model = self.session.load_model('stocks')
+
+        # Get fact and dimension tables
+        fact_df = source_model.get_table('fact_stock_prices')
+        dim_df = source_model.get_table('dim_stock')
+
+        # Join fact with dim to get ticker
+        if self.backend == 'spark':
+            from pyspark.sql import functions as F
+
+            # Join to get ticker
+            df = fact_df.alias('f').join(
+                dim_df.select('security_id', 'ticker').alias('d'),
+                F.col('f.security_id') == F.col('d.security_id'),
+                'inner'
+            ).select(
+                'f.*',
+                F.col('d.ticker')
+            )
+
+            # Filter by ticker
+            df = df.filter(F.col('ticker') == entity_id)
+
+            # Convert date_id to trade_date (date_id is YYYYMMDD integer)
+            df = df.withColumn(
+                'trade_date',
+                F.to_date(F.col('date_id').cast('string'), 'yyyyMMdd')
+            )
+
+            # Filter by date if specified
+            if date_from:
+                date_from_int = int(date_from.replace('-', ''))
+                df = df.filter(F.col('date_id') >= date_from_int)
+            if date_to:
+                date_to_int = int(date_to.replace('-', ''))
+                df = df.filter(F.col('date_id') <= date_to_int)
+
+            # Order by date
+            df = df.orderBy('date_id')
+
+        else:
+            # DuckDB/pandas path
+            import pandas as pd
+
+            # Convert to pandas if needed
+            if hasattr(fact_df, 'df'):
+                fact_pdf = fact_df.df()
+            elif isinstance(fact_df, pd.DataFrame):
+                fact_pdf = fact_df
+            else:
+                fact_pdf = pd.DataFrame(fact_df)
+
+            if hasattr(dim_df, 'df'):
+                dim_pdf = dim_df.df()
+            elif isinstance(dim_df, pd.DataFrame):
+                dim_pdf = dim_df
+            else:
+                dim_pdf = pd.DataFrame(dim_df)
+
+            # Merge to get ticker
+            df = fact_pdf.merge(
+                dim_pdf[['security_id', 'ticker']],
+                on='security_id',
+                how='inner'
+            )
+
+            # Filter by ticker
+            df = df[df['ticker'] == entity_id]
+
+            # Convert date_id to trade_date
+            df['trade_date'] = pd.to_datetime(df['date_id'].astype(str), format='%Y%m%d')
+
+            # Filter by date
+            if date_from:
+                date_from_int = int(date_from.replace('-', ''))
+                df = df[df['date_id'] >= date_from_int]
+            if date_to:
+                date_to_int = int(date_to.replace('-', ''))
+                df = df[df['date_id'] <= date_to_int]
+
+            # Order by date
+            df = df.sort_values('date_id')
+
+        return df
 
     def run_forecast_for_ticker(
         self,
