@@ -37,10 +37,10 @@ $filter${
 }
 
 $filter${
-  id: trade_date
+  id: date_id
   type: date_range
   label: Date Range
-  column: trade_date
+  column: date_id
   operator: between
   default: {start: current_date() - 365, end: current_date()}
   help_text: Filter by trading date range
@@ -71,7 +71,7 @@ Explore stock price data interactively. Select which metrics to display and how 
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   title: Stock Price Explorer
   height: 450
   measure_selector:
@@ -100,7 +100,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   y: [close, sma_20, sma_50, sma_200]
   color: ticker
   title: Price with Moving Averages (20, 50, 200 day)
@@ -112,7 +112,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   y: rsi_14
   color: ticker
   title: Relative Strength Index (14-day)
@@ -131,7 +131,7 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   y: volume
   color: ticker
   title: Daily Trading Volume
@@ -143,7 +143,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   y: volume_ratio
   color: ticker
   title: Volume Ratio (Current / 20-day Average)
@@ -162,7 +162,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   y: [high, low]
   color: ticker
   title: Daily High and Low Prices
@@ -174,7 +174,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   y: [close, bollinger_upper, bollinger_middle, bollinger_lower]
   color: ticker
   title: Bollinger Bands (20-day, 2 std dev)
@@ -193,7 +193,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   y: [volatility_20d, volatility_60d]
   color: ticker
   title: Rolling Volatility (20-day and 60-day)
@@ -205,7 +205,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   y: daily_return
   color: ticker
   title: Daily Returns (%)
@@ -222,8 +222,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: stocks.fact_stock_prices
-  columns: [ticker, trade_date, open, high, low, close, volume, daily_return]
-  sort_by: trade_date
+  columns: [ticker, date_id, open, high, low, close, volume, daily_return]
+  sort_by: date_id
   sort_order: desc
   page_size: 20
   download: true

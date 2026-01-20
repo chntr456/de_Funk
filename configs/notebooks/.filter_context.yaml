@@ -8,19 +8,14 @@ filters:
     - MSFT
     - GOOGL
 
-  # Date range for price and forecast analysis
-  trade_date:
+  # Date range for price and forecast analysis (uses date_id FK to calendar)
+  date_id:
     start: "2024-01-01"
     end: "2025-12-31"
 
   # Forecast date range
   forecast_date:
     start: "2025-01-01"
-    end: "2025-12-31"
-
-  # Fiscal period for company financials
-  fiscal_date:
-    start: "2020-01-01"
     end: "2025-12-31"
 
   # Report type default

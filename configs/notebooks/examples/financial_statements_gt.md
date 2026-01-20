@@ -143,7 +143,7 @@ $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
   title: Stock Price Explorer
-  x: trade_date
+  x: date_id
   height: 300
   limit: 1000
   measure_selector:

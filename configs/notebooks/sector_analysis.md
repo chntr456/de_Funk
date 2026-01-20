@@ -36,10 +36,10 @@ $filter${
 }
 
 $filter${
-  id: trade_date
+  id: date_id
   type: date_range
   label: Date Range
-  column: trade_date
+  column: date_id
   operator: between
   default: {start: "2024-01-01", end: "2025-12-05"}
   help_text: Filter by trading date range
@@ -204,7 +204,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   y: daily_return
   title: Average Daily Returns by Sector
   height: 400
@@ -223,7 +223,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: trade_date
+  x: date_id
   y: volatility_20d
   title: Average 20-Day Volatility by Sector
   height: 350
