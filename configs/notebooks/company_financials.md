@@ -39,10 +39,10 @@ $filter${
 }
 
 $filter${
-  id: period_date
+  id: date_id
   type: date_range
   label: Fiscal Period
-  column: period_date
+  column: date_id
   operator: between
   default: {start: "2020-01-01", end: "2025-12-31"}
   help_text: Filter by fiscal period end date
@@ -81,7 +81,7 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: company.fact_income_statement
-  x: period_date
+  x: date_id
   y: total_revenue
   color: ticker
   title: Total Revenue by Period
@@ -93,7 +93,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: company.fact_income_statement
-  x: period_date
+  x: date_id
   y: [gross_profit, operating_income, net_income]
   color: ticker
   title: Profitability Metrics Over Time
@@ -108,7 +108,7 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: company.fact_income_statement
-  x: period_date
+  x: date_id
   y: [operating_expenses, sg_and_a, research_and_development]
   color: ticker
   title: Operating Expense Breakdown
@@ -120,7 +120,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: company.fact_income_statement
-  x: period_date
+  x: date_id
   y: [ebit, ebitda]
   color: ticker
   title: EBIT vs EBITDA
@@ -132,8 +132,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.fact_income_statement
-  columns: [ticker, period_date, report_type, total_revenue, gross_profit, operating_income, net_income, ebitda]
-  sort_by: period_date
+  columns: [ticker, date_id, report_type, total_revenue, gross_profit, operating_income, net_income, ebitda]
+  sort_by: date_id
   sort_order: desc
   page_size: 20
   download: true
@@ -161,7 +161,7 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: company.fact_balance_sheet
-  x: period_date
+  x: date_id
   y: [total_current_assets, total_non_current_assets]
   color: ticker
   title: Current vs Non-Current Assets
@@ -176,7 +176,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: company.fact_balance_sheet
-  x: period_date
+  x: date_id
   y: [long_term_debt, total_debt, cash_and_equivalents]
   color: ticker
   title: Debt vs Cash Position
@@ -188,8 +188,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.fact_balance_sheet
-  columns: [ticker, period_date, report_type, total_assets, total_liabilities, total_shareholder_equity, cash_and_equivalents, total_debt]
-  sort_by: period_date
+  columns: [ticker, date_id, report_type, total_assets, total_liabilities, total_shareholder_equity, cash_and_equivalents, total_debt]
+  sort_by: date_id
   sort_order: desc
   page_size: 20
   download: true
@@ -217,7 +217,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: company.fact_cash_flow
-  x: period_date
+  x: date_id
   y: [operating_cashflow, cashflow_from_investment, cashflow_from_financing]
   color: ticker
   title: Cash Flow Components Over Time
@@ -232,7 +232,7 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: company.fact_cash_flow
-  x: period_date
+  x: date_id
   y: free_cash_flow
   color: ticker
   title: Free Cash Flow by Period
@@ -244,7 +244,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: company.fact_cash_flow
-  x: period_date
+  x: date_id
   y: [capital_expenditures, dividend_payout]
   color: ticker
   title: CapEx and Dividends
@@ -256,8 +256,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.fact_cash_flow
-  columns: [ticker, period_date, report_type, operating_cashflow, cashflow_from_investment, cashflow_from_financing, free_cash_flow, capital_expenditures]
-  sort_by: period_date
+  columns: [ticker, date_id, report_type, operating_cashflow, cashflow_from_investment, cashflow_from_financing, free_cash_flow, capital_expenditures]
+  sort_by: date_id
   sort_order: desc
   page_size: 20
   download: true
@@ -284,7 +284,7 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: company.fact_earnings
-  x: period_date
+  x: date_id
   y: [reported_eps, estimated_eps]
   color: ticker
   title: Reported EPS vs Analyst Estimates
@@ -299,7 +299,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: company.fact_earnings
-  x: period_date
+  x: date_id
   y: surprise_percentage
   color: ticker
   title: Earnings Surprise Percentage Over Time
@@ -311,8 +311,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.fact_earnings
-  columns: [ticker, period_date, report_type, reported_date, reported_eps, estimated_eps, surprise, surprise_percentage, beat_estimate]
-  sort_by: period_date
+  columns: [ticker, date_id, report_type, reported_date, reported_eps, estimated_eps, surprise, surprise_percentage, beat_estimate]
+  sort_by: date_id
   sort_order: desc
   page_size: 20
   download: true

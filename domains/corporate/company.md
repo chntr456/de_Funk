@@ -356,9 +356,7 @@ graph:
         income_statement_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
-        # Derived from date_id for display - calendar is source of truth
-        period_date: "TO_DATE(CAST(date_id AS STRING), 'yyyyMMdd')"
-      # Drop natural keys - use FKs (company_id, date_id)
+      # Drop natural keys - use FKs only (company_id → dim_company, date_id → temporal.dim_calendar)
       drop: [ticker, fiscal_date_ending]
       primary_key: [income_statement_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
@@ -420,9 +418,7 @@ graph:
         balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
-        # Derived from date_id for display - calendar is source of truth
-        period_date: "TO_DATE(CAST(date_id AS STRING), 'yyyyMMdd')"
-      # Drop natural keys - use FKs (company_id, date_id)
+      # Drop natural keys - use FKs only (company_id → dim_company, date_id → temporal.dim_calendar)
       drop: [ticker, fiscal_date_ending]
       primary_key: [balance_sheet_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
@@ -476,9 +472,7 @@ graph:
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
         free_cash_flow: "COALESCE(operating_cashflow, 0) - COALESCE(capital_expenditures, 0)"
-        # Derived from date_id for display - calendar is source of truth
-        period_date: "TO_DATE(CAST(date_id AS STRING), 'yyyyMMdd')"
-      # Drop natural keys - use FKs (company_id, date_id)
+      # Drop natural keys - use FKs only (company_id → dim_company, date_id → temporal.dim_calendar)
       drop: [ticker, fiscal_date_ending]
       primary_key: [cash_flow_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
@@ -506,9 +500,7 @@ graph:
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
         beat_estimate: "CASE WHEN reported_eps > estimated_eps THEN true ELSE false END"
-        # Derived from date_id for display - calendar is source of truth
-        period_date: "TO_DATE(CAST(date_id AS STRING), 'yyyyMMdd')"
-      # Drop natural keys - use FKs (company_id, date_id)
+      # Drop natural keys - use FKs only (company_id → dim_company, date_id → temporal.dim_calendar)
       drop: [ticker, fiscal_date_ending]
       primary_key: [earnings_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
@@ -600,21 +592,10 @@ Corporate legal entities with SEC registration and financial fundamentals.
 
 ### Date Handling - Calendar as Source of Truth
 
-Facts use `date_id` FK pointing to the calendar dimension. The `period_date` column is derived from `date_id` for display convenience, but the calendar is the source of truth.
+Facts use `date_id` FK pointing to the calendar dimension (`temporal.dim_calendar`). All date-related attributes (date, year, quarter, fiscal_year, etc.) come from the calendar join. The UI reconciles these joins through defined edge pathways.
 
 ```sql
--- Direct access via derived period_date column
-SELECT
-    i.period_date,
-    co.ticker,
-    i.total_revenue,
-    i.net_income
-FROM fact_income_statement i
-JOIN dim_company co ON i.company_id = co.company_id
-WHERE i.period_date >= '2024-01-01'
-  AND i.report_type = 'annual'
-
--- Join via date_id for full calendar attributes
+-- Query with calendar join (auto-resolved by UI edge pathways)
 SELECT
     c.date AS fiscal_date,
     c.year,
@@ -629,6 +610,12 @@ JOIN dim_company co ON i.company_id = co.company_id
 WHERE c.year = 2024
   AND i.report_type = 'annual'
 ```
+
+**Edge pathways defined:**
+- `income_to_calendar`: fact_income_statement → temporal.dim_calendar (via date_id)
+- `balance_to_calendar`: fact_balance_sheet → temporal.dim_calendar (via date_id)
+- `cashflow_to_calendar`: fact_cash_flow → temporal.dim_calendar (via date_id)
+- `earnings_to_calendar`: fact_earnings → temporal.dim_calendar (via date_id)
 
 ### Data Sources
 
