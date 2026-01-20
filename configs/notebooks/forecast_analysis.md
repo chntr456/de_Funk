@@ -13,7 +13,7 @@ $filter${
   label: Stock Ticker
   type: select
   multi: true
-  source: {model: forecast, table: fact_forecasts, column: ticker}
+  source: {model: forecast, table: fact_forecast_price, column: ticker}
   default: ["AAPL", "MSFT"]
   help_text: Select stocks to view forecasts
 }
@@ -23,7 +23,7 @@ $filter${
   label: Forecast Model
   type: select
   multi: true
-  source: {model: forecast, table: fact_forecasts, column: model_name}
+  source: {model: forecast, table: fact_forecast_price, column: model_name}
   help_text: Filter by forecast model type (ARIMA, Prophet, etc.)
 }
 
@@ -59,7 +59,7 @@ Analyze price predictions from machine learning models including ARIMA, Prophet,
 
 $exhibits${
   type: metric_cards
-  source: forecast.fact_forecasts
+  source: forecast.fact_forecast_price
   metrics: [
     { column: predicted_close, label: "Avg Predicted Price", aggregation: avg, format: "$,.2f" },
     { column: confidence, label: "Avg Confidence", aggregation: avg, format: ".1%" },
@@ -74,7 +74,7 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: forecast.fact_forecasts
+  source: forecast.fact_forecast_price
   x: prediction_date
   y: [predicted_close, lower_bound, upper_bound]
   color: ticker
@@ -86,7 +86,7 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: forecast.fact_forecasts
+  source: forecast.fact_forecast_price
   x: prediction_date
   y: predicted_close
   color: model_name
@@ -159,7 +159,7 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: forecast.fact_forecasts
+  source: forecast.fact_forecast_price
   columns: [ticker, model_name, forecast_date, prediction_date, horizon, predicted_close, lower_bound, upper_bound, confidence]
   sort_by: prediction_date
   sort_order: desc
@@ -176,7 +176,7 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: forecast.fact_model_registry
+  source: forecast.dim_model_registry
   columns: [model_name, model_type, ticker, target_variable, lookback_days, forecast_horizon, trained_date, status]
   sort_by: trained_date
   sort_order: desc
