@@ -240,6 +240,12 @@ class ForecastBuilder(BaseModelBuilder):
                 f"{total_forecasts} forecasts generated, {len(errors)} errors"
             )
 
+            # Log first few errors for debugging
+            if errors:
+                logger.warning("First 5 errors:")
+                for err in errors[:5]:
+                    logger.warning(f"  - {err}")
+
             return BuildResult(
                 model_name=self.model_name,
                 success=True,
