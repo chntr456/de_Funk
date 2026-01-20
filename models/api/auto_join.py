@@ -271,17 +271,16 @@ class AutoJoinHandler:
             for edge in edges:
                 edge_from = edge.get('from', '')
                 edge_to = edge.get('to', '')
+                cross_model = None  # Track if this is a cross-model edge
 
-                # Handle cross-model edges to temporal.dim_calendar (foundational dimension)
-                # Calendar is a shared dimension that all time-series data joins to
+                # Handle cross-model edges (e.g., temporal.dim_calendar, corporate.dim_company)
+                # These are foundational/shared dimensions that models can join to
                 if '.' in edge_to:
-                    if 'temporal.dim_calendar' in edge_to or 'dim_calendar' in edge_to:
-                        # Allow calendar joins - normalize the table name
-                        edge_to = 'dim_calendar'
-                    else:
-                        # Skip other cross-model edges
-                        logger.debug(f"AUTO-JOIN PLAN: Skipping cross-model edge {edge_from} -> {edge_to}")
-                        continue
+                    # Parse cross-model reference: "model.table" or "category.model.table"
+                    parts = edge_to.split('.')
+                    cross_model = parts[0]  # e.g., "temporal", "corporate"
+                    edge_to = parts[-1]  # e.g., "dim_calendar", "dim_company"
+                    logger.debug(f"AUTO-JOIN PLAN: Cross-model edge {edge_from} -> {cross_model}.{edge_to}")
 
                 # Check if this edge connects a current table to a new table
                 if edge_from in current_tables and edge_to not in seen_tables:
@@ -295,13 +294,19 @@ class AutoJoinHandler:
                     if on_conditions:
                         # Parse "col1=col2" format
                         left_col, right_col = self._parse_join_condition(on_conditions[0])
-                        joins.append({
+                        join_info = {
                             'from_table': edge_from,
                             'to_table': edge_to,
                             'left_col': left_col,
                             'right_col': right_col
-                        })
-                        logger.debug(f"AUTO-JOIN PLAN: Added join {edge_from}.{left_col} = {edge_to}.{right_col}")
+                        }
+                        # Track cross-model reference for loading from correct model
+                        if cross_model:
+                            join_info['cross_model'] = cross_model
+                            logger.debug(f"AUTO-JOIN PLAN: Added cross-model join {edge_from}.{left_col} = {cross_model}.{edge_to}.{right_col}")
+                        else:
+                            logger.debug(f"AUTO-JOIN PLAN: Added join {edge_from}.{left_col} = {edge_to}.{right_col}")
+                        joins.append(join_info)
 
                     added_table = True
                     break
@@ -367,12 +372,15 @@ class AutoJoinHandler:
         if self.backend == 'duckdb' and hasattr(self.connection, 'conn'):
             try:
                 # Get all tables/views in this schema from DuckDB catalog
-                # Also include temporal schema for calendar dimension (foundational/shared)
+                # Also include foundational/shared schemas that models commonly join to:
+                # - temporal: calendar dimension (date_id, date, etc.)
+                # - company: company dimension (sector, industry, etc.)
                 result = self.connection.conn.execute(f"""
                     SELECT table_name, column_name
                     FROM information_schema.columns
                     WHERE table_schema = '{model_name}'
                        OR table_schema = 'temporal'
+                       OR table_schema = 'company'
                     ORDER BY table_name, ordinal_position
                 """).fetchall()
 
@@ -448,7 +456,7 @@ class AutoJoinHandler:
                     f"indexed {len(index)} columns")
 
         # Log key columns for debugging join issues
-        for key_col in ['ticker', 'company_id', 'date_id', 'date']:
+        for key_col in ['ticker', 'company_id', 'date_id', 'date', 'sector', 'industry']:
             if key_col in index:
                 logger.debug(f"AUTO-JOIN INDEX: '{key_col}' found in tables: {index[key_col]}")
 
@@ -829,12 +837,33 @@ class AutoJoinHandler:
         base_table = table_sequence[0]
         temp_tables = {}
 
+        # Build mapping of table -> model from cross-model joins
+        table_to_model = {}
+        for join_info in joins:
+            if 'cross_model' in join_info:
+                to_table = join_info['to_table']
+                cross_model = join_info['cross_model']
+                # Map model category to actual model name
+                # e.g., "corporate" -> "company", "temporal" -> "temporal"
+                model_mapping = {
+                    'corporate': 'company',
+                    'temporal': 'temporal',
+                    'foundation': 'temporal',
+                }
+                table_to_model[to_table] = model_mapping.get(cross_model, cross_model)
+                logger.debug(f"AUTO-JOIN DUCKDB: Table {to_table} from cross-model {cross_model} -> {table_to_model[to_table]}")
+
         try:
             # Register tables as temp views - use DuckDB relations directly (lazy, no pandas)
             for table_name in table_sequence:
                 t0 = time.time()
-                # Handle cross-model joins: dim_calendar is in 'temporal' model
-                if table_name == 'dim_calendar':
+                # Handle cross-model joins using the mapping built from join plan
+                if table_name in table_to_model:
+                    load_model_name = table_to_model[table_name]
+                    load_model = self.session.load_model(load_model_name)
+                    logger.debug(f"AUTO-JOIN DUCKDB: Loading {table_name} from cross-model {load_model_name}")
+                elif table_name == 'dim_calendar':
+                    # Legacy fallback for dim_calendar
                     load_model_name = 'temporal'
                     load_model = self.session.load_model('temporal')
                 else:
