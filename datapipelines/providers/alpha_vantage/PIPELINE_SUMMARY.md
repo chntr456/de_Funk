@@ -40,6 +40,8 @@ Alpha Vantage provides stock market data including real-time and historical pric
 | `balance_sheet` | Quarterly/annual balance sheets | `balance_sheets` | Active |
 | `cash_flow` | Quarterly/annual cash flows | `cash_flows` | Active |
 | `earnings` | Quarterly/annual earnings | `earnings` | Active |
+| `dividends` | Historical and declared dividends | `dividends` | **New** |
+| `splits` | Historical stock splits | `splits` | **New** |
 | `global_quote` | Real-time quote (single ticker) | - | Available |
 | `historical_options` | Historical options chains | `historical_options` | Available |
 | `etf_profile` | ETF holdings and profile | `etf_profiles` | Available |
@@ -64,6 +66,17 @@ Alpha Vantage provides stock market data including real-time and historical pric
 - All return quarterly and annual data
 - One call per ticker per endpoint
 
+#### Corporate Action Endpoints (New)
+- **dividends**: Historical and future (declared) dividend distributions
+  - Returns: ex_dividend_date, dividend_amount, record_date, payment_date, declaration_date
+  - One call per ticker
+  - API: `function=DIVIDENDS&symbol={ticker}`
+
+- **splits**: Historical stock split events
+  - Returns: effective_date, split_from, split_to (e.g., 1:4 for 4-for-1 split)
+  - One call per ticker
+  - API: `function=SPLITS&symbol={ticker}`
+
 ---
 
 ## Bronze Tables
@@ -77,6 +90,8 @@ Alpha Vantage provides stock market data including real-time and historical pric
 | `balance_sheets` | balance_sheet | `fiscal_year` | ticker, fiscal_date, total_assets, total_liabilities |
 | `cash_flows` | cash_flow | `fiscal_year` | ticker, fiscal_date, operating_cf, investing_cf |
 | `earnings` | earnings | `fiscal_year` | ticker, fiscal_date, reported_eps, estimated_eps |
+| `dividends` | dividends | `ex_dividend_date` | ticker, ex_dividend_date, dividend_amount, payment_date |
+| `splits` | splits | `effective_date` | ticker, effective_date, split_from, split_to |
 
 ---
 

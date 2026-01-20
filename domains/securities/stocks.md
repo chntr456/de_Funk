@@ -19,6 +19,8 @@ storage:
       listing_status: alpha_vantage/listing_status  # All tickers from LISTING_STATUS
       time_series_daily_adjusted: alpha_vantage/time_series_daily_adjusted  # Daily OHLCV
       company_overview: alpha_vantage/company_overview  # Company fundamentals
+      dividends: alpha_vantage/dividends  # Dividend history (DIVIDENDS endpoint)
+      splits: alpha_vantage/splits  # Stock split history (SPLITS endpoint)
   silver:
     root: storage/silver/stocks
 
@@ -91,6 +93,48 @@ tables:
       - [golden_cross_days, expression, "SUM(CASE WHEN sma_50 > sma_200 THEN 1 ELSE 0 END)", "Days with Golden Cross (SMA50 > SMA200)", {format: "#,##0"}]
       - [death_cross_days, expression, "SUM(CASE WHEN sma_50 < sma_200 THEN 1 ELSE 0 END)", "Days with Death Cross (SMA50 < SMA200)", {format: "#,##0"}]
 
+  fact_dividends:
+    type: fact
+    description: "Dividend distribution history"
+    primary_key: [dividend_id]
+    partition_by: [ex_dividend_date_id]
+
+    schema:
+      # Keys
+      - [dividend_id, integer, false, "PK - Integer surrogate"]
+      - [security_id, integer, false, "FK to dim_stock", {fk: dim_stock.security_id}]
+      - [ex_dividend_date_id, integer, false, "FK to dim_calendar (ex-dividend date)", {fk: temporal.dim_calendar.date_id}]
+      - [payment_date_id, integer, true, "FK to dim_calendar (payment date)", {fk: temporal.dim_calendar.date_id}]
+      # Dividend data
+      - [dividend_amount, double, false, "Dividend per share"]
+      - [record_date, date, true, "Record date"]
+      - [declaration_date, date, true, "Declaration date"]
+
+    measures:
+      - [total_dividends, sum, dividend_amount, "Total dividends paid", {format: "$#,##0.00"}]
+      - [avg_dividend, avg, dividend_amount, "Average dividend amount", {format: "$#,##0.00"}]
+      - [dividend_count, count_distinct, dividend_id, "Number of dividend events", {format: "#,##0"}]
+
+  fact_splits:
+    type: fact
+    description: "Stock split history"
+    primary_key: [split_id]
+    partition_by: [effective_date_id]
+
+    schema:
+      # Keys
+      - [split_id, integer, false, "PK - Integer surrogate"]
+      - [security_id, integer, false, "FK to dim_stock", {fk: dim_stock.security_id}]
+      - [effective_date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+      # Split data
+      - [split_from, integer, false, "Original shares (e.g., 1)"]
+      - [split_to, integer, false, "New shares (e.g., 4 for 4:1)"]
+      - [split_ratio, double, false, "Split ratio (split_to/split_from)"]
+
+    measures:
+      - [split_count, count_distinct, split_id, "Number of splits", {format: "#,##0"}]
+      - [avg_split_ratio, avg, split_ratio, "Average split ratio", {format: "#,##0.00"}]
+
 # Graph
 graph:
   extends: _base.finance.securities.graph
@@ -148,6 +192,52 @@ graph:
     # NOTE: Technical indicators are computed post-build by StocksBuilder.post_build()
     # and added as columns to fact_stock_prices. There is no separate technicals table.
 
+    fact_dividends:
+      from: bronze.alpha_vantage.dividends
+      type: fact
+      description: "Dividend distribution history (from DIVIDENDS endpoint)"
+      select:
+        ticker: ticker
+        ex_dividend_date: ex_dividend_date
+        dividend_amount: amount
+        record_date: record_date
+        payment_date: payment_date
+        declaration_date: declaration_date
+      derive:
+        dividend_id: "ABS(HASH(CONCAT(ticker, '_', CAST(ex_dividend_date AS STRING))))"
+        security_id: "ABS(HASH(ticker))"
+        ex_dividend_date_id: "CAST(REGEXP_REPLACE(CAST(ex_dividend_date AS STRING), '-', '') AS INT)"
+        payment_date_id: "CAST(REGEXP_REPLACE(CAST(payment_date AS STRING), '-', '') AS INT)"
+      drop: [ticker]  # Use security_id instead
+      primary_key: [dividend_id]
+      unique_key: [ticker, ex_dividend_date]
+      foreign_keys:
+        - {column: security_id, references: dim_stock.security_id}
+        - {column: ex_dividend_date_id, references: temporal.dim_calendar.date_id}
+      tags: [fact, dividends, corporate_action]
+
+    fact_splits:
+      from: bronze.alpha_vantage.splits
+      type: fact
+      description: "Stock split history (from SPLITS endpoint)"
+      select:
+        ticker: ticker
+        effective_date: effective_date
+        split_from: split_from      # Original shares (e.g., 1)
+        split_to: split_to          # New shares (e.g., 4 for 4:1 split)
+      derive:
+        split_id: "ABS(HASH(CONCAT(ticker, '_', CAST(effective_date AS STRING))))"
+        security_id: "ABS(HASH(ticker))"
+        effective_date_id: "CAST(REGEXP_REPLACE(CAST(effective_date AS STRING), '-', '') AS INT)"
+        split_ratio: "CAST(split_to AS DOUBLE) / CAST(split_from AS DOUBLE)"  # e.g., 4.0 for 4:1
+      drop: [ticker]  # Use security_id instead
+      primary_key: [split_id]
+      unique_key: [ticker, effective_date]
+      foreign_keys:
+        - {column: security_id, references: dim_stock.security_id}
+        - {column: effective_date_id, references: temporal.dim_calendar.date_id}
+      tags: [fact, splits, corporate_action]
+
   edges:
     # NOTE: No stock_to_security edge needed - dim_stock IS the complete dimension
     # It inherits the schema from _base.finance.securities.dim_security but is self-contained
@@ -169,6 +259,30 @@ graph:
       from: fact_stock_prices
       to: temporal.dim_calendar
       on: [date_id=date_id]
+      type: many_to_one
+
+    dividends_to_stock:
+      from: fact_dividends
+      to: dim_stock
+      on: [security_id=security_id]
+      type: many_to_one
+
+    dividends_to_calendar:
+      from: fact_dividends
+      to: temporal.dim_calendar
+      on: [ex_dividend_date_id=date_id]
+      type: many_to_one
+
+    splits_to_stock:
+      from: fact_splits
+      to: dim_stock
+      on: [security_id=security_id]
+      type: many_to_one
+
+    splits_to_calendar:
+      from: fact_splits
+      to: temporal.dim_calendar
+      on: [effective_date_id=date_id]
       type: many_to_one
 
   paths:
