@@ -838,20 +838,17 @@ class AutoJoinHandler:
         temp_tables = {}
 
         # Build mapping of table -> model from cross-model joins
+        # Uses registry.resolve_cross_model() to dynamically resolve category names
+        # to actual model names (e.g., 'securities' -> 'stocks', 'corporate' -> 'company')
         table_to_model = {}
         for join_info in joins:
             if 'cross_model' in join_info:
                 to_table = join_info['to_table']
                 cross_model = join_info['cross_model']
-                # Map model category to actual model name
-                # e.g., "corporate" -> "company", "temporal" -> "temporal"
-                model_mapping = {
-                    'corporate': 'company',
-                    'temporal': 'temporal',
-                    'foundation': 'temporal',
-                }
-                table_to_model[to_table] = model_mapping.get(cross_model, cross_model)
-                logger.debug(f"AUTO-JOIN DUCKDB: Table {to_table} from cross-model {cross_model} -> {table_to_model[to_table]}")
+                # Use registry to resolve cross-model reference to actual model name
+                resolved_model = self.registry.resolve_cross_model(cross_model)
+                table_to_model[to_table] = resolved_model
+                logger.debug(f"AUTO-JOIN DUCKDB: Table {to_table} from cross-model {cross_model} -> {resolved_model}")
 
         try:
             # Register tables as temp views - use DuckDB relations directly (lazy, no pandas)

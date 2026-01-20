@@ -471,6 +471,74 @@ class ModelRegistry:
         self.models.clear()
         self._load_models()
 
+    def resolve_cross_model(self, cross_model_ref: str) -> str:
+        """
+        Resolve a cross_model reference to an actual model name.
+
+        This uses domain configuration to map category/base names to concrete models:
+        - 'temporal' -> 'temporal' (foundation model)
+        - 'foundation' -> 'temporal' (alias)
+        - 'corporate' -> 'company' (domain folder -> model name)
+        - 'securities' -> 'stocks' (base template -> concrete model)
+        - 'geospatial' -> 'geospatial' (foundation model)
+
+        Args:
+            cross_model_ref: Reference from graph edge cross_model value
+
+        Returns:
+            Actual model name that exists in registry
+        """
+        # Direct model match
+        if cross_model_ref in self.models:
+            return cross_model_ref
+
+        # Build dynamic mapping from model configs
+        # Check if any model extends a base matching this ref
+        for model_name, model_config in self.models.items():
+            # Check if model extends this base
+            if hasattr(model_config, '_raw_config'):
+                extends = model_config._raw_config.get('extends', '')
+            else:
+                # Try to get from domain loader
+                try:
+                    raw_config = self._domain_loader.load_model_config(model_name)
+                    extends = raw_config.get('extends', '')
+                except Exception:
+                    extends = ''
+
+            # Match on extends path like '_base.finance.securities'
+            if extends:
+                # Extract the base category name
+                # '_base.finance.securities' -> 'securities'
+                # '_base.geospatial.geospatial' -> 'geospatial'
+                parts = extends.split('.')
+                if parts:
+                    base_category = parts[-1]
+                    if base_category == cross_model_ref:
+                        return model_name
+
+        # Known aliases (foundation aliases)
+        aliases = {
+            'foundation': 'temporal',
+            'foundation_temporal': 'temporal',
+        }
+        if cross_model_ref in aliases:
+            alias_target = aliases[cross_model_ref]
+            if alias_target in self.models:
+                return alias_target
+
+        # Domain folder to model name mappings (when folder != model name)
+        domain_mappings = {
+            'corporate': 'company',  # domains/corporate/ -> company model
+        }
+        if cross_model_ref in domain_mappings:
+            mapped = domain_mappings[cross_model_ref]
+            if mapped in self.models:
+                return mapped
+
+        # If nothing matched, return as-is (will fail later with helpful error)
+        return cross_model_ref
+
     # ============================================================
     # MODEL CLASS REGISTRY (for dynamic instantiation)
     # ============================================================
