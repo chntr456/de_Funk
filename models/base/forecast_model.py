@@ -344,8 +344,14 @@ class TimeSeriesForecastModel(BaseModel):
                 all_registry.append(registry_df)
 
             except Exception as e:
+                import traceback
                 error_msg = f"{config_name}: {str(e)}"
                 results['errors'].append(error_msg)
+                # Log full traceback for debugging
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Training failed for {entity_id}/{config_name}: {e}")
+                logger.debug(f"Full traceback: {traceback.format_exc()}")
 
         # Save all forecasts, metrics, and registry entries
         if all_forecasts:
