@@ -102,6 +102,8 @@ class TemporalModel(BaseModel):
 
         # Add all calendar attributes
         df = df.select(
+            # Primary key - integer YYYYMMDD format (required for cross-model joins)
+            F.date_format("date", "yyyyMMdd").cast("int").alias("date_id"),
             F.col("date"),
             F.year("date").alias("year"),
             F.quarter("date").alias("quarter"),
@@ -158,6 +160,8 @@ class TemporalModel(BaseModel):
 
         # Build calendar dataframe
         df = pd.DataFrame({'date': dates})
+        # Primary key - integer YYYYMMDD format (required for cross-model joins)
+        df['date_id'] = df['date'].dt.strftime('%Y%m%d').astype(int)
         df['year'] = df['date'].dt.year
         df['quarter'] = df['date'].dt.quarter
         df['month'] = df['date'].dt.month

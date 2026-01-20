@@ -121,7 +121,11 @@ class CalendarBuilder:
         year_quarter = f"{year:04d}-Q{quarter}"
         date_str = date.strftime('%Y-%m-%d')
 
+        # Primary key - integer YYYYMMDD format (required for cross-model joins)
+        date_id = int(date.strftime('%Y%m%d'))
+
         return {
+            'date_id': date_id,
             'date': date,
             'year': year,
             'quarter': quarter,
@@ -195,6 +199,7 @@ class CalendarBuilder:
 
         # Define schema
         schema = StructType([
+            StructField('date_id', IntegerType(), False),  # PK - YYYYMMDD format
             StructField('date', DateType(), False),
             StructField('year', IntegerType(), False),
             StructField('quarter', IntegerType(), False),
