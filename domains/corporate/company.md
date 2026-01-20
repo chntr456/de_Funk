@@ -511,7 +511,7 @@ graph:
   edges:
     company_to_security:
       from: dim_company
-      to: securities.dim_security
+      to: stocks.dim_security
       on: [security_id=security_id]
       type: one_to_one
 
