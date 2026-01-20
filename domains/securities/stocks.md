@@ -32,7 +32,7 @@ build:
 tables:
   dim_stock:
     type: dimension
-    extends: _base.finance.securities.dim_security
+    extends: _base.finance.securities._dim_security
     description: "Stock equity dimension with company linkage"
     primary_key: [stock_id]
     unique_key: [ticker]
@@ -41,7 +41,7 @@ tables:
     schema:
       # Keys - all integers
       - [stock_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT('STOCK_', ticker)))"}]
-      - [security_id, integer, false, "FK to dim_security", {fk: _base.finance.securities.dim_security.security_id}]
+      - [security_id, integer, false, "Derived security key: ABS(HASH(ticker))", {derived: "ABS(HASH(ticker))"}]
       - [company_id, integer, false, "FK to dim_company", {fk: corporate.dim_company.company_id}]
 
       # Inherited from base (for reference)
@@ -77,7 +77,7 @@ tables:
     schema:
       # Keys - all integers (NO trade_date column - use date_id)
       - [price_id, integer, false, "PK - Integer surrogate"]
-      - [security_id, integer, false, "FK to dim_security", {fk: dim_security.security_id}]
+      - [security_id, integer, false, "FK to dim_stock", {fk: dim_stock.security_id}]
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
 
       # Inherited from base: open, high, low, close, volume, adjusted_close
@@ -121,7 +121,7 @@ graph:
       primary_key: [stock_id]
       unique_key: [ticker]
       foreign_keys:
-        - {column: security_id, references: dim_security.security_id}
+        # security_id is derived inline, not a true FK (denormalized design)
         - {column: company_id, references: corporate.dim_company.company_id, optional: true}
       tags: [dim, stock]
 
@@ -141,7 +141,7 @@ graph:
       primary_key: [price_id]
       unique_key: [ticker, trade_date]
       foreign_keys:
-        - {column: security_id, references: dim_security.security_id}
+        - {column: security_id, references: dim_stock.security_id}
         - {column: date_id, references: temporal.dim_calendar.date_id}
       tags: [fact, prices, stocks]
 
@@ -149,11 +149,9 @@ graph:
     # and added as columns to fact_stock_prices. There is no separate technicals table.
 
   edges:
-    stock_to_security:
-      from: dim_stock
-      to: dim_security
-      on: [security_id=security_id]
-      type: many_to_one
+    # NOTE: No stock_to_security edge needed - dim_stock IS the complete dimension
+    # It inherits the schema from _base.finance.securities.dim_security but is self-contained
+    # The security_id column is derived inline: ABS(HASH(ticker))
 
     stock_to_company:
       from: dim_stock

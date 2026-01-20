@@ -41,7 +41,7 @@ tables:
     schema:
       # Keys - all integers
       - [company_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT('COMPANY_', COALESCE(cik, ticker))))"}]
-      - [security_id, integer, true, "FK to dim_security (if publicly traded)", {fk: securities.dim_security.security_id}]
+      - [security_id, integer, true, "FK to stocks.dim_stock (if publicly traded)", {fk: stocks.dim_stock.security_id}]
 
       # Natural keys
       - [cik, string, true, "SEC Central Index Key", {pattern: "^[0-9]{10}$", transform: "zfill(10)"}]
@@ -311,7 +311,7 @@ graph:
       primary_key: [company_id]
       unique_key: [ticker]
       foreign_keys:
-        - {column: security_id, references: securities.dim_security.security_id}
+        - {column: security_id, references: stocks.dim_stock.security_id}
       tags: [dim, entity, corporate]
 
     fact_income_statement:
@@ -509,17 +509,23 @@ graph:
         - {column: date_id, references: temporal.dim_calendar.date_id}
 
   edges:
-    company_to_security:
-      from: dim_company
-      to: stocks.dim_security
-      on: [security_id=security_id]
-      type: one_to_one
-
+    # Primary join path: company → stock via company_id (recommended)
+    # Both tables derive company_id from HASH('COMPANY_' + ticker/cik)
     company_to_stock:
       from: dim_company
       to: stocks.dim_stock
       on: [company_id=company_id]
       type: one_to_one
+      description: "Link company to its stock dimension via company_id"
+
+    # Alternative join path: company → stock via security_id
+    # Both tables derive security_id from HASH(ticker)
+    company_to_stock_by_security:
+      from: dim_company
+      to: stocks.dim_stock
+      on: [security_id=security_id]
+      type: one_to_one
+      description: "Alternative link via security_id (ticker hash)"
 
     income_to_company:
       from: fact_income_statement

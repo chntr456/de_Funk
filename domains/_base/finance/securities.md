@@ -7,6 +7,8 @@ description: "Base template for all tradable securities (stocks, options, ETFs, 
 depends_on: [temporal]
 
 # Storage - provider/dataset for bronze, domain hierarchy for silver
+# NOTE: This is a BASE TEMPLATE (type: domain-base) - NO tables are materialized here!
+# Child models (stocks, options, etfs, futures) inherit schema and write to their own paths.
 storage:
   format: delta
   bronze:
@@ -16,13 +18,15 @@ storage:
       listing_status: alpha_vantage/listing_status  # All tickers from LISTING_STATUS
       time_series_daily_adjusted: alpha_vantage/time_series_daily_adjusted  # Daily OHLCV
   silver:
-    root: storage/silver/securities
+    # NOT USED - base templates don't write to Silver
+    root: storage/silver/_base_securities_UNUSED
 
-# Base Tables
+# Base Tables (TEMPLATES - prefix with _ to exclude from materialization)
+# Tables starting with _ are templates for inheritance, not built directly
 tables:
-  dim_security:
+  _dim_security:
     type: dimension
-    description: "Master security dimension - OWNS ticker uniqueness"
+    description: "TEMPLATE: Master security dimension - inherit via extends"
     primary_key: [security_id]
     unique_key: [ticker]
 
@@ -104,14 +108,14 @@ tables:
       - [overbought_days, expression, "SUM(CASE WHEN rsi_14 > 70 THEN 1 ELSE 0 END)", "Days RSI > 70", {format: "#,##0"}]
       - [oversold_days, expression, "SUM(CASE WHEN rsi_14 < 30 THEN 1 ELSE 0 END)", "Days RSI < 30", {format: "#,##0"}]
 
-# Graph Templates
+# Graph Templates (nodes starting with _ are templates for inheritance)
 graph:
   nodes:
-    dim_security:
+    _dim_security:
       from: bronze.alpha_vantage.listing_status
       type: dimension
-      # Note: listing_status comes from LISTING_STATUS endpoint (bulk ticker list)
-      # This has ALL securities, not just the ones we've called OVERVIEW on
+      # TEMPLATE: listing_status comes from LISTING_STATUS endpoint (bulk ticker list)
+      # Child models override this node (e.g., stocks uses dim_stock)
       select:
         ticker: ticker
         security_name: security_name
@@ -124,7 +128,7 @@ graph:
         is_active: "true"
       primary_key: [security_id]
       unique_key: [ticker]
-      tags: [dim, master, security]
+      tags: [dim, master, security, template]
 
     _fact_prices_base:
       from: bronze.alpha_vantage.time_series_daily_adjusted
@@ -157,10 +161,13 @@ graph:
     # NOTE: Technical indicators are computed post-build by scripts/build/compute_technicals.py
     # and added as columns to _fact_prices_base. There is no separate technicals table.
 
+  # TEMPLATE EDGES - These are inherited and overridden by child models
+  # Child models should replace references to _dim_security with their concrete dimension
+  # e.g., stocks replaces _dim_security -> dim_stock
   edges:
-    prices_to_security:
+    _prices_to_security:
       from: _fact_prices_base
-      to: dim_security
+      to: _dim_security  # Template reference - override in child model
       on: [security_id=security_id]
       type: many_to_one
 
@@ -179,7 +186,24 @@ status: active
 
 ## Base Securities Template
 
-Reusable base template for all tradable securities with integer surrogate keys.
+**⚠️ TEMPLATE ONLY - NEVER MATERIALIZED**
+
+This is a base template (`type: domain-base`) that provides reusable schema definitions
+for all tradable securities. It is inherited by child models but **NO TABLES ARE BUILT**
+from this template directly.
+
+**Child models using this template:**
+- `stocks` → produces `dim_stock` and `fact_stock_prices`
+- `options` → produces `dim_option` and `fact_option_prices`
+- `etfs` → produces `dim_etf` and `fact_etf_prices`
+- `futures` → produces `dim_future` and `fact_future_prices`
+
+**Inheritance pattern:**
+Child models use `extends: _base.finance.securities` to inherit schema definitions.
+The schema columns are COPIED into the child dimension, creating a denormalized
+document-style table. There is no FK relationship to a shared `dim_security` table.
+
+### Integer Surrogate Keys
 
 ### Dependencies
 
