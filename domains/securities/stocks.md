@@ -199,7 +199,7 @@ graph:
       select:
         ticker: ticker
         ex_dividend_date: ex_dividend_date
-        dividend_amount: amount
+        dividend_amount: dividend_amount  # Already normalized in Bronze
         record_date: record_date
         payment_date: payment_date
         declaration_date: declaration_date
