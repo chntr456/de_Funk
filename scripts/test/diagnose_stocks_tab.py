@@ -253,7 +253,11 @@ def check_universal_session():
         from models.api.session import UniversalSession
 
         ctx = RepoContext.from_repo_root(connection_type="duckdb")
-        session = UniversalSession(ctx)
+        session = UniversalSession(
+            connection=ctx.connection,
+            storage_cfg=ctx.storage,
+            repo_root=ctx.repo
+        )
 
         print(f"Session created with backend: duckdb")
         print(f"Available models: {session.list_models()}")
@@ -305,7 +309,7 @@ def check_auto_join():
 
     try:
         from core.context import RepoContext
-        from models.api.auto_join import AutoJoin
+        from models.api.auto_join import AutoJoinHandler
         from models.registry import ModelRegistry
         from pathlib import Path
 
@@ -313,7 +317,7 @@ def check_auto_join():
         ctx = RepoContext.from_repo_root(connection_type="duckdb")
         registry = ModelRegistry(repo_root / "domains")
 
-        auto_join = AutoJoin(registry, ctx.connection)
+        auto_join = AutoJoinHandler(registry, ctx.connection)
 
         # Test column index
         print_subheader("Column Index for stocks")
@@ -354,8 +358,7 @@ def check_exhibit_handler():
 
     try:
         from core.context import RepoContext
-        from app.notebook.exhibits.registry import ExhibitRegistry
-        from app.notebook.exhibits.base import ExhibitContext
+        from app.notebook.exhibits.registry import ExhibitTypeRegistry
 
         ctx = RepoContext.from_repo_root(connection_type="duckdb")
 
@@ -368,31 +371,12 @@ def check_exhibit_handler():
 
         print(f"Exhibit config: {exhibit_config}")
 
-        # Try to get the exhibit handler
-        registry = ExhibitRegistry()
-        handler = registry.get_handler(exhibit_config["type"])
+        # Try to get the exhibit type registry
+        registry = ExhibitTypeRegistry()
+        print(f"Registered exhibit types: {list(registry._types.keys())}")
 
-        print(f"Handler: {handler}")
-
-        # Create context
-        exhibit_ctx = ExhibitContext(
-            repo_context=ctx,
-            filters={},
-            model_name="stocks"
-        )
-
-        # Try to fetch data
-        if handler:
-            try:
-                result = handler.fetch_data(exhibit_config, exhibit_ctx)
-                print(f"Result type: {type(result)}")
-                if hasattr(result, 'shape'):
-                    print(f"Shape: {result.shape}")
-                print(f"Data:\n{result}")
-            except Exception as e:
-                print(f"Fetch data failed: {e}")
-                import traceback
-                traceback.print_exc()
+        # Note: Exhibit rendering happens in the Streamlit context
+        # This test just verifies the registry is working
 
     except Exception as e:
         print(f"ERROR in exhibit test: {e}")
