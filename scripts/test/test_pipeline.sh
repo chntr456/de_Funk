@@ -409,7 +409,7 @@ if not tickers:
     ticker_seed_path = Path(storage_cfg['roots']['bronze']) / 'seeds' / 'tickers'
     if ticker_seed_path.exists():
         if ticker_source == 'market_cap':
-            logger.info('No market cap data yet - falling back to ticker_seed')
+            logger.warning('⚠ No market cap data available - falling back to ticker_seed. Run company_overview ingestion first for market_cap ranking.')
         else:
             logger.info('Using ticker_seed as configured')
         if (ticker_seed_path / '_delta_log').exists():
@@ -451,14 +451,22 @@ endpoint_to_work_item = {
     'balance_sheet': 'balance',
     'cash_flow': 'cashflow',
     'earnings': 'earnings',
+    'dividends': 'dividends',
+    'splits': 'splits',
     # listing_status is NOT here - it's a bulk endpoint seeded in Task 1
 }
 
 work_items = []
+unmapped_endpoints = []
 for ep in endpoints:
     work_item = endpoint_to_work_item.get(ep)
     if work_item and work_item not in work_items:
         work_items.append(work_item)
+    elif ep not in ['listing_status'] and not work_item:
+        unmapped_endpoints.append(ep)
+
+if unmapped_endpoints:
+    logger.warning(f'⚠ Unmapped endpoints (not in endpoint_to_work_item): {unmapped_endpoints}')
 
 logger.info(f'Work items: {work_items}')
 
