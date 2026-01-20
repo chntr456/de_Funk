@@ -66,9 +66,9 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 300
-  sort: {by: fiscal_date_ending, order: desc}
+  sort: {by: period_date, order: desc}
   columns:
-    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: period_date, label: Period, format: date}
     - {id: total_revenue, label: Revenue, format: currency_millions}
     - {id: gross_profit, label: Gross Profit, format: currency_millions, style: {bold: true}}
     - {id: operating_income, label: Op. Income, format: currency_millions}
@@ -88,9 +88,9 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 300
-  sort: {by: fiscal_date_ending, order: desc}
+  sort: {by: period_date, order: desc}
   columns:
-    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: period_date, label: Period, format: date}
     - {id: total_assets, label: Total Assets, format: currency_millions, style: {bold: true}}
     - {id: total_liabilities, label: Total Liabilities, format: currency_millions}
     - {id: total_shareholder_equity, label: Equity, format: currency_millions, style: {bold: true}}
@@ -106,9 +106,9 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 300
-  sort: {by: fiscal_date_ending, order: desc}
+  sort: {by: period_date, order: desc}
   columns:
-    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: period_date, label: Period, format: date}
     - {id: operating_cashflow, label: Operating, format: currency_millions, style: {bold: true}}
     - {id: cashflow_from_investment, label: Investing, format: currency_millions}
     - {id: cashflow_from_financing, label: Financing, format: currency_millions}
@@ -125,9 +125,9 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 300
-  sort: {by: fiscal_date_ending, order: desc}
+  sort: {by: period_date, order: desc}
   columns:
-    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: period_date, label: Period, format: date}
     - {id: reported_eps, label: EPS, format: currency}
     - {id: estimated_eps, label: Est. EPS, format: currency}
     - {id: surprise_percentage, label: Surprise %, format: percent, conditional: {type: color_scale, palette: ['#ef4444', '#fbbf24', '#22c55e'], domain: [-0.1, 0, 0.1]}}
@@ -180,9 +180,9 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 400
-  sort: {by: fiscal_date_ending, order: desc}
+  sort: {by: period_date, order: desc}
   columns:
-    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: period_date, label: Period, format: date}
     - {id: total_revenue, label: Total Revenue, format: currency_millions}
     - {id: cost_of_revenue, label: Cost of Revenue, format: currency_millions}
     - {id: gross_profit, label: Gross Profit, format: currency_millions, style: {bold: true}}
@@ -211,9 +211,9 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 400
-  sort: {by: fiscal_date_ending, order: desc}
+  sort: {by: period_date, order: desc}
   columns:
-    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: period_date, label: Period, format: date}
     - {id: cash_and_equivalents, label: Cash & Equivalents, format: currency_millions}
     - {id: total_current_assets, label: Current Assets, format: currency_millions, style: {bold: true}}
     - {id: total_assets, label: Total Assets, format: currency_millions, style: {bold: true}}
@@ -243,9 +243,9 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 400
-  sort: {by: fiscal_date_ending, order: desc}
+  sort: {by: period_date, order: desc}
   columns:
-    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: period_date, label: Period, format: date}
     - {id: operating_cashflow, label: Cash from Operations, format: currency_millions, style: {bold: true}}
     - {id: capital_expenditures, label: Capital Expenditures, format: currency_millions}
     - {id: cashflow_from_investment, label: Cash from Investing, format: currency_millions, style: {bold: true}}
@@ -277,9 +277,9 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 400
-  sort: {by: fiscal_date_ending, order: desc}
+  sort: {by: period_date, order: desc}
   columns:
-    - {id: fiscal_date_ending, label: Period, format: date}
+    - {id: period_date, label: Period, format: date}
     - {id: reported_eps, label: Reported EPS, format: currency}
     - {id: estimated_eps, label: Estimated EPS, format: currency}
     - {id: surprise, label: Surprise, format: currency, conditional: {type: color_scale, palette: ['#ef4444', '#ffffff', '#22c55e'], domain: [-0.5, 0, 0.5]}}

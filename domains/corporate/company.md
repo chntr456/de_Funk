@@ -356,8 +356,10 @@ graph:
         income_statement_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
-      # Drop ticker (use company_id FK), keep fiscal_date_ending for notebook compatibility
-      drop: [ticker]
+        # Derived from date_id for display - calendar is source of truth
+        period_date: "TO_DATE(CAST(date_id AS STRING), 'yyyyMMdd')"
+      # Drop natural keys - use FKs (company_id, date_id)
+      drop: [ticker, fiscal_date_ending]
       primary_key: [income_statement_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -418,8 +420,10 @@ graph:
         balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
-      # Drop ticker (use company_id FK), keep fiscal_date_ending for notebook compatibility
-      drop: [ticker]
+        # Derived from date_id for display - calendar is source of truth
+        period_date: "TO_DATE(CAST(date_id AS STRING), 'yyyyMMdd')"
+      # Drop natural keys - use FKs (company_id, date_id)
+      drop: [ticker, fiscal_date_ending]
       primary_key: [balance_sheet_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -472,8 +476,10 @@ graph:
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
         free_cash_flow: "COALESCE(operating_cashflow, 0) - COALESCE(capital_expenditures, 0)"
-      # Drop ticker (use company_id FK), keep fiscal_date_ending for notebook compatibility
-      drop: [ticker]
+        # Derived from date_id for display - calendar is source of truth
+        period_date: "TO_DATE(CAST(date_id AS STRING), 'yyyyMMdd')"
+      # Drop natural keys - use FKs (company_id, date_id)
+      drop: [ticker, fiscal_date_ending]
       primary_key: [cash_flow_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -500,8 +506,10 @@ graph:
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
         beat_estimate: "CASE WHEN reported_eps > estimated_eps THEN true ELSE false END"
-      # Drop ticker (use company_id FK), keep fiscal_date_ending for notebook compatibility
-      drop: [ticker]
+        # Derived from date_id for display - calendar is source of truth
+        period_date: "TO_DATE(CAST(date_id AS STRING), 'yyyyMMdd')"
+      # Drop natural keys - use FKs (company_id, date_id)
+      drop: [ticker, fiscal_date_ending]
       primary_key: [earnings_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -590,27 +598,28 @@ Corporate legal entities with SEC registration and financial fundamentals.
 | `date_id` | integer | `YYYYMMDD` format |
 | `{fact}_id` | integer | `HASH(ticker + date + type)` |
 
-### Date Columns on Facts
+### Date Handling - Calendar as Source of Truth
 
-Facts have both `date_id` FK for calendar joins AND `fiscal_date_ending` for direct access:
+Facts use `date_id` FK pointing to the calendar dimension. The `period_date` column is derived from `date_id` for display convenience, but the calendar is the source of truth.
 
 ```sql
--- Option 1: Direct access to fiscal_date_ending
+-- Direct access via derived period_date column
 SELECT
-    i.fiscal_date_ending,
+    i.period_date,
     co.ticker,
     i.total_revenue,
     i.net_income
 FROM fact_income_statement i
 JOIN dim_company co ON i.company_id = co.company_id
-WHERE i.fiscal_date_ending >= '2024-01-01'
+WHERE i.period_date >= '2024-01-01'
   AND i.report_type = 'annual'
 
--- Option 2: Join via date_id for calendar attributes
+-- Join via date_id for full calendar attributes
 SELECT
     c.date AS fiscal_date,
     c.year,
     c.quarter,
+    c.fiscal_year,
     co.ticker,
     i.total_revenue,
     i.net_income
