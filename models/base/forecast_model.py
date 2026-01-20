@@ -891,7 +891,11 @@ class TimeSeriesForecastModel(BaseModel):
 
         try:
             # Get actual values
-            y_true = validation_data[target].values
+            # Prophet uses 'y' column, others use the original target column name
+            target_col = 'y' if model_type == 'Prophet' and 'y' in validation_data.columns else target
+            if target_col not in validation_data.columns:
+                return empty_metrics
+            y_true = validation_data[target_col].values
 
             # Generate predictions based on model type
             if model_type == 'ARIMA':
