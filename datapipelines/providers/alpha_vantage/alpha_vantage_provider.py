@@ -957,16 +957,40 @@ class AlphaVantageProvider(BaseProvider):
             df = df.withColumn("ticker", F.col("_meta.ticker"))
             df = df.drop("_meta")
 
-        # Handle response - could be array or null
+        # Handle response - could be struct with 'data' array or direct array
         if "response" in df.columns:
             # Filter out null responses
             df = df.filter(F.col("response").isNotNull())
-            df = df.filter(F.size(F.col("response")) > 0)
+
+            # Check the response schema to determine structure
+            response_schema = df.schema["response"].dataType
+
+            if isinstance(response_schema, StructType):
+                # Response is a struct (e.g., {"symbol": "...", "data": [...]})
+                # Check if it has a 'data' field containing the array
+                field_names = [f.name for f in response_schema.fields]
+
+                if "data" in field_names:
+                    # Use response.data as the array
+                    array_col = F.col("response.data")
+                    logger.debug("Using response.data as array source")
+                else:
+                    # Unexpected struct without 'data' field
+                    logger.warning(f"Response struct has no 'data' field. Fields: {field_names}")
+                    return None
+            else:
+                # Response is directly an array
+                array_col = F.col("response")
+                logger.debug("Using response directly as array source")
+
+            # Filter out null/empty arrays
+            df = df.filter(array_col.isNotNull())
+            df = df.filter(F.size(array_col) > 0)
 
             # Explode the array
             df = df.select(
                 "ticker",
-                F.explode(F.col("response")).alias("_record")
+                F.explode(array_col).alias("_record")
             )
 
             # Flatten the struct - get all field names dynamically
