@@ -20,7 +20,7 @@ storage:
       time_series_daily_adjusted: alpha_vantage/time_series_daily_adjusted  # Daily OHLCV
       company_overview: alpha_vantage/company_overview  # Company fundamentals
   silver:
-    root: storage/silver/securities/stocks
+    root: storage/silver/stocks
 
 # Build
 build:

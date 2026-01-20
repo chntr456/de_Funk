@@ -273,7 +273,17 @@ class ModelConfig:
 
     @property
     def storage_root(self) -> str:
-        """Get storage root path."""
+        """Get storage root path.
+
+        Supports both flat and nested storage config:
+        - Flat (v1.x): storage.root = 'storage/silver/stocks'
+        - Nested (v3.0): storage.silver.root = 'storage/silver/stocks'
+        """
+        # Try nested format first (v3.0): storage.silver.root
+        silver_config = self.storage.get('silver', {})
+        if isinstance(silver_config, dict) and 'root' in silver_config:
+            return silver_config.get('root', '')
+        # Fall back to flat format (v1.x): storage.root
         return self.storage.get('root', '')
 
     @property
