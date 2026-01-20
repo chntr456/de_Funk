@@ -177,7 +177,7 @@ def check_silver_data():
 
 
 def check_universal_session():
-    """Check UniversalSession can query data."""
+    """Check UniversalSession can access data via get_table."""
     print("\n" + "=" * 60)
     print("5. CHECKING UNIVERSAL SESSION")
     print("=" * 60)
@@ -193,23 +193,39 @@ def check_universal_session():
         repo_root=ctx.repo
     )
 
-    # Test query on stocks model
-    print("\nTesting queries...")
+    # Test get_table on various models
+    print("\nTesting get_table (correct API)...")
 
-    test_queries = [
-        ("stocks.dim_stock", "SELECT COUNT(*) as cnt FROM stocks.dim_stock"),
-        ("stocks.fact_stock_prices", "SELECT COUNT(*) as cnt FROM stocks.fact_stock_prices"),
-        ("company.dim_company", "SELECT COUNT(*) as cnt FROM company.dim_company"),
-        ("temporal.dim_calendar", "SELECT COUNT(*) as cnt FROM temporal.dim_calendar"),
+    test_tables = [
+        ("stocks", "dim_stock"),
+        ("stocks", "fact_stock_prices"),
+        ("company", "dim_company"),
+        ("temporal", "dim_calendar"),
     ]
 
-    for view_name, query in test_queries:
+    for model_name, table_name in test_tables:
         try:
-            result = session.query(query)
-            count = result['cnt'].iloc[0] if len(result) > 0 else 0
-            print(f"  {view_name}: {count:,} rows")
+            df = session.get_table(model_name, table_name)
+            # Get row count based on DataFrame type
+            if hasattr(df, 'count'):
+                # DuckDB relation
+                count = df.count('*').fetchone()[0]
+            elif hasattr(df, 'shape'):
+                # pandas DataFrame
+                count = len(df)
+            else:
+                count = "?"
+            print(f"  ✅ {model_name}.{table_name}: {count:,} rows")
         except Exception as e:
-            print(f"  {view_name}: ERROR - {e}")
+            print(f"  ❌ {model_name}.{table_name}: ERROR - {e}")
+
+    # Also test direct connection query (for raw SQL)
+    print("\nTesting direct connection query...")
+    try:
+        result = ctx.connection.conn.execute("SELECT COUNT(*) FROM stocks.dim_stock").fetchone()
+        print(f"  ✅ Direct SQL query works: {result[0]:,} rows in stocks.dim_stock")
+    except Exception as e:
+        print(f"  ❌ Direct SQL query failed: {e}")
 
 
 def main():

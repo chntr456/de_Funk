@@ -47,32 +47,39 @@ def test_ui_model_access():
     )
     print(f"   Session created with connection: {type(session.connection).__name__}")
 
-    # 4. Test queries on key models
-    print("\n4. Testing queries...")
+    # 4. Test get_table method (correct API for UniversalSession)
+    print("\n4. Testing get_table method...")
 
-    test_views = [
-        "stocks.dim_stock",
-        "stocks.fact_stock_prices",
-        "company.dim_company",
-        "temporal.dim_calendar",
+    test_tables = [
+        ("stocks", "dim_stock"),
+        ("stocks", "fact_stock_prices"),
+        ("company", "dim_company"),
+        ("temporal", "dim_calendar"),
     ]
 
-    for view in test_views:
+    for model_name, table_name in test_tables:
         try:
-            query = f"SELECT COUNT(*) as cnt FROM {view}"
-            result = session.query(query)
-            count = result['cnt'].iloc[0] if len(result) > 0 else 0
-            print(f"   ✅ {view}: {count:,} rows")
+            df = session.get_table(model_name, table_name)
+            # Get row count based on DataFrame type
+            if hasattr(df, 'count'):
+                # DuckDB relation
+                count = df.count('*').fetchone()[0]
+            elif hasattr(df, 'shape'):
+                # pandas DataFrame
+                count = len(df)
+            else:
+                count = "?"
+            print(f"   ✅ {model_name}.{table_name}: {count:,} rows")
         except Exception as e:
-            print(f"   ❌ {view}: ERROR - {e}")
+            print(f"   ❌ {model_name}.{table_name}: ERROR - {e}")
 
-    # 5. Test get_table method
-    print("\n5. Testing get_table method...")
+    # 5. Test direct SQL via connection (for raw queries)
+    print("\n5. Testing direct SQL via connection...")
     try:
-        df = session.get_table('stocks', 'dim_stock')
-        print(f"   ✅ stocks.dim_stock: {len(df):,} rows via get_table")
+        result = ctx.connection.conn.execute("SELECT COUNT(*) FROM stocks.dim_stock").fetchone()
+        print(f"   ✅ Direct SQL works: {result[0]:,} rows")
     except Exception as e:
-        print(f"   ❌ get_table failed: {e}")
+        print(f"   ❌ Direct SQL failed: {e}")
 
     # 6. Test notebook manager
     print("\n6. Testing NotebookManager...")
