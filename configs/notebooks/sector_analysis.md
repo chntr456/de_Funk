@@ -13,7 +13,7 @@ $filter${
   label: Sector
   type: select
   multi: true
-  source: {model: stocks, table: dim_stock, column: sector}
+  source: {model: company, table: dim_company, column: sector}
   help_text: Select one or more sectors to analyze
 }
 
@@ -22,7 +22,7 @@ $filter${
   label: Industry
   type: select
   multi: true
-  source: {model: stocks, table: dim_stock, column: industry}
+  source: {model: company, table: dim_company, column: industry}
   help_text: Filter by specific industries
 }
 
@@ -55,9 +55,9 @@ Aggregate analysis across sectors and industries. Compare performance, volume, a
 
 $exhibits${
   type: bar_chart
-  source: stocks.dim_stock
+  source: company.dim_company
   x: sector
-  y: ticker
+  y: ticker_primary
   aggregation: count
   title: Number of Companies by Sector
   height: 350
@@ -67,7 +67,7 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: stocks.dim_stock
+  source: company.dim_company
   x: sector
   y: market_cap
   aggregation: sum
@@ -77,28 +77,30 @@ $exhibits${
 
 ## Sector Performance
 
-### Average Price by Sector
+### Company Metrics by Sector
 
 $exhibits${
   type: metric_cards
-  source: stocks.dim_stock
+  source: company.dim_company
   metrics: [
-    { column: ticker, label: "Total Stocks", aggregation: count },
+    { column: ticker_primary, label: "Total Companies", aggregation: count },
     { column: market_cap, label: "Total Market Cap", aggregation: sum, format: "$,.0f" },
     { column: market_cap, label: "Avg Market Cap", aggregation: avg, format: "$,.0f" },
     { column: shares_outstanding, label: "Total Shares", aggregation: sum, format: ",.0f" }
   ]
 }
 
-### Trading Volume by Sector
+### Trading Volume (All Stocks)
+
+NOTE: Sector-based volume aggregation requires cross-model joins (stocks.fact_stock_prices -> company.dim_company)
 
 $exhibits${
   type: bar_chart
   source: stocks.fact_stock_prices
-  x: sector
+  x: date_id
   y: volume
   aggregation: sum
-  title: Total Trading Volume by Sector
+  title: Total Trading Volume Over Time
   height: 350
 }
 
@@ -111,9 +113,9 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: stocks.dim_stock
+  source: company.dim_company
   x: industry
-  y: ticker
+  y: ticker_primary
   aggregation: count
   title: Companies by Industry
   height: 500
@@ -124,7 +126,7 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: stocks.dim_stock
+  source: company.dim_company
   x: industry
   y: market_cap
   aggregation: sum
@@ -144,8 +146,8 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: stocks.dim_stock
-  columns: [ticker, security_name, sector, industry, market_cap, exchange_code, shares_outstanding]
+  source: company.dim_company
+  columns: [ticker_primary, company_name, sector, industry, market_cap, shares_outstanding]
   sort_by: market_cap
   sort_order: desc
   page_size: 25
@@ -163,10 +165,10 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: stocks.dim_stock
-  columns: [sector, ticker, market_cap]
+  source: company.dim_company
+  columns: [sector, ticker_primary, market_cap]
   aggregations: [
-    { column: ticker, aggregation: count, label: "Companies" },
+    { column: ticker_primary, aggregation: count, label: "Companies" },
     { column: market_cap, aggregation: sum, label: "Total Market Cap" },
     { column: market_cap, aggregation: avg, label: "Avg Market Cap" }
   ]
@@ -180,10 +182,10 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: stocks.dim_stock
-  columns: [industry, sector, ticker, market_cap]
+  source: company.dim_company
+  columns: [industry, sector, ticker_primary, market_cap]
   aggregations: [
-    { column: ticker, aggregation: count, label: "Companies" },
+    { column: ticker_primary, aggregation: count, label: "Companies" },
     { column: market_cap, aggregation: sum, label: "Total Market Cap" }
   ]
   group_by: [sector, industry]
@@ -199,42 +201,30 @@ $exhibits${
 <details>
 <summary>Price Analysis by Sector</summary>
 
-### Sector Returns Index
+### Stock Returns
+
+NOTE: Sector-based aggregation requires cross-model joins (planned feature)
 
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: date
-  y: daily_return
-  title: Average Daily Returns by Sector
+  x: date_id
+  y: close
+  title: Stock Prices Over Time
   height: 400
-  dimension_selector:
-    available_dimensions: [sector, ticker, industry]
-    default_dimension: sector
-    primary_dimension: ticker
-    aggregation: avg
-    label: Group By
-    selector_type: radio
-    help_text: Aggregate returns by sector/industry or view individual stocks
+  columns: [date_id, close, security_id]
 }
 
-### Sector Volatility Index
+### Stock Volatility
 
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: date
-  y: volatility_20d
-  title: Average 20-Day Volatility by Sector
+  x: date_id
+  y: volume
+  title: Trading Volume Over Time
   height: 350
-  dimension_selector:
-    available_dimensions: [sector, ticker, industry]
-    default_dimension: sector
-    primary_dimension: ticker
-    aggregation: avg
-    label: Group By
-    selector_type: radio
-    help_text: Aggregate volatility by sector/industry or view individual stocks
+  columns: [date_id, volume, security_id]
 }
 
 </details>

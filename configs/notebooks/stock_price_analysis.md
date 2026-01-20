@@ -18,14 +18,15 @@ $filter${
   help_text: Select one or more stocks to analyze
 }
 
-$filter${
-  id: sector
-  label: Sector
-  type: select
-  multi: true
-  source: {model: stocks, table: dim_stock, column: sector}
-  help_text: Filter stocks by sector
-}
+## TODO: Sector filter disabled - dim_stock needs LEFT JOIN to company_overview for sector/industry
+## $filter${
+##   id: sector
+##   label: Sector
+##   type: select
+##   multi: true
+##   source: {model: stocks, table: dim_stock, column: sector}
+##   help_text: Filter stocks by sector
+## }
 
 $filter${
   id: exchange_code
@@ -82,7 +83,7 @@ $exhibits${
     selector_type: checkbox
     help_text: Select one or more price metrics to display
   dimension_selector:
-    available_dimensions: [ticker, sector, exchange_code]
+    available_dimensions: [ticker, exchange_code]  # sector disabled - not in dim_stock
     default_dimension: ticker
     label: Group By
     selector_type: radio
@@ -239,7 +240,7 @@ Reference information for selected stocks:
 $exhibits${
   type: data_table
   source: stocks.dim_stock
-  columns: [ticker, security_name, exchange_code, sector, industry, market_cap, shares_outstanding]
+  columns: [ticker, security_name, exchange_code]  # sector, industry, market_cap not in dim_stock
   download: true
 }
 
