@@ -826,6 +826,56 @@ class AutoJoinHandler:
 
                 temp_tables[table_name] = temp_name
 
+                # Validate that the registered table has columns
+                # An empty DataFrame from missing Silver layer would have no columns
+                try:
+                    cols = self.connection.conn.execute(f"DESCRIBE {temp_name}").fetchall()
+                    if not cols:
+                        raise RuntimeError(
+                            f"AUTO-JOIN: Table {load_model_name}.{table_name} has no columns. "
+                            f"Silver layer may be empty or corrupted. "
+                            f"Run: python -m scripts.build.build_models --models {load_model_name}"
+                        )
+                    col_names = {c[0] for c in cols}
+                    logger.debug(f"AUTO-JOIN DUCKDB: {table_name} has {len(col_names)} columns: {list(col_names)[:5]}...")
+                except RuntimeError:
+                    raise
+                except Exception as e:
+                    raise RuntimeError(
+                        f"AUTO-JOIN: Failed to validate {load_model_name}.{table_name}: {e}. "
+                        f"Silver layer may not exist. "
+                        f"Run: python -m scripts.build.build_models --models {load_model_name}"
+                    ) from e
+
+            # Validate join columns exist before building SQL
+            for join_info in joins:
+                from_table = join_info['from_table']
+                to_table = join_info['to_table']
+                left_col = join_info['left_col']
+                right_col = join_info['right_col']
+
+                # Check left table has left column
+                from_temp = temp_tables[from_table]
+                from_cols = self.connection.conn.execute(f"DESCRIBE {from_temp}").fetchall()
+                from_col_names = {c[0] for c in from_cols}
+                if left_col not in from_col_names:
+                    raise RuntimeError(
+                        f"AUTO-JOIN: Join column '{left_col}' not found in {from_table}. "
+                        f"Available columns: {sorted(from_col_names)[:10]}. "
+                        f"Silver layer may need to be rebuilt."
+                    )
+
+                # Check right table has right column
+                to_temp = temp_tables[to_table]
+                to_cols = self.connection.conn.execute(f"DESCRIBE {to_temp}").fetchall()
+                to_col_names = {c[0] for c in to_cols}
+                if right_col not in to_col_names:
+                    raise RuntimeError(
+                        f"AUTO-JOIN: Join column '{right_col}' not found in {to_table}. "
+                        f"Available columns: {sorted(to_col_names)[:10]}. "
+                        f"Silver layer may need to be rebuilt."
+                    )
+
             # Build SQL with proper qualified column names
             base_temp = temp_tables[base_table]
             select_cols = self._build_select_cols(model, table_sequence, temp_tables, required_columns)
