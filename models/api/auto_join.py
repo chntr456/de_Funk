@@ -233,14 +233,38 @@ class AutoJoinHandler:
         edges_config = graph_config.get('edges', [])
         if isinstance(edges_config, dict):
             edges = list(edges_config.values())
+            logger.debug(f"AUTO-JOIN PLAN: Loaded {len(edges)} edges from dict format")
         else:
             edges = edges_config
+            logger.debug(f"AUTO-JOIN PLAN: Loaded {len(edges)} edges from list format")
+
+        # Log all edges for debugging
+        for i, edge in enumerate(edges):
+            edge_from = edge.get('from', '')
+            edge_to = edge.get('to', '')
+            edge_on = edge.get('on', [])
+            logger.debug(f"AUTO-JOIN PLAN: Edge[{i}]: {edge_from} -> {edge_to} ON {edge_on}")
 
         current_tables = {base_table}
 
         # Keep adding tables until we have all target tables
+        needed_tables = set(target_tables.values())
+        logger.debug(f"AUTO-JOIN PLAN: Need to reach tables: {needed_tables}, starting from: {current_tables}")
+
+        max_iterations = len(edges) + 1  # Prevent infinite loops
+        iteration = 0
+
         while not all(tbl in seen_tables for tbl in target_tables.values()):
+            iteration += 1
+            if iteration > max_iterations:
+                raise ValueError(
+                    f"AUTO-JOIN PLAN: Exceeded max iterations ({max_iterations}). "
+                    f"Possible cycle in graph. Reached: {seen_tables}, Need: {needed_tables}"
+                )
+
             added_table = False
+            remaining = needed_tables - seen_tables
+            logger.debug(f"AUTO-JOIN PLAN: Iteration {iteration}, still need: {remaining}")
 
             for edge in edges:
                 edge_from = edge.get('from', '')
@@ -254,6 +278,7 @@ class AutoJoinHandler:
                         edge_to = 'dim_calendar'
                     else:
                         # Skip other cross-model edges
+                        logger.debug(f"AUTO-JOIN PLAN: Skipping cross-model edge {edge_from} -> {edge_to}")
                         continue
 
                 # Check if this edge connects a current table to a new table
@@ -280,9 +305,18 @@ class AutoJoinHandler:
                     break
 
             if not added_table:
+                # Log detailed failure info
+                logger.error(f"AUTO-JOIN PLAN: Failed to find edge. current_tables={current_tables}, seen={seen_tables}, need={remaining}")
+                for edge in edges:
+                    ef, et = edge.get('from', ''), edge.get('to', '')
+                    if '.' in et and 'dim_calendar' not in et:
+                        continue  # Cross-model
+                    logger.error(f"  Edge {ef} -> {et}: from_match={ef in current_tables}, to_unseen={et not in seen_tables}")
+
                 raise ValueError(
                     f"Cannot find join path from {base_table} to {missing_columns}. "
-                    f"Reached: {seen_tables}, Need: {set(target_tables.values())}"
+                    f"Reached: {seen_tables}, Need: {remaining}. "
+                    f"Check that model graph has edges connecting these tables."
                 )
 
         # For backwards compatibility, also include join_keys in old format
@@ -299,8 +333,8 @@ class AutoJoinHandler:
         """
         Build reverse index: column_name -> [table_names].
 
-        Uses DuckDB schema introspection on views (fast) instead of
-        building models from Bronze (slow).
+        Uses DuckDB schema introspection on views (fast) combined with
+        model schema (for tables without DuckDB views).
 
         Prefers model-specific tables (dim_stock) over base templates (dim_security).
 
@@ -322,6 +356,7 @@ class AutoJoinHandler:
         t_start = time.time()
 
         index = {}
+        duckdb_tables = set()  # Track which tables we found in DuckDB
 
         # Strategy 1: Use DuckDB information_schema (fast - no model building)
         if self.backend == 'duckdb' and hasattr(self.connection, 'conn'):
@@ -343,6 +378,7 @@ class AutoJoinHandler:
                         if table_name not in table_columns:
                             table_columns[table_name] = []
                         table_columns[table_name].append(column_name)
+                        duckdb_tables.add(table_name)
 
                     # Sort tables: prefer model-specific (dim_stock) over base (dim_security)
                     # Heuristic: tables with model name fragment or without "security" come first
@@ -354,7 +390,7 @@ class AutoJoinHandler:
                         return 0
 
                     sorted_tables = sorted(table_columns.keys(), key=table_priority)
-                    logger.debug(f"AUTO-JOIN INDEX: Table priority order: {sorted_tables}")
+                    logger.debug(f"AUTO-JOIN INDEX: DuckDB tables found: {sorted_tables}")
 
                     # Build index with priority ordering
                     for table_name in sorted_tables:
@@ -366,14 +402,12 @@ class AutoJoinHandler:
 
                     logger.debug(f"AUTO-JOIN INDEX: Built from DuckDB catalog in {time.time() - t_start:.2f}s, "
                                 f"indexed {len(index)} columns from {len(table_columns)} tables")
-                    # Cache for future calls
-                    self._column_index_cache[model_name] = index
-                    return index
 
             except Exception as e:
                 logger.debug(f"AUTO-JOIN INDEX: DuckDB catalog lookup failed: {e}, falling back to model schema")
 
-        # Strategy 2: Fall back to model schema (slower - may trigger build)
+        # Strategy 2: Augment with model schema for tables not found in DuckDB
+        # This ensures we have complete coverage even if some views aren't registered
         t0 = time.time()
         model = self.session.load_model(model_name)
         logger.debug(f"AUTO-JOIN INDEX: load_model took {time.time() - t0:.2f}s")
@@ -381,10 +415,15 @@ class AutoJoinHandler:
         t0 = time.time()
         tables = model.list_tables()
         all_tables = tables.get('dimensions', []) + tables.get('facts', [])
-        logger.debug(f"AUTO-JOIN INDEX: list_tables took {time.time() - t0:.2f}s, found {len(all_tables)} tables")
+        logger.debug(f"AUTO-JOIN INDEX: Model schema has {len(all_tables)} tables: {all_tables}")
 
-        # Index all tables (dims and facts)
-        for table_name in all_tables:
+        # Find tables missing from DuckDB index
+        missing_tables = [t for t in all_tables if t not in duckdb_tables]
+        if missing_tables:
+            logger.debug(f"AUTO-JOIN INDEX: Augmenting with model schema for tables not in DuckDB: {missing_tables}")
+
+        # Index tables missing from DuckDB (dims and facts)
+        for table_name in missing_tables:
             try:
                 t0 = time.time()
                 schema = model.get_table_schema(table_name)
@@ -394,12 +433,20 @@ class AutoJoinHandler:
                 for column_name in schema.keys():
                     if column_name not in index:
                         index[column_name] = []
-                    index[column_name].append(table_name)
+                    if table_name not in index[column_name]:
+                        index[column_name].append(table_name)
             except Exception as e:
                 logger.warning(f"AUTO-JOIN INDEX: Failed to get schema for {table_name}: {e}")
                 continue
 
-        logger.debug(f"AUTO-JOIN INDEX: Total build time {time.time() - t_start:.2f}s")
+        logger.debug(f"AUTO-JOIN INDEX: Total build time {time.time() - t_start:.2f}s, "
+                    f"indexed {len(index)} columns")
+
+        # Log key columns for debugging join issues
+        for key_col in ['ticker', 'company_id', 'date_id', 'date']:
+            if key_col in index:
+                logger.debug(f"AUTO-JOIN INDEX: '{key_col}' found in tables: {index[key_col]}")
+
         # Cache for future calls
         self._column_index_cache[model_name] = index
         return index
