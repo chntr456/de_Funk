@@ -218,6 +218,7 @@ class ForecastBuilder(BaseModelBuilder):
 
             for ticker in tickers:
                 try:
+                    logger.info(f"  Processing ticker: {ticker}")
                     result = forecast_model.run_forecast_for_ticker(
                         ticker=ticker,
                         model_configs=models_to_run
@@ -225,11 +226,22 @@ class ForecastBuilder(BaseModelBuilder):
                     total_forecasts += result.get("forecasts_generated", 0)
                     total_models += result.get("models_trained", 0)
 
+                    # Log validation results
+                    validation = result.get("validation", {})
+                    if validation:
+                        row_count = validation.get("metrics", {}).get("row_count", 0)
+                        logger.info(f"    Data: {row_count} rows")
+                        if validation.get("warnings"):
+                            for w in validation["warnings"]:
+                                logger.warning(f"    {w}")
+
                     if result.get("errors"):
                         errors.extend(result["errors"])
+                        for err in result["errors"]:
+                            logger.warning(f"    Error: {err}")
 
                 except Exception as e:
-                    errors.append(f"{ticker}: {str(e)[:50]}")
+                    errors.append(f"{ticker}: {str(e)[:100]}")
                     logger.warning(f"Forecast failed for {ticker}: {e}")
 
             duration = (datetime.now() - start_time).total_seconds()

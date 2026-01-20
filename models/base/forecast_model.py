@@ -432,7 +432,8 @@ class TimeSeriesForecastModel(BaseModel):
                     )
 
             # Check required columns
-            required_cols = ['close', 'trade_date']
+            date_col = self.get_date_column()
+            required_cols = ['close', date_col]
             missing_cols = [c for c in required_cols if c not in data_pdf.columns]
             if missing_cols:
                 result['is_valid'] = False
@@ -452,9 +453,9 @@ class TimeSeriesForecastModel(BaseModel):
             result['metrics']['null_close_pct'] = null_count / row_count if row_count > 0 else 0
 
             # Check date range
-            if 'trade_date' in data_pdf.columns:
-                min_date = data_pdf['trade_date'].min()
-                max_date = data_pdf['trade_date'].max()
+            if date_col in data_pdf.columns:
+                min_date = data_pdf[date_col].min()
+                max_date = data_pdf[date_col].max()
                 result['metrics']['date_range'] = f"{min_date} to {max_date}"
 
             # Check close price stats

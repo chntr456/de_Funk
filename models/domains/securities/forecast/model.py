@@ -46,9 +46,10 @@ class ForecastModel(TimeSeriesForecastModel):
         Column for the date/timestamp.
 
         Note: fact_stock_prices uses date_id (integer FK to dim_calendar),
-        not trade_date. The get_training_data method handles conversion.
+        but get_training_data() converts this to trade_date for ML training.
+        We return 'trade_date' since that's what the training data provides.
         """
-        return 'date_id'
+        return 'trade_date'
 
     def get_training_data(self, entity_id: str, date_from=None, date_to=None, lookback_days=None):
         """
