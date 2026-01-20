@@ -502,6 +502,11 @@ class GreatTableRenderer:
                 palette = conditional.get('palette', ['red', 'white', 'green'])
                 domain = conditional.get('domain')
 
+                # Great Tables data_color expects 2-value domain [min, max]
+                # If 3+ values provided (for midpoint-style config), use first and last
+                if domain and len(domain) > 2:
+                    domain = [domain[0], domain[-1]]
+
                 self.gt = self.gt.data_color(
                     columns=col_id,
                     palette=palette,

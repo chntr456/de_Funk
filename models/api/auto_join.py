@@ -435,10 +435,13 @@ class AutoJoinHandler:
                     if isinstance(condition, str):
                         parts = condition.split('=')
                         if len(parts) == 2:
-                            local_col = parts[0].strip()  # e.g., 'trade_date'
-                            calendar_col = parts[1].strip()  # e.g., 'date'
-                            if calendar_col == 'date':
-                                logger.debug(f"CALENDAR MAPPING: {model_name}.{table_name}.{local_col} -> dim_calendar.date")
+                            local_col = parts[0].strip()  # e.g., 'trade_date' or 'date_id'
+                            calendar_col = parts[1].strip()  # e.g., 'date' or 'date_id'
+                            # Handle both patterns:
+                            # 1. Direct date mapping: trade_date=date
+                            # 2. Integer FK mapping: date_id=date_id
+                            if calendar_col in ('date', 'date_id'):
+                                logger.debug(f"CALENDAR MAPPING: {model_name}.{table_name}.{local_col} -> dim_calendar.{calendar_col}")
                                 return local_col
 
         return None
@@ -545,7 +548,12 @@ class AutoJoinHandler:
 
         # Join each subsequent table
         for i, next_table in enumerate(table_sequence[1:]):
-            right_df = model.get_table(next_table)
+            # Handle cross-model joins: dim_calendar is in 'temporal' model
+            if next_table == 'dim_calendar':
+                temporal_model = self.session.load_model('temporal')
+                right_df = temporal_model.get_table(next_table)
+            else:
+                right_df = model.get_table(next_table)
             left_col, right_col = join_keys[i]
             df = df.join(right_df, df[left_col] == right_df[right_col], 'left')
 
@@ -574,7 +582,12 @@ class AutoJoinHandler:
 
             # Check if all required tables exist as views
             for table_name in table_sequence:
-                view_name = f'"{model_name}"."{table_name}"'
+                # Handle cross-model joins: dim_calendar is in 'temporal' schema
+                if table_name == 'dim_calendar':
+                    schema_name = 'temporal'
+                else:
+                    schema_name = model_name
+                view_name = f'"{schema_name}"."{table_name}"'
                 try:
                     # Quick check if view exists
                     self.connection.conn.execute(f"SELECT 1 FROM {view_name} LIMIT 1")
@@ -699,19 +712,27 @@ class AutoJoinHandler:
             # Register tables as temp views - use DuckDB relations directly (lazy, no pandas)
             for table_name in table_sequence:
                 t0 = time.time()
+                # Handle cross-model joins: dim_calendar is in 'temporal' model
+                if table_name == 'dim_calendar':
+                    load_model_name = 'temporal'
+                    load_model = self.session.load_model('temporal')
+                else:
+                    load_model_name = model_name
+                    load_model = model
+
                 # Use session to get table from Silver layer (lazy DuckDB relation)
                 # This avoids triggering ensure_built() which would read from Bronze
                 try:
                     df_temp = self.session._get_table_from_view_or_build(
-                        model, model_name, table_name, allow_build=False
+                        load_model, load_model_name, table_name, allow_build=False
                     )
                 except ValueError as e:
                     # Silver not available - DO NOT fall back to Bronze!
                     # For large tables (22M+ rows), reading from Bronze would crash the app.
                     # Instead, raise a clear error so the user knows to build Silver layer.
                     raise RuntimeError(
-                        f"AUTO-JOIN: Cannot load {model_name}.{table_name} - Silver layer not available. "
-                        f"Run: python -m scripts.build.build_models --models {model_name}"
+                        f"AUTO-JOIN: Cannot load {load_model_name}.{table_name} - Silver layer not available. "
+                        f"Run: python -m scripts.build.build_models --models {load_model_name}"
                     ) from e
                 t1 = time.time()
                 temp_name = f"_autojoin_{table_name}"
