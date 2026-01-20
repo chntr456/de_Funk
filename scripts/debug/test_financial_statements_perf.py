@@ -18,9 +18,14 @@ repo_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(repo_root))
 
 from config.logging import setup_logging, get_logger
+import logging
 
+# Enable DEBUG logging to see auto-join trace
 setup_logging()
 logger = get_logger(__name__)
+
+# Also enable DEBUG for auto_join module to trace join planning
+logging.getLogger('models.api.auto_join').setLevel(logging.DEBUG)
 
 
 def time_operation(name: str, func):
