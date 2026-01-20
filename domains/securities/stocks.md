@@ -1,13 +1,12 @@
 ---
 type: domain-model
 model: stocks
-version: 3.0
-description: "Common stock equities with price data and technical indicators"
+version: 3.1
+description: "Stock equities with company linkage, technicals, dividends, and splits"
 tags: [stocks, equities, securities]
 
-# Inheritance and Dependencies
-extends: _base.finance.securities
-depends_on: [temporal, corporate]
+# Dependencies - stocks depends on securities (normalized base) and corporate
+depends_on: [temporal, securities, corporate]
 
 # Storage - provider/endpoint_id for bronze, domain hierarchy for silver
 storage:
@@ -15,9 +14,7 @@ storage:
   bronze:
     provider: alpha_vantage
     tables:
-      # Table names match endpoint_id from API config
       listing_status: alpha_vantage/listing_status  # All tickers from LISTING_STATUS
-      time_series_daily_adjusted: alpha_vantage/time_series_daily_adjusted  # Daily OHLCV
       company_overview: alpha_vantage/company_overview  # Company fundamentals
       dividends: alpha_vantage/dividends  # Dividend history (DIVIDENDS endpoint)
       splits: alpha_vantage/splits  # Stock split history (SPLITS endpoint)
@@ -34,8 +31,7 @@ build:
 tables:
   dim_stock:
     type: dimension
-    extends: _base.finance.securities._dim_security
-    description: "Stock equity dimension with company linkage"
+    description: "Stock equity dimension - extends securities.dim_security with stock-specific attributes"
     primary_key: [stock_id]
     unique_key: [ticker]
 
@@ -43,22 +39,23 @@ tables:
     schema:
       # Keys - all integers
       - [stock_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT('STOCK_', ticker)))"}]
-      - [security_id, integer, false, "Derived security key: ABS(HASH(ticker))", {derived: "ABS(HASH(ticker))"}]
-      - [company_id, integer, false, "FK to dim_company", {fk: corporate.dim_company.company_id}]
+      - [security_id, integer, false, "FK to securities.dim_security", {fk: securities.dim_security.security_id}]
+      - [company_id, integer, true, "FK to dim_company (optional - not all stocks have company data)", {fk: corporate.dim_company.company_id}]
 
-      # Inherited from base (for reference)
+      # Natural key (denormalized for convenience)
       - [ticker, string, false, "Natural key - trading symbol", {unique: true}]
 
-      # Stock-specific attributes (from securities_reference / LISTING_STATUS)
+      # Stock-specific attributes
       - [stock_type, string, true, "Type of stock", {enum: [common, preferred, adr, rights, units, warrants], default: "common"}]
 
-      # Company enrichment fields (from company_reference / OVERVIEW - may be NULL)
-      # These are only available for stocks that have been processed through COMPANY_OVERVIEW
-      - [cik, string, true, "SEC Central Index Key (from company_reference)", {pattern: "^[0-9]{10}$", transform: "zfill(10)"}]
-      - [shares_outstanding, long, true, "Current shares outstanding (from company_reference)", {coerce: long}]
-      - [market_cap, double, true, "Market capitalization (from company_reference)", {coerce: double}]
-      - [sector, string, true, "GICS Sector (from company_reference)"]
-      - [industry, string, true, "GICS Industry (from company_reference)"]
+      # Stock-level attributes (MOVED from company - these are per-security, not per-company)
+      - [shares_outstanding, long, true, "Current shares outstanding"]
+      - [shares_float, long, true, "Shares available for trading"]
+      - [market_cap, double, true, "Market capitalization"]
+
+      # Classification (stock-level, can differ from company)
+      - [sector, string, true, "GICS Sector"]
+      - [industry, string, true, "GICS Industry"]
 
     # Measures on the table
     measures:
@@ -67,35 +64,52 @@ tables:
       - [total_market_cap, sum, market_cap, "Total market cap", {format: "$#,##0.00B"}]
       - [avg_shares, avg, shares_outstanding, "Average shares outstanding", {format: "#,##0.00M"}]
 
-  fact_stock_prices:
+  fact_stock_technicals:
     type: fact
-    extends: _base.finance.securities._fact_prices_base
-    description: "Daily stock prices with technical indicators"
-    primary_key: [price_id]
+    description: "Stock-specific technical indicators (computed from securities.fact_security_prices)"
+    primary_key: [technical_id]
     partition_by: [date_id]
 
     # Schema: [column, type, nullable, description, {options}]
     # NOTE: Technical indicators are computed post-build by scripts/build/compute_technicals.py
     schema:
-      # Keys - all integers (NO trade_date column - use date_id)
-      - [price_id, integer, false, "PK - Integer surrogate"]
+      # Keys - all integers
+      - [technical_id, integer, false, "PK - Integer surrogate"]
       - [security_id, integer, false, "FK to dim_stock", {fk: dim_stock.security_id}]
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
 
-      # Inherited from base: open, high, low, close, volume, adjusted_close
-      # Inherited technicals: sma_20, sma_50, sma_200, rsi_14, bollinger_*, volatility_*, volume_sma_20, volume_ratio
+      # Moving Averages
+      - [sma_20, double, true, "20-day Simple Moving Average"]
+      - [sma_50, double, true, "50-day Simple Moving Average"]
+      - [sma_200, double, true, "200-day Simple Moving Average"]
 
-    # Measures on the table (inherits base measures + stock-specific)
+      # Returns & Volatility
+      - [daily_return, double, true, "Daily return percentage"]
+      - [volatility_20d, double, true, "20-day annualized volatility"]
+      - [volatility_60d, double, true, "60-day annualized volatility"]
+
+      # Momentum
+      - [rsi_14, double, true, "14-day Relative Strength Index"]
+
+      # Bollinger Bands
+      - [bollinger_upper, double, true, "Bollinger Band Upper"]
+      - [bollinger_middle, double, true, "Bollinger Band Middle"]
+      - [bollinger_lower, double, true, "Bollinger Band Lower"]
+
+      # Volume Indicators
+      - [volume_sma_20, double, true, "20-day volume SMA"]
+      - [volume_ratio, double, true, "Volume ratio (current/SMA20)"]
+
     measures:
-      # Inherited: avg_close, total_volume, max_high, min_low, price_range, intraday_return
-      # Inherited: avg_rsi, avg_volatility, overbought_days, oversold_days
-      - [avg_dollar_volume, expression, "AVG(close * volume)", "Average dollar volume", {format: "$#,##0.00M"}]
-      - [golden_cross_days, expression, "SUM(CASE WHEN sma_50 > sma_200 THEN 1 ELSE 0 END)", "Days with Golden Cross (SMA50 > SMA200)", {format: "#,##0"}]
-      - [death_cross_days, expression, "SUM(CASE WHEN sma_50 < sma_200 THEN 1 ELSE 0 END)", "Days with Death Cross (SMA50 < SMA200)", {format: "#,##0"}]
+      - [avg_rsi, avg, rsi_14, "Average RSI", {format: "#,##0.00"}]
+      - [avg_volatility, avg, volatility_20d, "Average 20-day volatility", {format: "#,##0.00%"}]
+      - [overbought_days, expression, "SUM(CASE WHEN rsi_14 > 70 THEN 1 ELSE 0 END)", "Days RSI > 70", {format: "#,##0"}]
+      - [oversold_days, expression, "SUM(CASE WHEN rsi_14 < 30 THEN 1 ELSE 0 END)", "Days RSI < 30", {format: "#,##0"}]
+      - [golden_cross_days, expression, "SUM(CASE WHEN sma_50 > sma_200 THEN 1 ELSE 0 END)", "Days with Golden Cross", {format: "#,##0"}]
 
   fact_dividends:
     type: fact
-    description: "Dividend distribution history"
+    description: "Dividend distribution history (time-series per security)"
     primary_key: [dividend_id]
     partition_by: [ex_dividend_date_id]
 
@@ -105,10 +119,13 @@ tables:
       - [security_id, integer, false, "FK to dim_stock", {fk: dim_stock.security_id}]
       - [ex_dividend_date_id, integer, false, "FK to dim_calendar (ex-dividend date)", {fk: temporal.dim_calendar.date_id}]
       - [payment_date_id, integer, true, "FK to dim_calendar (payment date)", {fk: temporal.dim_calendar.date_id}]
+
       # Dividend data
       - [dividend_amount, double, false, "Dividend per share"]
       - [record_date, date, true, "Record date"]
+      - [payment_date, date, true, "Payment date"]
       - [declaration_date, date, true, "Declaration date"]
+      - [dividend_type, string, true, "Dividend type (regular, special, stock)"]
 
     measures:
       - [total_dividends, sum, dividend_amount, "Total dividends paid", {format: "$#,##0.00"}]
@@ -126,26 +143,22 @@ tables:
       - [split_id, integer, false, "PK - Integer surrogate"]
       - [security_id, integer, false, "FK to dim_stock", {fk: dim_stock.security_id}]
       - [effective_date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+
       # Split data
-      - [split_factor, double, false, "Split ratio from Bronze (e.g., 4.0 for 4:1)"]
-      - [split_ratio, double, false, "Split ratio (derived from split_factor)"]
+      - [effective_date, date, false, "Split effective date"]
+      - [split_factor, double, false, "Split ratio (e.g., 4.0 for 4:1 split)"]
 
     measures:
       - [split_count, count_distinct, split_id, "Number of splits", {format: "#,##0"}]
-      - [avg_split_ratio, avg, split_ratio, "Average split ratio", {format: "#,##0.00"}]
+      - [avg_split_ratio, avg, split_factor, "Average split ratio", {format: "#,##0.00"}]
 
 # Graph
 graph:
-  extends: _base.finance.securities.graph
-
   nodes:
     dim_stock:
       from: bronze.alpha_vantage.listing_status
       type: dimension
-      # Note: listing_status comes from LISTING_STATUS endpoint (bulk ticker list)
-      # This gives us ALL tickers (~12,499), not just those with company data (~197)
-      # Company-specific fields (cik, sector, industry, market_cap) are enriched
-      # via LEFT JOIN to company_overview in a subsequent step or left NULL
+      description: "Stock dimension filtered from listing_status"
       select:
         ticker: ticker
         security_name: security_name
@@ -155,41 +168,18 @@ graph:
         - "asset_type = 'stocks'"  # Only stock securities, not ETFs
       derive:
         stock_id: "ABS(HASH(CONCAT('STOCK_', ticker)))"
-        security_id: "ABS(HASH(ticker))"
-        # company_id derived from ticker - will match company if CIK exists
-        # For stocks without company data, company_id still derived from ticker
-        company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        # Default stock_type - can be overridden via enrichment
+        security_id: "ABS(HASH(ticker))"  # FK to securities.dim_security
+        company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"  # FK to corporate.dim_company
         stock_type: "'common'"
       primary_key: [stock_id]
       unique_key: [ticker]
       foreign_keys:
-        # security_id is derived inline, not a true FK (denormalized design)
+        - {column: security_id, references: securities.dim_security.security_id}
         - {column: company_id, references: corporate.dim_company.company_id, optional: true}
       tags: [dim, stock]
 
-    fact_stock_prices:
-      extends: _base.finance.securities._fact_prices_base
-      filter_by_dimension: dim_stock
-      filters:
-        - "trade_date IS NOT NULL"
-        - "ticker IS NOT NULL"
-      derive:
-        # Integer surrogate keys - facts use FKs only, no natural keys
-        security_id: "ABS(HASH(ticker))"
-        date_id: "CAST(REGEXP_REPLACE(CAST(trade_date AS STRING), '-', '') AS INT)"
-        price_id: "ABS(HASH(CONCAT(ticker, '_', CAST(trade_date AS STRING))))"
-      # Drop natural keys - fact tables have only FK columns (no ticker, trade_date)
-      drop: [ticker, trade_date]
-      primary_key: [price_id]
-      unique_key: [ticker, trade_date]
-      foreign_keys:
-        - {column: security_id, references: dim_stock.security_id}
-        - {column: date_id, references: temporal.dim_calendar.date_id}
-      tags: [fact, prices, stocks]
-
-    # NOTE: Technical indicators are computed post-build by StocksBuilder.post_build()
-    # and added as columns to fact_stock_prices. There is no separate technicals table.
+    # NOTE: fact_stock_technicals is computed post-build from securities.fact_security_prices
+    # by scripts/build/compute_technicals.py - it's not loaded from bronze directly
 
     fact_dividends:
       from: bronze.alpha_vantage.dividends
@@ -198,7 +188,7 @@ graph:
       select:
         ticker: ticker
         ex_dividend_date: ex_dividend_date
-        dividend_amount: dividend_amount  # Already normalized in Bronze
+        dividend_amount: dividend_amount
         record_date: record_date
         payment_date: payment_date
         declaration_date: declaration_date
@@ -207,7 +197,7 @@ graph:
         security_id: "ABS(HASH(ticker))"
         ex_dividend_date_id: "CAST(REGEXP_REPLACE(CAST(ex_dividend_date AS STRING), '-', '') AS INT)"
         payment_date_id: "CAST(REGEXP_REPLACE(CAST(payment_date AS STRING), '-', '') AS INT)"
-      drop: [ticker]  # Use security_id instead
+      drop: [ticker]
       primary_key: [dividend_id]
       unique_key: [ticker, ex_dividend_date]
       foreign_keys:
@@ -222,13 +212,12 @@ graph:
       select:
         ticker: ticker
         effective_date: effective_date
-        split_factor: split_factor  # Already computed ratio in Bronze (e.g., 4.0 for 4:1)
+        split_factor: split_factor
       derive:
         split_id: "ABS(HASH(CONCAT(ticker, '_', CAST(effective_date AS STRING))))"
         security_id: "ABS(HASH(ticker))"
         effective_date_id: "CAST(REGEXP_REPLACE(CAST(effective_date AS STRING), '-', '') AS INT)"
-        split_ratio: "CAST(split_factor AS DOUBLE)"  # Use Bronze split_factor directly
-      drop: [ticker]  # Use security_id instead
+      drop: [ticker]
       primary_key: [split_id]
       unique_key: [ticker, effective_date]
       foreign_keys:
@@ -237,28 +226,22 @@ graph:
       tags: [fact, splits, corporate_action]
 
   edges:
-    # NOTE: No stock_to_security edge needed - dim_stock IS the complete dimension
-    # It inherits the schema from _base.finance.securities.dim_security but is self-contained
-    # The security_id column is derived inline: ABS(HASH(ticker))
+    # Stock to master security dimension
+    stock_to_security:
+      from: dim_stock
+      to: securities.dim_security
+      on: [security_id=security_id]
+      type: many_to_one
 
+    # Stock to company (optional - not all stocks have company data)
     stock_to_company:
       from: dim_stock
       to: corporate.dim_company
       on: [company_id=company_id]
       type: many_to_one
+      optional: true
 
-    prices_to_stock:
-      from: fact_stock_prices
-      to: dim_stock
-      on: [security_id=security_id]
-      type: many_to_one
-
-    prices_to_calendar:
-      from: fact_stock_prices
-      to: temporal.dim_calendar
-      on: [date_id=date_id]
-      type: many_to_one
-
+    # Dividends relationships
     dividends_to_stock:
       from: fact_dividends
       to: dim_stock
@@ -271,6 +254,7 @@ graph:
       on: [ex_dividend_date_id=date_id]
       type: many_to_one
 
+    # Splits relationships
     splits_to_stock:
       from: fact_splits
       to: dim_stock
@@ -284,11 +268,17 @@ graph:
       type: many_to_one
 
   paths:
-    company_to_prices:
-      description: "Enable company filter to prices"
+    company_to_dividends:
+      description: "Navigate from company to dividend history"
       steps:
         - {from: corporate.dim_company, to: dim_stock, via: company_id}
-        - {from: dim_stock, to: fact_stock_prices, via: security_id}
+        - {from: dim_stock, to: fact_dividends, via: security_id}
+
+    security_to_technicals:
+      description: "Navigate from master security to stock technicals"
+      steps:
+        - {from: securities.dim_security, to: dim_stock, via: security_id}
+        - {from: dim_stock, to: fact_stock_technicals, via: security_id}
 
 # Metadata
 metadata:
@@ -300,84 +290,75 @@ status: active
 
 ## Stocks Model
 
-Common stock equities with daily prices and technical indicators.
+Stock equities with company linkage, technical indicators, dividends, and splits.
+
+### Architecture (Normalized)
+
+```
+securities.dim_security (MASTER)
+         ↑
+    security_id FK
+         │
+      dim_stock ←──── company_id FK ───→ corporate.dim_company
+         │
+    ┌────┴────────────┬───────────────┐
+    ↓                 ↓               ↓
+fact_stock_      fact_dividends   fact_splits
+technicals       (time-series)    (corporate actions)
+```
+
+### Key Points
+
+1. **dim_stock FKs to securities.dim_security** - Master security dimension is in securities model
+2. **Prices are in securities.fact_security_prices** - Unified OHLCV for all asset types
+3. **Technicals are stock-specific** - Computed from prices, stored in fact_stock_technicals
+4. **Dividends/Splits are time-series facts** - NOT static attributes in company
 
 ### Integer Keys
 
-All keys are integers for storage efficiency:
-
 | Key | Type | Derivation |
 |-----|------|------------|
-| `stock_id` | integer | `HASH('STOCK_' + ticker)` |
-| `security_id` | integer | `HASH(ticker)` |
-| `company_id` | integer | `HASH('COMPANY_' + cik)` |
+| `stock_id` | integer | `ABS(HASH('STOCK_' + ticker))` |
+| `security_id` | integer | `ABS(HASH(ticker))` - FK to securities |
+| `company_id` | integer | `ABS(HASH('COMPANY_' + ticker))` - FK to corporate |
 | `date_id` | integer | `YYYYMMDD` format |
-| `price_id` | integer | `HASH(ticker + date)` |
 
-### No trade_date Column
+### Stock-Level vs Company-Level Attributes
 
-Prices have `date_id` FK, not `trade_date`:
+**In dim_stock (security-level):**
+- shares_outstanding, shares_float (change over time, per-security)
+- market_cap (derived from price × shares)
+- sector, industry (stock classification)
+
+**In dim_company (legal entity level):**
+- cik, company_name, headquarters
+- fiscal_year_end
+- Financial statements
+
+### Querying Prices with Technicals
 
 ```sql
--- Get prices with technicals and actual dates (all on same table)
+-- Get stock prices with technicals (join to securities for prices)
 SELECT
     c.date AS trade_date,
-    c.day_of_week_name,
     s.ticker,
     p.close,
     p.volume,
-    p.rsi_14,
-    p.sma_50,
-    p.sma_200
-FROM fact_stock_prices p
+    t.rsi_14,
+    t.sma_50,
+    t.sma_200
+FROM securities.fact_security_prices p
+JOIN securities.dim_security sec ON p.security_id = sec.security_id
+JOIN stocks.dim_stock s ON s.security_id = sec.security_id
+JOIN stocks.fact_stock_technicals t ON t.security_id = s.security_id AND t.date_id = p.date_id
 JOIN temporal.dim_calendar c ON p.date_id = c.date_id
-JOIN dim_stock s ON p.security_id = s.security_id
-WHERE c.year = 2025
-  AND c.is_trading_day = true
+WHERE sec.asset_type = 'stocks'
   AND s.ticker = 'AAPL'
+  AND c.year = 2025
 ```
 
-### Technical Indicators
+### Build Order
 
-Technical indicators are **computed columns** on `fact_stock_prices`, not a separate table.
-They are calculated during the build process by `StocksBuilder.post_build()`.
-
-**Moving Averages:**
-- SMA (20, 50, 200 day)
-
-**Returns & Volatility:**
-- Daily return percentage
-- 20-day and 60-day annualized volatility
-
-**Momentum:**
-- RSI (14 day)
-
-**Bollinger Bands:**
-- Upper, Middle, Lower (20 day, 2 std dev)
-
-**Volume:**
-- 20-day volume SMA
-- Volume ratio (current/SMA)
-
-### Build Workflow
-
-1. `StocksBuilder.build()` creates `dim_stock` and `fact_stock_prices` with OHLCV data
-2. `StocksBuilder.post_build()` computes technical indicators in batches
-3. Technical columns are added to `fact_stock_prices`
-
-### Data Sources
-
-| Source | Provider | Endpoint | Description |
-|--------|----------|----------|-------------|
-| securities_reference | Alpha Vantage | LISTING_STATUS | All US tickers (~12,499), bulk listing |
-| securities_prices_daily | Alpha Vantage | TIME_SERIES_DAILY | OHLCV price data |
-| company_reference | Alpha Vantage | COMPANY_OVERVIEW | Company fundamentals (per-ticker, subset) |
-
-### Notes
-
-- **dim_stock** loads from `securities_reference` (LISTING_STATUS) for full ticker coverage
-- Company-specific fields (cik, sector, industry, market_cap) may be NULL - only populated for tickers with company_reference data
-- Inherits OHLCV schema from `_base.finance.securities`
-- Technical indicators are computed columns, not a separate table
-- Company linkage via integer `company_id` (optional FK)
-- All date filtering through `dim_calendar` join
+```
+temporal → securities → corporate → stocks
+```

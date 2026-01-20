@@ -90,11 +90,12 @@
   },
   "silver_models": {
     "models": [
+      "securities",
       "company",
       "stocks",
       "forecast"
     ],
-    "_models_comment": "Models to build. Dependencies (like temporal) are auto-resolved."
+    "_models_comment": "Models to build. Build order: temporal → securities → company → stocks → forecast. Dependencies auto-resolved."
   },
   "cluster": {
     "spark_master": "auto",

@@ -1,13 +1,12 @@
 """
 StocksBuilder - Builder for the Stocks model.
 
-Builds the stocks silver layer from bronze securities data.
-Bronze tables are defined in domains/securities/stocks.md storage.bronze.tables.
+Builds the stocks silver layer with normalized architecture:
+- dim_stock FKs to securities.dim_security (master security dimension)
+- fact_dividends and fact_splits as time-series corporate actions
+- fact_stock_technicals computed from securities.fact_security_prices
 
-Build includes:
-1. dim_stock dimension from listing_status (LISTING_STATUS endpoint)
-2. fact_stock_prices from time_series_daily_adjusted (TIME_SERIES_DAILY_ADJUSTED endpoint)
-3. Technical indicators computed on fact_stock_prices (SMA, RSI, Bollinger Bands, etc.)
+Bronze tables are defined in domains/securities/stocks.md storage.bronze.tables.
 """
 
 from __future__ import annotations
@@ -24,26 +23,30 @@ logger = logging.getLogger(__name__)
 @BuilderRegistry.register
 class StocksBuilder(BaseModelBuilder):
     """
-    Builder for the Stocks model.
+    Builder for the Stocks model (normalized architecture).
 
     Builds:
-    - dim_stock: Stock dimension with ticker info
-    - fact_stock_prices: Daily OHLCV data with technical indicators
+    - dim_stock: Stock dimension (FKs to securities.dim_security and corporate.dim_company)
+    - fact_dividends: Dividend distribution history (time-series)
+    - fact_splits: Stock split history (time-series)
+    - fact_stock_technicals: Technical indicators (computed post-build)
 
     Dependencies:
     - temporal: For date dimension joins
+    - securities: For master dim_security and unified fact_security_prices
+    - corporate: For company linkage (optional FK)
 
     Required bronze tables (from domains/securities/stocks.md):
-    - alpha_vantage/listing_status
-    - alpha_vantage/time_series_daily_adjusted
+    - alpha_vantage/listing_status (stock dimension)
+    - alpha_vantage/dividends (dividend history)
+    - alpha_vantage/splits (split history)
 
-    Technical Indicators:
-    The post_build step computes technical indicators (SMA, RSI, Bollinger Bands, etc.)
-    and adds them as columns to fact_stock_prices.
+    Note: OHLCV prices are in securities.fact_security_prices (unified).
+    Technical indicators are computed from those prices in post_build.
     """
 
     model_name = "stocks"
-    depends_on = ["temporal"]  # Requires temporal for date dimension
+    depends_on = ["temporal", "securities", "corporate"]  # Normalized architecture
 
     def get_model_class(self) -> Type:
         """Return the StocksModel class."""

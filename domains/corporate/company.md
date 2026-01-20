@@ -38,29 +38,34 @@ tables:
     unique_key: [ticker]
 
     # Schema: [column, type, nullable, description, {options}]
+    # NOTE: Company is a LEGAL ENTITY, not a tradable security
+    # Security-level attributes (shares_outstanding, market_cap) are in stocks.dim_stock
+    # Companies can have multiple tickers (e.g., GOOGL/GOOG, BRK.A/BRK.B)
     schema:
       # Keys - all integers
       - [company_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT('COMPANY_', COALESCE(cik, ticker))))"}]
-      - [security_id, integer, true, "FK to stocks.dim_stock (if publicly traded)", {fk: stocks.dim_stock.security_id}]
 
       # Natural keys
       - [cik, string, true, "SEC Central Index Key", {pattern: "^[0-9]{10}$", transform: "zfill(10)"}]
-      - [ticker, string, false, "Primary ticker symbol", {unique: true}]
+      - [ticker, string, false, "Primary ticker symbol (for linking)", {unique: true}]
 
-      # Company attributes
+      # Company attributes (LEGAL ENTITY level, not security-level)
       - [company_name, string, false, "Company name"]
+      - [description, string, true, "Company description"]
+      - [asset_type, string, true, "Asset type"]
       - [exchange_code, string, true, "Primary exchange (NYSE, NASDAQ)"]
       - [sector, string, true, "GICS Sector"]
       - [industry, string, true, "GICS Industry"]
-      - [market_cap, double, true, "Market capitalization", {coerce: double}]
       - [country, string, true, "Country of incorporation", {default: "US"}]
       - [currency, string, true, "Reporting currency", {default: "USD"}]
+      - [address, string, true, "Headquarters address"]
+      - [official_site, string, true, "Official website URL"]
+      - [fiscal_year_end, string, true, "Fiscal year end month"]
       - [is_active, boolean, true, "Currently active", {default: true}]
 
     # Measures on the table
     measures:
       - [company_count, count_distinct, company_id, "Number of companies", {format: "#,##0"}]
-      - [avg_market_cap, avg, market_cap, "Average market cap", {format: "$#,##0.00B"}]
 
   fact_income_statement:
     type: fact
@@ -306,12 +311,11 @@ graph:
         analyst_rating_strong_sell: analyst_rating_strong_sell
       derive:
         company_id: "ABS(HASH(CONCAT('COMPANY_', COALESCE(cik, ticker))))"
-        security_id: "ABS(HASH(ticker))"
         is_active: "true"
       primary_key: [company_id]
       unique_key: [ticker]
-      foreign_keys:
-        - {column: security_id, references: stocks.dim_stock.security_id}
+      # NOTE: No FK to stocks - stocks.dim_stock FKs to dim_company (stocks reference companies)
+      # A company can have multiple tickers (e.g., GOOGL/GOOG, BRK.A/BRK.B)
       tags: [dim, entity, corporate]
 
     fact_income_statement:
