@@ -386,6 +386,7 @@ class ModelRegistry:
         self.models_dir = Path(models_dir)
         self.models: Dict[str, ModelConfig] = {}
         self._model_classes: Dict[str, type] = {}
+        self._domain_loader = None  # Cached loader for performance
         self._load_models()
         self._register_default_model_classes()
 
@@ -397,12 +398,13 @@ class ModelRegistry:
         # Use domain_loader for markdown-based configs
         try:
             from config.domain_loader import ModelConfigLoader
-            loader = ModelConfigLoader(self.models_dir)
+            # Cache the loader for reuse in get_model_config()
+            self._domain_loader = ModelConfigLoader(self.models_dir)
 
             # Load all discovered domain models
-            for model_name in loader.list_models():
+            for model_name in self._domain_loader.list_models():
                 try:
-                    config_dict = loader.load_model_config(model_name)
+                    config_dict = self._domain_loader.load_model_config(model_name)
                     model = ModelConfig(config_dict)
                     self.models[model.name] = model
                 except Exception as e:
@@ -579,7 +581,8 @@ class ModelRegistry:
         """
         Get raw model configuration dictionary (for model instantiation).
 
-        Loads from domains/ directory (markdown with YAML front matter).
+        Uses cached domain_loader for performance - avoids re-parsing
+        markdown files on every call.
 
         Args:
             model_name: Name of the model
@@ -590,7 +593,11 @@ class ModelRegistry:
         # Verify model exists in registry
         self.get_model(model_name)
 
-        # Load full config from domain_loader
+        # Use cached loader (has internal cache for parsed configs)
+        if self._domain_loader is not None:
+            return self._domain_loader.load_model_config(model_name)
+
+        # Fallback: create loader if not cached (shouldn't happen normally)
         from config.domain_loader import ModelConfigLoader
-        loader = ModelConfigLoader(self.models_dir)
-        return loader.load_model_config(model_name)
+        self._domain_loader = ModelConfigLoader(self.models_dir)
+        return self._domain_loader.load_model_config(model_name)

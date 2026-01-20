@@ -47,6 +47,8 @@ class AutoJoinHandler:
             session: UniversalSession instance
         """
         self.session = session
+        # Cache column indexes per model for performance
+        self._column_index_cache: Dict[str, Dict[str, List[str]]] = {}
 
     @property
     def connection(self):
@@ -289,12 +291,19 @@ class AutoJoinHandler:
 
         Prefers model-specific tables (dim_stock) over base templates (dim_security).
 
+        Results are cached per model for the session lifetime.
+
         Args:
             model_name: Model to index
 
         Returns:
             Dict mapping column names to list of tables that have that column
         """
+        # Return cached index if available
+        if model_name in self._column_index_cache:
+            logger.debug(f"AUTO-JOIN INDEX: Using cached index for {model_name}")
+            return self._column_index_cache[model_name]
+
         import time
         logger.debug(f"AUTO-JOIN INDEX: Building column index for {model_name}")
         t_start = time.time()
@@ -344,6 +353,8 @@ class AutoJoinHandler:
 
                     logger.debug(f"AUTO-JOIN INDEX: Built from DuckDB catalog in {time.time() - t_start:.2f}s, "
                                 f"indexed {len(index)} columns from {len(table_columns)} tables")
+                    # Cache for future calls
+                    self._column_index_cache[model_name] = index
                     return index
 
             except Exception as e:
@@ -376,6 +387,8 @@ class AutoJoinHandler:
                 continue
 
         logger.debug(f"AUTO-JOIN INDEX: Total build time {time.time() - t_start:.2f}s")
+        # Cache for future calls
+        self._column_index_cache[model_name] = index
         return index
 
     def _parse_join_condition(self, condition: str) -> Tuple[str, str]:
