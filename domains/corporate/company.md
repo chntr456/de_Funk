@@ -356,8 +356,8 @@ graph:
         income_statement_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
-      # Drop natural keys - fact tables have only FK columns
-      drop: [ticker, fiscal_date_ending]
+      # Drop ticker (use company_id FK), keep fiscal_date_ending for notebook compatibility
+      drop: [ticker]
       primary_key: [income_statement_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -418,8 +418,8 @@ graph:
         balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
-      # Drop natural keys - fact tables have only FK columns
-      drop: [ticker, fiscal_date_ending]
+      # Drop ticker (use company_id FK), keep fiscal_date_ending for notebook compatibility
+      drop: [ticker]
       primary_key: [balance_sheet_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -472,8 +472,8 @@ graph:
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
         free_cash_flow: "COALESCE(operating_cashflow, 0) - COALESCE(capital_expenditures, 0)"
-      # Drop natural keys - fact tables have only FK columns
-      drop: [ticker, fiscal_date_ending]
+      # Drop ticker (use company_id FK), keep fiscal_date_ending for notebook compatibility
+      drop: [ticker]
       primary_key: [cash_flow_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -500,8 +500,8 @@ graph:
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
         beat_estimate: "CASE WHEN reported_eps > estimated_eps THEN true ELSE false END"
-      # Drop natural keys - fact tables have only FK columns
-      drop: [ticker, fiscal_date_ending]
+      # Drop ticker (use company_id FK), keep fiscal_date_ending for notebook compatibility
+      drop: [ticker]
       primary_key: [earnings_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -590,12 +590,23 @@ Corporate legal entities with SEC registration and financial fundamentals.
 | `date_id` | integer | `YYYYMMDD` format |
 | `{fact}_id` | integer | `HASH(ticker + date + type)` |
 
-### No Date Columns on Facts
+### Date Columns on Facts
 
-All facts use `date_id` FK instead of `fiscal_date_ending`:
+Facts have both `date_id` FK for calendar joins AND `fiscal_date_ending` for direct access:
 
 ```sql
--- Get income statements with actual dates
+-- Option 1: Direct access to fiscal_date_ending
+SELECT
+    i.fiscal_date_ending,
+    co.ticker,
+    i.total_revenue,
+    i.net_income
+FROM fact_income_statement i
+JOIN dim_company co ON i.company_id = co.company_id
+WHERE i.fiscal_date_ending >= '2024-01-01'
+  AND i.report_type = 'annual'
+
+-- Option 2: Join via date_id for calendar attributes
 SELECT
     c.date AS fiscal_date,
     c.year,

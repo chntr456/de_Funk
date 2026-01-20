@@ -65,7 +65,13 @@ class ModelConfig:
         # Schema
         self._dimensions = {}
         self._facts = {}
+
+        # Load from v1.x/v2.x 'schema:' structure
         self._load_schema(config_dict.get('schema', {}))
+
+        # Load from v3.0 'tables:' structure (markdown front matter)
+        if 'tables' in config_dict:
+            self._load_tables(config_dict.get('tables', {}))
 
         # Measures
         self._measures = {}
@@ -76,7 +82,7 @@ class ModelConfig:
 
     def _load_schema(self, schema: Dict):
         """Load schema definitions."""
-        # Load dimensions
+        # Load dimensions from v1.x/v2.x structure
         for dim_name, dim_config in schema.get('dimensions', {}).items():
             # Skip base templates (names starting with _)
             if dim_name.startswith('_'):
@@ -94,7 +100,7 @@ class ModelConfig:
                 tags=dim_config.get('tags', [])
             )
 
-        # Load facts
+        # Load facts from v1.x/v2.x structure
         for fact_name, fact_config in schema.get('facts', {}).items():
             # Skip base templates (names starting with _)
             if fact_name.startswith('_'):
@@ -111,6 +117,107 @@ class ModelConfig:
                 partitions=fact_config.get('partitions'),
                 tags=fact_config.get('tags', [])
             )
+
+    def _load_tables(self, tables: Dict):
+        """
+        Load table definitions from v3.0 'tables:' structure.
+
+        v3.0 uses:
+            tables:
+              dim_company:
+                type: dimension
+                ...
+              fact_income_statement:
+                type: fact
+                ...
+        """
+        for table_name, table_config in tables.items():
+            # Skip base templates (names starting with _)
+            if table_name.startswith('_'):
+                continue
+
+            # Determine table type
+            table_type = table_config.get('type', '')
+
+            # Auto-generate path if not provided
+            if table_type == 'dimension':
+                path = table_config.get('path', f'dims/{table_name}')
+                self._dimensions[table_name] = TableConfig(
+                    name=table_name,
+                    path=path,
+                    description=table_config.get('description', ''),
+                    columns=self._extract_columns(table_config.get('schema', [])),
+                    primary_key=table_config.get('primary_key'),
+                    tags=table_config.get('tags', [])
+                )
+            elif table_type == 'fact':
+                path = table_config.get('path', f'facts/{table_name}')
+                self._facts[table_name] = TableConfig(
+                    name=table_name,
+                    path=path,
+                    description=table_config.get('description', ''),
+                    columns=self._extract_columns(table_config.get('schema', [])),
+                    partitions=table_config.get('partition_by'),
+                    tags=table_config.get('tags', [])
+                )
+
+            # Load measures defined on the table (v3.0 format)
+            self._load_table_measures(table_name, table_config.get('measures', []))
+
+    def _load_table_measures(self, table_name: str, measures_list: list):
+        """
+        Load measures from v3.0 table-level measures list.
+
+        v3.0 measure format: [name, aggregation_type, source_column, description, {options}]
+        Example: [company_count, count_distinct, company_id, "Number of companies", {format: "#,##0"}]
+        """
+        if not isinstance(measures_list, list):
+            return
+
+        for measure_def in measures_list:
+            if not isinstance(measure_def, list) or len(measure_def) < 3:
+                continue
+
+            measure_name = measure_def[0]
+            aggregation = measure_def[1]
+            source_column = measure_def[2]
+            description = measure_def[3] if len(measure_def) > 3 else ''
+            options = measure_def[4] if len(measure_def) > 4 else {}
+
+            # Build source reference: table_name.column
+            source = f"{table_name}.{source_column}"
+
+            # Handle expression-type measures
+            if aggregation == 'expression':
+                # source_column is actually the expression
+                source = source_column
+                aggregation = None
+
+            self._measures[measure_name] = MeasureConfig(
+                name=measure_name,
+                description=description,
+                source=source,
+                data_type='double',
+                aggregation=aggregation,
+                type='simple' if aggregation else 'expression',
+                format=options.get('format') if isinstance(options, dict) else None,
+                tags=[]
+            )
+
+    def _extract_columns(self, schema_list: list) -> Dict[str, str]:
+        """
+        Extract columns from v3.0 schema list format.
+
+        v3.0 schema format: [[column_name, type, nullable, description, options], ...]
+        """
+        columns = {}
+        if isinstance(schema_list, list):
+            for item in schema_list:
+                if isinstance(item, list) and len(item) >= 2:
+                    col_name = item[0]
+                    col_type = item[1]
+                    columns[col_name] = col_type
+        return columns
 
     def _load_measures(self, measures: Dict):
         """
