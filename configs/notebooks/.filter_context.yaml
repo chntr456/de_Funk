@@ -8,8 +8,8 @@ filters:
     - MSFT
     - GOOGL
 
-  # Date range for price and forecast analysis (uses date_id FK to calendar)
-  date_id:
+  # Date range for price and forecast analysis (joins to calendar via date_id FK)
+  date:
     start: current_date() - 365
     end: current_date()
 

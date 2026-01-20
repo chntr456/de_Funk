@@ -496,10 +496,18 @@ class NotebookManager:
         required_cols = set()
 
         # Add x-axis column
+        x_col = None
         if hasattr(exhibit, 'x') and exhibit.x:
+            x_col = exhibit.x
             required_cols.add(exhibit.x)
         elif hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension'):
+            x_col = exhibit.x_axis.dimension
             required_cols.add(exhibit.x_axis.dimension)
+
+        # If x-axis is date_id (integer FK), also request calendar's date column
+        # This enables human-readable date display via auto-join to temporal.dim_calendar
+        if x_col == 'date_id':
+            required_cols.add('date')  # Will trigger auto-join to temporal.dim_calendar
 
         # Add y-axis columns
         if hasattr(exhibit, 'y') and exhibit.y:

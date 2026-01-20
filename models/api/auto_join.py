@@ -241,9 +241,15 @@ class AutoJoinHandler:
                 edge_from = edge.get('from', '')
                 edge_to = edge.get('to', '')
 
-                # Skip cross-model edges for now
+                # Handle cross-model edges to temporal.dim_calendar (foundational dimension)
+                # Calendar is a shared dimension that all time-series data joins to
                 if '.' in edge_to:
-                    continue
+                    if 'temporal.dim_calendar' in edge_to or 'dim_calendar' in edge_to:
+                        # Allow calendar joins - normalize the table name
+                        edge_to = 'dim_calendar'
+                    else:
+                        # Skip other cross-model edges
+                        continue
 
                 # Check if this edge connects a current table to a new table
                 if edge_from in current_tables and edge_to not in seen_tables:
@@ -299,10 +305,12 @@ class AutoJoinHandler:
         if self.backend == 'duckdb' and hasattr(self.connection, 'conn'):
             try:
                 # Get all tables/views in this schema from DuckDB catalog
+                # Also include temporal schema for calendar dimension (foundational/shared)
                 result = self.connection.conn.execute(f"""
                     SELECT table_name, column_name
                     FROM information_schema.columns
                     WHERE table_schema = '{model_name}'
+                       OR table_schema = 'temporal'
                     ORDER BY table_name, ordinal_position
                 """).fetchall()
 
