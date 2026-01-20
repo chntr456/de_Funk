@@ -127,9 +127,8 @@ tables:
       - [security_id, integer, false, "FK to dim_stock", {fk: dim_stock.security_id}]
       - [effective_date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
       # Split data
-      - [split_from, integer, false, "Original shares (e.g., 1)"]
-      - [split_to, integer, false, "New shares (e.g., 4 for 4:1)"]
-      - [split_ratio, double, false, "Split ratio (split_to/split_from)"]
+      - [split_factor, double, false, "Split ratio from Bronze (e.g., 4.0 for 4:1)"]
+      - [split_ratio, double, false, "Split ratio (derived from split_factor)"]
 
     measures:
       - [split_count, count_distinct, split_id, "Number of splits", {format: "#,##0"}]
@@ -223,13 +222,12 @@ graph:
       select:
         ticker: ticker
         effective_date: effective_date
-        split_from: split_from      # Original shares (e.g., 1)
-        split_to: split_to          # New shares (e.g., 4 for 4:1 split)
+        split_factor: split_factor  # Already computed ratio in Bronze (e.g., 4.0 for 4:1)
       derive:
         split_id: "ABS(HASH(CONCAT(ticker, '_', CAST(effective_date AS STRING))))"
         security_id: "ABS(HASH(ticker))"
         effective_date_id: "CAST(REGEXP_REPLACE(CAST(effective_date AS STRING), '-', '') AS INT)"
-        split_ratio: "CAST(split_to AS DOUBLE) / CAST(split_from AS DOUBLE)"  # e.g., 4.0 for 4:1
+        split_ratio: "CAST(split_factor AS DOUBLE)"  # Use Bronze split_factor directly
       drop: [ticker]  # Use security_id instead
       primary_key: [split_id]
       unique_key: [ticker, effective_date]
