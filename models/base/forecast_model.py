@@ -214,7 +214,8 @@ class TimeSeriesForecastModel(BaseModel):
     def run_forecast_for_entity(
         self,
         entity_id: str,
-        model_configs: Optional[List[str]] = None
+        model_configs: Optional[List[str]] = None,
+        validate_data: bool = True
     ) -> dict:
         """
         Run all configured forecast models for an entity.
@@ -226,6 +227,7 @@ class TimeSeriesForecastModel(BaseModel):
             entity_id: Entity identifier to forecast
             model_configs: List of model config names to run
                           If None, runs all configured models
+            validate_data: Whether to validate training data before training
 
         Returns:
             Dictionary with results:
@@ -233,7 +235,8 @@ class TimeSeriesForecastModel(BaseModel):
                 'entity_id': str,
                 'models_trained': int,
                 'forecasts_generated': int,
-                'errors': List[str]
+                'errors': List[str],
+                'validation': Optional[dict]
             }
         """
         import pandas as pd
@@ -243,13 +246,38 @@ class TimeSeriesForecastModel(BaseModel):
             'entity_id': entity_id,
             'models_trained': 0,
             'forecasts_generated': 0,
-            'errors': []
+            'errors': [],
+            'validation': None
         }
 
         # Get model configs to run
         all_configs = self.get_model_configs()
         if model_configs is None:
             model_configs = list(all_configs.keys())
+
+        # Get max lookback for validation
+        max_lookback = max(
+            all_configs.get(m, {}).get('lookback_days', 60)
+            for m in model_configs
+        )
+
+        # Validate training data if enabled
+        if validate_data:
+            try:
+                validation_result = self._validate_training_data(
+                    entity_id, max_lookback, model_configs
+                )
+                results['validation'] = validation_result
+
+                if not validation_result.get('is_valid', False):
+                    # Add validation errors to results
+                    for error in validation_result.get('errors', []):
+                        results['errors'].append(f"validation: {error}")
+                    return results
+
+            except Exception as e:
+                results['errors'].append(f"validation failed: {str(e)[:50]}")
+                # Continue anyway - validation is advisory
 
         # Collect forecasts, metrics, and registry entries for batch saving
         all_forecasts = []
@@ -333,6 +361,105 @@ class TimeSeriesForecastModel(BaseModel):
             self.save_model_registry(combined_registry)
 
         return results
+
+    def _validate_training_data(
+        self,
+        entity_id: str,
+        lookback_days: int,
+        model_configs: List[str]
+    ) -> dict:
+        """
+        Validate training data before ML training.
+
+        Args:
+            entity_id: Entity to validate (ticker, etc.)
+            lookback_days: Lookback window for training
+            model_configs: List of model configs to validate for
+
+        Returns:
+            Dictionary with validation results:
+            {
+                'is_valid': bool,
+                'errors': List[str],
+                'warnings': List[str],
+                'metrics': Dict
+            }
+        """
+        result = {
+            'is_valid': True,
+            'errors': [],
+            'warnings': [],
+            'metrics': {}
+        }
+
+        try:
+            # Get training data
+            training_df = self.get_training_data(
+                entity_id=entity_id,
+                lookback_days=lookback_days
+            )
+
+            # Convert to pandas for validation
+            if hasattr(training_df, 'toPandas'):
+                data_pdf = training_df.toPandas()
+            else:
+                data_pdf = training_df
+
+            # Check row count
+            row_count = len(data_pdf)
+            result['metrics']['row_count'] = row_count
+
+            if row_count == 0:
+                result['is_valid'] = False
+                result['errors'].append(f"No data for {entity_id}")
+                return result
+
+            # Check minimum rows for models
+            min_rows = {'arima': 30, 'prophet': 60, 'random_forest': 90}
+            for config_name in model_configs:
+                model_type = config_name.split('_')[0].lower()
+                min_required = min_rows.get(model_type, 30)
+
+                if row_count < min_required:
+                    result['warnings'].append(
+                        f"{config_name} needs {min_required} rows, only {row_count} available"
+                    )
+
+            # Check required columns
+            required_cols = ['close', 'trade_date']
+            missing_cols = [c for c in required_cols if c not in data_pdf.columns]
+            if missing_cols:
+                result['is_valid'] = False
+                result['errors'].append(f"Missing columns: {missing_cols}")
+                return result
+
+            # Check for nulls in close price
+            null_count = data_pdf['close'].isna().sum()
+            if null_count > 0:
+                null_pct = null_count / row_count
+                if null_pct > 0.1:  # >10% nulls
+                    result['is_valid'] = False
+                    result['errors'].append(f"Too many null close prices: {null_pct:.1%}")
+                else:
+                    result['warnings'].append(f"{null_count} null close prices")
+
+            result['metrics']['null_close_pct'] = null_count / row_count if row_count > 0 else 0
+
+            # Check date range
+            if 'trade_date' in data_pdf.columns:
+                min_date = data_pdf['trade_date'].min()
+                max_date = data_pdf['trade_date'].max()
+                result['metrics']['date_range'] = f"{min_date} to {max_date}"
+
+            # Check close price stats
+            result['metrics']['close_mean'] = float(data_pdf['close'].mean())
+            result['metrics']['close_std'] = float(data_pdf['close'].std())
+
+        except Exception as e:
+            result['is_valid'] = False
+            result['errors'].append(f"Validation error: {str(e)}")
+
+        return result
 
     # ============================================================
     # CONVENIENCE METHODS

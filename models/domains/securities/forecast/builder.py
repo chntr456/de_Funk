@@ -266,12 +266,45 @@ class ForecastBuilder(BaseModelBuilder):
 
         Checks:
         - Stocks model has been built (has price data)
+        - Source tables have required columns and data
         - ML model configurations are valid
         """
+        from models.domains.securities.forecast.data_validator import StocksSourceValidator
+
         # Check for price data
         tickers = self.get_available_tickers(limit=1)
         if not tickers:
             logger.warning("No price data available. Build stocks model first.")
+            return False
+
+        # Validate source tables
+        try:
+            stocks_model = self._get_stocks_model()
+
+            # Validate dim_stock
+            dim_df = stocks_model.get_table('dim_stock')
+            dim_validator = StocksSourceValidator(dim_df, 'dim_stock')
+            dim_report = dim_validator.validate()
+
+            if not dim_report.is_valid:
+                logger.warning(f"dim_stock validation failed:\n{dim_report.summary()}")
+                return False
+
+            logger.info(f"  dim_stock: {dim_report.metrics.get('row_count', 0)} stocks")
+
+            # Validate fact_stock_prices
+            fact_df = stocks_model.get_table('fact_stock_prices')
+            fact_validator = StocksSourceValidator(fact_df, 'fact_stock_prices')
+            fact_report = fact_validator.validate()
+
+            if not fact_report.is_valid:
+                logger.warning(f"fact_stock_prices validation failed:\n{fact_report.summary()}")
+                return False
+
+            logger.info(f"  fact_stock_prices: {fact_report.metrics.get('row_count', 0)} prices")
+
+        except Exception as e:
+            logger.warning(f"Source validation failed: {e}")
             return False
 
         # Check ML model configs
