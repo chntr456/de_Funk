@@ -77,9 +77,12 @@ class StocksBuilder(BaseModelBuilder):
             from models.domains.securities.stocks.technicals import compute_technicals
 
             # Compute technicals using native Spark windowing (no batching needed)
+            # CRITICAL: Pass spark session to avoid compute_technicals creating its own
+            # session and stopping it (which would kill the shared session for subsequent builds)
             rows_processed = compute_technicals(
                 storage_path=storage_root,
-                dry_run=False
+                dry_run=False,
+                spark=self.spark
             )
 
             if rows_processed > 0:
