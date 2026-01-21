@@ -661,7 +661,7 @@ class MarkdownNotebookParser:
 
         # Define valid parameters for clean exhibit definitions
         valid_common = {'type', 'source', 'title', 'height', 'options', 'description'}
-        valid_chart_shorthand = {'x', 'y', 'color', 'size', 'legend', 'interactive'}
+        valid_chart_shorthand = {'x', 'y', 'color', 'size', 'legend', 'interactive', 'y_agg'}
         valid_chart_full = {'x_axis', 'y_axis', 'y_axis_left', 'y_axis_right', 'color_by', 'size_by'}
         valid_metric = {'metrics'}
         valid_table = {'columns', 'pagination', 'page_size', 'download', 'sortable', 'searchable', 'sort_by', 'sort_order'}
