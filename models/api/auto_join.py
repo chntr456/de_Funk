@@ -264,21 +264,23 @@ class AutoJoinHandler:
                     f"Possible cycle in graph. Reached: {seen_tables}, Need: {needed_tables}"
                 )
 
-            added_table = False
+            added_any_table = False
             remaining = needed_tables - seen_tables
             logger.debug(f"AUTO-JOIN PLAN: Iteration {iteration}, still need: {remaining}")
 
+            # Star schema support: Add ALL reachable tables in each iteration,
+            # not just the first one. This handles fact → multiple dimensions.
             for edge in edges:
                 edge_from = edge.get('from', '')
                 edge_to = edge.get('to', '')
                 cross_model = None  # Track if this is a cross-model edge
 
-                # Handle cross-model edges (e.g., temporal.dim_calendar, corporate.dim_company)
+                # Handle cross-model edges (e.g., temporal.dim_calendar, company.dim_company)
                 # These are foundational/shared dimensions that models can join to
                 if '.' in edge_to:
                     # Parse cross-model reference: "model.table" or "category.model.table"
                     parts = edge_to.split('.')
-                    cross_model = parts[0]  # e.g., "temporal", "corporate"
+                    cross_model = parts[0]  # e.g., "temporal", "company"
                     edge_to = parts[-1]  # e.g., "dim_calendar", "dim_company"
                     logger.debug(f"AUTO-JOIN PLAN: Cross-model edge {edge_from} -> {cross_model}.{edge_to}")
 
@@ -308,22 +310,31 @@ class AutoJoinHandler:
                             logger.debug(f"AUTO-JOIN PLAN: Added join {edge_from}.{left_col} = {edge_to}.{right_col}")
                         joins.append(join_info)
 
-                    added_table = True
-                    break
+                    added_any_table = True
+                    # NO BREAK - continue to find all reachable tables in this iteration
 
-            if not added_table:
-                # Log detailed failure info
-                logger.error(f"AUTO-JOIN PLAN: Failed to find edge. current_tables={current_tables}, seen={seen_tables}, need={remaining}")
+            if not added_any_table:
+                # Log detailed failure info for debugging
+                logger.error(f"AUTO-JOIN PLAN: Failed to find any connecting edges.")
+                logger.error(f"  Current tables: {current_tables}")
+                logger.error(f"  Seen tables: {seen_tables}")
+                logger.error(f"  Still need: {remaining}")
+                logger.error(f"  Available edges:")
                 for edge in edges:
-                    ef, et = edge.get('from', ''), edge.get('to', '')
-                    if '.' in et and 'dim_calendar' not in et:
-                        continue  # Cross-model
-                    logger.error(f"  Edge {ef} -> {et}: from_match={ef in current_tables}, to_unseen={et not in seen_tables}")
+                    ef = edge.get('from', '')
+                    et = edge.get('to', '')
+                    # Show cross-model edges clearly
+                    if '.' in et:
+                        cross_model = et.split('.')[0]
+                        table_name = et.split('.')[-1]
+                        logger.error(f"    {ef} -> {cross_model}.{table_name}")
+                    else:
+                        logger.error(f"    {ef} -> {et}")
 
                 raise ValueError(
-                    f"Cannot find join path from {base_table} to {missing_columns}. "
-                    f"Reached: {seen_tables}, Need: {remaining}. "
-                    f"Check that model graph has edges connecting these tables."
+                    f"Cannot find join path from {base_table} to columns {missing_columns}. "
+                    f"Reached tables: {seen_tables}. Still need: {remaining}. "
+                    f"Ensure model graph has edges connecting these tables."
                 )
 
         # For backwards compatibility, also include join_keys in old format
