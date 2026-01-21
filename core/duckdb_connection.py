@@ -103,8 +103,24 @@ class DuckDBConnection(DataConnection):
         - Only runs for persistent databases (not :memory:)
         - Gracefully handles missing silver layer data
         - Recreates stale views that point to wrong storage paths
+        - Validates views point to configured storage_path from run_config.json
         """
         try:
+            # Get configured storage_path from run_config.json for validation
+            from utils.repo import get_repo_root
+            import json
+
+            repo_root = get_repo_root()
+            configured_storage_root = None
+            run_config_path = repo_root / 'configs' / 'pipelines' / 'run_config.json'
+            if run_config_path.exists():
+                with open(run_config_path) as f:
+                    run_config = json.load(f)
+                storage_path_str = run_config.get('defaults', {}).get('storage_path')
+                if storage_path_str and Path(storage_path_str).exists():
+                    configured_storage_root = Path(storage_path_str)
+                    logger.debug(f"Configured storage_path: {configured_storage_root}")
+
             # Check if any v2.0 model schemas exist (quick check to avoid unnecessary work)
             # Including 'bronze' schema for Bronze layer views
             # NOTE: Must include 'securities' for normalized v3.0 architecture
@@ -115,6 +131,30 @@ class DuckDBConnection(DataConnection):
             """).fetchall()
 
             views_need_refresh = False
+
+            # Check if views point to configured storage_path
+            # If they point to a different path (e.g., local storage vs /shared/storage), force refresh
+            if configured_storage_root and existing_schemas:
+                try:
+                    # Get the definition of a known view to check its path
+                    view_def = self.conn.execute("""
+                        SELECT sql FROM duckdb_views()
+                        WHERE schema_name = 'stocks' AND view_name = 'dim_stock'
+                        LIMIT 1
+                    """).fetchone()
+
+                    if view_def and view_def[0]:
+                        view_sql = view_def[0]
+                        # Check if view path contains configured storage root
+                        configured_path_str = str(configured_storage_root)
+                        if configured_path_str not in view_sql:
+                            logger.info(
+                                f"Views point to wrong storage path (expected {configured_path_str}), "
+                                f"will refresh to use configured storage"
+                            )
+                            views_need_refresh = True
+                except Exception as e:
+                    logger.debug(f"Could not check view paths: {e}")
 
             # If schemas exist with tables, verify views actually work
             # Test both dimension AND fact tables to ensure complete validation
