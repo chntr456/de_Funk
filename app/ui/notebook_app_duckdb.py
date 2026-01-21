@@ -92,6 +92,37 @@ if 'notebook_model_sessions' not in st.session_state:
 if 'repo_context' not in st.session_state:
     st.session_state.repo_context = RepoContext.from_repo_root(connection_type="duckdb")
 
+# Validate storage paths match DuckDB views on startup
+if 'storage_validated' not in st.session_state:
+    st.session_state.storage_validated = True
+    ctx = st.session_state.repo_context
+    configured_storage = ctx.storage.get('roots', {}).get('silver', '')
+
+    # Check if configured storage path exists
+    if configured_storage and not Path(configured_storage).exists():
+        logger.warning(f"Configured storage path not accessible: {configured_storage}")
+        # Check if local storage exists as fallback
+        local_storage = ctx.repo / 'storage' / 'silver'
+        if local_storage.exists():
+            logger.info(f"Using local storage fallback: {local_storage}")
+            st.session_state.storage_mismatch = {
+                'configured': configured_storage,
+                'actual': str(local_storage),
+                'message': (
+                    f"⚠️ **Storage Path Mismatch**\n\n"
+                    f"Configured: `{configured_storage}` (not accessible)\n\n"
+                    f"Using local: `{local_storage}`\n\n"
+                    f"To use the configured storage, run:\n"
+                    f"```bash\npython -m scripts.setup.setup_duckdb_views --update --storage-path {configured_storage}\n```"
+                )
+            }
+        else:
+            st.session_state.storage_mismatch = {
+                'configured': configured_storage,
+                'actual': None,
+                'message': f"⚠️ **No storage found**\n\nConfigured path not accessible: `{configured_storage}`"
+            }
+
 if 'model_registry' not in st.session_state:
     ctx = st.session_state.repo_context
     st.session_state.model_registry = ModelRegistry(ctx.repo / "domains")
@@ -150,6 +181,11 @@ class NotebookVaultApp:
 
     def _render_header(self):
         """Render professional header with toolbar and tabs."""
+        # Show storage mismatch warning if detected
+        if st.session_state.get('storage_mismatch'):
+            with st.expander("⚠️ Storage Configuration Notice", expanded=False):
+                st.markdown(st.session_state.storage_mismatch['message'])
+
         # Row 1: Block Edit, Filter, and Theme buttons on the right
         col_spacer, col_block, col_filter, col_theme = st.columns([0.7, 0.1, 0.1, 0.1])
 
