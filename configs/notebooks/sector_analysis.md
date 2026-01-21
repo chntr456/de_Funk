@@ -13,8 +13,8 @@ $filter${
   label: Sector
   type: select
   multi: true
-  source: {model: company, table: dim_company, column: sector}
-  help_text: Select one or more sectors to analyze
+  source: {model: stocks, table: dim_stock, column: sector}
+  help_text: Filter by sector (from stock dimension)
 }
 
 $filter${
@@ -22,8 +22,8 @@ $filter${
   label: Industry
   type: select
   multi: true
-  source: {model: company, table: dim_company, column: industry}
-  help_text: Filter by specific industries
+  source: {model: stocks, table: dim_stock, column: industry}
+  help_text: Filter by industry (from stock dimension)
 }
 
 $filter${
