@@ -57,7 +57,7 @@ $exhibits${
   type: bar_chart
   source: company.dim_company
   x: sector
-  y: ticker_primary
+  y: ticker
   aggregation: count
   title: Number of Companies by Sector
   height: 350
@@ -83,7 +83,7 @@ $exhibits${
   type: metric_cards
   source: company.dim_company
   metrics: [
-    { column: ticker_primary, label: "Total Companies", aggregation: count },
+    { column: ticker, label: "Total Companies", aggregation: count },
     { column: market_cap, label: "Total Market Cap", aggregation: sum, format: "$,.0f" },
     { column: market_cap, label: "Avg Market Cap", aggregation: avg, format: "$,.0f" },
     { column: shares_outstanding, label: "Total Shares", aggregation: sum, format: ",.0f" }
@@ -115,7 +115,7 @@ $exhibits${
   type: bar_chart
   source: company.dim_company
   x: industry
-  y: ticker_primary
+  y: ticker
   aggregation: count
   title: Companies by Industry
   height: 500
@@ -147,7 +147,7 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.dim_company
-  columns: [ticker_primary, company_name, sector, industry, market_cap, shares_outstanding]
+  columns: [ticker, company_name, sector, industry, market_cap, shares_outstanding]
   sort_by: market_cap
   sort_order: desc
   page_size: 25
@@ -166,9 +166,9 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.dim_company
-  columns: [sector, ticker_primary, market_cap]
+  columns: [sector, ticker, market_cap]
   aggregations: [
-    { column: ticker_primary, aggregation: count, label: "Companies" },
+    { column: ticker, aggregation: count, label: "Companies" },
     { column: market_cap, aggregation: sum, label: "Total Market Cap" },
     { column: market_cap, aggregation: avg, label: "Avg Market Cap" }
   ]
@@ -183,9 +183,9 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.dim_company
-  columns: [industry, sector, ticker_primary, market_cap]
+  columns: [industry, sector, ticker, market_cap]
   aggregations: [
-    { column: ticker_primary, aggregation: count, label: "Companies" },
+    { column: ticker, aggregation: count, label: "Companies" },
     { column: market_cap, aggregation: sum, label: "Total Market Cap" }
   ]
   group_by: [sector, industry]

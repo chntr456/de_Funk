@@ -57,7 +57,7 @@ Analyze company financial statements including income, balance sheet, cash flows
 $exhibits${
   type: data_table
   source: company.dim_company
-  columns: [ticker_primary, company_name, sector, industry, market_cap, pe_ratio, eps, dividend_yield]
+  columns: [ticker, company_name, sector, industry, market_cap, pe_ratio, eps, dividend_yield]
   download: true
 }
 
