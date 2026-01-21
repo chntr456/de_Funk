@@ -22,7 +22,7 @@ Features:
 - Creates views for ALL v2.0 models (temporal, company, stocks, options, etfs, futures)
 - Auto-detects Delta Lake vs Parquet format (uses delta_scan or read_parquet)
 - Points views to Silver layer tables (zero data duplication)
-- Creates alias views (stocks.fact_prices → stocks.fact_stock_prices) for DuckDB caching
+- Creates alias views (stocks.fact_prices → securities.fact_security_prices) for DuckDB caching
 - Backend-agnostic base measures work via schema aliases (ModelConfigLoader)
 - This script provides performance optimization by pre-creating database views
 - Handles missing tables gracefully (skips if not built yet)
@@ -281,48 +281,72 @@ SELECT * FROM {read_sql};
                 dry_run=dry_run
             )
 
+    def create_securities_views(self, dry_run: bool = False):
+        """Create views for master securities model (v3.0 normalized architecture)."""
+        logger.info("\n" + "="*80)
+        logger.info("SECURITIES MODEL VIEWS (Master)")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('securities')
+
+        # Master security dimension
+        self.create_view(
+            schema='securities',
+            table='dim_security',
+            table_path=silver_path / 'dim_security',
+            dry_run=dry_run
+        )
+
+        # Unified price facts for all asset types
+        self.create_view(
+            schema='securities',
+            table='fact_security_prices',
+            table_path=silver_path / 'fact_security_prices',
+            dry_run=dry_run
+        )
+
     def create_stocks_views(self, dry_run: bool = False):
-        """Create views for stocks model."""
+        """Create views for stocks model (v3.0 normalized - FKs to securities)."""
         logger.info("\n" + "="*80)
         logger.info("STOCKS MODEL VIEWS")
         logger.info("="*80)
 
         silver_path = self.get_silver_path('stocks')
 
-        # Dimensions (v3.0 schema)
-        dimensions = [
-            'dim_stock'
+        # Dimensions (v3.0 schema - extends securities.dim_security)
+        self.create_view(
+            schema='stocks',
+            table='dim_stock',
+            table_path=silver_path / 'dim_stock',
+            dry_run=dry_run
+        )
+
+        # Facts (v3.0 schema - stock-specific facts, prices are in securities)
+        stock_facts = [
+            'fact_stock_technicals',
+            'fact_dividends',
+            'fact_splits'
         ]
 
-        for dim in dimensions:
-            self.create_view(
-                schema='stocks',
-                table=dim,
-                table_path=silver_path / 'dims' / dim,
-                dry_run=dry_run
-            )
-
-        # Facts (v3.0 schema - OHLCV prices)
-        facts = [
-            'fact_stock_prices'
-        ]
-
-        for fact in facts:
+        for fact in stock_facts:
             self.create_view(
                 schema='stocks',
                 table=fact,
-                table_path=silver_path / 'facts' / fact,
+                table_path=silver_path / fact,
                 dry_run=dry_run
             )
 
-        # Alias views for inherited base securities measures
-        # Base measures reference generic table names (fact_prices, dim_security)
-        # Create aliases so inherited measures work without modification
+        # Alias views for backward compatibility
+        # NOTE: In v3.0 architecture, prices are in securities.fact_security_prices
         alias_sql = """
--- Alias views for base securities compatibility
-CREATE OR REPLACE VIEW stocks.fact_prices AS
-  SELECT * FROM stocks.fact_stock_prices;
+-- Alias views for backward compatibility (v3.0 normalized architecture)
+-- Prices are now in securities.fact_security_prices
 
+-- fact_prices alias points to securities model (master prices)
+CREATE OR REPLACE VIEW stocks.fact_prices AS
+  SELECT * FROM securities.fact_security_prices;
+
+-- dim_security alias points to stocks dimension
 CREATE OR REPLACE VIEW stocks.dim_security AS
   SELECT * FROM stocks.dim_stock;
 """
@@ -333,7 +357,7 @@ CREATE OR REPLACE VIEW stocks.dim_security AS
         else:
             try:
                 self.conn.execute(alias_sql)
-                logger.info("✓ Created alias views: fact_prices, dim_security")
+                logger.info("✓ Created alias views: fact_prices (→ securities), dim_security")
                 self.created_views.extend(["stocks.fact_prices", "stocks.dim_security"])
             except Exception as e:
                 logger.warning(f"⚠ Could not create alias views: {e}")
@@ -614,13 +638,14 @@ CREATE OR REPLACE VIEW futures.dim_security AS
         logger.info("HELPER VIEWS")
         logger.info("="*80)
 
-        # Helper: Stock prices with company info
+        # Helper: Stock prices with company info (v3.0 normalized architecture)
         # Note: Use 'helpers' schema instead of 'analytics' to avoid ambiguity
         # with the 'analytics.db' database/catalog name
+        # NOTE: In v3.0, prices are in securities.fact_security_prices (master table)
         helper_sql = """
 CREATE OR REPLACE VIEW helpers.stock_prices_enriched AS
 SELECT
-    p.ticker,
+    sec.ticker,
     p.trade_date,
     p.open,
     p.high,
@@ -631,11 +656,13 @@ SELECT
     c.company_name,
     c.sector,
     c.industry,
-    c.market_cap,
-    c.exchange_code
-FROM stocks.fact_stock_prices p
-LEFT JOIN stocks.dim_stock s ON p.ticker = s.ticker
-LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
+    s.market_cap,
+    sec.exchange_code
+FROM securities.fact_security_prices p
+JOIN securities.dim_security sec ON p.security_id = sec.security_id
+LEFT JOIN stocks.dim_stock s ON sec.security_id = s.security_id
+LEFT JOIN company.dim_company c ON s.company_id = c.company_id
+WHERE sec.asset_type = 'stocks';
 """
 
         if dry_run:
@@ -689,8 +716,10 @@ LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
         logger.info(f"\nConnect with:")
         logger.info(f"  python -c \"import duckdb; conn = duckdb.connect('{self.db_path}')\"")
         logger.info(f"\nQuery examples:")
-        logger.info(f"  -- Silver layer (dimensional models)")
-        logger.info(f"  SELECT * FROM stocks.fact_stock_prices LIMIT 10;")
+        logger.info(f"  -- Silver layer (v3.0 normalized architecture)")
+        logger.info(f"  SELECT * FROM securities.fact_security_prices LIMIT 10;")
+        logger.info(f"  SELECT * FROM securities.dim_security LIMIT 10;")
+        logger.info(f"  SELECT * FROM stocks.dim_stock LIMIT 10;")
         logger.info(f"  SELECT * FROM company.dim_company LIMIT 10;")
         logger.info(f"")
         logger.info(f"  -- Bronze layer (raw ingested data)")
@@ -712,11 +741,12 @@ LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
             if include_bronze:
                 self.create_bronze_views(dry_run=dry_run)
 
-            # v3.0 Silver models
+            # v3.0 Silver models (normalized architecture)
             self.create_temporal_views(dry_run=dry_run)
             self.create_geospatial_views(dry_run=dry_run)
+            self.create_securities_views(dry_run=dry_run)  # Master securities - must be before stocks
             self.create_company_views(dry_run=dry_run)
-            self.create_stocks_views(dry_run=dry_run)
+            self.create_stocks_views(dry_run=dry_run)  # Stocks FKs to securities
             self.create_forecast_views(dry_run=dry_run)
             self.create_options_views(dry_run=dry_run)
             self.create_etfs_views(dry_run=dry_run)

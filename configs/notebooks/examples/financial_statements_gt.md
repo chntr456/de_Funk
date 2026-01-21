@@ -141,7 +141,7 @@ $exhibits${
 $exhibits${
   grid_cell: 6
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   title: Stock Price Explorer
   x: date
   height: 300

@@ -1,10 +1,12 @@
 """
 Stocks Model - Common stock equities.
 
-Inherits from BaseModel with securities pattern.
-Filters bronze data by asset_type='stocks'.
+Normalized architecture (v3.0):
+- dim_stock FKs to securities.dim_security (master dimension)
+- Prices are in securities.fact_security_prices (unified OHLCV)
+- Stock-specific tables: fact_stock_technicals, fact_dividends, fact_splits
 
-Version: 2.1 - Backend-agnostic via UniversalSession methods
+Version: 3.0 - Normalized securities architecture
 """
 
 from models.base.model import BaseModel
@@ -19,28 +21,27 @@ DataFrame = Any
 
 class StocksModel(BaseModel):
     """
-    Common stock equities model.
+    Common stock equities model (Normalized Architecture v3.0).
+
+    Architecture:
+    - dim_stock: Stock-specific attributes, FKs to securities.dim_security and corporate.dim_company
+    - Prices: Located in securities.fact_security_prices (unified for all asset types)
+    - Technicals: fact_stock_technicals (computed from prices, stock-specific indicators)
+    - Corporate actions: fact_dividends, fact_splits (time-series facts)
 
     Key features:
-    - Inherits base securities schema and measures
-    - Uses JOIN-based filtering: prices filtered to tickers in dim_stock
-    - Links to Company model via company_id
-    - Includes technical indicators (RSI, MACD, Bollinger Bands, etc.)
-    - Supports complex Python measures (Sharpe, correlation, momentum, etc.)
+    - Links to master securities via security_id FK
+    - Links to Company model via company_id FK
+    - Stock-level attributes: shares_outstanding, market_cap, sector, industry
+    - Technical indicators computed from unified price data
     - Backend-agnostic: uses session methods for all DataFrame operations
-
-    Architecture Note:
-        Bronze prices table may have NULL asset_type. Instead of filtering by
-        asset_type='stocks', we filter fact_stock_prices to only include tickers
-        that exist in dim_stock (which IS filtered by asset_type='stocks' from
-        the securities_reference table). This JOIN-based approach is more robust.
 
     Usage:
         from models.domains.securities.stocks import StocksModel
         stocks = StocksModel(connection, storage_cfg, model_cfg)
         stocks.build()
 
-        # Get price data
+        # Get price data (from securities model)
         prices = stocks.get_prices('AAPL')
 
         # Calculate measures
@@ -52,112 +53,25 @@ class StocksModel(BaseModel):
         Return asset type to filter from unified bronze table.
 
         This is used by the graph building logic to filter
-        bronze.securities_prices_daily and bronze.securities_reference.
+        bronze.securities_reference for dim_stock.
 
         Returns:
             'stocks' - filters for common stock equities
         """
         return 'stocks'
 
-    def after_build(
-        self,
-        dims: Dict[str, DataFrame],
-        facts: Dict[str, DataFrame]
-    ) -> Tuple[Dict[str, DataFrame], Dict[str, DataFrame]]:
-        """
-        Post-build hook: Filter fact_stock_prices to only securities in dim_stock.
-
-        This implements JOIN-based filtering for the prices table. Since Bronze
-        prices may have NULL asset_type, we can't filter directly. Instead, we:
-        1. Build dim_stock (filtered by asset_type='stocks' from securities_reference)
-        2. Build fact_stock_prices (all prices, no asset_type filter)
-        3. Filter fact_stock_prices to only security_ids that exist in dim_stock
-
-        This ensures we only have prices for actual stock securities.
-
-        Note: Dimension columns (sector, exchange_code) are accessed via auto-join
-        at query time using the model graph edges, not denormalized here.
-
-        Note: Facts use security_id (FK) not ticker. Ticker is dropped after deriving FKs.
-        """
-        # Check if we have both tables
-        if 'dim_stock' not in dims or 'fact_stock_prices' not in facts:
-            logger.warning("Missing dim_stock or fact_stock_prices, skipping JOIN filter")
-            return dims, facts
-
-        dim_stock = dims['dim_stock']
-        fact_prices = facts['fact_stock_prices']
-
-        # Use session methods if available, otherwise fall back to direct approach
-        if self.session:
-            # Count before filtering
-            before_count = self.session.row_count(fact_prices)
-
-            # Semi-join on security_id (FK pattern - facts don't have ticker)
-            filtered_prices = self.session.semi_join(fact_prices, dim_stock, on='security_id')
-
-            after_count = self.session.row_count(filtered_prices)
-            security_count = len(self.session.distinct_values(dim_stock, 'security_id'))
-
-            logger.info(
-                f"  JOIN filter: {before_count:,} → {after_count:,} prices "
-                f"(filtered to {security_count} stock securities)"
-            )
-
-            facts['fact_stock_prices'] = filtered_prices
-        else:
-            # Fallback for when session is not available (e.g., during initial build)
-            # Use backend property from BaseModel
-            if self.backend == 'spark':
-                # Semi-join on security_id (not ticker - ticker is dropped from facts)
-                stock_security_ids = dim_stock.select('security_id').distinct()
-                before_count = fact_prices.count()
-                filtered_prices = fact_prices.join(stock_security_ids, on='security_id', how='left_semi')
-                after_count = filtered_prices.count()
-                logger.info(
-                    f"  JOIN filter: {before_count:,} → {after_count:,} prices "
-                    f"(filtered to {stock_security_ids.count()} stock securities)"
-                )
-                facts['fact_stock_prices'] = filtered_prices
-            else:
-                import pandas as pd
-                if hasattr(dim_stock, 'df'):
-                    dim_stock_pdf = dim_stock.df()
-                elif isinstance(dim_stock, pd.DataFrame):
-                    dim_stock_pdf = dim_stock
-                else:
-                    dim_stock_pdf = dim_stock
-
-                if hasattr(fact_prices, 'df'):
-                    fact_prices_pdf = fact_prices.df()
-                elif isinstance(fact_prices, pd.DataFrame):
-                    fact_prices_pdf = fact_prices
-                else:
-                    fact_prices_pdf = fact_prices
-
-                # Filter by security_id (not ticker - ticker is dropped from facts)
-                stock_security_ids = set(dim_stock_pdf['security_id'].unique())
-                before_count = len(fact_prices_pdf)
-                filtered_prices_pdf = fact_prices_pdf[fact_prices_pdf['security_id'].isin(stock_security_ids)]
-                after_count = len(filtered_prices_pdf)
-
-                logger.info(
-                    f"  JOIN filter: {before_count:,} → {after_count:,} prices "
-                    f"(filtered to {len(stock_security_ids)} stock securities)"
-                )
-
-                if hasattr(self.connection, 'conn'):
-                    facts['fact_stock_prices'] = self.connection.conn.from_df(filtered_prices_pdf)
-                else:
-                    facts['fact_stock_prices'] = filtered_prices_pdf
-
-        return dims, facts
+    # NOTE: Prices are now in securities.fact_security_prices (normalized architecture)
+    # No after_build filtering needed - prices are filtered at query time by joining
+    # through securities.dim_security via security_id FK.
 
     def get_prices(self, ticker: Optional[str] = None,
                    start_date: Optional[str] = None,
                    end_date: Optional[str] = None) -> Any:
         """
-        Get stock price data.
+        Get stock price data from securities.fact_security_prices.
+
+        In the normalized architecture, prices are stored in the securities model.
+        This method queries the securities model for prices filtered to stock securities.
 
         Args:
             ticker: Specific ticker (optional)
@@ -165,41 +79,75 @@ class StocksModel(BaseModel):
             end_date: End date filter (YYYY-MM-DD)
 
         Returns:
-            DataFrame with price data
+            DataFrame with price data (joined with dim_stock for stock-only prices)
         """
-        prices_df = self.get_table('fact_stock_prices')
+        # Get dim_stock for filtering to stock securities only
+        dim_stock = self.get_table('dim_stock')
 
-        # Use session methods if available
+        # Try to get prices from securities model via session
         if self.session:
-            if ticker:
-                prices_df = self.session.filter_by_value(prices_df, 'ticker', ticker)
-            prices_df = self.session.filter_by_range(
-                prices_df, 'trade_date', min_val=start_date, max_val=end_date
-            )
-        else:
-            # Fallback for when session is not available
-            if self.backend == 'spark':
-                if ticker:
-                    prices_df = prices_df.filter(prices_df.ticker == ticker)
-                if start_date:
-                    prices_df = prices_df.filter(prices_df.trade_date >= start_date)
-                if end_date:
-                    prices_df = prices_df.filter(prices_df.trade_date <= end_date)
-            else:
-                if ticker:
-                    prices_df = prices_df[prices_df['ticker'] == ticker]
-                if start_date:
-                    prices_df = prices_df[prices_df['trade_date'] >= start_date]
-                if end_date:
-                    prices_df = prices_df[prices_df['trade_date'] <= end_date]
+            try:
+                securities_model = self.session.get_model_instance('securities')
+                prices_df = securities_model.get_prices(
+                    ticker=ticker,
+                    asset_type='stocks',
+                    start_date_id=int(start_date.replace('-', '')) if start_date else None,
+                    end_date_id=int(end_date.replace('-', '')) if end_date else None
+                )
+                return prices_df
+            except Exception as e:
+                logger.warning(f"Could not get prices from securities model: {e}")
 
-        return prices_df
+        # Fallback: Query securities.fact_security_prices directly if available
+        # This handles cases where session doesn't have the securities model loaded
+        try:
+            from pathlib import Path
+
+            # Get storage root from model config or default
+            storage_root = Path(self.storage_cfg.get('root', 'storage/silver'))
+
+            if self.backend == 'spark':
+                from pyspark.sql import functions as F
+
+                # Load prices from securities silver layer
+                securities_prices_path = storage_root.parent / 'securities' / 'fact_security_prices'
+                if securities_prices_path.exists():
+                    prices_df = self.connection.read.format('delta').load(str(securities_prices_path))
+
+                    # Join with dim_stock to filter to stock securities
+                    stock_security_ids = dim_stock.select('security_id').distinct()
+                    prices_df = prices_df.join(stock_security_ids, on='security_id', how='inner')
+
+                    if ticker:
+                        # Need to join back to dim_stock to filter by ticker
+                        dim_with_ticker = dim_stock.select('security_id', 'ticker')
+                        prices_df = prices_df.join(dim_with_ticker, on='security_id', how='inner')
+                        prices_df = prices_df.filter(F.col('ticker') == ticker)
+
+                    if start_date:
+                        start_id = int(start_date.replace('-', ''))
+                        prices_df = prices_df.filter(F.col('date_id') >= start_id)
+                    if end_date:
+                        end_id = int(end_date.replace('-', ''))
+                        prices_df = prices_df.filter(F.col('date_id') <= end_id)
+
+                    return prices_df
+
+            logger.warning("Securities prices not available, returning empty result")
+            return dim_stock.limit(0)  # Return empty DataFrame with compatible schema
+
+        except Exception as e:
+            logger.error(f"Failed to get prices: {e}")
+            raise
 
     def get_technicals(self, ticker: Optional[str] = None,
                        start_date: Optional[str] = None,
                        end_date: Optional[str] = None) -> Any:
         """
-        Get technical indicators (from fact_stock_prices which now includes all technicals).
+        Get technical indicators from fact_stock_technicals.
+
+        In normalized architecture, technicals are computed post-build from
+        securities.fact_security_prices and stored in stocks.fact_stock_technicals.
 
         Args:
             ticker: Specific ticker (optional)
@@ -207,10 +155,33 @@ class StocksModel(BaseModel):
             end_date: End date filter
 
         Returns:
-            DataFrame with price data including technical indicators
+            DataFrame with technical indicators (RSI, MACD, Bollinger, etc.)
         """
-        # Technical indicators are now consolidated into fact_stock_prices
-        return self.get_prices(ticker=ticker, start_date=start_date, end_date=end_date)
+        try:
+            technicals_df = self.get_table('fact_stock_technicals')
+
+            if self.session:
+                if ticker:
+                    # Join to dim_stock to filter by ticker
+                    dim_stock = self.get_table('dim_stock')
+                    stock_row = self.session.filter_by_value(dim_stock, 'ticker', ticker)
+                    if stock_row is not None:
+                        security_ids = self.session.distinct_values(stock_row, 'security_id')
+                        if security_ids:
+                            technicals_df = self.session.filter_by_value(technicals_df, 'security_id', security_ids[0])
+
+                technicals_df = self.session.filter_by_range(
+                    technicals_df, 'date_id',
+                    min_val=int(start_date.replace('-', '')) if start_date else None,
+                    max_val=int(end_date.replace('-', '')) if end_date else None
+                )
+
+            return technicals_df
+
+        except Exception as e:
+            logger.warning(f"Technicals table not available: {e}")
+            # Return prices as fallback (without computed technicals)
+            return self.get_prices(ticker=ticker, start_date=start_date, end_date=end_date)
 
     def get_stock_info(self, ticker: Optional[str] = None) -> Any:
         """
@@ -324,70 +295,27 @@ class StocksModel(BaseModel):
         """
         Get top stocks by market capitalization.
 
-        If market_cap column doesn't exist, calculates it from latest price
-        and shares_outstanding.
-
-        Note: fact_stock_prices uses security_id (not ticker) as the FK.
-        We join with dim_stock to get tickers for the calculation.
+        Uses market_cap column from dim_stock if available (v3.0 architecture stores
+        market_cap in dim_stock as a stock-level attribute).
 
         Args:
             limit: Number of top stocks to return
 
         Returns:
-            DataFrame with top stocks
+            DataFrame with top stocks ordered by market cap
         """
         dim_stock = self.get_table('dim_stock')
 
-        # Check if market_cap column exists and has data
-        has_market_cap = 'market_cap' in dim_stock.columns
-
-        if has_market_cap:
-            # Use existing market_cap column
-            if self.session:
-                return self.session.top_n_by(dim_stock, limit, 'market_cap', ascending=False)
-            elif self.backend == 'spark':
-                return dim_stock.orderBy(dim_stock.market_cap.desc()).limit(limit)
-            else:
-                return dim_stock.nlargest(limit, 'market_cap')
+        # In v3.0 architecture, market_cap is a stock-level attribute in dim_stock
+        if self.session:
+            return self.session.top_n_by(dim_stock, limit, 'market_cap', ascending=False)
+        elif self.backend == 'spark':
+            return dim_stock.orderBy(dim_stock.market_cap.desc_nulls_last()).limit(limit)
         else:
-            # Calculate market_cap from latest prices and shares_outstanding
-            # Note: fact_stock_prices has security_id (FK), not ticker
-            if self.backend == 'spark':
-                from pyspark.sql import functions as F
-
-                fact_prices = self.get_table('fact_stock_prices')
-
-                # Get latest prices per security_id (fact_stock_prices uses security_id, not ticker)
-                latest_prices = (
-                    fact_prices
-                    .groupBy('security_id')
-                    .agg(F.max('date_id').alias('latest_date_id'))
-                )
-                latest_prices = (
-                    fact_prices.alias('p')
-                    .join(latest_prices.alias('l'),
-                          (F.col('p.security_id') == F.col('l.security_id')) &
-                          (F.col('p.date_id') == F.col('l.latest_date_id')))
-                    .select('p.security_id', F.col('p.close').alias('latest_close'))
-                )
-
-                # Join with dim_stock and calculate market_cap
-                if 'shares_outstanding' in dim_stock.columns:
-                    result = (
-                        dim_stock.alias('d')
-                        .join(latest_prices.alias('lp'), F.col('d.security_id') == F.col('lp.security_id'), 'left')
-                        .withColumn('calc_market_cap',
-                                    F.col('d.shares_outstanding') * F.col('lp.latest_close'))
-                        .orderBy(F.col('calc_market_cap').desc_nulls_last())
-                        .limit(limit)
-                        .select('d.*')
-                    )
-                    return result
-                else:
-                    # No shares data - just return top by alphabetical
-                    return dim_stock.orderBy('ticker').limit(limit)
+            if 'market_cap' in dim_stock.columns:
+                return dim_stock.nlargest(limit, 'market_cap')
             else:
-                # DuckDB/pandas fallback - return first N tickers
+                # Fallback to alphabetical if market_cap not available
                 return dim_stock.head(limit)
 
     # Complex measures are accessed via calculate_measure()

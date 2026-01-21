@@ -118,10 +118,14 @@ class DuckDBConnection(DataConnection):
             # If schemas exist with tables, verify views actually work
             # Test both dimension AND fact tables to ensure complete validation
             # Bronze schema is validated by checking if any bronze.* views exist
+            # NOTE: Normalized architecture (v3.0) - prices are in securities.fact_security_prices
             validation_queries = {
+                'securities': [
+                    'SELECT 1 FROM securities.dim_security LIMIT 1',
+                    'SELECT 1 FROM securities.fact_security_prices LIMIT 1',
+                ],
                 'stocks': [
                     'SELECT 1 FROM stocks.dim_stock LIMIT 1',
-                    'SELECT 1 FROM stocks.fact_stock_prices LIMIT 1',
                 ],
                 'company': [
                     'SELECT 1 FROM company.dim_company LIMIT 1',
@@ -246,7 +250,7 @@ class DuckDBConnection(DataConnection):
 
         Example:
             df = conn.table('stocks.dim_stock')
-            df = conn.table('stocks.fact_stock_prices')
+            df = conn.table('securities.fact_security_prices')
         """
         # Use sql() to get a relation object with .filter(), .df() methods
         return self.conn.sql(f"SELECT * FROM {view_name}")

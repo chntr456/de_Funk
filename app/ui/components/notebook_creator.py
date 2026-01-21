@@ -163,7 +163,7 @@ help_text: Select date range for analysis
 $exhibits${{
 type: line_chart
 title: Daily Closing Prices
-source: stocks.fact_stock_prices
+source: securities.fact_security_prices
 x: trade_date
 y: close
 color: ticker
@@ -174,7 +174,7 @@ color: ticker
 $exhibits${{
 type: bar_chart
 title: Trading Volume
-source: stocks.fact_stock_prices
+source: securities.fact_security_prices
 x: trade_date
 y: volume
 color: ticker
@@ -185,7 +185,7 @@ color: ticker
 $exhibits${{
 type: data_table
 title: Price History
-source: stocks.fact_stock_prices
+source: securities.fact_security_prices
 columns: [ticker, trade_date, open, high, low, close, volume]
 pagination: true
 page_size: 50

@@ -933,10 +933,10 @@ metadata:
 label: Stock Tickers
 type: select
 multi: true
-source: {model: stocks, table: fact_stock_prices, column: ticker}
+source: {model: securities, table: dim_security, column: ticker}
 default: []
 operator: in
-help_text: Select stocks to analyze""",
+help_text: Select securities to analyze""",
             "date_range": """id: date_range
 label: Date Range
 type: date_range

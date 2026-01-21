@@ -26,8 +26,22 @@
     "_note_cook_county": "See Data Sources/Endpoints/Cook County Data Portal/*.md",
 
     "_comment_silver": "Silver layer tables (domain-based)",
-    "dim_calendar": { "root": "silver", "rel": "core/dims/dim_calendar" },
-    "dim_stock": { "root": "securities_silver", "rel": "stocks/dims/dim_stock" },
-    "fact_stock_prices": { "root": "securities_silver", "rel": "stocks/facts/fact_stock_prices" }
+    "_comment_v3": "Normalized architecture v3.0 - securities is master model for all tradable instruments",
+
+    "_comment_temporal": "Temporal/Calendar domain",
+    "dim_calendar": { "root": "silver", "rel": "temporal/dim_calendar" },
+
+    "_comment_securities": "Master securities domain - unified dimension and prices",
+    "dim_security": { "root": "silver", "rel": "securities/dim_security" },
+    "fact_security_prices": { "root": "silver", "rel": "securities/fact_security_prices" },
+
+    "_comment_stocks": "Stocks domain - extends securities with stock-specific tables",
+    "dim_stock": { "root": "silver", "rel": "stocks/dim_stock" },
+    "fact_stock_technicals": { "root": "silver", "rel": "stocks/fact_stock_technicals" },
+    "fact_dividends": { "root": "silver", "rel": "stocks/fact_dividends" },
+    "fact_splits": { "root": "silver", "rel": "stocks/fact_splits" },
+
+    "_comment_corporate": "Corporate domain",
+    "dim_company": { "root": "silver", "rel": "company/dim_company" }
   }
 }

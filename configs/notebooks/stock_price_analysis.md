@@ -54,7 +54,7 @@ Analyze stock price movements, trading volume, and key metrics for selected equi
 
 $exhibits${
   type: metric_cards
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   metrics: [
     { column: close, label: "Latest Close", aggregation: last, format: "$,.2f" },
     { column: close, label: "Avg Price", aggregation: avg, format: "$,.2f" },
@@ -70,7 +70,7 @@ Explore stock price data interactively. Select which metrics to display and how 
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date
   title: Stock Price Explorer
   height: 450
@@ -99,7 +99,7 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date
   y: [close, sma_20, sma_50, sma_200]
   color: ticker
@@ -111,7 +111,7 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date
   y: rsi_14
   color: ticker
@@ -130,7 +130,7 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date
   y: volume
   color: ticker
@@ -142,7 +142,7 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date
   y: volume_ratio
   color: ticker
@@ -161,7 +161,7 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date
   y: [high, low]
   color: ticker
@@ -173,7 +173,7 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date
   y: [close, bollinger_upper, bollinger_middle, bollinger_lower]
   color: ticker
@@ -192,7 +192,7 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date
   y: [volatility_20d, volatility_60d]
   color: ticker
@@ -204,7 +204,7 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date
   y: daily_return
   color: ticker
@@ -221,7 +221,7 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   columns: [ticker, date, open, high, low, close, volume, daily_return]
   sort_by: date
   sort_order: desc

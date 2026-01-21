@@ -92,11 +92,11 @@ $exhibits${
 
 ### Trading Volume (All Stocks)
 
-NOTE: Sector-based volume aggregation requires cross-model joins (stocks.fact_stock_prices -> company.dim_company)
+NOTE: Sector-based volume aggregation requires cross-model joins (securities.fact_security_prices -> company.dim_company)
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date_id
   y: volume
   aggregation: sum
@@ -207,7 +207,7 @@ NOTE: Sector-based aggregation requires cross-model joins (planned feature)
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date_id
   y: close
   title: Stock Prices Over Time
@@ -219,7 +219,7 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.fact_security_prices
   x: date_id
   y: volume
   title: Trading Volume Over Time
