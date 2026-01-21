@@ -15,6 +15,7 @@ depends_on: []  # Foundation model - no dependencies
 storage:
   root: storage/silver/temporal
   format: delta
+  auto_vacuum: true  # Disable time travel to save storage (default: true)
 
 # Build
 build:

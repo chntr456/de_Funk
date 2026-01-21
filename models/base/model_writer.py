@@ -8,9 +8,11 @@ This module is used by BaseModel via composition.
 
 Storage format is Delta Lake for:
 - ACID transactions
-- Time travel / version history
 - Schema evolution
 - Efficient upserts
+
+Note: Time travel/versioning is DISABLED by default (auto_vacuum: true).
+Set `storage.auto_vacuum: false` in domain markdown to enable versioning.
 """
 
 from typing import Dict, Any, Optional, List
@@ -24,12 +26,20 @@ DataFrame = Any
 # Default storage format
 DEFAULT_FORMAT = "delta"
 
+# Default auto_vacuum setting - True means NO time travel (clean up old files immediately)
+DEFAULT_AUTO_VACUUM = True
+
 
 class ModelWriter:
     """
     Handles writing model tables to persistent storage.
 
-    Uses Delta Lake format for ACID transactions and time travel.
+    Uses Delta Lake format for ACID transactions.
+    Auto-vacuum is enabled by default to disable time travel and save storage.
+
+    To enable time travel/versioning, set in domain markdown:
+        storage:
+          auto_vacuum: false
     """
 
     def __init__(self, model):
@@ -41,11 +51,22 @@ class ModelWriter:
         """
         self.model = model
         self._quiet = False
+        self._spark = None  # Lazy-loaded for vacuum operations
 
     def _print(self, msg: str):
         """Print message if not in quiet mode."""
         if not self._quiet:
             print(msg)
+
+    @property
+    def auto_vacuum(self) -> bool:
+        """
+        Check if auto_vacuum is enabled for this model.
+
+        Reads from domain markdown: storage.auto_vacuum
+        Default: True (vacuum after writes, no time travel)
+        """
+        return self.model.model_cfg.get("storage", {}).get("auto_vacuum", DEFAULT_AUTO_VACUUM)
 
     @property
     def model_name(self) -> str:
@@ -54,6 +75,45 @@ class ModelWriter:
     @property
     def storage_cfg(self) -> Dict:
         return self.model.storage_cfg
+
+    def _vacuum_table(self, path: str, format: str) -> bool:
+        """
+        Vacuum a Delta table to remove old files (disable time travel).
+
+        Args:
+            path: Path to the Delta table
+            format: Storage format (only vacuums if 'delta')
+
+        Returns:
+            True if vacuum succeeded, False otherwise
+        """
+        if format != "delta" or not self.auto_vacuum:
+            return False
+
+        try:
+            from delta import DeltaTable
+
+            # Get or create Spark session
+            if self._spark is None:
+                from orchestration.common.spark_session import get_spark
+                self._spark = get_spark("ModelWriter")
+
+            # Disable retention check to allow vacuum(0)
+            self._spark.conf.set(
+                "spark.databricks.delta.retentionDurationCheck.enabled", "false"
+            )
+
+            dt = DeltaTable.forPath(self._spark, path)
+            dt.vacuum(0)  # Remove ALL old files
+            logger.debug(f"Vacuumed: {path}")
+            return True
+
+        except ImportError:
+            logger.debug("Delta Lake not available, skipping vacuum")
+            return False
+        except Exception as e:
+            logger.warning(f"Vacuum failed for {path}: {e}")
+            return False
 
     def write_tables(
         self,
@@ -168,6 +228,11 @@ class ModelWriter:
                 writer = writer.partitionBy(partition_by[name])
 
             writer.save(path)
+
+            # Auto-vacuum to remove old files (if enabled)
+            if self.auto_vacuum and format == "delta":
+                self._vacuum_table(path, format)
+
             elapsed = time.time() - start_time
             stats['dimensions'][name] = {
                 'rows': row_count,
@@ -176,7 +241,8 @@ class ModelWriter:
             }
             stats['total_rows'] += row_count
             stats['total_tables'] += 1
-            self._print(f"    ✓ {row_count:,} rows ({elapsed:.1f}s)")
+            vacuum_status = " [vacuumed]" if self.auto_vacuum and format == "delta" else ""
+            self._print(f"    ✓ {row_count:,} rows ({elapsed:.1f}s){vacuum_status}")
 
         # Write facts
         self._print(f"\nWriting Facts:")
@@ -204,6 +270,11 @@ class ModelWriter:
             self._print(f"    Writing... (this may take a moment for large datasets)")
             writer.save(path)
 
+            # Auto-vacuum to remove old files (if enabled)
+            if self.auto_vacuum and format == "delta":
+                self._print(f"    Vacuuming old versions...")
+                self._vacuum_table(path, format)
+
             elapsed = time.time() - start_time
             # Estimate file count for Delta
             num_files = max(1, row_count // 2_000_000 + 1)
@@ -214,7 +285,8 @@ class ModelWriter:
             }
             stats['total_rows'] += row_count
             stats['total_tables'] += 1
-            self._print(f"    ✓ Complete ({elapsed:.1f}s)")
+            vacuum_status = " [vacuumed]" if self.auto_vacuum and format == "delta" else ""
+            self._print(f"    ✓ Complete ({elapsed:.1f}s){vacuum_status}")
 
         return stats
 

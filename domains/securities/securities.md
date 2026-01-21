@@ -11,6 +11,7 @@ depends_on: [temporal]
 # Storage
 storage:
   format: delta
+  auto_vacuum: true  # Disable time travel to save storage (default: true)
   bronze:
     provider: alpha_vantage
     tables:

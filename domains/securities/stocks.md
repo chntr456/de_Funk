@@ -11,6 +11,7 @@ depends_on: [temporal, securities, company]
 # Storage - provider/endpoint_id for bronze, domain hierarchy for silver
 storage:
   format: delta
+  auto_vacuum: true  # Disable time travel to save storage (default: true)
   bronze:
     provider: alpha_vantage
     tables:
