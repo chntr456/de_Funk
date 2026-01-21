@@ -181,6 +181,33 @@ graph:
     # NOTE: fact_stock_technicals is computed post-build from securities.fact_security_prices
     # by scripts/build/compute_technicals.py - it's not loaded from bronze directly
 
+    # fact_stock_prices is a filtered copy of securities.fact_security_prices for stocks only
+    # This enables stock-specific price analysis with auto-join to dim_stock and sector data
+    fact_stock_prices:
+      from: securities.fact_security_prices
+      type: fact
+      description: "Stock prices - filtered from unified securities prices"
+      select:
+        ticker: ticker
+        trade_date: trade_date
+        open: open
+        high: high
+        low: low
+        close: close
+        volume: volume
+        adjusted_close: adjusted_close
+        price_id: price_id
+        security_id: security_id
+        date_id: date_id
+        date: date
+      filters:
+        - "asset_type = 'stocks'"
+      primary_key: [price_id]
+      foreign_keys:
+        - {column: security_id, references: dim_stock.security_id}
+        - {column: date_id, references: temporal.dim_calendar.date_id}
+      tags: [fact, prices, ohlcv]
+
     fact_dividends:
       from: bronze.alpha_vantage.dividends
       type: fact
@@ -241,6 +268,19 @@ graph:
       type: many_to_one
       optional: true
 
+    # Stock prices relationships (fact_stock_prices is subset of securities.fact_security_prices for stocks only)
+    prices_to_stock:
+      from: fact_stock_prices
+      to: dim_stock
+      on: [security_id=security_id]
+      type: many_to_one
+
+    prices_to_calendar:
+      from: fact_stock_prices
+      to: temporal.dim_calendar
+      on: [date_id=date_id]
+      type: many_to_one
+
     # Dividends relationships
     dividends_to_stock:
       from: fact_dividends
@@ -279,6 +319,12 @@ graph:
       steps:
         - {from: securities.dim_security, to: dim_stock, via: security_id}
         - {from: dim_stock, to: fact_stock_technicals, via: security_id}
+
+    prices_to_sector:
+      description: "Navigate from stock prices to sector via dim_stock"
+      steps:
+        - {from: fact_stock_prices, to: dim_stock, via: security_id}
+        # dim_stock has sector column directly
 
 # Metadata
 metadata:
