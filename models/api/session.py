@@ -370,11 +370,21 @@ class UniversalSession:
 
         # Try multiple possible paths
         # Model writer creates: facts/fact_xxx or dims/dim_xxx
+        # Also check shared NFS storage which may have data from cluster builds
         possible_paths = [
             base_silver_path / table_path,
             base_silver_path / f"facts/{table_name}",  # facts/fact_stock_prices
             base_silver_path / f"dims/{table_name}",   # dims/dim_stock
         ]
+
+        # Also try shared NFS storage paths (cluster builds write here)
+        shared_silver_base = Path('/shared/storage/silver') / model_name
+        if shared_silver_base != base_silver_path:
+            possible_paths.extend([
+                shared_silver_base / table_path,
+                shared_silver_base / f"facts/{table_name}",
+                shared_silver_base / f"dims/{table_name}",
+            ])
 
         logger.debug(f"Looking for {model_name}.{table_name} in paths: {[str(p) for p in possible_paths]}")
 
