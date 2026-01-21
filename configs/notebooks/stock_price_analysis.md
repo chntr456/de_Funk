@@ -1,9 +1,9 @@
 ---
 id: stock_price_analysis
 title: Stock Price Analysis
-description: Comprehensive stock price analysis with technical indicators
-tags: [stocks, prices, analysis, technical]
-models: [stocks]
+description: Stock price analysis with OHLCV data
+tags: [stocks, prices, analysis]
+models: [securities, stocks]
 author: de_Funk Analytics
 created: 2025-12-05
 ---
@@ -13,37 +13,19 @@ $filter${
   label: Stock Ticker
   type: select
   multi: true
-  source: {model: stocks, table: dim_stock, column: ticker}
+  source: {model: securities, table: dim_security, column: ticker}
   default: ["AAPL", "MSFT", "GOOGL"]
   help_text: Select one or more stocks to analyze
 }
 
 $filter${
-  id: sector
-  label: Sector
-  type: select
-  multi: true
-  source: {model: company, table: dim_company, column: sector}
-  help_text: Filter stocks by sector
-}
-
-$filter${
-  id: exchange_code
-  label: Exchange
-  type: select
-  multi: true
-  source: {model: stocks, table: dim_stock, column: exchange_code}
-  help_text: Filter by stock exchange
-}
-
-$filter${
-  id: date
+  id: date_id
   type: date_range
   label: Date Range
-  column: date
+  column: date_id
   operator: between
-  default: {start: current_date() - 365, end: current_date()}
-  help_text: Filter by trading date range
+  default: {start: 20240101, end: 20251231}
+  help_text: Filter by trading date range (YYYYMMDD format)
 }
 
 # Stock Price Analysis
@@ -56,70 +38,24 @@ $exhibits${
   type: metric_cards
   source: securities.fact_security_prices
   metrics: [
-    { column: close, label: "Latest Close", aggregation: last, format: "$,.2f" },
-    { column: close, label: "Avg Price", aggregation: avg, format: "$,.2f" },
+    { column: close, label: "Avg Close", aggregation: avg, format: "$,.2f" },
     { column: volume, label: "Total Volume", aggregation: sum, format: ",.0f" },
-    { column: high, label: "52W High", aggregation: max, format: "$,.2f" },
-    { column: low, label: "52W Low", aggregation: min, format: "$,.2f" }
+    { column: high, label: "Max High", aggregation: max, format: "$,.2f" },
+    { column: low, label: "Min Low", aggregation: min, format: "$,.2f" }
   ]
 }
 
 ## Price Trend
 
-Explore stock price data interactively. Select which metrics to display and how to group them.
-
 $exhibits${
   type: line_chart
   source: securities.fact_security_prices
-  x: date
-  title: Stock Price Explorer
+  x: date_id
+  y: close
+  color: security_id
+  title: Daily Closing Prices
   height: 450
-  measure_selector:
-    available_measures: [close, open, high, low, volume]
-    default_measures: [close]
-    label: Price Metrics
-    allow_multiple: true
-    selector_type: checkbox
-    help_text: Select one or more price metrics to display
-  dimension_selector:
-    available_dimensions: [ticker, sector, exchange_code]
-    default_dimension: ticker
-    label: Group By
-    selector_type: radio
-    applies_to: group_by
-    help_text: Choose how to group/color the lines
 }
-
-## Technical Indicators
-
-<details>
-<summary>Moving Averages & RSI</summary>
-
-### Moving Average Crossovers
-
-$exhibits${
-  type: line_chart
-  source: securities.fact_security_prices
-  x: date
-  y: [close, sma_20, sma_50, sma_200]
-  color: ticker
-  title: Price with Moving Averages (20, 50, 200 day)
-  height: 400
-}
-
-### RSI (14-day)
-
-$exhibits${
-  type: line_chart
-  source: securities.fact_security_prices
-  x: date
-  y: rsi_14
-  color: ticker
-  title: Relative Strength Index (14-day)
-  height: 300
-}
-
-</details>
 
 ## Volume Analysis
 
@@ -131,22 +67,10 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: securities.fact_security_prices
-  x: date
+  x: date_id
   y: volume
-  color: ticker
+  color: security_id
   title: Daily Trading Volume
-  height: 300
-}
-
-### Volume Ratio (vs 20-day avg)
-
-$exhibits${
-  type: line_chart
-  source: securities.fact_security_prices
-  x: date
-  y: volume_ratio
-  color: ticker
-  title: Volume Ratio (Current / 20-day Average)
   height: 300
 }
 
@@ -162,54 +86,11 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: securities.fact_security_prices
-  x: date
+  x: date_id
   y: [high, low]
-  color: ticker
+  color: security_id
   title: Daily High and Low Prices
   height: 350
-}
-
-### Bollinger Bands
-
-$exhibits${
-  type: line_chart
-  source: securities.fact_security_prices
-  x: date
-  y: [close, bollinger_upper, bollinger_middle, bollinger_lower]
-  color: ticker
-  title: Bollinger Bands (20-day, 2 std dev)
-  height: 400
-}
-
-</details>
-
-## Volatility
-
-<details>
-<summary>Volatility Analysis</summary>
-
-### Rolling Volatility (Annualized)
-
-$exhibits${
-  type: line_chart
-  source: securities.fact_security_prices
-  x: date
-  y: [volatility_20d, volatility_60d]
-  color: ticker
-  title: Rolling Volatility (20-day and 60-day)
-  height: 350
-}
-
-### Daily Returns Distribution
-
-$exhibits${
-  type: line_chart
-  source: securities.fact_security_prices
-  x: date
-  y: daily_return
-  color: ticker
-  title: Daily Returns (%)
-  height: 300
 }
 
 </details>
@@ -222,8 +103,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: securities.fact_security_prices
-  columns: [ticker, date, open, high, low, close, volume, daily_return]
-  sort_by: date
+  columns: [security_id, date_id, open, high, low, close, volume]
+  sort_by: date_id
   sort_order: desc
   page_size: 20
   download: true
@@ -232,14 +113,28 @@ $exhibits${
 </details>
 
 <details>
-<summary>Stock Information</summary>
+<summary>Security Information</summary>
 
-Reference information for selected stocks:
+Reference information for selected securities:
+
+$exhibits${
+  type: data_table
+  source: securities.dim_security
+  columns: [ticker, security_name, exchange_code, asset_type, is_active]
+  download: true
+}
+
+</details>
+
+<details>
+<summary>Stock Details</summary>
+
+Stock-specific information (from stocks model):
 
 $exhibits${
   type: data_table
   source: stocks.dim_stock
-  columns: [ticker, security_name, exchange_code, sector, industry, market_cap]
+  columns: [ticker, exchange_code, sector, industry, market_cap, shares_outstanding]
   download: true
 }
 
