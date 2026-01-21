@@ -569,6 +569,22 @@ class UniversalSession:
         df = auto_join.execute_auto_joins(model_name, join_plan, required_columns, filters)
         logger.debug(f"AUTO-JOIN: execute_auto_joins took {time.time() - t0:.2f}s")
 
+        # Log result row count for debugging
+        try:
+            if hasattr(df, 'count'):
+                # DuckDB relation - use count() which is efficient
+                row_count = df.count('*').fetchone()[0]
+            elif hasattr(df, 'shape'):
+                # Pandas DataFrame
+                row_count = df.shape[0]
+            else:
+                row_count = 'unknown'
+            logger.info(f"AUTO-JOIN RESULT: {row_count} rows returned")
+            if row_count == 0:
+                logger.warning(f"AUTO-JOIN RESULT: No data! Check filters: {filters}")
+        except Exception as e:
+            logger.debug(f"AUTO-JOIN RESULT: Could not get row count: {e}")
+
         # NOTE: Removed try/except fallback to model.get_table()
         # If auto-join fails, let the error propagate - don't silently read from Bronze
 
@@ -576,6 +592,17 @@ class UniversalSession:
             t0 = time.time()
             df = aggregation.aggregate_data(model_name, df, required_columns, group_by, aggregations)
             logger.debug(f"AUTO-JOIN: aggregate_data took {time.time() - t0:.2f}s")
+            # Log aggregated row count
+            try:
+                if hasattr(df, 'count'):
+                    agg_count = df.count('*').fetchone()[0]
+                elif hasattr(df, 'shape'):
+                    agg_count = df.shape[0]
+                else:
+                    agg_count = 'unknown'
+                logger.info(f"AUTO-JOIN AGGREGATED: {agg_count} rows after aggregation (group_by={group_by})")
+            except Exception:
+                pass
 
         logger.debug(f"AUTO-JOIN COMPLETE: Total time {time.time() - start_time:.2f}s")
         return df

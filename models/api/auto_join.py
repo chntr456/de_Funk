@@ -617,6 +617,12 @@ class AutoJoinHandler:
         """
         from core.session.filters import FilterEngine
 
+        # Log input filters for debugging
+        if filters:
+            logger.info(f"AUTO-JOIN EXECUTE: Input filters = {filters}")
+        else:
+            logger.info(f"AUTO-JOIN EXECUTE: No filters provided")
+
         model = self.session.load_model(model_name)
         table_sequence = join_plan['table_sequence']
 
@@ -823,8 +829,12 @@ class AutoJoinHandler:
             where_clause = self._build_where_clause_for_views(translated_filters, base_view, available_cols)
             if where_clause:
                 sql += f" WHERE {where_clause}"
+                logger.info(f"AUTO-JOIN WHERE CLAUSE (views): {where_clause}")
+            else:
+                logger.info(f"AUTO-JOIN WHERE CLAUSE (views): (none - no filters applied)")
 
-        logger.debug(f"AUTO-JOIN DUCKDB SQL: {sql[:500]}{'...' if len(sql) > 500 else ''}")
+        # Log the full SQL for debugging
+        logger.info(f"AUTO-JOIN FULL SQL (views):\n{sql}")
 
         # Return lazy DuckDB relation - do NOT use fetchdf() which loads all data into memory
         t0 = time.time()
@@ -1021,8 +1031,12 @@ class AutoJoinHandler:
                 )
                 if where_clause:
                     sql += f" WHERE {where_clause}"
+                    logger.info(f"AUTO-JOIN WHERE CLAUSE: {where_clause}")
+                else:
+                    logger.info(f"AUTO-JOIN WHERE CLAUSE: (none - no filters applied)")
 
-            logger.debug(f"AUTO-JOIN DUCKDB SQL: {sql[:500]}{'...' if len(sql) > 500 else ''}")
+            # Log the full SQL for debugging
+            logger.info(f"AUTO-JOIN FULL SQL:\n{sql}")
 
             # Execute the join query - return LAZY relation, NOT fetchdf()!
             # fetchdf() would load ALL rows into pandas memory (crashes on 22M rows)
