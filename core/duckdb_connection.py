@@ -579,9 +579,10 @@ class DuckDBConnection(DataConnection):
         Returns:
             DuckDB relation
         """
-        # If no schema provided, create empty relation with no columns
+        # If no schema provided, create empty relation with a placeholder column
+        # (DuckDB requires at least one column in a DataFrame)
         if schema is None:
-            return self.conn.from_df(pd.DataFrame())
+            return self.conn.from_df(pd.DataFrame({'_empty': pd.Series([], dtype='object')}))
 
         # Parse PySpark schema to create pandas DataFrame with correct types
         try:
@@ -611,16 +612,16 @@ class DuckDBConnection(DataConnection):
                 df = pd.DataFrame(columns)
                 return self.conn.from_df(df)
             else:
-                # Schema is not StructType, create empty DataFrame
-                return self.conn.from_df(pd.DataFrame())
+                # Schema is not StructType, create empty DataFrame with placeholder
+                return self.conn.from_df(pd.DataFrame({'_empty': pd.Series([], dtype='object')}))
 
         except ImportError:
-            # PySpark not available, just create empty DataFrame
-            return self.conn.from_df(pd.DataFrame())
+            # PySpark not available, create empty DataFrame with placeholder
+            return self.conn.from_df(pd.DataFrame({'_empty': pd.Series([], dtype='object')}))
         except Exception as e:
-            # Fallback: create empty DataFrame
+            # Fallback: create empty DataFrame with placeholder
             logger.warning(f"Could not parse schema for createDataFrame: {e}")
-            return self.conn.from_df(pd.DataFrame())
+            return self.conn.from_df(pd.DataFrame({'_empty': pd.Series([], dtype='object')}))
 
     def apply_filters(self, df: Any, filters: Dict[str, Any]) -> Any:
         """

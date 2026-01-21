@@ -433,11 +433,10 @@ class UniversalSession:
             )
 
         if not base_silver_path.exists():
-            logger.warning(f"Silver storage not found at {base_silver_path}. "
-                          f"Run data generation first.")
-            # Return empty DataFrame instead of triggering expensive build
-            import pandas as pd
-            return self.connection.conn.from_df(pd.DataFrame()) if hasattr(self.connection, 'conn') else pd.DataFrame()
+            raise ValueError(
+                f"Silver storage for '{model_name}' not found at {base_silver_path}. "
+                f"Run: python -m scripts.build.build_models --models {model_name}"
+            )
 
         # Strategy 4: REMOVED - Never fall back to Bronze for queries
         # Building from Bronze would load 22M+ rows into memory and crash.
