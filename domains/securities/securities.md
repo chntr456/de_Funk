@@ -152,12 +152,42 @@ graph:
       on: [date_id=date_id]
       type: many_to_one
 
+    # Cross-model edges for auto-join traversal
+    # These allow queries on securities to reach stock/company dimensions
+    security_to_stock:
+      from: dim_security
+      to: stocks.dim_stock
+      on: [security_id=security_id]
+      type: one_to_one
+      optional: true  # Not all securities are stocks
+
+    security_to_company:
+      from: dim_security
+      to: corporate.dim_company
+      on: [security_id=company_id]  # Derived: company_id = HASH('COMPANY_' + ticker)
+      type: many_to_one
+      optional: true
+      description: "Cross-model edge for sector/industry lookup via stocks.dim_stock"
+
   paths:
     security_prices_by_date:
       description: "Navigate from calendar to prices to security"
       steps:
         - {from: temporal.dim_calendar, to: fact_security_prices, via: date_id}
         - {from: fact_security_prices, to: dim_security, via: security_id}
+
+    prices_to_stock:
+      description: "Navigate from prices to stock dimension for ticker/sector/industry"
+      steps:
+        - {from: fact_security_prices, to: dim_security, via: security_id}
+        - {from: dim_security, to: stocks.dim_stock, via: security_id}
+
+    prices_to_company:
+      description: "Navigate from prices to company for sector/industry (via stock)"
+      steps:
+        - {from: fact_security_prices, to: dim_security, via: security_id}
+        - {from: dim_security, to: stocks.dim_stock, via: security_id}
+        - {from: stocks.dim_stock, to: corporate.dim_company, via: company_id}
 
 # Metadata
 metadata:

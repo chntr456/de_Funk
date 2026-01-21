@@ -373,14 +373,19 @@ class AutoJoinHandler:
             try:
                 # Get all tables/views in this schema from DuckDB catalog
                 # Also include foundational/shared schemas that models commonly join to:
-                # - temporal: calendar dimension (date_id, date, etc.)
-                # - company: company dimension (sector, industry, etc.)
+                # - temporal: calendar dimension (date_id, date, year, month, etc.)
+                # - company/corporate: company dimension (sector, industry, etc.)
+                # - securities: master security dimension (ticker, asset_type, etc.)
+                # - stocks: stock dimension (sector, industry, market_cap, etc.)
                 result = self.connection.conn.execute(f"""
                     SELECT table_name, column_name
                     FROM information_schema.columns
                     WHERE table_schema = '{model_name}'
                        OR table_schema = 'temporal'
                        OR table_schema = 'company'
+                       OR table_schema = 'corporate'
+                       OR table_schema = 'securities'
+                       OR table_schema = 'stocks'
                     ORDER BY table_name, ordinal_position
                 """).fetchall()
 
