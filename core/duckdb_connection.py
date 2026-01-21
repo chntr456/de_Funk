@@ -107,10 +107,11 @@ class DuckDBConnection(DataConnection):
         try:
             # Check if any v2.0 model schemas exist (quick check to avoid unnecessary work)
             # Including 'bronze' schema for Bronze layer views
+            # NOTE: Must include 'securities' for normalized v3.0 architecture
             existing_schemas = self.conn.execute("""
                 SELECT schema_name
                 FROM information_schema.schemata
-                WHERE schema_name IN ('stocks', 'options', 'company', 'temporal', 'geography', 'bronze')
+                WHERE schema_name IN ('securities', 'stocks', 'options', 'company', 'temporal', 'geography', 'bronze')
             """).fetchall()
 
             views_need_refresh = False
