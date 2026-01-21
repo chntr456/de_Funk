@@ -117,17 +117,41 @@ class DuckDBViewSetup:
         else:
             return self.repo_root / 'storage' / 'bronze'
 
+    # Schema to directory mapping for legacy Silver layer paths
+    # Some schemas have different directory names in the Silver layer
+    SCHEMA_DIR_ALIASES = {
+        'temporal': ['temporal', 'core'],      # temporal model data may be in 'core' dir
+        'company': ['company', 'corporate'],   # company model data may be in 'corporate' dir
+    }
+
     def get_silver_path(self, model: str) -> Path:
         """Get Silver layer path for model (absolute path).
 
         If storage_root is set (e.g., /shared/storage), uses that.
         Otherwise falls back to repo_root/storage.
+
+        Handles legacy directory name aliases (e.g., 'temporal' -> 'core').
         """
+        base_path = self.storage_root if self.storage_root else self.repo_root / 'storage'
+
+        # Check if this model has directory aliases
+        dirs_to_try = self.SCHEMA_DIR_ALIASES.get(model, [model])
+
+        for dir_name in dirs_to_try:
+            if self.storage_root:
+                path = self.storage_root / 'silver' / dir_name
+            else:
+                relative_path = self.config.storage.get(f'{dir_name}_silver', f'storage/silver/{dir_name}')
+                path = self.repo_root / relative_path
+
+            if path.exists():
+                logger.debug(f"get_silver_path('{model}'): Found at {path}")
+                return path
+
+        # Return primary path even if it doesn't exist (caller will handle)
         if self.storage_root:
-            # Use explicit storage root (e.g., /shared/storage from run_config.json)
             return self.storage_root / 'silver' / model
         else:
-            # Fallback to repo-relative path
             relative_path = self.config.storage.get(f'{model}_silver', f'storage/silver/{model}')
             return self.repo_root / relative_path
 
@@ -233,20 +257,38 @@ SELECT * FROM {read_sql};
             return False
 
     def create_temporal_views(self, dry_run: bool = False):
-        """Create views for temporal model (calendar dimension)."""
+        """Create views for temporal model (calendar dimension).
+
+        Checks both 'temporal' and 'core' directories since the calendar
+        dimension may be stored under either name depending on the build version.
+        """
         logger.info("\n" + "="*80)
         logger.info("TEMPORAL MODEL VIEWS")
         logger.info("="*80)
 
-        silver_path = self.get_silver_path('temporal')
+        # Try multiple paths for calendar dimension (temporal vs core legacy naming)
+        base_path = self.storage_root if self.storage_root else self.repo_root / 'storage'
+        calendar_paths = [
+            base_path / 'silver' / 'temporal' / 'dims' / 'dim_calendar',
+            base_path / 'silver' / 'core' / 'dims' / 'dim_calendar',
+        ]
 
-        # dim_calendar
-        self.create_view(
-            schema='temporal',
-            table='dim_calendar',
-            table_path=silver_path / 'dims' / 'dim_calendar',
-            dry_run=dry_run
-        )
+        table_path = None
+        for path in calendar_paths:
+            if self._check_path_exists(path):
+                table_path = path
+                logger.debug(f"Found calendar dimension at: {path}")
+                break
+
+        if table_path:
+            self.create_view(
+                schema='temporal',
+                table='dim_calendar',
+                table_path=table_path,
+                dry_run=dry_run
+            )
+        else:
+            logger.warning(f"⚠ Skipping temporal.dim_calendar - not found at any of: {calendar_paths}")
 
     def create_geospatial_views(self, dry_run: bool = False):
         """Create views for geospatial model (geographic dimensions)."""
