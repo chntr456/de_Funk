@@ -732,21 +732,41 @@ CREATE OR REPLACE VIEW futures.dim_security AS
         logger.info("HELPER VIEWS")
         logger.info("="*80)
 
-        # Helper: Stock prices with company info (v3.0 normalized architecture)
-        # Note: Use 'helpers' schema instead of 'analytics' to avoid ambiguity
-        # with the 'analytics.db' database/catalog name
-        # NOTE: In v3.0, prices are in securities.fact_security_prices (master table)
-        helper_sql = """
+        # First, check what columns exist in securities.fact_security_prices
+        # to handle schema variations (trade_date vs date, volume_weighted may not exist)
+        try:
+            cols_result = self.conn.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'securities'
+                AND table_name = 'fact_security_prices'
+            """).fetchall()
+            fact_cols = {r[0] for r in cols_result}
+
+            # Determine date column name
+            date_col = 'trade_date' if 'trade_date' in fact_cols else 'date'
+
+            # Check if volume_weighted exists
+            has_volume_weighted = 'volume_weighted' in fact_cols
+        except Exception:
+            # Default fallback
+            date_col = 'date'
+            has_volume_weighted = False
+
+        # Build helper SQL with correct column names
+        volume_weighted_col = "p.volume_weighted," if has_volume_weighted else ""
+
+        helper_sql = f"""
 CREATE OR REPLACE VIEW helpers.stock_prices_enriched AS
 SELECT
     sec.ticker,
-    p.trade_date,
+    p.{date_col} as trade_date,
     p.open,
     p.high,
     p.low,
     p.close,
     p.volume,
-    p.volume_weighted,
+    {volume_weighted_col}
     c.company_name,
     c.sector,
     c.industry,
