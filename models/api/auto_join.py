@@ -268,9 +268,14 @@ class AutoJoinHandler:
             remaining = needed_tables - seen_tables
             logger.debug(f"AUTO-JOIN PLAN: Iteration {iteration}, still need: {remaining}")
 
-            # Star schema support: Add ALL reachable tables in each iteration,
-            # not just the first one. This handles fact → multiple dimensions.
+            # Star schema support: Add reachable tables in each iteration,
+            # but ONLY add edges that lead toward target tables to avoid unnecessary joins.
             for edge in edges:
+                # Early exit: stop if we've reached all target tables
+                if all(tbl in seen_tables for tbl in target_tables.values()):
+                    logger.debug(f"AUTO-JOIN PLAN: All target tables reached, stopping edge traversal")
+                    break
+
                 edge_from = edge.get('from', '')
                 edge_to = edge.get('to', '')
                 cross_model = None  # Track if this is a cross-model edge
@@ -286,6 +291,18 @@ class AutoJoinHandler:
 
                 # Check if this edge connects a current table to a new table
                 if edge_from in current_tables and edge_to not in seen_tables:
+                    # OPTIMIZATION: Only add edges that lead toward our target tables
+                    # Skip edges that go to tables not needed for our required columns
+                    is_target_table = edge_to in needed_tables
+                    is_on_path_to_target = edge_to in ('dim_security', 'dim_stock')  # Common intermediate tables
+
+                    # For non-target tables, check if they might lead to a target
+                    # We need to traverse intermediate tables to reach our targets
+                    # But skip tables like dim_calendar/dim_company if not needed
+                    if not is_target_table and not is_on_path_to_target:
+                        logger.debug(f"AUTO-JOIN PLAN: Skipping edge to {edge_to} - not needed for target columns")
+                        continue
+
                     # Add this table to sequence
                     table_sequence.append(edge_to)
                     seen_tables.add(edge_to)
@@ -311,7 +328,7 @@ class AutoJoinHandler:
                         joins.append(join_info)
 
                     added_any_table = True
-                    # NO BREAK - continue to find all reachable tables in this iteration
+                    # Continue to potentially find more needed tables in this iteration
 
             if not added_any_table:
                 # Log detailed failure info for debugging
@@ -431,11 +448,25 @@ class AutoJoinHandler:
                     logger.debug(f"AUTO-JOIN INDEX: Built from DuckDB catalog in {time.time() - t_start:.2f}s, "
                                 f"indexed {len(index)} columns from {len(table_columns)} tables")
 
+                    # If we got a good index from DuckDB, skip model schema augmentation
+                    # This avoids triggering Bronze reads via model.list_tables() -> ensure_built()
+                    if index:
+                        # Log key columns for debugging join issues
+                        for key_col in ['ticker', 'company_id', 'date_id', 'date', 'sector', 'industry']:
+                            if key_col in index:
+                                logger.debug(f"AUTO-JOIN INDEX: '{key_col}' found in tables: {index[key_col]}")
+
+                        # Cache for future calls
+                        self._column_index_cache[model_name] = index
+                        return index
+
             except Exception as e:
                 logger.debug(f"AUTO-JOIN INDEX: DuckDB catalog lookup failed: {e}, falling back to model schema")
 
         # Strategy 2: Augment with model schema for tables not found in DuckDB
-        # This ensures we have complete coverage even if some views aren't registered
+        # This is a FALLBACK only used when DuckDB views aren't available
+        # WARNING: This can trigger Bronze reads via model.list_tables() -> ensure_built()
+        logger.debug(f"AUTO-JOIN INDEX: Falling back to model schema (DuckDB index empty or failed)")
         t0 = time.time()
         model = self.session.load_model(model_name)
         logger.debug(f"AUTO-JOIN INDEX: load_model took {time.time() - t0:.2f}s")
