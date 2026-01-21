@@ -90,18 +90,20 @@ $exhibits${
   ]
 }
 
-### Trading Volume (All Stocks)
+### Trading Volume by Sector
 
-NOTE: Sector-based volume aggregation requires cross-model joins (securities.fact_security_prices -> company.dim_company)
+Total trading volume aggregated by sector. Uses auto-join from prices to stock dimension.
 
 $exhibits${
   type: bar_chart
-  source: securities.fact_security_prices
-  x: date
+  source: stocks.fact_stock_prices
+  x: sector
   y: volume
   aggregation: sum
-  title: Total Trading Volume Over Time
+  title: Total Trading Volume by Sector
   height: 350
+  columns: [sector, volume]
+  group_by: [sector]
 }
 
 ## Industry Breakdown
@@ -201,30 +203,32 @@ $exhibits${
 <details>
 <summary>Price Analysis by Sector</summary>
 
-### Stock Returns
-
-NOTE: Sector-based aggregation requires cross-model joins (planned feature)
+### Average Close Price by Sector
 
 $exhibits${
-  type: line_chart
-  source: securities.fact_security_prices
-  x: date
+  type: bar_chart
+  source: stocks.fact_stock_prices
+  x: sector
   y: close
-  title: Stock Prices Over Time
+  aggregation: avg
+  title: Average Close Price by Sector
   height: 400
-  columns: [date, close, security_id]
+  columns: [sector, close]
+  group_by: [sector]
 }
 
-### Stock Volatility
+### Total Volume by Sector
 
 $exhibits${
-  type: line_chart
-  source: securities.fact_security_prices
-  x: date
+  type: bar_chart
+  source: stocks.fact_stock_prices
+  x: sector
   y: volume
-  title: Trading Volume Over Time
+  aggregation: sum
+  title: Total Trading Volume by Sector
   height: 350
-  columns: [date, volume, security_id]
+  columns: [sector, volume]
+  group_by: [sector]
 }
 
 </details>

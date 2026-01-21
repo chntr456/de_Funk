@@ -191,6 +191,113 @@ $exhibits${
 
 </details>
 
+## Technical Indicators
+
+Technical indicators computed from price data. These provide insights into momentum, trend, and volatility.
+
+<details>
+<summary>Moving Averages</summary>
+
+### Price with Moving Averages
+
+Moving averages help identify trends. SMA-20 shows short-term trend, SMA-50 medium-term, and SMA-200 long-term.
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: date
+  y: [close, sma_20, sma_50, sma_200]
+  color: ticker
+  title: Price with Moving Averages
+  height: 450
+  columns: [date, ticker, close, sma_20, sma_50, sma_200]
+}
+
+*Note: Moving average columns (sma_20, sma_50, sma_200) require running `python -m scripts.build.compute_technicals` to populate.*
+
+</details>
+
+<details>
+<summary>Momentum Indicators</summary>
+
+### RSI (Relative Strength Index)
+
+RSI measures momentum. Values above 70 suggest overbought conditions, below 30 suggests oversold.
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: date
+  y: rsi_14
+  color: ticker
+  title: RSI (14-day)
+  height: 350
+  columns: [date, ticker, rsi_14]
+}
+
+*Note: RSI column (rsi_14) requires running `python -m scripts.build.compute_technicals` to populate.*
+
+</details>
+
+<details>
+<summary>Volatility</summary>
+
+### Bollinger Bands
+
+Bollinger Bands show price volatility. Prices near the upper band may be overbought, near lower band may be oversold.
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: date
+  y: [close, bollinger_upper, bollinger_middle, bollinger_lower]
+  color: ticker
+  title: Bollinger Bands (20-day, 2 std dev)
+  height: 400
+  columns: [date, ticker, close, bollinger_upper, bollinger_middle, bollinger_lower]
+}
+
+### Daily Volatility
+
+20-day and 60-day annualized volatility measures price fluctuation intensity.
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: date
+  y: [volatility_20d, volatility_60d]
+  color: ticker
+  title: Annualized Volatility
+  height: 350
+  columns: [date, ticker, volatility_20d, volatility_60d]
+}
+
+*Note: Volatility columns require running `python -m scripts.build.compute_technicals` to populate.*
+
+</details>
+
+<details>
+<summary>Volume Analysis</summary>
+
+### Volume vs Moving Average
+
+Volume ratio shows current volume relative to 20-day average. High ratios indicate unusual activity.
+
+$exhibits${
+  type: bar_chart
+  source: stocks.fact_stock_prices
+  x: date
+  y: [volume, volume_sma_20]
+  color: ticker
+  title: Volume vs 20-day SMA
+  height: 350
+  columns: [date, ticker, volume, volume_sma_20]
+}
+
+*Note: Volume SMA column (volume_sma_20) requires running `python -m scripts.build.compute_technicals` to populate.*
+
+</details>
+
 ## Data Tables
 
 <details>
