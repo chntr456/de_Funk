@@ -90,6 +90,38 @@ $exhibits${
   ]
 }
 
+### Market Cap by Sector
+
+$exhibits${
+  type: bar_chart
+  source: stocks.dim_stock
+  x: sector
+  y: market_cap
+  aggregation: sum
+  title: Total Market Cap by Sector
+  height: 350
+}
+
+### Sector Performance Summary
+
+Sector-level metrics including total market cap, stock count, and average market cap.
+
+$exhibits${
+  type: data_table
+  source: stocks.dim_stock
+  columns: [sector, ticker, market_cap, shares_outstanding]
+  group_by: [sector]
+  aggregations: [
+    { column: ticker, aggregation: count, label: "# Stocks" },
+    { column: market_cap, aggregation: sum, label: "Total Market Cap", format: "$,.0f" },
+    { column: market_cap, aggregation: avg, label: "Avg Market Cap", format: "$,.0f" },
+    { column: shares_outstanding, aggregation: sum, label: "Total Shares", format: ",.0f" }
+  ]
+  sort_by: market_cap_sum
+  sort_order: desc
+  download: true
+}
+
 ### Trading Volume by Sector
 
 Total trading volume aggregated by sector. Uses auto-join from prices to stock dimension.
