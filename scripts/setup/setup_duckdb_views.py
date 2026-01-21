@@ -310,28 +310,88 @@ SELECT * FROM {read_sql};
             )
 
     def create_securities_views(self, dry_run: bool = False):
-        """Create views for master securities model (v3.0 normalized architecture)."""
+        """Create views for master securities model (v3.0 normalized architecture).
+
+        If securities-specific data doesn't exist but stocks data does,
+        creates alias views pointing to stocks data for backward compatibility.
+        """
         logger.info("\n" + "="*80)
         logger.info("SECURITIES MODEL VIEWS (Master)")
         logger.info("="*80)
 
         silver_path = self.get_silver_path('securities')
+        stocks_path = self.get_silver_path('stocks')
 
-        # Master security dimension
-        self.create_view(
-            schema='securities',
-            table='dim_security',
-            table_path=silver_path / 'dim_security',
-            dry_run=dry_run
-        )
+        # Create securities schema
+        if not dry_run:
+            self.conn.execute("CREATE SCHEMA IF NOT EXISTS securities;")
 
-        # Unified price facts for all asset types
-        self.create_view(
-            schema='securities',
-            table='fact_security_prices',
-            table_path=silver_path / 'fact_security_prices',
-            dry_run=dry_run
-        )
+        # Check if securities-specific data exists
+        securities_dim_path = silver_path / 'dims' / 'dim_security'
+        securities_fact_path = silver_path / 'facts' / 'fact_security_prices'
+
+        # Check alternative paths (shared storage, flat structure)
+        securities_paths_exist = self._check_path_exists(securities_dim_path) and self._check_path_exists(securities_fact_path)
+
+        # Check if stocks data exists as fallback
+        stocks_dim_path = stocks_path / 'dims' / 'dim_stock'
+        stocks_fact_path = stocks_path / 'facts' / 'fact_stock_prices'
+        stocks_paths_exist = self._check_path_exists(stocks_dim_path) and self._check_path_exists(stocks_fact_path)
+
+        if securities_paths_exist:
+            # Use actual securities data
+            logger.info("Using securities-specific data")
+            self.create_view(
+                schema='securities',
+                table='dim_security',
+                table_path=securities_dim_path,
+                dry_run=dry_run
+            )
+            self.create_view(
+                schema='securities',
+                table='fact_security_prices',
+                table_path=securities_fact_path,
+                dry_run=dry_run
+            )
+        elif stocks_paths_exist:
+            # Fallback: Create alias views pointing to stocks data
+            logger.info("Securities data not found, creating aliases from stocks data")
+
+            # Create dim_security as alias to stocks.dim_stock
+            self.create_view(
+                schema='securities',
+                table='dim_security',
+                table_path=stocks_dim_path,
+                dry_run=dry_run
+            )
+
+            # Create fact_security_prices as alias to stocks.fact_stock_prices
+            self.create_view(
+                schema='securities',
+                table='fact_security_prices',
+                table_path=stocks_fact_path,
+                dry_run=dry_run
+            )
+        else:
+            # No data available
+            logger.warning("⚠ Neither securities nor stocks data found - skipping securities views")
+            self.skipped_views.extend(["securities.dim_security", "securities.fact_security_prices"])
+
+    def _check_path_exists(self, path: Path) -> bool:
+        """Check if a path exists, including shared storage fallbacks."""
+        if path.exists():
+            return True
+
+        # Check shared storage
+        path_str = str(path)
+        if 'storage/silver/' in path_str and not path_str.startswith('/shared/'):
+            rel_idx = path_str.find('storage/silver/')
+            rel_path = path_str[rel_idx + len('storage/'):]
+            shared_path = Path('/shared/storage') / rel_path
+            if shared_path.exists():
+                return True
+
+        return False
 
     def create_stocks_views(self, dry_run: bool = False):
         """Create views for stocks model (v3.0 normalized - FKs to securities)."""
@@ -341,15 +401,15 @@ SELECT * FROM {read_sql};
 
         silver_path = self.get_silver_path('stocks')
 
-        # Dimensions (v3.0 schema - extends securities.dim_security)
+        # Dimensions (v3.0 schema - extends securities.dim_security, uses dims/ subdirectory)
         self.create_view(
             schema='stocks',
             table='dim_stock',
-            table_path=silver_path / 'dim_stock',
+            table_path=silver_path / 'dims' / 'dim_stock',
             dry_run=dry_run
         )
 
-        # Facts (v3.0 schema - stock-specific facts, prices are in securities)
+        # Facts (v3.0 schema - stock-specific facts, prices are in securities, uses facts/ subdirectory)
         stock_facts = [
             'fact_stock_technicals',
             'fact_dividends',
@@ -360,19 +420,25 @@ SELECT * FROM {read_sql};
             self.create_view(
                 schema='stocks',
                 table=fact,
-                table_path=silver_path / fact,
+                table_path=silver_path / 'facts' / fact,
                 dry_run=dry_run
             )
 
-        # Alias views for backward compatibility
-        # NOTE: In v3.0 architecture, prices are in securities.fact_security_prices
-        alias_sql = """
--- Alias views for backward compatibility (v3.0 normalized architecture)
--- Prices are now in securities.fact_security_prices
+        # Create fact_stock_prices view (primary price data for stocks)
+        self.create_view(
+            schema='stocks',
+            table='fact_stock_prices',
+            table_path=silver_path / 'facts' / 'fact_stock_prices',
+            dry_run=dry_run
+        )
 
--- fact_prices alias points to securities model (master prices)
+        # Alias views for backward compatibility
+        alias_sql = """
+-- Alias views for backward compatibility
+
+-- fact_prices alias points to stocks.fact_stock_prices
 CREATE OR REPLACE VIEW stocks.fact_prices AS
-  SELECT * FROM securities.fact_security_prices;
+  SELECT * FROM stocks.fact_stock_prices;
 
 -- dim_security alias points to stocks dimension
 CREATE OR REPLACE VIEW stocks.dim_security AS
@@ -385,7 +451,7 @@ CREATE OR REPLACE VIEW stocks.dim_security AS
         else:
             try:
                 self.conn.execute(alias_sql)
-                logger.info("✓ Created alias views: fact_prices (→ securities), dim_security")
+                logger.info("✓ Created alias views: fact_prices, dim_security")
                 self.created_views.extend(["stocks.fact_prices", "stocks.dim_security"])
             except Exception as e:
                 logger.warning(f"⚠ Could not create alias views: {e}")
