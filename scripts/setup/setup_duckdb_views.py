@@ -144,18 +144,46 @@ class DuckDBViewSetup:
         Returns:
             True if view created, False if skipped
         """
-        # Check if path exists - try both nested (dims/facts) and flat structures
-        if not table_path.exists():
-            # Try flat structure (table directly under model folder)
-            # e.g., silver/stocks/dim_stock instead of silver/stocks/dims/dim_stock
-            flat_path = table_path.parent.parent / table
-            if flat_path.exists():
-                table_path = flat_path
-                logger.debug(f"Using flat path: {table_path}")
-            else:
-                logger.warning(f"⚠ Skipping {schema}.{table} - path not found: {table_path}")
-                self.skipped_views.append(f"{schema}.{table}")
-                return False
+        # Check if path exists - try multiple locations:
+        # 1. Original path (may be local or shared)
+        # 2. Flat structure (table directly under model folder)
+        # 3. Shared NFS storage (cluster builds write here)
+        paths_to_try = [table_path]
+
+        # Try flat structure
+        flat_path = table_path.parent.parent / table
+        if flat_path != table_path:
+            paths_to_try.append(flat_path)
+
+        # Try shared storage paths (NFS mount from cluster builds)
+        # Convert local path to shared path: storage/silver/X -> /shared/storage/silver/X
+        path_str = str(table_path)
+        if 'storage/silver/' in path_str and not path_str.startswith('/shared/'):
+            # Extract relative part after storage/silver/
+            rel_idx = path_str.find('storage/silver/')
+            rel_path = path_str[rel_idx + len('storage/'):]  # silver/model/...
+            shared_path = Path('/shared/storage') / rel_path
+            paths_to_try.append(shared_path)
+            # Also try shared flat path
+            shared_flat = shared_path.parent.parent / table
+            paths_to_try.append(shared_flat)
+
+        # Find first existing path
+        found_path = None
+        for p in paths_to_try:
+            if p.exists():
+                found_path = p
+                if p != table_path:
+                    logger.debug(f"Using alternate path: {p}")
+                break
+
+        if not found_path:
+            logger.warning(f"⚠ Skipping {schema}.{table} - path not found in any location")
+            logger.debug(f"  Tried: {[str(p) for p in paths_to_try]}")
+            self.skipped_views.append(f"{schema}.{table}")
+            return False
+
+        table_path = found_path
 
         # Check if this is a Delta table (has _delta_log directory)
         is_delta = (table_path / "_delta_log").exists() if table_path.is_dir() else False
