@@ -37,13 +37,13 @@ $filter${
 }
 
 $filter${
-  id: date_id
+  id: date
   type: date_range
   label: Date Range
-  column: date_id
+  column: date
   operator: between
-  default: {start: 20240101, end: 20251231}
-  help_text: Filter by trading date range (YYYYMMDD format)
+  default: {start: "2024-01-01", end: "2024-12-31"}
+  help_text: Filter by trading date range
 }
 
 # Stock Price Analysis
@@ -70,7 +70,7 @@ Daily closing prices grouped by security. Uses auto-join to get ticker from dim_
 $exhibits${
   type: line_chart
   source: securities.fact_security_prices
-  x: date_id
+  x: date
   y: close
   color: ticker
   title: Daily Closing Prices by Ticker
@@ -135,7 +135,7 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: securities.fact_security_prices
-  x: date_id
+  x: date
   y: volume
   color: ticker
   title: Daily Trading Volume
@@ -168,7 +168,7 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: securities.fact_security_prices
-  x: date_id
+  x: date
   y: [high, low]
   color: ticker
   title: Daily High and Low Prices
@@ -201,8 +201,8 @@ Price data with auto-joined ticker from dim_security:
 $exhibits${
   type: data_table
   source: securities.fact_security_prices
-  columns: [ticker, date_id, open, high, low, close, volume]
-  sort_by: date_id
+  columns: [ticker, date, open, high, low, close, volume]
+  sort_by: date
   sort_order: desc
   page_size: 20
   download: true

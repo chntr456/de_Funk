@@ -97,7 +97,7 @@ NOTE: Sector-based volume aggregation requires cross-model joins (securities.fac
 $exhibits${
   type: bar_chart
   source: securities.fact_security_prices
-  x: date_id
+  x: date
   y: volume
   aggregation: sum
   title: Total Trading Volume Over Time
@@ -208,11 +208,11 @@ NOTE: Sector-based aggregation requires cross-model joins (planned feature)
 $exhibits${
   type: line_chart
   source: securities.fact_security_prices
-  x: date_id
+  x: date
   y: close
   title: Stock Prices Over Time
   height: 400
-  columns: [date_id, close, security_id]
+  columns: [date, close, security_id]
 }
 
 ### Stock Volatility
@@ -220,11 +220,11 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: securities.fact_security_prices
-  x: date_id
+  x: date
   y: volume
   title: Trading Volume Over Time
   height: 350
-  columns: [date_id, volume, security_id]
+  columns: [date, volume, security_id]
 }
 
 </details>
