@@ -555,10 +555,11 @@ class AutoJoinHandler:
         available_cols: Set[str]
     ) -> Dict[str, Any]:
         """
-        Translate universal date filters to the table's local date column.
+        Translate universal date filters to use dim_calendar.date when available.
 
-        If a filter uses 'forecast_date' but the table has 'trade_date',
-        translate it using the calendar edge mapping.
+        IMPROVED: When dim_calendar is in the join (which has a proper 'date' column),
+        we filter on dim_calendar.date directly instead of converting to date_id integers.
+        This is cleaner and avoids date format conversion issues.
 
         Args:
             model_name: Model being queried
@@ -572,26 +573,32 @@ class AutoJoinHandler:
         if not filters:
             return filters
 
-        # Get the local date column for this table
-        local_date_col = self.get_calendar_date_column(model_name, base_table)
-
-        if not local_date_col:
-            logger.debug(f"DATE TRANSLATE: No calendar edge for {model_name}.{base_table}")
-            return filters
+        # Check if dim_calendar's 'date' column is available in the join
+        # If so, we can filter on it directly - no need to use date_id
+        calendar_date_available = 'date' in available_cols
 
         translated = {}
         for col, val in filters.items():
             # Check if this is a universal date column that needs translation
-            if col in UNIVERSAL_DATE_COLUMNS and col not in available_cols:
-                if local_date_col in available_cols:
-                    # Translate the filter to use the local date column
-                    logger.debug(f"DATE TRANSLATE: {col} -> {local_date_col} (via dim_calendar)")
-                    translated[local_date_col] = val
+            if col in UNIVERSAL_DATE_COLUMNS:
+                if calendar_date_available:
+                    # Best case: dim_calendar is joined, use its 'date' column directly
+                    # This avoids any date_id integer conversion
+                    logger.debug(f"DATE TRANSLATE: {col} -> date (using dim_calendar.date directly)")
+                    translated['date'] = val
+                elif col in available_cols:
+                    # Column exists as-is, keep it
+                    translated[col] = val
                 else:
-                    logger.debug(f"DATE TRANSLATE: Can't translate {col}, local column {local_date_col} not available")
-                    # Skip this filter - neither column exists
+                    # Try to get the local date column (like date_id)
+                    local_date_col = self.get_calendar_date_column(model_name, base_table)
+                    if local_date_col and local_date_col in available_cols:
+                        logger.debug(f"DATE TRANSLATE: {col} -> {local_date_col} (fallback to local column)")
+                        translated[local_date_col] = val
+                    else:
+                        logger.debug(f"DATE TRANSLATE: Skipping {col} - no suitable date column found")
             else:
-                # Keep the filter as-is
+                # Keep non-date filters as-is
                 translated[col] = val
 
         return translated
