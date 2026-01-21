@@ -5,8 +5,8 @@ version: 3.1
 description: "Stock equities with company linkage, technicals, dividends, and splits"
 tags: [stocks, equities, securities]
 
-# Dependencies - stocks depends on securities (normalized base) and corporate
-depends_on: [temporal, securities, corporate]
+# Dependencies - stocks depends on securities (normalized base) and company
+depends_on: [temporal, securities, company]
 
 # Storage - provider/endpoint_id for bronze, domain hierarchy for silver
 storage:
@@ -40,7 +40,7 @@ tables:
       # Keys - all integers
       - [stock_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT('STOCK_', ticker)))"}]
       - [security_id, integer, false, "FK to securities.dim_security", {fk: securities.dim_security.security_id}]
-      - [company_id, integer, true, "FK to dim_company (optional - not all stocks have company data)", {fk: corporate.dim_company.company_id}]
+      - [company_id, integer, true, "FK to dim_company (optional - not all stocks have company data)", {fk: company.dim_company.company_id}]
 
       # Natural key (denormalized for convenience)
       - [ticker, string, false, "Natural key - trading symbol", {unique: true}]
@@ -169,13 +169,13 @@ graph:
       derive:
         stock_id: "ABS(HASH(CONCAT('STOCK_', ticker)))"
         security_id: "ABS(HASH(ticker))"  # FK to securities.dim_security
-        company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"  # FK to corporate.dim_company
+        company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"  # FK to company.dim_company
         stock_type: "'common'"
       primary_key: [stock_id]
       unique_key: [ticker]
       foreign_keys:
         - {column: security_id, references: securities.dim_security.security_id}
-        - {column: company_id, references: corporate.dim_company.company_id, optional: true}
+        - {column: company_id, references: company.dim_company.company_id, optional: true}
       tags: [dim, stock]
 
     # NOTE: fact_stock_technicals is computed post-build from securities.fact_security_prices
@@ -236,7 +236,7 @@ graph:
     # Stock to company (optional - not all stocks have company data)
     stock_to_company:
       from: dim_stock
-      to: corporate.dim_company
+      to: company.dim_company
       on: [company_id=company_id]
       type: many_to_one
       optional: true
@@ -271,7 +271,7 @@ graph:
     company_to_dividends:
       description: "Navigate from company to dividend history"
       steps:
-        - {from: corporate.dim_company, to: dim_stock, via: company_id}
+        - {from: company.dim_company, to: dim_stock, via: company_id}
         - {from: dim_stock, to: fact_dividends, via: security_id}
 
     security_to_technicals:
@@ -299,7 +299,7 @@ securities.dim_security (MASTER)
          ↑
     security_id FK
          │
-      dim_stock ←──── company_id FK ───→ corporate.dim_company
+      dim_stock ←──── company_id FK ───→ company.dim_company
          │
     ┌────┴────────────┬───────────────┐
     ↓                 ↓               ↓
@@ -320,7 +320,7 @@ technicals       (time-series)    (corporate actions)
 |-----|------|------------|
 | `stock_id` | integer | `ABS(HASH('STOCK_' + ticker))` |
 | `security_id` | integer | `ABS(HASH(ticker))` - FK to securities |
-| `company_id` | integer | `ABS(HASH('COMPANY_' + ticker))` - FK to corporate |
+| `company_id` | integer | `ABS(HASH('COMPANY_' + ticker))` - FK to company |
 | `date_id` | integer | `YYYYMMDD` format |
 
 ### Stock-Level vs Company-Level Attributes
@@ -360,5 +360,5 @@ WHERE sec.asset_type = 'stocks'
 ### Build Order
 
 ```
-temporal → securities → corporate → stocks
+temporal → securities → company → stocks
 ```

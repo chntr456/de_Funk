@@ -163,11 +163,11 @@ graph:
 
     security_to_company:
       from: dim_security
-      to: corporate.dim_company
+      to: company.dim_company
       on: [security_id=company_id]  # Derived: company_id = HASH('COMPANY_' + ticker)
       type: many_to_one
       optional: true
-      description: "Cross-model edge for sector/industry lookup via stocks.dim_stock"
+      description: "Cross-model edge for sector/industry lookup via company.dim_company"
 
   paths:
     security_prices_by_date:
@@ -187,7 +187,7 @@ graph:
       steps:
         - {from: fact_security_prices, to: dim_security, via: security_id}
         - {from: dim_security, to: stocks.dim_stock, via: security_id}
-        - {from: stocks.dim_stock, to: corporate.dim_company, via: company_id}
+        - {from: stocks.dim_stock, to: company.dim_company, via: company_id}
 
 # Metadata
 metadata:
