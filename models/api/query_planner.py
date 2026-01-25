@@ -101,10 +101,11 @@ class GraphQueryPlanner:
                 continue
 
             # Add edge with join metadata
+            # Note: YAML 1.1 treats 'on' as boolean True, so we check both keys
             g.add_edge(
                 from_table,
                 to_table,
-                join_on=edge.get('on', []),
+                join_on=edge.get('on', edge.get(True, [])),  # Handle YAML 1.1 'on' -> True quirk
                 join_type=edge.get('type', 'left'),
                 description=edge.get('description', '')
             )

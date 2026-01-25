@@ -44,6 +44,27 @@ def load_config(config_path: str) -> dict:
             return yaml.safe_load(f)
 
 
+def read_table(spark_session, path: Path):
+    """
+    Read a table using Spark with proper Delta/Parquet detection.
+
+    Uses spark.read.format("delta") for Delta tables (batch processing best practice).
+    Falls back to spark.read.parquet() for plain Parquet.
+
+    Args:
+        spark_session: Active Spark session
+        path: Path to the table directory
+
+    Returns:
+        Spark DataFrame
+    """
+    delta_log = path / "_delta_log"
+    if delta_log.exists():
+        return spark_session.read.format("delta").load(str(path))
+    else:
+        return spark_session.read.parquet(str(path))
+
+
 def get_active_tickers(storage_cfg: dict, spark_session, limit: int = None) -> list:
     """
     Get list of tickers that have price data for forecasting.
@@ -74,15 +95,30 @@ def get_active_tickers(storage_cfg: dict, spark_session, limit: int = None) -> l
         logger.warning("stocks_silver not configured in storage roots")
         stocks_root = storage_cfg["roots"]["silver"] + "/stocks"
     fact_prices_path = Path(stocks_root) / "facts" / "fact_stock_prices"
+    dim_stock_path = Path(stocks_root) / "dims" / "dim_stock"
 
-    if fact_prices_path.exists():
+    if fact_prices_path.exists() and dim_stock_path.exists():
         try:
-            df = spark_session.read.parquet(str(fact_prices_path))
+            # fact_stock_prices uses security_id/date_id, need to join with dim_stock for ticker
+            # Use read_table() for proper Delta/Parquet handling (Spark for batch processing)
+            prices_df = read_table(spark_session, fact_prices_path)
+            dim_df = read_table(spark_session, dim_stock_path)
+
+            # Join to get ticker from dimension table
+            df = prices_df.alias('p').join(
+                dim_df.select('security_id', 'ticker').alias('d'),
+                F.col('p.security_id') == F.col('d.security_id'),
+                'inner'
+            ).select(
+                'p.*',
+                F.col('d.ticker')
+            )
 
             if limit:
                 # Sort by market cap proxy (close × volume) using Spark SQL
                 # Get latest price per ticker, then sort by market cap proxy
-                window = Window.partitionBy("ticker").orderBy(F.col("trade_date").desc())
+                # Use date_id for ordering (YYYYMMDD integer format)
+                window = Window.partitionBy("ticker").orderBy(F.col("date_id").desc())
 
                 tickers_df = (
                     df.filter(F.col("close").isNotNull() & F.col("volume").isNotNull() & (F.col("volume") > 0))
@@ -109,7 +145,7 @@ def get_active_tickers(storage_cfg: dict, spark_session, limit: int = None) -> l
 
     if prices_path.exists():
         try:
-            df = spark_session.read.parquet(str(prices_path))
+            df = read_table(spark_session, prices_path)
 
             if limit:
                 # Sort by market cap proxy using Spark SQL
@@ -137,7 +173,7 @@ def get_active_tickers(storage_cfg: dict, spark_session, limit: int = None) -> l
     legacy_prices_path = Path(bronze_root) / "prices_daily"
     if legacy_prices_path.exists():
         try:
-            df = spark_session.read.parquet(str(legacy_prices_path))
+            df = read_table(spark_session, legacy_prices_path)
 
             if limit:
                 window = Window.partitionBy("ticker").orderBy(F.col("trade_date").desc())
@@ -217,13 +253,16 @@ def run_forecast_pipeline(
     # Load configurations
     if not minimal_progress:
         print("Loading configurations...")
-    config_root = get_repo_root() / "configs"
 
     # Use ConfigLoader for properly resolved storage paths
     config = ConfigLoader().load()
     storage_cfg = config.storage
-    # v2.0 modular config structure: configs/models/forecast/model.yaml
-    forecast_cfg = load_config(config_root / "models" / "forecast" / "model.yaml")
+
+    # v3.0: Load forecast config from domain markdown file
+    from config.domain_loader import ModelConfigLoader
+    domains_root = get_repo_root() / "domains"
+    domain_loader = ModelConfigLoader(domains_root)
+    forecast_cfg = domain_loader.load_model_config("forecast")
 
     logger.debug("Configurations loaded")
     if not minimal_progress:

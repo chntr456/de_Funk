@@ -68,6 +68,10 @@ tables:
       - [security_id, integer, false, "FK to dim_security", {fk: dim_security.security_id}]
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
 
+      # Natural keys (kept for downstream models)
+      - [ticker, string, false, "Trading symbol"]
+      - [trade_date, date, false, "Trading date"]
+
       # Asset type for partition pruning
       - [asset_type, string, false, "Asset type for partition pruning"]
 
@@ -132,7 +136,7 @@ graph:
         price_id: "ABS(HASH(CONCAT(ticker, '_', CAST(trade_date AS STRING))))"
         # Get asset_type from dim_security via lookup (or default to 'stocks')
         asset_type: "'stocks'"  # Will be enriched via join to dim_security
-      drop: [ticker, trade_date]
+      # NOTE: Keep ticker and trade_date for downstream models (stocks.fact_stock_prices needs them)
       primary_key: [price_id]
       unique_key: [ticker, trade_date]
       foreign_keys:

@@ -678,6 +678,16 @@ class DuckDBConnection(DataConnection):
         if not filters:
             return df
 
+        # Get available columns from the relation
+        try:
+            available_cols = set(df.columns)
+        except:
+            available_cols = set()
+
+        # Universal date columns that might trigger period overlap
+        UNIVERSAL_DATE_COLUMNS = {'date', 'trade_date', 'forecast_date', 'fiscal_date',
+                                  'report_date', 'effective_date', 'as_of_date'}
+
         # Build WHERE clause
         conditions = []
         for column, value in filters.items():
@@ -691,9 +701,34 @@ class DuckDBConnection(DataConnection):
                         start = start.strftime('%Y-%m-%d')
                     if hasattr(end, 'strftime'):
                         end = end.strftime('%Y-%m-%d')
-                    conditions.append(
-                        f"{column} BETWEEN '{start}' AND '{end}'"
+
+                    # Check if this is a period overlap case
+                    # This happens when filtering by a date column that doesn't exist in the table,
+                    # but the table has period_start_date_id and period_end_date_id
+                    is_period_overlap = (
+                        column in UNIVERSAL_DATE_COLUMNS and
+                        'period_start_date_id' in available_cols and
+                        'period_end_date_id' in available_cols and
+                        column not in available_cols  # Column doesn't exist, so use period overlap
                     )
+
+                    logger.debug(f"apply_filters: column={column}, available_cols={available_cols}, is_period_overlap={is_period_overlap}")
+
+                    if is_period_overlap:
+                        # Use temporal.dim_calendar to convert the filter dates to date_ids
+                        # Then apply period overlap logic using those date_ids
+                        # This requires a subquery to join with temporal.dim_calendar
+                        conditions.append(
+                            f"""(period_start_date_id <= (
+                                SELECT date_id FROM temporal.dim_calendar WHERE date = '{end}' LIMIT 1
+                            ) AND period_end_date_id >= (
+                                SELECT date_id FROM temporal.dim_calendar WHERE date = '{start}' LIMIT 1
+                            ))"""
+                        )
+                    else:
+                        conditions.append(
+                            f"{column} BETWEEN '{start}' AND '{end}'"
+                        )
                 # Numeric range filter (min/max)
                 elif 'min' in value or 'max' in value:
                     if 'min' in value and value['min'] is not None and value['min'] > 0:

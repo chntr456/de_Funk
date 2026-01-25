@@ -108,8 +108,10 @@ class GreatTableRenderer:
 
     def _build_gt(self) -> None:
         """Build the Great Table object without rendering."""
+        logger.info(f"GREAT_TABLE: Starting _build_gt() with {len(self.pdf)} rows, {len(self.pdf.columns)} columns")
         # Filter to only declared columns (if specified)
         filtered_df = self._filter_columns()
+        logger.debug(f"GREAT_TABLE: After filtering columns: {len(filtered_df)} rows, {len(filtered_df.columns)} columns")
 
         # Apply sorting before creating GT
         sorted_df = self._sort_dataframe(filtered_df)
@@ -586,7 +588,9 @@ class GreatTableRenderer:
         """Render GT to Streamlit."""
         try:
             # GT renders to HTML
+            logger.info(f"GREAT_TABLE: About to call as_raw_html() with {len(self.pdf)} rows")
             html = self.gt.as_raw_html()
+            logger.info(f"GREAT_TABLE: as_raw_html() completed, HTML length: {len(html)}")
 
             # Check for scroll/max_height option
             max_height = getattr(self.exhibit, 'max_height', None)

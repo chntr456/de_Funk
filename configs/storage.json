@@ -13,7 +13,9 @@
     "silver": "storage/silver",
 
     "_comment_domains": "Domain-based silver roots",
-    "securities_silver": "storage/silver/securities",
+    "stocks_silver": "/shared/storage/silver/stocks",
+    "securities_silver": "/shared/storage/silver/securities",
+    "forecast_silver": "/shared/storage/silver/forecast",
     "municipal_silver": "storage/silver/municipal"
   },
   "tables": {

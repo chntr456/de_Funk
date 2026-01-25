@@ -148,7 +148,7 @@ class ModelGraph:
                         source='graph.edges',
                         from_table=from_node,
                         to_table=to_node,
-                        join_condition=edge.get('on', []),
+                        join_condition=edge.get('on', edge.get(True, [])),  # Handle YAML 1.1 'on' -> True quirk
                         join_type=edge.get('type', 'left'),
                         description=edge.get('description', '')
                     )

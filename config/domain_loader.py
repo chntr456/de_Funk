@@ -249,7 +249,11 @@ class ModelConfigLoader:
         file_path = self.domains_dir / template_path
 
         if not file_path.exists():
-            logger.warning(f"Template not found: {file_path}")
+            # Use debug level for _schema templates (optional), warning for others
+            if '_schema' in template_path:
+                logger.debug(f"Optional schema template not found: {file_path}")
+            else:
+                logger.warning(f"Template not found: {file_path}")
             return {}
 
         return self._parse_front_matter(file_path)
@@ -325,11 +329,19 @@ class ModelConfigLoader:
             if extends_path in self._model_to_path:
                 file_path = self.domains_dir / self._model_to_path[extends_path]
             else:
-                logger.warning(f"Could not resolve extends: {extends_path}")
+                # Use debug level for _schema paths (optional), warning for others
+                if '_schema' in extends_path:
+                    logger.debug(f"Optional schema extends not resolved: {extends_path}")
+                else:
+                    logger.warning(f"Could not resolve extends: {extends_path}")
                 return {}
 
         if not file_path.exists():
-            logger.warning(f"Extends file not found: {file_path}")
+            # Use debug level for _schema paths (optional), warning for others
+            if '_schema' in str(file_path):
+                logger.debug(f"Optional schema extends file not found: {file_path}")
+            else:
+                logger.warning(f"Extends file not found: {file_path}")
             return {}
 
         return self._parse_front_matter(file_path)
@@ -479,7 +491,11 @@ class ModelConfigLoader:
             nav_start_idx = 2 if len(parts) >= 2 else 1
 
         if not base_config:
-            logger.warning(f"Could not resolve extends: {extends_ref}")
+            # Use debug level for _schema paths (optional), warning for others
+            if '_schema' in extends_ref:
+                logger.debug(f"Optional schema extends not resolved: {extends_ref}")
+            else:
+                logger.warning(f"Could not resolve extends: {extends_ref}")
             return {}
 
         nav_path = parts[nav_start_idx:]

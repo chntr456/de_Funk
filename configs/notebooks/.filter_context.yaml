@@ -1,28 +1,8 @@
 # Folder Filter Context for Root Notebooks
 # Provides default filter values for stock, company, sector, and forecast analysis notebooks
 
-filters:
+filters: {}
   # Default tickers for multi-select notebooks
-  ticker:
-    - AAPL
-    - MSFT
-    - GOOGL
-
-  # Date range for price and forecast analysis (joins to calendar via date_id FK)
-  date:
-    start: current_date() - 365
-    end: current_date()
-
-  # Forecast date range
-  forecast_date:
-    start: current_date()
-    end: current_date() + 365
-
-  # Report type default
-  report_type: "annual"
-
-  # Forecast horizon default (days)
-  horizon: 7
 
 metadata:
   created: "2025-12-05T00:00:00"

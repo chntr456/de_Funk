@@ -122,19 +122,32 @@ def compute_technicals(
 def _add_technical_indicators(
     df: DataFrame,
     partition_col: str,
-    order_col: str
+    order_col: str,
+    price_col: str = "adjusted_close"
 ) -> DataFrame:
     """
     Add technical indicator columns to a price DataFrame.
 
     Args:
-        df: DataFrame with price data (must have 'close', 'volume' columns)
+        df: DataFrame with price data (must have price_col and 'volume' columns)
         partition_col: Column to partition by (ticker or security_id)
         order_col: Column to order by (trade_date or date_id)
+        price_col: Column to use for price calculations (default: adjusted_close)
+                   Use adjusted_close for split-adjusted prices, close for raw prices.
 
     Returns:
         DataFrame with technical indicator columns added
     """
+    # Verify price column exists, fallback to 'close' if adjusted_close not available
+    if price_col not in df.columns:
+        if 'close' in df.columns:
+            logger.warning(f"Price column '{price_col}' not found, falling back to 'close'")
+            price_col = 'close'
+        else:
+            raise ValueError(f"Neither '{price_col}' nor 'close' found in DataFrame columns: {df.columns}")
+
+    logger.info(f"Computing technicals using price column: {price_col}")
+
     # Define window specs - Spark handles partitioning automatically
     security_window = Window.partitionBy(partition_col).orderBy(order_col)
 
@@ -145,27 +158,27 @@ def _add_technical_indicators(
     window_60 = security_window.rowsBetween(-59, 0)
     window_200 = security_window.rowsBetween(-199, 0)
 
-    # Step 1: Daily return and price change
+    # Step 1: Daily return and price change (using adjusted prices)
     logger.debug("Computing returns...")
     df = df.withColumn(
-        "prev_close",
-        F.lag("close", 1).over(security_window)
+        "prev_price",
+        F.lag(price_col, 1).over(security_window)
     ).withColumn(
         "daily_return",
-        F.when(F.col("prev_close").isNotNull() & (F.col("prev_close") != 0),
-               (F.col("close") - F.col("prev_close")) / F.col("prev_close") * 100)
+        F.when(F.col("prev_price").isNotNull() & (F.col("prev_price") != 0),
+               (F.col(price_col) - F.col("prev_price")) / F.col("prev_price") * 100)
         .otherwise(None)
     ).withColumn(
         "price_change",
-        F.col("close") - F.col("prev_close")
+        F.col(price_col) - F.col("prev_price")
     )
 
-    # Step 2: Simple Moving Averages
+    # Step 2: Simple Moving Averages (using adjusted prices)
     logger.debug("Computing SMAs (20, 50, 200)...")
     df = (df
-        .withColumn("sma_20", F.avg("close").over(window_20))
-        .withColumn("sma_50", F.avg("close").over(window_50))
-        .withColumn("sma_200", F.avg("close").over(window_200))
+        .withColumn("sma_20", F.avg(price_col).over(window_20))
+        .withColumn("sma_50", F.avg(price_col).over(window_50))
+        .withColumn("sma_200", F.avg(price_col).over(window_200))
     )
 
     # Step 3: RSI (Relative Strength Index)
@@ -200,9 +213,9 @@ def _add_technical_indicators(
         .withColumn("volatility_60d", F.stddev("daily_return").over(window_60) * (252 ** 0.5))
     )
 
-    # Step 5: Bollinger Bands
+    # Step 5: Bollinger Bands (using adjusted prices)
     logger.debug("Computing Bollinger Bands...")
-    std_20 = F.stddev("close").over(window_20)
+    std_20 = F.stddev(price_col).over(window_20)
     df = (df
         .withColumn("bollinger_middle", F.col("sma_20"))
         .withColumn("bollinger_upper", F.col("sma_20") + (2 * std_20))
@@ -221,6 +234,6 @@ def _add_technical_indicators(
     )
 
     # Drop intermediate columns
-    df = df.drop("prev_close", "price_change", "gain", "loss", "avg_gain_14", "avg_loss_14", "rs_14")
+    df = df.drop("prev_price", "price_change", "gain", "loss", "avg_gain_14", "avg_loss_14", "rs_14")
 
     return df

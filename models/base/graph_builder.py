@@ -118,22 +118,34 @@ class GraphBuilder:
                 nodes[node_id] = custom_df
                 continue
 
-            # Check if loading from bronze or from another node
+            # Check if loading from bronze, silver (another model), or another node
             from_spec = node_config['from']
             if '.' in from_spec:
-                # Loading from bronze: bronze.table_name
+                # Has a dot - could be bronze.table or model.table (silver)
                 layer, table = from_spec.split('.', 1)
-                assert layer == 'bronze', f"Node {node_id} must load from bronze, got {layer}"
-                try:
-                    df = self._load_bronze_table(table)
-                except Exception as e:
-                    # Check if this node is marked as optional
-                    if node_config.get('optional', False):
-                        logger.warning(f"Skipping optional node {node_id}: bronze table '{table}' not found")
-                        continue
-                    else:
-                        # Re-raise the error for required nodes
-                        raise
+                if layer == 'bronze':
+                    # Loading from bronze: bronze.provider.table_name
+                    try:
+                        df = self._load_bronze_table(table)
+                    except Exception as e:
+                        # Check if this node is marked as optional
+                        if node_config.get('optional', False):
+                            logger.warning(f"Skipping optional node {node_id}: bronze table '{table}' not found")
+                            continue
+                        else:
+                            # Re-raise the error for required nodes
+                            raise
+                else:
+                    # Loading from silver: model.table_name (e.g., securities.fact_security_prices)
+                    try:
+                        df = self._load_silver_table(layer, table)
+                    except Exception as e:
+                        # Check if this node is marked as optional
+                        if node_config.get('optional', False):
+                            logger.warning(f"Skipping optional node {node_id}: silver table '{layer}.{table}' not found")
+                            continue
+                        else:
+                            raise
             else:
                 # Loading from another node (must already be built)
                 parent_node = from_spec
@@ -362,6 +374,49 @@ class GraphBuilder:
         # Build config-style table reference: "bronze.alpha_vantage.listing_status"
         table_ref = f"bronze.{table_name}"
         logger.debug(f"Loading table: {table_ref}")
+
+        # Use backend type to determine how to load
+        if self.backend == 'spark':
+            from models.api.dal import Table
+            spark = getattr(self.connection, 'spark', self.connection)
+            table = Table(spark, self.storage_router, table_ref)
+            return table.read(merge_schema=True)
+        else:
+            # DuckDB - use read_table which auto-detects Delta/Parquet
+            path = self.storage_router.resolve(table_ref)
+            return self.connection.read_table(path)
+
+    def _load_silver_table(self, model_name: str, table_name: str) -> DataFrame:
+        """
+        Load a Silver table from another model.
+
+        This allows models to build upon data from other silver models.
+        For example, stocks.fact_stock_prices can load from securities.fact_security_prices.
+
+        Args:
+            model_name: Name of the source model (e.g., 'securities')
+            table_name: Table name within that model (e.g., 'fact_security_prices')
+
+        Returns:
+            DataFrame with the silver data
+        """
+        # Silver storage uses nested structure: {model}/dims/ and {model}/facts/
+        # Determine subdirectory based on table name prefix
+        if table_name.startswith('dim_'):
+            subdir = 'dims'
+        elif table_name.startswith('fact_'):
+            subdir = 'facts'
+        else:
+            # Default to root if no prefix (backward compatibility)
+            subdir = None
+
+        # Build config-style table reference with slashes
+        # e.g., "silver.securities/facts/fact_security_prices"
+        if subdir:
+            table_ref = f"silver.{model_name}/{subdir}/{table_name}"
+        else:
+            table_ref = f"silver.{model_name}/{table_name}"
+        logger.debug(f"Loading silver table: {table_ref}")
 
         # Use backend type to determine how to load
         if self.backend == 'spark':

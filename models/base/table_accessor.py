@@ -285,6 +285,35 @@ class TableAccessor:
 
         return derivations
 
+    def get_fk_relationships(self, table_name: str) -> Dict[str, str]:
+        """
+        Get foreign key relationships for a table.
+
+        Extracts {fk: "dim_table.column"} from schema array options.
+
+        Args:
+            table_name: Name of the table
+
+        Returns:
+            Dictionary mapping fk_column -> referenced_table.column
+            Example: {'company_id': 'dim_company.company_id', 'date_id': 'temporal.dim_calendar.date_id'}
+        """
+        fk_relationships = {}
+
+        # NEW FORMAT: tables.{table_name}.schema array
+        tables_config = self.model_cfg.get('tables', {})
+        if table_name in tables_config:
+            schema_array = tables_config[table_name].get('schema', [])
+            for item in schema_array:
+                if len(item) >= 5 and isinstance(item[4], dict):
+                    options = item[4]
+                    if 'fk' in options:
+                        fk_column = item[0]
+                        fk_target = options['fk']
+                        fk_relationships[fk_column] = fk_target
+
+        return fk_relationships
+
     def get_table_measures(self, table_name: str) -> List[Dict[str, Any]]:
         """
         Get measures defined on a table.

@@ -32,11 +32,13 @@ build:
 tables:
   dim_stock:
     type: dimension
-    description: "Stock equity dimension - extends securities.dim_security with stock-specific attributes"
+    description: "Stock equity dimension - links to securities.dim_security and company.dim_company. Sector/industry/market_cap available via auto-join to company.dim_company."
     primary_key: [stock_id]
     unique_key: [ticker]
 
     # Schema: [column, type, nullable, description, {options}]
+    # Note: Sector, industry, market_cap, shares_outstanding are in company.dim_company
+    # Use auto-join to access these columns (e.g., company.dim_company.sector)
     schema:
       # Keys - all integers
       - [stock_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT('STOCK_', ticker)))"}]
@@ -46,24 +48,18 @@ tables:
       # Natural key (denormalized for convenience)
       - [ticker, string, false, "Natural key - trading symbol", {unique: true}]
 
+      # Stock attributes from listing_status
+      - [security_name, string, true, "Security name"]
+      - [exchange_code, string, true, "Exchange code (NYSE, NASDAQ, etc.)"]
+      - [asset_type, string, true, "Asset type (stocks)"]
+
       # Stock-specific attributes
       - [stock_type, string, true, "Type of stock", {enum: [common, preferred, adr, rights, units, warrants], default: "common"}]
-
-      # Stock-level attributes (MOVED from company - these are per-security, not per-company)
-      - [shares_outstanding, long, true, "Current shares outstanding"]
-      - [shares_float, long, true, "Shares available for trading"]
-      - [market_cap, double, true, "Market capitalization"]
-
-      # Classification (stock-level, can differ from company)
-      - [sector, string, true, "GICS Sector"]
-      - [industry, string, true, "GICS Industry"]
 
     # Measures on the table
     measures:
       - [stock_count, count_distinct, stock_id, "Number of stocks", {format: "#,##0"}]
-      - [avg_market_cap, avg, market_cap, "Average market cap", {format: "$#,##0.00B"}]
-      - [total_market_cap, sum, market_cap, "Total market cap", {format: "$#,##0.00B"}]
-      - [avg_shares, avg, shares_outstanding, "Average shares outstanding", {format: "#,##0.00M"}]
+      # Note: Market cap measures are on company.dim_company
 
   fact_stock_technicals:
     type: fact
@@ -159,7 +155,7 @@ graph:
     dim_stock:
       from: bronze.alpha_vantage.listing_status
       type: dimension
-      description: "Stock dimension filtered from listing_status"
+      description: "Stock dimension filtered from listing_status. Sector/industry available via auto-join to company.dim_company"
       select:
         ticker: ticker
         security_name: security_name
@@ -188,6 +184,7 @@ graph:
       from: securities.fact_security_prices
       type: fact
       description: "Stock prices - filtered from unified securities prices"
+      # Source table has OHLCV + ticker + trade_date + foreign keys
       select:
         ticker: ticker
         trade_date: trade_date
@@ -200,9 +197,11 @@ graph:
         price_id: price_id
         security_id: security_id
         date_id: date_id
-        date: date
+        asset_type: asset_type
       filters:
         - "asset_type = 'stocks'"
+      derive:
+        date: trade_date  # Alias for compatibility
       primary_key: [price_id]
       foreign_keys:
         - {column: security_id, references: dim_stock.security_id}

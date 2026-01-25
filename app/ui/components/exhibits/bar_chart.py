@@ -35,18 +35,25 @@ def get_bar_chart_html(
     """
     import plotly.io as pio
     from config.logging import get_logger
+    from app.notebook.schema import ColumnReference
     logger = get_logger(__name__)
 
-    # Get x column
-    if not hasattr(exhibit, 'x_axis') or not exhibit.x_axis:
-        x_col = getattr(exhibit, 'x', None)
-        if not x_col:
-            return "<div>Bar chart requires x_axis configuration</div>"
-    else:
-        x_col = exhibit.x_axis.dimension
+    # Helper function to extract field name from ColumnReference or string
+    def extract_field_name(col_ref):
+        """Extract field name from ColumnReference object or return string as-is."""
+        if isinstance(col_ref, ColumnReference):
+            return col_ref.field
+        return col_ref
 
-    if x_col not in pdf.columns:
-        return f"<div>X column '{x_col}' not found in data</div>"
+    # Get x column - must have x_axis with dimension as ColumnReference
+    if not hasattr(exhibit, 'x_axis') or not exhibit.x_axis or not exhibit.x_axis.dimension:
+        return "<div>Bar chart requires x_axis configuration with dimension in model.table.column format</div>"
+
+    x_col = exhibit.x_axis.dimension
+    x_col_name = extract_field_name(x_col)
+
+    if x_col_name not in pdf.columns:
+        return f"<div>X column '{x_col_name}' not found in data</div>"
 
     # Check for measure_selector configuration
     has_measure_selector = hasattr(exhibit, 'measure_selector') and exhibit.measure_selector
@@ -58,34 +65,28 @@ def get_bar_chart_html(
     if has_measure_selector:
         ms = exhibit.measure_selector
         if hasattr(ms, 'available_measures') and ms.available_measures:
-            available_measures = [m for m in ms.available_measures if m in pdf.columns]
+            available_measures = [extract_field_name(m) for m in ms.available_measures if extract_field_name(m) in pdf.columns]
         if hasattr(ms, 'default_measures') and ms.default_measures:
-            default_measures = [m for m in ms.default_measures if m in pdf.columns]
+            default_measures = [extract_field_name(m) for m in ms.default_measures if extract_field_name(m) in pdf.columns]
     elif hasattr(exhibit, 'y_axis') and exhibit.y_axis:
+        # Get measures from y_axis (ColumnReference objects)
         if hasattr(exhibit.y_axis, 'measure') and exhibit.y_axis.measure:
             if isinstance(exhibit.y_axis.measure, list):
-                available_measures = [m for m in exhibit.y_axis.measure if m in pdf.columns]
+                available_measures = [extract_field_name(m) for m in exhibit.y_axis.measure if extract_field_name(m) in pdf.columns]
             else:
-                available_measures = [exhibit.y_axis.measure] if exhibit.y_axis.measure in pdf.columns else []
+                m_name = extract_field_name(exhibit.y_axis.measure)
+                available_measures = [m_name] if m_name in pdf.columns else []
         elif hasattr(exhibit.y_axis, 'measures') and exhibit.y_axis.measures:
-            available_measures = [m for m in exhibit.y_axis.measures if m in pdf.columns]
-        default_measures = available_measures.copy()
-    elif hasattr(exhibit, 'y') and exhibit.y:
-        if isinstance(exhibit.y, list):
-            available_measures = [m for m in exhibit.y if m in pdf.columns]
-        else:
-            available_measures = [exhibit.y] if exhibit.y in pdf.columns else []
+            available_measures = [extract_field_name(m) for m in exhibit.y_axis.measures if extract_field_name(m) in pdf.columns]
         default_measures = available_measures.copy()
 
     # Use passed selections if provided
     if selected_measures:
         default_measures = [m for m in selected_measures if m in pdf.columns]
 
+    # No fallback to auto-detect numeric columns - y_axis measures MUST be configured
     if not available_measures:
-        available_measures = [c for c in pdf.columns if pd.api.types.is_numeric_dtype(pdf[c]) and c != x_col][:5]
-
-    if not available_measures:
-        return "<div>No numeric measures found for bar chart</div>"
+        return "<div>Bar chart requires y_axis configuration with measures in model.table.column format (e.g., stocks.fact_stock_prices.adjusted_close)</div>"
 
     if not default_measures:
         default_measures = available_measures[:1]
@@ -100,15 +101,16 @@ def get_bar_chart_html(
     if has_dimension_selector:
         ds = exhibit.dimension_selector
         if hasattr(ds, 'available_dimensions') and ds.available_dimensions:
-            available_dimensions = [d for d in ds.available_dimensions if d in pdf.columns]
+            available_dimensions = [extract_field_name(d) for d in ds.available_dimensions if extract_field_name(d) in pdf.columns]
         if hasattr(ds, 'default_dimension') and ds.default_dimension:
-            default_dimension = ds.default_dimension if ds.default_dimension in pdf.columns else None
-    elif hasattr(exhibit, 'color_by') and exhibit.color_by and exhibit.color_by in pdf.columns:
-        available_dimensions = [exhibit.color_by]
-        default_dimension = exhibit.color_by
-    elif hasattr(exhibit, 'color') and exhibit.color and exhibit.color in pdf.columns:
-        available_dimensions = [exhibit.color]
-        default_dimension = exhibit.color
+            d_name = extract_field_name(ds.default_dimension)
+            default_dimension = d_name if d_name in pdf.columns else None
+    elif hasattr(exhibit, 'color_by') and exhibit.color_by:
+        # color_by is a ColumnReference object
+        color_name = extract_field_name(exhibit.color_by)
+        if color_name in pdf.columns:
+            available_dimensions = [color_name]
+            default_dimension = color_name
 
     # Use passed dimension if provided (from Streamlit selectbox)
     if selected_dimension and selected_dimension in pdf.columns:
@@ -141,7 +143,7 @@ def get_bar_chart_html(
     logger.debug(f"Bar chart HTML: measures={available_measures}, dim={default_dimension}")
 
     # Aggregate data by x_col and selected dimension
-    group_cols = [x_col]
+    group_cols = [x_col_name]
     if default_dimension and default_dimension in pdf.columns:
         # Filter to top dimension values first
         top_dims = pdf[default_dimension].value_counts().head(MAX_DIMENSION_VALUES).index.tolist()
@@ -176,7 +178,7 @@ def get_bar_chart_html(
                 df_subset = pdf[pdf[default_dimension] == dim_val]
                 name = f"{dim_val}" if len(measures_to_display) == 1 else f"{dim_val} - {measure.replace('_', ' ').title()}"
                 fig.add_trace(go.Bar(
-                    x=df_subset[x_col],
+                    x=df_subset[x_col_name],
                     y=df_subset[measure],
                     name=name,
                     visible=is_visible,
@@ -187,7 +189,7 @@ def get_bar_chart_html(
         for measure in measures_to_display:
             is_visible = measure in default_measures
             fig.add_trace(go.Bar(
-                x=pdf[x_col],
+                x=pdf[x_col_name],
                 y=pdf[measure],
                 name=measure.replace('_', ' ').title(),
                 visible=is_visible,

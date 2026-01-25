@@ -10,9 +10,9 @@ depends_on: [temporal, stocks]
 
 # Storage
 storage:
-  root: storage/silver/forecast
+  root: /shared/storage/silver/forecast
   format: delta
-  auto_vacuum: true  # Disable time travel to save storage (default: true)
+  auto_vacuum: true
 
 # Build
 build:
@@ -29,16 +29,18 @@ tables:
     partition_by: [forecast_date]
 
     schema:
-      # Keys - all integers
-      - [forecast_price_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT(ticker, '_', model_name, '_', forecast_date, '_', prediction_date)))"}]
-      - [security_id, integer, false, "FK to dim_security", {fk: stocks.dim_security.security_id}]
-      - [date_id, integer, false, "FK to dim_calendar (forecast_date)", {fk: temporal.dim_calendar.date_id}]
-      - [prediction_date_id, integer, false, "FK to dim_calendar (prediction_date)", {fk: temporal.dim_calendar.date_id}]
+      # Natural keys and attributes
+      - [ticker, string, false, "Stock ticker"]
+      - [forecast_date, string, false, "Date forecast was generated (YYYY-MM-DD)"]
+      - [prediction_date, string, false, "Date being predicted (YYYY-MM-DD)"]
+
+      # Integer date FKs for temporal dimension joins
+      - [forecast_date_id, integer, false, "FK to dim_calendar (forecast date)", {fk: temporal.dim_calendar.date_id}]
+      - [prediction_date_id, integer, false, "FK to dim_calendar (prediction date)", {fk: temporal.dim_calendar.date_id}]
 
       # Forecast attributes
-      - [ticker, string, false, "Stock ticker"]
-      - [model_name, string, false, "Model identifier (e.g., arima_7d)"]
       - [horizon, integer, false, "Days ahead prediction"]
+      - [model_name, string, false, "Model identifier (e.g., ARIMA_60d)"]
       - [predicted_close, double, false, "Predicted closing price"]
       - [lower_bound, double, true, "Lower confidence bound"]
       - [upper_bound, double, true, "Upper confidence bound"]
@@ -73,21 +75,31 @@ tables:
   fact_forecast_metrics:
     type: fact
     description: "Forecast model accuracy metrics"
-    primary_key: [metric_id]
     partition_by: [metric_date]
 
     schema:
-      - [metric_id, integer, false, "PK - Integer surrogate"]
-      - [security_id, integer, true, "FK to dim_security", {fk: stocks.dim_security.security_id}]
-      - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+      # Natural keys
       - [ticker, string, false, "Stock ticker"]
       - [model_name, string, false, "Model identifier"]
+      - [metric_date, string, false, "Date metrics calculated (YYYY-MM-DD)"]
+
+      # Integer date FK for temporal dimension joins
+      - [metric_date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+
+      # Training period dates
+      - [training_start, string, true, "Training period start"]
+      - [training_end, string, true, "Training period end"]
+
+      # Accuracy metrics
       - [mae, double, true, "Mean Absolute Error"]
       - [rmse, double, true, "Root Mean Square Error"]
       - [mape, double, true, "Mean Absolute Percentage Error"]
       - [r2_score, double, true, "R-squared score"]
       - [directional_accuracy, double, true, "Direction prediction accuracy %"]
-      - [num_predictions, integer, true, "Number of predictions evaluated"]
+      - [num_predictions, double, true, "Number of predictions evaluated"]
+      - [avg_error_pct, double, true, "Average error percentage"]
+      - [test_start, string, true, "Test period start"]
+      - [test_end, string, true, "Test period end"]
 
     measures:
       - [avg_mape, avg, mape, "Average MAPE", {format: "#,##0.00%"}]
@@ -96,20 +108,22 @@ tables:
   dim_model_registry:
     type: dimension
     description: "Trained model registry"
-    primary_key: [registry_id]
+    primary_key: [model_id]
 
     schema:
-      - [registry_id, integer, false, "PK - Integer surrogate"]
-      - [model_id, string, false, "Unique model identifier", {unique: true}]
+      # Current schema matches actual parquet output
+      - [model_id, string, false, "Unique model identifier"]
       - [model_name, string, false, "Model name"]
-      - [model_type, string, false, "Model type (ARIMA, Prophet, RandomForest)", {enum: [ARIMA, Prophet, RandomForest]}]
+      - [model_type, string, false, "Model type (ARIMA, Prophet, RandomForest)"]
       - [ticker, string, false, "Stock ticker"]
       - [target_variable, string, false, "Target column (close, volume)"]
       - [lookback_days, integer, false, "Training window days"]
       - [forecast_horizon, integer, false, "Forecast horizon days"]
+      - [day_of_week_adj, boolean, true, "Day of week adjustment enabled"]
       - [parameters, string, true, "JSON-encoded model parameters"]
-      - [trained_date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+      - [trained_date, string, false, "Date model was trained (YYYY-MM-DD)"]
       - [training_samples, integer, true, "Number of training samples"]
+      - [status, string, false, "Model status (active, deprecated)"]
       - [status, string, false, "active or inactive", {enum: [active, inactive]}]
 
     measures:
@@ -188,28 +202,24 @@ graph:
       tags: [dim, forecast, registry]
 
   edges:
-    forecast_price_to_security:
-      from: fact_forecast_price
-      to: stocks.dim_security
-      on: [security_id=security_id]
-      type: many_to_one
-
-    forecast_price_to_calendar:
+    # Forecast price joins to calendar for prediction dates
+    forecast_price_to_prediction_calendar:
       from: fact_forecast_price
       to: temporal.dim_calendar
-      on: [date_id=date_id]
+      on: [prediction_date_id=date_id]
       type: many_to_one
 
-    forecast_volume_to_security:
+    forecast_price_to_forecast_calendar:
+      from: fact_forecast_price
+      to: temporal.dim_calendar
+      on: [forecast_date_id=date_id]
+      type: many_to_one
+
+    # Forecast volume joins to calendar
+    forecast_volume_to_calendar:
       from: fact_forecast_volume
-      to: stocks.dim_security
-      on: [security_id=security_id]
-      type: many_to_one
-
-    metrics_to_security:
-      from: fact_forecast_metrics
-      to: stocks.dim_security
-      on: [security_id=security_id]
+      to: temporal.dim_calendar
+      on: [date_id=date_id]
       type: many_to_one
 
 # Metadata

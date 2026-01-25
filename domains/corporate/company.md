@@ -44,7 +44,8 @@ tables:
     # Companies can have multiple tickers (e.g., GOOGL/GOOG, BRK.A/BRK.B)
     schema:
       # Keys - all integers
-      - [company_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT('COMPANY_', COALESCE(cik, ticker))))"}]
+      # NOTE: Use ticker (not CIK) for company_id to match stocks.dim_stock FK derivation
+      - [company_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT('COMPANY_', ticker)))"}]
 
       # Natural keys
       - [cik, string, true, "SEC Central Index Key", {pattern: "^[0-9]{10}$", transform: "zfill(10)"}]
@@ -72,14 +73,15 @@ tables:
     type: fact
     description: "Income statement data from SEC filings"
     primary_key: [income_statement_id]
-    partition_by: [date_id]
+    partition_by: [period_end_date_id]
 
     # Schema: [column, type, nullable, description, {options}]
     schema:
       # Keys - all integers
       - [income_statement_id, integer, false, "PK - Integer surrogate"]
       - [company_id, integer, false, "FK to dim_company", {fk: dim_company.company_id}]
-      - [date_id, integer, false, "FK to dim_calendar (fiscal_date_ending)", {fk: temporal.dim_calendar.date_id}]
+      - [period_start_date_id, integer, false, "FK to dim_calendar (period start)", {fk: temporal.dim_calendar.date_id}]
+      - [period_end_date_id, integer, false, "FK to dim_calendar (fiscal_date_ending)", {fk: temporal.dim_calendar.date_id}]
 
       # Attributes
       - [report_type, string, true, "annual or quarterly", {enum: [annual, quarterly]}]
@@ -101,13 +103,14 @@ tables:
     type: fact
     description: "Balance sheet data from SEC filings"
     primary_key: [balance_sheet_id]
-    partition_by: [date_id]
+    partition_by: [period_end_date_id]
 
     schema:
       # Keys
       - [balance_sheet_id, integer, false, "PK - Integer surrogate"]
       - [company_id, integer, false, "FK to dim_company", {fk: dim_company.company_id}]
-      - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+      - [period_start_date_id, integer, false, "FK to dim_calendar (period start)", {fk: temporal.dim_calendar.date_id}]
+      - [period_end_date_id, integer, false, "FK to dim_calendar (fiscal_date_ending)", {fk: temporal.dim_calendar.date_id}]
       # Attributes
       - [report_type, string, true, "annual or quarterly"]
       - [reported_currency, string, true, "Reporting currency"]
@@ -164,13 +167,14 @@ tables:
     type: fact
     description: "Cash flow statement data"
     primary_key: [cash_flow_id]
-    partition_by: [date_id]
+    partition_by: [period_end_date_id]
 
     schema:
       # Keys
       - [cash_flow_id, integer, false, "PK - Integer surrogate"]
       - [company_id, integer, false, "FK to dim_company", {fk: dim_company.company_id}]
-      - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+      - [period_start_date_id, integer, false, "FK to dim_calendar (period start)", {fk: temporal.dim_calendar.date_id}]
+      - [period_end_date_id, integer, false, "FK to dim_calendar (fiscal_date_ending)", {fk: temporal.dim_calendar.date_id}]
       # Attributes
       - [report_type, string, true, "annual or quarterly"]
       - [reported_currency, string, true, "Reporting currency"]
@@ -218,13 +222,14 @@ tables:
     type: fact
     description: "Earnings data (EPS actual vs estimate)"
     primary_key: [earnings_id]
-    partition_by: [date_id]
+    partition_by: [period_end_date_id]
 
     schema:
       # Keys
       - [earnings_id, integer, false, "PK - Integer surrogate"]
       - [company_id, integer, false, "FK to dim_company", {fk: dim_company.company_id}]
-      - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+      - [period_start_date_id, integer, false, "FK to dim_calendar (period start)", {fk: temporal.dim_calendar.date_id}]
+      - [period_end_date_id, integer, false, "FK to dim_calendar (fiscal_date_ending)", {fk: temporal.dim_calendar.date_id}]
       # Attributes
       - [report_type, string, true, "annual or quarterly"]
       - [reported_date, date, true, "Actual earnings announcement date"]
@@ -311,7 +316,9 @@ graph:
         analyst_rating_sell: analyst_rating_sell
         analyst_rating_strong_sell: analyst_rating_strong_sell
       derive:
-        company_id: "ABS(HASH(CONCAT('COMPANY_', COALESCE(cik, ticker))))"
+        # IMPORTANT: Use ticker (not cik) for company_id to match stocks.dim_stock FK
+        # dim_stock uses HASH('COMPANY_' + ticker) and doesn't have cik available
+        company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
         is_active: "true"
       primary_key: [company_id]
       unique_key: [ticker]
@@ -358,11 +365,11 @@ graph:
         ebit: ebit
         ebitda: ebitda
       derive:
-        income_statement_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
-      # Drop natural keys - use FKs only (company_id → dim_company, date_id → temporal.dim_calendar)
-      drop: [ticker, fiscal_date_ending]
+        income_statement_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
+        period_end_date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        period_start_date_id: "CAST(DATE_FORMAT(CASE WHEN report_type = 'quarterly' THEN ADD_MONTHS(fiscal_date_ending, -3) ELSE ADD_MONTHS(fiscal_date_ending, -12) END, 'yyyyMMdd') AS INT)"
+      drop: [fiscal_date_ending]
       primary_key: [income_statement_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -420,11 +427,11 @@ graph:
         common_stock: common_stock
         shares_outstanding: shares_outstanding
       derive:
-        balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
-      # Drop natural keys - use FKs only (company_id → dim_company, date_id → temporal.dim_calendar)
-      drop: [ticker, fiscal_date_ending]
+        balance_sheet_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
+        period_end_date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        period_start_date_id: "CAST(DATE_FORMAT(CASE WHEN report_type = 'quarterly' THEN ADD_MONTHS(fiscal_date_ending, -3) ELSE ADD_MONTHS(fiscal_date_ending, -12) END, 'yyyyMMdd') AS INT)"
+      drop: [fiscal_date_ending]
       primary_key: [balance_sheet_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -473,12 +480,12 @@ graph:
         change_in_exchange_rate: change_in_exchange_rate
         net_income: net_income
       derive:
-        cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        cash_flow_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
+        period_end_date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        period_start_date_id: "CAST(DATE_FORMAT(CASE WHEN report_type = 'quarterly' THEN ADD_MONTHS(fiscal_date_ending, -3) ELSE ADD_MONTHS(fiscal_date_ending, -12) END, 'yyyyMMdd') AS INT)"
         free_cash_flow: "COALESCE(operating_cashflow, 0) - COALESCE(capital_expenditures, 0)"
-      # Drop natural keys - use FKs only (company_id → dim_company, date_id → temporal.dim_calendar)
-      drop: [ticker, fiscal_date_ending]
+      drop: [fiscal_date_ending]
       primary_key: [cash_flow_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -501,12 +508,12 @@ graph:
         surprise: surprise
         surprise_percentage: surprise_percentage
       derive:
-        earnings_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
         company_id: "ABS(HASH(CONCAT('COMPANY_', ticker)))"
-        date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        earnings_id: "ABS(HASH(CONCAT(ticker, '_', CAST(fiscal_date_ending AS STRING), '_', report_type)))"
+        period_end_date_id: "CAST(DATE_FORMAT(fiscal_date_ending, 'yyyyMMdd') AS INT)"
+        period_start_date_id: "CAST(DATE_FORMAT(CASE WHEN report_type = 'quarterly' THEN ADD_MONTHS(fiscal_date_ending, -3) ELSE ADD_MONTHS(fiscal_date_ending, -12) END, 'yyyyMMdd') AS INT)"
         beat_estimate: "CASE WHEN reported_eps > estimated_eps THEN true ELSE false END"
-      # Drop natural keys - use FKs only (company_id → dim_company, date_id → temporal.dim_calendar)
-      drop: [ticker, fiscal_date_ending]
+      drop: [fiscal_date_ending]
       primary_key: [earnings_id]
       unique_key: [ticker, fiscal_date_ending, report_type]
       foreign_keys:
@@ -538,11 +545,19 @@ graph:
       on: [company_id=company_id]
       type: many_to_one
 
-    income_to_calendar:
+    income_to_period_start:
       from: fact_income_statement
       to: temporal.dim_calendar
-      on: [date_id=date_id]
+      on: [period_start_date_id=date_id]
       type: many_to_one
+      description: "Link to fiscal period start date"
+
+    income_to_period_end:
+      from: fact_income_statement
+      to: temporal.dim_calendar
+      on: [period_end_date_id=date_id]
+      type: many_to_one
+      description: "Link to fiscal period end date"
 
     balance_to_company:
       from: fact_balance_sheet
@@ -550,11 +565,19 @@ graph:
       on: [company_id=company_id]
       type: many_to_one
 
-    balance_to_calendar:
+    balance_to_period_start:
       from: fact_balance_sheet
       to: temporal.dim_calendar
-      on: [date_id=date_id]
+      on: [period_start_date_id=date_id]
       type: many_to_one
+      description: "Link to fiscal period start date"
+
+    balance_to_period_end:
+      from: fact_balance_sheet
+      to: temporal.dim_calendar
+      on: [period_end_date_id=date_id]
+      type: many_to_one
+      description: "Link to fiscal period end date"
 
     cashflow_to_company:
       from: fact_cash_flow
@@ -562,11 +585,19 @@ graph:
       on: [company_id=company_id]
       type: many_to_one
 
-    cashflow_to_calendar:
+    cashflow_to_period_start:
       from: fact_cash_flow
       to: temporal.dim_calendar
-      on: [date_id=date_id]
+      on: [period_start_date_id=date_id]
       type: many_to_one
+      description: "Link to fiscal period start date"
+
+    cashflow_to_period_end:
+      from: fact_cash_flow
+      to: temporal.dim_calendar
+      on: [period_end_date_id=date_id]
+      type: many_to_one
+      description: "Link to fiscal period end date"
 
     earnings_to_company:
       from: fact_earnings
@@ -574,11 +605,19 @@ graph:
       on: [company_id=company_id]
       type: many_to_one
 
-    earnings_to_calendar:
+    earnings_to_period_start:
       from: fact_earnings
       to: temporal.dim_calendar
-      on: [date_id=date_id]
+      on: [period_start_date_id=date_id]
       type: many_to_one
+      description: "Link to fiscal period start date"
+
+    earnings_to_period_end:
+      from: fact_earnings
+      to: temporal.dim_calendar
+      on: [period_end_date_id=date_id]
+      type: many_to_one
+      description: "Link to fiscal period end date"
 
 # Metadata
 metadata:

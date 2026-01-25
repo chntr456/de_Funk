@@ -23,8 +23,8 @@ $filter${
   label: Sector
   type: select
   multi: true
-  source: {model: stocks, table: dim_stock, column: sector}
-  help_text: Filter by sector (from stock dimension)
+  source: {model: company, table: dim_company, column: sector}
+  help_text: Filter by sector (from company dimension via auto-join)
 }
 
 $filter${
@@ -40,7 +40,7 @@ $filter${
   id: date
   type: date_range
   label: Date Range
-  column: date
+  column: securities.fact_security_prices.trade_date
   operator: between
   default: {start: "2020-01-01", end: current_date()}
   help_text: Filter by trading date range
@@ -56,10 +56,10 @@ $exhibits${
   type: metric_cards
   source: securities.fact_security_prices
   metrics: [
-    { column: close, label: "Avg Close", aggregation: avg, format: "$,.2f" },
-    { column: volume, label: "Total Volume", aggregation: sum, format: ",.0f" },
-    { column: high, label: "Max High", aggregation: max, format: "$,.2f" },
-    { column: low, label: "Min Low", aggregation: min, format: "$,.2f" }
+    { column: securities.fact_security_prices.adjusted_close, label: "Avg Close", aggregation: avg, format: "$,.2f" },
+    { column: securities.fact_security_prices.volume, label: "Total Volume", aggregation: sum, format: ",.0f" },
+    { column: securities.fact_security_prices.high, label: "Max High", aggregation: max, format: "$,.2f" },
+    { column: securities.fact_security_prices.low, label: "Min Low", aggregation: min, format: "$,.2f" }
   ]
 }
 
@@ -70,10 +70,10 @@ Daily closing prices grouped by security. Uses auto-join to get ticker from dim_
 $exhibits${
   type: line_chart
   source: securities.fact_security_prices
-  x: date
-  y: close
-  color: ticker
-  title: Daily Closing Prices by Ticker
+  x: securities.fact_security_prices.trade_date
+  y: securities.fact_security_prices.adjusted_close
+  color: securities.fact_security_prices.ticker
+  title: Daily Adjusted Closing Prices by Ticker
   height: 450
 }
 
@@ -84,13 +84,13 @@ Annual average closing price - aggregated by year from calendar dimension.
 $exhibits${
   type: bar_chart
   source: securities.fact_security_prices
-  x: year
-  y: close
+  x: temporal.dim_calendar.year
+  y: securities.fact_security_prices.adjusted_close
   y_agg: avg
-  color: ticker
-  title: Annual Average Closing Price
+  color: securities.fact_security_prices.ticker
+  title: Annual Average Adjusted Closing Price
   height: 400
-  group_by: [year, ticker]
+  group_by: [temporal.dim_calendar.year, securities.fact_security_prices.ticker]
 }
 
 ## Sector Analysis
@@ -98,17 +98,17 @@ $exhibits${
 <details>
 <summary>Price by Sector</summary>
 
-Average closing prices grouped by sector (via auto-join to stocks.dim_stock).
+Average closing prices grouped by sector (via auto-join to company.dim_company).
 
 $exhibits${
   type: bar_chart
   source: securities.fact_security_prices
-  x: sector
-  y: close
+  x: company.dim_company.sector
+  y: securities.fact_security_prices.adjusted_close
   y_agg: avg
-  title: Average Close Price by Sector
+  title: Average Adjusted Close Price by Sector
   height: 400
-  group_by: [sector]
+  group_by: [company.dim_company.sector]
 }
 
 ### Volume by Sector
@@ -116,8 +116,8 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: securities.fact_security_prices
-  x: sector
-  y: volume
+  x: company.dim_company.sector
+  y: securities.fact_security_prices.volume
   y_agg: sum
   title: Total Volume by Sector
   height: 350
@@ -135,9 +135,9 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: securities.fact_security_prices
-  x: date
-  y: volume
-  color: ticker
+  x: securities.fact_security_prices.trade_date
+  y: securities.fact_security_prices.volume
+  color: securities.fact_security_prices.ticker
   title: Daily Trading Volume
   height: 300
 }
@@ -147,13 +147,13 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: securities.fact_security_prices
-  x: month
-  y: volume
+  x: temporal.dim_calendar.month
+  y: securities.fact_security_prices.volume
   y_agg: sum
-  color: ticker
+  color: securities.fact_security_prices.ticker
   title: Monthly Trading Volume
   height: 350
-  group_by: [month, ticker]
+  group_by: [temporal.dim_calendar.month, securities.fact_security_prices.ticker]
 }
 
 </details>
@@ -168,9 +168,9 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: securities.fact_security_prices
-  x: date
-  y: [high, low]
-  color: ticker
+  x: securities.fact_security_prices.trade_date
+  y: [securities.fact_security_prices.high, securities.fact_security_prices.low]
+  color: securities.fact_security_prices.ticker
   title: Daily High and Low Prices
   height: 350
 }
@@ -180,13 +180,13 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: securities.fact_security_prices
-  x: quarter
-  y: [high, low]
+  x: temporal.dim_calendar.quarter
+  y: [securities.fact_security_prices.high, securities.fact_security_prices.low]
   y_agg: [max, min]
-  color: ticker
+  color: securities.fact_security_prices.ticker
   title: Quarterly Price Range
   height: 350
-  group_by: [quarter, ticker]
+  group_by: [temporal.dim_calendar.quarter, securities.fact_security_prices.ticker]
 }
 
 </details>
@@ -205,12 +205,11 @@ Moving averages help identify trends. SMA-20 shows short-term trend, SMA-50 medi
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: date
-  y: [close, sma_20, sma_50, sma_200]
-  color: ticker
+  x: stocks.fact_stock_prices.date
+  y: [stocks.fact_stock_prices.adjusted_close, stocks.fact_stock_prices.sma_20, stocks.fact_stock_prices.sma_50, stocks.fact_stock_prices.sma_200]
+  color: stocks.fact_stock_prices.ticker
   title: Price with Moving Averages
   height: 450
-  columns: [date, ticker, close, sma_20, sma_50, sma_200]
 }
 
 *Note: Moving average columns (sma_20, sma_50, sma_200) require running `python -m scripts.build.compute_technicals` to populate.*
@@ -227,12 +226,11 @@ RSI measures momentum. Values above 70 suggest overbought conditions, below 30 s
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: date
-  y: rsi_14
-  color: ticker
+  x: stocks.fact_stock_prices.date
+  y: stocks.fact_stock_prices.rsi_14
+  color: stocks.fact_stock_prices.ticker
   title: RSI (14-day)
   height: 350
-  columns: [date, ticker, rsi_14]
 }
 
 *Note: RSI column (rsi_14) requires running `python -m scripts.build.compute_technicals` to populate.*
@@ -249,12 +247,11 @@ Bollinger Bands show price volatility. Prices near the upper band may be overbou
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: date
-  y: [close, bollinger_upper, bollinger_middle, bollinger_lower]
-  color: ticker
+  x: stocks.fact_stock_prices.date
+  y: [stocks.fact_stock_prices.adjusted_close, stocks.fact_stock_prices.bollinger_upper, stocks.fact_stock_prices.bollinger_middle, stocks.fact_stock_prices.bollinger_lower]
+  color: stocks.fact_stock_prices.ticker
   title: Bollinger Bands (20-day, 2 std dev)
   height: 400
-  columns: [date, ticker, close, bollinger_upper, bollinger_middle, bollinger_lower]
 }
 
 ### Daily Volatility
@@ -264,12 +261,11 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: stocks.fact_stock_prices
-  x: date
-  y: [volatility_20d, volatility_60d]
-  color: ticker
+  x: stocks.fact_stock_prices.date
+  y: [stocks.fact_stock_prices.volatility_20d, stocks.fact_stock_prices.volatility_60d]
+  color: stocks.fact_stock_prices.ticker
   title: Annualized Volatility
   height: 350
-  columns: [date, ticker, volatility_20d, volatility_60d]
 }
 
 *Note: Volatility columns require running `python -m scripts.build.compute_technicals` to populate.*
@@ -286,12 +282,11 @@ Volume ratio shows current volume relative to 20-day average. High ratios indica
 $exhibits${
   type: bar_chart
   source: stocks.fact_stock_prices
-  x: date
-  y: [volume, volume_sma_20]
-  color: ticker
+  x: stocks.fact_stock_prices.date
+  y: [stocks.fact_stock_prices.volume, stocks.fact_stock_prices.volume_sma_20]
+  color: stocks.fact_stock_prices.ticker
   title: Volume vs 20-day SMA
   height: 350
-  columns: [date, ticker, volume, volume_sma_20]
 }
 
 *Note: Volume SMA column (volume_sma_20) requires running `python -m scripts.build.compute_technicals` to populate.*
@@ -308,8 +303,8 @@ Price data with auto-joined ticker from dim_security:
 $exhibits${
   type: data_table
   source: securities.fact_security_prices
-  columns: [ticker, date, open, high, low, close, volume]
-  sort_by: date
+  columns: [securities.fact_security_prices.ticker, securities.fact_security_prices.trade_date, securities.fact_security_prices.open, securities.fact_security_prices.high, securities.fact_security_prices.low, securities.fact_security_prices.close, securities.fact_security_prices.adjusted_close, securities.fact_security_prices.volume]
+  sort_by: securities.fact_security_prices.trade_date
   sort_order: desc
   page_size: 20
   download: true
@@ -325,8 +320,8 @@ Stock details including sector, industry, and market cap:
 $exhibits${
   type: data_table
   source: stocks.dim_stock
-  columns: [ticker, security_id, sector, industry, market_cap, shares_outstanding, exchange_code]
-  sort_by: market_cap
+  columns: [stocks.dim_stock.ticker, stocks.dim_stock.security_id, stocks.dim_stock.sector, stocks.dim_stock.industry, stocks.dim_stock.market_cap, stocks.dim_stock.shares_outstanding, stocks.dim_stock.exchange_code]
+  sort_by: stocks.dim_stock.market_cap
   sort_order: desc
   page_size: 25
   download: true
@@ -342,10 +337,10 @@ Annual aggregated metrics per stock:
 $exhibits${
   type: data_table
   source: securities.fact_security_prices
-  columns: [ticker, year, close, volume, high, low]
-  aggregations: {close: avg, volume: sum, high: max, low: min}
-  group_by: [ticker, year]
-  sort_by: year
+  columns: [securities.fact_security_prices.ticker, temporal.dim_calendar.year, securities.fact_security_prices.adjusted_close, securities.fact_security_prices.volume, securities.fact_security_prices.high, securities.fact_security_prices.low]
+  aggregations: {adjusted_close: avg, volume: sum, high: max, low: min}
+  group_by: [securities.fact_security_prices.ticker, temporal.dim_calendar.year]
+  sort_by: temporal.dim_calendar.year
   sort_order: desc
   page_size: 20
   download: true
@@ -361,7 +356,7 @@ Master security dimension (all asset types):
 $exhibits${
   type: data_table
   source: securities.dim_security
-  columns: [ticker, security_name, asset_type, exchange_code, is_active]
+  columns: [securities.dim_security.ticker, securities.dim_security.security_name, securities.dim_security.asset_type, securities.dim_security.exchange_code, securities.dim_security.is_active]
   download: true
 }
 

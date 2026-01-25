@@ -13,6 +13,7 @@ from enum import Enum
 class FilterType(Enum):
     """Types of dynamic filters."""
     DATE_RANGE = "date_range"
+    DATE = "date"  # Single date with expression support (e.g., current_date())
     SELECT = "select"  # Single or multi-select (auto-detected)
     NUMBER_RANGE = "number_range"
     TEXT_SEARCH = "text_search"  # Fuzzy text search
@@ -120,11 +121,80 @@ class FilterCollection:
     def add_filter(self, filter_config: FilterConfig):
         """Add a filter to the collection."""
         self.filters[filter_config.id] = filter_config
+
+        # Resolve expression-based defaults (e.g., current_date())
+        resolved_default = self._resolve_default(filter_config)
+
         self.states[filter_config.id] = FilterState(
             filter_id=filter_config.id,
             config=filter_config,
-            current_value=filter_config.default
+            current_value=resolved_default
         )
+
+    def _resolve_default(self, filter_config: FilterConfig) -> Any:
+        """
+        Resolve filter default value, handling expressions like current_date().
+
+        Args:
+            filter_config: Filter configuration
+
+        Returns:
+            Resolved default value
+        """
+        if filter_config.default is None:
+            return None
+
+        # For DATE type filters, resolve date expressions
+        if filter_config.type == FilterType.DATE:
+            return self._resolve_date_expression(filter_config.default)
+
+        # For DATE_RANGE type, resolve both start and end
+        elif filter_config.type == FilterType.DATE_RANGE:
+            if isinstance(filter_config.default, dict):
+                start = filter_config.default.get('start')
+                end = filter_config.default.get('end')
+                return {
+                    'start': self._resolve_date_expression(start) if start else None,
+                    'end': self._resolve_date_expression(end) if end else None,
+                }
+            return filter_config.default
+
+        return filter_config.default
+
+    def _resolve_date_expression(self, value: Any) -> Any:
+        """
+        Resolve a date expression to its value.
+
+        Supports:
+        - ISO dates: "2024-01-01" -> "2024-01-01"
+        - Expressions: "current_date()" -> today's date as string
+        - Arithmetic: "current_date() - 365" -> 365 days ago
+
+        Args:
+            value: Date string or expression
+
+        Returns:
+            Resolved date string in ISO format
+        """
+        if not isinstance(value, str):
+            return value
+
+        # Check if this looks like an expression (contains function call)
+        if '(' in value and ')' in value:
+            try:
+                from ..expressions.resolver import ExpressionResolver
+                resolver = ExpressionResolver()
+                result = resolver.resolve(value)
+
+                # Convert date object to ISO string
+                if hasattr(result, 'isoformat'):
+                    return result.isoformat()
+                return result
+            except Exception:
+                # If resolution fails, return original value
+                return value
+
+        return value
 
     def get_filter(self, filter_id: str) -> Optional[FilterConfig]:
         """Get filter configuration by ID."""

@@ -136,6 +136,71 @@ class CompanyModel(BaseModel):
                 return dim_company.df()['sector'].value_counts().to_dict()
             return dim_company['sector'].value_counts().to_dict()
 
+    def after_build(
+        self,
+        dims: Dict[str, Any],
+        facts: Dict[str, Any]
+    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        """
+        Post-process fact tables to add correct company_id from dim_company.
+
+        Problem: Bronze financial statement tables only have ticker, not CIK.
+        The company_id formula uses COALESCE(cik, ticker), so:
+        - dim_company has company_id = HASH('COMPANY_' + cik)
+        - fact tables have company_id = HASH('COMPANY_' + ticker)
+        These don't match, causing 100% join failure.
+
+        Solution: After dim_company is built, join fact tables by ticker
+        to get the correct company_id from dim_company.
+        """
+        if 'dim_company' not in dims:
+            logger.warning("dim_company not found in dims, skipping company_id enrichment")
+            return dims, facts
+
+        dim_company = dims['dim_company']
+
+        # Extract company_id mapping: ticker → company_id
+        if self.backend == 'spark':
+            # Create lookup table with ticker and company_id
+            company_id_map = dim_company.select('ticker', 'company_id')
+
+            # Enrich each fact table
+            for fact_name, fact_df in facts.items():
+                if 'ticker' in fact_df.columns:
+                    logger.info(f"Enriching {fact_name} with correct company_id from dim_company")
+
+                    # Drop company_id if it exists (derived from ticker only, not CIK)
+                    # We need the correct company_id from dim_company which uses CIK
+                    if 'company_id' in fact_df.columns:
+                        fact_df = fact_df.drop('company_id')
+                        logger.debug(f"  Dropped incorrect company_id (ticker-only) from {fact_name}")
+
+                    # Join with dim_company to get correct company_id (from CIK)
+                    fact_df = fact_df.join(
+                        company_id_map,
+                        on='ticker',
+                        how='left'
+                    )
+
+                    # Log stats
+                    total = fact_df.count()
+                    matched = fact_df.filter(fact_df.company_id.isNotNull()).count()
+                    logger.info(f"  {fact_name}: {matched:,}/{total:,} rows matched ({matched/total*100:.1f}%)")
+
+                    # Drop ticker - fact table should only have FKs (company_id, date_id)
+                    fact_df = fact_df.drop('ticker')
+                    logger.debug(f"  Dropped ticker from {fact_name}, keeping only FKs")
+
+                    # Update facts dict
+                    facts[fact_name] = fact_df
+
+        else:
+            # DuckDB backend
+            logger.warning("DuckDB backend not yet implemented for company_id enrichment")
+            # TODO: Implement DuckDB version if needed
+
+        return dims, facts
+
     # Future methods when we add financial data:
     # def get_financials(self, cik: str, start_date=None, end_date=None):
     #     """Get financial statements for a company"""

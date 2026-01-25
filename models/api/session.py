@@ -566,7 +566,11 @@ class UniversalSession:
         logger.debug(f"AUTO-JOIN: Join plan: {' -> '.join(join_plan['table_sequence'])}")
 
         t0 = time.time()
-        df = auto_join.execute_auto_joins(model_name, join_plan, required_columns, filters)
+        # Pass group_by and aggregations to SQL level for efficient aggregation
+        df = auto_join.execute_auto_joins(
+            model_name, join_plan, required_columns, filters,
+            group_by=group_by, aggregations=aggregations
+        )
         logger.debug(f"AUTO-JOIN: execute_auto_joins took {time.time() - t0:.2f}s")
 
         # Log result row count for debugging
@@ -588,21 +592,8 @@ class UniversalSession:
         # NOTE: Removed try/except fallback to model.get_table()
         # If auto-join fails, let the error propagate - don't silently read from Bronze
 
-        if group_by:
-            t0 = time.time()
-            df = aggregation.aggregate_data(model_name, df, required_columns, group_by, aggregations)
-            logger.debug(f"AUTO-JOIN: aggregate_data took {time.time() - t0:.2f}s")
-            # Log aggregated row count
-            try:
-                if hasattr(df, 'count'):
-                    agg_count = df.count('*').fetchone()[0]
-                elif hasattr(df, 'shape'):
-                    agg_count = df.shape[0]
-                else:
-                    agg_count = 'unknown'
-                logger.info(f"AUTO-JOIN AGGREGATED: {agg_count} rows after aggregation (group_by={group_by})")
-            except Exception:
-                pass
+        # NOTE: Aggregation is now pushed to SQL level in execute_auto_joins
+        # No need to call aggregate_data here
 
         logger.debug(f"AUTO-JOIN COMPLETE: Total time {time.time() - start_time:.2f}s")
         return df
@@ -661,6 +652,8 @@ class UniversalSession:
         If a filter uses 'forecast_date' but the table has 'trade_date',
         this method translates it via the dim_calendar relationship.
 
+        Also translates filter parameters like start_date/end_date to date range filters.
+
         Args:
             model_name: Model being queried
             table_name: Table being queried
@@ -686,7 +679,13 @@ class UniversalSession:
 
         # Use auto-join handler's translation logic
         auto_join = self._get_auto_join_handler()
-        return auto_join.translate_date_filters(model_name, table_name, filters, available_cols)
+
+        # Step 1: Translate filter parameters (start_date/end_date -> date range)
+        # This must happen BEFORE translate_date_filters to ensure date filters work
+        param_translated = auto_join.translate_filter_parameters(filters, available_cols)
+
+        # Step 2: Translate universal date filters via dim_calendar mapping
+        return auto_join.translate_date_filters(model_name, table_name, param_translated, available_cols)
 
     def get_dimension_df(self, model_name: str, dim_id: str) -> Any:
         """Get a dimension table from a model."""

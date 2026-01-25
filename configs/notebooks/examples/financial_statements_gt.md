@@ -30,6 +30,20 @@ $filter${
   default: annual
 }
 
+$filter${
+  id: start_date
+  type: date
+  label: Start Date
+  default: "current_date() - 365"
+}
+
+$filter${
+  id: end_date
+  type: date
+  label: End Date
+  default: "current_date()"
+}
+
 ---
 
 ## Financial Dashboard
@@ -66,9 +80,10 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 300
-  sort: {by: date, order: desc}
+  sort: {by: period_end_date_id, order: desc}
   columns:
-    - {id: date, label: Period, format: date}
+    - {id: period_end_date_id, label: Period End}
+    - {id: report_type, label: Type}
     - {id: total_revenue, label: Revenue, format: currency_millions}
     - {id: gross_profit, label: Gross Profit, format: currency_millions, style: {bold: true}}
     - {id: operating_income, label: Op. Income, format: currency_millions}
@@ -76,7 +91,7 @@ $exhibits${
   spanners:
     - {label: Revenue, columns: [total_revenue, gross_profit]}
     - {label: Bottom Line, columns: [operating_income, net_income]}
-  source_note: "Amounts in millions USD"
+  source_note: "Amounts in millions USD | Fiscal periods vary by company"
   row_striping: true
 }
 
@@ -88,9 +103,10 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 300
-  sort: {by: date, order: desc}
+  sort: {by: period_end_date_id, order: desc}
   columns:
-    - {id: date, label: Period, format: date}
+    - {id: period_end_date_id, label: Period Ending, format: date_id}
+    - {id: report_type, label: Type}
     - {id: total_assets, label: Total Assets, format: currency_millions, style: {bold: true}}
     - {id: total_liabilities, label: Total Liabilities, format: currency_millions}
     - {id: total_shareholder_equity, label: Equity, format: currency_millions, style: {bold: true}}
@@ -106,9 +122,10 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 300
-  sort: {by: date, order: desc}
+  sort: {by: period_end_date_id, order: desc}
   columns:
-    - {id: date, label: Period, format: date}
+    - {id: period_end_date_id, label: Period Ending, format: date_id}
+    - {id: report_type, label: Type}
     - {id: operating_cashflow, label: Operating, format: currency_millions, style: {bold: true}}
     - {id: cashflow_from_investment, label: Investing, format: currency_millions}
     - {id: cashflow_from_financing, label: Financing, format: currency_millions}
@@ -125,9 +142,10 @@ $exhibits${
   theme: financial
   scroll: true
   max_height: 300
-  sort: {by: date, order: desc}
+  sort: {by: reported_date, order: desc}
   columns:
-    - {id: date, label: Period, format: date}
+    - {id: reported_date, label: Report Date, format: date}
+    - {id: period_end_date_id, label: Fiscal Period End, format: date_id}
     - {id: reported_eps, label: EPS, format: currency}
     - {id: estimated_eps, label: Est. EPS, format: currency}
     - {id: surprise_percentage, label: Surprise %, format: percent, conditional: {type: color_scale, palette: ['#ef4444', '#fbbf24', '#22c55e'], domain: [-0.1, 0, 0.1]}}
@@ -138,28 +156,21 @@ $exhibits${
   row_striping: true
 }
 
+## Stock Price History
+
 $exhibits${
   grid_cell: 6
   type: line_chart
   source: securities.fact_security_prices
-  title: Stock Price Explorer
+  title: Daily Closing Prices
   x: date
-  height: 300
-  limit: 1000
   measure_selector:
     available_measures: [close, open, high, low, volume]
     default_measures: [close]
-    label: Price Metrics
-    allow_multiple: true
-    selector_type: checkbox
-    help_text: Select one or more price metrics to display
   dimension_selector:
     available_dimensions: [ticker, exchange_code]
     default_dimension: ticker
-    label: Group By
-    selector_type: radio
-    applies_to: group_by
-    help_text: Choose how to group/color the lines
+  height: 400
 }
 
 $/grid$

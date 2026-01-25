@@ -135,6 +135,24 @@ class APIConfig:
 
 
 @dataclass
+class DebugConfig:
+    """Debug logging configuration."""
+    filters: bool = False  # Enable detailed filter logging
+    exhibits: bool = False  # Enable exhibit data logging
+    sql: bool = False  # Enable SQL query logging
+
+    @classmethod
+    def from_env(cls) -> "DebugConfig":
+        """Load debug flags from environment variables."""
+        import os
+        return cls(
+            filters=os.getenv("DEBUG_FILTERS", "false").lower() == "true",
+            exhibits=os.getenv("DEBUG_EXHIBITS", "false").lower() == "true",
+            sql=os.getenv("DEBUG_SQL", "false").lower() == "true",
+        )
+
+
+@dataclass
 class AppConfig:
     """
     Main application configuration.
@@ -146,6 +164,7 @@ class AppConfig:
     storage: Dict[str, Any]  # Raw storage config (JSON dict from storage.json)
     apis: Dict[str, Dict[str, Any]] = field(default_factory=dict)  # Raw API configs (JSON dicts)
     log_level: str = "INFO"
+    debug: DebugConfig = field(default_factory=DebugConfig)
     env_loaded: bool = False
 
     def __post_init__(self):

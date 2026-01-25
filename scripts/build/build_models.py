@@ -21,6 +21,10 @@ Usage:
 
 from __future__ import annotations
 
+# Load .env BEFORE any other imports that might use env vars
+from dotenv import load_dotenv
+load_dotenv()
+
 import sys
 import argparse
 import logging
@@ -54,6 +58,9 @@ def get_spark_session(app_name: str = "ModelBuilder"):
     """
     Create and return a Spark session with Delta Lake support.
 
+    Memory is configured automatically by get_spark() based on cluster vs local mode.
+    Override with SPARK_DRIVER_MEMORY and SPARK_EXECUTOR_MEMORY env vars if needed.
+
     Returns:
         SparkSession
     """
@@ -62,7 +69,6 @@ def get_spark_session(app_name: str = "ModelBuilder"):
     return get_spark(
         app_name=app_name,
         config={
-            "spark.driver.memory": "8g",
             "spark.sql.parquet.compression.codec": "snappy",
         }
     )
@@ -244,9 +250,12 @@ def build_models(
         print(f"  Failed: {failed} models")
     print("-" * 70 + "\n")
 
-    # Cleanup Spark
+    # Cleanup Spark (gracefully handle OOM during shutdown)
     if spark and not dry_run:
-        spark.stop()
+        try:
+            spark.stop()
+        except Exception as e:
+            logger.warning(f"Spark shutdown warning (builds completed): {type(e).__name__}")
 
     return results
 

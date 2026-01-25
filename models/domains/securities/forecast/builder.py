@@ -84,17 +84,24 @@ class ForecastBuilder(BaseModelBuilder):
 
             if limit:
                 # Try to get top stocks by market cap
+                # First try stocks.dim_stock, then company.dim_company
                 try:
                     top_stocks = stocks_model.get_top_by_market_cap(limit=limit)
                     if self.spark:
                         return [row["ticker"] for row in top_stocks.select("ticker").collect()]
                     else:
                         return top_stocks["ticker"].tolist()
-                except Exception as market_cap_err:
-                    # market_cap column may not exist - fall back to random sample
-                    logger.warning(f"market_cap not available, using random sample: {market_cap_err}")
-                    all_tickers = stocks_model.list_tickers(active_only=False)
-                    return all_tickers[:limit] if len(all_tickers) > limit else all_tickers
+                except Exception as stocks_err:
+                    # stocks.dim_stock doesn't have market_cap - try company.dim_company
+                    logger.debug(f"stocks.dim_stock market_cap failed: {stocks_err}")
+                    try:
+                        return self._get_top_tickers_from_company(limit)
+                    except Exception as company_err:
+                        # Both failed - fall back to random sample
+                        logger.warning(f"market_cap not available in stocks or company, using random sample")
+                        logger.debug(f"company error: {company_err}")
+                        all_tickers = stocks_model.list_tickers(active_only=False)
+                        return all_tickers[:limit] if len(all_tickers) > limit else all_tickers
             else:
                 # Get all tickers
                 return stocks_model.list_tickers(active_only=False)
@@ -102,6 +109,77 @@ class ForecastBuilder(BaseModelBuilder):
         except Exception as e:
             logger.error(f"Failed to get tickers from StocksModel: {e}")
             return []
+
+    def _get_top_tickers_from_company(self, limit: int) -> List[str]:
+        """
+        Get top tickers by market cap from company.dim_company.
+
+        Args:
+            limit: Number of top tickers to return
+
+        Returns:
+            List of ticker symbols ordered by market cap descending
+        """
+        logger.info(f"Getting top {limit} tickers by market_cap from company.dim_company")
+
+        # Ensure Spark session is active
+        self._ensure_active_session()
+
+        from models.domains.corporate.company.model import CompanyModel
+        from core.connection import get_spark_connection
+        from config.domain_loader import ModelConfigLoader
+
+        # Create connection wrapper
+        connection = get_spark_connection(self.spark)
+
+        # Load company model config
+        domains_dir = self.repo_root / "domains"
+        loader = ModelConfigLoader(domains_dir)
+        company_config = loader.load_model_config("company")
+
+        # Instantiate company model
+        company_model = CompanyModel(
+            connection=connection,
+            storage_cfg=self.storage_config,
+            model_cfg=company_config,
+            params={},
+            repo_root=self.repo_root
+        )
+
+        # Get dim_company table and sort by market_cap
+        dim_company = company_model.get_table('dim_company')
+        logger.debug(f"dim_company loaded, type={type(dim_company)}")
+
+        if self.spark:
+            # Spark DataFrame - use col() for safer column access
+            from pyspark.sql.functions import col, desc
+
+            # Log available columns for debugging
+            logger.debug(f"dim_company columns: {dim_company.columns}")
+
+            # Check if market_cap column exists
+            if 'market_cap' not in dim_company.columns:
+                raise ValueError(f"market_cap column not found. Available columns: {dim_company.columns}")
+
+            top_df = dim_company.filter(
+                col("market_cap").isNotNull()
+            ).orderBy(
+                desc("market_cap")
+            ).limit(limit).select("ticker")
+
+            tickers = [row["ticker"] for row in top_df.collect()]
+            logger.info(f"Got {len(tickers)} tickers from company.dim_company: {tickers[:5]}...")
+            return tickers
+        else:
+            # Pandas DataFrame
+            if 'market_cap' not in dim_company.columns:
+                raise ValueError(f"market_cap column not found. Available columns: {list(dim_company.columns)}")
+
+            df = dim_company[dim_company['market_cap'].notna()]
+            df = df.nlargest(limit, 'market_cap')
+            tickers = df['ticker'].tolist()
+            logger.info(f"Got {len(tickers)} tickers from company.dim_company: {tickers[:5]}...")
+            return tickers
 
     def _get_stocks_model(self):
         """

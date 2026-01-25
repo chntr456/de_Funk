@@ -25,6 +25,7 @@ from .models import (
     APIConfig,
     SparkConfig,
     DuckDBConfig,
+    DebugConfig,
 )
 from .constants import (
     DEFAULT_CONNECTION_TYPE,
@@ -523,6 +524,9 @@ class ConfigLoader:
         # Get log level
         log_level = os.getenv("LOG_LEVEL", DEFAULT_LOG_LEVEL).upper()
 
+        # Load debug flags from environment
+        debug = DebugConfig.from_env()
+
         # Build final config
         return AppConfig(
             repo_root=self._repo_root,
@@ -530,6 +534,7 @@ class ConfigLoader:
             storage=storage,
             apis=apis,
             log_level=log_level,
+            debug=debug,
             env_loaded=self._env_loaded,
         )
 

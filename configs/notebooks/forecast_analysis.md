@@ -31,9 +31,8 @@ $filter${
   id: forecast_date
   type: date_range
   label: Forecast Date
-  column: forecast_date
+  column: forecast.fact_forecast_price.forecast_date
   operator: between
-  default: {start: current_date(), end: current_date() + 365}
   help_text: Filter by when the forecast was generated
 }
 
@@ -41,7 +40,7 @@ $filter${
   id: horizon
   label: Forecast Horizon (Days)
   type: slider
-  column: horizon
+  column: forecast.fact_forecast_price.horizon
   min_value: 1
   max_value: 30
   default: 7
@@ -61,10 +60,10 @@ $exhibits${
   type: metric_cards
   source: forecast.fact_forecast_price
   metrics: [
-    { column: predicted_close, label: "Avg Predicted Price", aggregation: avg, format: "$,.2f" },
-    { column: confidence, label: "Avg Confidence", aggregation: avg, format: ".1%" },
-    { column: horizon, label: "Max Horizon", aggregation: max },
-    { column: ticker, label: "Tickers Covered", aggregation: count_distinct }
+    { column: forecast.fact_forecast_price.predicted_close, label: "Avg Predicted Price", aggregation: avg, format: "$,.2f" },
+    { column: forecast.fact_forecast_price.confidence, label: "Avg Confidence", aggregation: avg, format: ".1%" },
+    { column: forecast.fact_forecast_price.horizon, label: "Max Horizon", aggregation: max },
+    { column: forecast.fact_forecast_price.ticker, label: "Tickers Covered", aggregation: count_distinct }
   ]
 }
 
@@ -75,9 +74,9 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: forecast.fact_forecast_price
-  x: prediction_date
-  y: [predicted_close, lower_bound, upper_bound]
-  color: ticker
+  x: forecast.fact_forecast_price.prediction_date
+  y: [forecast.fact_forecast_price.predicted_close, forecast.fact_forecast_price.lower_bound, forecast.fact_forecast_price.upper_bound]
+  color: forecast.fact_forecast_price.ticker
   title: Price Predictions with Confidence Intervals
   height: 450
 }
@@ -87,11 +86,52 @@ $exhibits${
 $exhibits${
   type: line_chart
   source: forecast.fact_forecast_price
-  x: prediction_date
-  y: predicted_close
-  color: model_name
+  x: forecast.fact_forecast_price.prediction_date
+  y: forecast.fact_forecast_price.predicted_close
+  color: forecast.fact_forecast_price.model_name
   title: Price Predictions by Model Type
   height: 400
+}
+
+## Actual Stock Prices
+
+Compare forecast predictions against actual market data.
+
+### Recent Stock Prices
+
+$exhibits${
+  type: metric_cards
+  source: stocks.fact_stock_prices
+  metrics: [
+    { column: stocks.fact_stock_prices.adjusted_close, label: "Latest Close", aggregation: last, format: "$,.2f" },
+    { column: stocks.fact_stock_prices.adjusted_close, label: "Avg Close", aggregation: avg, format: "$,.2f" },
+    { column: stocks.fact_stock_prices.high, label: "Period High", aggregation: max, format: "$,.2f" },
+    { column: stocks.fact_stock_prices.low, label: "Period Low", aggregation: min, format: "$,.2f" }
+  ]
+}
+
+### Price History
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: stocks.fact_stock_prices.date
+  y: stocks.fact_stock_prices.adjusted_close
+  color: stocks.fact_stock_prices.ticker
+  title: Actual Stock Price History (Adjusted)
+  height: 400
+}
+
+### Price with Volume
+
+$exhibits${
+  type: line_chart
+  source: stocks.fact_stock_prices
+  x: stocks.fact_stock_prices.date
+  y: [stocks.fact_stock_prices.adjusted_close, stocks.fact_stock_prices.volume]
+  color: stocks.fact_stock_prices.ticker
+  title: Adjusted Price and Volume Over Time
+  height: 350
 }
 
 ## Model Performance
@@ -101,8 +141,8 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: forecast.fact_forecast_metrics
-  x: model_name
-  y: [mae, rmse]
+  x: forecast.fact_forecast_metrics.model_name
+  y: [forecast.fact_forecast_metrics.mae, forecast.fact_forecast_metrics.rmse]
   title: Model Error Comparison (MAE & RMSE)
   height: 350
 }
@@ -113,10 +153,10 @@ $exhibits${
   type: metric_cards
   source: forecast.fact_forecast_metrics
   metrics: [
-    { column: mae, label: "Avg MAE", aggregation: avg, format: "$,.2f" },
-    { column: rmse, label: "Avg RMSE", aggregation: avg, format: "$,.2f" },
-    { column: mape, label: "Avg MAPE", aggregation: avg, format: ".2%" },
-    { column: r2_score, label: "Avg R-Squared", aggregation: avg, format: ".3f" }
+    { column: forecast.fact_forecast_metrics.mae, label: "Avg MAE", aggregation: avg, format: "$,.2f" },
+    { column: forecast.fact_forecast_metrics.rmse, label: "Avg RMSE", aggregation: avg, format: "$,.2f" },
+    { column: forecast.fact_forecast_metrics.mape, label: "Avg MAPE", aggregation: avg, format: ".2%" },
+    { column: forecast.fact_forecast_metrics.r2_score, label: "Avg R-Squared", aggregation: avg, format: ".3f" }
   ]
 }
 
@@ -130,8 +170,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: forecast.fact_forecast_metrics
-  columns: [ticker, model_name, mae, rmse, mape, r2_score, num_predictions]
-  sort_by: mae
+  columns: [forecast.fact_forecast_metrics.ticker, forecast.fact_forecast_metrics.model_name, forecast.fact_forecast_metrics.mae, forecast.fact_forecast_metrics.rmse, forecast.fact_forecast_metrics.mape, forecast.fact_forecast_metrics.r2_score, forecast.fact_forecast_metrics.num_predictions]
+  sort_by: forecast.fact_forecast_metrics.mae
   sort_order: asc
   page_size: 20
   download: true
@@ -142,10 +182,10 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: forecast.fact_forecast_metrics
-  x: ticker
-  y: mape
+  x: forecast.fact_forecast_metrics.ticker
+  y: forecast.fact_forecast_metrics.mape
   aggregation: avg
-  color: model_name
+  color: forecast.fact_forecast_metrics.model_name
   title: Average MAPE by Stock and Model
   height: 400
 }
@@ -160,8 +200,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: forecast.fact_forecast_price
-  columns: [ticker, model_name, forecast_date, prediction_date, horizon, predicted_close, lower_bound, upper_bound, confidence]
-  sort_by: prediction_date
+  columns: [forecast.fact_forecast_price.ticker, forecast.fact_forecast_price.model_name, forecast.fact_forecast_price.forecast_date, forecast.fact_forecast_price.prediction_date, forecast.fact_forecast_price.horizon, forecast.fact_forecast_price.predicted_close, forecast.fact_forecast_price.lower_bound, forecast.fact_forecast_price.upper_bound, forecast.fact_forecast_price.confidence]
+  sort_by: forecast.fact_forecast_price.prediction_date
   sort_order: desc
   page_size: 25
   download: true
@@ -177,8 +217,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: forecast.dim_model_registry
-  columns: [model_name, model_type, ticker, target_variable, lookback_days, forecast_horizon, trained_date, status]
-  sort_by: trained_date
+  columns: [forecast.dim_model_registry.model_name, forecast.dim_model_registry.model_type, forecast.dim_model_registry.ticker, forecast.dim_model_registry.target_variable, forecast.dim_model_registry.lookback_days, forecast.dim_model_registry.forecast_horizon, forecast.dim_model_registry.trained_date, forecast.dim_model_registry.status]
+  sort_by: forecast.dim_model_registry.trained_date
   sort_order: desc
   page_size: 20
   download: true

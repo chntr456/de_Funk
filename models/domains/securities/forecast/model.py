@@ -90,17 +90,15 @@ class ForecastModel(TimeSeriesForecastModel):
         if self.backend == 'spark':
             from pyspark.sql import functions as F
 
-            # Join to get ticker
+            # fact_stock_prices now has ticker column directly (no join needed for ticker)
+            # Just filter by ticker and security_id to ensure we have matching dim data
             df = fact_df.alias('f').join(
-                dim_df.select('security_id', 'ticker').alias('d'),
+                dim_df.select('security_id').alias('d'),
                 F.col('f.security_id') == F.col('d.security_id'),
                 'inner'
-            ).select(
-                'f.*',
-                F.col('d.ticker')
-            )
+            ).select('f.*')
 
-            # Filter by ticker
+            # Filter by ticker (now directly in fact_stock_prices)
             df = df.filter(F.col('ticker') == entity_id)
 
             # Convert date_id to trade_date (date_id is YYYYMMDD integer)

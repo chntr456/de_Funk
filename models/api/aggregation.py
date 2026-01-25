@@ -193,30 +193,47 @@ class AggregationHandler:
         except ImportError:
             raise RuntimeError("PySpark is required for Spark backend but not installed")
 
+        # Normalize aggregations to list of (column, agg_func, alias) tuples
+        # Supports both dict format {col: agg} and list format [{column: col, aggregation: agg}, ...]
+        agg_specs = []
+        if isinstance(aggregations, dict):
+            for col, agg_func in aggregations.items():
+                alias = f"{col}_{agg_func}"
+                agg_specs.append((col, agg_func, alias))
+        elif isinstance(aggregations, list):
+            for agg_item in aggregations:
+                if isinstance(agg_item, dict) and 'column' in agg_item and 'aggregation' in agg_item:
+                    col = agg_item['column']
+                    agg_func = agg_item['aggregation']
+                    alias = f"{col}_{agg_func}"
+                    agg_specs.append((col, agg_func, alias))
+        else:
+            print(f"   Warning: Unknown aggregations format: {type(aggregations)}")
+
         # Build aggregation expressions
         agg_exprs = []
-        for col, agg_func in aggregations.items():
+        for col, agg_func, alias in agg_specs:
             if agg_func == 'avg':
-                agg_exprs.append(F.avg(col).alias(col))
+                agg_exprs.append(F.avg(col).alias(alias))
             elif agg_func == 'sum':
-                agg_exprs.append(F.sum(col).alias(col))
+                agg_exprs.append(F.sum(col).alias(alias))
             elif agg_func == 'max':
-                agg_exprs.append(F.max(col).alias(col))
+                agg_exprs.append(F.max(col).alias(alias))
             elif agg_func == 'min':
-                agg_exprs.append(F.min(col).alias(col))
+                agg_exprs.append(F.min(col).alias(alias))
             elif agg_func == 'count':
-                agg_exprs.append(F.count(col).alias(col))
+                agg_exprs.append(F.count(col).alias(alias))
             elif agg_func == 'first':
-                agg_exprs.append(F.first(col).alias(col))
+                agg_exprs.append(F.first(col).alias(alias))
             else:
                 print(f"   Warning: Unknown aggregation '{agg_func}' for {col}, using avg")
-                agg_exprs.append(F.avg(col).alias(col))
+                agg_exprs.append(F.avg(col).alias(alias))
 
         # Group and aggregate
         result = df.groupBy(*group_by).agg(*agg_exprs)
 
         # Reorder columns to match group_by + measures order
-        measure_order = list(aggregations.keys())
+        measure_order = [alias for _, _, alias in agg_specs]
         result = result.select(*group_by, *measure_order)
 
         return result
@@ -273,8 +290,28 @@ class AggregationHandler:
         for col in group_by:
             select_parts.append(col)
 
+        # Normalize aggregations to list of (column, agg_func, alias) tuples
+        # Supports both dict format {col: agg} and list format [{column: col, aggregation: agg, label: alias}, ...]
+        agg_specs = []
+        if isinstance(aggregations, dict):
+            for col, agg_func in aggregations.items():
+                # For dict format, create alias as {col}_{agg} to support multiple aggs per column
+                alias = f"{col}_{agg_func}"
+                agg_specs.append((col, agg_func, alias))
+        elif isinstance(aggregations, list):
+            for agg_item in aggregations:
+                if isinstance(agg_item, dict) and 'column' in agg_item and 'aggregation' in agg_item:
+                    col = agg_item['column']
+                    agg_func = agg_item['aggregation']
+                    # Always use {col}_{agg} format for SQL alias (predictable, matches sort_by conventions)
+                    # The 'label' field is for display purposes, not SQL aliasing
+                    alias = f"{col}_{agg_func}"
+                    agg_specs.append((col, agg_func, alias))
+        else:
+            print(f"   Warning: Unknown aggregations format: {type(aggregations)}")
+
         # Add aggregated measures with appropriate functions
-        for col, agg_func in aggregations.items():
+        for col, agg_func, alias in agg_specs:
             # For string columns, only allow first/count_distinct, not avg/sum
             if col in string_cols and agg_func in ('avg', 'sum'):
                 # Skip string columns with numeric aggregations
@@ -282,28 +319,28 @@ class AggregationHandler:
                 continue
 
             if agg_func == 'avg':
-                select_parts.append(f"AVG({col}) as {col}")
+                select_parts.append(f"AVG({col}) as {alias}")
             elif agg_func == 'sum':
-                select_parts.append(f"SUM({col}) as {col}")
+                select_parts.append(f"SUM({col}) as {alias}")
             elif agg_func == 'max':
-                select_parts.append(f"MAX({col}) as {col}")
+                select_parts.append(f"MAX({col}) as {alias}")
             elif agg_func == 'min':
-                select_parts.append(f"MIN({col}) as {col}")
+                select_parts.append(f"MIN({col}) as {alias}")
             elif agg_func == 'count':
-                select_parts.append(f"COUNT({col}) as {col}")
+                select_parts.append(f"COUNT({col}) as {alias}")
             elif agg_func == 'count_distinct':
-                select_parts.append(f"COUNT(DISTINCT {col}) as {col}")
+                select_parts.append(f"COUNT(DISTINCT {col}) as {alias}")
             elif agg_func == 'first':
                 # DuckDB uses FIRST() or ANY_VALUE() for this
-                select_parts.append(f"FIRST({col}) as {col}")
+                select_parts.append(f"FIRST({col}) as {alias}")
             else:
                 # Unknown aggregation - check if column is numeric before using avg
                 if col in numeric_cols:
                     print(f"   Warning: Unknown aggregation '{agg_func}' for {col}, using AVG")
-                    select_parts.append(f"AVG({col}) as {col}")
+                    select_parts.append(f"AVG({col}) as {alias}")
                 else:
                     print(f"   Warning: Unknown aggregation '{agg_func}' for non-numeric {col}, using FIRST")
-                    select_parts.append(f"FIRST({col}) as {col}")
+                    select_parts.append(f"FIRST({col}) as {alias}")
 
         # If no measures to aggregate, just return distinct dimensions
         if len(select_parts) == len(group_by):

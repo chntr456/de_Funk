@@ -12,17 +12,26 @@ Key changes from NotebookSession:
 - Supports folder-based filter contexts (shared within folder, isolated across folders)
 """
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from pathlib import Path
 import pandas as pd
 
-from ..schema import NotebookConfig, Exhibit, ExhibitType
+from ..schema import NotebookConfig, Exhibit, ExhibitType, ColumnReference
 from ..parsers import NotebookParser, MarkdownNotebookParser
 from ..filters.context import FilterContext
 from ..folder_context import FolderFilterContextManager
 from models.api.session import UniversalSession
 from models.registry import ModelRegistry
 from core.session.filters import FilterEngine
+
+
+def _extract_field(ref: Any) -> Optional[str]:
+    """Extract field name from ColumnReference or return string as-is."""
+    if ref is None:
+        return None
+    if isinstance(ref, ColumnReference):
+        return ref.field
+    return str(ref)
 
 
 class NotebookManager:
@@ -495,63 +504,229 @@ class NotebookManager:
         """
         required_cols = set()
 
-        # Add x-axis column
+        # Add x-axis column (ColumnReference object)
         x_col = None
-        if hasattr(exhibit, 'x') and exhibit.x:
-            x_col = exhibit.x
-            required_cols.add(exhibit.x)
-        elif hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension'):
-            x_col = exhibit.x_axis.dimension
-            required_cols.add(exhibit.x_axis.dimension)
+        if hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension'):
+            x_col = _extract_field(exhibit.x_axis.dimension)
+            if x_col:
+                required_cols.add(x_col)
 
         # If x-axis is date_id (integer FK), also request calendar's date column
         # This enables human-readable date display via auto-join to temporal.dim_calendar
         if x_col == 'date_id':
             required_cols.add('date')  # Will trigger auto-join to temporal.dim_calendar
 
-        # Add y-axis columns
-        if hasattr(exhibit, 'y') and exhibit.y:
-            if isinstance(exhibit.y, list):
-                required_cols.update(exhibit.y)
-            else:
-                required_cols.add(exhibit.y)
-        elif hasattr(exhibit, 'y_axis') and exhibit.y_axis:
+        # Add y-axis columns (ColumnReference objects)
+        if hasattr(exhibit, 'y_axis') and exhibit.y_axis:
             if hasattr(exhibit.y_axis, 'measures') and exhibit.y_axis.measures:
-                required_cols.update(exhibit.y_axis.measures)
+                for m in exhibit.y_axis.measures:
+                    field = _extract_field(m)
+                    if field:
+                        required_cols.add(field)
             elif hasattr(exhibit.y_axis, 'measure') and exhibit.y_axis.measure:
                 # Handle both single measure and list of measures
                 if isinstance(exhibit.y_axis.measure, list):
-                    required_cols.update(exhibit.y_axis.measure)
+                    for m in exhibit.y_axis.measure:
+                        field = _extract_field(m)
+                        if field:
+                            required_cols.add(field)
                 else:
-                    required_cols.add(exhibit.y_axis.measure)
+                    field = _extract_field(exhibit.y_axis.measure)
+                    if field:
+                        required_cols.add(field)
 
         # Add dimension selector dimensions
         if hasattr(exhibit, 'dimension_selector') and exhibit.dimension_selector:
             dim_selector = exhibit.dimension_selector
             if hasattr(dim_selector, 'available_dimensions'):
-                required_cols.update(dim_selector.available_dimensions)
+                for d in dim_selector.available_dimensions:
+                    field = _extract_field(d)
+                    if field:
+                        required_cols.add(field)
 
         # Add measure selector measures
         if hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
             measure_selector = exhibit.measure_selector
             if hasattr(measure_selector, 'available_measures'):
-                required_cols.update(measure_selector.available_measures)
+                for m in measure_selector.available_measures:
+                    field = _extract_field(m)
+                    if field:
+                        required_cols.add(field)
 
-        # Add color_by column
+        # Add color_by column (ColumnReference object)
         if hasattr(exhibit, 'color_by') and exhibit.color_by:
-            required_cols.add(exhibit.color_by)
+            field = _extract_field(exhibit.color_by)
+            if field:
+                required_cols.add(field)
 
         # Add metric columns (for metric_cards)
         if hasattr(exhibit, 'metrics') and exhibit.metrics:
             for metric in exhibit.metrics:
-                if hasattr(metric, 'measure') and metric.measure:
-                    required_cols.add(metric.measure)
+                # Handle both 'column' (new format) and 'measure' (legacy)
+                col_ref = getattr(metric, 'column', None) or getattr(metric, 'measure', None)
+                if col_ref:
+                    field = _extract_field(col_ref)
+                    if field:
+                        # Handle model.table.column format
+                        if '.' in field:
+                            field = field.split('.')[-1]
+                        required_cols.add(field)
 
         # Add aggregate_by column (for aggregations)
         if hasattr(exhibit, 'aggregate_by') and exhibit.aggregate_by:
-            required_cols.add(exhibit.aggregate_by)
+            agg_col = exhibit.aggregate_by
+            if '.' in agg_col:
+                agg_col = agg_col.split('.')[-1]
+            required_cols.add(agg_col)
+
+        # Add columns from data_table/great_table exhibits
+        # These have a 'columns' attribute with column definitions
+        if hasattr(exhibit, 'columns') and exhibit.columns:
+            for col in exhibit.columns:
+                # Handle different column formats:
+                # 1. ColumnReference object -> extract field
+                # 2. String with model.table.column format -> extract last part
+                # 3. String: "ticker" -> add directly
+                # 4. Dict: {id: "ticker", label: "Ticker"} -> extract id
+                # 5. Object with id attr: GTColumnConfig -> extract id
+                field = _extract_field(col)
+                if field:
+                    # Handle model.table.column format - extract just the column name
+                    if '.' in field:
+                        field = field.split('.')[-1]
+                    required_cols.add(field)
+                elif isinstance(col, dict) and 'id' in col:
+                    col_id = col['id']
+                    if '.' in col_id:
+                        col_id = col_id.split('.')[-1]
+                    required_cols.add(col_id)
+                elif hasattr(col, 'id') and col.id:
+                    col_id = col.id
+                    if '.' in col_id:
+                        col_id = col_id.split('.')[-1]
+                    required_cols.add(col_id)
+
+        # Add sort column if specified (for data_table/great_table)
+        if hasattr(exhibit, 'sort') and exhibit.sort:
+            sort_config = exhibit.sort
+            if isinstance(sort_config, dict) and 'by' in sort_config:
+                sort_col = sort_config['by']
+                if '.' in sort_col:
+                    sort_col = sort_col.split('.')[-1]
+                required_cols.add(sort_col)
+            elif hasattr(sort_config, 'by') and sort_config.by:
+                sort_col = sort_config.by
+                if '.' in sort_col:
+                    sort_col = sort_col.split('.')[-1]
+                required_cols.add(sort_col)
+
+        # CRITICAL: Add filter columns so auto-join can bring them in
+        # Without this, filters on columns that don't exist in the base table
+        # (like ticker from dim_company when querying fact_income_statement)
+        # get silently skipped by FilterEngine
+        filter_columns = self._get_filter_columns_for_exhibit(exhibit)
+        if filter_columns:
+            required_cols.update(filter_columns)
 
         return list(required_cols) if required_cols else None
+
+    def _get_filter_columns_for_exhibit(self, exhibit: Exhibit) -> set:
+        """
+        Get filter columns that need to be fetched for this exhibit.
+
+        When a filter targets a column that doesn't exist in the base table
+        (e.g., ticker filter applied to fact_income_statement which only has company_id),
+        we need to include that column in required_columns so auto-join brings it in.
+
+        Only includes filter columns when there's a valid join path:
+        - Filter from same table as exhibit → include
+        - Filter from dimension, exhibit is fact that references it → include
+        - Filter from fact, exhibit is dimension → SKIP (no valid join path)
+
+        Args:
+            exhibit: Exhibit configuration
+
+        Returns:
+            Set of filter column names to add to required_columns
+        """
+        filter_columns = set()
+
+        if not self.notebook_config or not hasattr(self.notebook_config, '_filter_collection'):
+            return filter_columns
+
+        filter_collection = self.notebook_config._filter_collection
+        if not filter_collection:
+            return filter_columns
+
+        # Get exhibit's source model and table for relationship checking
+        exhibit_model = None
+        exhibit_table = None
+        if hasattr(exhibit, 'source') and exhibit.source:
+            try:
+                exhibit_model, exhibit_table = self._parse_source(exhibit.source)
+            except (ValueError, AttributeError):
+                pass
+
+        # Get active filters and add their columns
+        # NOTE: Only includes filters that have an explicit source.column.
+        # UI-only filters (like start_date, end_date) are translated to date ranges
+        # later and don't need to be in required_columns.
+        active_filters = filter_collection.get_active_filters()
+        for filter_id, value in active_filters.items():
+            if value is None:
+                continue
+
+            filter_config = filter_collection.get_filter(filter_id)
+            if not filter_config:
+                # No config - skip (don't add filter_id as column, it might be a UI parameter)
+                continue
+
+            # Only include filters that have an explicit source column
+            # UI-only filters (start_date, end_date) are handled via date range translation
+            if not filter_config.source or not filter_config.source.column:
+                continue
+
+            # Check if this filter should apply to this exhibit's model
+            if exhibit_model:
+                filter_model = filter_config.source.model
+                filter_table = filter_config.source.table
+                filter_column = filter_config.source.column
+
+                # Only include if same model or related models
+                if not self.session.should_apply_cross_model_filter(filter_model, exhibit_model):
+                    continue
+
+                # Check if there's a valid join path
+                # Case 1: Same table - always include
+                if filter_table == exhibit_table:
+                    filter_columns.add(filter_column)
+                    continue
+
+                # Case 2: Filter is from dimension, exhibit is fact - valid join
+                # (facts can join TO dimensions via FK)
+                filter_is_dim = filter_table and filter_table.startswith('dim_')
+                exhibit_is_fact = exhibit_table and exhibit_table.startswith('fact_')
+                if filter_is_dim and exhibit_is_fact:
+                    filter_columns.add(filter_column)
+                    continue
+
+                # Case 3: Filter is from fact, exhibit is dimension - NO valid join
+                # (dimensions don't join TO facts - that's a one-to-many)
+                filter_is_fact = filter_table and filter_table.startswith('fact_')
+                exhibit_is_dim = exhibit_table and exhibit_table.startswith('dim_')
+                if filter_is_fact and exhibit_is_dim:
+                    # Skip - no valid join path from dimension to fact
+                    continue
+
+                # Case 4: Both dimensions - include (may or may not join)
+                if filter_is_dim and exhibit_is_dim:
+                    filter_columns.add(filter_column)
+                    continue
+
+                # Default: include and let auto-join figure it out
+                filter_columns.add(filter_column)
+
+        return filter_columns
 
     def _determine_aggregation(self, exhibit: Exhibit) -> tuple[Optional[List[str]], Optional[Dict[str, str]]]:
         """
@@ -582,6 +757,11 @@ class NotebookManager:
         """
         aggregations = getattr(exhibit, 'aggregations', None)
 
+        # Note: aggregations can be either dict format {col: agg} or list format
+        # [{column: col, aggregation: agg, label: alias}, ...]. The list format
+        # supports multiple aggregations per column and custom labels.
+        # aggregation.py handles both formats.
+
         # First, check for explicit group_by configuration
         if hasattr(exhibit, 'group_by') and exhibit.group_by:
             group_by_cols = exhibit.group_by if isinstance(exhibit.group_by, list) else [exhibit.group_by]
@@ -592,17 +772,18 @@ class NotebookManager:
         if aggregations:
             group_by_cols = []
 
-            # Always include x-axis in group_by for time-series aggregation
-            if hasattr(exhibit, 'x') and exhibit.x:
-                group_by_cols.append(exhibit.x)
-            elif hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension'):
-                group_by_cols.append(exhibit.x_axis.dimension)
+            # Always include x-axis in group_by for time-series aggregation (ColumnReference)
+            if hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension'):
+                x_field = _extract_field(exhibit.x_axis.dimension)
+                if x_field:
+                    group_by_cols.append(x_field)
 
             # If color_by is specified, include it in group_by to split the visualization
             # This allows one line/bar per dimension value (e.g., one line per ticker)
             if hasattr(exhibit, 'color_by') and exhibit.color_by:
-                if exhibit.color_by not in group_by_cols:
-                    group_by_cols.append(exhibit.color_by)
+                color_field = _extract_field(exhibit.color_by)
+                if color_field and color_field not in group_by_cols:
+                    group_by_cols.append(color_field)
 
             if group_by_cols:
                 print(f"📊 Using smart default aggregation: group_by={group_by_cols}, aggregations={aggregations}")
@@ -641,11 +822,11 @@ class NotebookManager:
         # Group by: x-axis (time/category) + selected dimension
         group_by_cols = []
 
-        # Add x-axis column
-        if hasattr(exhibit, 'x') and exhibit.x:
-            group_by_cols.append(exhibit.x)
-        elif hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension'):
-            group_by_cols.append(exhibit.x_axis.dimension)
+        # Add x-axis column (ColumnReference)
+        if hasattr(exhibit, 'x_axis') and exhibit.x_axis and hasattr(exhibit.x_axis, 'dimension'):
+            x_field = _extract_field(exhibit.x_axis.dimension)
+            if x_field:
+                group_by_cols.append(x_field)
 
         # Add selected dimension
         if selected_dimension:

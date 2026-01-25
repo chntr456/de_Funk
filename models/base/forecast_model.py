@@ -1008,7 +1008,7 @@ class TimeSeriesForecastModel(BaseModel):
 
     def save_forecasts(self, forecasts_df):
         """
-        Save forecast results to Silver layer.
+        Save forecast results to Silver layer using Delta Lake format.
 
         Saves to appropriate table based on target (price vs volume).
 
@@ -1017,7 +1017,13 @@ class TimeSeriesForecastModel(BaseModel):
         """
         from pathlib import Path
         import pandas as pd
-        import os
+        import pyarrow as pa
+
+        try:
+            from deltalake import write_deltalake
+            DELTA_AVAILABLE = True
+        except ImportError:
+            DELTA_AVAILABLE = False
 
         # Get forecast Silver root
         forecast_root = self.storage_cfg['roots'].get(
@@ -1035,12 +1041,15 @@ class TimeSeriesForecastModel(BaseModel):
             target_df = forecasts_df[forecasts_df['target'] == target].copy()
 
             # Determine table name and column name based on target
+            # Use fact_ prefix to match expected schema
             if target == 'close':
-                table_name = 'forecast_price'
+                table_name = 'fact_forecast_price'
+                value_col = 'predicted_close'
                 # Rename predicted_value to predicted_close
                 target_df = target_df.rename(columns={'predicted_value': 'predicted_close'})
             elif target == 'volume':
-                table_name = 'forecast_volume'
+                table_name = 'fact_forecast_volume'
+                value_col = 'predicted_volume'
                 # Rename predicted_value to predicted_volume
                 target_df = target_df.rename(columns={'predicted_value': 'predicted_volume'})
             else:
@@ -1050,39 +1059,81 @@ class TimeSeriesForecastModel(BaseModel):
             # Drop the target column as it's implicit in the table name
             target_df = target_df.drop(columns=['target'])
 
+            # Normalize column types to ensure consistent schema across appends
+            entity_col = self.get_entity_column()
+            target_df[entity_col] = target_df[entity_col].astype(str)
+            target_df['model_name'] = target_df['model_name'].astype(str)
+            target_df['horizon'] = target_df['horizon'].astype('int32')
+            target_df['confidence'] = target_df['confidence'].astype('float64')
+            target_df[value_col] = target_df[value_col].astype('float64')
+            target_df['lower_bound'] = target_df['lower_bound'].astype('float64')
+            target_df['upper_bound'] = target_df['upper_bound'].astype('float64')
+
+            # Convert date columns to consistent string format for partitioning
+            target_df['forecast_date'] = pd.to_datetime(target_df['forecast_date']).dt.strftime('%Y-%m-%d')
+            target_df['prediction_date'] = pd.to_datetime(target_df['prediction_date']).dt.strftime('%Y-%m-%d')
+
+            # Derive integer date_id columns for temporal dimension joins (YYYYMMDD format)
+            target_df['forecast_date_id'] = pd.to_datetime(target_df['forecast_date']).dt.strftime('%Y%m%d').astype('int32')
+            target_df['prediction_date_id'] = pd.to_datetime(target_df['prediction_date']).dt.strftime('%Y%m%d').astype('int32')
+
             # Determine output path according to schema
             output_path = Path(forecast_root) / 'facts' / table_name
+            output_path.mkdir(parents=True, exist_ok=True)
 
-            # Partition by forecast_date
-            forecast_date = target_df['forecast_date'].iloc[0]
-            partition_path = output_path / f"forecast_date={forecast_date}"
-            partition_path.mkdir(parents=True, exist_ok=True)
-
-            # Append to existing data or create new file
-            file_path = partition_path / "data.parquet"
-
-            if file_path.exists():
-                # Read existing data and append new data
-                existing_df = pd.read_parquet(file_path)
-                combined_df = pd.concat([existing_df, target_df], ignore_index=True)
-                combined_df.to_parquet(file_path, index=False, compression='snappy')
-                self._print(f"    → Appended {len(target_df)} {table_name} records (total: {len(combined_df)})")
+            if DELTA_AVAILABLE:
+                # Write as Delta Lake - append mode to accumulate forecasts across tickers
+                # Clear forecast data before running script if you want fresh start
+                table = pa.Table.from_pandas(target_df, preserve_index=False)
+                write_deltalake(
+                    str(output_path),
+                    table,
+                    mode="append",
+                    partition_by=["forecast_date"],
+                    schema_mode="merge"  # Allow schema evolution
+                )
+                self._print(f"    → Appended {table_name}: {len(target_df)} records (Delta)")
             else:
-                # Create new file
-                target_df.to_parquet(file_path, index=False, compression='snappy')
-                self._print(f"    → Saved {len(target_df)} {table_name} records")
+                # Fallback to Parquet if Delta not available
+                forecast_date = target_df['forecast_date'].iloc[0]
+                partition_path = output_path / f"forecast_date={forecast_date}"
+                partition_path.mkdir(parents=True, exist_ok=True)
+                file_path = partition_path / "data.parquet"
 
-            self._print(f"      File: {file_path}")
+                if file_path.exists():
+                    existing_df = pd.read_parquet(file_path)
+                    # Normalize existing df to same types as target_df
+                    for col in [entity_col, 'model_name']:
+                        if col in existing_df.columns:
+                            existing_df[col] = existing_df[col].astype(str)
+                    for col in ['forecast_date', 'prediction_date']:
+                        if col in existing_df.columns:
+                            existing_df[col] = pd.to_datetime(existing_df[col]).dt.strftime('%Y-%m-%d')
+                    combined_df = pd.concat([existing_df, target_df], ignore_index=True)
+                    combined_df.to_parquet(file_path, index=False, compression='snappy')
+                    self._print(f"    → Appended {len(target_df)} {table_name} records (Parquet fallback)")
+                else:
+                    target_df.to_parquet(file_path, index=False, compression='snappy')
+                    self._print(f"    → Saved {len(target_df)} {table_name} records (Parquet fallback)")
+
+            self._print(f"      Path: {output_path}")
 
     def save_metrics(self, metrics_df):
         """
-        Save forecast metrics to Silver layer.
+        Save forecast metrics to Silver layer using Delta Lake format.
 
         Args:
             metrics_df: pandas DataFrame with metrics
         """
         from pathlib import Path
-        from datetime import date
+        import pandas as pd
+        import pyarrow as pa
+
+        try:
+            from deltalake import write_deltalake
+            DELTA_AVAILABLE = True
+        except ImportError:
+            DELTA_AVAILABLE = False
 
         # Get forecast Silver root
         forecast_root = self.storage_cfg['roots'].get(
@@ -1090,43 +1141,71 @@ class TimeSeriesForecastModel(BaseModel):
             'storage/silver/forecast'
         )
 
-        # Normalize date columns to ensure consistent types
+        # Normalize column types to ensure consistent schema across appends
+        entity_col = self.get_entity_column()
+        metrics_df[entity_col] = metrics_df[entity_col].astype(str)
+        metrics_df['model_name'] = metrics_df['model_name'].astype(str)
+
+        # Normalize numeric columns
+        numeric_cols = ['mae', 'rmse', 'mape', 'r2_score', 'directional_accuracy', 'num_predictions', 'avg_error_pct']
+        for col in numeric_cols:
+            if col in metrics_df.columns:
+                metrics_df[col] = metrics_df[col].astype('float64')
+
+        # Normalize date columns to string format for consistent serialization
         date_columns = ['metric_date', 'training_start', 'training_end', 'test_start', 'test_end']
         for col in date_columns:
             if col in metrics_df.columns:
-                metrics_df[col] = pd.to_datetime(metrics_df[col]).dt.date
+                metrics_df[col] = pd.to_datetime(metrics_df[col]).dt.strftime('%Y-%m-%d')
+
+        # Derive integer date_id for temporal dimension joins (YYYYMMDD format)
+        if 'metric_date' in metrics_df.columns:
+            metrics_df['metric_date_id'] = pd.to_datetime(metrics_df['metric_date']).dt.strftime('%Y%m%d').astype('int32')
 
         # Determine output path according to schema
-        output_path = Path(forecast_root) / 'facts' / 'forecast_metrics'
+        # Use fact_ prefix to match expected schema
+        output_path = Path(forecast_root) / 'facts' / 'fact_forecast_metrics'
+        output_path.mkdir(parents=True, exist_ok=True)
 
-        # Partition by metric_date
-        metric_date = metrics_df['metric_date'].iloc[0]
-        partition_path = output_path / f"metric_date={metric_date}"
-        partition_path.mkdir(parents=True, exist_ok=True)
-
-        # Append to existing data or create new file
-        file_path = partition_path / "data.parquet"
-
-        if file_path.exists():
-            # Read existing data and append new data
-            existing_df = pd.read_parquet(file_path)
-
-            # Normalize date columns in existing data as well
-            for col in date_columns:
-                if col in existing_df.columns:
-                    existing_df[col] = pd.to_datetime(existing_df[col]).dt.date
-
-            combined_df = pd.concat([existing_df, metrics_df], ignore_index=True)
-            combined_df.to_parquet(file_path, index=False, compression='snappy')
-            self._print(f"    Appended {len(metrics_df)} metric records (total: {len(combined_df)}) to {file_path}")
+        if DELTA_AVAILABLE:
+            # Write as Delta Lake - append mode to accumulate metrics across tickers
+            table = pa.Table.from_pandas(metrics_df, preserve_index=False)
+            write_deltalake(
+                str(output_path),
+                table,
+                mode="append",
+                partition_by=["metric_date"],
+                schema_mode="merge"
+            )
+            self._print(f"    → Appended fact_forecast_metrics: {len(metrics_df)} records (Delta)")
         else:
-            # Create new file
-            metrics_df.to_parquet(file_path, index=False, compression='snappy')
-            self._print(f"    Saved {len(metrics_df)} metric records to {file_path}")
+            # Fallback to Parquet if Delta not available
+            metric_date = metrics_df['metric_date'].iloc[0]
+            partition_path = output_path / f"metric_date={metric_date}"
+            partition_path.mkdir(parents=True, exist_ok=True)
+            file_path = partition_path / "data.parquet"
+
+            if file_path.exists():
+                existing_df = pd.read_parquet(file_path)
+                # Normalize existing df to same string format
+                for col in date_columns:
+                    if col in existing_df.columns:
+                        existing_df[col] = pd.to_datetime(existing_df[col]).dt.strftime('%Y-%m-%d')
+                for col in [entity_col, 'model_name']:
+                    if col in existing_df.columns:
+                        existing_df[col] = existing_df[col].astype(str)
+                combined_df = pd.concat([existing_df, metrics_df], ignore_index=True)
+                combined_df.to_parquet(file_path, index=False, compression='snappy')
+                self._print(f"    Appended {len(metrics_df)} metric records (Parquet fallback)")
+            else:
+                metrics_df.to_parquet(file_path, index=False, compression='snappy')
+                self._print(f"    Saved {len(metrics_df)} metric records (Parquet fallback)")
+
+        self._print(f"      Path: {output_path}")
 
     def save_model_registry(self, registry_df):
         """
-        Save model registry to Silver layer.
+        Save model registry to Silver layer using Delta Lake format.
 
         Tracks trained models with their parameters and status.
 
@@ -1135,6 +1214,13 @@ class TimeSeriesForecastModel(BaseModel):
         """
         from pathlib import Path
         import pandas as pd
+        import pyarrow as pa
+
+        try:
+            from deltalake import write_deltalake
+            DELTA_AVAILABLE = True
+        except ImportError:
+            DELTA_AVAILABLE = False
 
         # Get forecast Silver root
         forecast_root = self.storage_cfg['roots'].get(
@@ -1142,30 +1228,64 @@ class TimeSeriesForecastModel(BaseModel):
             'storage/silver/forecast'
         )
 
-        # Normalize date columns
+        # Normalize column types to ensure consistent schema
+        entity_col = self.get_entity_column()
+        string_cols = ['model_id', 'model_name', 'model_type', entity_col, 'target_variable', 'parameters', 'status']
+        int_cols = ['lookback_days', 'forecast_horizon', 'training_samples']
+        bool_cols = ['day_of_week_adj']
+
+        for col in string_cols:
+            if col in registry_df.columns:
+                registry_df[col] = registry_df[col].astype(str)
+
+        for col in int_cols:
+            if col in registry_df.columns:
+                registry_df[col] = registry_df[col].astype('int32')
+
+        for col in bool_cols:
+            if col in registry_df.columns:
+                registry_df[col] = registry_df[col].astype(bool)
+
+        # Normalize date columns to string format
         if 'trained_date' in registry_df.columns:
-            registry_df['trained_date'] = pd.to_datetime(registry_df['trained_date']).dt.date
+            registry_df['trained_date'] = pd.to_datetime(registry_df['trained_date']).dt.strftime('%Y-%m-%d')
 
         # Determine output path according to schema
-        output_path = Path(forecast_root) / 'facts' / 'model_registry'
+        # Use dims directory and dim_ prefix for dimension table
+        output_path = Path(forecast_root) / 'dims' / 'dim_model_registry'
+        output_path.mkdir(parents=True, exist_ok=True)
 
-        # Partition by trained_date
-        trained_date = registry_df['trained_date'].iloc[0]
-        partition_path = output_path / f"trained_date={trained_date}"
-        partition_path.mkdir(parents=True, exist_ok=True)
-
-        # Append to existing data or create new file
-        file_path = partition_path / "data.parquet"
-
-        if file_path.exists():
-            existing_df = pd.read_parquet(file_path)
-            if 'trained_date' in existing_df.columns:
-                existing_df['trained_date'] = pd.to_datetime(existing_df['trained_date']).dt.date
-            combined_df = pd.concat([existing_df, registry_df], ignore_index=True)
-            # Deduplicate by model_id
-            combined_df = combined_df.drop_duplicates(subset=['model_id'], keep='last')
-            combined_df.to_parquet(file_path, index=False, compression='snappy')
-            self._print(f"    Updated model registry: {len(combined_df)} models in {file_path}")
+        if DELTA_AVAILABLE:
+            # Write as Delta Lake - append mode to accumulate registry across tickers
+            table = pa.Table.from_pandas(registry_df, preserve_index=False)
+            write_deltalake(
+                str(output_path),
+                table,
+                mode="append",
+                schema_mode="merge"
+            )
+            self._print(f"    → Appended dim_model_registry: {len(registry_df)} records (Delta)")
         else:
-            registry_df.to_parquet(file_path, index=False, compression='snappy')
-            self._print(f"    Saved {len(registry_df)} model registry records to {file_path}")
+            # Fallback to Parquet if Delta not available
+            trained_date = registry_df['trained_date'].iloc[0]
+            partition_path = output_path / f"trained_date={trained_date}"
+            partition_path.mkdir(parents=True, exist_ok=True)
+            file_path = partition_path / "data.parquet"
+
+            if file_path.exists():
+                existing_df = pd.read_parquet(file_path)
+                # Normalize existing df to same types as registry_df
+                if 'trained_date' in existing_df.columns:
+                    existing_df['trained_date'] = pd.to_datetime(existing_df['trained_date']).dt.strftime('%Y-%m-%d')
+                for col in string_cols:
+                    if col in existing_df.columns:
+                        existing_df[col] = existing_df[col].astype(str)
+                combined_df = pd.concat([existing_df, registry_df], ignore_index=True)
+                combined_df = combined_df.drop_duplicates(subset=['model_id'], keep='last')
+                combined_df.to_parquet(file_path, index=False, compression='snappy')
+                self._print(f"    Updated model registry: {len(combined_df)} models (Parquet fallback)")
+            else:
+                registry_df.to_parquet(file_path, index=False, compression='snappy')
+                self._print(f"    Saved {len(registry_df)} model registry records (Parquet fallback)")
+
+        self._print(f"      Path: {output_path}")

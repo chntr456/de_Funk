@@ -10,6 +10,13 @@ from pathlib import Path
 DEFAULT_CONNECTION_TYPE = "duckdb"
 DEFAULT_LOG_LEVEL = "INFO"
 
+# Debug logging switches (controlled by environment variables or profile)
+# Set DEBUG_FILTERS=true to enable detailed filter logging
+# Set DEBUG_EXHIBITS=true to enable exhibit data logging
+DEFAULT_DEBUG_FILTERS = False
+DEFAULT_DEBUG_EXHIBITS = False
+DEFAULT_DEBUG_SQL = False
+
 # Spark defaults (increased for long-running batch jobs)
 DEFAULT_SPARK_DRIVER_MEMORY = "8g"
 DEFAULT_SPARK_EXECUTOR_MEMORY = "8g"

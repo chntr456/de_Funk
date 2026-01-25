@@ -538,6 +538,10 @@ class BaseModel:
         """Get schema (column definitions) for a table."""
         return self._get_table_accessor().get_table_schema(table_name)
 
+    def get_fk_relationships(self, table_name: str) -> Dict[str, str]:
+        """Get foreign key relationships for a table."""
+        return self._get_table_accessor().get_fk_relationships(table_name)
+
     def get_relations(self) -> Dict[str, List[str]]:
         """Return relationship graph from edges config."""
         return self._get_table_accessor().get_relations()
@@ -613,7 +617,8 @@ class BaseModel:
                 continue
 
             # Parse join condition
-            on_conditions = edge.get('on', [])
+            # Note: YAML 1.1 treats 'on' as boolean True, so we check both keys
+            on_conditions = edge.get('on', edge.get(True, []))  # Handle YAML 1.1 'on' -> True quirk
             if on_conditions:
                 join_cols = self._parse_join_conditions(on_conditions)
                 dim_joins.append({

@@ -1,10 +1,13 @@
 from __future__ import annotations
 import os
+import logging
 from typing import Dict, Optional, TYPE_CHECKING
 from pyspark.sql import SparkSession
 
 if TYPE_CHECKING:
     from config.models import SparkConfig
+
+logger = logging.getLogger(__name__)
 
 def get_spark(
     app_name: str = "App",
@@ -42,16 +45,35 @@ def get_spark(
     # Resolve master URL
     if master is None:
         master = os.environ.get("SPARK_MASTER_URL")
+
+    # Log cluster mode status and set appropriate memory defaults
+    # CRITICAL: In cluster mode, driver runs on head node which may have limited resources
+    # Heavy processing should happen on executors, not the driver
+    if master:
+        logger.info(f"Spark cluster mode: connecting to {master}")
+        # Cluster mode: Lower driver memory (head node), higher executor memory (workers)
+        default_driver_memory = "2g"
+        default_executor_memory = "4g"
+    else:
+        logger.warning(
+            "SPARK_MASTER_URL not set - running in LOCAL mode. "
+            "Set SPARK_MASTER_URL=spark://192.168.1.212:7077 in .env for cluster mode."
+        )
+        # Local mode: All processing on same machine, use more driver memory
+        default_driver_memory = "4g"
+        default_executor_memory = "4g"
+
     # Use SparkConfig if provided, otherwise use defaults
     if spark_config:
         base_config = spark_config.to_spark_conf_dict()
     else:
-        # Memory configuration (can be overridden by environment variables for cluster mode)
-        # Cluster workers may have less memory than local machine
-        driver_memory = os.environ.get("SPARK_DRIVER_MEMORY", "8g")
-        executor_memory = os.environ.get("SPARK_EXECUTOR_MEMORY", "8g")
+        # Memory configuration (can be overridden by environment variables)
+        driver_memory = os.environ.get("SPARK_DRIVER_MEMORY", default_driver_memory)
+        executor_memory = os.environ.get("SPARK_EXECUTOR_MEMORY", default_executor_memory)
         # Memory overhead for off-heap (Python, Delta, etc.) - default 10% is often too low
-        executor_memory_overhead = os.environ.get("SPARK_EXECUTOR_MEMORY_OVERHEAD", "2g")
+        executor_memory_overhead = os.environ.get("SPARK_EXECUTOR_MEMORY_OVERHEAD", "1g")
+
+        logger.info(f"Memory config: driver={driver_memory}, executor={executor_memory}, overhead={executor_memory_overhead}")
 
         base_config = {
             "spark.sql.session.timeZone": "UTC",

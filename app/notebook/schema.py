@@ -37,6 +37,7 @@ class AggregationType(Enum):
     MIN = "min"
     MAX = "max"
     COUNT = "count"
+    COUNT_DISTINCT = "count_distinct"
     STDDEV = "stddev"
     VARIANCE = "variance"
     FIRST = "first"
@@ -79,6 +80,67 @@ class SourceReference:
     node: str
     column: Optional[str] = None
     filter: Optional[List[str]] = None
+
+
+@dataclass(frozen=True)
+class ColumnReference:
+    """
+    Fully-qualified column reference for exhibit configurations.
+
+    Supports two formats:
+    1. Silver layer: model.table.field (e.g., temporal.dim_calendar.date)
+    2. Bronze layer: provider.table.field (e.g., alpha_vantage.securities_prices.close)
+
+    Attributes:
+        namespace: Model name (Silver) or provider name (Bronze)
+        table: Table name
+        field: Column name
+        layer: 'silver' or 'bronze' (auto-detected from context)
+    """
+    namespace: str  # model or provider name
+    table: str
+    field: str
+    layer: Optional[str] = None  # 'silver' or 'bronze'
+
+    def __str__(self):
+        return f"{self.namespace}.{self.table}.{self.field}"
+
+    @property
+    def table_path(self):
+        """Return namespace.table for join planning."""
+        return f"{self.namespace}.{self.table}"
+
+    @classmethod
+    def parse(cls, ref_string: str, context: Optional[str] = None) -> "ColumnReference":
+        """
+        Parse a qualified column reference string.
+
+        Args:
+            ref_string: Format 'namespace.table.field'
+            context: Optional context for layer detection
+
+        Returns:
+            ColumnReference instance
+
+        Raises:
+            ValueError: If format is invalid
+
+        Example:
+            >>> ColumnReference.parse("temporal.dim_calendar.date")
+            ColumnReference(namespace='temporal', table='dim_calendar', field='date')
+        """
+        parts = ref_string.split('.')
+        if len(parts) != 3:
+            raise ValueError(
+                f"Invalid column reference: '{ref_string}'\n"
+                f"Expected format: 'namespace.table.field'\n"
+                f"Examples:\n"
+                f"  - Silver: temporal.dim_calendar.date\n"
+                f"  - Bronze: alpha_vantage.securities_prices.close"
+            )
+
+        namespace, table, field = parts
+        return cls(namespace=namespace, table=table, field=field, layer=context)
 
 
 @dataclass
@@ -175,10 +237,23 @@ class Measure:
 
 @dataclass
 class AxisConfig:
-    """Chart axis configuration."""
-    dimension: Optional[str] = None
-    measure: Optional[str] = None
-    measures: Optional[List[str]] = None
+    """
+    Chart axis configuration using fully-qualified column references.
+
+    All column references MUST use the model.table.column format.
+    Example: temporal.dim_calendar.date, stocks.fact_stock_prices.adjusted_close
+
+    Attributes:
+        dimension: ColumnReference for x-axis dimension (e.g., temporal.dim_calendar.date)
+        measure: Single ColumnReference for y-axis measure
+        measures: List of ColumnReferences for multiple y-axis measures
+        label: Display label for the axis
+        scale: Scale type (linear, log, etc.)
+        source: Optional SourceReference for data source
+    """
+    dimension: Optional['ColumnReference'] = None
+    measure: Optional[Union['ColumnReference', List['ColumnReference']]] = None
+    measures: Optional[List['ColumnReference']] = None
     label: Optional[str] = None
     scale: Optional[str] = None  # linear, log, etc.
     source: Optional[SourceReference] = None
@@ -519,8 +594,8 @@ class Exhibit:
     y_axis: Optional[AxisConfig] = None
     y_axis_left: Optional[AxisConfig] = None
     y_axis_right: Optional[AxisConfig] = None
-    color_by: Optional[str] = None
-    size_by: Optional[str] = None
+    color_by: Optional['ColumnReference'] = None  # Must use model.table.column format
+    size_by: Optional['ColumnReference'] = None  # Must use model.table.column format
     legend: bool = True
     interactive: bool = True
 

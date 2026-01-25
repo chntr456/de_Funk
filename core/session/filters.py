@@ -240,7 +240,45 @@ class FilterEngine:
 
         conditions = []
 
+        # Check for period overlap case (company model tables with fiscal periods)
+        has_period_columns = (
+            available_columns is not None and
+            'period_start_date_id' in available_columns and
+            'period_end_date_id' in available_columns
+        )
+
         for col_name, value in filters.items():
+            # Handle period overlap for date filters on tables with period columns
+            # When filtering on 'date' but table has period_start/end_date_id columns,
+            # we need: period_start_date_id <= end AND period_end_date_id >= start
+            if col_name == 'date' and has_period_columns and isinstance(value, dict):
+                if 'start' in value and 'end' in value:
+                    start_int = FilterEngine._convert_date_to_date_id(value['start'])
+                    end_int = FilterEngine._convert_date_to_date_id(value['end'])
+                    if start_int and end_int:
+                        # Period overlap logic: fiscal period overlaps with filter range
+                        # A period overlaps when: period_start <= filter_end AND period_end >= filter_start
+                        conditions.append(f"period_start_date_id <= {end_int}")
+                        conditions.append(f"period_end_date_id >= {start_int}")
+                    continue
+                elif 'start' in value:
+                    start_int = FilterEngine._convert_date_to_date_id(value['start'])
+                    if start_int:
+                        conditions.append(f"period_end_date_id >= {start_int}")
+                    continue
+                elif 'end' in value:
+                    end_int = FilterEngine._convert_date_to_date_id(value['end'])
+                    if end_int:
+                        conditions.append(f"period_start_date_id <= {end_int}")
+                    continue
+
+            # Translate 'date' filter to 'date_id' if table has date_id but not date
+            # This allows notebooks to use human-friendly 'date' filters that work
+            # with star schema tables using integer date_id (YYYYMMDD format)
+            if col_name == 'date' and available_columns is not None:
+                if 'date' not in available_columns and 'date_id' in available_columns:
+                    col_name = 'date_id'
+
             # Skip filter if column doesn't exist in this table
             if available_columns is not None and col_name not in available_columns:
                 continue

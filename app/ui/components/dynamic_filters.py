@@ -132,6 +132,9 @@ def render_filter(
     elif filter_config.type == FilterType.SLIDER:
         new_value = render_slider_filter(filter_config, current_value)
 
+    elif filter_config.type == FilterType.DATE:
+        new_value = render_date_filter(filter_config, current_value)
+
     else:
         st.warning(f"Filter type not implemented: {filter_config.type}")
         return False
@@ -180,6 +183,25 @@ def render_date_range_filter(filter_config: FilterConfig, current_value: Any) ->
         )
 
     return {'start': str(start), 'end': str(end)}
+
+
+def render_date_filter(filter_config: FilterConfig, current_value: Any) -> Any:
+    """Render single date filter (supports dynamic expressions like current_date())."""
+    st.subheader(filter_config.label)
+
+    if filter_config.help_text:
+        st.caption(filter_config.help_text)
+
+    # Parse current value using the expression-aware parser
+    date_value = parse_date(current_value)
+
+    selected_date = st.date_input(
+        "Date",
+        value=date_value,
+        key=f"date_{filter_config.id}"
+    )
+
+    return str(selected_date)
 
 
 def render_select_filter(

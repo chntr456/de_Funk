@@ -7,8 +7,17 @@ Renders key metrics as styled cards with formatted values.
 import streamlit as st
 import pandas as pd
 from typing import List
-from app.notebook.schema import MetricConfig, AggregationType
+from app.notebook.schema import MetricConfig, AggregationType, ColumnReference
 from .measure_selector import render_measure_selector
+
+
+def _extract_field_name(measure):
+    """Extract field name from ColumnReference or model.table.column string."""
+    if isinstance(measure, ColumnReference):
+        return measure.field
+    if isinstance(measure, str) and '.' in measure:
+        return measure.split('.')[-1]
+    return measure
 
 
 def render_metric_cards(exhibit, pdf: pd.DataFrame):
@@ -72,7 +81,7 @@ def _render_single_metric_card(metric_config: MetricConfig, pdf: pd.DataFrame):
         metric_config: Metric configuration
         pdf: Pandas DataFrame with data
     """
-    measure_id = metric_config.measure
+    measure_id = _extract_field_name(metric_config.measure)
 
     # Get aggregation method (default to first value if not specified)
     agg_method = 'first'
@@ -91,12 +100,28 @@ def _render_single_metric_card(metric_config: MetricConfig, pdf: pd.DataFrame):
             value = pdf[measure_id].max()
         elif agg_method == 'count':
             value = pdf[measure_id].count()
+        elif agg_method == 'count_distinct':
+            value = pdf[measure_id].nunique()
+        elif agg_method == 'first':
+            value = pdf[measure_id].iloc[0] if len(pdf) > 0 else 0
+        elif agg_method == 'last':
+            value = pdf[measure_id].iloc[-1] if len(pdf) > 0 else 0
         else:
             value = pdf[measure_id].iloc[0] if len(pdf) > 0 else 0
 
-        # Format value based on magnitude
+        # Format value - use config format if provided, otherwise smart defaults
+        fmt = getattr(metric_config, 'format', None)
         if pd.isna(value):
             formatted = "N/A"
+        elif fmt:
+            # Use explicit format string from config
+            try:
+                formatted = f"{value:{fmt}}"
+            except (ValueError, KeyError):
+                formatted = str(value)
+        elif agg_method == 'count' or agg_method == 'count_distinct':
+            # Count metrics shouldn't have currency formatting
+            formatted = f"{int(value):,}"
         elif abs(value) >= 1e9:
             formatted = f"${value/1e9:.2f}B"
         elif abs(value) >= 1e6:

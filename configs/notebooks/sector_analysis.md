@@ -13,8 +13,8 @@ $filter${
   label: Sector
   type: select
   multi: true
-  source: {model: stocks, table: dim_stock, column: sector}
-  help_text: Filter by sector (from stock dimension)
+  source: {model: company, table: dim_company, column: sector}
+  help_text: Filter by sector (from company dimension)
 }
 
 $filter${
@@ -22,8 +22,8 @@ $filter${
   label: Industry
   type: select
   multi: true
-  source: {model: stocks, table: dim_stock, column: industry}
-  help_text: Filter by industry (from stock dimension)
+  source: {model: company, table: dim_company, column: industry}
+  help_text: Filter by industry (from company dimension)
 }
 
 $filter${
@@ -39,7 +39,7 @@ $filter${
   id: date
   type: date_range
   label: Date Range
-  column: date
+  column: stocks.fact_stock_prices.trade_date
   operator: between
   default: {start: "2024-01-01", end: current_date()}
   help_text: Filter by trading date range
@@ -56,8 +56,8 @@ Aggregate analysis across sectors and industries. Compare performance, volume, a
 $exhibits${
   type: bar_chart
   source: company.dim_company
-  x: sector
-  y: ticker
+  x: company.dim_company.sector
+  y: company.dim_company.ticker
   aggregation: count
   title: Number of Companies by Sector
   height: 350
@@ -68,8 +68,8 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: company.dim_company
-  x: sector
-  y: market_cap
+  x: company.dim_company.sector
+  y: company.dim_company.market_cap
   aggregation: sum
   title: Total Market Cap by Sector ($)
   height: 350
@@ -83,23 +83,11 @@ $exhibits${
   type: metric_cards
   source: company.dim_company
   metrics: [
-    { column: ticker, label: "Total Companies", aggregation: count },
-    { column: market_cap, label: "Total Market Cap", aggregation: sum, format: "$,.0f" },
-    { column: market_cap, label: "Avg Market Cap", aggregation: avg, format: "$,.0f" },
-    { column: shares_outstanding, label: "Total Shares", aggregation: sum, format: ",.0f" }
+    { column: company.dim_company.ticker, label: "Total Companies", aggregation: count },
+    { column: company.dim_company.market_cap, label: "Total Market Cap", aggregation: sum, format: "$,.0f" },
+    { column: company.dim_company.market_cap, label: "Avg Market Cap", aggregation: avg, format: "$,.0f" },
+    { column: company.dim_company.shares_outstanding, label: "Total Shares", aggregation: sum, format: ",.0f" }
   ]
-}
-
-### Market Cap by Sector
-
-$exhibits${
-  type: bar_chart
-  source: stocks.dim_stock
-  x: sector
-  y: market_cap
-  aggregation: sum
-  title: Total Market Cap by Sector
-  height: 350
 }
 
 ### Sector Performance Summary
@@ -108,14 +96,14 @@ Sector-level metrics including total market cap, stock count, and average market
 
 $exhibits${
   type: data_table
-  source: stocks.dim_stock
-  columns: [sector, ticker, market_cap, shares_outstanding]
-  group_by: [sector]
+  source: company.dim_company
+  columns: [company.dim_company.sector, company.dim_company.ticker, company.dim_company.market_cap, company.dim_company.shares_outstanding]
+  group_by: [company.dim_company.sector]
   aggregations: [
-    { column: ticker, aggregation: count, label: "# Stocks" },
-    { column: market_cap, aggregation: sum, label: "Total Market Cap", format: "$,.0f" },
-    { column: market_cap, aggregation: avg, label: "Avg Market Cap", format: "$,.0f" },
-    { column: shares_outstanding, aggregation: sum, label: "Total Shares", format: ",.0f" }
+    { column: company.dim_company.ticker, aggregation: count, label: "# Stocks" },
+    { column: company.dim_company.market_cap, aggregation: sum, label: "Total Market Cap", format: "$,.0f" },
+    { column: company.dim_company.market_cap, aggregation: avg, label: "Avg Market Cap", format: "$,.0f" },
+    { column: company.dim_company.shares_outstanding, aggregation: sum, label: "Total Shares", format: ",.0f" }
   ]
   sort_by: market_cap_sum
   sort_order: desc
@@ -124,18 +112,17 @@ $exhibits${
 
 ### Trading Volume by Sector
 
-Total trading volume aggregated by sector. Uses auto-join from prices to stock dimension.
+Total trading volume aggregated by sector. Uses auto-join from prices to company dimension.
 
 $exhibits${
   type: bar_chart
   source: stocks.fact_stock_prices
-  x: sector
-  y: volume
+  x: company.dim_company.sector
+  y: stocks.fact_stock_prices.volume
   aggregation: sum
   title: Total Trading Volume by Sector
   height: 350
-  columns: [sector, volume]
-  group_by: [sector]
+  group_by: [company.dim_company.sector]
 }
 
 ## Industry Breakdown
@@ -148,8 +135,8 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: company.dim_company
-  x: industry
-  y: ticker
+  x: company.dim_company.industry
+  y: company.dim_company.ticker
   aggregation: count
   title: Companies by Industry
   height: 500
@@ -161,8 +148,8 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: company.dim_company
-  x: industry
-  y: market_cap
+  x: company.dim_company.industry
+  y: company.dim_company.market_cap
   aggregation: sum
   title: Market Cap by Industry
   height: 500
@@ -181,8 +168,8 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.dim_company
-  columns: [ticker, company_name, sector, industry, market_cap, shares_outstanding]
-  sort_by: market_cap
+  columns: [company.dim_company.ticker, company.dim_company.company_name, company.dim_company.sector, company.dim_company.industry, company.dim_company.market_cap, company.dim_company.shares_outstanding]
+  sort_by: company.dim_company.market_cap
   sort_order: desc
   page_size: 25
   download: true
@@ -200,13 +187,13 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.dim_company
-  columns: [sector, ticker, market_cap]
+  columns: [company.dim_company.sector, company.dim_company.ticker, company.dim_company.market_cap]
   aggregations: [
-    { column: ticker, aggregation: count, label: "Companies" },
-    { column: market_cap, aggregation: sum, label: "Total Market Cap" },
-    { column: market_cap, aggregation: avg, label: "Avg Market Cap" }
+    { column: company.dim_company.ticker, aggregation: count, label: "Companies" },
+    { column: company.dim_company.market_cap, aggregation: sum, label: "Total Market Cap" },
+    { column: company.dim_company.market_cap, aggregation: avg, label: "Avg Market Cap" }
   ]
-  group_by: sector
+  group_by: company.dim_company.sector
   sort_by: market_cap_sum
   sort_order: desc
   download: true
@@ -217,12 +204,12 @@ $exhibits${
 $exhibits${
   type: data_table
   source: company.dim_company
-  columns: [industry, sector, ticker, market_cap]
+  columns: [company.dim_company.industry, company.dim_company.sector, company.dim_company.ticker, company.dim_company.market_cap]
   aggregations: [
-    { column: ticker, aggregation: count, label: "Companies" },
-    { column: market_cap, aggregation: sum, label: "Total Market Cap" }
+    { column: company.dim_company.ticker, aggregation: count, label: "Companies" },
+    { column: company.dim_company.market_cap, aggregation: sum, label: "Total Market Cap" }
   ]
-  group_by: [sector, industry]
+  group_by: [company.dim_company.sector, company.dim_company.industry]
   sort_by: market_cap_sum
   sort_order: desc
   download: true
@@ -240,27 +227,12 @@ $exhibits${
 $exhibits${
   type: bar_chart
   source: stocks.fact_stock_prices
-  x: sector
-  y: close
+  x: company.dim_company.sector
+  y: stocks.fact_stock_prices.adjusted_close
   aggregation: avg
-  title: Average Close Price by Sector
+  title: Average Adjusted Close Price by Sector
   height: 400
-  columns: [sector, close]
-  group_by: [sector]
-}
-
-### Total Volume by Sector
-
-$exhibits${
-  type: bar_chart
-  source: stocks.fact_stock_prices
-  x: sector
-  y: volume
-  aggregation: sum
-  title: Total Trading Volume by Sector
-  height: 350
-  columns: [sector, volume]
-  group_by: [sector]
+  group_by: [company.dim_company.sector]
 }
 
 </details>

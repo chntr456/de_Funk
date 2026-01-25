@@ -50,10 +50,12 @@ class FolderFilterContext:
     @classmethod
     def from_yaml_dict(cls, folder_path: Path, data: Dict[str, Any]) -> 'FolderFilterContext':
         """Create from YAML dictionary."""
-        metadata = data.get('metadata', {})
+        metadata = data.get('metadata', {}) or {}
+        # Handle case where filters key exists but value is None (empty YAML value)
+        filters = data.get('filters') or {}
         return cls(
             folder_path=folder_path,
-            filters=data.get('filters', {}),
+            filters=filters,
             created=datetime.fromisoformat(metadata['created']) if metadata.get('created') else None,
             last_updated=datetime.fromisoformat(metadata['last_updated']) if metadata.get('last_updated') else None
         )

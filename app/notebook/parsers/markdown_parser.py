@@ -34,6 +34,7 @@ from ..schema import (
     GridBlock,
     GridGap,
     GridTemplate,
+    ColumnReference,
 )
 from ..filters.dynamic import (
     FilterConfig,
@@ -588,7 +589,7 @@ class MarkdownNotebookParser:
                 inner_content = part_data['content']
                 inner_exhibits = []
                 inner_blocks = []
-                inner_counter = len(exhibits)  # Start from current count
+                inner_counter = exhibit_counter  # Continue from passed-in counter
 
                 # Extract exhibits from inner content
                 last_pos = 0
@@ -640,7 +641,10 @@ class MarkdownNotebookParser:
                     'content': inner_blocks
                 })
 
-        return len(exhibits)  # Return updated counter
+                # Update exhibit_counter to account for exhibits added inside collapsible
+                exhibit_counter = inner_counter
+
+        return exhibit_counter  # Return the counter (may be unchanged if no collapsibles)
 
     def _validate_exhibit_params(self, data: Dict[str, Any], exhibit_id: str) -> None:
         """
@@ -664,7 +668,7 @@ class MarkdownNotebookParser:
         valid_chart_shorthand = {'x', 'y', 'color', 'size', 'legend', 'interactive', 'y_agg'}
         valid_chart_full = {'x_axis', 'y_axis', 'y_axis_left', 'y_axis_right', 'color_by', 'size_by'}
         valid_metric = {'metrics'}
-        valid_table = {'columns', 'pagination', 'page_size', 'download', 'sortable', 'searchable', 'sort_by', 'sort_order'}
+        valid_table = {'columns', 'pagination', 'page_size', 'download', 'sortable', 'searchable', 'sort_by', 'sort_order', 'aggregation', 'orientation'}
         valid_selectors = {'measure_selector', 'dimension_selector'}
         valid_advanced = {
             'collapsible', 'collapsible_title', 'collapsible_expanded', 'nest_in_expander',
@@ -696,15 +700,15 @@ class MarkdownNotebookParser:
             logger.debug(f"Exhibit data: {data}")
             raise ValueError(
                 f"Exhibit '{exhibit_id}': Invalid root-level parameters: {used_internal}\n"
-                f"These belong inside axis configs. Use one of these formats:\n\n"
-                f"SHORTHAND (recommended):\n"
-                f"  x: trade_date\n"
-                f"  y: close          # single measure\n"
-                f"  y: [close, open]  # multiple measures\n"
-                f"  color: ticker\n\n"
+                f"These belong inside axis configs. Use model.table.column format:\n\n"
+                f"REQUIRED FORMAT (model.table.column):\n"
+                f"  x: temporal.dim_calendar.trade_date\n"
+                f"  y: stocks.fact_stock_prices.adjusted_close          # single measure\n"
+                f"  y: [stocks.fact_stock_prices.close, stocks.fact_stock_prices.open]  # multiple\n"
+                f"  color: stocks.fact_stock_prices.ticker\n\n"
                 f"FULL FORMAT (for advanced options):\n"
                 f"  y_axis:\n"
-                f"    measures: [close, open, high]\n"
+                f"    measures: [stocks.fact_stock_prices.close, stocks.fact_stock_prices.open]\n"
                 f"    label: Price\n"
                 f"    scale: log\n\n"
                 f"DYNAMIC SELECTORS:\n"
@@ -777,39 +781,79 @@ class MarkdownNotebookParser:
                 f"Full data: {data}"
             ) from e
 
-        # Parse streamlined axis parameters
+        # Helper to parse column references - MUST be in model.table.column format
+        def parse_column_ref(value: Any, field_name: str) -> Optional[ColumnReference]:
+            """Parse a column reference string into ColumnReference object."""
+            if value is None:
+                return None
+            if isinstance(value, ColumnReference):
+                return value
+            if isinstance(value, str):
+                parts = value.split('.')
+                if len(parts) != 3:
+                    raise ValueError(
+                        f"Exhibit '{exhibit_id}': Invalid column reference for '{field_name}': '{value}'\n"
+                        f"Column references MUST use 'model.table.column' format.\n"
+                        f"Examples:\n"
+                        f"  - x: temporal.dim_calendar.date\n"
+                        f"  - y: stocks.fact_stock_prices.adjusted_close\n"
+                        f"  - color: stocks.fact_stock_prices.ticker"
+                    )
+                return ColumnReference.parse(value)
+            raise ValueError(
+                f"Exhibit '{exhibit_id}': Invalid type for '{field_name}': {type(value).__name__}\n"
+                f"Expected string in 'model.table.column' format."
+            )
+
+        def parse_column_ref_list(values: Any, field_name: str) -> Optional[List[ColumnReference]]:
+            """Parse a list of column references."""
+            if values is None:
+                return None
+            if isinstance(values, list):
+                return [parse_column_ref(v, field_name) for v in values]
+            # Single value - wrap in list
+            return [parse_column_ref(values, field_name)]
+
+        # Parse axis parameters - require fully-qualified model.table.column format
         x_axis = None
+        logger.debug(f"Exhibit {exhibit_id}: Checking for x-axis. 'x' in data={('x' in data)}, 'x_axis' in data={('x_axis' in data)}")
         if 'x' in data:
-            # Shorthand syntax: x: dimension_name
+            # x: model.table.column format required
+            logger.debug(f"Exhibit {exhibit_id}: Found x={data['x']}, creating AxisConfig")
+            x_ref = parse_column_ref(data['x'], 'x')
             x_axis = AxisConfig(
-                dimension=data['x'],
-                label=data.get('x_label', data['x'])
+                dimension=x_ref,
+                label=data.get('x_label', x_ref.field if x_ref else None)
             )
         elif 'x_axis' in data and isinstance(data['x_axis'], dict):
-            # Full syntax: x_axis: {dimension: ..., label: ...}
+            # Full syntax: x_axis: {dimension: model.table.column, ...}
+            logger.debug(f"Exhibit {exhibit_id}: Found x_axis dict, creating AxisConfig")
             x_axis = AxisConfig(
-                dimension=data['x_axis'].get('dimension'),
-                measure=data['x_axis'].get('measure'),
-                measures=data['x_axis'].get('measures'),
+                dimension=parse_column_ref(data['x_axis'].get('dimension'), 'x_axis.dimension'),
+                measure=parse_column_ref(data['x_axis'].get('measure'), 'x_axis.measure'),
+                measures=parse_column_ref_list(data['x_axis'].get('measures'), 'x_axis.measures'),
                 label=data['x_axis'].get('label'),
                 scale=data['x_axis'].get('scale')
             )
+        logger.debug(f"Exhibit {exhibit_id}: Final x_axis={x_axis}")
 
         y_axis = None
         if 'y' in data:
-            # Shorthand syntax: y: measure_name (or list of measures)
-            # For label, only use data['y'] if it's a string (not a list)
-            default_label = data['y'] if isinstance(data['y'], str) else None
+            # y: model.table.column format required (or list of them)
+            y_refs = parse_column_ref_list(data['y'], 'y')
+            # For label, use first field name if single measure
+            default_label = y_refs[0].field if y_refs and len(y_refs) == 1 else None
             y_axis = AxisConfig(
-                measure=data['y'],
+                measure=y_refs[0] if y_refs and len(y_refs) == 1 else None,
+                measures=y_refs if y_refs and len(y_refs) > 1 else None,
                 label=data.get('y_label', default_label)
             )
         elif 'y_axis' in data and isinstance(data['y_axis'], dict):
             # Full syntax: y_axis: {measures: [...], label: ...}
             y_axis = AxisConfig(
-                dimension=data['y_axis'].get('dimension'),
-                measure=data['y_axis'].get('measure'),
-                measures=data['y_axis'].get('measures'),
+                dimension=parse_column_ref(data['y_axis'].get('dimension'), 'y_axis.dimension'),
+                measure=parse_column_ref(data['y_axis'].get('measure'), 'y_axis.measure'),
+                measures=parse_column_ref_list(data['y_axis'].get('measures'), 'y_axis.measures'),
                 label=data['y_axis'].get('label'),
                 scale=data['y_axis'].get('scale')
             )
@@ -817,10 +861,12 @@ class MarkdownNotebookParser:
         y_axis_left = None
         if 'y2' in data:
             y_axis_left = y_axis
-            # For label, only use data['y2'] if it's a string (not a list)
-            default_y2_label = data['y2'] if isinstance(data['y2'], str) else None
+            # y2: model.table.column format required
+            y2_refs = parse_column_ref_list(data['y2'], 'y2')
+            default_y2_label = y2_refs[0].field if y2_refs and len(y2_refs) == 1 else None
             y_axis = AxisConfig(
-                measure=data['y2'],
+                measure=y2_refs[0] if y2_refs and len(y2_refs) == 1 else None,
+                measures=y2_refs if y2_refs and len(y2_refs) > 1 else None,
                 label=data.get('y2_label', default_y2_label)
             )
 
@@ -903,6 +949,15 @@ class MarkdownNotebookParser:
         if extra_options:
             options.update(extra_options)
 
+        # Parse color and size references (optional - may be None)
+        color_ref = None
+        if 'color' in data and data['color']:
+            color_ref = parse_column_ref(data['color'], 'color')
+
+        size_ref = None
+        if 'size' in data and data['size']:
+            size_ref = parse_column_ref(data['size'], 'size')
+
         return Exhibit(
             id=exhibit_id,
             type=exhibit_type,
@@ -914,8 +969,8 @@ class MarkdownNotebookParser:
             y_axis=y_axis,
             y_axis_left=y_axis_left,
             y_axis_right=None,
-            color_by=data.get('color'),
-            size_by=data.get('size'),
+            color_by=color_ref,
+            size_by=size_ref,
             legend=data.get('legend', True),
             interactive=data.get('interactive', True),
             metrics=metrics,
@@ -1255,6 +1310,12 @@ class MarkdownNotebookParser:
         if not exhibit:
             return ""
 
+        def col_ref_to_str(ref) -> str:
+            """Convert ColumnReference or string to string."""
+            if isinstance(ref, ColumnReference):
+                return str(ref)
+            return str(ref) if ref else ''
+
         # Convert exhibit back to YAML-like format
         yaml_parts = [f"type: {exhibit.type.value}"]
 
@@ -1265,20 +1326,20 @@ class MarkdownNotebookParser:
         if exhibit.source:
             yaml_parts.append(f"source: {exhibit.source}")
 
-        # X/Y axis
+        # X/Y axis - ColumnReference objects are serialized to model.table.column format
         if exhibit.x_axis and exhibit.x_axis.dimension:
-            yaml_parts.append(f"x: {exhibit.x_axis.dimension}")
+            yaml_parts.append(f"x: {col_ref_to_str(exhibit.x_axis.dimension)}")
         if exhibit.y_axis:
             if exhibit.y_axis.measure:
                 if isinstance(exhibit.y_axis.measure, list):
-                    yaml_parts.append(f"y: [{', '.join(exhibit.y_axis.measure)}]")
+                    yaml_parts.append(f"y: [{', '.join(col_ref_to_str(m) for m in exhibit.y_axis.measure)}]")
                 else:
-                    yaml_parts.append(f"y: {exhibit.y_axis.measure}")
+                    yaml_parts.append(f"y: {col_ref_to_str(exhibit.y_axis.measure)}")
             elif exhibit.y_axis.measures:
-                yaml_parts.append(f"y: [{', '.join(exhibit.y_axis.measures)}]")
+                yaml_parts.append(f"y: [{', '.join(col_ref_to_str(m) for m in exhibit.y_axis.measures)}]")
 
         if exhibit.color_by:
-            yaml_parts.append(f"color: {exhibit.color_by}")
+            yaml_parts.append(f"color: {col_ref_to_str(exhibit.color_by)}")
 
         # Height
         if hasattr(exhibit, 'options') and exhibit.options and exhibit.options.get('height'):

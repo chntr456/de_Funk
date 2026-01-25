@@ -70,7 +70,7 @@ def verify_cross_model_edges():
             for i, edge in enumerate(edges, 1):
                 from_node = edge.get('from', '')
                 to_node = edge.get('to', '')
-                on_clause = edge.get('on', [])
+                on_clause = edge.get('on', edge.get(True, []))  # Handle YAML 1.1 'on' -> True quirk
                 edge_type = edge.get('type', '')
                 description = edge.get('description', '')
 

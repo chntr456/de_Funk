@@ -59,3 +59,4 @@ logs/*.json
 # Environment variables
 .env
 .env.local
+.claude/
