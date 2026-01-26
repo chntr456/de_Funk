@@ -28,7 +28,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 try:
@@ -39,12 +39,12 @@ except ImportError:
     PANDAS_AVAILABLE = False
 
 try:
-    from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
     DUCKDB_AVAILABLE = True
 except ImportError:
     DUCKDB_AVAILABLE = False
 
-from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
 
 logging.basicConfig(
     level=logging.INFO,
@@ -416,7 +416,7 @@ class UIIntegrationTester:
         logger.info("Testing measure calculations...")
 
         try:
-            from models.implemented.stocks.model import StocksModel
+from de_funk.models.implemented.stocks.model import StocksModel
 
             model = StocksModel(
                 connection=self.conn,

@@ -26,7 +26,7 @@ from unittest.mock import patch, MagicMock
 # Add repo root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from config.logging import (
+from de_funk.config.logging import (
     setup_logging,
     get_logger,
     LogConfig,

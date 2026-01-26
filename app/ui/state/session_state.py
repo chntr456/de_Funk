@@ -100,10 +100,10 @@ def init_app_objects(repo_root: Path):
     Args:
         repo_root: Path to repository root
     """
-    from core.context import RepoContext
-    from models.registry import ModelRegistry
-    from models.api.session import UniversalSession
-    from app.notebook.managers import NotebookManager
+from de_funk.core.context import RepoContext
+from de_funk.models.registry import ModelRegistry
+from de_funk.models.api.session import UniversalSession
+    from de_funk.notebook.managers import NotebookManager
 
     if 'repo_context' not in st.session_state:
         st.session_state.repo_context = RepoContext.from_repo_root(connection_type="duckdb")
@@ -129,7 +129,7 @@ def init_app_objects(repo_root: Path):
 
     if 'notebook_manager' not in st.session_state:
         ctx = st.session_state.repo_context
-        notebooks_root = ctx.repo / "configs" / "notebooks"
+        notebooks_root = ctx.repo / "notebooks"
         st.session_state.notebook_manager = NotebookManager(
             st.session_state.universal_session,
             ctx.repo,

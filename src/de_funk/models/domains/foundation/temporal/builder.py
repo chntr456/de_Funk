@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Type
 import logging
 
-from models.base.builder import BaseModelBuilder, BuilderRegistry, BuildResult
+from de_funk.models.base.builder import BaseModelBuilder, BuilderRegistry, BuildResult
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class TemporalBuilder(BaseModelBuilder):
 
     def get_model_class(self) -> Type:
         """Return the TemporalModel class."""
-        from models.domains.foundation.temporal.model import TemporalModel
+        from de_funk.models.domains.foundation.temporal.model import TemporalModel
         return TemporalModel
 
     def pre_build(self) -> None:

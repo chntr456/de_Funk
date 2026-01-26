@@ -12,7 +12,7 @@ Usage:
     python -m orchestration.scheduler
 
     # Or import and configure programmatically
-    from orchestration.scheduler import PipelineScheduler
+    from de_funk.orchestration.scheduler import PipelineScheduler
     scheduler = PipelineScheduler()
     scheduler.start()
 
@@ -26,7 +26,7 @@ from datetime import datetime
 from typing import Optional, Callable, Dict, Any
 from pathlib import Path
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -215,11 +215,11 @@ def job_daily_market_cap_refresh():
     logger.info(f"[{datetime.now()}] Starting daily market cap refresh...")
 
     try:
-        from utils.repo import setup_repo_imports
+        from de_funk.utils.repo import setup_repo_imports
         repo_root = setup_repo_imports()
 
-        from core.context import RepoContext
-        from datapipelines.providers.alpha_vantage.alpha_vantage_ingestor import AlphaVantageIngestor
+from de_funk.core.context import RepoContext
+        from de_funk.pipelines.providers.alpha_vantage.alpha_vantage_ingestor import AlphaVantageIngestor
 
         ctx = RepoContext.from_repo_root(connection_type="spark")
 
@@ -247,12 +247,12 @@ def job_daily_price_ingestion():
     logger.info(f"[{datetime.now()}] Starting daily price ingestion...")
 
     try:
-        from utils.repo import setup_repo_imports
+        from de_funk.utils.repo import setup_repo_imports
         repo_root = setup_repo_imports()
 
-        from core.context import RepoContext
-        from datapipelines.base.ingestor_engine import create_engine
-        from datapipelines.base.provider import DataType
+from de_funk.core.context import RepoContext
+        from de_funk.pipelines.base.ingestor_engine import create_engine
+        from de_funk.pipelines.base.provider import DataType
 
         ctx = RepoContext.from_repo_root(connection_type="spark")
 
@@ -289,10 +289,10 @@ def job_daily_silver_rebuild():
     logger.info(f"[{datetime.now()}] Starting silver layer rebuild...")
 
     try:
-        from utils.repo import setup_repo_imports
+        from de_funk.utils.repo import setup_repo_imports
         repo_root = setup_repo_imports()
 
-        from core.context import RepoContext
+from de_funk.core.context import RepoContext
         from scripts.orchestrate import build_model, load_storage_config
 
         ctx = RepoContext.from_repo_root(connection_type="spark")
@@ -329,10 +329,10 @@ def job_weekly_forecasts():
     logger.info(f"[{datetime.now()}] Starting weekly forecast run...")
 
     try:
-        from utils.repo import setup_repo_imports
+        from de_funk.utils.repo import setup_repo_imports
         repo_root = setup_repo_imports()
 
-        from orchestration.distributed.ray_cluster import RayCluster, get_ray
+        from de_funk.orchestration.distributed.ray_cluster import RayCluster, get_ray
 
         ray = get_ray()
         if ray is None:
@@ -347,11 +347,11 @@ def job_weekly_forecasts():
             logger.info(f"Connected to Ray cluster: {cluster.resources.num_nodes} nodes")
 
             # Import tasks
-            from orchestration.distributed.tasks import forecast_ticker
+            from de_funk.orchestration.distributed.tasks import forecast_ticker
 
             # Get tickers
-            from core.context import RepoContext
-            from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
+from de_funk.core.context import RepoContext
+            from de_funk.pipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 
             ctx = RepoContext.from_repo_root(connection_type="spark")
             provider = create_alpha_vantage_provider(

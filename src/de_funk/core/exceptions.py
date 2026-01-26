@@ -32,7 +32,7 @@ Exception Hierarchy:
         └── ModelTrainingError
 
 Usage:
-    from core.exceptions import ModelNotFoundError, IngestionError
+from de_funk.core.exceptions import ModelNotFoundError, IngestionError
 
     # Raise with structured details
     raise ModelNotFoundError("stocks")

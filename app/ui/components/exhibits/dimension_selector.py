@@ -6,7 +6,7 @@ Provides interactive UI for selecting which dimension to use for grouping/colori
 
 import streamlit as st
 from typing import List, Optional
-from app.notebook.schema import DimensionSelectorConfig
+from de_funk.notebook.schema import DimensionSelectorConfig
 
 
 def render_dimension_selector(

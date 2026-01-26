@@ -38,7 +38,7 @@ class SidebarNavigator:
         notebooks = self._scan_notebooks()
 
         if not notebooks:
-            st.info("No notebooks found. Create a `.md` file in `configs/notebooks/`")
+            st.info("No notebooks found. Create a `.md` file in `notebooks/`")
             return
 
         # Group by directory

@@ -44,7 +44,7 @@ logger = get_logger(__name__)
 
 # Import centralized repo root discovery
 try:
-    from utils.repo import get_repo_root
+    from de_funk.utils.repo import get_repo_root
     _HAS_UTILS_REPO = True
 except ImportError:
     # Fallback if utils.repo doesn't exist yet (during migration)
@@ -294,7 +294,7 @@ class ConfigLoader:
         Returns:
             Storage path string or None if not set
         """
-        config_path = self._repo_root / "configs" / "pipelines" / "run_config.json"
+        config_path = self._repo_root / "configs" / "run_config.json"
         if config_path.exists():
             try:
                 with open(config_path) as f:
@@ -328,7 +328,7 @@ class ConfigLoader:
         if not run_config_storage:
             raise ValueError(
                 "Storage path not configured.\n"
-                "Set 'storage_path' in configs/pipelines/run_config.json:\n"
+                "Set 'storage_path' in configs/run_config.json:\n"
                 '  "defaults": {\n'
                 '    "storage_path": "/shared/storage"\n'
                 '  }\n'

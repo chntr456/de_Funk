@@ -22,11 +22,11 @@ from pathlib import Path
 import time
 from typing import Dict, Any
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from core.context import RepoContext
-from models.api.session import UniversalSession
+from de_funk.core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
 
 
 def format_rows(count: int) -> str:

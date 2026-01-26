@@ -5,7 +5,7 @@ Validates that training data from stocks model meets requirements for
 ARIMA, Prophet, and RandomForest forecasting models.
 
 Usage:
-    from models.domains.securities.forecast.data_validator import ForecastDataValidator
+    from de_funk.models.domains.securities.forecast.data_validator import ForecastDataValidator
 
     validator = ForecastDataValidator(training_df, ticker='AAPL')
     report = validator.validate()
@@ -17,7 +17,7 @@ Usage:
 from __future__ import annotations
 
 from typing import List, Optional, Dict, Any
-from models.base.data_validator import DataValidator, ValidationReport
+from de_funk.models.base.data_validator import DataValidator, ValidationReport
 
 import logging
 

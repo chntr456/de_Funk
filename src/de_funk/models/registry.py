@@ -407,7 +407,7 @@ class ModelRegistry:
 
         # Use domain_loader for markdown-based configs
         try:
-            from config.domain_loader import ModelConfigLoader
+            from de_funk.config.domain_loader import ModelConfigLoader
             # Cache the loader for reuse in get_model_config()
             self._domain_loader = ModelConfigLoader(self.models_dir)
 
@@ -511,7 +511,7 @@ class ModelRegistry:
 
         # Foundation models
         try:
-            from models.domains.foundation.temporal.model import TemporalModel
+            from de_funk.models.domains.foundation.temporal.model import TemporalModel
             self.register_model_class('temporal', TemporalModel)
         except Exception:
             pass  # Will use auto-registration on first access
@@ -519,21 +519,21 @@ class ModelRegistry:
         # Domain models (v2.6 architecture - organized by domain)
         # Corporate domain
         try:
-            from models.domains.corporate.company import CompanyModel
+            from de_funk.models.domains.corporate.company import CompanyModel
             self.register_model_class('company', CompanyModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         # Securities domain
         try:
-            from models.domains.securities.stocks import StocksModel
+            from de_funk.models.domains.securities.stocks import StocksModel
             self.register_model_class('stocks', StocksModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         # Municipal domain
         try:
-            from models.domains.municipal.city_finance import CityFinanceModel
+            from de_funk.models.domains.municipal.city_finance import CityFinanceModel
             self.register_model_class('city_finance', CityFinanceModel)
         except Exception:
             pass  # Will use auto-registration on first access
@@ -632,6 +632,6 @@ class ModelRegistry:
             return self._domain_loader.load_model_config(model_name)
 
         # Fallback: create loader if not cached (shouldn't happen normally)
-        from config.domain_loader import ModelConfigLoader
+        from de_funk.config.domain_loader import ModelConfigLoader
         self._domain_loader = ModelConfigLoader(self.models_dir)
         return self._domain_loader.load_model_config(model_name)

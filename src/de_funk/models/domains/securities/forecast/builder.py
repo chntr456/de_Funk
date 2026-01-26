@@ -14,8 +14,8 @@ from __future__ import annotations
 from typing import Type, List, Optional, Dict, Any
 from datetime import datetime
 
-from models.base.builder import BaseModelBuilder, BuildResult, BuildContext
-from config.logging import get_logger
+from de_funk.models.base.builder import BaseModelBuilder, BuildResult, BuildContext
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -51,7 +51,7 @@ class ForecastBuilder(BaseModelBuilder):
 
     def get_model_class(self) -> Type:
         """Return ForecastModel class."""
-        from models.domains.securities.forecast import ForecastModel
+        from de_funk.models.domains.securities.forecast import ForecastModel
         return ForecastModel
 
     def get_forecast_config(self) -> Dict[str, Any]:
@@ -125,9 +125,9 @@ class ForecastBuilder(BaseModelBuilder):
         # Ensure Spark session is active
         self._ensure_active_session()
 
-        from models.domains.corporate.company.model import CompanyModel
-        from core.connection import get_spark_connection
-        from config.domain_loader import ModelConfigLoader
+        from de_funk.models.domains.corporate.company.model import CompanyModel
+from de_funk.core.connection import get_spark_connection
+        from de_funk.config.domain_loader import ModelConfigLoader
 
         # Create connection wrapper
         connection = get_spark_connection(self.spark)
@@ -192,14 +192,14 @@ class ForecastBuilder(BaseModelBuilder):
         # The session may have become unregistered between builder executions
         self._ensure_active_session()
 
-        from models.domains.securities.stocks.model import StocksModel
-        from core.connection import get_spark_connection
+        from de_funk.models.domains.securities.stocks.model import StocksModel
+from de_funk.core.connection import get_spark_connection
 
         # Create connection wrapper
         connection = get_spark_connection(self.spark)
 
         # Load stocks model config
-        from config.domain_loader import ModelConfigLoader
+        from de_funk.config.domain_loader import ModelConfigLoader
         domains_dir = self.repo_root / "domains"
         loader = ModelConfigLoader(domains_dir)
         stocks_config = loader.load_model_config("stocks")
@@ -266,9 +266,9 @@ class ForecastBuilder(BaseModelBuilder):
             logger.info(f"Using forecast models: {models_to_run}")
 
             # Create forecast model instance
-            from models.domains.securities.forecast import ForecastModel
-            from models.api.session import UniversalSession
-            from core.connection import get_spark_connection
+            from de_funk.models.domains.securities.forecast import ForecastModel
+            from de_funk.models.api.session import UniversalSession
+from de_funk.core.connection import get_spark_connection
 
             # Create connection wrapper for Spark session
             connection = get_spark_connection(self.spark)
@@ -365,7 +365,7 @@ class ForecastBuilder(BaseModelBuilder):
         - Source tables have required columns and data
         - ML model configurations are valid
         """
-        from models.domains.securities.forecast.data_validator import StocksSourceValidator
+        from de_funk.models.domains.securities.forecast.data_validator import StocksSourceValidator
 
         # Check for price data
         tickers = self.get_available_tickers(limit=1)

@@ -9,7 +9,7 @@ Normalized architecture (v3.0):
 Version: 3.0 - Normalized securities architecture
 """
 
-from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
 from typing import Optional, Dict, Any, List, Tuple
 import logging
 
@@ -37,7 +37,7 @@ class StocksModel(BaseModel):
     - Backend-agnostic: uses session methods for all DataFrame operations
 
     Usage:
-        from models.domains.securities.stocks import StocksModel
+        from de_funk.models.domains.securities.stocks import StocksModel
         stocks = StocksModel(connection, storage_cfg, model_cfg)
         stocks.build()
 

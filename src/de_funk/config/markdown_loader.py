@@ -20,7 +20,7 @@ Directory Structure Expected:
                 └── Time Series Daily.md
 
 Usage:
-    from config.markdown_loader import MarkdownConfigLoader
+    from de_funk.config.markdown_loader import MarkdownConfigLoader
 
     loader = MarkdownConfigLoader(repo_root)
     providers = loader.load_providers()
@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

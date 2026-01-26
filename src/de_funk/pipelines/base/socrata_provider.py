@@ -5,7 +5,7 @@ Base class for Socrata-based data providers (Chicago, Cook County, etc.).
 Contains shared functionality for date parsing and DataFrame creation.
 
 Usage:
-    from datapipelines.base.socrata_provider import SocrataBaseProvider
+    from de_funk.pipelines.base.socrata_provider import SocrataBaseProvider
 
     class ChicagoProvider(SocrataBaseProvider):
         PROVIDER_NAME = "Chicago Data Portal"
@@ -23,10 +23,10 @@ from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.types import StructType, StructField, StringType
 
-from datapipelines.base.provider import BaseProvider
-from datapipelines.base.socrata_client import SocrataClient
-from config.logging import get_logger
-from config.markdown_loader import EndpointConfig
+from de_funk.pipelines.base.provider import BaseProvider
+from de_funk.pipelines.base.socrata_client import SocrataClient
+from de_funk.config.logging import get_logger
+from de_funk.config.markdown_loader import EndpointConfig
 
 logger = get_logger(__name__)
 
@@ -533,7 +533,7 @@ class SocrataBaseProvider(BaseProvider):
             Spark DataFrame
         """
         import json as json_module
-        from datapipelines.base.normalizer import SparkNormalizer
+        from de_funk.pipelines.base.normalizer import SparkNormalizer
 
         # Normalize record keys: "Case Number" -> "case_number"
         # This ensures CSV column names match schema source definitions

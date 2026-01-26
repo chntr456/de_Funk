@@ -35,7 +35,7 @@ from pyspark.sql.types import (
     BooleanType, DateType, TimestampType
 )
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -158,8 +158,8 @@ class Facet:
             return self._md_schema_cache
 
         try:
-            from config.markdown_loader import get_markdown_loader
-            from utils.repo import get_repo_root
+            from de_funk.config.markdown_loader import get_markdown_loader
+            from de_funk.utils.repo import get_repo_root
 
             repo_root = get_repo_root()
             loader = get_markdown_loader(repo_root)

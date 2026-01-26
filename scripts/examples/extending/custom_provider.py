@@ -25,16 +25,16 @@ from urllib.parse import urlencode
 # Bootstrap: add repo to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from utils.repo import get_repo_root
+from de_funk.utils.repo import get_repo_root
 repo_root = get_repo_root()
 
 from pyspark.sql import SparkSession, DataFrame
-from datapipelines.base.registry import BaseRegistry
-from datapipelines.base.http_client import HttpClient
-from datapipelines.base.key_pool import ApiKeyPool
-from datapipelines.ingestors.base_ingestor import Ingestor
-from datapipelines.ingestors.bronze_sink import BronzeSink
-from datapipelines.base.facet import Facet
+from de_funk.pipelines.base.registry import BaseRegistry
+from de_funk.pipelines.base.http_client import HttpClient
+from de_funk.pipelines.base.key_pool import ApiKeyPool
+from de_funk.pipelines.ingestors.base_ingestor import Ingestor
+from de_funk.pipelines.ingestors.bronze_sink import BronzeSink
+from de_funk.pipelines.base.facet import Facet
 
 
 # ============================================================

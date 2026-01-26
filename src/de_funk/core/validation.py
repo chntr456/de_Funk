@@ -7,8 +7,8 @@ Validates notebook configurations against available models.
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 
-from models.registry import ModelRegistry
-from app.notebook.schema import NotebookConfig, Exhibit
+from de_funk.models.registry import ModelRegistry
+from de_funk.notebook.schema import NotebookConfig, Exhibit
 
 
 @dataclass

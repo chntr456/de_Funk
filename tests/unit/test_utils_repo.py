@@ -19,7 +19,7 @@ for _parent in [_current.parent] + list(_current.parents):
             sys.path.insert(0, str(_parent))
         break
 
-from utils.repo import get_repo_root, setup_repo_imports, verify_repo_structure, repo_imports
+from de_funk.utils.repo import get_repo_root, setup_repo_imports, verify_repo_structure, repo_imports
 
 
 class TestGetRepoRoot(unittest.TestCase):

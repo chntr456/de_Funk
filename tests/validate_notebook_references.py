@@ -17,7 +17,7 @@ from typing import Dict, List, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 
@@ -51,7 +51,7 @@ def get_domain_tables(domains_dir: Path) -> Dict[str, Set[str]]:
 
     Returns dict of model_name -> set of table names.
     """
-    from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
 
     registry = ModelRegistry(domains_dir)
     model_tables = {}

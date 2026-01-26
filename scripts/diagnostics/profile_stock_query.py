@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 
@@ -38,12 +38,12 @@ def main():
     print("-" * 40)
 
     start = time.perf_counter()
-    from core.context import RepoContext
+from de_funk.core.context import RepoContext
     timings['import_context'] = time.perf_counter() - start
     print(f"   Import RepoContext: {format_time(timings['import_context'])}")
 
     start = time.perf_counter()
-    from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
     timings['import_registry'] = time.perf_counter() - start
     print(f"   Import ModelRegistry: {format_time(timings['import_registry'])}")
 

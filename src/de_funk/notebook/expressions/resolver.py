@@ -13,7 +13,7 @@ from datetime import date, timedelta
 from typing import Any, Dict, List, Optional, Union
 from dataclasses import dataclass, field
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

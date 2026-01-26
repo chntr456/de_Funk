@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 import streamlit as st
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

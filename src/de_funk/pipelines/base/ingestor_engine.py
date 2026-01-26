@@ -18,8 +18,8 @@ Benefits:
     - Same interface as synchronous version
 
 Usage:
-    from datapipelines.base.ingestor_engine import IngestorEngine
-    from datapipelines.providers.alpha_vantage import create_alpha_vantage_provider
+    from de_funk.pipelines.base.ingestor_engine import IngestorEngine
+    from de_funk.pipelines.providers.alpha_vantage import create_alpha_vantage_provider
 
     provider = create_alpha_vantage_provider(spark, docs_path)
     engine = IngestorEngine(provider, storage_cfg)
@@ -44,9 +44,9 @@ from typing import Dict, List, Optional, Any, Callable
 from pathlib import Path
 from queue import Queue, Empty
 
-from datapipelines.base.provider import BaseProvider, WorkItemResult
-from datapipelines.ingestors.bronze_sink import BronzeSink
-from config.logging import get_logger
+from de_funk.pipelines.base.provider import BaseProvider, WorkItemResult
+from de_funk.pipelines.ingestors.bronze_sink import BronzeSink
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -889,7 +889,7 @@ def create_engine(
         IngestorEngine wrapping the appropriate provider
     """
     if provider_name == "alpha_vantage":
-        from datapipelines.providers.alpha_vantage.alpha_vantage_provider import (
+        from de_funk.pipelines.providers.alpha_vantage.alpha_vantage_provider import (
             create_alpha_vantage_provider
         )
         provider = create_alpha_vantage_provider(spark, docs_path)
@@ -900,7 +900,7 @@ def create_engine(
         )
 
     elif provider_name in ("chicago", "chicago_data_portal"):
-        from datapipelines.providers.chicago.chicago_provider import (
+        from de_funk.pipelines.providers.chicago.chicago_provider import (
             create_chicago_provider
         )
         # Pass storage_path to enable BULK path (Spark-native CSV reading)
@@ -913,7 +913,7 @@ def create_engine(
         )
 
     elif provider_name in ("cook_county", "cook_county_data_portal"):
-        from datapipelines.providers.cook_county.cook_county_provider import (
+        from de_funk.pipelines.providers.cook_county.cook_county_provider import (
             create_cook_county_provider
         )
         # Pass storage_path to enable BULK path (Spark-native CSV reading)

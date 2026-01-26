@@ -40,7 +40,7 @@ import time
 import logging
 
 # Add repo root to path
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 try:
@@ -50,7 +50,7 @@ except ImportError:
     print("Install with: pip install requests")
     sys.exit(1)
 
-from config import ConfigLoader
+from de_funk.config import ConfigLoader
 
 logging.basicConfig(
     level=logging.INFO,

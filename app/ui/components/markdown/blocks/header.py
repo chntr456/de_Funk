@@ -6,7 +6,7 @@ Handles rendering of notebook headers and filter section headers.
 
 import streamlit as st
 
-from app.notebook.schema import NotebookConfig
+from de_funk.notebook.schema import NotebookConfig
 
 
 def render_notebook_header(notebook_config: NotebookConfig):

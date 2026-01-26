@@ -4,7 +4,7 @@ from abc import ABC
 from typing import Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from models.api.session import UniversalSession
+    from de_funk.models.api.session import UniversalSession
 
 
 class BaseAPI(ABC):
@@ -34,7 +34,7 @@ class BaseAPI(ABC):
             TypeError: If session is not a UniversalSession
         """
         # Enforce UniversalSession only (no backwards compatibility)
-        from models.api.session import UniversalSession
+        from de_funk.models.api.session import UniversalSession
         if not isinstance(session, UniversalSession):
             raise TypeError(
                 f"BaseAPI requires UniversalSession, got {type(session).__name__}. "

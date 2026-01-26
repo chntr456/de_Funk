@@ -12,7 +12,7 @@ Key Features:
     - Unified interface for orchestrator
 
 Usage:
-    from datapipelines.providers.registry import ProviderRegistry
+    from de_funk.pipelines.providers.registry import ProviderRegistry
 
     # List available providers
     providers = ProviderRegistry.list_available()
@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
 import yaml
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

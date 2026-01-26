@@ -11,7 +11,7 @@ Usage:
 import sys
 from pathlib import Path
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 setup_repo_imports()
 
 
@@ -19,7 +19,7 @@ def test_logging_setup():
     """Test basic logging setup."""
     print("\n[1] Testing Logging Setup...")
 
-    from config.logging import setup_logging, get_logger, LogConfig
+from de_funk.config.logging import setup_logging, get_logger, LogConfig
 
     # Test with default config
     setup_logging()
@@ -46,7 +46,7 @@ def test_log_timer():
     """Test LogTimer context manager."""
     print("\n[2] Testing LogTimer...")
 
-    from config.logging import get_logger, LogTimer
+from de_funk.config.logging import get_logger, LogTimer
     import time
 
     logger = get_logger("test.timer")
@@ -62,7 +62,7 @@ def test_exception_hierarchy():
     """Test custom exception hierarchy."""
     print("\n[3] Testing Exception Hierarchy...")
 
-    from core.exceptions import (
+from de_funk.core.exceptions import (
         DeFunkError,
         ModelNotFoundError,
         MeasureError,
@@ -105,7 +105,7 @@ def test_error_handling_decorators():
     """Test error handling decorators."""
     print("\n[4] Testing Error Handling Decorators...")
 
-    from core.error_handling import handle_exceptions, retry_on_exception, safe_call
+from de_funk.core.error_handling import handle_exceptions, retry_on_exception, safe_call
 
     # Test handle_exceptions
     @handle_exceptions(ValueError, default_return="fallback", log_level='warning')
@@ -149,7 +149,7 @@ def test_error_context():
     """Test ErrorContext context manager."""
     print("\n[5] Testing ErrorContext...")
 
-    from core.error_handling import ErrorContext
+from de_funk.core.error_handling import ErrorContext
 
     # ErrorContext logs errors but doesn't wrap them - it re-raises the original
     error_logged = False
@@ -171,7 +171,7 @@ def test_structured_logging():
     """Test structured JSON logging."""
     print("\n[6] Testing Structured Logging...")
 
-    from config.logging import StructuredFormatter
+from de_funk.config.logging import StructuredFormatter
     import logging
     import json
 

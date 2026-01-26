@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """Quick check of columns in DuckDB views vs expected from YAML."""
 from pathlib import Path
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 import duckdb

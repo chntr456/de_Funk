@@ -11,7 +11,7 @@ Usage:
 
 import sys
 from pathlib import Path
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 
 repo_root = setup_repo_imports()
 
@@ -27,7 +27,7 @@ def test_notebook_rendering():
     print("-" * 80)
 
     try:
-        from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
+        from de_funk.notebook.parsers.markdown_parser import MarkdownNotebookParser
 
         notebook_path = repo_root / "configs" / "notebooks" / "stocks" / "stock_analysis_v2.md"
 
@@ -57,9 +57,9 @@ def test_notebook_rendering():
     print("-" * 80)
 
     try:
-        from app.notebook.api.notebook_session import NotebookSession
-        from core.duckdb_connection import DuckDBConnection
-        from models.registry import ModelRegistry
+        from de_funk.notebook.api.notebook_session import NotebookSession
+from de_funk.core.duckdb_connection import DuckDBConnection
+from de_funk.models.registry import ModelRegistry
 
         # Create connection
         conn = DuckDBConnection()

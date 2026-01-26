@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 # Add repo root to path
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 try:

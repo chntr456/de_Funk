@@ -43,7 +43,7 @@ def compute_technicals(
     Returns:
         Total rows processed
     """
-    from orchestration.common.spark_session import get_spark
+    from de_funk.orchestration.common.spark_session import get_spark
 
     # Paths - fact_stock_prices is in silver layer
     silver_root = storage_path / "silver" / "stocks" / "facts"

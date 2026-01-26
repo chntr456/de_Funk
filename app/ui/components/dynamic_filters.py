@@ -7,7 +7,7 @@ Renders filters with database-driven options and session state management.
 import streamlit as st
 from typing import Any, List, Optional
 from datetime import date, datetime, timedelta
-from app.notebook.filters.dynamic import (
+from de_funk.notebook.filters.dynamic import (
     FilterCollection,
     FilterConfig,
     FilterType,
@@ -433,7 +433,7 @@ def parse_date(date_str: Any) -> date:
 
         # Use ExpressionResolver for function-based expressions
         try:
-            from app.notebook.expressions.resolver import ExpressionResolver
+            from de_funk.notebook.expressions.resolver import ExpressionResolver
             resolver = ExpressionResolver()
             result = resolver.resolve(date_str)
             if isinstance(result, date):

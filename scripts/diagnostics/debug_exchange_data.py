@@ -21,10 +21,10 @@ To re-ingest exchanges:
   # This will fetch fresh data from Polygon API with MIC codes
 """
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
 
 # Initialize DuckDB connection
 conn = DuckDBConnection()

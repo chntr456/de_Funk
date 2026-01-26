@@ -13,7 +13,7 @@ print("=" * 80)
 print("VIEW DATA DIAGNOSTIC")
 print("=" * 80)
 
-from core.context import RepoContext
+from de_funk.core.context import RepoContext
 
 ctx = RepoContext.from_repo_root(connection_type="duckdb")
 conn = ctx.connection.conn

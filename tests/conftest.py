@@ -13,7 +13,7 @@ if str(repo_root) not in sys.path:
     sys.path.insert(0, str(repo_root))
 
 # Now we can use the unified config system
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 setup_repo_imports()
 
 import pytest
@@ -145,7 +145,7 @@ def duckdb_connection(temp_dir, sample_price_data):
 @pytest.fixture
 def mock_model(simple_model_config, duckdb_connection, temp_dir):
     """Create a mock model for testing."""
-    from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
 
     storage_cfg = {
         'roots': {

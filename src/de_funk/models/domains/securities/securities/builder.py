@@ -13,7 +13,7 @@ from __future__ import annotations
 from typing import Type
 import logging
 
-from models.base.builder import BaseModelBuilder, BuilderRegistry, BuildResult
+from de_funk.models.base.builder import BaseModelBuilder, BuilderRegistry, BuildResult
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ class SecuritiesBuilder(BaseModelBuilder):
 
     def get_model_class(self) -> Type:
         """Return the SecuritiesModel class."""
-        from models.domains.securities.securities.model import SecuritiesModel
+        from de_funk.models.domains.securities.securities.model import SecuritiesModel
         return SecuritiesModel
 
     def post_build(self, result: BuildResult) -> None:

@@ -9,18 +9,18 @@ Configuration loaded from markdown documentation (single source of truth):
 - Data Sources/Endpoints/Cook County Data Portal/*.md
 
 Usage:
-    from datapipelines.providers.cook_county import (
+    from de_funk.pipelines.providers.cook_county import (
         CookCountyProvider,
         create_cook_county_provider,
     )
-    from datapipelines.base import IngestorEngine
+    from de_funk.pipelines.base import IngestorEngine
 
     provider = create_cook_county_provider(spark, docs_path)
     engine = IngestorEngine(provider, storage_cfg)
     results = engine.run()
 """
 
-from datapipelines.providers.cook_county.cook_county_provider import (
+from de_funk.pipelines.providers.cook_county.cook_county_provider import (
     CookCountyProvider,
     create_cook_county_provider,
 )

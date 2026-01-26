@@ -6,15 +6,15 @@ Provides single entry point for measure calculation across all backends.
 
 from typing import Optional, Any, Dict
 
-from models.base.backend.adapter import BackendAdapter
-from models.base.backend.duckdb_adapter import DuckDBAdapter
-from models.base.backend.spark_adapter import SparkAdapter
+from de_funk.models.base.backend.adapter import BackendAdapter
+from de_funk.models.base.backend.duckdb_adapter import DuckDBAdapter
+from de_funk.models.base.backend.spark_adapter import SparkAdapter
 from .registry import MeasureRegistry
 
 # Bootstrap: Import measure implementations to trigger @MeasureRegistry.register decorators
 # This ensures all measure types are registered before create_measure() is called
-import models.measures.simple
-import models.measures.computed
+import de_funk.models.measures.simple
+import de_funk.models.measures.computed
 
 
 class MeasureExecutor:

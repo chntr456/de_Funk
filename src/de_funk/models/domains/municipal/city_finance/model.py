@@ -8,7 +8,7 @@ Version: 2.1 - Backend-agnostic via UniversalSession methods
 """
 
 from typing import Optional, Any, Dict, List
-from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
 import logging
 
 logger = logging.getLogger(__name__)

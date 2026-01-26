@@ -10,11 +10,11 @@ This module provides a unified logging system that:
 
 Usage:
     # In main entry point (run_app.py, scripts, etc.)
-    from config.logging import setup_logging
+    from de_funk.config.logging import setup_logging
     setup_logging()
 
     # In any module
-    from config.logging import get_logger
+    from de_funk.config.logging import get_logger
     logger = get_logger(__name__)
     logger.info("Processing started", extra={'ticker': 'AAPL'})
 
@@ -269,7 +269,7 @@ def get_logger(name: str) -> logging.Logger:
     This is the primary way to get a logger in de_Funk code.
 
     Usage:
-        from config.logging import get_logger
+        from de_funk.config.logging import get_logger
         logger = get_logger(__name__)
 
         logger.debug("Detailed info for debugging")

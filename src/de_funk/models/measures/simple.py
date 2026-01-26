@@ -6,9 +6,9 @@ Handles basic aggregation functions: AVG, SUM, MIN, MAX, COUNT, etc.
 
 from typing import Dict, Any, List
 
-from models.measures.base_measure import BaseMeasure, MeasureType
-from models.measures.registry import MeasureRegistry
-from models.base.backend.sql_builder import SQLBuilder
+from de_funk.models.measures.base_measure import BaseMeasure, MeasureType
+from de_funk.models.measures.registry import MeasureRegistry
+from de_funk.models.base.backend.sql_builder import SQLBuilder
 
 
 @MeasureRegistry.register(MeasureType.SIMPLE)

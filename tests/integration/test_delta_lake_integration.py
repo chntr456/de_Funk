@@ -29,7 +29,7 @@ try:
 except ImportError:
     DELTA_AVAILABLE = False
 
-from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
 
 
 @pytest.fixture
@@ -331,8 +331,8 @@ class TestDuckDBAdapterDelta:
     @pytest.mark.skipif(not DELTA_AVAILABLE, reason="Delta Lake not installed")
     def test_adapter_detects_delta_table(self, temp_dir, sample_df):
         """Test that adapter detects and uses delta_scan for Delta tables."""
-        from models.base.backend.duckdb_adapter import DuckDBAdapter
-        from core.duckdb_connection import DuckDBConnection
+from de_funk.models.base.backend.duckdb_adapter import DuckDBAdapter
+from de_funk.core.duckdb_connection import DuckDBConnection
 
         # Write Delta table
         delta_path = temp_dir / "test_adapter_delta"
@@ -346,8 +346,8 @@ class TestDuckDBAdapterDelta:
 
     def test_adapter_supports_delta_features(self):
         """Test that adapter reports Delta Lake feature support."""
-        from models.base.backend.duckdb_adapter import DuckDBAdapter
-        from models.base.model import BaseModel
+from de_funk.models.base.backend.duckdb_adapter import DuckDBAdapter
+from de_funk.models.base.model import BaseModel
         from unittest.mock import Mock
 
         # Create mock model

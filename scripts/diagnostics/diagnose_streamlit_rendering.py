@@ -14,7 +14,7 @@ Usage:
 
 import sys
 from pathlib import Path
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 
 repo_root = setup_repo_imports()
 

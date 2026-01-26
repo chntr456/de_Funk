@@ -14,7 +14,7 @@ Usage:
         depends_on = ["company"]
 
         def get_model_class(self):
-            from models.domains.securities.stocks import StocksModel
+            from de_funk.models.domains.securities.stocks import StocksModel
             return StocksModel
 
 The build orchestrator discovers all builders and executes them in dependency order.
@@ -122,7 +122,7 @@ class BaseModelBuilder(ABC):
             Markdown files have YAML front matter with full model config.
         """
         if self._model_config is None:
-            from config.domain_loader import ModelConfigLoader
+            from de_funk.config.domain_loader import ModelConfigLoader
 
             # Load from domains/ (markdown with YAML front matter)
             domains_dir = self.repo_root / "domains"
@@ -151,7 +151,7 @@ class BaseModelBuilder(ABC):
         model_config = self.get_model_config()
 
         # Create connection wrapper for Spark
-        from core.connection import get_spark_connection
+from de_funk.core.connection import get_spark_connection
         connection = get_spark_connection(self.spark)
 
         # Build params dict

@@ -1,8 +1,8 @@
 """
 Test script to verify environment variable loading and credential injection
 """
-from utils.env_loader import inject_credentials_into_config
-from utils.repo import get_repo_root
+from de_funk.utils.env_loader import inject_credentials_into_config
+from de_funk.utils.repo import get_repo_root
 from pathlib import Path
 import json
 

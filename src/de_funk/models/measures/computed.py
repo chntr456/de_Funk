@@ -6,9 +6,9 @@ Handles measures that require custom expressions before aggregation.
 
 from typing import Dict, Any
 
-from models.measures.base_measure import BaseMeasure, MeasureType
-from models.measures.registry import MeasureRegistry
-from models.base.backend.sql_builder import SQLBuilder
+from de_funk.models.measures.base_measure import BaseMeasure, MeasureType
+from de_funk.models.measures.registry import MeasureRegistry
+from de_funk.models.base.backend.sql_builder import SQLBuilder
 
 
 @MeasureRegistry.register(MeasureType.COMPUTED)

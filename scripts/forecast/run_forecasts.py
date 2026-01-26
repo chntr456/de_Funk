@@ -21,14 +21,14 @@ import yaml
 import json
 import traceback
 
-from utils.repo import setup_repo_imports, get_repo_root
+from de_funk.utils.repo import setup_repo_imports, get_repo_root
 repo_root = setup_repo_imports()
 
-from config import ConfigLoader
-from config.logging import get_logger, setup_logging
-from models.domains.securities.forecast import ForecastModel
-from models.api.session import UniversalSession
-from datapipelines.base.progress_tracker import StepProgressTracker
+from de_funk.config import ConfigLoader
+from de_funk.config.logging import get_logger, setup_logging
+from de_funk.models.domains.securities.forecast import ForecastModel
+from de_funk.models.api.session import UniversalSession
+from de_funk.pipelines.base.progress_tracker import StepProgressTracker
 
 logger = get_logger(__name__)
 
@@ -245,8 +245,8 @@ def run_forecast_pipeline(
     logger.info("Starting time series forecast pipeline")
 
     # Initialize Spark connection (required for ETL operations)
-    from orchestration.common.spark_session import get_spark
-    from core.connection import ConnectionFactory
+from de_funk.orchestration.common.spark_session import get_spark
+from de_funk.core.connection import ConnectionFactory
     spark_session = get_spark("ForecastPipeline")
     spark = ConnectionFactory.create("spark", spark_session=spark_session)
 
@@ -259,7 +259,7 @@ def run_forecast_pipeline(
     storage_cfg = config.storage
 
     # v3.0: Load forecast config from domain markdown file
-    from config.domain_loader import ModelConfigLoader
+from de_funk.config.domain_loader import ModelConfigLoader
     domains_root = get_repo_root() / "domains"
     domain_loader = ModelConfigLoader(domains_root)
     forecast_cfg = domain_loader.load_model_config("forecast")

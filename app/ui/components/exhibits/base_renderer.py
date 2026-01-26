@@ -14,7 +14,7 @@ import pandas as pd
 from typing import List, Optional, Tuple, Union
 from abc import ABC, abstractmethod
 
-from app.notebook.schema import ColumnReference
+from de_funk.notebook.schema import ColumnReference
 
 
 def extract_field_name(col_ref: Union[ColumnReference, str, None]) -> Optional[str]:

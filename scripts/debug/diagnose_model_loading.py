@@ -17,7 +17,7 @@ from pathlib import Path
 repo_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(repo_root))
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -28,7 +28,7 @@ def check_domain_files():
     print("1. CHECKING DOMAIN FILES")
     print("=" * 60)
 
-    from config.domain_loader import ModelConfigLoader
+from de_funk.config.domain_loader import ModelConfigLoader
 
     domains_dir = repo_root / "domains"
     loader = ModelConfigLoader(domains_dir)
@@ -73,7 +73,7 @@ def check_model_registry():
     print("2. CHECKING MODEL REGISTRY")
     print("=" * 60)
 
-    from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
 
     domains_dir = repo_root / "domains"
     registry = ModelRegistry(domains_dir)
@@ -104,7 +104,7 @@ def check_duckdb_views():
     print("3. CHECKING DUCKDB VIEWS")
     print("=" * 60)
 
-    from core.context import RepoContext
+from de_funk.core.context import RepoContext
 
     ctx = RepoContext.from_repo_root(connection_type="duckdb")
     conn = ctx.connection
@@ -182,8 +182,8 @@ def check_universal_session():
     print("5. CHECKING UNIVERSAL SESSION")
     print("=" * 60)
 
-    from core.context import RepoContext
-    from models.api.session import UniversalSession
+from de_funk.core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
 
     ctx = RepoContext.from_repo_root(connection_type="duckdb")
 

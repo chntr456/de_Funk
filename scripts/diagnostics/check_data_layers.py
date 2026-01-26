@@ -17,7 +17,7 @@ import argparse
 
 # Setup imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 setup_repo_imports()
 
 

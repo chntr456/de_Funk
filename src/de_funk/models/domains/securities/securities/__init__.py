@@ -8,7 +8,7 @@ This module provides the normalized foundation for all security types:
 Child models (stocks, etfs, options, futures) FK to dim_security.
 """
 
-from models.domains.securities.securities.model import SecuritiesModel
-from models.domains.securities.securities.builder import SecuritiesBuilder
+from de_funk.models.domains.securities.securities.model import SecuritiesModel
+from de_funk.models.domains.securities.securities.builder import SecuritiesBuilder
 
 __all__ = ['SecuritiesModel', 'SecuritiesBuilder']

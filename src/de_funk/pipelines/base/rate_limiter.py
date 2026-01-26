@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 from datetime import datetime
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

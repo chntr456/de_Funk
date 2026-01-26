@@ -40,11 +40,11 @@ _repo_root = _script_dir.parent.parent  # scripts/build -> scripts -> repo_root
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from config.logging import setup_logging, get_logger
-from models.base.builder import (
+from de_funk.config.logging import setup_logging, get_logger
+from de_funk.models.base.builder import (
     BaseModelBuilder,
     BuilderRegistry,
     BuildContext,
@@ -64,7 +64,7 @@ def get_spark_session(app_name: str = "ModelBuilder"):
     Returns:
         SparkSession
     """
-    from orchestration.common.spark_session import get_spark
+from de_funk.orchestration.common.spark_session import get_spark
 
     return get_spark(
         app_name=app_name,

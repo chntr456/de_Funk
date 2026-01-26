@@ -35,7 +35,7 @@ except ImportError:
 
 # Import StorageRouter and Table (with fallback if pyspark not available)
 try:
-    from models.api.dal import StorageRouter, Table
+    from de_funk.models.api.dal import StorageRouter, Table
 except ImportError:
     # Fallback for DuckDB-only environments
     @dataclass(frozen=True)
@@ -149,7 +149,7 @@ class BaseModel:
         all types of measures (simple, computed, weighted, etc.).
         """
         if self._measure_executor is None:
-            from models.measures.executor import MeasureExecutor
+            from de_funk.models.measures.executor import MeasureExecutor
             self._measure_executor = MeasureExecutor(self, backend=self.backend)
         return self._measure_executor
 
@@ -161,7 +161,7 @@ class BaseModel:
         Uses the model's graph edges to plan and execute joins at runtime.
         """
         if self._query_planner is None:
-            from models.api.query_planner import GraphQueryPlanner
+            from de_funk.models.api.query_planner import GraphQueryPlanner
             self._query_planner = GraphQueryPlanner(self)
         return self._query_planner
 
@@ -179,7 +179,7 @@ class BaseModel:
     def _load_python_measures(self):
         """Load Python measures module for this model."""
         try:
-            from config.domain_loader import ModelConfigLoader
+            from de_funk.config.domain_loader import ModelConfigLoader
             from pathlib import Path
 
             # Use domains/ directory (markdown with YAML front matter)
@@ -320,7 +320,7 @@ class BaseModel:
         self._ensure_active_spark_session()
 
         if self._graph_builder is None:
-            from models.base.graph_builder import GraphBuilder
+            from de_funk.models.base.graph_builder import GraphBuilder
             self._graph_builder = GraphBuilder(self)
         self._dims, self._facts = self._graph_builder.build()
         self._is_built = True
@@ -344,7 +344,7 @@ class BaseModel:
 
             # Fall back to building from Bronze
             if self._graph_builder is None:
-                from models.base.graph_builder import GraphBuilder
+                from de_funk.models.base.graph_builder import GraphBuilder
                 self._graph_builder = GraphBuilder(self)
             self._dims, self._facts = self._graph_builder.build()
             self._is_built = True
@@ -501,7 +501,7 @@ class BaseModel:
     def _get_table_accessor(self):
         """Get or create TableAccessor instance."""
         if self._table_accessor is None:
-            from models.base.table_accessor import TableAccessor
+            from de_funk.models.base.table_accessor import TableAccessor
             self._table_accessor = TableAccessor(self)
         return self._table_accessor
 
@@ -746,7 +746,7 @@ class BaseModel:
     def _get_measure_calculator(self):
         """Get or create MeasureCalculator instance."""
         if self._measure_calculator is None:
-            from models.base.measure_calculator import MeasureCalculator
+            from de_funk.models.base.measure_calculator import MeasureCalculator
             self._measure_calculator = MeasureCalculator(self)
         return self._measure_calculator
 
@@ -793,7 +793,7 @@ class BaseModel:
                    then storage.json defaults, then falls back to "delta".
         """
         if self._model_writer is None:
-            from models.base.model_writer import ModelWriter
+            from de_funk.models.base.model_writer import ModelWriter
             self._model_writer = ModelWriter(self)
         return self._model_writer.write_tables(
             output_root, format, mode, partition_by, quiet=quiet

@@ -10,7 +10,7 @@ Key Differences from Polygon:
 - Rate limits are lower (5 calls/min for free tier)
 """
 
-from datapipelines.base.registry import BaseRegistry, Endpoint
+from de_funk.pipelines.base.registry import BaseRegistry, Endpoint
 
 
 class AlphaVantageRegistry(BaseRegistry):

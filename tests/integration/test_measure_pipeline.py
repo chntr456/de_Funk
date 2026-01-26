@@ -140,7 +140,7 @@ class TestErrorHandling:
 
     def test_invalid_backend(self, simple_model_config, storage_cfg, duckdb_connection):
         """Test error for invalid backend."""
-        from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
 
         model = BaseModel(duckdb_connection, storage_cfg, simple_model_config)
 

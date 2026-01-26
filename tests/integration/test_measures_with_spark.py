@@ -28,9 +28,9 @@ from datetime import date, timedelta
 from pyspark.sql import functions as F
 from pyspark.sql import SparkSession
 
-from core.context import RepoContext
-from models.api.session import UniversalSession
-from models.registry import ModelRegistry
+from de_funk.core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
+from de_funk.models.registry import ModelRegistry
 
 
 # ============================================================

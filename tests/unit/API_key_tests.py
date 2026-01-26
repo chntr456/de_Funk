@@ -1,4 +1,4 @@
-from utils.env_loader import inject_credentials_into_config
+from de_funk.utils.env_loader import inject_credentials_into_config
 from pathlib import Path
 import json
 

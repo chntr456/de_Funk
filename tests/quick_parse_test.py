@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path.cwd()))
 
-from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
+from de_funk.notebook.parsers.markdown_parser import MarkdownNotebookParser
 from pathlib import Path
 
 parser = MarkdownNotebookParser(Path.cwd())

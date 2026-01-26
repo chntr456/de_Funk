@@ -59,7 +59,7 @@ def render_filters_section(notebook_config, notebook_session, connection=None, s
     st.subheader("🎛️ Filters")
 
     # Import here to avoid circular dependency
-    from app.notebook.schema import VariableType
+    from de_funk.notebook.schema import VariableType
 
     # CRITICAL: Clear filter widget state when folder changes
     # This ensures widgets don't retain old values from previous folders

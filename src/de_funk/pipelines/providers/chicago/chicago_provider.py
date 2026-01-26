@@ -11,8 +11,8 @@ Features:
 - Schema-driven transformation using markdown configs
 
 Usage:
-    from datapipelines.providers.chicago import create_chicago_provider
-    from datapipelines.base.ingestor_engine import IngestorEngine
+    from de_funk.pipelines.providers.chicago import create_chicago_provider
+    from de_funk.pipelines.base.ingestor_engine import IngestorEngine
 
     provider = create_chicago_provider(spark, docs_path)
     engine = IngestorEngine(provider, storage_cfg)
@@ -31,8 +31,8 @@ from __future__ import annotations
 from typing import Optional
 from pathlib import Path
 
-from datapipelines.base.socrata_provider import SocrataBaseProvider
-from config.logging import get_logger
+from de_funk.pipelines.base.socrata_provider import SocrataBaseProvider
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

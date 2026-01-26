@@ -1,0 +1,113 @@
+[project]
+name = "de_funk"
+version = "3.0.0"
+description = "A graphical overlay to a unified relational model"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "de_Funk Team"}
+]
+keywords = [
+    "data-warehouse",
+    "graph-model",
+    "yaml-driven",
+    "spark",
+    "duckdb",
+    "analytics"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "pandas>=2.0.0",
+    "pyarrow>=14.0.0",
+    "pyyaml>=6.0",
+    "duckdb>=0.9.0",
+    "networkx>=3.0",
+    "requests>=2.31.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+spark = [
+    "pyspark>=3.5.0",
+    "delta-spark>=3.0.0",
+]
+ui = [
+    "streamlit>=1.28.0",
+    "plotly>=5.18.0",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "mypy>=1.5.0",
+]
+all = [
+    "de_funk[spark,ui,dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/de_funk/de_funk"
+Documentation = "https://github.com/de_funk/de_funk#readme"
+
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"de_funk" = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 88
+target-version = ["py310", "py311", "py312"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+  | __pycache__
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+known_first_party = ["de_funk"]
+skip = [".git", "__pycache__", ".venv"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+exclude = [
+    "^tests/",
+    "^scripts/",
+]

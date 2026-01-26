@@ -13,7 +13,7 @@ Key Features:
     - Visualization of dependency graph
 
 Usage:
-    from orchestration.dependency_graph import DependencyGraph
+    from de_funk.orchestration.dependency_graph import DependencyGraph
     from pathlib import Path
 
     # Initialize with configs path
@@ -44,7 +44,7 @@ try:
 except ImportError:
     HAS_NETWORKX = False
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

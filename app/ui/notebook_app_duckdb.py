@@ -20,30 +20,36 @@ import sys
 from pathlib import Path
 from typing import Dict, Any
 
-# Bootstrap: Add repo to path before importing utils.repo
+# Bootstrap: Add repo and src/ to path before importing de_funk
 # This handles the case when streamlit is run from any directory
 _current_file = Path(__file__).resolve()
 _repo_root = None
 for _parent in [_current_file.parent] + list(_current_file.parents):
-    if (_parent / "configs").exists() and (_parent / "core").exists():
+    if (_parent / "src").exists() and (_parent / "configs").exists():
         _repo_root = _parent
         break
-if _repo_root and str(_repo_root) not in sys.path:
-    sys.path.insert(0, str(_repo_root))
+if _repo_root:
+    # Add src/ first for de_funk.* imports
+    _src_path = str(_repo_root / "src")
+    if _src_path not in sys.path:
+        sys.path.insert(0, _src_path)
+    # Add repo root for app.* imports
+    if str(_repo_root) not in sys.path:
+        sys.path.insert(0, str(_repo_root))
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 # Initialize logging FIRST - before any other imports that might log
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 setup_logging(repo_root=repo_root)
 logger = get_logger(__name__)
 logger.info("Streamlit app starting...")
 
-from core.context import RepoContext
-from models.registry import ModelRegistry
-from models.api.session import UniversalSession
-from app.notebook.managers import NotebookManager
+from de_funk.core.context import RepoContext
+from de_funk.models.registry import ModelRegistry
+from de_funk.models.api.session import UniversalSession
+from de_funk.notebook.managers import NotebookManager
 
 # Import modular UI components
 from app.ui.components.theme import apply_professional_theme
@@ -137,7 +143,7 @@ if 'universal_session' not in st.session_state:
 
 if 'notebook_manager' not in st.session_state:
     ctx = st.session_state.repo_context
-    notebooks_root = ctx.repo / "configs" / "notebooks"
+    notebooks_root = ctx.repo / "notebooks"
     st.session_state.notebook_manager = NotebookManager(
         st.session_state.universal_session,
         ctx.repo,
@@ -157,7 +163,7 @@ class NotebookVaultApp:
         self.model_registry = st.session_state.model_registry
         self.universal_session = st.session_state.universal_session
         self.notebook_manager = st.session_state.notebook_manager
-        self.notebooks_root = self.ctx.repo / "configs" / "notebooks"
+        self.notebooks_root = self.ctx.repo / "notebooks"
         self.notebooks_root.mkdir(parents=True, exist_ok=True)
         self.sidebar_nav = SidebarNavigator(self.notebooks_root, self.notebook_manager)
 
@@ -665,7 +671,7 @@ class NotebookVaultApp:
         """Render folder filter context editor (.filter_context.yaml)."""
         import yaml
         from pathlib import Path
-        from app.notebook.folder_context import FolderFilterContextManager
+        from de_funk.notebook.folder_context import FolderFilterContextManager
 
         context_file = folder_path / '.filter_context.yaml'
 
@@ -1415,7 +1421,7 @@ help_text: Filter by trading volume"""
             folder_filters = self.notebook_manager.folder_context_manager.get_filters(new_folder)
 
             # Reinitialize filter context with folder filters
-            from app.notebook.filters.context import FilterContext
+            from de_funk.notebook.filters.context import FilterContext
             self.notebook_manager.filter_context = FilterContext(self.notebook_manager.notebook_config.variables)
             if folder_filters:
                 # Apply all folder filters (we'll use them even if not in notebook variables)
@@ -1934,7 +1940,7 @@ help_text: Filter by trading volume"""
             # Save the updated content
             new_content = '\n'.join(lines)
 
-            from app.notebook.parsers.markdown_parser import MarkdownNotebookParser
+            from de_funk.notebook.parsers.markdown_parser import MarkdownNotebookParser
             parser = MarkdownNotebookParser(self.ctx.repo)
             parser.save_block_update(str(notebook_path), block_index, new_content)
 

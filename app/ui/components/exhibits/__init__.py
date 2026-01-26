@@ -11,8 +11,8 @@ from __future__ import annotations
 from typing import Any, Dict, Optional, Union
 import pandas as pd
 
-from config.logging import get_logger
-from app.notebook.schema import ColumnReference
+from de_funk.config.logging import get_logger
+from de_funk.notebook.schema import ColumnReference
 
 
 def _extract_field_name(col_ref: Union[ColumnReference, str, None]) -> Optional[str]:

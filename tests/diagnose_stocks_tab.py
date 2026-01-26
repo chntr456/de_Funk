@@ -78,7 +78,7 @@ def check_model_registry():
     print_header("STEP 2: Model Registry")
 
     try:
-        from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
         from pathlib import Path
 
         repo_root = Path(__file__).resolve().parents[2]
@@ -123,7 +123,7 @@ def check_domain_loader():
     print_header("STEP 3: Domain Loader Config")
 
     try:
-        from config.domain_loader import ModelConfigLoader
+from de_funk.config.domain_loader import ModelConfigLoader
         from pathlib import Path
 
         repo_root = Path(__file__).resolve().parents[2]
@@ -249,8 +249,8 @@ def check_universal_session():
     print_header("STEP 6: UniversalSession Query Test")
 
     try:
-        from core.context import RepoContext
-        from models.api.session import UniversalSession
+from de_funk.core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
 
         ctx = RepoContext.from_repo_root(connection_type="duckdb")
         session = UniversalSession(
@@ -308,9 +308,9 @@ def check_auto_join():
     print_header("STEP 7: Auto-Join Test")
 
     try:
-        from core.context import RepoContext
-        from models.api.auto_join import AutoJoinHandler
-        from models.registry import ModelRegistry
+from de_funk.core.context import RepoContext
+from de_funk.models.api.auto_join import AutoJoinHandler
+from de_funk.models.registry import ModelRegistry
         from pathlib import Path
 
         repo_root = Path(__file__).resolve().parents[2]
@@ -357,8 +357,8 @@ def check_exhibit_handler():
     print_header("STEP 8: Exhibit Handler Test")
 
     try:
-        from core.context import RepoContext
-        from app.notebook.exhibits.registry import ExhibitTypeRegistry
+from de_funk.core.context import RepoContext
+        from de_funk.notebook.exhibits.registry import ExhibitTypeRegistry
 
         ctx = RepoContext.from_repo_root(connection_type="duckdb")
 
@@ -389,7 +389,7 @@ def check_duckdb_views():
     print_header("STEP 9: DuckDB Views/Schemas")
 
     try:
-        from core.context import RepoContext
+from de_funk.core.context import RepoContext
 
         ctx = RepoContext.from_repo_root(connection_type="duckdb")
         conn = ctx.connection.conn

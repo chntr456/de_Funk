@@ -16,12 +16,12 @@ This should be run BEFORE the distributed pipeline to populate the ticker list.
 import argparse
 from pathlib import Path
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 
 repo_root = setup_repo_imports()
 
-from orchestration.common.spark_session import get_spark
-from config.logging import setup_logging, get_logger
+from de_funk.orchestration.common.spark_session import get_spark
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -84,7 +84,7 @@ def seed_tickers(storage_path: Path = None, force: bool = False) -> int:
 
     # Initialize provider (new v2.6 pattern)
     print("2. Initializing Alpha Vantage provider...")
-    from datapipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
+from de_funk.pipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
 
     provider = create_alpha_vantage_provider(spark=spark, docs_path=repo_root)
     print()

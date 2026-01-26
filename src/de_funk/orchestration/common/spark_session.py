@@ -5,7 +5,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 from pyspark.sql import SparkSession
 
 if TYPE_CHECKING:
-    from config.models import SparkConfig
+    from de_funk.config.models import SparkConfig
 
 logger = logging.getLogger(__name__)
 

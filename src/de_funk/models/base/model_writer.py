@@ -95,7 +95,7 @@ class ModelWriter:
 
             # Get or create Spark session
             if self._spark is None:
-                from orchestration.common.spark_session import get_spark
+                from de_funk.orchestration.common.spark_session import get_spark
                 self._spark = get_spark("ModelWriter")
 
             # Disable retention check to allow vacuum(0)

@@ -1,5 +1,5 @@
 """Quick view of AAPL volatility data."""
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 setup_repo_imports()
 
 import pandas as pd

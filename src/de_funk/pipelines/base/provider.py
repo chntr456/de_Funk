@@ -5,7 +5,7 @@ Defines the abstract interface that all data providers must implement.
 Configuration is loaded from markdown documentation files (single source of truth).
 
 Usage:
-    from datapipelines.base.provider import BaseProvider
+    from de_funk.pipelines.base.provider import BaseProvider
 
     class MyProvider(BaseProvider):
         def list_work_items(self, **kwargs) -> List[str]:
@@ -32,8 +32,8 @@ from typing import Dict, List, Optional, Any, Generator
 from enum import Enum
 from pathlib import Path
 
-from config.logging import get_logger
-from config.markdown_loader import (
+from de_funk.config.logging import get_logger
+from de_funk.config.markdown_loader import (
     MarkdownConfigLoader,
     ProviderConfig as MarkdownProviderConfig,
     EndpointConfig,

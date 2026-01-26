@@ -7,18 +7,18 @@ in every script.
 
 Usage:
     # Option 1: Just get the repo root (no sys.path modification)
-    from utils.repo import get_repo_root
+    from de_funk.utils.repo import get_repo_root
     repo_root = get_repo_root()
 
     # Option 2: Auto-setup imports (recommended for scripts)
-    from utils.repo import setup_repo_imports
+    from de_funk.utils.repo import setup_repo_imports
     repo_root = setup_repo_imports()
     # Now you can import from anywhere in the repo!
 
     # Option 3: Use with context manager (auto-cleanup)
-    from utils.repo import repo_imports
+    from de_funk.utils.repo import repo_imports
     with repo_imports() as repo_root:
-        from core.context import RepoContext
+from de_funk.core.context import RepoContext
         # ... your code ...
 """
 
@@ -29,7 +29,7 @@ from contextlib import contextmanager
 
 
 # Markers used to identify the repository root
-REPO_MARKERS = ["configs", "core", ".git"]
+REPO_MARKERS = ["src", "configs", ".git"]
 
 
 def get_repo_root(start_path: Optional[Path] = None) -> Path:
@@ -56,7 +56,8 @@ def get_repo_root(start_path: Optional[Path] = None) -> Path:
     # Start from this file's location if no path provided
     # This ensures it works even when called from deeply nested scripts
     if start_path is None:
-        start_path = Path(__file__).resolve().parent.parent  # utils/ -> repo/
+        # src/de_funk/utils/ -> src/de_funk/ -> src/ -> repo/
+        start_path = Path(__file__).resolve().parent.parent.parent.parent
 
     current = Path(start_path).resolve()
 
@@ -82,7 +83,7 @@ def setup_repo_imports(start_path: Optional[Path] = None) -> Path:
 
     This is the recommended way to set up imports in scripts. It:
     - Finds the repo root reliably
-    - Adds to sys.path (only if not already present)
+    - Adds repo_root/src to sys.path for de_funk.* imports
     - Returns the repo root path for further use
 
     Args:
@@ -93,16 +94,21 @@ def setup_repo_imports(start_path: Optional[Path] = None) -> Path:
 
     Example:
         # At the top of your script:
-        from utils.repo import setup_repo_imports
+        from de_funk.utils.repo import setup_repo_imports
         repo_root = setup_repo_imports()
 
-        # Now you can import from anywhere:
-        from core.context import RepoContext
-        from models.api.session import UniversalSession
+        # Now you can import from the de_funk package:
+        from de_funk.core.context import RepoContext
+        from de_funk.models.api.session import UniversalSession
     """
     repo_root = get_repo_root(start_path)
 
-    # Add to sys.path only if not already present
+    # Add src/ to sys.path for de_funk.* imports
+    src_path = str(repo_root / "src")
+    if src_path not in sys.path:
+        sys.path.insert(0, src_path)
+
+    # Also add repo root for backwards compatibility with app/ imports
     repo_root_str = str(repo_root)
     if repo_root_str not in sys.path:
         sys.path.insert(0, repo_root_str)
@@ -115,7 +121,7 @@ def repo_imports(start_path: Optional[Path] = None):
     """
     Context manager for temporary repo imports.
 
-    Adds repo to sys.path for the duration of the context,
+    Adds repo/src to sys.path for the duration of the context,
     then removes it when exiting. Useful for scripts that
     need imports but want to clean up after themselves.
 
@@ -126,28 +132,36 @@ def repo_imports(start_path: Optional[Path] = None):
         Path to repository root.
 
     Example:
-        from utils.repo import repo_imports
+        from de_funk.utils.repo import repo_imports
 
         with repo_imports() as repo_root:
-            from core.context import RepoContext
+            from de_funk.core.context import RepoContext
             ctx = RepoContext.from_repo_root()
             # ... your code ...
         # sys.path is restored after exiting
     """
     repo_root = get_repo_root(start_path)
+    src_path = str(repo_root / "src")
     repo_root_str = str(repo_root)
 
-    # Track if we added it (only remove if we added it)
-    added = False
+    # Track if we added them (only remove if we added them)
+    added_src = False
+    added_root = False
+
+    if src_path not in sys.path:
+        sys.path.insert(0, src_path)
+        added_src = True
     if repo_root_str not in sys.path:
         sys.path.insert(0, repo_root_str)
-        added = True
+        added_root = True
 
     try:
         yield repo_root
     finally:
-        # Remove from sys.path if we added it
-        if added and repo_root_str in sys.path:
+        # Remove from sys.path if we added them
+        if added_src and src_path in sys.path:
+            sys.path.remove(src_path)
+        if added_root and repo_root_str in sys.path:
             sys.path.remove(repo_root_str)
 
 
@@ -162,20 +176,23 @@ def verify_repo_structure() -> bool:
         True if structure is valid, False otherwise.
 
     Example:
-        from utils.repo import verify_repo_structure
+        from de_funk.utils.repo import verify_repo_structure
         if not verify_repo_structure():
             print("ERROR: Invalid repository structure!")
     """
     try:
         repo_root = get_repo_root()
 
-        # Required directories
+        # Required directories (new src/de_funk structure)
         required_dirs = [
-            "config",
+            "src/de_funk",
+            "src/de_funk/config",
+            "src/de_funk/core",
+            "src/de_funk/models",
+            "src/de_funk/utils",
             "configs",
-            "core",
-            "models",
-            "utils",
+            "app",
+            "scripts",
         ]
 
         # Check each directory
@@ -210,11 +227,11 @@ def repo_root_for_script(script_file: str) -> Path:
         Path to repository root.
 
     Example (deprecated):
-        from utils.repo import repo_root_for_script
+        from de_funk.utils.repo import repo_root_for_script
         repo_root = repo_root_for_script(__file__)
 
     Recommended:
-        from utils.repo import get_repo_root
+        from de_funk.utils.repo import get_repo_root
         repo_root = get_repo_root()
     """
     import warnings

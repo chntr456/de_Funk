@@ -7,7 +7,7 @@ Primary key is SEC CIK (Central Index Key).
 Version: 2.1 - Backend-agnostic via UniversalSession methods
 """
 
-from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
 from typing import Optional, Dict, Any, List
 import logging
 

@@ -12,7 +12,7 @@ Key Features:
 - Both console and log output support
 
 Usage:
-    from datapipelines.base.progress_tracker import PipelineProgressTracker
+    from de_funk.pipelines.base.progress_tracker import PipelineProgressTracker
 
     # Create tracker for overall pipeline
     tracker = PipelineProgressTracker(
@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set
 from datetime import datetime, timedelta
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

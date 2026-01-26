@@ -16,7 +16,7 @@ print("=" * 80)
 
 # Check BaseModel has the method
 print("\n[STEP 1] Checking BaseModel.set_session() method exists...")
-from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
 import inspect
 
 if hasattr(BaseModel, 'set_session'):
@@ -44,8 +44,8 @@ else:
 
 # Load session and check injection logic
 print("\n[STEP 3] Loading UniversalSession and checking load_model logic...")
-from models.api.session import UniversalSession
-from core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
+from de_funk.core.context import RepoContext
 
 # Check if session.load_model() has the injection code
 load_model_source = inspect.getsource(UniversalSession.load_model)
@@ -99,7 +99,7 @@ else:
 print("\n[STEP 6] Building forecast model (will trigger register_views)...")
 
 # Trace ensure_built calls on all models
-from models.implemented.forecast.company_forecast_model import CompanyForecastModel
+from de_funk.models.implemented.forecast.company_forecast_model import CompanyForecastModel
 
 original_ensure_built = CompanyForecastModel.ensure_built
 

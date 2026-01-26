@@ -30,7 +30,7 @@ import argparse
 import shutil
 from datetime import datetime, timedelta
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 
@@ -42,7 +42,7 @@ def confirm_action(prompt: str) -> bool:
 
 def clear_storage(bronze: bool = True, silver: bool = True, skip_confirm: bool = False):
     """Clear bronze and/or silver storage for v2.0 unified architecture."""
-    from core.context import RepoContext
+from de_funk.core.context import RepoContext
 
     print("=" * 80)
     print("CLEAR STORAGE AND REFRESH DATA")
@@ -118,7 +118,7 @@ def clear_storage(bronze: bool = True, silver: bool = True, skip_confirm: bool =
 
 def reingest_bronze(ctx, date_from: str, date_to: str, max_tickers: int = None):
     """Re-ingest bronze data from Alpha Vantage API."""
-    from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
+from de_funk.pipelines.providers.alpha_vantage import AlphaVantageIngestor
 
     print("=" * 80)
     print("RE-INGESTING BRONZE DATA")
@@ -156,10 +156,10 @@ def reingest_bronze(ctx, date_from: str, date_to: str, max_tickers: int = None):
 
 def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
     """Rebuild silver layer models using v2.0 modular architecture."""
-    from config.domain_loader import ModelConfigLoader
-    from models.domains.corporate.company import CompanyModel
-    from models.domains.securities.stocks import StocksModel
-    from models.api.session import UniversalSession
+from de_funk.config.domain_loader import ModelConfigLoader
+from de_funk.models.domains.corporate.company import CompanyModel
+from de_funk.models.domains.securities.stocks import StocksModel
+from de_funk.models.api.session import UniversalSession
 
     print("=" * 80)
     print("REBUILDING SILVER LAYER (v2.0 Models)")
@@ -312,7 +312,7 @@ def main():
         # If we didn't ingest bronze, we need to figure out tickers
         if not tickers:
             print("Determining ticker list from existing bronze data...")
-            from datapipelines.ingestors.bronze_sink import BronzeSink
+from de_funk.pipelines.ingestors.bronze_sink import BronzeSink
             sink = BronzeSink(ctx.storage)
             # Get latest snapshot date
             snapshot_dt = datetime.now().date().isoformat()

@@ -25,10 +25,10 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 import json
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from config.logging import get_logger, setup_logging
+from de_funk.config.logging import get_logger, setup_logging
 
 logger = get_logger(__name__)
 

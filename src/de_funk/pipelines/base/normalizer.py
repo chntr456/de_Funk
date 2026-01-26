@@ -10,7 +10,7 @@ Provides a unified, pure-Spark normalization pipeline that handles:
 - Final column selection and ordering
 
 Usage:
-    from datapipelines.base.normalizer import SparkNormalizer
+    from de_funk.pipelines.base.normalizer import SparkNormalizer
 
     normalizer = SparkNormalizer(spark)
 
@@ -36,7 +36,7 @@ from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, LongType, StringType, DateType, TimestampType
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

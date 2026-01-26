@@ -20,17 +20,20 @@ from ..schema import NotebookConfig, Exhibit, ExhibitType, ColumnReference
 from ..parsers import NotebookParser, MarkdownNotebookParser
 from ..filters.context import FilterContext
 from ..folder_context import FolderFilterContextManager
-from models.api.session import UniversalSession
-from models.registry import ModelRegistry
-from core.session.filters import FilterEngine
+from de_funk.models.api.session import UniversalSession
+from de_funk.models.registry import ModelRegistry
+from de_funk.core.session.filters import FilterEngine
 
 
 def _extract_field(ref: Any) -> Optional[str]:
-    """Extract field name from ColumnReference or return string as-is."""
+    """Extract field name from ColumnReference, dict, or return string as-is."""
     if ref is None:
         return None
     if isinstance(ref, ColumnReference):
         return ref.field
+    if isinstance(ref, dict):
+        # Handle dict format like {'id': 'column_name', 'label': '...'}
+        return ref.get('id') or ref.get('field') or ref.get('column')
     return str(ref)
 
 
@@ -62,11 +65,11 @@ class NotebookManager:
         Args:
             universal_session: UniversalSession for data access
             repo_root: Repository root for resolving paths
-            notebooks_root: Root directory for notebooks (defaults to repo_root/configs/notebooks)
+            notebooks_root: Root directory for notebooks (defaults to repo_root/notebooks)
         """
         self.session = universal_session
         if repo_root is None:
-            from utils.repo import get_repo_root
+            from de_funk.utils.repo import get_repo_root
             repo_root = get_repo_root()
         self.repo_root = repo_root
 
@@ -75,7 +78,7 @@ class NotebookManager:
 
         # Folder-based filter context management
         if notebooks_root is None:
-            notebooks_root = self.repo_root / "configs" / "notebooks"
+            notebooks_root = self.repo_root / "notebooks"
         self.folder_context_manager = FolderFilterContextManager(notebooks_root)
 
         # Notebook state
@@ -223,7 +226,7 @@ class NotebookManager:
         """
         # Ensure we have a filter collection (create if needed for YAML notebooks)
         if not hasattr(self.notebook_config, '_filter_collection') or not self.notebook_config._filter_collection:
-            from app.notebook.filters.dynamic import FilterCollection
+            from de_funk.notebook.filters.dynamic import FilterCollection
             self.notebook_config._filter_collection = FilterCollection()
 
         filter_collection = self.notebook_config._filter_collection
@@ -306,7 +309,7 @@ class NotebookManager:
         Returns:
             FilterConfig object
         """
-        from app.notebook.filters.dynamic import FilterConfig, FilterType, FilterOperator
+        from de_funk.notebook.filters.dynamic import FilterConfig, FilterType, FilterOperator
 
         # Generate friendly label
         label = filter_id.replace('_', ' ').title()
@@ -911,7 +914,7 @@ class NotebookManager:
             active_filters = filter_collection.get_active_filters()
 
             # Convert filter values to FilterEngine format
-            from app.notebook.filters.dynamic import FilterType, FilterOperator
+            from de_funk.notebook.filters.dynamic import FilterType, FilterOperator
 
             for filter_id, value in active_filters.items():
                 if value is None:

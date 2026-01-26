@@ -14,7 +14,7 @@ import urllib.request
 import urllib.parse
 from urllib.error import HTTPError, URLError
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

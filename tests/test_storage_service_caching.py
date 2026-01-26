@@ -16,7 +16,7 @@ from pathlib import Path
 # Setup imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 setup_logging()
 logger = get_logger(__name__)
 
@@ -31,10 +31,10 @@ def get_storage_root() -> Path:
 
 def test_storage_service():
     """Test storage service with DuckDB connection."""
-    from core.connection import get_duckdb_connection
-    from models.registry import ModelRegistry
-    from app.services.storage_service import SilverStorageService
-    from utils.repo import get_repo_root
+from de_funk.core.connection import get_duckdb_connection
+from de_funk.models.registry import ModelRegistry
+    from de_funk.services.storage_service import SilverStorageService
+from de_funk.utils.repo import get_repo_root
 
     repo_root = get_repo_root()
     storage_root = get_storage_root()

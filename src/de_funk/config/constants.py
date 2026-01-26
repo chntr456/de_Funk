@@ -39,4 +39,4 @@ DEFAULT_RATE_LIMIT_PERIOD = 60  # seconds
 DEFAULT_REQUEST_TIMEOUT = 30  # seconds
 
 # Repo structure markers - used to find repo root
-REPO_MARKERS = ["configs", "core", ".git"]
+REPO_MARKERS = ["src", "configs", ".git"]

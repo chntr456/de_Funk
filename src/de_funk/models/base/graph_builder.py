@@ -377,7 +377,7 @@ class GraphBuilder:
 
         # Use backend type to determine how to load
         if self.backend == 'spark':
-            from models.api.dal import Table
+            from de_funk.models.api.dal import Table
             spark = getattr(self.connection, 'spark', self.connection)
             table = Table(spark, self.storage_router, table_ref)
             return table.read(merge_schema=True)
@@ -420,7 +420,7 @@ class GraphBuilder:
 
         # Use backend type to determine how to load
         if self.backend == 'spark':
-            from models.api.dal import Table
+            from de_funk.models.api.dal import Table
             spark = getattr(self.connection, 'spark', self.connection)
             table = Table(spark, self.storage_router, table_ref)
             return table.read(merge_schema=True)

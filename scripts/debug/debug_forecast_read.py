@@ -48,7 +48,7 @@ def main():
 
     # Step 1: Get Spark session
     print("\n[1] Getting Spark session...")
-    from orchestration.common.spark_session import get_spark
+from de_funk.orchestration.common.spark_session import get_spark
     spark = get_spark()
     print(f"    Got: {spark}")
     check_session(spark, "Initial")
@@ -76,7 +76,7 @@ def main():
     print("\n[3] Reading stocks Silver layer (like ForecastBuilder does)...")
 
     # Create StocksModel the same way ForecastBuilder does
-    from core.connection import get_spark_connection
+from de_funk.core.connection import get_spark_connection
     connection = get_spark_connection(spark)
 
     storage_cfg = {
@@ -85,12 +85,12 @@ def main():
         'bronze_root': str(storage_root / 'bronze'),
     }
 
-    from config.domain_loader import ModelConfigLoader
+from de_funk.config.domain_loader import ModelConfigLoader
     domains_dir = repo_root / "domains"
     loader = ModelConfigLoader(domains_dir)
     stocks_config = loader.load_model_config("stocks")
 
-    from models.domains.securities.stocks.model import StocksModel
+from de_funk.models.domains.securities.stocks.model import StocksModel
     stocks_model = StocksModel(
         connection=connection,
         storage_cfg=storage_cfg,

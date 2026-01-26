@@ -15,7 +15,7 @@ from pyspark.sql import DataFrame as SparkDataFrame
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
-from models.measures import DomainMeasures
+from de_funk.models.measures import DomainMeasures
 
 logger = logging.getLogger(__name__)
 

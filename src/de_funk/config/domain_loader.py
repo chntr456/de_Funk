@@ -18,7 +18,7 @@ The domains/ directory structure:
     └── securities/        # Securities models
 
 Usage:
-    from config.domain_loader import ModelConfigLoader
+    from de_funk.config.domain_loader import ModelConfigLoader
 
     loader = ModelConfigLoader(repo_root / "domains")
     config = loader.load_model_config("chicago_public_safety")

@@ -23,10 +23,10 @@ from pathlib import Path
 import time
 from datetime import datetime
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from core.context import RepoContext
+from de_funk.core.context import RepoContext
 
 
 class PipelineTester:
@@ -146,7 +146,7 @@ class PipelineTester:
         self.log("Test 3: Model Loading", 'HEADER')
 
         try:
-            from models.implemented.company.model import CompanyModel
+from de_funk.models.implemented.company.model import CompanyModel
 
             self.model = CompanyModel(
                 self.ctx.connection,
@@ -380,7 +380,7 @@ class PipelineTester:
                 self.test_skip("ETF Model", "etf.yaml not found")
                 return True
 
-            from models.implemented.etf.model import ETFModel
+from de_funk.models.implemented.etf.model import ETFModel
 
             etf_model = ETFModel(
                 self.ctx.connection,

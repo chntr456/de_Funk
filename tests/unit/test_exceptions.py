@@ -20,7 +20,7 @@ from pathlib import Path
 # Add repo root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from core.exceptions import (
+from de_funk.core.exceptions import (
     DeFunkError,
     ConfigurationError,
     MissingConfigError,

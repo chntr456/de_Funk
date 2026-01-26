@@ -36,7 +36,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 try:
@@ -45,7 +45,7 @@ try:
 except ImportError:
     PANDAS_AVAILABLE = False
 
-from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
 
 # Import our test scripts
 try:

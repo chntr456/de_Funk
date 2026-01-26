@@ -9,18 +9,18 @@ Configuration loaded from markdown documentation (single source of truth):
 - Data Sources/Endpoints/Chicago Data Portal/*.md
 
 Usage:
-    from datapipelines.providers.chicago import (
+    from de_funk.pipelines.providers.chicago import (
         ChicagoProvider,
         create_chicago_provider,
     )
-    from datapipelines.base import IngestorEngine
+    from de_funk.pipelines.base import IngestorEngine
 
     provider = create_chicago_provider(spark, docs_path)
     engine = IngestorEngine(provider, storage_cfg)
     results = engine.run()
 """
 
-from datapipelines.providers.chicago.chicago_provider import (
+from de_funk.pipelines.providers.chicago.chicago_provider import (
     ChicagoProvider,
     create_chicago_provider,
 )

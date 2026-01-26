@@ -37,10 +37,10 @@ import json
 import sys
 from pathlib import Path
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -126,7 +126,7 @@ def main():
 
     try:
         # Initialize Spark
-        from orchestration.common.spark_session import get_spark
+from de_funk.orchestration.common.spark_session import get_spark
         spark = get_spark(app_name='run_bronze_ingestion')
 
         # Load storage config
@@ -139,8 +139,8 @@ def main():
 
         # Initialize provider
         # Pass storage_path to enable raw layer (caching)
-        from datapipelines.providers.alpha_vantage import create_alpha_vantage_provider
-        from datapipelines.base.ingestor_engine import IngestorEngine
+from de_funk.pipelines.providers.alpha_vantage import create_alpha_vantage_provider
+from de_funk.pipelines.base.ingestor_engine import IngestorEngine
 
         raw_storage = storage_path if use_raw_layer else None
         provider = create_alpha_vantage_provider(spark=spark, docs_path=repo_root, storage_path=raw_storage)

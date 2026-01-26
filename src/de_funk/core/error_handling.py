@@ -7,8 +7,8 @@ Provides decorators and context managers for consistent error handling:
 - ErrorContext: Context manager for detailed error reporting
 
 Usage:
-    from core.error_handling import handle_exceptions, retry_on_exception, ErrorContext
-    from config.logging import get_logger
+from de_funk.core.error_handling import handle_exceptions, retry_on_exception, ErrorContext
+    from de_funk.config.logging import get_logger
 
     logger = get_logger(__name__)
 
@@ -37,7 +37,7 @@ import time
 from typing import Callable, Type, Tuple, Optional, Any, Union
 from datetime import datetime
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

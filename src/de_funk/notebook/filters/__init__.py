@@ -11,7 +11,7 @@ from .context import FilterContext
 from .dynamic import FilterType, FilterOperator, FilterConfig, FilterState, FilterCollection
 
 # Re-export core FilterEngine for backwards compatibility
-from core.session.filters import FilterEngine
+from de_funk.core.session.filters import FilterEngine
 
 __all__ = [
     "FilterEngine",  # From core.session.filters

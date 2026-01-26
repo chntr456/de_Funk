@@ -4,7 +4,7 @@ Ray Cluster Manager for distributed computing.
 Handles Ray cluster connection and resource management.
 
 Usage:
-    from orchestration.distributed.ray_cluster import RayCluster
+    from de_funk.orchestration.distributed.ray_cluster import RayCluster
 
     # Local execution (all cores on this machine)
     cluster = RayCluster()
@@ -27,7 +27,7 @@ import os
 from typing import Dict, Optional, Any
 from dataclasses import dataclass
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

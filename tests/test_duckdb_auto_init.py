@@ -11,7 +11,7 @@ Usage:
 import sys
 import tempfile
 from pathlib import Path
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 
 repo_root = setup_repo_imports()
 
@@ -26,7 +26,7 @@ def test_auto_init():
     print("\n[Test 1] In-memory database (should skip)")
     print("-" * 80)
 
-    from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
 
     conn_memory = DuckDBConnection(db_path=":memory:", enable_delta=False)
     print("✓ In-memory connection created (no view initialization expected)")

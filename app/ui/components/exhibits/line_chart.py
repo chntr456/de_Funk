@@ -34,7 +34,7 @@ def get_line_chart_html(
         HTML string with embedded Plotly chart and interactive dropdowns
     """
     import plotly.io as pio
-    from app.notebook.schema import ColumnReference
+    from de_funk.notebook.schema import ColumnReference
 
     # Helper function to extract field name from ColumnReference or string
     def extract_field_name(col_ref):

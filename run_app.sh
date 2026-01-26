@@ -24,7 +24,7 @@ if ! command -v streamlit &> /dev/null; then
 fi
 
 # Check if running from repo root
-if [ ! -d "configs/notebooks" ]; then
+if [ ! -d "notebooks" ]; then
     echo "ERROR: Please run this script from the repository root directory."
     echo ""
     echo "Usage:"

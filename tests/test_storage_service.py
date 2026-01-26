@@ -13,7 +13,7 @@ from pathlib import Path
 # Setup repo imports
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 import logging
@@ -21,9 +21,9 @@ logging.basicConfig(level=logging.DEBUG, format='%(name)s - %(levelname)s - %(me
 
 
 def main():
-    from core.context import RepoContext
-    from models.registry import ModelRegistry
-    from app.services.storage_service import SilverStorageService
+from de_funk.core.context import RepoContext
+from de_funk.models.registry import ModelRegistry
+    from de_funk.services.storage_service import SilverStorageService
 
     print("=" * 60)
     print("  Testing SilverStorageService Data Access")

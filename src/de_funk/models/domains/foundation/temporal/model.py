@@ -10,7 +10,7 @@ Version: 2.2 - Self-generating calendar (no bronze dependency)
 """
 
 from typing import Optional, Any, Dict
-from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
 from datetime import date, timedelta
 import logging
 

@@ -9,10 +9,10 @@ pipelines. It includes:
 - IngestorEngine: Generic ingestion engine
 - HTTP utilities: Rate limiting, key rotation, progress tracking
 """
-from datapipelines.base.facet import Facet, coalesce_existing, first_existing
-from datapipelines.base.http_client import HttpClient
-from datapipelines.base.key_pool import ApiKeyPool
-from datapipelines.base.progress_tracker import (
+from de_funk.pipelines.base.facet import Facet, coalesce_existing, first_existing
+from de_funk.pipelines.base.http_client import HttpClient
+from de_funk.pipelines.base.key_pool import ApiKeyPool
+from de_funk.pipelines.base.progress_tracker import (
     PipelineProgressTracker,
     PhaseProgress,
     PipelineStats,
@@ -22,15 +22,15 @@ from datapipelines.base.progress_tracker import (
     format_duration,
     format_eta
 )
-from datapipelines.base.metrics import MetricsCollector, TimingContext
-from datapipelines.base.provider import (
+from de_funk.pipelines.base.metrics import MetricsCollector, TimingContext
+from de_funk.pipelines.base.provider import (
     BaseProvider,
     DataType,
     FetchResult,
     WorkItemResult,
 )
-from datapipelines.base.socrata_provider import SocrataBaseProvider
-from datapipelines.base.ingestor_engine import IngestorEngine, IngestionResults, create_engine
+from de_funk.pipelines.base.socrata_provider import SocrataBaseProvider
+from de_funk.pipelines.base.ingestor_engine import IngestorEngine, IngestionResults, create_engine
 
 __all__ = [
     # Facet (Data Transformation)

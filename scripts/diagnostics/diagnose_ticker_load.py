@@ -14,10 +14,10 @@ import traceback
 from pathlib import Path
 
 # Setup imports
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -75,7 +75,7 @@ def main():
 
     # Step 3: DuckDBConnection class
     def step3_duckdb_connection_class():
-        from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
         conn = DuckDBConnection(db_path=":memory:", auto_init_views=False)
         print(f"   Delta enabled: {conn.delta_enabled}")
         return conn
@@ -151,7 +151,7 @@ def main():
     # Step 6: Read Silver layer directly (if exists)
     if silver_exists:
         def step6_read_silver_directly():
-            from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
             conn = DuckDBConnection(db_path=":memory:", auto_init_views=False)
 
             dim_stock_path = repo_root / "storage" / "silver" / "stocks" / "dim_stock"
@@ -184,7 +184,7 @@ def main():
             print("   ⚠️ Analytics DB not found - views not initialized")
             return False
 
-        from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
 
         # Connect WITHOUT auto_init_views to avoid the hang
         print("   Connecting (without auto_init_views)...")
@@ -235,7 +235,7 @@ def main():
 
     # Step 8: Test RepoContext (the entry point used by UI)
     def step8_repo_context():
-        from core.context import RepoContext
+from de_funk.core.context import RepoContext
 
         print("   Creating RepoContext...")
         ctx = RepoContext.from_repo_root(connection_type='duckdb')
@@ -248,7 +248,7 @@ def main():
     # Step 9: Test UniversalSession
     if ctx and ok:
         def step9_universal_session():
-            from models.api.session import UniversalSession
+from de_funk.models.api.session import UniversalSession
 
             print("   Creating UniversalSession...")
             session = UniversalSession(

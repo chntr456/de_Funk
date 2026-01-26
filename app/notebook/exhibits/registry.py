@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List, Optional, Type
 import importlib
 import yaml
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

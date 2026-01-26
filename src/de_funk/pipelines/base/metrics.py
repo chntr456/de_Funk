@@ -5,7 +5,7 @@ Provides timing and statistics collection for monitoring pipeline performance.
 Helps identify bottlenecks and track execution time for each step.
 
 Usage:
-    from datapipelines.base.metrics import MetricsCollector
+    from de_funk.pipelines.base.metrics import MetricsCollector
 
     metrics = MetricsCollector()
 
@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional
 from contextlib import contextmanager
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

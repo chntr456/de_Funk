@@ -90,7 +90,7 @@ class MarkdownNotebookParser:
             repo_root: Repository root path for resolving relative paths
         """
         if repo_root is None:
-            from utils.repo import get_repo_root
+            from de_funk.utils.repo import get_repo_root
             repo_root = get_repo_root()
         self.repo_root = repo_root
 
@@ -1038,7 +1038,7 @@ class MarkdownNotebookParser:
         The content before --- is YAML config, after --- is markdown content.
         If no ---, the entire content is treated as markdown with no config.
         """
-        from app.notebook.schema import MarkdownBlock
+        from de_funk.notebook.schema import MarkdownBlock
         import re
 
         # Check for config/content separator (--- on its own line, possibly indented)

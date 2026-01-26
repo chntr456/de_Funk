@@ -12,10 +12,10 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -30,12 +30,12 @@ def main():
     print()
 
     # Connect with DuckDB
-    from core.context import RepoContext
+from de_funk.core.context import RepoContext
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
     print(f"✓ Connected with backend: {type(ctx.connection).__name__}")
 
     # Create UniversalSession
-    from models.api.session import UniversalSession
+from de_funk.models.api.session import UniversalSession
     session = UniversalSession(
         connection=ctx.connection,
         storage_cfg=ctx.storage,

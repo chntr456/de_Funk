@@ -112,7 +112,7 @@ def print_schemas(
     # Initialize Spark if needed
     spark = None
     if use_spark:
-        from orchestration.common.spark_session import get_spark
+from de_funk.orchestration.common.spark_session import get_spark
         spark = get_spark("SchemaPrinter", config={"spark.driver.memory": "2g"})
 
     all_results = []

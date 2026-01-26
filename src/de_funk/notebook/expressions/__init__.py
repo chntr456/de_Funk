@@ -6,7 +6,7 @@ expressions like current_date(), start_of_quarter(), etc. in YAML configs.
 """
 from __future__ import annotations
 
-from app.notebook.expressions.resolver import (
+from de_funk.notebook.expressions.resolver import (
     ExpressionResolver,
     ExpressionContext,
 )

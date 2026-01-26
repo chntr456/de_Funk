@@ -31,7 +31,7 @@ import logging
 from typing import Dict, Any
 import traceback
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 # Configure logging
@@ -121,8 +121,8 @@ class DomainModelIntegrationTest:
     def test_session_initialization(self):
         """Test 1: UniversalSession initialization."""
         try:
-            from core.context import RepoContext
-            from models.api.session import UniversalSession
+from de_funk.core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
 
             print("  ✓ Imports successful")
 
@@ -178,7 +178,7 @@ class DomainModelIntegrationTest:
 
                 # Check if it's domain-specific or BaseModel
                 if model_class:
-                    from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
                     if model_class != BaseModel:
                         print(f"    ✓ Using domain-specific class: {model_class.__name__}")
                     else:
@@ -199,8 +199,8 @@ class DomainModelIntegrationTest:
     def test_measure_registry(self):
         """Test 3: Measure registry bootstrap."""
         try:
-            from models.measures.registry import MeasureRegistry
-            from models.measures.base_measure import MeasureType
+from de_funk.models.measures.registry import MeasureRegistry
+from de_funk.models.measures.base_measure import MeasureType
 
             print("  Checking registered measure types:")
 

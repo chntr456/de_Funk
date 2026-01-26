@@ -27,7 +27,7 @@ else:
 # Import StorageRouter and Table from canonical location (models/api/dal.py)
 # Fallback only exists for DuckDB-only environments without pyspark
 try:
-    from models.api.dal import StorageRouter, Table
+    from de_funk.models.api.dal import StorageRouter, Table
 except ImportError:
     from dataclasses import dataclass
     from typing import Dict, Any as DictAny
@@ -62,7 +62,7 @@ except ImportError:
 
     Table = None
 
-from core.session.filters import FilterEngine
+from de_funk.core.session.filters import FilterEngine
 
 try:
     import yaml
@@ -119,7 +119,7 @@ class UniversalSession:
         self.repo_root = repo_root
 
         # Model registry for dynamic loading
-        from models.registry import ModelRegistry
+        from de_funk.models.registry import ModelRegistry
         # Models are in domains/ directory (v2.0+ architecture)
         models_dir = repo_root / "domains"
         self.registry = ModelRegistry(models_dir)
@@ -128,7 +128,7 @@ class UniversalSession:
         self._models: Dict[str, Any] = {}
 
         # Build model dependency graph from registry (handles modular YAML)
-        from models.api.graph import ModelGraph
+        from de_funk.models.api.graph import ModelGraph
         self.model_graph = ModelGraph()
         try:
             # Use registry to handle modular YAML configs (v2.0+)
@@ -167,14 +167,14 @@ class UniversalSession:
     def _get_auto_join_handler(self):
         """Get or create AutoJoinHandler instance."""
         if self._auto_join_handler is None:
-            from models.api.auto_join import AutoJoinHandler
+            from de_funk.models.api.auto_join import AutoJoinHandler
             self._auto_join_handler = AutoJoinHandler(self)
         return self._auto_join_handler
 
     def _get_aggregation_handler(self):
         """Get or create AggregationHandler instance."""
         if self._aggregation_handler is None:
-            from models.api.aggregation import AggregationHandler
+            from de_funk.models.api.aggregation import AggregationHandler
             self._aggregation_handler = AggregationHandler(self)
         return self._aggregation_handler
 
@@ -263,7 +263,7 @@ class UniversalSession:
         try:
             model_class = self.registry.get_model_class(model_name)
         except ValueError:
-            from models.base.model import BaseModel
+            from de_funk.models.base.model import BaseModel
             model_class = BaseModel
             print(f"⚠ No custom class for {model_name}, using BaseModel")
 

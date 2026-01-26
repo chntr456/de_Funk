@@ -15,7 +15,7 @@ from pathlib import Path
 from datetime import datetime
 
 # Setup imports
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 
@@ -93,7 +93,7 @@ def main():
         return 1
 
     try:
-        from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
         success("DuckDBConnection imported")
 
         # Check if table() method exists
@@ -108,7 +108,7 @@ def main():
         errors_found.append(f"DuckDBConnection import failed: {e}")
 
     try:
-        from core.session.filters import FilterEngine
+from de_funk.core.session.filters import FilterEngine
         success("FilterEngine imported")
 
         # Check if _format_sql_value exists
@@ -131,7 +131,7 @@ def main():
 
     subheader("2.1 Connect to persistent database")
     try:
-        from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
         conn = DuckDBConnection(db_path=str(db_path), auto_init_views=False)
         success(f"Connected to: {db_path}")
         info(f"Delta enabled: {conn.delta_enabled}")
@@ -219,7 +219,7 @@ def main():
 
     subheader("3.1 Create RepoContext")
     try:
-        from core.context import RepoContext
+from de_funk.core.context import RepoContext
         ctx = RepoContext.from_repo_root(connection_type='duckdb')
         success(f"RepoContext created")
         info(f"Connection type: {type(ctx.connection).__name__}")
@@ -253,7 +253,7 @@ def main():
 
     subheader("4.1 Create UniversalSession")
     try:
-        from models.api.session import UniversalSession
+from de_funk.models.api.session import UniversalSession
         session = UniversalSession(
             connection=ctx.connection,
             storage_cfg=ctx.storage,
@@ -337,7 +337,7 @@ def main():
 
     subheader("5.1 Test _format_sql_value()")
     try:
-        from core.session.filters import FilterEngine
+from de_funk.core.session.filters import FilterEngine
 
         test_cases = [
             (1000000, "1000000"),

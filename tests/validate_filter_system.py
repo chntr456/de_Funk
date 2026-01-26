@@ -13,10 +13,10 @@ import sys
 from pathlib import Path
 
 # Setup imports
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -27,7 +27,7 @@ def validate_filter_sql_generation():
     print("VALIDATION 1: Filter SQL Generation")
     print("="*60 + "\n")
 
-    from core.session.filters import FilterEngine
+from de_funk.core.session.filters import FilterEngine
 
     tests_passed = 0
     tests_failed = 0
@@ -142,9 +142,9 @@ def validate_duckdb_filter_application():
     tests_failed = 0
 
     try:
-        from core.context import RepoContext
-        from models.api.session import UniversalSession
-        from core.session.filters import FilterEngine
+from de_funk.core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
+from de_funk.core.session.filters import FilterEngine
 
         ctx = RepoContext.from_repo_root(connection_type='duckdb')
         session = UniversalSession(

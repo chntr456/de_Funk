@@ -99,7 +99,7 @@ class DomainMeasures(ABC):
         if hasattr(self.model, 'session') and hasattr(self.model.session, 'spark'):
             return self.model.session.spark
         # Fallback: create one
-        from orchestration.common.spark_session import get_spark
+        from de_funk.orchestration.common.spark_session import get_spark
         return get_spark("DomainMeasures")
 
     # ============================================================

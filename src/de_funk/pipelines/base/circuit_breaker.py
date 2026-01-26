@@ -21,7 +21,7 @@ from enum import Enum
 from typing import Dict, Optional, Callable, Any
 from functools import wraps
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

@@ -12,7 +12,7 @@ Features:
 - Automatic retry with exponential backoff
 
 Usage:
-    from datapipelines.base.socrata_client import SocrataClient
+    from de_funk.pipelines.base.socrata_client import SocrataClient
 
     client = SocrataClient(
         base_url="https://data.cityofchicago.org",
@@ -47,7 +47,7 @@ import urllib.parse
 from typing import Dict, List, Optional, Any, Generator
 from urllib.error import HTTPError, URLError
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

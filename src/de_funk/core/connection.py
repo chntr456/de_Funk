@@ -11,8 +11,8 @@ from pathlib import Path
 import pandas as pd
 import logging
 
-from config.constants import DEFAULT_DUCKDB_PATH
-from utils.repo import get_repo_root
+from de_funk.config.constants import DEFAULT_DUCKDB_PATH
+from de_funk.utils.repo import get_repo_root
 
 logger = logging.getLogger(__name__)
 

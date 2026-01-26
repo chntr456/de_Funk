@@ -17,7 +17,7 @@ from pathlib import Path
 repo_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(repo_root))
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 import logging
 
 # Enable DEBUG logging to see auto-join trace
@@ -87,7 +87,7 @@ def validate_silver_layer():
         silver_root = local_silver  # Default to local for further checks
 
     # Now load context to verify DuckDB views
-    from core.context import RepoContext
+from de_funk.core.context import RepoContext
     ctx = RepoContext.from_repo_root(connection_type="duckdb")
 
     # Get storage config
@@ -255,8 +255,8 @@ def test_financial_statements_performance():
     print("\n[1] SETUP - Creating context and session...")
     print("-" * 70)
 
-    from core.context import RepoContext
-    from models.api.session import UniversalSession
+from de_funk.core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
 
     ctx, timings['create_context'] = time_operation(
         "Create RepoContext",

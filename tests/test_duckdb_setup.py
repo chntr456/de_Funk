@@ -34,7 +34,7 @@ import time
 import logging
 
 # Add repo root to path
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 try:
@@ -45,8 +45,8 @@ except ImportError as e:
     print("Install with: pip install duckdb pandas")
     sys.exit(1)
 
-from config import ConfigLoader
-from config.constants import DEFAULT_DUCKDB_PATH
+from de_funk.config import ConfigLoader
+from de_funk.config.constants import DEFAULT_DUCKDB_PATH
 
 logging.basicConfig(
     level=logging.INFO,

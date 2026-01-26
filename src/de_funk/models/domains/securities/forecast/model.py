@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Dict, Optional, Tuple
 from pathlib import Path
 
-from models.base.forecast_model import TimeSeriesForecastModel
+from de_funk.models.base.forecast_model import TimeSeriesForecastModel
 
 
 class ForecastModel(TimeSeriesForecastModel):
@@ -20,7 +20,7 @@ class ForecastModel(TimeSeriesForecastModel):
     Data is sourced from the stocks model (fact_stock_prices).
 
     Usage:
-        from models.domains.securities.forecast import ForecastModel
+        from de_funk.models.domains.securities.forecast import ForecastModel
 
         model = ForecastModel(connection, storage_cfg, model_cfg)
         model.set_session(session)  # Required for cross-model access

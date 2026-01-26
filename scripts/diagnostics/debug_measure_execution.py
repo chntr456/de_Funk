@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 
 # Setup imports
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 logging.basicConfig(
@@ -34,7 +34,7 @@ def test_inherited_measure():
     print("\n[1] LOADING CONFIGURATION")
     print("-" * 80)
 
-    from config.domain_loader import ModelConfigLoader
+from de_funk.config.domain_loader import ModelConfigLoader
     loader = ModelConfigLoader(Path("domains"))
     config = loader.load_model_config("stocks")
 
@@ -103,7 +103,7 @@ def test_inherited_measure():
 
     try:
         import json
-        from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
 
         # Load storage config
         with open(repo_root / "configs" / "storage.json") as f:
@@ -113,7 +113,7 @@ def test_inherited_measure():
         conn = DuckDBConnection(db_path=":memory:")
 
         # Instantiate model
-        from models.implemented.stocks.model import StocksModel
+from de_funk.models.implemented.stocks.model import StocksModel
 
         model = StocksModel(
             connection=conn,
@@ -136,7 +136,7 @@ def test_inherited_measure():
         print(f"\n[7] TESTING TABLE REFERENCE RESOLUTION")
         print("-" * 80)
 
-        from models.base.backend.duckdb_adapter import DuckDBAdapter
+from de_funk.models.base.backend.duckdb_adapter import DuckDBAdapter
         adapter = DuckDBAdapter(conn, model)
 
         # Try to resolve different table names
@@ -217,7 +217,7 @@ def test_inherited_measure():
     print(f"\n[10] FILTER ENGINE INVESTIGATION")
     print("-" * 80)
 
-    from core.session.filters import FilterEngine
+from de_funk.core.session.filters import FilterEngine
     print(f"✓ FilterEngine exists in core.session.filters")
     print(f"  Purpose: Runtime filter application (query-time)")
     print(f"  Methods: apply_filters(), apply_from_session()")
@@ -227,7 +227,7 @@ def test_inherited_measure():
     print("-" * 80)
 
     # Check if my filter code is even used
-    from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
     if hasattr(BaseModel, '_apply_filters'):
         print(f"✓ BaseModel._apply_filters() exists (my addition)")
         print(f"  Purpose: Build-time filter application (in _build_nodes)")

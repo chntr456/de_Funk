@@ -8,7 +8,7 @@ Provides the normalized foundation that all security-type models reference:
 Version: 3.0 - Normalized architecture
 """
 
-from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
 from typing import Optional, Any, List
 import logging
 

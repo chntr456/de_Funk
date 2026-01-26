@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Type, List
 import logging
 
-from models.base.builder import BaseModelBuilder, BuilderRegistry, BuildResult
+from de_funk.models.base.builder import BaseModelBuilder, BuilderRegistry, BuildResult
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class CompanyBuilder(BaseModelBuilder):
 
     def get_model_class(self) -> Type:
         """Return the CompanyModel class."""
-        from models.domains.corporate.company.model import CompanyModel
+        from de_funk.models.domains.corporate.company.model import CompanyModel
         return CompanyModel
 
     # pre_build inherited from BaseModelBuilder - reads required tables from config

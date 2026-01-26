@@ -16,11 +16,11 @@ from pathlib import Path
 from collections import defaultdict
 
 # Setup repo imports
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 import duckdb
-from config.logging import get_logger, setup_logging
+from de_funk.config.logging import get_logger, setup_logging
 
 logger = get_logger(__name__)
 

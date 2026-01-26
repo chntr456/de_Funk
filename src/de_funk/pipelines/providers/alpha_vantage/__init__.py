@@ -16,11 +16,11 @@ Pro tier: 75 requests/minute (1.25/sec)
 Free tier: 25 requests/day, 5 requests/minute
 
 Usage:
-    from datapipelines.providers.alpha_vantage import (
+    from de_funk.pipelines.providers.alpha_vantage import (
         AlphaVantageProvider,
         create_alpha_vantage_provider,
     )
-    from datapipelines.base import IngestorEngine
+    from de_funk.pipelines.base import IngestorEngine
 
     # Create provider
     provider = create_alpha_vantage_provider(spark, docs_path)
@@ -31,7 +31,7 @@ Usage:
     results = engine.run(work_items=["prices", "reference"])
 """
 
-from datapipelines.providers.alpha_vantage.alpha_vantage_provider import (
+from de_funk.pipelines.providers.alpha_vantage.alpha_vantage_provider import (
     AlphaVantageProvider,
     create_alpha_vantage_provider,
 )

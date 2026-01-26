@@ -2,8 +2,8 @@ from __future__ import annotations
 from pathlib import Path
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
-from config import ConfigLoader, AppConfig
-from config.logging import get_logger
+from de_funk.config import ConfigLoader, AppConfig
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -58,7 +58,7 @@ class RepoContext:
         connection = None
 
         if config.connection.type == "duckdb":
-            from core.connection import ConnectionFactory
+            from de_funk.core.connection import ConnectionFactory
             # Get DuckDB path from config
             duckdb_path = config.connection.duckdb.database_path
             duckdb_path.parent.mkdir(parents=True, exist_ok=True)
@@ -68,10 +68,10 @@ class RepoContext:
             spark = None
         else:
             # Spark mode
-            from orchestration.common.spark_session import get_spark
+            from de_funk.orchestration.common.spark_session import get_spark
             # Pass SparkConfig to get_spark for proper configuration
             spark = get_spark("CompanyPipeline", spark_config=config.connection.spark)
-            from core.connection import ConnectionFactory
+            from de_funk.core.connection import ConnectionFactory
             connection = ConnectionFactory.create("spark", spark_session=spark)
             logger.info("Created Spark connection")
 

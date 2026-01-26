@@ -26,8 +26,8 @@ except ImportError:
     HAS_SPARK = False
     DataFrame = None  # type: ignore
 
-from models.base.model import BaseModel
-from models.domains.securities.forecast import training_methods
+from de_funk.models.base.model import BaseModel
+from de_funk.models.domains.securities.forecast import training_methods
 
 
 class TimeSeriesForecastModel(BaseModel):

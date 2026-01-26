@@ -11,7 +11,7 @@ from pathlib import Path
 # Bootstrap: add repo to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from utils.repo import get_repo_root
+from de_funk.utils.repo import get_repo_root
 repo_root = get_repo_root()
 
 
@@ -21,8 +21,8 @@ def problem_1_measure_not_found():
     print("PROBLEM 1: Measure Not Found")
     print("=" * 70)
 
-    from core.context import RepoContext
-    from models.implemented.company.model import CompanyModel
+from de_funk.core.context import RepoContext
+from de_funk.models.implemented.company.model import CompanyModel
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
@@ -45,8 +45,8 @@ def problem_2_backend_not_supported():
     print("PROBLEM 2: Backend Issues")
     print("=" * 70)
 
-    from core.context import RepoContext
-    from models.implemented.company.model import CompanyModel
+from de_funk.core.context import RepoContext
+from de_funk.models.implemented.company.model import CompanyModel
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
@@ -71,8 +71,8 @@ def problem_3_table_not_found():
     print("PROBLEM 3: Table Not Found")
     print("=" * 70)
 
-    from core.context import RepoContext
-    from models.implemented.company.model import CompanyModel
+from de_funk.core.context import RepoContext
+from de_funk.models.implemented.company.model import CompanyModel
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
@@ -99,8 +99,8 @@ def problem_4_sql_generation_error():
     print("PROBLEM 4: SQL Generation Error")
     print("=" * 70)
 
-    from core.context import RepoContext
-    from models.implemented.company.model import CompanyModel
+from de_funk.core.context import RepoContext
+from de_funk.models.implemented.company.model import CompanyModel
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
@@ -126,8 +126,8 @@ def problem_5_performance_slow():
     print("PROBLEM 5: Performance Issues")
     print("=" * 70)
 
-    from core.context import RepoContext
-    from models.implemented.company.model import CompanyModel
+from de_funk.core.context import RepoContext
+from de_funk.models.implemented.company.model import CompanyModel
     import time
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
@@ -160,8 +160,8 @@ def problem_6_data_type_mismatch():
     print("PROBLEM 6: Data Type Issues")
     print("=" * 70)
 
-    from core.context import RepoContext
-    from models.implemented.company.model import CompanyModel
+from de_funk.core.context import RepoContext
+from de_funk.models.implemented.company.model import CompanyModel
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
@@ -185,8 +185,8 @@ def problem_7_weighted_measure_wrong_results():
     print("PROBLEM 7: Weighted Measure Validation")
     print("=" * 70)
 
-    from core.context import RepoContext
-    from models.implemented.company.model import CompanyModel
+from de_funk.core.context import RepoContext
+from de_funk.models.implemented.company.model import CompanyModel
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
@@ -234,8 +234,8 @@ def problem_8_etf_holdings_not_working():
     print("=" * 70)
 
     try:
-        from core.context import RepoContext
-        from models.implemented.etf.model import ETFModel
+from de_funk.core.context import RepoContext
+from de_funk.models.implemented.etf.model import ETFModel
 
         ctx = RepoContext.from_repo_root(connection_type='duckdb')
         etf_model = ETFModel(ctx.connection, ctx.storage, ctx.repo)

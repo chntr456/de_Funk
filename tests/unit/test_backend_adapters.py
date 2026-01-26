@@ -14,8 +14,8 @@ if str(REPO_ROOT) not in sys.path:
 
 import pytest
 import pandas as pd
-from models.base.backend.duckdb_adapter import DuckDBAdapter
-from models.base.backend.adapter import QueryResult
+from de_funk.models.base.backend.duckdb_adapter import DuckDBAdapter
+from de_funk.models.base.backend.adapter import QueryResult
 
 
 class TestDuckDBAdapter:
@@ -77,8 +77,8 @@ class TestSQLBuilder:
 
     def test_build_simple_aggregate(self, mock_model):
         """Test simple aggregation SQL generation."""
-        from models.base.backend.sql_builder import SQLBuilder
-        from models.base.backend.duckdb_adapter import DuckDBAdapter
+from de_funk.models.base.backend.sql_builder import SQLBuilder
+from de_funk.models.base.backend.duckdb_adapter import DuckDBAdapter
 
         adapter = DuckDBAdapter(mock_model.connection, mock_model)
         builder = SQLBuilder(adapter)
@@ -98,8 +98,8 @@ class TestSQLBuilder:
 
     def test_build_weighted_aggregate(self, mock_model):
         """Test weighted aggregation SQL generation."""
-        from models.base.backend.sql_builder import SQLBuilder
-        from models.base.backend.duckdb_adapter import DuckDBAdapter
+from de_funk.models.base.backend.sql_builder import SQLBuilder
+from de_funk.models.base.backend.duckdb_adapter import DuckDBAdapter
 
         adapter = DuckDBAdapter(mock_model.connection, mock_model)
         builder = SQLBuilder(adapter)
@@ -119,8 +119,8 @@ class TestSQLBuilder:
 
     def test_build_cte_query(self, mock_model):
         """Test CTE query building."""
-        from models.base.backend.sql_builder import SQLBuilder
-        from models.base.backend.duckdb_adapter import DuckDBAdapter
+from de_funk.models.base.backend.sql_builder import SQLBuilder
+from de_funk.models.base.backend.duckdb_adapter import DuckDBAdapter
 
         adapter = DuckDBAdapter(mock_model.connection, mock_model)
         builder = SQLBuilder(adapter)

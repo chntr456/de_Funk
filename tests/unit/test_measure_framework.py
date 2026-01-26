@@ -13,11 +13,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 import pytest
-from models.measures.base_measure import BaseMeasure, MeasureType
-from models.measures.registry import MeasureRegistry
-from models.measures.executor import MeasureExecutor
-from models.measures.simple import SimpleMeasure
-from models.measures.computed import ComputedMeasure
+from de_funk.models.measures.base_measure import BaseMeasure, MeasureType
+from de_funk.models.measures.registry import MeasureRegistry
+from de_funk.models.measures.executor import MeasureExecutor
+from de_funk.models.measures.simple import SimpleMeasure
+from de_funk.models.measures.computed import ComputedMeasure
 
 
 class TestMeasureRegistry:
@@ -220,7 +220,7 @@ class TestSimpleMeasure:
 
     def test_to_sql(self, mock_model):
         """Test SQL generation for simple measure."""
-        from models.base.backend.duckdb_adapter import DuckDBAdapter
+from de_funk.models.base.backend.duckdb_adapter import DuckDBAdapter
 
         config = {
             'name': 'avg_close',
@@ -270,7 +270,7 @@ class TestComputedMeasure:
 
     def test_to_sql(self, mock_model):
         """Test SQL generation for computed measure."""
-        from models.base.backend.duckdb_adapter import DuckDBAdapter
+from de_funk.models.base.backend.duckdb_adapter import DuckDBAdapter
 
         config = {
             'name': 'market_cap',

@@ -19,8 +19,8 @@ print("=" * 80)
 # Step 1: Initialize repo context and create session
 print("\n[STEP 1] Loading UniversalSession...")
 try:
-    from core.context import RepoContext
-    from models.api.session import UniversalSession
+from de_funk.core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
 
     ctx = RepoContext.from_repo_root(connection_type="duckdb")
     session = UniversalSession(

@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-    from config.domain_loader import ModelConfigLoader
+from de_funk.config.domain_loader import ModelConfigLoader
 
     repo_root = Path(__file__).resolve().parents[2]
     domains_dir = repo_root / "domains"

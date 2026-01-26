@@ -12,7 +12,7 @@ from __future__ import annotations
 import sys
 sys.path.insert(0, '.')
 
-from orchestration.common.spark_session import get_spark
+from de_funk.orchestration.common.spark_session import get_spark
 
 def diagnose():
     spark = get_spark('diagnose')

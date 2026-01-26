@@ -23,7 +23,7 @@ from unittest.mock import MagicMock, patch
 # Add repo root to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 
-from core.error_handling import (
+from de_funk.core.error_handling import (
     handle_exceptions,
     retry_on_exception,
     ErrorContext,

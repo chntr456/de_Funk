@@ -36,13 +36,13 @@ import yaml
 import json
 import traceback
 
-from utils.repo import setup_repo_imports, get_repo_root
+from de_funk.utils.repo import setup_repo_imports, get_repo_root
 repo_root = setup_repo_imports()
 
-from config import ConfigLoader
-from config.logging import get_logger, setup_logging
-from models.domains.securities.forecast import ForecastModel
-from models.api.session import UniversalSession
+from de_funk.config import ConfigLoader
+from de_funk.config.logging import get_logger, setup_logging
+from de_funk.models.domains.securities.forecast import ForecastModel
+from de_funk.models.api.session import UniversalSession
 
 logger = get_logger(__name__)
 
@@ -196,8 +196,8 @@ def run_forecast_pipeline(
     logger.info(f"Starting large cap forecast pipeline, min_market_cap={format_market_cap(min_market_cap)}, dry_run={dry_run}")
 
     # Initialize Spark
-    from orchestration.common.spark_session import get_spark
-    from core.connection import ConnectionFactory
+from de_funk.orchestration.common.spark_session import get_spark
+from de_funk.core.connection import ConnectionFactory
     spark_session = get_spark("LargeCapForecastPipeline")
     spark = ConnectionFactory.create("spark", spark_session=spark_session)
 

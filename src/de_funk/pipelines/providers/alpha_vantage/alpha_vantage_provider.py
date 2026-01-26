@@ -11,8 +11,8 @@ Features:
 - Integration with IngestorEngine for distributed cluster execution
 
 Usage:
-    from datapipelines.providers.alpha_vantage import create_alpha_vantage_provider
-    from datapipelines.base.ingestor_engine import IngestorEngine
+    from de_funk.pipelines.providers.alpha_vantage import create_alpha_vantage_provider
+    from de_funk.pipelines.base.ingestor_engine import IngestorEngine
 
     provider = create_alpha_vantage_provider(spark, docs_path)
     engine = IngestorEngine(provider, storage_cfg)
@@ -37,10 +37,10 @@ from pathlib import Path
 
 from pyspark.sql import DataFrame
 
-from datapipelines.base.provider import BaseProvider, DataType, FetchResult
-from datapipelines.base.http_client import HttpClient
-from datapipelines.base.key_pool import ApiKeyPool
-from config.logging import get_logger
+from de_funk.pipelines.base.provider import BaseProvider, DataType, FetchResult
+from de_funk.pipelines.base.http_client import HttpClient
+from de_funk.pipelines.base.key_pool import ApiKeyPool
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -483,7 +483,7 @@ class AlphaVantageProvider(BaseProvider):
         date parsing, metadata). This is the same pattern used by Chicago, Cook County,
         and other providers.
         """
-        from datapipelines.base.normalizer import SparkNormalizer
+        from de_funk.pipelines.base.normalizer import SparkNormalizer
 
         if not records:
             return self.spark.createDataFrame([], samplingRatio=1.0)
@@ -1169,7 +1169,7 @@ class AlphaVantageProvider(BaseProvider):
         Returns:
             Normalized DataFrame
         """
-        from datapipelines.base.normalizer import SparkNormalizer
+        from de_funk.pipelines.base.normalizer import SparkNormalizer
 
         endpoint_id = DATATYPE_TO_ENDPOINT.get(data_type)
         endpoint = self._endpoints.get(endpoint_id) if endpoint_id else None

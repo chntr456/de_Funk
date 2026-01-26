@@ -8,7 +8,7 @@ Components:
 - ForecastModel: Time series forecasting model
 - ForecastBuilder: Builder for pipeline integration
 """
-from models.domains.securities.forecast.model import ForecastModel
-from models.domains.securities.forecast.builder import ForecastBuilder
+from de_funk.models.domains.securities.forecast.model import ForecastModel
+from de_funk.models.domains.securities.forecast.builder import ForecastBuilder
 
 __all__ = ['ForecastModel', 'ForecastBuilder']

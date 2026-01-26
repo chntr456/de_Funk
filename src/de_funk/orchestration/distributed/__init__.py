@@ -12,7 +12,7 @@ Configuration:
     See orchestration.distributed.config for details.
 
 Usage:
-    from orchestration.distributed import RayCluster, load_cluster_config
+    from de_funk.orchestration.distributed import RayCluster, load_cluster_config
 
     # Load configuration
     config = load_cluster_config()
@@ -22,15 +22,15 @@ Usage:
     cluster.connect()
 
     # Run distributed forecasting
-    from orchestration.distributed.tasks import forecast_ticker
+    from de_funk.orchestration.distributed.tasks import forecast_ticker
     futures = [forecast_ticker.remote(ticker) for ticker in tickers]
     results = ray.get(futures)
 
     # Run distributed ingestion with rate limiting
-    from orchestration.distributed.key_manager import (
+    from de_funk.orchestration.distributed.key_manager import (
         KeyManagerRegistry, init_key_managers_from_env
     )
-    from orchestration.distributed.tasks import ingest_ticker
+    from de_funk.orchestration.distributed.tasks import ingest_ticker
 
     # Initialize key managers (reads from env vars)
     registry = init_key_managers_from_env()
@@ -40,9 +40,9 @@ Usage:
     futures = [ingest_ticker.remote(t, av_manager) for t in tickers]
     results = ray.get(futures)
 """
-from orchestration.distributed.ray_cluster import RayCluster
-from orchestration.distributed.config import load_cluster_config, ClusterConfig
-from orchestration.distributed.key_manager import (
+from de_funk.orchestration.distributed.ray_cluster import RayCluster
+from de_funk.orchestration.distributed.config import load_cluster_config, ClusterConfig
+from de_funk.orchestration.distributed.key_manager import (
     KeyManagerRegistry,
     init_key_managers_from_env,
     create_key_manager_for_provider,

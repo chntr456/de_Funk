@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Type
 import logging
 
-from models.base.builder import BaseModelBuilder, BuilderRegistry, BuildResult
+from de_funk.models.base.builder import BaseModelBuilder, BuilderRegistry, BuildResult
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class StocksBuilder(BaseModelBuilder):
 
     def get_model_class(self) -> Type:
         """Return the StocksModel class."""
-        from models.domains.securities.stocks.model import StocksModel
+        from de_funk.models.domains.securities.stocks.model import StocksModel
         return StocksModel
 
     # pre_build inherited from BaseModelBuilder - reads required tables from config
@@ -77,7 +77,7 @@ class StocksBuilder(BaseModelBuilder):
         logger.info("  Computing technical indicators...")
 
         try:
-            from models.domains.securities.stocks.technicals import compute_technicals
+            from de_funk.models.domains.securities.stocks.technicals import compute_technicals
 
             # Compute technicals using native Spark windowing (no batching needed)
             # CRITICAL: Pass spark session to avoid compute_technicals creating its own

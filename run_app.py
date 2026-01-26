@@ -22,8 +22,11 @@ log_file = repo_root / "logs" / "de_funk.log"
 if log_file.exists():
     log_file.write_text("")  # Clear the file
 
+# Add src/ to path for de_funk package
+sys.path.insert(0, str(repo_root / "src"))
+
 # Initialize logging early
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 # Setup logging before anything else
 setup_logging(repo_root=repo_root)
@@ -41,11 +44,11 @@ def main():
     logger.info("Starting notebook application")
 
     # Check if running from repo root
-    notebooks_dir = repo_root / "configs" / "notebooks"
+    notebooks_dir = repo_root / "notebooks"
 
     if not notebooks_dir.exists():
         logger.error(f"Notebooks directory not found: {notebooks_dir}")
-        print("ERROR: configs/notebooks directory not found.")
+        print("ERROR: notebooks directory not found.")
         print()
         print("Please run this script from the repository root directory.")
         print()

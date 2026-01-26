@@ -130,7 +130,7 @@ def render_exhibit_block(block: Dict[str, Any], notebook_session, connection, in
                 pdf = connection.to_pandas(df)
 
             # Render based on type
-            from app.notebook.schema import ExhibitType
+            from de_funk.notebook.schema import ExhibitType
             if exhibit.type == ExhibitType.METRIC_CARDS:
                 render_metric_cards(exhibit, pdf)
             elif exhibit.type == ExhibitType.LINE_CHART:

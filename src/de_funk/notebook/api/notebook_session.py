@@ -18,10 +18,10 @@ import logging
 from ..schema import NotebookConfig, Exhibit, ExhibitType
 from ..parsers import NotebookParser, MarkdownNotebookParser
 from ..filters.context import FilterContext
-from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
 
 logger = logging.getLogger(__name__)
-from app.services.storage_service import SilverStorageService
+from de_funk.services.storage_service import SilverStorageService
 import pandas as pd
 
 
@@ -53,7 +53,7 @@ class NotebookSession:
         self.connection = connection
         self.model_registry = model_registry
         if repo_root is None:
-            from utils.repo import get_repo_root
+            from de_funk.utils.repo import get_repo_root
             repo_root = get_repo_root()
         self.repo_root = repo_root
 
@@ -265,7 +265,7 @@ class NotebookSession:
             active_filters = filter_collection.get_active_filters()
 
             # Convert filter values to storage service format
-            from app.notebook.filters.dynamic import FilterType, FilterOperator
+            from de_funk.notebook.filters.dynamic import FilterType, FilterOperator
 
             for filter_id, value in active_filters.items():
                 if value is None:

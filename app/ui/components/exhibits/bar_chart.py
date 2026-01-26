@@ -34,8 +34,8 @@ def get_bar_chart_html(
         HTML string with embedded Plotly chart and interactive dropdowns
     """
     import plotly.io as pio
-    from config.logging import get_logger
-    from app.notebook.schema import ColumnReference
+    from de_funk.config.logging import get_logger
+    from de_funk.notebook.schema import ColumnReference
     logger = get_logger(__name__)
 
     # Helper function to extract field name from ColumnReference or string

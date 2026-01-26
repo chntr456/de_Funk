@@ -10,7 +10,7 @@ import pytest
 import tempfile
 from pathlib import Path
 
-from config.markdown_loader import (
+from de_funk.config.markdown_loader import (
     MarkdownConfigLoader,
     SchemaField,
     BronzeConfig,

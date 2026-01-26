@@ -24,10 +24,10 @@ from pathlib import Path
 
 # Setup imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 setup_repo_imports()
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -75,7 +75,7 @@ def main():
         return 1
 
     # Initialize Spark
-    from orchestration.common.spark_session import get_spark
+from de_funk.orchestration.common.spark_session import get_spark
     spark = get_spark("MarketCapSeeder")
 
     try:

@@ -883,7 +883,7 @@ class AutoJoinHandler:
         Returns:
             DataFrame with required columns (filtered and aggregated if specified)
         """
-        from core.session.filters import FilterEngine
+        from de_funk.core.session.filters import FilterEngine
 
         # Log input filters for debugging
         if filters:
@@ -918,7 +918,7 @@ class AutoJoinHandler:
         aggregations: Optional[Dict[str, str]] = None
     ) -> Any:
         """Execute joins using Spark DataFrame API with optional aggregation."""
-        from core.session.filters import FilterEngine
+        from de_funk.core.session.filters import FilterEngine
 
         table_sequence = join_plan['table_sequence']
         joins = join_plan.get('joins', [])
@@ -1014,7 +1014,7 @@ class AutoJoinHandler:
         aggregations: Optional[Dict[str, str]] = None
     ) -> Any:
         """Execute joins using DuckDB SQL against views with optional aggregation."""
-        from core.session.filters import FilterEngine
+        from de_funk.core.session.filters import FilterEngine
         import time
 
         table_sequence = join_plan['table_sequence']
@@ -1275,7 +1275,7 @@ class AutoJoinHandler:
         logger.info(f">>>>>> _execute_duckdb_joins_via_tables CALLED with filters={filters}")
         if group_by:
             logger.info(f">>>>>> SQL GROUP BY (tables): {group_by}, aggregations: {aggregations}")
-        from core.session.filters import FilterEngine
+        from de_funk.core.session.filters import FilterEngine
         import time
 
         table_sequence = join_plan['table_sequence']

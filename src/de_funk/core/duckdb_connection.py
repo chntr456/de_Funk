@@ -15,7 +15,7 @@ from typing import Dict, Any, Optional, List
 import pandas as pd
 from pathlib import Path
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 try:
     import duckdb
@@ -107,7 +107,7 @@ class DuckDBConnection(DataConnection):
         """
         try:
             # Get configured storage_path from run_config.json for validation
-            from utils.repo import get_repo_root
+            from de_funk.utils.repo import get_repo_root
             import json
 
             repo_root = get_repo_root()
@@ -212,7 +212,7 @@ class DuckDBConnection(DataConnection):
             logger.info("Initializing v2.0 model views...")
 
             # Import here to avoid circular dependency
-            from utils.repo import get_repo_root
+            from de_funk.utils.repo import get_repo_root
             from config import ConfigLoader
             import json
 

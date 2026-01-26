@@ -22,11 +22,11 @@ from typing import Optional
 # Bootstrap: add repo to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from utils.repo import get_repo_root
+from de_funk.utils.repo import get_repo_root
 repo_root = get_repo_root()
 
 from pyspark.sql import DataFrame
-from models.base.model import BaseModel
+from de_funk.models.base.model import BaseModel
 
 
 # ============================================================
@@ -733,7 +733,7 @@ TESTING YOUR MODEL:
 
 1. Validate YAML:
    ```python
-   from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
    registry = ModelRegistry(models_dir)
    config = registry.get_model_config('mymodel')  # Validates syntax
    ```

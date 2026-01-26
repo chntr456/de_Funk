@@ -4,7 +4,7 @@ Cluster Configuration Loader.
 Loads and validates cluster configuration from configs/cluster.yaml.
 
 Usage:
-    from orchestration.distributed.config import load_cluster_config, ClusterConfig
+    from de_funk.orchestration.distributed.config import load_cluster_config, ClusterConfig
 
     config = load_cluster_config()
     print(config.ray.mode)  # "local"
@@ -22,7 +22,7 @@ from typing import Dict, List, Optional, Any
 
 import yaml
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -281,7 +281,7 @@ def load_cluster_config(config_path: Optional[Path] = None) -> ClusterConfig:
                 config_path = home_config
             else:
                 # Use repo default
-                from utils.repo import get_repo_root
+                from de_funk.utils.repo import get_repo_root
                 config_path = Path(get_repo_root()) / 'configs' / 'cluster.yaml'
 
     # Load config
@@ -357,7 +357,7 @@ def get_storage_path(config: ClusterConfig, path_type: str) -> Path:
     if config.storage.type == "nfs":
         base = Path(config.storage.nfs.mount_point)
     else:
-        from utils.repo import get_repo_root
+        from de_funk.utils.repo import get_repo_root
         base = Path(get_repo_root())
 
     paths = {

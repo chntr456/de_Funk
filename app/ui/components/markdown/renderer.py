@@ -12,7 +12,7 @@ available via use_flat_renderer=False.
 import streamlit as st
 from typing import Dict, Any, List, Optional, Callable
 
-from app.notebook.schema import NotebookConfig
+from de_funk.notebook.schema import NotebookConfig
 
 from .toggle_container import ToggleContainer, apply_toggle_styles, expand_all, collapse_all
 from .styles import apply_markdown_styles, get_block_icon

@@ -5,7 +5,7 @@ These tasks are designed to run on Ray workers across the cluster.
 Each task is self-contained and loads data from shared storage.
 
 Usage:
-    from orchestration.distributed.tasks import forecast_ticker, ingest_ticker
+    from de_funk.orchestration.distributed.tasks import forecast_ticker, ingest_ticker
 
     # Submit tasks to cluster
     futures = [forecast_ticker.remote(ticker) for ticker in tickers]
@@ -474,12 +474,12 @@ def create_build_model_task():
             sys.path.insert(0, str(repo_path))
 
         try:
-            from config.logging import setup_logging, get_logger
+            from de_funk.config.logging import setup_logging, get_logger
             setup_logging()
             logger = get_logger(f"build_{model_name}")
 
-            from orchestration.common.spark_session import get_spark
-            from models.base.builder import BuilderRegistry, BuildContext
+            from de_funk.orchestration.common.spark_session import get_spark
+            from de_funk.models.base.builder import BuilderRegistry, BuildContext
 
             logger.info(f"Building model: {model_name}")
             logger.info(f"Storage path: {storage_path}")

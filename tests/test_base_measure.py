@@ -10,7 +10,7 @@ Usage:
 
 import sys
 from pathlib import Path
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 
 repo_root = setup_repo_imports()
 
@@ -21,7 +21,7 @@ def main():
 
     try:
         # Import registry
-        from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
 
         # Create registry
         models_dir = Path("configs/models")
@@ -48,8 +48,8 @@ def main():
         # Now try to instantiate the model
         print(f"\n[Attempting to load model instance...]")
 
-        from models.implemented.stocks.model import StocksModel
-        from core.duckdb_connection import DuckDBConnection
+from de_funk.models.implemented.stocks.model import StocksModel
+from de_funk.core.duckdb_connection import DuckDBConnection
         import json
 
         # Load storage config

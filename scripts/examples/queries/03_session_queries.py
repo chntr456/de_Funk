@@ -22,11 +22,11 @@ from datetime import datetime, timedelta
 # Bootstrap: add repo to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from utils.repo import get_repo_root
+from de_funk.utils.repo import get_repo_root
 repo_root = get_repo_root()
 
 from pyspark.sql import SparkSession, functions as F
-from models.api.session import UniversalSession
+from de_funk.models.api.session import UniversalSession
 
 
 # ============================================================
@@ -634,7 +634,7 @@ UNIVERSALSESSION QUERY PATTERNS - KEY TAKEAWAYS:
 
 1. INITIALIZATION:
    ```python
-   from models.api.session import UniversalSession
+from de_funk.models.api.session import UniversalSession
 
    session = UniversalSession(
        connection=spark,

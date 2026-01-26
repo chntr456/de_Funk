@@ -7,7 +7,7 @@ Renders key metrics as styled cards with formatted values.
 import streamlit as st
 import pandas as pd
 from typing import List
-from app.notebook.schema import MetricConfig, AggregationType, ColumnReference
+from de_funk.notebook.schema import MetricConfig, AggregationType, ColumnReference
 from .measure_selector import render_measure_selector
 
 

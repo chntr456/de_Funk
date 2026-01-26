@@ -43,7 +43,7 @@ from typing import Dict, List, Tuple, Optional
 import logging
 
 # Add repo root to path
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 try:
@@ -53,7 +53,7 @@ except ImportError:
     print("Install it with: pip install duckdb")
     sys.exit(1)
 
-from config import ConfigLoader
+from de_funk.config import ConfigLoader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -982,7 +982,7 @@ def main():
         db_path = args.db_path
     else:
         # Use from config (DuckDB config or default)
-        from config.constants import DEFAULT_DUCKDB_PATH
+from de_funk.config.constants import DEFAULT_DUCKDB_PATH
         db_path_str = config.connection.duckdb.database_path if hasattr(config.connection, 'duckdb') else DEFAULT_DUCKDB_PATH
         db_path = Path(db_path_str)
 

@@ -20,7 +20,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -46,7 +46,7 @@ def main():
     setup_logging()
 
     # Import from the domain module
-    from models.domains.securities.stocks.technicals import compute_technicals
+from de_funk.models.domains.securities.stocks.technicals import compute_technicals
 
     storage_path = Path(args.storage_path)
 
