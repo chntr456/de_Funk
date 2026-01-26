@@ -17,12 +17,12 @@ import sys
 import argparse
 from pathlib import Path
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 
 repo_root = setup_repo_imports()
 
-from orchestration.common.spark_session import get_spark
-from models.foundation.temporal.builders.calendar_builder import CalendarBuilder
+from de_funk.orchestration.common.spark_session import get_spark
+from de_funk.models.domains.foundation.temporal.builders.calendar_builder import CalendarBuilder
 
 
 def seed_calendar(storage_path: Path = None, spark=None) -> int:

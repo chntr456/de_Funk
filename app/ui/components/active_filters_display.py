@@ -5,7 +5,7 @@ Shows currently selected filter values dynamically from session state.
 """
 
 import streamlit as st
-from app.notebook.filters.dynamic import FilterCollection, FilterType
+from de_funk.notebook.filters.dynamic import FilterCollection, FilterType
 
 
 def render_active_filters_summary(filter_collection: FilterCollection):

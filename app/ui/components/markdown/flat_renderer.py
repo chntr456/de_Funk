@@ -14,7 +14,7 @@ Each row has a consistent column layout:
 import streamlit as st
 from typing import Dict, Any, List, Optional, Callable
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 

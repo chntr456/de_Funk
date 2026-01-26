@@ -21,12 +21,12 @@ from typing import List, Optional, Dict, Any
 # Bootstrap: add repo to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from utils.repo import get_repo_root
+from de_funk.utils.repo import get_repo_root
 repo_root = get_repo_root()
 
 # Import session and context
-from core.context import RepoContext
-from models.api.session import UniversalSession
+from de_funk.core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
 
 
 def setup_equity_model():

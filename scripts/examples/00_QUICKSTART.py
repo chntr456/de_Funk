@@ -14,7 +14,7 @@ from pathlib import Path
 # Bootstrap: add repo to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from utils.repo import get_repo_root
+from de_funk.utils.repo import get_repo_root
 repo_root = get_repo_root()
 
 from scripts.examples.parameter_interface import MeasureCalculator

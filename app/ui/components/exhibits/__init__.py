@@ -8,10 +8,20 @@ HTML output from any exhibit type, used for CSS grid layouts.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 import pandas as pd
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
+from de_funk.notebook.schema import ColumnReference
+
+
+def _extract_field_name(col_ref: Union[ColumnReference, str, None]) -> Optional[str]:
+    """Extract field name from ColumnReference object or return string as-is."""
+    if col_ref is None:
+        return None
+    if isinstance(col_ref, ColumnReference):
+        return col_ref.field
+    return col_ref
 
 from .metric_cards import render_metric_cards
 from .line_chart import get_line_chart_html
@@ -194,24 +204,25 @@ def _get_scatter_chart_html(exhibit: Any, pdf: pd.DataFrame) -> str:
     if not hasattr(exhibit, 'x_axis') or not exhibit.x_axis:
         return "<div>Scatter chart requires x_axis configuration</div>"
 
-    x_col = exhibit.x_axis.dimension
+    # Extract field names from ColumnReferences
+    x_col = _extract_field_name(exhibit.x_axis.dimension)
     y_col = None
 
     # Get y column from y_axis or measure_selector
     if hasattr(exhibit, 'y_axis') and exhibit.y_axis:
         if hasattr(exhibit.y_axis, 'measure'):
-            y_col = exhibit.y_axis.measure
+            y_col = _extract_field_name(exhibit.y_axis.measure)
         elif hasattr(exhibit.y_axis, 'dimension'):
-            y_col = exhibit.y_axis.dimension
+            y_col = _extract_field_name(exhibit.y_axis.dimension)
     elif hasattr(exhibit, 'measure_selector') and exhibit.measure_selector:
         ms = exhibit.measure_selector
         if hasattr(ms, 'default_measures') and ms.default_measures:
-            y_col = ms.default_measures[0]
+            y_col = _extract_field_name(ms.default_measures[0])
 
     if not y_col:
         return "<div>No y-axis configured for scatter chart</div>"
 
-    color = getattr(exhibit, 'color_by', None)
+    color = _extract_field_name(getattr(exhibit, 'color_by', None))
 
     fig = px.scatter(
         pdf,
@@ -243,12 +254,13 @@ def _get_heatmap_html(exhibit: Any, pdf: pd.DataFrame) -> str:
     y_col = None
     z_col = None
 
+    # Extract field names from ColumnReferences
     if hasattr(exhibit, 'x_axis') and exhibit.x_axis:
-        x_col = exhibit.x_axis.dimension
+        x_col = _extract_field_name(exhibit.x_axis.dimension)
     if hasattr(exhibit, 'y_axis') and exhibit.y_axis:
-        y_col = getattr(exhibit.y_axis, 'dimension', None) or getattr(exhibit.y_axis, 'measure', None)
+        y_col = _extract_field_name(getattr(exhibit.y_axis, 'dimension', None)) or _extract_field_name(getattr(exhibit.y_axis, 'measure', None))
     if hasattr(exhibit, 'color_by') and exhibit.color_by:
-        z_col = exhibit.color_by
+        z_col = _extract_field_name(exhibit.color_by)
 
     if not all([x_col, y_col, z_col]):
         return "<div>Heatmap requires x_axis, y_axis, and color_by configuration</div>"
@@ -281,16 +293,17 @@ def _get_dual_axis_chart_html(exhibit: Any, pdf: pd.DataFrame) -> str:
     if not hasattr(exhibit, 'x_axis') or not exhibit.x_axis:
         return "<div>Dual axis chart requires x_axis configuration</div>"
 
-    x_col = exhibit.x_axis.dimension
+    # Extract field names from ColumnReferences
+    x_col = _extract_field_name(exhibit.x_axis.dimension)
 
     # Get primary and secondary measures
     primary_measure = None
     secondary_measure = None
 
     if hasattr(exhibit, 'y_axis') and exhibit.y_axis:
-        primary_measure = getattr(exhibit.y_axis, 'measure', None)
+        primary_measure = _extract_field_name(getattr(exhibit.y_axis, 'measure', None))
     if hasattr(exhibit, 'y_axis_secondary') and exhibit.y_axis_secondary:
-        secondary_measure = getattr(exhibit.y_axis_secondary, 'measure', None)
+        secondary_measure = _extract_field_name(getattr(exhibit.y_axis_secondary, 'measure', None))
 
     if not primary_measure:
         return "<div>Dual axis chart requires primary y_axis measure</div>"
@@ -332,7 +345,8 @@ def _get_forecast_chart_html(exhibit: Any, pdf: pd.DataFrame) -> str:
     if not hasattr(exhibit, 'x_axis') or not exhibit.x_axis:
         return "<div>Forecast chart requires x_axis configuration</div>"
 
-    x_col = exhibit.x_axis.dimension
+    # Extract field name from ColumnReference
+    x_col = _extract_field_name(exhibit.x_axis.dimension)
     actual_col = getattr(exhibit, 'actual_column', 'actual')
     forecast_col = getattr(exhibit, 'forecast_column', 'forecast')
 
@@ -377,11 +391,12 @@ def _get_weighted_aggregate_chart_html(exhibit: Any, pdf: pd.DataFrame) -> str:
     if not hasattr(exhibit, 'x_axis') or not exhibit.x_axis:
         return "<div>Weighted aggregate chart requires x_axis configuration</div>"
 
-    x_col = exhibit.x_axis.dimension
+    # Extract field names from ColumnReferences
+    x_col = _extract_field_name(exhibit.x_axis.dimension)
     y_col = None
 
     if hasattr(exhibit, 'y_axis') and exhibit.y_axis:
-        y_col = getattr(exhibit.y_axis, 'measure', None)
+        y_col = _extract_field_name(getattr(exhibit.y_axis, 'measure', None))
 
     if not y_col:
         return "<div>Weighted aggregate chart requires y_axis measure</div>"

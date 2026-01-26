@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import argparse
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 
@@ -42,8 +42,8 @@ def main():
     print("=" * 80)
     print(f"Batch size: {args.batch_size} (memory optimization)")
 
-    from core.context import RepoContext
-    from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
+from de_funk.core.context import RepoContext
+from de_funk.pipelines.providers.alpha_vantage import AlphaVantageIngestor
 
     ctx = RepoContext.from_repo_root(connection_type="spark")
     ingestor = AlphaVantageIngestor(

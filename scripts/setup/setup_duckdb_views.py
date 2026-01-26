@@ -22,7 +22,7 @@ Features:
 - Creates views for ALL v2.0 models (temporal, company, stocks, options, etfs, futures)
 - Auto-detects Delta Lake vs Parquet format (uses delta_scan or read_parquet)
 - Points views to Silver layer tables (zero data duplication)
-- Creates alias views (stocks.fact_prices → stocks.fact_stock_prices) for DuckDB caching
+- Creates alias views (stocks.fact_prices → securities.fact_security_prices) for DuckDB caching
 - Backend-agnostic base measures work via schema aliases (ModelConfigLoader)
 - This script provides performance optimization by pre-creating database views
 - Handles missing tables gracefully (skips if not built yet)
@@ -43,7 +43,7 @@ from typing import Dict, List, Tuple, Optional
 import logging
 
 # Add repo root to path
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 try:
@@ -53,7 +53,7 @@ except ImportError:
     print("Install it with: pip install duckdb")
     sys.exit(1)
 
-from config import ConfigLoader
+from de_funk.config import ConfigLoader
 
 logging.basicConfig(
     level=logging.INFO,
@@ -117,17 +117,41 @@ class DuckDBViewSetup:
         else:
             return self.repo_root / 'storage' / 'bronze'
 
+    # Schema to directory mapping for legacy Silver layer paths
+    # Some schemas have different directory names in the Silver layer
+    SCHEMA_DIR_ALIASES = {
+        'temporal': ['temporal', 'core'],      # temporal model data may be in 'core' dir
+        'company': ['company', 'corporate'],   # company model data may be in 'corporate' dir
+    }
+
     def get_silver_path(self, model: str) -> Path:
         """Get Silver layer path for model (absolute path).
 
         If storage_root is set (e.g., /shared/storage), uses that.
         Otherwise falls back to repo_root/storage.
+
+        Handles legacy directory name aliases (e.g., 'temporal' -> 'core').
         """
+        base_path = self.storage_root if self.storage_root else self.repo_root / 'storage'
+
+        # Check if this model has directory aliases
+        dirs_to_try = self.SCHEMA_DIR_ALIASES.get(model, [model])
+
+        for dir_name in dirs_to_try:
+            if self.storage_root:
+                path = self.storage_root / 'silver' / dir_name
+            else:
+                relative_path = self.config.storage.get(f'{dir_name}_silver', f'storage/silver/{dir_name}')
+                path = self.repo_root / relative_path
+
+            if path.exists():
+                logger.debug(f"get_silver_path('{model}'): Found at {path}")
+                return path
+
+        # Return primary path even if it doesn't exist (caller will handle)
         if self.storage_root:
-            # Use explicit storage root (e.g., /shared/storage from run_config.json)
             return self.storage_root / 'silver' / model
         else:
-            # Fallback to repo-relative path
             relative_path = self.config.storage.get(f'{model}_silver', f'storage/silver/{model}')
             return self.repo_root / relative_path
 
@@ -144,18 +168,46 @@ class DuckDBViewSetup:
         Returns:
             True if view created, False if skipped
         """
-        # Check if path exists - try both nested (dims/facts) and flat structures
-        if not table_path.exists():
-            # Try flat structure (table directly under model folder)
-            # e.g., silver/stocks/dim_stock instead of silver/stocks/dims/dim_stock
-            flat_path = table_path.parent.parent / table
-            if flat_path.exists():
-                table_path = flat_path
-                logger.debug(f"Using flat path: {table_path}")
-            else:
-                logger.warning(f"⚠ Skipping {schema}.{table} - path not found: {table_path}")
-                self.skipped_views.append(f"{schema}.{table}")
-                return False
+        # Check if path exists - try multiple locations:
+        # 1. Original path (may be local or shared)
+        # 2. Flat structure (table directly under model folder)
+        # 3. Shared NFS storage (cluster builds write here)
+        paths_to_try = [table_path]
+
+        # Try flat structure
+        flat_path = table_path.parent.parent / table
+        if flat_path != table_path:
+            paths_to_try.append(flat_path)
+
+        # Try shared storage paths (NFS mount from cluster builds)
+        # Convert local path to shared path: storage/silver/X -> /shared/storage/silver/X
+        path_str = str(table_path)
+        if 'storage/silver/' in path_str and not path_str.startswith('/shared/'):
+            # Extract relative part after storage/silver/
+            rel_idx = path_str.find('storage/silver/')
+            rel_path = path_str[rel_idx + len('storage/'):]  # silver/model/...
+            shared_path = Path('/shared/storage') / rel_path
+            paths_to_try.append(shared_path)
+            # Also try shared flat path
+            shared_flat = shared_path.parent.parent / table
+            paths_to_try.append(shared_flat)
+
+        # Find first existing path
+        found_path = None
+        for p in paths_to_try:
+            if p.exists():
+                found_path = p
+                if p != table_path:
+                    logger.debug(f"Using alternate path: {p}")
+                break
+
+        if not found_path:
+            logger.warning(f"⚠ Skipping {schema}.{table} - path not found in any location")
+            logger.debug(f"  Tried: {[str(p) for p in paths_to_try]}")
+            self.skipped_views.append(f"{schema}.{table}")
+            return False
+
+        table_path = found_path
 
         # Check if this is a Delta table (has _delta_log directory)
         is_delta = (table_path / "_delta_log").exists() if table_path.is_dir() else False
@@ -205,40 +257,58 @@ SELECT * FROM {read_sql};
             return False
 
     def create_temporal_views(self, dry_run: bool = False):
-        """Create views for temporal model (calendar dimension)."""
+        """Create views for temporal model (calendar dimension).
+
+        Checks both 'temporal' and 'core' directories since the calendar
+        dimension may be stored under either name depending on the build version.
+        """
         logger.info("\n" + "="*80)
         logger.info("TEMPORAL MODEL VIEWS")
         logger.info("="*80)
 
-        silver_path = self.get_silver_path('temporal')
+        # Try multiple paths for calendar dimension (temporal vs core legacy naming)
+        base_path = self.storage_root if self.storage_root else self.repo_root / 'storage'
+        calendar_paths = [
+            base_path / 'silver' / 'temporal' / 'dims' / 'dim_calendar',
+            base_path / 'silver' / 'core' / 'dims' / 'dim_calendar',
+        ]
 
-        # dim_calendar
-        self.create_view(
-            schema='temporal',
-            table='dim_calendar',
-            table_path=silver_path / 'dims' / 'dim_calendar',
-            dry_run=dry_run
-        )
+        table_path = None
+        for path in calendar_paths:
+            if self._check_path_exists(path):
+                table_path = path
+                logger.debug(f"Found calendar dimension at: {path}")
+                break
 
-    def create_geography_views(self, dry_run: bool = False):
-        """Create views for geography model (US location dimensions)."""
+        if table_path:
+            self.create_view(
+                schema='temporal',
+                table='dim_calendar',
+                table_path=table_path,
+                dry_run=dry_run
+            )
+        else:
+            logger.warning(f"⚠ Skipping temporal.dim_calendar - not found at any of: {calendar_paths}")
+
+    def create_geospatial_views(self, dry_run: bool = False):
+        """Create views for geospatial model (geographic dimensions)."""
         logger.info("\n" + "="*80)
-        logger.info("GEOGRAPHY MODEL VIEWS")
+        logger.info("GEOSPATIAL MODEL VIEWS")
         logger.info("="*80)
 
-        silver_path = self.get_silver_path('geography')
+        silver_path = self.get_silver_path('geospatial')
 
-        # Dimensions
+        # Dimensions (v3.0 schema)
         dimensions = [
+            'dim_location',
             'dim_state',
             'dim_county',
-            'dim_city',
-            'dim_zip'
+            'dim_city'
         ]
 
         for dim in dimensions:
             self.create_view(
-                schema='geography',
+                schema='geospatial',
                 table=dim,
                 table_path=silver_path / 'dims' / dim,
                 dry_run=dry_run
@@ -252,10 +322,9 @@ SELECT * FROM {read_sql};
 
         silver_path = self.get_silver_path('company')
 
-        # Dimensions
+        # Dimensions (v3.0 schema)
         dimensions = [
-            'dim_company',
-            'dim_exchange'
+            'dim_company'
         ]
 
         for dim in dimensions:
@@ -266,10 +335,12 @@ SELECT * FROM {read_sql};
                 dry_run=dry_run
             )
 
-        # Facts
+        # Facts (v3.0 schema - financial statement facts)
         facts = [
-            'fact_company_fundamentals',
-            'fact_company_metrics'
+            'fact_income_statement',
+            'fact_balance_sheet',
+            'fact_cash_flow',
+            'fact_earnings'
         ]
 
         for fact in facts:
@@ -280,35 +351,114 @@ SELECT * FROM {read_sql};
                 dry_run=dry_run
             )
 
+    def create_securities_views(self, dry_run: bool = False):
+        """Create views for master securities model (v3.0 normalized architecture).
+
+        If securities-specific data doesn't exist but stocks data does,
+        creates alias views pointing to stocks data for backward compatibility.
+        """
+        logger.info("\n" + "="*80)
+        logger.info("SECURITIES MODEL VIEWS (Master)")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('securities')
+        stocks_path = self.get_silver_path('stocks')
+
+        # Create securities schema
+        if not dry_run:
+            self.conn.execute("CREATE SCHEMA IF NOT EXISTS securities;")
+
+        # Check if securities-specific data exists
+        securities_dim_path = silver_path / 'dims' / 'dim_security'
+        securities_fact_path = silver_path / 'facts' / 'fact_security_prices'
+
+        # Check alternative paths (shared storage, flat structure)
+        securities_paths_exist = self._check_path_exists(securities_dim_path) and self._check_path_exists(securities_fact_path)
+
+        # Check if stocks data exists as fallback
+        stocks_dim_path = stocks_path / 'dims' / 'dim_stock'
+        stocks_fact_path = stocks_path / 'facts' / 'fact_stock_prices'
+        stocks_paths_exist = self._check_path_exists(stocks_dim_path) and self._check_path_exists(stocks_fact_path)
+
+        if securities_paths_exist:
+            # Use actual securities data
+            logger.info("Using securities-specific data")
+            self.create_view(
+                schema='securities',
+                table='dim_security',
+                table_path=securities_dim_path,
+                dry_run=dry_run
+            )
+            self.create_view(
+                schema='securities',
+                table='fact_security_prices',
+                table_path=securities_fact_path,
+                dry_run=dry_run
+            )
+        elif stocks_paths_exist:
+            # Fallback: Create alias views pointing to stocks data
+            logger.info("Securities data not found, creating aliases from stocks data")
+
+            # Create dim_security as alias to stocks.dim_stock
+            self.create_view(
+                schema='securities',
+                table='dim_security',
+                table_path=stocks_dim_path,
+                dry_run=dry_run
+            )
+
+            # Create fact_security_prices as alias to stocks.fact_stock_prices
+            self.create_view(
+                schema='securities',
+                table='fact_security_prices',
+                table_path=stocks_fact_path,
+                dry_run=dry_run
+            )
+        else:
+            # No data available
+            logger.warning("⚠ Neither securities nor stocks data found - skipping securities views")
+            self.skipped_views.extend(["securities.dim_security", "securities.fact_security_prices"])
+
+    def _check_path_exists(self, path: Path) -> bool:
+        """Check if a path exists, including shared storage fallbacks."""
+        if path.exists():
+            return True
+
+        # Check shared storage
+        path_str = str(path)
+        if 'storage/silver/' in path_str and not path_str.startswith('/shared/'):
+            rel_idx = path_str.find('storage/silver/')
+            rel_path = path_str[rel_idx + len('storage/'):]
+            shared_path = Path('/shared/storage') / rel_path
+            if shared_path.exists():
+                return True
+
+        return False
+
     def create_stocks_views(self, dry_run: bool = False):
-        """Create views for stocks model."""
+        """Create views for stocks model (v3.0 normalized - FKs to securities)."""
         logger.info("\n" + "="*80)
         logger.info("STOCKS MODEL VIEWS")
         logger.info("="*80)
 
         silver_path = self.get_silver_path('stocks')
 
-        # Dimensions
-        dimensions = [
-            'dim_stock'
-        ]
+        # Dimensions (v3.0 schema - extends securities.dim_security, uses dims/ subdirectory)
+        self.create_view(
+            schema='stocks',
+            table='dim_stock',
+            table_path=silver_path / 'dims' / 'dim_stock',
+            dry_run=dry_run
+        )
 
-        for dim in dimensions:
-            self.create_view(
-                schema='stocks',
-                table=dim,
-                table_path=silver_path / 'dims' / dim,
-                dry_run=dry_run
-            )
-
-        # Facts
-        facts = [
-            'fact_stock_prices',
+        # Facts (v3.0 schema - stock-specific facts, prices are in securities, uses facts/ subdirectory)
+        stock_facts = [
             'fact_stock_technicals',
-            'fact_stock_fundamentals'
+            'fact_dividends',
+            'fact_splits'
         ]
 
-        for fact in facts:
+        for fact in stock_facts:
             self.create_view(
                 schema='stocks',
                 table=fact,
@@ -316,14 +466,23 @@ SELECT * FROM {read_sql};
                 dry_run=dry_run
             )
 
-        # Alias views for inherited base securities measures
-        # Base measures reference generic table names (fact_prices, dim_security)
-        # Create aliases so inherited measures work without modification
+        # Create fact_stock_prices view (primary price data for stocks)
+        self.create_view(
+            schema='stocks',
+            table='fact_stock_prices',
+            table_path=silver_path / 'facts' / 'fact_stock_prices',
+            dry_run=dry_run
+        )
+
+        # Alias views for backward compatibility
         alias_sql = """
--- Alias views for base securities compatibility
+-- Alias views for backward compatibility
+
+-- fact_prices alias points to stocks.fact_stock_prices
 CREATE OR REPLACE VIEW stocks.fact_prices AS
   SELECT * FROM stocks.fact_stock_prices;
 
+-- dim_security alias points to stocks dimension
 CREATE OR REPLACE VIEW stocks.dim_security AS
   SELECT * FROM stocks.dim_stock;
 """
@@ -507,6 +666,42 @@ CREATE OR REPLACE VIEW futures.dim_security AS
             except Exception as e:
                 logger.warning(f"⚠ Could not create alias views: {e}")
 
+    def create_forecast_views(self, dry_run: bool = False):
+        """Create views for forecast model."""
+        logger.info("\n" + "="*80)
+        logger.info("FORECAST MODEL VIEWS")
+        logger.info("="*80)
+
+        silver_path = self.get_silver_path('forecast')
+
+        # Dimensions (v3.0 schema)
+        dimensions = [
+            'dim_model_registry'
+        ]
+
+        for dim in dimensions:
+            self.create_view(
+                schema='forecast',
+                table=dim,
+                table_path=silver_path / 'dims' / dim,
+                dry_run=dry_run
+            )
+
+        # Facts (v3.0 schema)
+        facts = [
+            'fact_forecast_price',
+            'fact_forecast_volume',
+            'fact_forecast_metrics'
+        ]
+
+        for fact in facts:
+            self.create_view(
+                schema='forecast',
+                table=fact,
+                table_path=silver_path / 'facts' / fact,
+                dry_run=dry_run
+            )
+
     def create_bronze_views(self, dry_run: bool = False):
         """
         Create views for all Bronze layer tables.
@@ -579,28 +774,51 @@ CREATE OR REPLACE VIEW futures.dim_security AS
         logger.info("HELPER VIEWS")
         logger.info("="*80)
 
-        # Helper: Stock prices with company info
-        # Note: Use 'helpers' schema instead of 'analytics' to avoid ambiguity
-        # with the 'analytics.db' database/catalog name
-        helper_sql = """
+        # First, check what columns exist in securities.fact_security_prices
+        # to handle schema variations (trade_date vs date, volume_weighted may not exist)
+        try:
+            cols_result = self.conn.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'securities'
+                AND table_name = 'fact_security_prices'
+            """).fetchall()
+            fact_cols = {r[0] for r in cols_result}
+
+            # Determine date column name
+            date_col = 'trade_date' if 'trade_date' in fact_cols else 'date'
+
+            # Check if volume_weighted exists
+            has_volume_weighted = 'volume_weighted' in fact_cols
+        except Exception:
+            # Default fallback
+            date_col = 'date'
+            has_volume_weighted = False
+
+        # Build helper SQL with correct column names
+        volume_weighted_col = "p.volume_weighted," if has_volume_weighted else ""
+
+        helper_sql = f"""
 CREATE OR REPLACE VIEW helpers.stock_prices_enriched AS
 SELECT
-    p.ticker,
-    p.trade_date,
+    sec.ticker,
+    p.{date_col} as trade_date,
     p.open,
     p.high,
     p.low,
     p.close,
     p.volume,
-    p.volume_weighted,
+    {volume_weighted_col}
     c.company_name,
     c.sector,
     c.industry,
-    c.market_cap,
-    c.exchange_code
-FROM stocks.fact_stock_prices p
-LEFT JOIN stocks.dim_stock s ON p.ticker = s.ticker
-LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
+    s.market_cap,
+    sec.exchange_code
+FROM securities.fact_security_prices p
+JOIN securities.dim_security sec ON p.security_id = sec.security_id
+LEFT JOIN stocks.dim_stock s ON sec.security_id = s.security_id
+LEFT JOIN company.dim_company c ON s.company_id = c.company_id
+WHERE sec.asset_type = 'stocks';
 """
 
         if dry_run:
@@ -654,8 +872,10 @@ LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
         logger.info(f"\nConnect with:")
         logger.info(f"  python -c \"import duckdb; conn = duckdb.connect('{self.db_path}')\"")
         logger.info(f"\nQuery examples:")
-        logger.info(f"  -- Silver layer (dimensional models)")
-        logger.info(f"  SELECT * FROM stocks.fact_stock_prices LIMIT 10;")
+        logger.info(f"  -- Silver layer (v3.0 normalized architecture)")
+        logger.info(f"  SELECT * FROM securities.fact_security_prices LIMIT 10;")
+        logger.info(f"  SELECT * FROM securities.dim_security LIMIT 10;")
+        logger.info(f"  SELECT * FROM stocks.dim_stock LIMIT 10;")
         logger.info(f"  SELECT * FROM company.dim_company LIMIT 10;")
         logger.info(f"")
         logger.info(f"  -- Bronze layer (raw ingested data)")
@@ -677,11 +897,13 @@ LEFT JOIN company.dim_company c ON s.company_id = c.company_id;
             if include_bronze:
                 self.create_bronze_views(dry_run=dry_run)
 
-            # v2.0 Silver models
+            # v3.0 Silver models (normalized architecture)
             self.create_temporal_views(dry_run=dry_run)
-            self.create_geography_views(dry_run=dry_run)
+            self.create_geospatial_views(dry_run=dry_run)
+            self.create_securities_views(dry_run=dry_run)  # Master securities - must be before stocks
             self.create_company_views(dry_run=dry_run)
-            self.create_stocks_views(dry_run=dry_run)
+            self.create_stocks_views(dry_run=dry_run)  # Stocks FKs to securities
+            self.create_forecast_views(dry_run=dry_run)
             self.create_options_views(dry_run=dry_run)
             self.create_etfs_views(dry_run=dry_run)
             self.create_futures_views(dry_run=dry_run)
@@ -760,7 +982,7 @@ def main():
         db_path = args.db_path
     else:
         # Use from config (DuckDB config or default)
-        from config.constants import DEFAULT_DUCKDB_PATH
+from de_funk.config.constants import DEFAULT_DUCKDB_PATH
         db_path_str = config.connection.duckdb.database_path if hasattr(config.connection, 'duckdb') else DEFAULT_DUCKDB_PATH
         db_path = Path(db_path_str)
 

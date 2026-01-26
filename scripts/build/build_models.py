@@ -21,6 +21,10 @@ Usage:
 
 from __future__ import annotations
 
+# Load .env BEFORE any other imports that might use env vars
+from dotenv import load_dotenv
+load_dotenv()
+
 import sys
 import argparse
 import logging
@@ -29,11 +33,18 @@ from pathlib import Path
 from datetime import datetime, date, timedelta
 from typing import List, Optional, Dict
 
-from utils.repo import setup_repo_imports
+# Add repo root to path BEFORE importing project modules
+# This is needed when running via spark-submit where the path isn't pre-configured
+_script_dir = Path(__file__).resolve().parent
+_repo_root = _script_dir.parent.parent  # scripts/build -> scripts -> repo_root
+if str(_repo_root) not in sys.path:
+    sys.path.insert(0, str(_repo_root))
+
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from config.logging import setup_logging, get_logger
-from models.base.builder import (
+from de_funk.config.logging import setup_logging, get_logger
+from de_funk.models.base.builder import (
     BaseModelBuilder,
     BuilderRegistry,
     BuildContext,
@@ -47,15 +58,17 @@ def get_spark_session(app_name: str = "ModelBuilder"):
     """
     Create and return a Spark session with Delta Lake support.
 
+    Memory is configured automatically by get_spark() based on cluster vs local mode.
+    Override with SPARK_DRIVER_MEMORY and SPARK_EXECUTOR_MEMORY env vars if needed.
+
     Returns:
         SparkSession
     """
-    from orchestration.common.spark_session import get_spark
+from de_funk.orchestration.common.spark_session import get_spark
 
     return get_spark(
         app_name=app_name,
         config={
-            "spark.driver.memory": "8g",
             "spark.sql.parquet.compression.codec": "snappy",
         }
     )
@@ -80,11 +93,10 @@ def load_storage_config(repo_root: Path, storage_root: Optional[Path] = None) ->
     """
     from config import ConfigLoader
 
-    # Load config from ConfigLoader (reads run_config.json storage_path)
-    # ConfigLoader will raise ValueError if storage_path not configured
+    # Load only storage config (silver build doesn't need API/provider configs)
+    # This is faster and cleaner than loading the full config
     loader = ConfigLoader(repo_root=repo_root)
-    config = loader.load()
-    storage_cfg = config.storage  # Already resolved from run_config.json
+    storage_cfg = loader.load_storage()  # Just storage paths, no API configs
 
     # CLI override for testing only
     if storage_root:
@@ -98,19 +110,18 @@ def load_storage_config(repo_root: Path, storage_root: Optional[Path] = None) ->
 
 
 def discover_builders(repo_root: Path) -> None:
-    """Discover and register all model builders from foundation and domain."""
-    # Discover from both foundation (temporal) and domain (company, stocks, etc.)
-    for subdir in ["foundation", "domain"]:
-        models_path = repo_root / "models" / subdir
-        if models_path.exists():
-            BuilderRegistry.discover(models_path)
-            logger.debug(f"Discovered builders from models/{subdir}")
+    """Discover and register all model builders from the unified domains directory."""
+    # New unified structure: models/domains/{category}/{model}/builder.py
+    domains_path = repo_root / "models" / "domains"
+    if domains_path.exists():
+        BuilderRegistry.discover(domains_path)
+        logger.debug(f"Discovered builders from models/domains")
 
     total = len(BuilderRegistry.all())
     if total > 0:
         logger.info(f"Discovered {total} builders: {', '.join(BuilderRegistry.all().keys())}")
     else:
-        logger.warning("No builders discovered. Check models/foundation/*/builder.py and models/domain/*/builder.py")
+        logger.warning("No builders discovered. Check models/domains/*/builder.py")
 
 
 def build_models(
@@ -120,7 +131,8 @@ def build_models(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     max_tickers: Optional[int] = None,
-    storage_root: Optional[Path] = None
+    storage_root: Optional[Path] = None,
+    skip_deps: bool = False
 ) -> Dict[str, BuildResult]:
     """
     Build specified models (or all) using the builder registry.
@@ -133,6 +145,7 @@ def build_models(
         date_to: End date for data
         max_tickers: Max tickers to process
         storage_root: Optional custom storage root (e.g., /shared/storage for NFS)
+        skip_deps: If True, skip building dependencies (assumes they exist)
 
     Returns:
         Dict mapping model name to BuildResult
@@ -152,7 +165,7 @@ def build_models(
     available_builders = BuilderRegistry.all()
 
     if not available_builders:
-        logger.error("No builders discovered. Check models/domain/*/builder.py files.")
+        logger.error("No builders discovered. Check models/domains/*/builder.py files.")
         return {}
 
     if models:
@@ -168,9 +181,14 @@ def build_models(
         logger.error("No models to build")
         return {}
 
-    # Get build order (respects dependencies)
-    build_order = BuilderRegistry.get_build_order(models_to_build)
-    logger.info(f"Build order: {' -> '.join(build_order)}")
+    # Get build order (respects dependencies unless skip_deps is True)
+    if skip_deps:
+        # Skip dependency resolution - just build the requested models
+        build_order = models_to_build
+        logger.info(f"Skipping dependencies, building only: {' -> '.join(build_order)}")
+    else:
+        build_order = BuilderRegistry.get_build_order(models_to_build)
+        logger.info(f"Build order: {' -> '.join(build_order)}")
 
     # Initialize Spark
     if not dry_run:
@@ -232,9 +250,12 @@ def build_models(
         print(f"  Failed: {failed} models")
     print("-" * 70 + "\n")
 
-    # Cleanup Spark
+    # Cleanup Spark (gracefully handle OOM during shutdown)
     if spark and not dry_run:
-        spark.stop()
+        try:
+            spark.stop()
+        except Exception as e:
+            logger.warning(f"Spark shutdown warning (builds completed): {type(e).__name__}")
 
     return results
 
@@ -296,6 +317,12 @@ Examples:
         help='Custom storage root path (e.g., /shared/storage for NFS). '
              'Overrides default repo-local storage paths.'
     )
+    parser.add_argument(
+        '--skip-deps',
+        action='store_true',
+        help='Skip building dependencies, only build specified models. '
+             'Assumes dependencies already exist in Silver layer.'
+    )
 
     args = parser.parse_args()
 
@@ -313,7 +340,8 @@ Examples:
             date_from=args.date_from,
             date_to=args.date_to,
             max_tickers=args.max_tickers,
-            storage_root=storage_root
+            storage_root=storage_root,
+            skip_deps=args.skip_deps
         )
 
         # Exit with error if any builds failed

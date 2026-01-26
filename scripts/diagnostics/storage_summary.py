@@ -23,7 +23,7 @@ from datetime import datetime
 from dataclasses import dataclass
 from typing import List, Optional
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 import duckdb

@@ -1,13 +1,29 @@
 # CLAUDE.md - AI Assistant Guide for de_Funk
 
-**Last Updated**: 2025-12-23
-**Version**: 2.5
+**Last Updated**: 2026-01-25
+**Version**: 3.0
 
 This document provides comprehensive guidance for AI assistants (like Claude) working with the de_Funk codebase. It covers project structure, architecture patterns, development workflows, and key conventions.
 
 **Architecture Diagram**: See `docs/architecture-diagram.drawio` for visual representation of the system architecture.
 
-**Recent Updates (v2.6)** - Script Consolidation & Spark Pipeline:
+**Recent Updates (v3.0)** - Repository Structure Reorganization (January 2026):
+- **✅ Python Package Consolidation**: All Python code moved to `src/de_funk/` package
+  - Standard Python packaging with `pyproject.toml`
+  - Clean namespace: `from de_funk.models.api.session import UniversalSession`
+  - `datapipelines/` renamed to `de_funk.pipelines/`
+- **✅ User-Browsable Top-Level Folders**:
+  - `domains/` - Domain model configs (markdown with YAML front matter)
+  - `data_sources/` - Provider and endpoint documentation
+  - `exhibits/` - Exhibit type definitions
+  - `notebooks/` - User notebooks (moved from configs/notebooks/)
+- **✅ Flat configs/** - No subdirectories, all runtime config at root
+- **✅ Tests Relocated**: `scripts/test/` → `tests/` at root
+- **✅ docs/ Reorganized**: `vault/` → `_archive/vault/`, `Guides/` → `docs/guides/`
+- **✅ app/ Split**: Backend notebook code moved to `de_funk.notebook/` and `de_funk.services/`
+  - UI components remain at `app/` (deprecated, deleted after React migration)
+
+**Previous Updates (v2.6)** - Script Consolidation & Spark Pipeline:
 - **✅ Spark-Based Pipeline**: Direct Spark execution for Bronze ingestion and Silver builds
   - NFS shared storage at `/shared/storage`
   - Profile-based configuration via `run_config.json`
@@ -15,7 +31,7 @@ This document provides comprehensive guidance for AI assistants (like Claude) wo
   - Removed Ray-based cluster scripts (migrated to pure Spark)
   - Consolidated build scripts to `build_models.py`
   - Consolidated ingest scripts to `run_bronze_ingestion.py`
-  - Main test script: `test_full_pipeline_spark.sh`
+  - Main test script: `test_pipeline.sh`
 - **✅ Foundation vs Domain Models**: `models/foundation/` for base models (temporal), `models/domain/` for domain-specific
   - BuilderRegistry discovers from both directories
   - TemporalBuilder moved from domain/ to foundation/
@@ -150,117 +166,100 @@ The current implementation demonstrates the framework with financial and economi
 
 ## Repository Structure
 
+**v3.0 Structure** (January 2026) - Python code consolidated into `src/de_funk/` package:
+
 ```
 de_Funk/
-├── app/                      # Streamlit UI application
-│   ├── notebook/            # Notebook system (parsers, managers, filters)
-│   ├── services/            # Business logic services
-│   └── ui/                  # Streamlit components & main app
-│       ├── components/
-│       │   └── markdown/    # Modular markdown renderer (v2.2 refactor)
-│       ├── state/           # Session state management (v2.2)
-│       └── callbacks/       # UI event handlers (v2.2)
-├── config/                   # Centralized configuration system
-│   ├── __init__.py          # ConfigLoader and typed models
-│   ├── loader.py            # Configuration loading with precedence
-│   ├── model_loader.py      # ModelConfigLoader with YAML inheritance (v2.0)
-│   ├── models.py            # Type-safe config dataclasses
-│   └── constants.py         # Default configuration values
-├── configs/
-│   ├── models/              # YAML model configurations
-│   │   ├── _base/           # Base templates for inheritance (v2.0)
-│   │   │   └── securities/  # Base securities schema/graph/measures
-│   │   ├── company/         # Company model (modular: model/schema/graph/measures)
-│   │   ├── stocks/          # Stocks model (modular + Python measures)
-│   │   ├── options/         # Options model (partial implementation)
-│   │   ├── etfs/            # ETFs model (skeleton)
-│   │   ├── futures/         # Futures model (skeleton)
-│   │   └── [legacy models]  # equity.yaml, corporate.yaml (deprecated)
-│   ├── notebooks/           # Markdown notebook definitions
-│   ├── pipelines/           # API endpoint configurations (consolidated)
-│   │   ├── alpha_vantage_endpoints.json  # Alpha Vantage API configuration
-│   │   ├── bls_endpoints.json   # BLS API configuration
-│   │   └── chicago_endpoints.json  # Chicago API configuration
-│   └── storage.json         # Storage paths and table mappings (v2.0 updated)
-├── core/
-│   ├── context.py           # RepoContext (now uses ConfigLoader)
-│   └── session/             # Core session & connection management
-├── datapipelines/
-│   ├── base/                # Base classes for pipeline components
-│   ├── facets/              # Data transformation facets
-│   ├── ingestors/           # Data ingestion orchestration
-│   └── providers/           # Provider-specific implementations
-│       ├── alpha_vantage/   # Stock market data (Alpha Vantage - v2.0)
-│       ├── chicago/         # Municipal data (Chicago Data Portal)
-│       └── bls/             # Economic data (Bureau of Labor Statistics)
-├── models/
-│   ├── api/                 # Model sessions & registry
-│   │   ├── session.py       # UniversalSession (v2.2: modular)
-│   │   ├── auto_join.py     # Auto-join operations (v2.2)
-│   │   └── aggregation.py   # Data aggregation (v2.2)
-│   ├── base/                # BaseModel class framework (v2.2: modular)
-│   │   ├── model.py         # Core BaseModel (composition pattern)
-│   │   ├── builder.py       # BaseModelBuilder with BuilderRegistry
-│   │   ├── graph_builder.py # Graph building and node loading
-│   │   ├── table_accessor.py # Table access and schema inspection
-│   │   ├── measure_calculator.py # Measure calculations
-│   │   └── model_writer.py  # Persistence to storage
-│   ├── builders/            # Model building utilities
-│   ├── measures/            # Measure framework (simple, computed, weighted, Python)
-│   ├── foundation/          # Foundational models (no dependencies) - v2.5
-│   │   └── temporal/        # Calendar dimension
-│   │       ├── model.py     # TemporalModel
-│   │       └── builder.py   # TemporalBuilder (registered with BuilderRegistry)
-│   └── domain/              # Domain-specific models - v2.5
-│       ├── company/         # Corporate entities (model.py, builder.py)
-│       ├── stocks/          # Stock securities (model.py, builder.py, measures.py)
-│       ├── options/         # Options contracts [PARTIAL]
-│       ├── etfs/            # Exchange-traded funds [SKELETON]
-│       ├── futures/         # Futures contracts [SKELETON]
-│       ├── macro/           # Economic indicators
-│       ├── city_finance/    # Municipal finance
-│       └── forecast/        # Time series predictions
-├── orchestration/
-│   ├── common/              # Shared orchestration utilities
-│   ├── pipelines/           # Pipeline definitions
-│   └── tasks/               # Individual task definitions
-├── tests/
-│   ├── fixtures/            # Test data generators
-│   ├── integration/         # Integration tests
-│   └── unit/                # Unit tests
-├── scripts/                 # Operational scripts
-│   ├── build/               # Model building scripts
-│   │   ├── build_models.py          # Main Silver build script (v2.6)
-│   │   └── rebuild_model.py         # Single model rebuild
-│   ├── ingest/              # Data ingestion scripts
-│   │   └── run_bronze_ingestion.py  # Bronze ingestion script (v2.6)
-│   ├── seed/                # Data seeding scripts
-│   │   ├── seed_tickers.py          # Seed from LISTING_STATUS (12,499 tickers)
-│   │   └── seed_calendar.py         # Seed calendar dimension (2000-2050)
-│   ├── spark-cluster/       # Spark cluster management
-│   ├── maintenance/         # Cleanup and migration scripts
-│   └── test/                # Test scripts
-│       └── test_full_pipeline_spark.sh  # Main pipeline test script (v2.6)
-├── storage/                 # Data storage (or /shared/storage on cluster)
-│   ├── bronze/              # Raw ingested data (Delta Lake)
-│   │   ├── securities_reference/    # All tickers from LISTING_STATUS
-│   │   ├── securities_prices_daily/ # OHLCV for all securities
-│   │   ├── income_statements/       # Alpha Vantage INCOME_STATEMENT
-│   │   ├── balance_sheets/          # Alpha Vantage BALANCE_SHEET
-│   │   ├── cash_flows/              # Alpha Vantage CASH_FLOW
-│   │   ├── earnings/                # Alpha Vantage EARNINGS
-│   │   ├── calendar_seed/           # Calendar seed data (2000-2050)
-│   │   └── [other providers]/       # bls/, chicago/, etc.
-│   ├── silver/              # Dimensional models (Delta Lake)
-│   │   ├── temporal/        # Calendar dimension (foundation)
-│   │   ├── company/         # Company dimension & facts
-│   │   └── stocks/          # Stock securities with prices/technicals
-│   └── duckdb/              # DuckDB catalog (analytics.db)
-├── docs/
-│   └── guide/               # Comprehensive documentation
-└── utils/                   # Utility functions
-    ├── repo.py              # Centralized repo discovery (NEW)
-    └── env_loader.py        # Environment variable loading
+├── src/                      # Python package code
+│   └── de_funk/              # Main package namespace
+│       ├── __init__.py       # Package root (version 3.0.0)
+│       ├── config/           # Centralized configuration system
+│       │   ├── loader.py     # ConfigLoader with precedence
+│       │   ├── domain_loader.py  # ModelConfigLoader with YAML inheritance
+│       │   ├── models.py     # Type-safe config dataclasses
+│       │   ├── constants.py  # Default configuration values
+│       │   └── logging.py    # Logging framework
+│       ├── core/             # Infrastructure
+│       │   ├── context.py    # RepoContext
+│       │   ├── exceptions.py # Custom exception hierarchy
+│       │   └── session/      # Session & connection management
+│       ├── models/           # Model framework
+│       │   ├── api/          # Model sessions & registry
+│       │   ├── base/         # BaseModel class framework (modular)
+│       │   ├── measures/     # Measure framework
+│       │   ├── foundation/   # Foundational models (temporal)
+│       │   └── domains/      # Domain-specific models
+│       ├── pipelines/        # Data pipelines (was datapipelines/)
+│       │   ├── base/         # Base classes for pipeline components
+│       │   ├── facets/       # Data transformation facets
+│       │   ├── ingestors/    # Data ingestion orchestration
+│       │   └── providers/    # Provider implementations
+│       ├── orchestration/    # Airflow, Spark orchestration
+│       ├── notebook/         # Notebook backend (parsers, managers, schema)
+│       ├── services/         # Business logic services
+│       └── utils/            # Utility functions
+│           └── repo.py       # Centralized repo discovery
+│
+├── app/                      # Streamlit UI (deprecated after React migration)
+│   ├── notebook/             # UI-specific notebook components
+│   │   ├── exhibits/         # Exhibit rendering (deprecated)
+│   │   └── filters/          # Filter UI components (deprecated)
+│   └── ui/                   # Streamlit components & main app
+│
+├── domains/                  # Domain model configs (markdown + YAML)
+│   ├── corporate/            # Company model
+│   ├── securities/           # Stocks, options, ETFs, futures
+│   ├── foundation/           # Temporal (calendar) dimension
+│   └── municipal/            # City finance models
+│
+├── data_sources/             # Data source documentation
+│   ├── providers/            # Provider configs (alpha_vantage.md, etc.)
+│   └── endpoints/            # API endpoint docs by provider
+│
+├── exhibits/                 # Exhibit type definitions
+│   ├── charts/               # Chart types
+│   ├── tables/               # Table types
+│   └── metrics/              # Metric displays
+│
+├── notebooks/                # User notebooks (markdown)
+│   ├── securities/           # Stock analysis notebooks
+│   └── examples/             # Example notebooks
+│
+├── configs/                  # Runtime configuration (FLAT - no subdirs)
+│   ├── storage.json          # Storage path mappings
+│   ├── cluster.yaml          # Cluster configuration
+│   └── run_config.json       # Pipeline run configuration
+│
+├── tests/                    # Test suite
+│   ├── unit/                 # Unit tests
+│   ├── integration/          # Integration tests
+│   ├── validation/           # Data validation tests
+│   ├── performance/          # Performance tests
+│   └── fixtures/             # Test data generators
+│
+├── scripts/                  # Operational scripts
+│   ├── build/                # Model building scripts
+│   ├── ingest/               # Data ingestion scripts
+│   ├── seed/                 # Data seeding scripts
+│   ├── spark-cluster/        # Spark cluster management
+│   └── maintenance/          # Cleanup and migration scripts
+│
+├── storage/                  # Data storage (or /shared/storage on cluster)
+│   ├── bronze/               # Raw ingested data (Delta Lake)
+│   ├── silver/               # Dimensional models (Delta Lake)
+│   └── duckdb/               # DuckDB catalog (analytics.db)
+│
+├── docs/                     # Technical documentation
+│   ├── guides/               # Terminology & concept guides
+│   ├── architecture/         # System architecture
+│   ├── de_funk/              # Python package docs (mirrors src/de_funk/)
+│   ├── deployment/           # Deployment & operations
+│   └── _archive/             # Old vault (preserved for reference)
+│       └── vault/
+│
+├── pyproject.toml            # Package configuration
+├── run_app.py                # Launch Streamlit UI
+└── CLAUDE.md                 # This file
 ```
 
 ### Key Statistics
@@ -329,16 +328,20 @@ de_Funk/
 
 ### Model Architecture Pattern
 
-**v2.0 Modular YAML Pattern** (Recommended):
+**v3.0 Markdown Config Pattern** (Current):
 
-Models split across multiple files for clarity and inheritance:
+Models are defined in markdown files with YAML front matter in `domains/`:
 
 ```
-configs/models/stocks/
-├── model.yaml          # Metadata & composition
-├── schema.yaml         # Table definitions (extends base)
-├── graph.yaml          # Graph structure (extends base)
-└── measures.yaml       # Measure definitions (YAML + Python)
+domains/
+├── corporate/
+│   └── company.md      # Company model (YAML front matter + docs)
+├── securities/
+│   └── stocks.md       # Stocks model
+├── foundation/
+│   └── temporal.md     # Calendar dimension
+└── municipal/
+    └── city_finance.md # City finance model
 ```
 
 **model.yaml**:
@@ -468,33 +471,33 @@ Tier 3: etf (→ etfs), forecast
 
 ## v2.0 Model Architecture (November 2025)
 
-### Modular YAML Structure
+### Markdown Config Structure
 
-**Philosophy**: Split large monolithic YAMLs into logical components for maintainability.
+**Philosophy**: Combine model documentation and configuration in one place.
 
 **Structure**:
 ```
-configs/models/{model}/
-├── model.yaml      # Metadata, dependencies, composition
-├── schema.yaml     # Dimensions, facts, columns
-├── graph.yaml      # Nodes, edges, paths
-└── measures.yaml   # Simple + Python measures
+domains/
+├── corporate/company.md     # Company model config + docs
+├── securities/stocks.md     # Stocks model config + docs
+├── foundation/temporal.md   # Calendar dimension
+└── municipal/city_finance.md
 ```
 
-**Loading**: `ModelConfigLoader` (`config/model_loader.py`) handles:
-- Discovering modular YAML files
-- Resolving `extends` and `inherits_from` keywords
+**Loading**: `ModelConfigLoader` (`config/domain_loader.py`) handles:
+- Discovering markdown files with YAML front matter
+- Resolving `extends` and `schema_template` keywords
 - Deep merging configurations with override semantics
 - Auto-discovering Python measure modules
 
 **Example Usage**:
 ```python
-from config.model_loader import ModelConfigLoader
+from de_funk.config.domain_loader import ModelConfigLoader
 from pathlib import Path
 
-loader = ModelConfigLoader(Path("configs/models"))
-config = loader.load_model_config("stocks")
-# Returns fully merged config with inherited schemas/measures
+loader = ModelConfigLoader(Path("domains"))
+config = loader.load_model_config("company")
+# Returns config from domains/corporate/company.md front matter
 ```
 
 ### YAML Inheritance System
@@ -699,7 +702,7 @@ Configuration sources in order of priority (highest to lowest):
 ### ConfigLoader Usage
 
 ```python
-from config import ConfigLoader
+from de_funk.config import ConfigLoader
 
 # Basic usage - auto-discover repo root
 loader = ConfigLoader()
@@ -751,7 +754,7 @@ All configuration uses dataclasses for type safety:
 `RepoContext` now uses `ConfigLoader` internally:
 
 ```python
-from core.context import RepoContext
+from de_funk.core.context import RepoContext
 
 # RepoContext uses ConfigLoader behind the scenes
 ctx = RepoContext.from_repo_root(connection_type="duckdb")
@@ -808,13 +811,13 @@ print(repo_root)  # /home/user/de_Funk
 # Option 2: Setup imports (recommended for scripts)
 repo_root = setup_repo_imports()
 # Now you can import from anywhere in the repo!
-from core.context import RepoContext
-from models.api.session import UniversalSession
+from de_funk.core.context import RepoContext
+from de_funk.models.api.session import UniversalSession
 
 # Option 3: Context manager (auto-cleanup)
 from utils.repo import repo_imports
 with repo_imports() as repo_root:
-    from core.context import RepoContext
+    from de_funk.core.context import RepoContext
     # ... use imports ...
 # sys.path cleaned up after exiting context
 ```
@@ -832,12 +835,13 @@ with repo_imports() as repo_root:
 
 When creating a new model or modifying an existing one:
 
-1. **Create/Update YAML Configuration**
-   - Location: `/configs/models/{model_name}.yaml`
-   - Define schema (dimensions, facts, columns)
+1. **Create/Update Markdown Configuration**
+   - Location: `/domains/{category}/{model_name}.md`
+   - Define schema (dimensions, facts, columns) in YAML front matter
    - Define graph (nodes, edges, paths)
    - Define measures (simple, computed, weighted)
    - Specify dependencies
+   - Add documentation in markdown body
 
 2. **Implement Model Class**
    - Location: `/models/implemented/{model_name}/`
@@ -1101,17 +1105,17 @@ streamlit run app/ui/notebook_app_duckdb.py
 
 **Full Pipeline Test** (recommended - tests ingestion + build):
 ```bash
-# Run full pipeline with dev profile (50 tickers)
-./scripts/test/test_full_pipeline_spark.sh --profile dev
+# Run full pipeline with dev profile
+./scripts/test/test_pipeline.sh --profile dev
 
-# Quick test (10 tickers)
-./scripts/test/test_full_pipeline_spark.sh --profile quick_test
+# Quick test
+./scripts/test/test_pipeline.sh --profile quick_test
 
 # Production (all tickers)
-./scripts/test/test_full_pipeline_spark.sh --profile production
+./scripts/test/test_pipeline.sh --profile production
 
 # Override ticker count
-./scripts/test/test_full_pipeline_spark.sh --max-tickers 100
+./scripts/test/test_pipeline.sh --max-tickers 100
 ```
 
 **Seeding Data** (run before pipeline if needed):
@@ -1199,7 +1203,7 @@ python -m scripts.test_pipeline_e2e
 
 ```python
 # Using Universal Session (recommended)
-from core.session.universal_session import UniversalSession
+from de_funk.core.session.universal_session import UniversalSession
 
 session = UniversalSession(backend="duckdb")
 df = session.query("""
@@ -1217,7 +1221,7 @@ filtered_df = session.apply_filters(df, filters)
 
 ```python
 # Get measure registry
-from models.api.registry import get_model_registry
+from de_funk.models.api.registry import get_model_registry
 
 registry = get_model_registry()
 model = registry.get_model("equity")
@@ -1333,10 +1337,10 @@ If queries are slow:
 | `.env` | API keys and environment configuration |
 | `configs/storage.json` | Storage paths and table mappings |
 | `configs/pipelines/*.json` | API endpoint configurations (auto-discovered) |
-| `configs/models/*.yaml` | Model definitions (v2.0 modular architecture) |
+| `domains/**/*.md` | Model definitions (markdown with YAML front matter) |
 | `configs/notebooks/*.md` | Notebook definitions |
 
-**Note**: With the new ConfigLoader system, API configs are auto-discovered from `configs/pipelines/*_endpoints.json` files. No manual registration needed!
+**Note**: Model configs are now in `domains/` directory as markdown files with YAML front matter. API configs are auto-discovered from `configs/pipelines/*_endpoints.json` files.
 
 ### Critical Documentation Files
 
@@ -1389,11 +1393,10 @@ If queries are slow:
 | Script | Purpose |
 |--------|---------|
 | `run_app.py` / `run_app.sh` | Launch Streamlit UI |
-| `scripts/test/test_full_pipeline_spark.sh` | **Main pipeline test** - ingestion + build (v2.6) |
-| `scripts/build/build_models.py` | Build Silver layer models (v2.6) |
+| `scripts/test/test_pipeline.sh` | **Main pipeline test** - ingestion + build |
+| `scripts/build/build_models.py` | Build Silver layer models |
 | `scripts/build/rebuild_model.py` | Rebuild specific model |
-| `scripts/ingest/run_bronze_ingestion.py` | Bronze ingestion (v2.6) |
-| `run_full_pipeline.py` | Legacy orchestrator (use test_full_pipeline_spark.sh instead) |
+| `scripts/ingest/run_bronze_ingestion.py` | Bronze ingestion |
 
 ---
 
@@ -1457,7 +1460,7 @@ If queries are slow:
 
 ### When Exploring Code
 
-1. **Start with YAML configs**: Models defined in `/configs/models/`
+1. **Start with domain configs**: Models defined in `/domains/` (markdown with YAML front matter)
 2. **Check documentation**: Review relevant `.md` files first
 3. **Use examples**: Look at `/scripts/examples/` for usage patterns
 4. **Follow imports**: Trace from high-level to implementation
@@ -1544,7 +1547,7 @@ print(f"Done!")
 print(f"Error: {e}")
 
 # ✅ CORRECT - Use centralized logging
-from config.logging import setup_logging, get_logger, LogTimer
+from de_funk.config.logging import setup_logging, get_logger, LogTimer
 
 # Initialize at script startup (once)
 setup_logging()
@@ -1577,7 +1580,7 @@ with LogTimer(logger, "Building model"):
 **Custom Exception Hierarchy** (December 2025): `core/exceptions.py`
 
 ```python
-from core.exceptions import (
+from de_funk.core.exceptions import (
     DeFunkError,           # Base class for all de_Funk errors
     ConfigurationError,    # Config loading issues
     ModelNotFoundError,    # Model doesn't exist
@@ -1598,7 +1601,7 @@ except ModelNotFoundError as e:
 **Error Handling Decorators** (December 2025): `core/error_handling.py`
 
 ```python
-from core.error_handling import handle_exceptions, retry_on_exception, safe_call
+from de_funk.core.error_handling import handle_exceptions, retry_on_exception, safe_call
 
 # Automatic error handling with default return
 @handle_exceptions(ValueError, TypeError, default_return=None)
@@ -1646,7 +1649,7 @@ result = safe_call(risky_function, default="fallback_value")
 ```python
 # ❌ WRONG - UI importing from pipeline layer
 # app/ui/notebook_app.py
-from datapipelines.providers.alpha_vantage import AlphaVantageIngestor
+from de_funk.pipelines.providers.alpha_vantage import AlphaVantageIngestor
 
 # ✅ CORRECT - UI calls service, service calls pipeline
 # app/ui/notebook_app.py
@@ -1980,7 +1983,7 @@ from pathlib import Path
 from utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -2134,8 +2137,8 @@ Which approach would you prefer?
 
 1. **Add to appropriate location**:
    - Environment secret → `.env` (never commit)
-   - API endpoint → `configs/{provider}_endpoints.json`
-   - Model config → `configs/models/{model}/*.yaml`
+   - API endpoint → `configs/pipelines/{provider}_endpoints.json`
+   - Model config → `domains/{category}/{model}.md` (YAML front matter)
    - App setting → `config/constants.py`
 
 2. **Add type-safe access**:
@@ -2185,7 +2188,7 @@ from pyspark.sql import SparkSession
 spark = SparkSession.builder.getOrCreate()
 
 # ✅ CORRECT - Always use session abstraction
-from core.session.universal_session import UniversalSession
+from de_funk.core.session.universal_session import UniversalSession
 session = UniversalSession(backend="duckdb")  # or "spark"
 result = session.query("SELECT ...")
 ```

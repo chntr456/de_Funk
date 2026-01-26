@@ -36,10 +36,10 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from config.logging import setup_logging, get_logger
+from de_funk.config.logging import setup_logging, get_logger
 
 logger = get_logger(__name__)
 
@@ -179,10 +179,10 @@ def get_table_stats(spark, path: str) -> dict:
 ZORDER_COLUMNS = {
     "securities_reference": ["ticker"],
     "securities_prices_daily": ["ticker", "trade_date"],
-    "income_statements": ["ticker", "fiscal_date_ending"],
-    "balance_sheets": ["ticker", "fiscal_date_ending"],
-    "cash_flows": ["ticker", "fiscal_date_ending"],
-    "earnings": ["ticker", "fiscal_date_ending"],
+    "company_income_statements": ["ticker", "fiscal_date_ending"],
+    "company_balance_sheets": ["ticker", "fiscal_date_ending"],
+    "company_cash_flows": ["ticker", "fiscal_date_ending"],
+    "company_earnings": ["ticker", "fiscal_date_ending"],
 }
 
 
@@ -222,7 +222,7 @@ def main():
     print()
 
     # Initialize context
-    from core.context import RepoContext
+from de_funk.core.context import RepoContext
     ctx = RepoContext.from_repo_root(connection_type="spark")
 
     # Get tables

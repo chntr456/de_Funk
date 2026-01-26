@@ -16,7 +16,7 @@ import shutil
 import argparse
 from pathlib import Path
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 
@@ -172,7 +172,7 @@ Examples:
     args = parser.parse_args()
 
     # Get silver root
-    from core.context import RepoContext
+from de_funk.core.context import RepoContext
     ctx = RepoContext.from_repo_root()
     silver_root = ctx.repo / "storage" / "silver"
 

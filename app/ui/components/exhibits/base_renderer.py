@@ -11,8 +11,19 @@ Provides common functionality for all exhibit types including:
 
 import streamlit as st
 import pandas as pd
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 from abc import ABC, abstractmethod
+
+from de_funk.notebook.schema import ColumnReference
+
+
+def extract_field_name(col_ref: Union[ColumnReference, str, None]) -> Optional[str]:
+    """Extract field name from ColumnReference object or return string as-is."""
+    if col_ref is None:
+        return None
+    if isinstance(col_ref, ColumnReference):
+        return col_ref.field
+    return col_ref
 
 
 class BaseExhibitRenderer(ABC):
@@ -135,7 +146,7 @@ class BaseExhibitRenderer(ABC):
         Process and return selected measures.
 
         Returns:
-            List of selected measure column names
+            List of selected measure column names (field names only)
         """
         from .measure_selector import render_measure_selector
 
@@ -149,26 +160,26 @@ class BaseExhibitRenderer(ABC):
                 measure_selector_config=self.exhibit.measure_selector,
                 available_columns=self.pdf.columns.tolist()
             )
-        # Otherwise use y_axis configuration
+        # Otherwise use y_axis configuration (ColumnReference objects)
         elif hasattr(self.exhibit, 'y_axis') and self.exhibit.y_axis:
             if hasattr(self.exhibit.y_axis, 'measures') and self.exhibit.y_axis.measures:
-                measures = self.exhibit.y_axis.measures
+                measures = [extract_field_name(m) for m in self.exhibit.y_axis.measures]
             elif hasattr(self.exhibit.y_axis, 'measure') and self.exhibit.y_axis.measure:
                 # Handle both single measure and list of measures
                 if isinstance(self.exhibit.y_axis.measure, list):
-                    measures = self.exhibit.y_axis.measure
+                    measures = [extract_field_name(m) for m in self.exhibit.y_axis.measure]
                 else:
-                    measures = [self.exhibit.y_axis.measure]
+                    measures = [extract_field_name(self.exhibit.y_axis.measure)]
 
         # Filter to only those present in the dataframe
-        return [m for m in measures if m in self.pdf.columns]
+        return [m for m in measures if m and m in self.pdf.columns]
 
     def _process_dimension(self) -> Optional[str]:
         """
         Process and return selected dimension for coloring/grouping.
 
         Returns:
-            Selected dimension column name or None
+            Selected dimension column name (field name only) or None
         """
         from .dimension_selector import render_dimension_selector
 
@@ -182,17 +193,9 @@ class BaseExhibitRenderer(ABC):
                 dimension_selector_config=self.exhibit.dimension_selector,
                 available_columns=self.pdf.columns.tolist()
             )
-        else:
-            # Use static color_by if no dimension selector
-            dimension = self.exhibit.color_by if hasattr(self.exhibit, 'color_by') else None
-
-        # Auto-detect dimension if not specified
-        if not dimension:
-            auto_detect_dimensions = ['ticker', 'symbol', 'stock', 'exchange', 'sector', 'category']
-            for dim in auto_detect_dimensions:
-                if dim in self.pdf.columns:
-                    dimension = dim
-                    break
+        elif hasattr(self.exhibit, 'color_by') and self.exhibit.color_by:
+            # color_by is a ColumnReference object
+            dimension = extract_field_name(self.exhibit.color_by)
 
         return dimension
 
@@ -235,7 +238,8 @@ class BaseExhibitRenderer(ABC):
         # Get x-axis column for grouping (typically trade_date)
         x_col = None
         if hasattr(self.exhibit, 'x_axis') and self.exhibit.x_axis:
-            x_col = self.exhibit.x_axis.dimension
+            # Extract field name from ColumnReference
+            x_col = extract_field_name(self.exhibit.x_axis.dimension)
 
         if not x_col or x_col not in self.pdf.columns:
             return
@@ -305,15 +309,16 @@ class BaseExhibitRenderer(ABC):
         Get x-axis and primary y-axis configuration.
 
         Returns:
-            Tuple of (x_column, y_label)
+            Tuple of (x_column field name, y_label)
         """
         x_col = None
         y_label = "Value"
 
         if hasattr(self.exhibit, 'x_axis') and self.exhibit.x_axis:
-            x_col = self.exhibit.x_axis.dimension
+            # x_axis.dimension is a ColumnReference object
+            x_col = extract_field_name(self.exhibit.x_axis.dimension)
             if self.exhibit.x_axis.label:
-                x_label = self.exhibit.x_axis.label
+                y_label = self.exhibit.x_axis.label
 
         if hasattr(self.exhibit, 'y_axis') and self.exhibit.y_axis:
             if self.exhibit.y_axis.label:

@@ -14,10 +14,10 @@ import sys
 import time
 from pathlib import Path
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from orchestration.common.spark_session import get_spark
+from de_funk.orchestration.common.spark_session import get_spark
 
 
 def test_append_write():
@@ -135,7 +135,7 @@ def test_append_write():
     print("   Monitoring memory usage...")
     print()
 
-    from datapipelines.ingestors.bronze_sink import BronzeSink
+from de_funk.pipelines.ingestors.bronze_sink import BronzeSink
     sink = BronzeSink(storage_cfg)
 
     # Show what config says

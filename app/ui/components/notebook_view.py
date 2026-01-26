@@ -10,7 +10,7 @@ Uses unified HTML-based rendering for consistency between grid and non-grid view
 import streamlit as st
 import streamlit.components.v1 as components
 from typing import Optional, Callable
-from app.notebook.schema import ExhibitType
+from de_funk.notebook.schema import ExhibitType
 from .exhibits import (
     render_metric_cards,
     render_data_table,

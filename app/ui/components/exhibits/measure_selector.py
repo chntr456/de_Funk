@@ -6,7 +6,7 @@ Provides interactive UI for selecting which measures to display in exhibits.
 
 import streamlit as st
 from typing import List, Optional
-from app.notebook.schema import MeasureSelectorConfig
+from de_funk.notebook.schema import MeasureSelectorConfig
 
 
 def render_measure_selector(

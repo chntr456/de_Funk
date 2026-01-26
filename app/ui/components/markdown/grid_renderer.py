@@ -15,8 +15,8 @@ import streamlit.components.v1 as components
 import markdown as md
 from typing import List, Dict, Any, Callable, Optional
 
-from config.logging import get_logger
-from app.notebook.schema import GridConfig, GridGap, GridBlock, GridTemplate
+from de_funk.config.logging import get_logger
+from de_funk.notebook.schema import GridConfig, GridGap, GridBlock, GridTemplate
 
 logger = get_logger(__name__)
 

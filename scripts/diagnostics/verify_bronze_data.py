@@ -11,7 +11,7 @@ import os
 import sys
 from pathlib import Path
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 
@@ -77,7 +77,7 @@ def main():
         return
 
     try:
-        from core.context import RepoContext
+from de_funk.core.context import RepoContext
 
         print("\nInitializing Spark...")
         ctx = RepoContext.from_repo_root(connection_type="spark")

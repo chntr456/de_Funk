@@ -93,14 +93,7 @@ class PredictionChartRenderer(BaseExhibitRenderer):
             # Use static color_by if no dimension selector
             dimension = self.exhibit.color_by if hasattr(self.exhibit, 'color_by') else None
 
-        # Auto-detect dimension if not specified
-        if not dimension:
-            auto_detect_dimensions = ['model_name', 'ticker', 'symbol', 'stock']
-            for dim in auto_detect_dimensions:
-                if dim in self.pdf.columns:
-                    dimension = dim
-                    break
-
+        # No auto-detect fallback - color_by MUST be configured if dimension is needed
         return dimension
 
     def render(self):
@@ -183,11 +176,14 @@ class PredictionChartRenderer(BaseExhibitRenderer):
 
     def render_chart(self):
         """Render the time series prediction chart with confidence intervals."""
+        from .base_renderer import extract_field_name
+
         if not hasattr(self.exhibit, 'x_axis') or not self.exhibit.x_axis:
             st.warning("Prediction chart requires x_axis configuration")
             return
 
-        x_col = self.exhibit.x_axis.dimension
+        # Extract field name from ColumnReference
+        x_col = extract_field_name(self.exhibit.x_axis.dimension)
 
         # Sort by x-axis for proper time ordering
         pdf_sorted = self.pdf.sort_values(by=x_col)

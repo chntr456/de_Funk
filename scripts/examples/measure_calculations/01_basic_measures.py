@@ -11,10 +11,10 @@ from pathlib import Path
 # Bootstrap: add repo to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
-from utils.repo import get_repo_root
+from de_funk.utils.repo import get_repo_root
 repo_root = get_repo_root()
 
-from core.context import RepoContext
+from de_funk.core.context import RepoContext
 
 
 def example_1_simple_measure():
@@ -27,7 +27,7 @@ def example_1_simple_measure():
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
 
     # Load company model
-    from models.implemented.company.model import CompanyModel
+from de_funk.models.implemented.company.model import CompanyModel
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
 
     # Calculate average closing price by ticker
@@ -52,7 +52,7 @@ def example_2_computed_measure():
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
 
-    from models.implemented.company.model import CompanyModel
+from de_funk.models.implemented.company.model import CompanyModel
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
 
     # Calculate market cap (close * volume) averaged by ticker
@@ -76,7 +76,7 @@ def example_3_weighted_measure():
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
 
-    from models.implemented.company.model import CompanyModel
+from de_funk.models.implemented.company.model import CompanyModel
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
 
     # Calculate volume-weighted index
@@ -96,7 +96,7 @@ def example_4_list_measures():
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
 
-    from models.implemented.company.model import CompanyModel
+from de_funk.models.implemented.company.model import CompanyModel
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
 
     # List all measures
@@ -121,7 +121,7 @@ def example_5_explain_sql():
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
 
-    from models.implemented.company.model import CompanyModel
+from de_funk.models.implemented.company.model import CompanyModel
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
 
     # Generate SQL without executing
@@ -142,7 +142,7 @@ def example_6_convenience_methods():
 
     ctx = RepoContext.from_repo_root(connection_type='duckdb')
 
-    from models.implemented.company.model import CompanyModel
+from de_funk.models.implemented.company.model import CompanyModel
     model = CompanyModel(ctx.connection, ctx.storage, ctx.repo)
 
     # Use company-specific convenience wrapper

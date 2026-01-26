@@ -32,16 +32,16 @@ import logging
 from datetime import datetime
 
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
 try:
-    from core.duckdb_connection import DuckDBConnection
+from de_funk.core.duckdb_connection import DuckDBConnection
     DUCKDB_AVAILABLE = True
 except ImportError:
     DUCKDB_AVAILABLE = False
 
-from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
 from scripts.maintenance.reset_model import ModelResetter
 
 logging.basicConfig(
@@ -78,7 +78,7 @@ class ModelRebuilder:
         self.model_cfg = self.registry.get_model_config(model_name)
 
         # Load storage configuration to get bronze root and table mappings
-        from config.loader import ConfigLoader
+from de_funk.config.loader import ConfigLoader
         config_loader = ConfigLoader(repo_root=repo_root)
         self.storage_config = config_loader._load_json_config("storage.json")
         self.bronze_root = Path(self.storage_config.get('roots', {}).get('bronze', 'storage/bronze'))
@@ -573,7 +573,7 @@ class ModelRebuilder:
     def _build_weighted_views(self):
         """Build weighted aggregate views for equity model (DuckDB only)."""
         try:
-            from models.builders import WeightedAggregateBuilder
+from de_funk.models.builders import WeightedAggregateBuilder
 
             # Get storage path
             storage_root = self.model_cfg.get('storage', {}).get('root', 'storage/silver/equity')

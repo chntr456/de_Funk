@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional, Union
 import pandas as pd
 import streamlit as st
 
-from config.logging import get_logger
+from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -108,8 +108,10 @@ class GreatTableRenderer:
 
     def _build_gt(self) -> None:
         """Build the Great Table object without rendering."""
+        logger.info(f"GREAT_TABLE: Starting _build_gt() with {len(self.pdf)} rows, {len(self.pdf.columns)} columns")
         # Filter to only declared columns (if specified)
         filtered_df = self._filter_columns()
+        logger.debug(f"GREAT_TABLE: After filtering columns: {len(filtered_df)} rows, {len(filtered_df.columns)} columns")
 
         # Apply sorting before creating GT
         sorted_df = self._sort_dataframe(filtered_df)
@@ -502,6 +504,11 @@ class GreatTableRenderer:
                 palette = conditional.get('palette', ['red', 'white', 'green'])
                 domain = conditional.get('domain')
 
+                # Great Tables data_color expects 2-value domain [min, max]
+                # If 3+ values provided (for midpoint-style config), use first and last
+                if domain and len(domain) > 2:
+                    domain = [domain[0], domain[-1]]
+
                 self.gt = self.gt.data_color(
                     columns=col_id,
                     palette=palette,
@@ -581,7 +588,9 @@ class GreatTableRenderer:
         """Render GT to Streamlit."""
         try:
             # GT renders to HTML
+            logger.info(f"GREAT_TABLE: About to call as_raw_html() with {len(self.pdf)} rows")
             html = self.gt.as_raw_html()
+            logger.info(f"GREAT_TABLE: as_raw_html() completed, HTML length: {len(html)}")
 
             # Check for scroll/max_height option
             max_height = getattr(self.exhibit, 'max_height', None)

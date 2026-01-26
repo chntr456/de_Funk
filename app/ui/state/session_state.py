@@ -100,17 +100,24 @@ def init_app_objects(repo_root: Path):
     Args:
         repo_root: Path to repository root
     """
-    from core.context import RepoContext
-    from models.registry import ModelRegistry
-    from models.api.session import UniversalSession
-    from app.notebook.managers import NotebookManager
+from de_funk.core.context import RepoContext
+from de_funk.models.registry import ModelRegistry
+from de_funk.models.api.session import UniversalSession
+    from de_funk.notebook.managers import NotebookManager
 
     if 'repo_context' not in st.session_state:
         st.session_state.repo_context = RepoContext.from_repo_root(connection_type="duckdb")
 
     if 'model_registry' not in st.session_state:
         ctx = st.session_state.repo_context
-        st.session_state.model_registry = ModelRegistry(ctx.repo / "configs" / "models")
+        st.session_state.model_registry = ModelRegistry(ctx.repo / "domains")
+
+    # Verify registry has expected models - refresh if stale
+    registry = st.session_state.model_registry
+    if not registry.has_model('company') and not registry.has_model('stocks'):
+        # Registry might be stale (using old configs/models path) - recreate
+        ctx = st.session_state.repo_context
+        st.session_state.model_registry = ModelRegistry(ctx.repo / "domains")
 
     if 'universal_session' not in st.session_state:
         ctx = st.session_state.repo_context
@@ -122,7 +129,7 @@ def init_app_objects(repo_root: Path):
 
     if 'notebook_manager' not in st.session_state:
         ctx = st.session_state.repo_context
-        notebooks_root = ctx.repo / "configs" / "notebooks"
+        notebooks_root = ctx.repo / "notebooks"
         st.session_state.notebook_manager = NotebookManager(
             st.session_state.universal_session,
             ctx.repo,

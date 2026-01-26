@@ -37,10 +37,10 @@ from datetime import datetime
 import yaml
 
 
-from utils.repo import setup_repo_imports
+from de_funk.utils.repo import setup_repo_imports
 repo_root = setup_repo_imports()
 
-from models.registry import ModelRegistry
+from de_funk.models.registry import ModelRegistry
 
 logging.basicConfig(
     level=logging.INFO,
