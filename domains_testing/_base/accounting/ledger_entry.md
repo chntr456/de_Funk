@@ -1,0 +1,99 @@
+---
+type: domain-base
+model: ledger_entry
+version: 1.0
+description: "Financial ledger entries - payments, payroll, contracts. Supports multi-source unions."
+extends: _base._base_.event
+
+# CANONICAL FIELDS
+# [field_name, type, nullable: bool, description: "meaning"]
+canonical_fields:
+  - [entry_id, integer, nullable: false, description: "Primary key"]
+  - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar"]
+  - [entry_type, string, nullable: false, description: "VENDOR_PAYMENT, PAYROLL, CONTRACT"]
+  - [domain_source, string, nullable: false, description: "Origin domain (chicago, cook_county, etc.)"]
+  - [source_id, string, nullable: false, description: "Original ID from source system"]
+  - [payee, string, nullable: false, description: "Entity receiving payment"]
+  - [transaction_amount, "decimal(18,2)", nullable: false, description: "Monetary value"]
+  - [transaction_date, date, nullable: false, description: "Date of transaction"]
+  - [organizational_unit, string, nullable: true, description: "Department/agency (null if unavailable)"]
+  - [expense_category, string, nullable: true, description: "How expense is classified (null if unavailable)"]
+  - [fund_code, string, nullable: true, description: "Fund the expense is charged to (null if unavailable)"]
+  - [contract_number, string, nullable: true, description: "Related contract (null if not applicable)"]
+  - [description, string, nullable: true, description: "Free-text description of transaction"]
+
+tables:
+  _fact_ledger_entries:
+    type: fact
+    primary_key: [entry_id]
+    partition_by: [date_id]
+
+    # [column, type, nullable, description, {options}]
+    schema:
+      - [entry_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(entry_type, '_', source_id)))"}]
+      - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(transaction_date, 'yyyyMMdd') AS INT)"}]
+      - [entry_type, string, false, "Source discriminator"]
+      - [domain_source, string, false, "Origin domain"]
+      - [source_id, string, false, "Original source ID"]
+      - [payee, string, false, "Who received payment"]
+      - [transaction_amount, "decimal(18,2)", false, "Amount"]
+      - [transaction_date, date, false, "Transaction date"]
+      - [organizational_unit, string, true, "Department (null if not available)"]
+      - [expense_category, string, true, "Classification (null if not available)"]
+      - [fund_code, string, true, "Fund code (null if not available)"]
+      - [contract_number, string, true, "Contract reference (null if n/a)"]
+      - [description, string, true, "Transaction description"]
+
+    measures:
+      - [total_amount, sum, transaction_amount, "Total transaction amount", {format: "$#,##0.00"}]
+      - [entry_count, count_distinct, entry_id, "Number of entries", {format: "#,##0"}]
+      - [avg_amount, avg, transaction_amount, "Average transaction", {format: "$#,##0.00"}]
+      - [payee_count, count_distinct, payee, "Unique payees", {format: "#,##0"}]
+      - [payroll_total, expression, "SUM(CASE WHEN entry_type = 'PAYROLL' THEN transaction_amount ELSE 0 END)", "Payroll total", {format: "$#,##0.00"}]
+      - [vendor_total, expression, "SUM(CASE WHEN entry_type = 'VENDOR_PAYMENT' THEN transaction_amount ELSE 0 END)", "Vendor payment total", {format: "$#,##0.00"}]
+      - [contract_total, expression, "SUM(CASE WHEN entry_type = 'CONTRACT' THEN transaction_amount ELSE 0 END)", "Contract total", {format: "$#,##0.00"}]
+
+graph:
+  edges:
+    # [edge_name, from, to, on, type, cross_model]
+    - [entry_to_calendar, _fact_ledger_entries, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+
+federation:
+  enabled: true
+  union_key: domain_source
+  primary_key: entry_id
+
+domain: accounting
+tags: [base, template, accounting, ledger]
+status: active
+---
+
+## Ledger Entry Base Template
+
+Unified financial ledger supporting multi-source unions. Each source endpoint (payments, salaries, contracts) maps to this schema via aliases.
+
+### Nullable Field Contract
+
+Fields marked `nullable: true` are optional. Sources that lack a field must explicitly handle it:
+
+| Pattern | When | Example |
+|---------|------|---------|
+| `"null"` | Source truly lacks field | `organizational_unit: "null"` |
+| `"'STATIC'"` | Use constant | `expense_category: "'SALARY'"` |
+| `"other_col"` | Use fallback column | `organizational_unit: "company_name"` |
+| `"COALESCE(...)"` | Try multiple | `"COALESCE(dept, division, 'UNKNOWN')"` |
+
+### Federation
+
+When multiple domain-models extend this base, a federation view unions them:
+
+```sql
+SELECT * FROM accounting.v_all_ledger_entries
+-- Unions: chicago_ledger, cook_county_ledger, corporate_ledger
+```
+
+### Usage
+
+```yaml
+extends: _base.accounting.ledger_entry
+```
