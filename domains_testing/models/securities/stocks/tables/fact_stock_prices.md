@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: fact_stock_prices
+extends: _base.finance.securities._fact_prices
 table_type: fact
 from: securities_master.fact_security_prices
 primary_key: [price_id]

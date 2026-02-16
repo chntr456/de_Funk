@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: dim_neighborhood
+extends: _base.geography.geo_spatial._dim_boundary
 table_type: dimension
 from: bronze.cook_county_neighborhoods
 primary_key: [nbhd_code]

@@ -3,6 +3,7 @@ type: domain-model
 model: municipal_housing
 version: 3.0
 description: "Municipal building permits and zoning data"
+extends: [_base.housing.permit, _base.geography.geo_spatial]
 depends_on: [municipal_geospatial]
 
 storage:

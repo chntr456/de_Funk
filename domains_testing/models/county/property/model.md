@@ -3,6 +3,7 @@ type: domain-model
 model: county_property
 version: 3.0
 description: "County property assessments, parcels, and sales"
+extends: [_base.property.parcel]
 depends_on: [temporal, county_geospatial]
 
 storage:

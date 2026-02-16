@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: fact_assessed_values
+extends: _base.property.parcel._fact_assessed_values
 table_type: fact
 from: bronze.cook_county_assessed_values
 primary_key: [parcel_id, year, assessment_stage]

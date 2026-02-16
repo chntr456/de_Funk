@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: fact_business_licenses
+extends: _base.regulatory.inspection._fact_licenses
 table_type: fact
 from: bronze.chicago_business_licenses
 primary_key: [license_id]

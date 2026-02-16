@@ -1,12 +1,15 @@
 ---
 type: domain-model-source
 source: budget_appropriations
+extends: _base.accounting.financial_event
 maps_to: fact_budget_events
-from: bronze.budget_appropriations
+from: bronze.chicago_budget_appropriations
 event_type: APPROPRIATION
 domain_source: "'chicago'"
+bronze_table: chicago/chicago_budget_appropriations
+description: "Budget appropriations by department"
+update_frequency: annual
 
-# [canonical_field, source_expression]
 aliases:
   - [fiscal_year, year]
   - [department_code, department_code]
@@ -21,17 +24,4 @@ aliases:
 
 ## Budget Appropriations Source
 
-Chicago Budget Ordinance — Appropriations. Annual authorized spending by department, fund, and account.
-
-### Source Schema
-
-| Column | Type | Description |
-|--------|------|-------------|
-| year | integer | Fiscal year |
-| fund_code | string | Fund code |
-| fund_description | string | Fund name |
-| department_code | string | Department code |
-| department_description | string | Department name |
-| appropriation_account | string | Appropriation account code |
-| appropriation_account_description | string | Account name |
-| amount | decimal | Appropriated amount |
+Annual budget appropriations by department and fund.

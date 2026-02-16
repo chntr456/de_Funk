@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: dim_security
+extends: _base.finance.securities._dim_security
 table_type: dimension
 from: bronze.alpha_vantage.listing_status
 primary_key: [security_id]

@@ -3,6 +3,7 @@ type: domain-model
 model: county_geospatial
 version: 3.0
 description: "County geospatial boundaries and hierarchies"
+extends: [_base.geography.geo_spatial]
 depends_on: []
 
 storage:

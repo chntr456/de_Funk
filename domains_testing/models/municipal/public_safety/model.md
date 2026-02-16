@@ -18,7 +18,7 @@ graph:
     # Chicago-specific edges
     - [crime_to_community_area, fact_crimes, municipal_geospatial.dim_community_area, [community_area=area_number], many_to_one, municipal_geospatial]
     - [crime_to_ward, fact_crimes, municipal_geospatial.dim_ward, [ward=ward_number], many_to_one, municipal_geospatial]
-    - [crime_to_district, fact_crimes, municipal_geospatial.dim_police_district, [district=district_number], many_to_one, municipal_geospatial]
+    - [crime_to_district, fact_crimes, municipal_geospatial.dim_patrol_district, [district=district_number], many_to_one, municipal_geospatial]
     - [arrest_to_crime_type, fact_arrests, dim_crime_type, [crime_type_id=crime_type_id], many_to_one, null]
     - [arrest_to_calendar, fact_arrests, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
 

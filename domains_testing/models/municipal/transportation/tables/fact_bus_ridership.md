@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: fact_bus_ridership
+extends: _base.transportation.transit._fact_ridership
 table_type: fact
 from: bronze.chicago_cta_bus_ridership
 primary_key: [route_id, date]

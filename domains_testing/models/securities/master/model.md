@@ -3,15 +3,12 @@ type: domain-model
 model: securities_master
 version: 3.0
 description: "Master securities domain - unified dimension and prices for all tradable instruments"
+extends: [_base.finance.securities]
 depends_on: [temporal]
 
+sources_from: sources/
 storage:
   format: delta
-  bronze:
-    provider: alpha_vantage
-    tables:
-      - [listing_status, alpha_vantage/listing_status]
-      - [time_series_daily_adjusted, alpha_vantage/time_series_daily_adjusted]
   silver:
     root: storage/silver/securities/
 

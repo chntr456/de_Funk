@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: dim_zoning_district
+extends: _base.geography.geo_spatial._dim_boundary
 table_type: dimension
 from: bronze.chicago_zoning_districts
 primary_key: [zone_class]

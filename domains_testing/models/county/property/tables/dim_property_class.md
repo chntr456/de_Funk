@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: dim_property_class
+extends: _base.property.parcel._dim_property_class
 table_type: dimension
 from: bronze.cook_county_assessed_values
 transform: distinct

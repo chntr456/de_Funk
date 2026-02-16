@@ -1,12 +1,15 @@
 ---
 type: domain-model-source
 source: budget_revenue
+extends: _base.accounting.financial_event
 maps_to: fact_budget_events
-from: bronze.budget_revenue
+from: bronze.chicago_budget_revenue
 event_type: REVENUE
 domain_source: "'chicago'"
+bronze_table: chicago/chicago_budget_revenue
+description: "Budget revenue estimates"
+update_frequency: annual
 
-# [canonical_field, source_expression]
 aliases:
   - [fiscal_year, year]
   - [department_code, "null"]
@@ -21,19 +24,4 @@ aliases:
 
 ## Budget Revenue Source
 
-Chicago Budget Ordinance — Revenue. Annual estimated revenue by fund and revenue source.
-
-### Source Schema
-
-| Column | Type | Description |
-|--------|------|-------------|
-| year | integer | Fiscal year |
-| fund_code | string | Fund code |
-| fund_description | string | Fund name |
-| revenue_source_code | string | Revenue source code |
-| revenue_source_description | string | Revenue source name |
-| amount | decimal | Estimated revenue |
-
-### Nullable Fields
-
-- `department_code` and `department_description` are null — revenue is not broken down by department in this source
+Annual revenue estimates by fund and revenue source.

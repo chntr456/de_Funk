@@ -1,7 +1,7 @@
 ---
 type: domain-model-table
 table: fact_budget_events
-extends: _fact_budget_events
+extends: _base.accounting.financial_event._fact_budget_events
 persist: true
 
 # Sources auto-discovered: any sources/*.md with maps_to: fact_budget_events

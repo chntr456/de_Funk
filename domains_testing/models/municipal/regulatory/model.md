@@ -3,6 +3,7 @@ type: domain-model
 model: municipal_regulatory
 version: 3.0
 description: "Municipal inspections, violations, and business licenses"
+extends: [_base.regulatory.inspection]
 depends_on: [municipal_geospatial]
 
 storage:

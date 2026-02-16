@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: fact_building_permits
+extends: _base.housing.permit._fact_permits
 table_type: fact
 from: bronze.chicago_building_permits
 primary_key: [permit_id]

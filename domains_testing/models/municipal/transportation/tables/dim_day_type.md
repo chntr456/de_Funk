@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: dim_day_type
+extends: _base.transportation.transit._dim_day_type
 table_type: dimension
 from: static
 primary_key: [day_type_id]

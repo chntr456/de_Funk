@@ -3,6 +3,7 @@ type: domain-model
 model: municipal_operations
 version: 3.0
 description: "Municipal 311 service requests"
+extends: [_base.operations.service_request]
 depends_on: [municipal_geospatial]
 
 storage:

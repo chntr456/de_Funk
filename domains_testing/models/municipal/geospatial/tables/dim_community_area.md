@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: dim_community_area
+extends: _base.geography.geo_spatial._dim_boundary
 table_type: dimension
 from: bronze.chicago_community_areas
 primary_key: [community_area_id]

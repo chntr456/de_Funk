@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: fact_service_requests
+extends: _base.operations.service_request._fact_service_requests
 table_type: fact
 from: bronze.chicago_311_requests
 primary_key: [request_id]

@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: dim_ward
+extends: _base.geography.geo_spatial._dim_boundary
 table_type: dimension
 from: bronze.chicago_wards
 primary_key: [ward_id]

@@ -1,6 +1,7 @@
 ---
 type: domain-model-table
 table: dim_permit_type
+extends: _base.housing.permit._dim_permit_type
 table_type: dimension
 from: bronze.chicago_building_permits
 transform: distinct

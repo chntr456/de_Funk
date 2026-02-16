@@ -3,16 +3,12 @@ type: domain-model
 model: stocks
 version: 3.1
 description: "Stock equities with company linkage, technicals, dividends, and splits"
+extends: [_base.finance.securities]
 depends_on: [temporal, securities_master, company]
 
+sources_from: sources/
 storage:
   format: delta
-  bronze:
-    provider: alpha_vantage
-    tables:
-      - [listing_status, alpha_vantage/listing_status]
-      - [dividends, alpha_vantage/dividends]
-      - [splits, alpha_vantage/splits]
   silver:
     root: storage/silver/stocks/
 
