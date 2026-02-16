@@ -1,8 +1,8 @@
 ---
 type: domain-model
-model: chicago_finance
-version: 2.0
-description: "Chicago payments, contracts, and budget data"
+model: municipal_finance
+version: 3.0
+description: "Municipal payments, contracts, and budget data"
 
 extends:
   - _base.accounting.ledger_entry
@@ -15,17 +15,9 @@ depends_on: [temporal]
 
 storage:
   format: delta
-  bronze:
-    provider: chicago
-    # [local_name, provider/endpoint]
-    tables:
-      - [payments, chicago/chicago_payments]
-      - [contracts, chicago/chicago_contracts]
-      - [budget_appropriations, chicago/chicago_budget_appropriations]
-      - [budget_revenue, chicago/chicago_budget_revenue]
-      - [budget_positions, chicago/chicago_budget_positions]
+  sources_from: sources/{entity}/
   silver:
-    root: storage/silver/chicago/finance/
+    root: storage/silver/municipal/{entity}/finance/
 
 graph:
   edges:
@@ -87,14 +79,13 @@ federation:
 
 metadata:
   domain: municipal
-  entity: chicago
   subdomain: finance
 status: active
 ---
 
-## Chicago Finance Model
+## Municipal Finance Model
 
-Payments, contracts, and budget data for the City of Chicago. Extends accounting base templates for federation with other municipal and corporate ledger models.
+Payments, contracts, and budget data. Extends accounting base templates for federation with other municipal and corporate ledger models. Entity sources in `sources/{entity}/` provide column aliases from bronze to canonical schema.
 
 ### Architecture
 

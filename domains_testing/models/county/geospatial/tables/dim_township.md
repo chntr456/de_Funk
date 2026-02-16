@@ -1,0 +1,22 @@
+---
+type: domain-model-table
+table: dim_township
+table_type: dimension
+from: bronze.cook_county_townships
+primary_key: [township_code]
+
+schema:
+  - [township_code, string, false, "PK - 2-digit township code"]
+  - [township_name, string, true, "Township name"]
+  - [centroid_lat, double, true, "Centroid latitude"]
+  - [centroid_lon, double, true, "Centroid longitude"]
+  - [area_sqmi, double, true, "Area in square miles"]
+  - [geometry, string, true, "Township boundary WKT"]
+
+measures:
+  - [township_count, count_distinct, township_code, "Number of townships", {format: "#,##0"}]
+---
+
+## Township Dimension
+
+Cook County's 38 townships — property tax administration units.

@@ -1,0 +1,69 @@
+---
+type: domain-model
+model: municipal_public_safety
+version: 3.0
+description: "Municipal crime and arrest data"
+extends: _base.public_safety.crime
+depends_on: [temporal, geospatial, municipal_geospatial]
+
+storage:
+  format: delta
+  sources_from: sources/{entity}/
+  silver:
+    root: storage/silver/municipal/{entity}/public_safety/
+
+graph:
+  edges:
+    # Inherited from base: crime_to_type, crime_to_location_type, crime_to_calendar
+    # Chicago-specific edges
+    - [crime_to_community_area, fact_crimes, municipal_geospatial.dim_community_area, [community_area=area_number], many_to_one, municipal_geospatial]
+    - [crime_to_ward, fact_crimes, municipal_geospatial.dim_ward, [ward=ward_number], many_to_one, municipal_geospatial]
+    - [crime_to_district, fact_crimes, municipal_geospatial.dim_police_district, [district=district_number], many_to_one, municipal_geospatial]
+    - [arrest_to_crime_type, fact_arrests, dim_crime_type, [crime_type_id=crime_type_id], many_to_one, null]
+    - [arrest_to_calendar, fact_arrests, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+
+build:
+  partitions: [year]
+  sort_by: [date_id, incident_id]
+  optimize: true
+  phases:
+    1: { tables: [dim_crime_type, dim_location_type] }
+    2: { tables: [fact_crimes, fact_arrests] }
+
+measures:
+  simple:
+    - [crime_count, count_distinct, fact_crimes.incident_id, "Total crime incidents", {format: "#,##0"}]
+    - [arrest_count, count, fact_crimes.incident_id, "Crimes with arrest", {filters: ["arrest_made = true"]}]
+    - [domestic_crime_count, count, fact_crimes.incident_id, "Domestic crimes", {filters: ["domestic = true"]}]
+    - [total_arrests, count_distinct, fact_arrests.arrest_id, "Total arrest records", {format: "#,##0"}]
+  computed:
+    - [arrest_rate, expression, "arrest_count / crime_count * 100", "Arrest rate %", {format: "#,##0.1%"}]
+    - [domestic_rate, expression, "domestic_crime_count / crime_count * 100", "Domestic rate %", {format: "#,##0.1%"}]
+
+metadata:
+  domain: municipal
+  subdomain: public_safety
+status: active
+---
+
+## Chicago Public Safety Model
+
+Crime and arrest data for the City of Chicago, extending `_base.public_safety.crime`.
+
+### Data Sources
+
+| Source | Bronze Table | Description |
+|--------|--------------|-------------|
+| Crimes | chicago_crimes | Incidents 2001-present |
+| Arrests | chicago_arrests | Arrest records |
+| IUCR Codes | chicago_iucr_codes | Crime classification |
+
+### Crime Taxonomy
+
+Standard taxonomy from base: VIOLENT, PROPERTY, OTHER.
+Chicago uses dual classification: IUCR (state) + FBI UCR (federal).
+
+### Privacy Notes
+
+- Addresses at block level only
+- Most recent 7 days excluded
