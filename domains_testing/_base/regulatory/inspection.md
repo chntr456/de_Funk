@@ -10,6 +10,7 @@ extends: _base._base_.event
 canonical_fields:
   - [inspection_id, integer, nullable: false, description: "Primary key"]
   - [legal_entity_id, integer, nullable: true, description: "FK to owning jurisdiction"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
   - [facility_id, integer, nullable: true, description: "FK to _dim_facility"]
   - [inspection_type_id, integer, nullable: true, description: "FK to _dim_inspection_type"]
   - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar"]
@@ -70,6 +71,7 @@ tables:
     schema:
       - [inspection_id, integer, false, "PK", {derived: "ABS(HASH(source_id))"}]
       - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [domain_source, string, false, "Origin domain"]
       - [facility_id, integer, true, "FK to _dim_facility", {fk: _dim_facility.facility_id}]
       - [inspection_type_id, integer, true, "FK to _dim_inspection_type", {fk: _dim_inspection_type.inspection_type_id}]
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(inspection_date, 'yyyyMMdd') AS INT)"}]
@@ -117,6 +119,7 @@ tables:
     schema:
       - [violation_id, integer, false, "PK", {derived: "ABS(HASH(source_id))"}]
       - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [domain_source, string, false, "Origin domain"]
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(violation_date, 'yyyyMMdd') AS INT)"}]
       - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
       - [violation_date, date, false, "Violation date"]
@@ -141,6 +144,7 @@ tables:
     schema:
       - [license_id, integer, false, "PK", {derived: "ABS(HASH(source_id))"}]
       - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [domain_source, string, false, "Origin domain"]
       - [business_name, string, true, "Licensed business name"]
       - [issue_date, date, false, "License issue date"]
       - [date_id, integer, false, "FK to calendar (issue date)", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(issue_date, 'yyyyMMdd') AS INT)"}]

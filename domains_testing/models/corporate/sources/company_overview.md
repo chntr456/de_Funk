@@ -4,9 +4,9 @@ source: company_overview
 extends: _base.entity.company
 maps_to: dim_company
 from: bronze.alpha_vantage_company_overview
+domain_source: "'alpha_vantage'"
 
 aliases:
-  - [domain_source, "'alpha_vantage'"]
   - [company_id, "ABS(HASH(CONCAT('COMPANY_', Symbol)))"]
   - [ticker, Symbol]
   - [company_name, Name]

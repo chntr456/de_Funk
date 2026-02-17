@@ -10,6 +10,7 @@ extends: _base._base_.event
 canonical_fields:
   - [request_id, integer, nullable: false, description: "Primary key"]
   - [legal_entity_id, integer, nullable: true, description: "FK to owning jurisdiction"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
   - [request_type_id, integer, nullable: false, description: "FK to _dim_request_type"]
   - [status_id, integer, nullable: true, description: "FK to _dim_status"]
   - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar (created date)"]
@@ -65,6 +66,7 @@ tables:
     schema:
       - [request_id, integer, false, "PK", {derived: "ABS(HASH(source_id))"}]
       - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [domain_source, string, false, "Origin domain"]
       - [request_type_id, integer, false, "FK to _dim_request_type", {fk: _dim_request_type.request_type_id}]
       - [status_id, integer, true, "FK to _dim_status", {fk: _dim_status.status_id}]
       - [date_id, integer, false, "FK to calendar (created)", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(created_date, 'yyyyMMdd') AS INT)"}]

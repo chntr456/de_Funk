@@ -4,9 +4,9 @@ source: municipalities
 extends: _base.geography.geo_spatial
 maps_to: dim_municipality
 from: bronze.cook_county_municipalities
+domain_source: "'cook_county'"
 
 aliases:
-  - [domain_source, "'cook_county'"]
   - [boundary_id, "ABS(HASH(CONCAT('MUNICIPALITY', '_', municipality_code)))"]
   - [boundary_type, "'MUNICIPALITY'"]
   - [boundary_code, municipality_code]

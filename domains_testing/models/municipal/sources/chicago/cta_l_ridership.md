@@ -4,10 +4,10 @@ source: cta_l_ridership
 extends: _base.transportation.transit
 maps_to: fact_rail_ridership
 from: bronze.chicago_cta_l_ridership
+domain_source: "'chicago'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
-  - [domain_source, "'chicago'"]
   - [ridership_id, "ABS(HASH(CONCAT(stationname, '_RAIL_', CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT))))"]
   - [station_id, "ABS(HASH(CONCAT(stationname, '_', 'RAIL')))"]
   - [route_id, "null"]

@@ -4,10 +4,10 @@ source: splits
 extends: _base.finance.corporate_action
 maps_to: fact_splits
 from: bronze.alpha_vantage_splits
+domain_source: "'alpha_vantage'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', symbol)))"]
-  - [domain_source, "'alpha_vantage'"]
   - [split_id, "ABS(HASH(CONCAT(symbol, '_', CAST(effective_date AS STRING))))"]
   - [security_id, "ABS(HASH(symbol))"]
   - [ticker, symbol]

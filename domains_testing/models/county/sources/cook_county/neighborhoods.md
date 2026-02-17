@@ -4,9 +4,9 @@ source: neighborhoods
 extends: _base.geography.geo_spatial
 maps_to: dim_neighborhood
 from: bronze.cook_county_neighborhoods
+domain_source: "'cook_county'"
 
 aliases:
-  - [domain_source, "'cook_county'"]
   - [boundary_id, "ABS(HASH(CONCAT('NEIGHBORHOOD', '_', nbhd_code)))"]
   - [boundary_type, "'NEIGHBORHOOD'"]
   - [boundary_code, nbhd_code]

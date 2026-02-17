@@ -4,10 +4,10 @@ source: time_series_daily
 extends: _base.finance.securities
 maps_to: fact_prices
 from: bronze.alpha_vantage_time_series_daily_adjusted
+domain_source: "'alpha_vantage'"
 
 aliases:
   - [legal_entity_id, "null"]
-  - [domain_source, "'alpha_vantage'"]
   - [security_id, "ABS(HASH(symbol))"]
   - [price_id, "ABS(HASH(CONCAT(symbol, '_', timestamp)))"]
   - [ticker, symbol]

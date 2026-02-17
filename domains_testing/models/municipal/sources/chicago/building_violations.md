@@ -4,10 +4,10 @@ source: building_violations
 extends: _base.regulatory.inspection
 maps_to: fact_violations
 from: bronze.chicago_building_violations
+domain_source: "'chicago'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
-  - [domain_source, "'chicago'"]
   - [violation_id, "ABS(HASH(CAST(id AS STRING)))"]
   - [violation_date, violation_date]
   - [date_id, "CAST(DATE_FORMAT(violation_date, 'yyyyMMdd') AS INT)"]

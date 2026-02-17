@@ -4,9 +4,9 @@ source: parcel_universe
 extends: _base.property.parcel
 maps_to: dim_parcel
 from: bronze.cook_county_parcel_universe
+domain_source: "'cook_county'"
 
 aliases:
-  - [domain_source, "'cook_county'"]
   - [parcel_id, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
   - [parcel_code, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
   - [property_class, class]

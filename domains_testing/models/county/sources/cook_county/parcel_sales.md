@@ -4,10 +4,10 @@ source: parcel_sales
 extends: _base.property.parcel
 maps_to: fact_parcel_sales
 from: bronze.cook_county_parcel_sales
+domain_source: "'cook_county'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('COUNTY_', 'Cook County')))"]
-  - [domain_source, "'cook_county'"]
   - [parcel_id, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
   - [sale_date, sale_date]
   - [sale_date_id, "CAST(DATE_FORMAT(sale_date, 'yyyyMMdd') AS INT)"]

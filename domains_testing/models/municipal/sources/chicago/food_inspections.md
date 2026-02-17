@@ -4,10 +4,10 @@ source: food_inspections
 extends: _base.regulatory.inspection
 maps_to: fact_inspections
 from: bronze.chicago_food_inspections
+domain_source: "'chicago'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
-  - [domain_source, "'chicago'"]
   - [inspection_id, "ABS(HASH(CAST(inspection_id AS STRING)))"]
   - [facility_id, "ABS(HASH(CAST(license_ AS STRING)))"]
   - [inspection_type_id, "ABS(HASH(inspection_type))"]

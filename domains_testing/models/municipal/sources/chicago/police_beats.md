@@ -4,9 +4,9 @@ source: police_beats
 extends: _base.geography.geo_spatial
 maps_to: dim_patrol_area
 from: bronze.chicago_police_beats
+domain_source: "'chicago'"
 
 aliases:
-  - [domain_source, "'chicago'"]
   - [boundary_id, "ABS(HASH(CONCAT('PATROL_AREA', '_', CAST(beat_num AS STRING))))"]
   - [boundary_type, "'PATROL_AREA'"]
   - [boundary_code, "CAST(beat_num AS STRING)"]

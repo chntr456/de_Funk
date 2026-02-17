@@ -17,11 +17,16 @@ Federation enables querying across multiple domain-models that share the same ba
 ### Base Template Config
 
 ```yaml
-# In domain-base
+# In domain-base (single-fact base — primary_key specified)
 federation:
   enabled: true
   union_key: domain_source
   primary_key: entry_id
+
+# In domain-base (multi-fact base — primary_key omitted)
+federation:
+  enabled: true
+  union_key: domain_source
 ```
 
 ### Fields
@@ -30,7 +35,7 @@ federation:
 |-------|----------|-------------|
 | `enabled` | Yes | Enable federation |
 | `union_key` | Yes | Column identifying source model |
-| `primary_key` | Yes | Shared PK across children |
+| `primary_key` | Conditional | Shared PK across children. Required for single-fact bases (e.g., `ledger_entry`). Omit for multi-fact bases (e.g., `crime` has `_fact_crimes` + `_fact_arrests` with different PKs) |
 | `materialize` | No | Create physical union table (default: false = view) |
 | `refresh` | No | Refresh schedule: `daily`, `hourly` |
 
@@ -47,4 +52,23 @@ SELECT * FROM accounting.v_all_ledger_entries
 
 - All children must extend the same base
 - All children must output the same canonical schema
-- The `union_key` column must be populated by each child's `domain_source` derive
+- The `union_key` column (`domain_source`) must exist in every fact table schema in the base template
+- Each source file must declare `domain_source:` as a top-level key with the origin value (e.g., `"'chicago'"`)
+
+### domain_source Column
+
+The `domain_source` column is defined on the root event base (`_base._base_.event`) and must be carried into every fact table schema throughout the inheritance chain. This column is `nullable: false` — every fact row must identify its origin.
+
+Sources declare it as a top-level key:
+
+```yaml
+---
+type: domain-model-source
+source: payments
+maps_to: fact_ledger_entries
+from: bronze.payments
+domain_source: "'chicago'"
+---
+```
+
+The loader injects it as a literal column value in the SELECT.

@@ -22,6 +22,7 @@ canonical_fields:
   - [period_end_date_id, integer, nullable: false, description: "FK to temporal.dim_calendar (period end, maps to ledger date_id)"]
   - [period_start_date_id, integer, nullable: true, description: "FK to temporal.dim_calendar (period start)"]
   - [report_type, string, nullable: false, description: "annual, quarterly, budget (maps to ledger entry_type)"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
   - [amount, double, nullable: false, description: "Line item value (maps to ledger transaction_amount)"]
   - [reported_currency, string, nullable: true, description: "Reporting currency (USD, EUR, etc.)"]
 
@@ -39,6 +40,7 @@ tables:
       - [period_end_date_id, integer, false, "FK to calendar (period end)", {fk: temporal.dim_calendar.date_id}]
       - [period_start_date_id, integer, true, "FK to calendar (period start)", {fk: temporal.dim_calendar.date_id}]
       - [report_type, string, false, "annual or quarterly"]
+      - [domain_source, string, false, "Origin domain"]
       - [amount, double, false, "Line item value"]
       - [reported_currency, string, true, "Reporting currency"]
 

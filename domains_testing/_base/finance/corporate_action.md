@@ -11,6 +11,7 @@ depends_on: [temporal]
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
   - [action_id, integer, nullable: false, description: "Primary key"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
   - [security_id, integer, nullable: false, description: "FK to security dimension"]
   - [ticker, string, nullable: false, description: "Ticker symbol"]
   - [action_type, string, nullable: false, description: "DIVIDEND, SPLIT, MERGER, SPINOFF"]
@@ -26,6 +27,7 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [dividend_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(ticker, '_', CAST(ex_dividend_date AS STRING))))"}]
+      - [domain_source, string, false, "Origin domain"]
       - [security_id, integer, false, "FK to security", {derived: "ABS(HASH(ticker))"}]
       - [ex_dividend_date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(REGEXP_REPLACE(CAST(ex_dividend_date AS STRING), '-', '') AS INT)"}]
       - [ex_dividend_date, date, false, "Ex-dividend date"]
@@ -48,6 +50,7 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [split_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(ticker, '_', CAST(effective_date AS STRING))))"}]
+      - [domain_source, string, false, "Origin domain"]
       - [security_id, integer, false, "FK to security", {derived: "ABS(HASH(ticker))"}]
       - [effective_date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(REGEXP_REPLACE(CAST(effective_date AS STRING), '-', '') AS INT)"}]
       - [effective_date, date, false, "Split effective date"]

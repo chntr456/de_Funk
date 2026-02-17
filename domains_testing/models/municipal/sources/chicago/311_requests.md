@@ -4,10 +4,10 @@ source: 311_requests
 extends: _base.operations.service_request
 maps_to: fact_service_requests
 from: bronze.chicago_311_requests
+domain_source: "'chicago'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
-  - [domain_source, "'chicago'"]
   - [request_id, "ABS(HASH(sr_number))"]
   - [request_type_id, "ABS(HASH(sr_type))"]
   - [status_id, "ABS(HASH(status))"]

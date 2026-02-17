@@ -8,6 +8,7 @@ extends: _base._base_.event
 canonical_fields:
   - [incident_id, integer, false, "PK - incident surrogate"]
   - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
   - [case_number, string, true, "Police case number"]
   - [crime_type_id, integer, false, "FK to _dim_crime_type"]
   - [location_type_id, integer, true, "FK to _dim_location_type"]
@@ -53,6 +54,7 @@ tables:
     schema:
       - [incident_id, integer, false, "PK", {derived: "ABS(HASH(case_number))"}]
       - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [domain_source, string, false, "Origin domain"]
       - [crime_type_id, integer, false, "FK to _dim_crime_type", {fk: _dim_crime_type.crime_type_id}]
       - [location_type_id, integer, true, "FK to _dim_location_type", {fk: _dim_location_type.location_type_id}]
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
@@ -81,6 +83,7 @@ tables:
       - [arrest_id, integer, false, "PK"]
       - [incident_id, integer, true, "FK to _fact_crimes (nullable — not all arrests link to a crime report)"]
       - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [domain_source, string, false, "Origin domain"]
       - [crime_type_id, integer, false, "FK to _dim_crime_type", {fk: _dim_crime_type.crime_type_id}]
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
       - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]

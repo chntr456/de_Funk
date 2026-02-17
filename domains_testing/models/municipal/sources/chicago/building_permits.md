@@ -4,10 +4,10 @@ source: building_permits
 extends: _base.housing.permit
 maps_to: fact_permits
 from: bronze.chicago_building_permits
+domain_source: "'chicago'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
-  - [domain_source, "'chicago'"]
   - [permit_id, "ABS(HASH(permit_))"]
   - [permit_number, permit_]
   - [permit_type_id, "ABS(HASH(permit_type))"]

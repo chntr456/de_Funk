@@ -4,9 +4,9 @@ source: listing_status
 extends: _base.finance.securities
 maps_to: dim_security
 from: bronze.alpha_vantage_listing_status
+domain_source: "'alpha_vantage'"
 
 aliases:
-  - [domain_source, "'alpha_vantage'"]
   - [security_id, "ABS(HASH(symbol))"]
   - [ticker, symbol]
   - [security_name, name]

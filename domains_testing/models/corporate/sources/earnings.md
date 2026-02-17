@@ -4,10 +4,10 @@ source: earnings
 extends: _base.corporate.earnings
 maps_to: fact_earnings
 from: bronze.alpha_vantage_earnings
+domain_source: "'alpha_vantage'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
-  - [domain_source, "'alpha_vantage'"]
   - [earnings_id, "ABS(HASH(CONCAT(ticker, '_', CAST(reportedDate AS STRING))))"]
   - [report_date_id, "CAST(REGEXP_REPLACE(CAST(reportedDate AS STRING), '-', '') AS INT)"]
   - [fiscal_date_ending, fiscalDateEnding]

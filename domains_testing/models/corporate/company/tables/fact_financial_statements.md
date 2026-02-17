@@ -6,37 +6,8 @@ extends: _base.accounting.financial_statement._fact_financial_statements
 primary_key: [statement_entry_id]
 partition_by: [period_end_date_id]
 
-# Built by unpivoting wide source tables into row-per-line-item
-# Sources: income_statement, balance_sheet, cash_flow bronze tables
+# Unpivot config lives in sources: income_statement.md, balance_sheet.md, cash_flow.md
 transform: unpivot
-unpivot_sources:
-  - from: bronze.income_statement
-    account_mapping:
-      - [total_revenue, TOTAL_REVENUE]
-      - [cost_of_revenue, COST_OF_REVENUE]
-      - [gross_profit, GROSS_PROFIT]
-      - [operating_expenses, OPERATING_EXPENSES]
-      - [operating_income, OPERATING_INCOME]
-      - [ebitda, EBITDA]
-      - [net_income, NET_INCOME]
-  - from: bronze.balance_sheet
-    account_mapping:
-      - [total_assets, TOTAL_ASSETS]
-      - [total_current_assets, TOTAL_CURRENT_ASSETS]
-      - [cash_and_equivalents, CASH_AND_EQUIVALENTS]
-      - [total_liabilities, TOTAL_LIABILITIES]
-      - [total_current_liabilities, TOTAL_CURRENT_LIABILITIES]
-      - [long_term_debt, LONG_TERM_DEBT]
-      - [total_shareholder_equity, TOTAL_SHAREHOLDER_EQUITY]
-      - [retained_earnings, RETAINED_EARNINGS]
-      - [shares_outstanding, SHARES_OUTSTANDING]
-  - from: bronze.cash_flow
-    account_mapping:
-      - [operating_cashflow, OPERATING_CASHFLOW]
-      - [capital_expenditures, CAPITAL_EXPENDITURES]
-      - [cashflow_from_investment, CASHFLOW_FROM_INVESTMENT]
-      - [cashflow_from_financing, CASHFLOW_FROM_FINANCING]
-      - [dividend_payout, DIVIDEND_PAYOUT]
 
 # [column, type, nullable, description, {options}]
 schema:
@@ -60,7 +31,7 @@ Normalized financial statement data. Each row is one line item for one company i
 
 ### Unpivot Transform
 
-Source columns are mapped to account codes via `unpivot_sources`. For example, the `total_revenue` column from `bronze.income_statement` becomes a row where `account_code = 'TOTAL_REVENUE'` and `amount` = the revenue value.
+Source columns are mapped to account codes via `unpivot_aliases` in each source file (income_statement.md, balance_sheet.md, cash_flow.md). For example, the `totalRevenue` column from bronze becomes a row where `account_code = 'TOTAL_REVENUE'` and `amount` = the revenue value.
 
 ### Query Pattern
 

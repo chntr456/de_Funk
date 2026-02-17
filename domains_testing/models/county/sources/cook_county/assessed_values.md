@@ -4,10 +4,10 @@ source: assessed_values
 extends: _base.property.parcel
 maps_to: fact_assessed_values
 from: bronze.cook_county_assessed_values
+domain_source: "'cook_county'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('COUNTY_', 'Cook County')))"]
-  - [domain_source, "'cook_county'"]
   - [parcel_id, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
   - [year, year]
   - [date_id, "CAST(CONCAT(year, '0101') AS INT)"]

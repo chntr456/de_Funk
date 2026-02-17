@@ -4,10 +4,10 @@ source: business_licenses
 extends: _base.regulatory.inspection
 maps_to: fact_licenses
 from: bronze.chicago_business_licenses
+domain_source: "'chicago'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
-  - [domain_source, "'chicago'"]
   - [license_id, "ABS(HASH(CAST(id AS STRING)))"]
   - [business_name, doing_business_as_name]
   - [issue_date, date_issued]

@@ -10,6 +10,7 @@ extends: _base._base_.event
 canonical_fields:
   - [permit_id, integer, nullable: false, description: "Primary key"]
   - [legal_entity_id, integer, nullable: true, description: "FK to owning jurisdiction"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
   - [permit_number, string, nullable: true, description: "Official permit number"]
   - [permit_type_id, integer, nullable: false, description: "FK to _dim_permit_type"]
   - [work_type_id, integer, nullable: true, description: "FK to _dim_work_type"]
@@ -65,6 +66,7 @@ tables:
     schema:
       - [permit_id, integer, false, "PK", {derived: "ABS(HASH(permit_number))"}]
       - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [domain_source, string, false, "Origin domain"]
       - [permit_number, string, true, "Official permit number"]
       - [permit_type_id, integer, false, "FK to _dim_permit_type", {fk: _dim_permit_type.permit_type_id}]
       - [work_type_id, integer, true, "FK to _dim_work_type", {fk: _dim_work_type.work_type_id}]

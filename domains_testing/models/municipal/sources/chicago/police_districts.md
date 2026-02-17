@@ -4,9 +4,9 @@ source: police_districts
 extends: _base.geography.geo_spatial
 maps_to: dim_patrol_district
 from: bronze.chicago_police_districts
+domain_source: "'chicago'"
 
 aliases:
-  - [domain_source, "'chicago'"]
   - [boundary_id, "ABS(HASH(CONCAT('PATROL_DISTRICT', '_', CAST(dist_num AS STRING))))"]
   - [boundary_type, "'PATROL_DISTRICT'"]
   - [boundary_code, "CAST(dist_num AS STRING)"]

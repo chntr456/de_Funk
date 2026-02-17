@@ -19,6 +19,7 @@ canonical_fields:
   - [location_id, integer, nullable: true, description: "FK to geo_location._dim_location (inherited from event, always null for financial events)"]
   - [amount, "decimal(18,2)", nullable: false, description: "Monetary value"]
   - [event_type, string, nullable: false, description: "Event classification (PAYMENT, BUDGET, STATEMENT, etc.)"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
   - [reported_currency, string, nullable: true, description: "Currency (USD, EUR, etc.)"]
 
 tables:
@@ -34,6 +35,7 @@ tables:
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
       - [amount, "decimal(18,2)", false, "Monetary value"]
       - [event_type, string, false, "Event classification"]
+      - [domain_source, string, false, "Origin domain"]
       - [reported_currency, string, true, "Currency", {default: "'USD'"}]
 
     measures:

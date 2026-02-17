@@ -12,6 +12,7 @@ depends_on: [temporal]
 canonical_fields:
   - [segment_id, string, nullable: false, description: "Road segment identifier"]
   - [legal_entity_id, integer, nullable: true, description: "FK to owning jurisdiction"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
   - [timestamp, timestamp, nullable: false, description: "Observation time"]
   - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar"]
   - [location_id, integer, nullable: true, description: "FK to geo_location._dim_location (segment centroid)"]
@@ -27,6 +28,7 @@ tables:
     schema:
       - [segment_id, string, false, "Road segment identifier"]
       - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [domain_source, string, false, "Origin domain"]
       - [timestamp, timestamp, false, "Observation time"]
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(timestamp, 'yyyyMMdd') AS INT)"}]
       - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id"}]

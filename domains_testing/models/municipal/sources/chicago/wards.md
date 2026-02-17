@@ -4,9 +4,9 @@ source: wards
 extends: _base.geography.geo_spatial
 maps_to: dim_ward
 from: bronze.chicago_wards
+domain_source: "'chicago'"
 
 aliases:
-  - [domain_source, "'chicago'"]
   - [boundary_id, "ABS(HASH(CONCAT('WARD', '_', CAST(ward AS STRING))))"]
   - [boundary_type, "'WARD'"]
   - [boundary_code, "CAST(ward AS STRING)"]

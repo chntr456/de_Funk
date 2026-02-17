@@ -104,8 +104,7 @@ Each table file defines one fact or dimension table.
 | `table` | string | Yes | Table name (e.g., `dim_vendor`) |
 | `table_type` | string | Yes | `dimension` or `fact` |
 | `extends` | string | No | Base template table (e.g., `_fact_ledger_entries`) |
-| `from` | string | Yes* | Source: fact table name, bronze ref, or list |
-| `transform` | string | No | `aggregate`, `distinct`, or omit |
+| `transform` | string | No | `aggregate`, `distinct`, `unpivot`, or omit |
 | `group_by` | list | If aggregate | Columns to group by |
 | `primary_key` | list | Yes | Primary key columns |
 | `schema` | list | Yes* | `[column, type, nullable, description, {options}]` |
@@ -113,7 +112,7 @@ Each table file defines one fact or dimension table.
 | `enrich` | list | No | Enrichment from related fact tables |
 | `measures` | list | No | Table-level measures |
 
-*Facts that extend a base inherit schema; dimensions need explicit schema.
+*Facts that extend a base inherit schema; dimensions need explicit schema. Data sourcing is handled by `maps_to:` on source files — tables do not declare `from:`.
 
 ---
 

@@ -5,10 +5,10 @@ extends: _base.accounting.financial_statement
 maps_to: fact_financial_statements
 from: bronze.alpha_vantage_cash_flow
 transform: unpivot
+domain_source: "'alpha_vantage'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
-  - [domain_source, "'alpha_vantage'"]
   - [statement_entry_id, "ABS(HASH(CONCAT(legal_entity_id, '_', account_id, '_', period_end_date_id, '_', report_type)))"]
   - [account_id, "ABS(HASH(account_code))"]
   - [period_end_date_id, "CAST(REGEXP_REPLACE(CAST(fiscalDateEnding AS STRING), '-', '') AS INT)"]

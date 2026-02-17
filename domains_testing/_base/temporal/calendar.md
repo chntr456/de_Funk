@@ -54,10 +54,6 @@ tables:
       - [weekday_count, count, date_id, "Weekdays", {format: "#,##0", filter: "is_weekday = true"}]
 
 graph:
-  nodes:
-    dim_calendar:
-      from: self
-      type: dimension
   edges: []
 
 domain: temporal

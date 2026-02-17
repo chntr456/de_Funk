@@ -12,6 +12,7 @@ depends_on: [temporal]
 canonical_fields:
   - [earnings_id, integer, nullable: false, description: "Primary key"]
   - [legal_entity_id, integer, nullable: false, description: "FK to reporting entity (company)"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
   - [report_date_id, integer, nullable: false, description: "FK to temporal.dim_calendar (report date)"]
   - [fiscal_date_ending, date, nullable: true, description: "Fiscal period end date"]
   - [reported_eps, double, nullable: true, description: "Reported earnings per share"]
@@ -29,6 +30,7 @@ tables:
     schema:
       - [earnings_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(legal_entity_id, '_', report_date_id)))"}]
       - [legal_entity_id, integer, false, "FK to reporting entity"]
+      - [domain_source, string, false, "Origin domain"]
       - [report_date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
       - [fiscal_date_ending, date, true, "Fiscal period end"]
       - [reported_eps, double, true, "Reported EPS"]

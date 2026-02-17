@@ -10,6 +10,7 @@ extends: _base._base_.event
 canonical_fields:
   - [station_id, integer, nullable: false, description: "PK for transit stations"]
   - [legal_entity_id, integer, nullable: true, description: "FK to owning transit authority"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
   - [station_name, string, nullable: false, description: "Station display name"]
   - [transit_mode, string, nullable: false, description: "RAIL, BUS, SUBWAY, FERRY, LIGHT_RAIL"]
   - [line_name, string, nullable: true, description: "Route/line name(s)"]
@@ -52,6 +53,7 @@ tables:
     schema:
       - [ridership_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(COALESCE(CAST(station_id AS STRING), route_id), '_', CAST(date_id AS STRING))))"}]
       - [legal_entity_id, integer, true, "FK to owning transit authority"]
+      - [domain_source, string, false, "Origin domain"]
       - [station_id, integer, true, "FK to _dim_transit_station (null for bus)", {fk: _dim_transit_station.station_id}]
       - [route_id, string, true, "Route identifier (null for rail)"]
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
