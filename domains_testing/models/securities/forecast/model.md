@@ -21,7 +21,7 @@ graph:
   edges:
     - [forecast_price_to_prediction_cal, fact_forecast_price, temporal.dim_calendar, [prediction_date_id=date_id], many_to_one, temporal]
     - [forecast_price_to_forecast_cal, fact_forecast_price, temporal.dim_calendar, [forecast_date_id=date_id], many_to_one, temporal]
-    - [forecast_volume_to_calendar, fact_forecast_volume, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+
 
 build:
   partitions: [forecast_date]

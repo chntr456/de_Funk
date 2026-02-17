@@ -2,6 +2,7 @@
 type: domain-model-table
 table: fact_earnings
 table_type: fact
+extends: _base.corporate.earnings._fact_earnings
 from: bronze.alpha_vantage.earnings
 primary_key: [earnings_id]
 partition_by: [report_date_id]

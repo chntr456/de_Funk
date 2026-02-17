@@ -2,7 +2,7 @@
 type: domain-model-source
 source: dividends
 extends: _base.finance.corporate_action
-maps_to: _fact_dividends
+maps_to: fact_dividends
 from: bronze.alpha_vantage_dividends
 
 aliases:

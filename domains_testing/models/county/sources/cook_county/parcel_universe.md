@@ -2,7 +2,7 @@
 type: domain-model-source
 source: parcel_universe
 extends: _base.property.parcel
-maps_to: _dim_parcel
+maps_to: dim_parcel
 from: bronze.cook_county_parcel_universe
 
 aliases:

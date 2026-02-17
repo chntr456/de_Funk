@@ -2,7 +2,7 @@
 type: domain-model-source
 source: assessed_values
 extends: _base.property.parcel
-maps_to: _fact_assessed_values
+maps_to: fact_assessed_values
 from: bronze.cook_county_assessed_values
 
 aliases:

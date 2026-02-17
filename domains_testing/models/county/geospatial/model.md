@@ -14,7 +14,7 @@ storage:
 
 graph:
   edges:
-    - [municipality_to_township, dim_municipality, dim_township, [township_code=township_code], many_to_one, null]
+    - [municipality_to_township, dim_municipal_boundary, dim_township, [township_code=township_code], many_to_one, null]
     - [neighborhood_to_township, dim_neighborhood, dim_township, [township_code=township_code], many_to_one, null]
 
 build:
@@ -22,12 +22,12 @@ build:
   optimize: true
   phases:
     1: { tables: [dim_township] }
-    2: { tables: [dim_municipality, dim_neighborhood] }
+    2: { tables: [dim_municipal_boundary, dim_neighborhood] }
 
 measures:
   simple:
     - [township_count, count_distinct, dim_township.township_code, "Number of townships", {format: "#,##0"}]
-    - [municipality_count, count_distinct, dim_municipality.municipality_id, "Number of municipalities", {format: "#,##0"}]
+    - [municipality_count, count_distinct, dim_municipal_boundary.municipality_id, "Number of municipalities", {format: "#,##0"}]
     - [total_area_sqmi, sum, dim_township.area_sqmi, "Total area in square miles", {format: "#,##0.0"}]
 
 metadata:

@@ -2,7 +2,7 @@
 type: domain-model-source
 source: building_violations
 extends: _base.regulatory.inspection
-maps_to: _fact_violations
+maps_to: fact_violations
 from: bronze.chicago_building_violations
 
 aliases:

@@ -1,7 +1,6 @@
 ---
 type: domain-base
 model: crime
-namespace: _base.public_safety.crime
 version: 3.1
 description: "Base template for crime/incident data across jurisdictions"
 extends: _base._base_.event
@@ -106,6 +105,10 @@ graph:
     - [arrest_to_crime_type, _fact_arrests, _dim_crime_type, [crime_type_id=crime_type_id], many_to_one, null]
     - [arrest_to_calendar, _fact_arrests, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [arrest_to_location, _fact_arrests, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
+
+domain: public_safety
+tags: [base, template, public_safety, crime]
+status: active
 ---
 
 ## Base Crime Template

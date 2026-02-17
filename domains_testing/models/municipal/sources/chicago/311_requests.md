@@ -2,7 +2,7 @@
 type: domain-model-source
 source: 311_requests
 extends: _base.operations.service_request
-maps_to: _fact_service_requests
+maps_to: fact_service_requests
 from: bronze.chicago_311_requests
 
 aliases:

@@ -2,7 +2,7 @@
 type: domain-model-source
 source: crimes
 extends: _base.public_safety.crime
-maps_to: _fact_crimes
+maps_to: fact_crimes
 from: bronze.chicago_crimes
 
 aliases:

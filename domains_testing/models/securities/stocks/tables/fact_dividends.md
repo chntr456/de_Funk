@@ -2,6 +2,7 @@
 type: domain-model-table
 table: fact_dividends
 table_type: fact
+extends: _base.finance.corporate_action._fact_dividends
 from: bronze.alpha_vantage.dividends
 primary_key: [dividend_id]
 partition_by: [ex_dividend_date_id]

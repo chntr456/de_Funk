@@ -6,7 +6,7 @@ maps_to: fact_earnings
 from: bronze.alpha_vantage_earnings
 
 aliases:
-  - [earnings_id, TBD]
+  - [earnings_id, "ABS(HASH(CONCAT(ticker, '_', CAST(reportedDate AS STRING))))"]
   - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
   - [report_date_id, "CAST(REGEXP_REPLACE(CAST(reportedDate AS STRING), '-', '') AS INT)"]
   - [fiscal_date_ending, fiscalDateEnding]

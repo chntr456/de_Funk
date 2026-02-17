@@ -2,7 +2,7 @@
 type: domain-model-source
 source: food_inspections
 extends: _base.regulatory.inspection
-maps_to: _fact_inspections
+maps_to: fact_inspections
 from: bronze.chicago_food_inspections
 
 aliases:

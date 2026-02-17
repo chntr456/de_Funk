@@ -2,7 +2,7 @@
 type: domain-model-source
 source: splits
 extends: _base.finance.corporate_action
-maps_to: _fact_splits
+maps_to: fact_splits
 from: bronze.alpha_vantage_splits
 
 aliases:

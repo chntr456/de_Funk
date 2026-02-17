@@ -21,7 +21,7 @@ build:
   partitions: [year]
   optimize: true
   phases:
-    1: { tables: [dim_facility, dim_inspection_type, dim_violation_type, dim_license_type] }
+    1: { tables: [dim_facility, dim_inspection_type] }
     2: { tables: [fact_food_inspections, fact_building_violations, fact_business_licenses] }
 
 measures:

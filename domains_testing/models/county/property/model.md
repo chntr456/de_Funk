@@ -25,7 +25,7 @@ build:
   sort_by: [parcel_id, year]
   optimize: true
   phases:
-    1: { tables: [dim_parcel, dim_property_class, dim_township_ref] }
+    1: { tables: [dim_parcel, dim_property_class] }
     2: { tables: [fact_assessed_values, fact_parcel_sales] }
 
 measures:

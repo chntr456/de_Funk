@@ -2,7 +2,7 @@
 type: domain-model-source
 source: parcel_sales
 extends: _base.property.parcel
-maps_to: _fact_parcel_sales
+maps_to: fact_parcel_sales
 from: bronze.cook_county_parcel_sales
 
 aliases:
