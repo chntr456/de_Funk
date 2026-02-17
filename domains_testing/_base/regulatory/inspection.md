@@ -85,6 +85,24 @@ tables:
       - [fail_count, expression, "SUM(CASE WHEN result = 'FAIL' THEN 1 ELSE 0 END)", "Failed inspections", {format: "#,##0"}]
       - [pass_rate, expression, "100.0 * SUM(CASE WHEN result = 'PASS' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)", "Pass rate %", {format: "#,##0.0%"}]
 
+    python_measures:
+      compliance_trend:
+        function: "regulatory.measures.calculate_compliance_trend"
+        description: "Rolling pass rate trend — detects improving or declining compliance by area"
+        params:
+          window_days: 365
+          result_col: "result"
+          partition_cols: [community_area]
+        returns: [community_area, date_id, rolling_pass_rate, trend_direction, trend_slope]
+
+      repeat_offender_score:
+        function: "regulatory.measures.calculate_repeat_offender_score"
+        description: "Facility-level risk score based on failure frequency and recency"
+        params:
+          lookback_days: 730
+          decay_factor: 0.9
+        returns: [facility_id, risk_score, failure_count, days_since_last_failure]
+
   _fact_violations:
     type: fact
     primary_key: [violation_id]

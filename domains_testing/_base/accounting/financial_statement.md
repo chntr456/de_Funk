@@ -3,18 +3,26 @@ type: domain-base
 model: financial_statement
 version: 1.0
 description: "Periodic financial reporting - income statements, balance sheets, cash flows, budgets structured by chart of accounts"
-extends: _base._base_.event
+extends: _base.accounting.ledger_entry
 
 # CANONICAL FIELDS
+# Inherited from financial_event → ledger_entry:
+#   event_id → entry_id → statement_entry_id (PK)
+#   date_id → date_id → period_end_date_id (FK to calendar)
+#   event_type → entry_type → report_type (annual, quarterly, budget)
+#   amount → transaction_amount → amount (line item value)
+#   legal_entity_id (FK to entity)
+#   reported_currency
+# Additional fields specific to periodic financial reporting:
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
-  - [statement_entry_id, integer, nullable: false, description: "Primary key"]
+  - [statement_entry_id, integer, nullable: false, description: "Primary key (maps to ledger entry_id)"]
   - [legal_entity_id, integer, nullable: false, description: "FK to reporting entity (company or municipality)"]
   - [account_id, integer, nullable: false, description: "FK to chart of accounts line item"]
-  - [period_end_date_id, integer, nullable: false, description: "FK to temporal.dim_calendar (period end)"]
+  - [period_end_date_id, integer, nullable: false, description: "FK to temporal.dim_calendar (period end, maps to ledger date_id)"]
   - [period_start_date_id, integer, nullable: true, description: "FK to temporal.dim_calendar (period start)"]
-  - [report_type, string, nullable: false, description: "annual, quarterly, budget"]
-  - [amount, double, nullable: false, description: "Line item value"]
+  - [report_type, string, nullable: false, description: "annual, quarterly, budget (maps to ledger entry_type)"]
+  - [amount, double, nullable: false, description: "Line item value (maps to ledger transaction_amount)"]
   - [reported_currency, string, nullable: true, description: "Reporting currency (USD, EUR, etc.)"]
 
 tables:
@@ -48,6 +56,56 @@ tables:
       - [net_position, expression, "SUM(CASE WHEN coa.account_type = 'REVENUE' THEN fs.amount WHEN coa.account_type = 'EXPENSE' THEN -fs.amount ELSE 0 END)", "Revenue minus expenses", {format: "$#,##0", joins: "_fact_financial_statements fs JOIN _dim_chart_of_accounts coa ON fs.account_id = coa.account_id"}]
       - [expense_ratio, expression, "SUM(CASE WHEN coa.account_type = 'EXPENSE' THEN fs.amount ELSE 0 END) / NULLIF(SUM(CASE WHEN coa.account_type = 'REVENUE' THEN fs.amount ELSE 0 END), 0)", "Expense-to-revenue ratio", {format: "#,##0.00", joins: "_fact_financial_statements fs JOIN _dim_chart_of_accounts coa ON fs.account_id = coa.account_id"}]
 
+    python_measures:
+      # Inherited from _base.accounting.ledger_entry, params overridden for statement schema
+      net_present_value:
+        params:
+          amount_col: "amount"
+          date_col: "period_end_date_id"
+
+      # Inherited, override for statement columns
+      spending_velocity:
+        params:
+          amount_col: "amount"
+          date_col: "period_end_date_id"
+          partition_cols: [legal_entity_id, report_type]
+
+      # Financial statement-specific measures below
+      npv_by_category:
+        function: "accounting.measures.calculate_npv_by_category"
+        description: "NPV grouped by account type (revenue, expense, asset, liability)"
+        params:
+          discount_rate: 0.05
+          category_col: "account_type"
+          amount_col: "amount"
+        returns: [legal_entity_id, account_type, npv]
+        joins: "_fact_financial_statements fs JOIN _dim_chart_of_accounts coa ON fs.account_id = coa.account_id"
+
+      cagr:
+        function: "accounting.measures.calculate_cagr"
+        description: "Compound annual growth rate of amounts between earliest and latest periods"
+        params:
+          amount_col: "amount"
+          date_col: "period_end_date_id"
+        returns: [legal_entity_id, account_type, cagr_pct]
+
+      yoy_growth:
+        function: "accounting.measures.calculate_yoy_growth"
+        description: "Year-over-year growth rate per entity per account type"
+        params:
+          amount_col: "amount"
+          date_col: "period_end_date_id"
+          partition_cols: [legal_entity_id, account_id]
+        returns: [legal_entity_id, account_id, period_end_date_id, amount, prior_amount, yoy_growth_pct]
+
+      budget_variance:
+        function: "accounting.measures.calculate_budget_variance"
+        description: "Variance between budget and actual amounts for same entity/account"
+        params:
+          budget_report_type: "budget"
+          actual_report_types: ["annual", "quarterly"]
+        returns: [legal_entity_id, account_id, budget_amount, actual_amount, variance, variance_pct]
+
 graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
@@ -62,6 +120,27 @@ status: active
 ## Financial Statement Base Template
 
 Periodic financial reporting data — income statements, balance sheets, cash flows, and budgets. Each row is one line item for one entity in one reporting period. The `report_type` discriminator distinguishes actuals from budgets.
+
+### Inheritance Chain
+
+```
+_base._base_.event
+└── _base.accounting.financial_event       ← NPV, spending_velocity defined here
+    └── _base.accounting.ledger_entry      ← adds payee, categorization
+        └── _base.accounting.financial_statement  ← adds account structure, CAGR, YoY, budget variance
+```
+
+Financial statements ARE structured ledger entries — periodic summaries organized by chart of accounts. The column mapping from ledger to statement:
+
+| ledger_entry field | financial_statement field | Notes |
+|-------------------|-------------------------|-------|
+| `entry_id` | `statement_entry_id` | PK |
+| `date_id` | `period_end_date_id` | FK to calendar |
+| `entry_type` | `report_type` | annual, quarterly, budget |
+| `transaction_amount` | `amount` | Line item value |
+| *(new)* | `account_id` | FK to chart of accounts |
+| *(new)* | `period_start_date_id` | Period start date |
+| *(new)* | `reported_currency` | Currency |
 
 ### What Extends This
 
@@ -97,6 +176,26 @@ aliases:
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', municipality_name)))"]
 ```
+
+### Python Measures
+
+**Inherited from `financial_event` → `ledger_entry`** (param overrides only):
+
+| Measure | Origin | Overridden Params |
+|---------|--------|-------------------|
+| `net_present_value` | `financial_event` | `amount_col: "amount"`, `date_col: "period_end_date_id"` |
+| `spending_velocity` | `financial_event` | `amount_col: "amount"`, `partition_cols: [legal_entity_id, report_type]` |
+
+**Defined at this level** (inherited by `financial_event` and all implementing models):
+
+| Measure | Description | Key Params |
+|---------|-------------|------------|
+| `npv_by_category` | NPV grouped by account type (revenue, expense, etc.) | `discount_rate: 0.05` |
+| `cagr` | Compound annual growth rate between earliest and latest periods | `amount_col: "amount"` |
+| `yoy_growth` | Year-over-year growth per entity per account | Partitions by entity + account |
+| `budget_variance` | Variance between budget and actual for same entity/account | Requires `report_type` filter |
+
+NPV is defined once at `financial_event` and flows through the chain: `financial_event` → `ledger_entry` → `financial_statement`. Each level overrides column params to match its schema. No duplication.
 
 ### Unpivot Transform
 

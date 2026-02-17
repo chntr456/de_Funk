@@ -43,6 +43,23 @@ tables:
       - [beat_count, expression, "SUM(CASE WHEN surprise_eps > 0 THEN 1 ELSE 0 END)", "Earnings beats", {format: "#,##0"}]
       - [beat_rate, expression, "100.0 * SUM(CASE WHEN surprise_eps > 0 THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)", "Beat rate %", {format: "#,##0.0%"}]
 
+    python_measures:
+      eps_trend:
+        function: "corporate.measures.calculate_eps_trend"
+        description: "Rolling EPS trend — QoQ and YoY growth with linear regression slope"
+        params:
+          window_quarters: 8
+          partition_cols: [legal_entity_id]
+        returns: [legal_entity_id, report_date_id, eps_qoq_growth, eps_yoy_growth, eps_trend_slope]
+
+      estimate_accuracy:
+        function: "corporate.measures.calculate_estimate_accuracy"
+        description: "Rolling analyst estimate accuracy — mean absolute error and bias direction"
+        params:
+          window_quarters: 8
+          partition_cols: [legal_entity_id]
+        returns: [legal_entity_id, report_date_id, mae, bias, accuracy_pct]
+
 graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]

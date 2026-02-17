@@ -57,6 +57,24 @@ tables:
       - [split_count, count_distinct, split_id, "Number of splits", {format: "#,##0"}]
       - [avg_split_ratio, avg, split_factor, "Average split ratio", {format: "#,##0.00"}]
 
+  # Cross-table python measures (require JOIN to _fact_prices via security_id)
+  python_measures:
+    dividend_yield:
+      function: "securities.measures.calculate_dividend_yield"
+      description: "Annualized dividend yield — trailing 12-month dividends / current price"
+      params:
+        trailing_months: 12
+      returns: [security_id, date_id, trailing_dividends, price, dividend_yield_pct]
+      joins: "_fact_dividends d JOIN _fact_prices p ON d.security_id = p.security_id"
+
+    split_adjusted_return:
+      function: "securities.measures.calculate_split_adjusted_return"
+      description: "Cumulative return adjusted for all historical splits"
+      params:
+        price_col: "close"
+      returns: [security_id, date_id, raw_return, split_factor_cum, adjusted_return]
+      joins: "_fact_splits s JOIN _fact_prices p ON s.security_id = p.security_id"
+
 graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]

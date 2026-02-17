@@ -3,9 +3,12 @@ type: domain-base
 model: ledger_entry
 version: 1.0
 description: "Financial ledger entries - payments, payroll, contracts. Supports multi-source unions."
-extends: _base._base_.event
+extends: _base.accounting.financial_event
 
 # CANONICAL FIELDS
+# Inherited from financial_event: event_id (→ entry_id), legal_entity_id,
+#   date_id, amount (→ transaction_amount), event_type (→ entry_type), reported_currency
+# Adds: payee, source tracking, categorization fields
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
   - [entry_id, integer, nullable: false, description: "Primary key"]
@@ -53,6 +56,19 @@ tables:
       - [vendor_total, expression, "SUM(CASE WHEN entry_type = 'VENDOR_PAYMENT' THEN transaction_amount ELSE 0 END)", "Vendor payment total", {format: "$#,##0.00"}]
       - [contract_total, expression, "SUM(CASE WHEN entry_type = 'CONTRACT' THEN transaction_amount ELSE 0 END)", "Contract total", {format: "$#,##0.00"}]
 
+    python_measures:
+      # Inherited from _base.accounting.financial_event, params overridden for ledger schema
+      net_present_value:
+        params:
+          amount_col: "transaction_amount"
+          date_col: "transaction_date"
+
+      spending_velocity:
+        params:
+          amount_col: "transaction_amount"
+          date_col: "transaction_date"
+          partition_cols: [domain_source, entry_type]
+
 graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
@@ -70,7 +86,18 @@ status: active
 
 ## Ledger Entry Base Template
 
-Unified financial ledger supporting multi-source unions. Each source endpoint (payments, salaries, contracts) maps to this schema via aliases.
+Categorized financial transactions with payee, department, and expense classification. Extends `financial_event` (the generic base) to add recording-level detail.
+
+### Inheritance Chain
+
+```
+_base._base_.event
+└── _base.accounting.financial_event       ← NPV, spending_velocity defined here
+    └── _base.accounting.ledger_entry      ← YOU ARE HERE (adds payee, categorization)
+        └── _base.accounting.financial_statement  ← periodic aggregation by chart of accounts
+```
+
+Each source endpoint (payments, salaries, contracts) maps to this schema via aliases. Supports multi-source unions via federation.
 
 ### Nullable Field Contract
 

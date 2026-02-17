@@ -1,39 +1,67 @@
 ---
 type: domain-base
 model: financial_event
-version: 2.0
-description: "Budget events - appropriations, revenue estimates, position allocations. Extends financial_statement for cross-domain comparison."
-extends: _base.accounting.financial_statement
+version: 3.0
+description: "Base for all financial occurrences — any event involving money, an entity, and a date"
+extends: _base._base_.event
+
+depends_on: [temporal]
 
 # CANONICAL FIELDS
-# Inherited from financial_statement: statement_entry_id, legal_entity_id, account_id,
-#   period_end_date_id, period_start_date_id, report_type, amount, reported_currency
-# Additional budget-specific fields below:
+# The universal financial event: something financial happened to an entity on a date.
+# All accounting templates inherit these core fields.
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
-  # Inherited (mapped by budget sources):
-  - [statement_entry_id, integer, nullable: false, description: "PK (aliased as budget_event_id)"]
-  - [legal_entity_id, integer, nullable: false, description: "FK to owning municipality/entity"]
-  - [account_id, integer, nullable: false, description: "FK to chart of accounts (derived from account_code)"]
-  - [period_end_date_id, integer, nullable: false, description: "FK to calendar (Dec 31 of fiscal year)"]
-  - [period_start_date_id, integer, nullable: true, description: "FK to calendar (Jan 1 of fiscal year)"]
-  - [report_type, string, nullable: false, description: "'budget' for all budget events"]
-  - [amount, "decimal(18,2)", nullable: false, description: "Budgeted amount"]
-  - [reported_currency, string, nullable: true, description: "Currency (USD for US municipal)"]
-
-  # Budget-specific additions:
-  - [fiscal_year, integer, nullable: false, description: "Budget fiscal year"]
-  - [event_type, string, nullable: false, description: "APPROPRIATION, REVENUE, POSITION"]
-  - [domain_source, string, nullable: false, description: "Origin domain"]
-  - [department_code, string, nullable: true, description: "Department code (null if n/a)"]
-  - [department_description, string, nullable: true, description: "Department name (null if n/a)"]
-  - [fund_code, string, nullable: true, description: "Fund code"]
-  - [fund_description, string, nullable: true, description: "Fund name"]
-  - [account_code, string, nullable: true, description: "Account/appropriation code (raw string)"]
-  - [account_description, string, nullable: true, description: "Account name"]
-  - [description, string, nullable: true, description: "Line-item description"]
+  - [event_id, integer, nullable: false, description: "Primary key"]
+  - [legal_entity_id, integer, nullable: false, description: "FK to entity involved"]
+  - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar"]
+  - [amount, "decimal(18,2)", nullable: false, description: "Monetary value"]
+  - [event_type, string, nullable: false, description: "Event classification (PAYMENT, BUDGET, STATEMENT, etc.)"]
+  - [reported_currency, string, nullable: true, description: "Currency (USD, EUR, etc.)"]
 
 tables:
+  # Generic financial event fact (used directly by simple event models)
+  _fact_financial_events:
+    type: fact
+    primary_key: [event_id]
+    partition_by: [date_id]
+
+    # [column, type, nullable, description, {options}]
+    schema:
+      - [event_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(event_type, '_', source_id)))"}]
+      - [legal_entity_id, integer, false, "FK to entity"]
+      - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
+      - [amount, "decimal(18,2)", false, "Monetary value"]
+      - [event_type, string, false, "Event classification"]
+      - [reported_currency, string, true, "Currency", {default: "'USD'"}]
+
+    measures:
+      - [total_amount, sum, amount, "Total amount", {format: "$#,##0.00"}]
+      - [event_count, count_distinct, event_id, "Number of events", {format: "#,##0"}]
+      - [avg_amount, avg, amount, "Average event amount", {format: "$#,##0.00"}]
+      - [entity_count, count_distinct, legal_entity_id, "Entities involved", {format: "#,##0"}]
+
+    python_measures:
+      net_present_value:
+        function: "accounting.measures.calculate_npv"
+        description: "NPV of cash flows discounted to earliest date"
+        params:
+          discount_rate: 0.05
+          amount_col: "amount"
+          date_col: "date_id"
+        returns: [legal_entity_id, event_type, npv]
+
+      spending_velocity:
+        function: "accounting.measures.calculate_spending_velocity"
+        description: "Rolling spend rate — trailing 30/90/365-day totals and trend"
+        params:
+          amount_col: "amount"
+          date_col: "date_id"
+          windows: [30, 90, 365]
+          partition_cols: [legal_entity_id, event_type]
+        returns: [legal_entity_id, event_type, date_id, spend_30d, spend_90d, spend_365d, trend]
+
+  # Budget-specific fact table (for models that extend with budget semantics)
   _fact_budget_events:
     type: fact
     primary_key: [budget_event_id]
@@ -41,8 +69,7 @@ tables:
 
     # [column, type, nullable, description, {options}]
     schema:
-      # Inherited financial_statement columns
-      - [budget_event_id, integer, false, "PK (maps to statement_entry_id)", {derived: "ABS(HASH(CONCAT(event_type, '_', fiscal_year, '_', COALESCE(department_code,''), '_', COALESCE(account_code,''))))"}]
+      - [budget_event_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(event_type, '_', fiscal_year, '_', COALESCE(department_code,''), '_', COALESCE(account_code,''))))"}]
       - [legal_entity_id, integer, false, "FK to owning entity"]
       - [account_id, integer, false, "FK to chart of accounts", {derived: "ABS(HASH(COALESCE(account_code, 'UNCLASSIFIED')))", fk: "_dim_chart_of_accounts.account_id"}]
       - [period_end_date_id, integer, false, "FK to calendar (Dec 31)", {fk: temporal.dim_calendar.date_id, derived: "CAST(CONCAT(fiscal_year, '1231') AS INT)"}]
@@ -50,8 +77,6 @@ tables:
       - [report_type, string, false, "'budget'", {default: "'budget'"}]
       - [amount, "decimal(18,2)", false, "Budgeted amount"]
       - [reported_currency, string, true, "Currency", {default: "'USD'"}]
-
-      # Budget-specific columns
       - [fiscal_year, integer, false, "Budget year"]
       - [event_type, string, false, "APPROPRIATION, REVENUE, POSITION"]
       - [domain_source, string, false, "Origin domain"]
@@ -64,9 +89,6 @@ tables:
       - [description, string, true, "Line-item description"]
 
     measures:
-      # Inherited from financial_statement: entry_count, total_amount, avg_line_item,
-      #   entity_count, period_count, total_revenue_by_type, total_expenses_by_type, etc.
-      # Budget-specific measures:
       - [total_budget, sum, amount, "Total budgeted amount", {format: "$#,##0.00"}]
       - [line_item_count, count_distinct, budget_event_id, "Budget line items", {format: "#,##0"}]
       - [appropriation_total, expression, "SUM(CASE WHEN event_type = 'APPROPRIATION' THEN amount ELSE 0 END)", "Total appropriations", {format: "$#,##0.00"}]
@@ -78,6 +100,7 @@ tables:
 graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
+    - [event_to_calendar, _fact_financial_events, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [budget_to_calendar, _fact_budget_events, temporal.dim_calendar, [period_end_date_id=date_id], many_to_one, temporal]
 
 federation:
@@ -86,28 +109,52 @@ federation:
   primary_key: budget_event_id
 
 domain: accounting
-tags: [base, template, accounting, budget, financial_statement]
+tags: [base, template, accounting, financial_event, budget]
 status: active
 ---
 
 ## Financial Event Base Template
 
-Budget and fiscal planning events. Extends `_base.accounting.financial_statement` so that budget data shares the same `legal_entity_id + account_id + amount` structure as SEC filings and other financial reports.
+The root of the accounting hierarchy. A financial event is any occurrence involving money, an entity, and a date. All accounting templates inherit from this.
 
-### Inheritance from Financial Statement
+### Inheritance Chain
 
-| financial_statement field | Budget mapping |
-|--------------------------|----------------|
-| `statement_entry_id` | `budget_event_id` (composite hash) |
-| `legal_entity_id` | Municipality or entity that owns the budget |
-| `account_id` | `ABS(HASH(account_code))` — links to chart of accounts |
-| `period_end_date_id` | Dec 31 of fiscal year |
-| `period_start_date_id` | Jan 1 of fiscal year |
-| `report_type` | `'budget'` (vs `'annual'`, `'quarterly'` for actuals) |
-| `amount` | Budgeted dollar amount |
-| `reported_currency` | `'USD'` |
+```
+_base._base_.event
+└── _base.accounting.financial_event       ← YOU ARE HERE (NPV, spending_velocity defined)
+    └── _base.accounting.ledger_entry      ← adds payee, categorization, source tracking
+        └── _base.accounting.financial_statement  ← adds account structure, report periods
+```
 
-This means the shared measures from `financial_statement` (like `total_revenue_by_type`, `net_position`, `expense_ratio`) work on budget data too. Filter by `report_type` to compare actuals vs budgets for the same entity.
+### Real-World Flow
+
+1. **Financial event occurs** — money moves, a budget is allocated, a statement is filed
+2. **Gets recorded as a ledger entry** — categorized with payee, department, expense type
+3. **Entries aggregate into financial statements** — periodic summaries by chart of accounts
+
+### Python Measures (Inherited by ALL Accounting Templates)
+
+| Measure | Description | Defined Here |
+|---------|-------------|:---:|
+| `net_present_value` | NPV of cash flows discounted to earliest date | **yes** |
+| `spending_velocity` | Rolling 30/90/365-day spend rate with trend | **yes** |
+
+These are the foundational financial measures. `ledger_entry` and `financial_statement` inherit them and override column params to match their schemas.
+
+### Provided Tables
+
+| Table | Purpose | Used By |
+|-------|---------|---------|
+| `_fact_financial_events` | Generic event rows (amount + date + entity) | Simple event models |
+| `_fact_budget_events` | Budget appropriations, revenue, positions | Municipal budget models |
+
+### Budget Event Types
+
+| Type | Description | Source Example |
+|------|-------------|---------------|
+| APPROPRIATION | Authorized spending | Budget ordinance expenditures |
+| REVENUE | Estimated income | Budget ordinance revenue |
+| POSITION | Budgeted positions/salaries | Position and salary allocations |
 
 ### Budget-vs-Actual Analysis
 
@@ -125,14 +172,6 @@ WHERE fs.legal_entity_id = ABS(HASH(CONCAT('CITY_', 'Chicago')))
 GROUP BY cal.year, fs.report_type
 ORDER BY cal.year, fs.report_type;
 ```
-
-### Event Types
-
-| Type | Description | Source Example |
-|------|-------------|---------------|
-| APPROPRIATION | Authorized spending | Budget ordinance expenditures |
-| REVENUE | Estimated income | Budget ordinance revenue |
-| POSITION | Budgeted positions/salaries | Position and salary allocations |
 
 ### Usage
 
