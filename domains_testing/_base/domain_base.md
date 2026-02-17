@@ -20,8 +20,8 @@ accounting/                      FINANCIAL ACCOUNTING
   chart_of_accounts.md           Account classification (extends entity)
   fund.md                        Fiscal accounting pools (extends entity)
   ledger_entry.md                Payments/payroll/contracts (extends event)
-  financial_event.md             Budget/appropriation events (extends event)
   financial_statement.md         Periodic financial reporting (extends event)
+    financial_event.md           Budget/appropriation events (extends financial_statement)
 
 corporate/                       CORPORATE REPORTING
   earnings.md                    EPS reports and analyst estimates (extends event)
@@ -71,6 +71,8 @@ temporal/                        TIME
 4. **Schema is authoritative** - Derived expressions live in table schema, not graph nodes
 5. **Integer PKs** - All surrogate keys are `ABS(HASH(...))` integers
 6. **date_id everywhere** - All facts FK to `temporal.dim_calendar` via integer date_id
+7. **legal_entity_id** - All event facts FK to owning legal entity (company, municipality, county)
+8. **Shared measures** - Account-type measures on financial_statement work for corporate AND municipal models
 
 ### Canonical Fields Format
 

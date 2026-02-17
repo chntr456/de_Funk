@@ -29,11 +29,11 @@ graph:
     - [entry_to_department, fact_ledger_entries, dim_department, [department_id=org_unit_id], many_to_one, null]
     - [entry_to_contract, fact_ledger_entries, dim_contract, [contract_id=contract_id], many_to_one, null]
 
-    # Budget → dimensions
-    - [budget_to_calendar, fact_budget_events, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    # Budget → dimensions (budget inherits financial_statement schema: account_id, period dates)
+    - [budget_to_calendar, fact_budget_events, temporal.dim_calendar, [period_end_date_id=date_id], many_to_one, temporal]
     - [budget_to_department, fact_budget_events, dim_department, [department_id=org_unit_id], many_to_one, null]
     - [budget_to_fund, fact_budget_events, dim_fund, [fund_id=fund_id], many_to_one, null]
-    - [budget_to_account, fact_budget_events, dim_chart_of_accounts, [chart_account_id=account_id], many_to_one, null]
+    - [budget_to_account, fact_budget_events, dim_chart_of_accounts, [account_id=account_id], many_to_one, null]
 
     # Dimension → dimension
     - [contract_to_vendor, dim_contract, dim_vendor, [vendor_id=vendor_id], many_to_one, null]

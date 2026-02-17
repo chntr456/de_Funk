@@ -7,7 +7,15 @@ from: bronze.chicago_budget_positions
 event_type: POSITION
 domain_source: "'chicago'"
 aliases:
+  # Inherited from financial_statement
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
+  - [account_id, "ABS(HASH(COALESCE(title_code, 'UNCLASSIFIED')))"]
+  - [period_end_date_id, "CAST(CONCAT(year, '1231') AS INT)"]
+  - [period_start_date_id, "CAST(CONCAT(year, '0101') AS INT)"]
+  - [report_type, "'budget'"]
+  - [amount, total_budgeted_amount]
+  - [reported_currency, "'USD'"]
+  # Budget-specific
   - [fiscal_year, year]
   - [department_code, department_code]
   - [department_description, department_description]
@@ -15,7 +23,6 @@ aliases:
   - [fund_description, "null"]
   - [account_code, title_code]
   - [account_description, title_description]
-  - [amount, total_budgeted_amount]
   - [description, "CONCAT(title_description, ' (', budgeted_unit, ' units)')"]
 ---
 
