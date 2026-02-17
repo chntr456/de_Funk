@@ -1,12 +1,19 @@
 ---
-type: data-source
+type: domain-model-source
 source: earnings
-bronze_table: alpha_vantage/earnings
-description: "Quarterly earnings reports and EPS data"
-update_frequency: quarterly
-feeds: [company]
+extends: _base.entity.legal
+maps_to: fact_earnings
+from: bronze.alpha_vantage_earnings
+
+aliases:
+  - [company_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
+  - [report_date_id, "CAST(REGEXP_REPLACE(CAST(reportedDate AS STRING), '-', '') AS INT)"]
+  - [fiscal_date_ending, fiscalDateEnding]
+  - [reported_eps, reportedEPS]
+  - [estimated_eps, estimatedEPS]
+  - [surprise_eps, surprise]
+  - [surprise_percentage, surprisePercentage]
 ---
 
 ## Earnings
-
 Quarterly reported EPS, estimated EPS, and surprise metrics.

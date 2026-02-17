@@ -1,10 +1,18 @@
 ---
-type: data-source
+type: domain-model-source
 source: cta_l_stops
-bronze_table: chicago/chicago_cta_l_stops
-description: "CTA L station reference data"
-update_frequency: periodic
-feeds: [municipal_transportation]
+extends: _base.transportation.transit
+maps_to: dim_transit_station
+from: bronze.chicago_cta_l_stops
+
+aliases:
+  - [station_id, "ABS(HASH(CONCAT(station_name, '_', 'RAIL')))"]
+  - [station_name, station_name]
+  - [transit_mode, "'RAIL'"]
+  - [line_name, TBD]
+  - [ada_accessible, ada]
+  - [latitude, TBD]
+  - [longitude, TBD]
 ---
 
 ## CTA L Stops

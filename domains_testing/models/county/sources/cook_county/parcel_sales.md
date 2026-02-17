@@ -1,10 +1,17 @@
 ---
-type: data-source
+type: domain-model-source
 source: parcel_sales
-bronze_table: cook_county/cook_county_parcel_sales
-description: "Property sales transactions"
-update_frequency: daily
-feeds: [county_property]
+extends: _base.property.parcel
+maps_to: _fact_parcel_sales
+from: bronze.cook_county_parcel_sales
+
+aliases:
+  - [parcel_id, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
+  - [sale_date, sale_date]
+  - [sale_date_id, "CAST(DATE_FORMAT(sale_date, 'yyyyMMdd') AS INT)"]
+  - [year, "YEAR(sale_date)"]
+  - [sale_price, sale_price]
+  - [sale_type, sale_type]
 ---
 
 ## Parcel Sales

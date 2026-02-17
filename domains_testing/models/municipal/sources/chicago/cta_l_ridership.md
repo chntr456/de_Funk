@@ -1,11 +1,19 @@
 ---
-type: data-source
+type: domain-model-source
 source: cta_l_ridership
-bronze_table: chicago/chicago_cta_l_ridership
-description: "Daily L station ridership since 2001"
-update_frequency: daily
-feeds: [municipal_transportation]
+extends: _base.transportation.transit
+maps_to: fact_rail_ridership
+from: bronze.chicago_cta_l_ridership
+
+aliases:
+  - [station_id, "ABS(HASH(CONCAT(stationname, '_', 'RAIL')))"]
+  - [route_id, "null"]
+  - [date_id, "CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT)"]
+  - [year, "YEAR(date)"]
+  - [day_type_id, daytype]
+  - [transit_mode, "'RAIL'"]
+  - [rides, rides]
 ---
 
 ## CTA L Ridership
-Daily station-level ridership by day type (weekday, Saturday, Sunday/holiday).
+Daily station-level ridership by day type (weekday, Saturday, Sunday/holiday) since 2001.

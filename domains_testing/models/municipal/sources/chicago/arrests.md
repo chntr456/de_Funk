@@ -1,10 +1,19 @@
 ---
-type: data-source
+type: domain-model-source
 source: arrests
-bronze_table: chicago/chicago_arrests
-description: "Arrest records"
-update_frequency: daily
-feeds: [municipal_public_safety]
+extends: _base.public_safety.crime
+maps_to: _fact_arrests
+from: bronze.chicago_arrests
+
+aliases:
+  - [arrest_id, TBD]
+  - [incident_id, TBD]
+  - [crime_type_id, TBD]
+  - [date_id, TBD]
+  - [beat, beat]
+  - [district, district]
+  - [community_area, TBD]
+  - [year, TBD]
 ---
 
 ## Arrests

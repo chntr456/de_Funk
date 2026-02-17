@@ -1,11 +1,21 @@
 ---
-type: data-source
+type: domain-model-source
 source: municipalities
-bronze_table: cook_county/cook_county_municipalities
-description: "Municipality boundaries (cities, villages, 130+)"
-update_frequency: periodic
-feeds: [county_geospatial]
+extends: _base.geography.geo_spatial
+maps_to: dim_municipality
+from: bronze.cook_county_municipalities
+
+aliases:
+  - [boundary_type, "'MUNICIPALITY'"]
+  - [boundary_code, municipality_code]
+  - [boundary_name, municipality_name]
+  - [parent_boundary_id, TBD]
+  - [centroid_lat, TBD]
+  - [centroid_lon, TBD]
+  - [geom_wkt, the_geom]
+  - [area_sqmi, TBD]
+  - [population, TBD]
 ---
 
 ## Municipalities
-130+ municipality boundaries within Cook County with geometry.
+130+ municipality boundaries within Cook County.

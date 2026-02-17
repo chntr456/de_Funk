@@ -6,10 +6,6 @@ maps_to: fact_budget_events
 from: bronze.chicago_budget_revenue
 event_type: REVENUE
 domain_source: "'chicago'"
-bronze_table: chicago/chicago_budget_revenue
-description: "Budget revenue estimates"
-update_frequency: annual
-
 aliases:
   - [fiscal_year, year]
   - [department_code, "null"]

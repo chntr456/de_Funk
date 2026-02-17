@@ -1,11 +1,21 @@
 ---
-type: data-source
+type: domain-model-source
 source: zoning_districts
-bronze_table: chicago/chicago_zoning_districts
-description: "Zoning district boundaries"
-update_frequency: periodic
-feeds: [municipal_housing]
+extends: _base.geography.geo_spatial
+maps_to: dim_zoning_district
+from: bronze.chicago_zoning_districts
+
+aliases:
+  - [boundary_type, "'ZONING_DISTRICT'"]
+  - [boundary_code, zone_class]
+  - [boundary_name, zone_type]
+  - [parent_boundary_id, "null"]
+  - [centroid_lat, "null"]
+  - [centroid_lon, "null"]
+  - [geom_wkt, the_geom]
+  - [area_sqmi, TBD]
+  - [population, "null"]
 ---
 
 ## Zoning Districts
-Zoning classification boundaries with geometry (residential, commercial, manufacturing, planned development).
+Zoning classification boundaries (residential, commercial, manufacturing, planned development).

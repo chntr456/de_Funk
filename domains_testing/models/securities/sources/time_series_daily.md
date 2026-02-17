@@ -1,12 +1,21 @@
 ---
-type: data-source
+type: domain-model-source
 source: time_series_daily
-bronze_table: alpha_vantage/time_series_daily_adjusted
-description: "Daily OHLCV price data for all securities"
-update_frequency: daily
-feeds: [securities_master, stocks]
+extends: _base.finance.securities
+maps_to: _fact_prices
+from: bronze.alpha_vantage_time_series_daily_adjusted
+
+aliases:
+  - [ticker, symbol]
+  - [trade_date, timestamp]
+  - [date_id, "CAST(REGEXP_REPLACE(CAST(timestamp AS STRING), '-', '') AS INT)"]
+  - [open, open]
+  - [high, high]
+  - [low, low]
+  - [close, close]
+  - [volume, volume]
+  - [adjusted_close, adjusted_close]
 ---
 
 ## Time Series Daily
-
-Daily open/high/low/close/volume with adjusted close and split coefficients.
+Daily OHLCV price data with adjusted close and split coefficients for all securities.

@@ -1,10 +1,18 @@
 ---
-type: data-source
+type: domain-model-source
 source: cta_bus_ridership
-bronze_table: chicago/chicago_cta_bus_ridership
-description: "Daily bus route ridership"
-update_frequency: daily
-feeds: [municipal_transportation]
+extends: _base.transportation.transit
+maps_to: fact_bus_ridership
+from: bronze.chicago_cta_bus_ridership
+
+aliases:
+  - [station_id, "null"]
+  - [route_id, route]
+  - [date_id, "CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT)"]
+  - [year, "YEAR(date)"]
+  - [day_type_id, daytype]
+  - [transit_mode, "'BUS'"]
+  - [rides, rides]
 ---
 
 ## CTA Bus Ridership

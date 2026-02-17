@@ -1,10 +1,26 @@
 ---
-type: data-source
+type: domain-model-source
 source: building_permits
-bronze_table: chicago/chicago_building_permits
-description: "Building permits issued"
-update_frequency: daily
-feeds: [municipal_housing]
+extends: _base.housing.permit
+maps_to: _fact_permits
+from: bronze.chicago_building_permits
+
+aliases:
+  - [permit_number, permit_]
+  - [permit_type_id, "ABS(HASH(permit_type))"]
+  - [work_type_id, "ABS(HASH(work_description))"]
+  - [issue_date, issue_date]
+  - [date_id, "CAST(DATE_FORMAT(issue_date, 'yyyyMMdd') AS INT)"]
+  - [year, "YEAR(issue_date)"]
+  - [address, street_address]
+  - [ward, TBD]
+  - [community_area, community_area]
+  - [latitude, latitude]
+  - [longitude, longitude]
+  - [total_fee, total_fee]
+  - [estimated_cost, estimated_cost]
+  - [permit_type, permit_type]
+  - [work_type, work_description]
 ---
 
 ## Building Permits

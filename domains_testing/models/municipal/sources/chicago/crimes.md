@@ -1,11 +1,28 @@
 ---
-type: data-source
+type: domain-model-source
 source: crimes
-bronze_table: chicago/chicago_crimes
-description: "Crime incidents 2001-present"
-update_frequency: daily
-feeds: [municipal_public_safety]
+extends: _base.public_safety.crime
+maps_to: _fact_crimes
+from: bronze.chicago_crimes
+
+aliases:
+  - [case_number, case_number]
+  - [date_id, "CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT)"]
+  - [year, year]
+  - [block, block]
+  - [beat, beat]
+  - [district, district]
+  - [ward, ward]
+  - [community_area, community_area]
+  - [latitude, latitude]
+  - [longitude, longitude]
+  - [arrest_made, arrest]
+  - [domestic, domestic]
+  - [iucr_code, iucr]
+  - [primary_type, primary_type]
+  - [description, description]
+  - [location_description, location_description]
 ---
 
 ## Crimes
-Crime incident reports since 2001. Includes IUCR code, location, arrest status.
+Crime incident reports 2001-present. Includes IUCR code, location, arrest status.

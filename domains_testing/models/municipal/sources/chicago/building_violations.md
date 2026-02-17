@@ -1,10 +1,20 @@
 ---
-type: data-source
+type: domain-model-source
 source: building_violations
-bronze_table: chicago/chicago_building_violations
-description: "Building code violations"
-update_frequency: daily
-feeds: [municipal_regulatory]
+extends: _base.regulatory.inspection
+maps_to: _fact_violations
+from: bronze.chicago_building_violations
+
+aliases:
+  - [violation_id, "ABS(HASH(CAST(id AS STRING)))"]
+  - [violation_date, violation_date]
+  - [date_id, "CAST(DATE_FORMAT(violation_date, 'yyyyMMdd') AS INT)"]
+  - [year, "YEAR(violation_date)"]
+  - [violation_type, violation_code]
+  - [status, violation_status]
+  - [address, address]
+  - [ward, TBD]
+  - [community_area, TBD]
 ---
 
 ## Building Violations

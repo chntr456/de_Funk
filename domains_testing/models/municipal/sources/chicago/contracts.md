@@ -6,10 +6,6 @@ maps_to: fact_ledger_entries
 from: bronze.chicago_contracts
 entry_type: CONTRACT
 domain_source: "'chicago'"
-bronze_table: chicago/chicago_contracts
-description: "City contracts with departments and amounts"
-update_frequency: daily
-
 aliases:
   - [source_id, contract_number]
   - [payee, vendor_name]

@@ -1,11 +1,17 @@
 ---
-type: data-source
+type: domain-model-source
 source: traffic
-bronze_table: chicago/chicago_traffic
-description: "Traffic congestion by segment"
-update_frequency: real-time
-feeds: [municipal_transportation]
+extends: _base.transportation.transit
+maps_to: _fact_traffic
+from: bronze.chicago_traffic
+
+aliases:
+  - [segment_id, segmentid]
+  - [timestamp, TBD]
+  - [date_id, TBD]
+  - [speed, current_speed]
+  - [congestion_level, TBD]
 ---
 
 ## Traffic
-Real-time traffic congestion data by road segment.
+Traffic congestion data by road segment.

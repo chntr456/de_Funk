@@ -6,10 +6,6 @@ maps_to: fact_budget_events
 from: bronze.chicago_budget_appropriations
 event_type: APPROPRIATION
 domain_source: "'chicago'"
-bronze_table: chicago/chicago_budget_appropriations
-description: "Budget appropriations by department"
-update_frequency: annual
-
 aliases:
   - [fiscal_year, year]
   - [department_code, department_code]
