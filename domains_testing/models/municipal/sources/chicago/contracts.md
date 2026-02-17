@@ -8,6 +8,8 @@ entry_type: CONTRACT
 domain_source: "'chicago'"
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
+  - [entry_id, "ABS(HASH(CONCAT('CONTRACT', '_', contract_number)))"]
+  - [date_id, "CAST(DATE_FORMAT(start_date, 'yyyyMMdd') AS INT)"]
   - [source_id, contract_number]
   - [payee, vendor_name]
   - [transaction_amount, award_amount]

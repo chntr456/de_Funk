@@ -9,6 +9,7 @@ domain_source: "'chicago'"
 aliases:
   # Inherited from financial_statement
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
+  - [budget_event_id, "ABS(HASH(CONCAT('APPROPRIATION', '_', year, '_', COALESCE(department_code,''), '_', COALESCE(appropriation_account,''))))"]
   - [account_id, "ABS(HASH(COALESCE(appropriation_account, 'UNCLASSIFIED')))"]
   - [period_end_date_id, "CAST(CONCAT(year, '1231') AS INT)"]
   - [period_start_date_id, "CAST(CONCAT(year, '0101') AS INT)"]

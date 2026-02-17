@@ -6,6 +6,7 @@ maps_to: dim_township
 from: bronze.cook_county_townships
 
 aliases:
+  - [boundary_id, "ABS(HASH(CONCAT('TOWNSHIP', '_', township_code)))"]
   - [boundary_type, "'TOWNSHIP'"]
   - [boundary_code, township_code]
   - [boundary_name, township_name]

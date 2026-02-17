@@ -6,6 +6,7 @@ maps_to: dim_neighborhood
 from: bronze.cook_county_neighborhoods
 
 aliases:
+  - [boundary_id, "ABS(HASH(CONCAT('NEIGHBORHOOD', '_', nbhd_code)))"]
   - [boundary_type, "'NEIGHBORHOOD'"]
   - [boundary_code, nbhd_code]
   - [boundary_name, nbhd_name]

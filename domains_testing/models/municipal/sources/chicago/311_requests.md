@@ -20,6 +20,7 @@ aliases:
   - [community_area, community_area]
   - [latitude, latitude]
   - [longitude, longitude]
+  - [days_to_close, "DATEDIFF(closed_date, created_date)"]
   - [sr_type, sr_type]
   - [status, status]
 ---

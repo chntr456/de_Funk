@@ -6,6 +6,7 @@ maps_to: dim_zoning_district
 from: bronze.chicago_zoning_districts
 
 aliases:
+  - [boundary_id, "ABS(HASH(CONCAT('ZONING_DISTRICT', '_', zone_class)))"]
   - [boundary_type, "'ZONING_DISTRICT'"]
   - [boundary_code, zone_class]
   - [boundary_name, zone_type]

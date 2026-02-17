@@ -6,6 +6,7 @@ maps_to: dim_patrol_area
 from: bronze.chicago_police_beats
 
 aliases:
+  - [boundary_id, "ABS(HASH(CONCAT('PATROL_AREA', '_', CAST(beat_num AS STRING))))"]
   - [boundary_type, "'PATROL_AREA'"]
   - [boundary_code, "CAST(beat_num AS STRING)"]
   - [boundary_name, "CONCAT('Beat ', CAST(beat_num AS STRING))"]

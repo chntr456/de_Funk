@@ -6,6 +6,7 @@ maps_to: dim_security
 from: bronze.alpha_vantage_listing_status
 
 aliases:
+  - [security_id, "ABS(HASH(symbol))"]
   - [ticker, symbol]
   - [security_name, name]
   - [asset_type, assetType]

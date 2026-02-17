@@ -7,6 +7,8 @@ from: bronze.alpha_vantage_time_series_daily_adjusted
 
 aliases:
   - [legal_entity_id, "null"]
+  - [security_id, "ABS(HASH(symbol))"]
+  - [price_id, "ABS(HASH(CONCAT(symbol, '_', timestamp)))"]
   - [ticker, symbol]
   - [trade_date, timestamp]
   - [date_id, "CAST(REGEXP_REPLACE(CAST(timestamp AS STRING), '-', '') AS INT)"]

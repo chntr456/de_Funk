@@ -8,6 +8,8 @@ entry_type: VENDOR_PAYMENT
 domain_source: "'chicago'"
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
+  - [entry_id, "ABS(HASH(CONCAT('VENDOR_PAYMENT', '_', voucher_number)))"]
+  - [date_id, "CAST(DATE_FORMAT(check_date, 'yyyyMMdd') AS INT)"]
   - [source_id, voucher_number]
   - [payee, vendor_name]
   - [transaction_amount, amount]

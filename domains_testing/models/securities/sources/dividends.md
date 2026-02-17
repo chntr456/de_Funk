@@ -7,7 +7,7 @@ from: bronze.alpha_vantage_dividends
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', symbol)))"]
-  - [action_id, TBD]
+  - [dividend_id, "ABS(HASH(CONCAT(symbol, '_', CAST(ex_dividend_date AS STRING))))"]
   - [security_id, "ABS(HASH(symbol))"]
   - [ticker, symbol]
   - [action_type, "'DIVIDEND'"]

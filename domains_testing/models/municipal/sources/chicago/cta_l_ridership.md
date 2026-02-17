@@ -7,6 +7,7 @@ from: bronze.chicago_cta_l_ridership
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
+  - [ridership_id, "ABS(HASH(CONCAT(stationname, '_RAIL_', CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT))))"]
   - [station_id, "ABS(HASH(CONCAT(stationname, '_', 'RAIL')))"]
   - [route_id, "null"]
   - [date_id, "CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT)"]
