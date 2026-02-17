@@ -3,7 +3,7 @@ type: domain-model
 model: company
 version: 3.1
 description: "Corporate legal entities with SEC registration and financial statements"
-extends: [_base.entity.legal, _base.accounting.chart_of_accounts]
+extends: [_base.entity.company, _base.accounting.financial_statement, _base.corporate.earnings]
 depends_on: [temporal]
 
 sources_from: sources/

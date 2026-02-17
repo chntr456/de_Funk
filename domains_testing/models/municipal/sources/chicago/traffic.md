@@ -1,7 +1,7 @@
 ---
 type: domain-model-source
 source: traffic
-extends: _base.transportation.transit
+extends: _base.transportation.traffic
 maps_to: _fact_traffic
 from: bronze.chicago_traffic
 

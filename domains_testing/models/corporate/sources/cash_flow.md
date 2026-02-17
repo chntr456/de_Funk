@@ -1,16 +1,19 @@
 ---
 type: domain-model-source
 source: cash_flow
-extends: _base.accounting.chart_of_accounts
+extends: _base.accounting.financial_statement
 maps_to: fact_financial_statements
 from: bronze.alpha_vantage_cash_flow
 transform: unpivot
 
 aliases:
-  - [company_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
-  - [period_start_date_id, "CAST(REGEXP_REPLACE(CAST(fiscalDateEnding AS STRING), '-', '') AS INT)"]
+  - [statement_entry_id, TBD]
+  - [entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
+  - [account_id, "ABS(HASH(account_code))"]
   - [period_end_date_id, "CAST(REGEXP_REPLACE(CAST(fiscalDateEnding AS STRING), '-', '') AS INT)"]
+  - [period_start_date_id, "CAST(REGEXP_REPLACE(CAST(fiscalDateEnding AS STRING), '-', '') AS INT)"]
   - [report_type, reportType]
+  - [amount, TBD]
   - [reported_currency, reportedCurrency]
 
 unpivot_aliases:

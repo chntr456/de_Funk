@@ -1,14 +1,18 @@
 ---
 type: domain-model-source
 source: dividends
-extends: _base.finance.securities
-maps_to: fact_dividends
+extends: _base.finance.corporate_action
+maps_to: _fact_dividends
 from: bronze.alpha_vantage_dividends
 
 aliases:
+  - [action_id, TBD]
+  - [security_id, "ABS(HASH(symbol))"]
   - [ticker, symbol]
+  - [action_type, "'DIVIDEND'"]
+  - [effective_date, ex_dividend_date]
+  - [effective_date_id, "CAST(REGEXP_REPLACE(CAST(ex_dividend_date AS STRING), '-', '') AS INT)"]
   - [ex_dividend_date, ex_dividend_date]
-  - [ex_dividend_date_id, "CAST(REGEXP_REPLACE(CAST(ex_dividend_date AS STRING), '-', '') AS INT)"]
   - [dividend_amount, amount]
   - [record_date, record_date]
   - [payment_date, payment_date]

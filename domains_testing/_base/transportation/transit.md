@@ -2,7 +2,7 @@
 type: domain-base
 model: transit
 version: 1.0
-description: "Public transit - stations, routes, ridership, and traffic data"
+description: "Public transit - stations, routes, and ridership data"
 extends: _base._base_.event
 
 # CANONICAL FIELDS
@@ -77,28 +77,13 @@ tables:
       - [total_rides, sum, rides, "Total ridership", {format: "#,##0"}]
       - [avg_daily_rides, avg, rides, "Avg daily ridership", {format: "#,##0"}]
 
-  _fact_traffic:
-    type: fact
-    primary_key: [segment_id, timestamp]
-
-    # [column, type, nullable, description, {options}]
-    schema:
-      - [segment_id, string, false, "Road segment identifier"]
-      - [timestamp, timestamp, false, "Observation time"]
-      - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(timestamp, 'yyyyMMdd') AS INT)"}]
-      - [speed, double, true, "Observed speed"]
-      - [congestion_level, string, true, "Congestion classification"]
-
-    measures:
-      - [avg_speed, avg, speed, "Average speed", {format: "#,##0.0"}]
-
 graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
     - [ridership_to_station, _fact_ridership, _dim_transit_station, [station_id=station_id], many_to_one, null]
     - [ridership_to_day_type, _fact_ridership, _dim_day_type, [day_type_id=day_type_id], many_to_one, null]
     - [ridership_to_calendar, _fact_ridership, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [traffic_to_calendar, _fact_traffic, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+
 
 domain: transportation
 tags: [base, template, transportation, transit, ridership]
@@ -107,7 +92,7 @@ status: active
 
 ## Transit Base Template
 
-Public transit ridership and traffic data. Supports multiple transit modes (rail, bus, subway) via the `transit_mode` discriminator on the fact table.
+Public transit ridership data. Supports multiple transit modes (rail, bus, subway) via the `transit_mode` discriminator on the fact table. For road traffic data, see `_base.transportation.traffic`.
 
 ### Transit Modes
 

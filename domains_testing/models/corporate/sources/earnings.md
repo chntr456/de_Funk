@@ -1,12 +1,13 @@
 ---
 type: domain-model-source
 source: earnings
-extends: _base.entity.legal
+extends: _base.corporate.earnings
 maps_to: fact_earnings
 from: bronze.alpha_vantage_earnings
 
 aliases:
-  - [company_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
+  - [earnings_id, TBD]
+  - [entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
   - [report_date_id, "CAST(REGEXP_REPLACE(CAST(reportedDate AS STRING), '-', '') AS INT)"]
   - [fiscal_date_ending, fiscalDateEnding]
   - [reported_eps, reportedEPS]

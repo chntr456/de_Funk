@@ -21,17 +21,43 @@ accounting/                      FINANCIAL ACCOUNTING
   fund.md                        Fiscal accounting pools (extends entity)
   ledger_entry.md                Payments/payroll/contracts (extends event)
   financial_event.md             Budget/appropriation events (extends event)
+  financial_statement.md         Periodic financial reporting (extends event)
+
+corporate/                       CORPORATE REPORTING
+  earnings.md                    EPS reports and analyst estimates (extends event)
 
 finance/                         MARKET FINANCE
   securities.md                  Tradable securities (extends entity)
+  corporate_action.md            Dividends, splits, mergers (extends event)
 
 entity/                          ORGANIZATIONAL
-  legal.md                       Companies, municipalities (extends entity)
+  legal.md                       Legal entities (extends entity)
+  company.md                     Public/private corporations (extends legal)
+  municipality.md                Cities, counties, districts (extends legal)
   organizational_entity.md       Departments, divisions (extends entity)
 
 geography/                       SPATIAL
   geo_location.md                Point locations (extends entity)
   geo_spatial.md                 Boundaries/polygons (extends entity)
+
+property/                        REAL ESTATE
+  parcel.md                      Land records/assessments (extends entity)
+
+public_safety/                   LAW ENFORCEMENT
+  crime.md                       Crime incidents (extends event)
+
+housing/                         CONSTRUCTION
+  permit.md                      Building permits (extends event)
+
+operations/                      CONSTITUENT SERVICES
+  service_request.md             311-type requests (extends event)
+
+regulatory/                      COMPLIANCE
+  inspection.md                  Inspections/violations/licenses (extends event)
+
+transportation/                  TRANSIT & TRAFFIC
+  transit.md                     Public transit stations/ridership (extends event)
+  traffic.md                     Road segment speed/congestion (extends event)
 
 temporal/                        TIME
   calendar.md                    Daily calendar dimension

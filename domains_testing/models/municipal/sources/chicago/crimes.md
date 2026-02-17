@@ -18,6 +18,8 @@ aliases:
   - [longitude, longitude]
   - [arrest_made, arrest]
   - [domestic, domestic]
+  - [crime_type_id, "ABS(HASH(CONCAT(iucr, '_', COALESCE(fbi_code, 'UNK'))))"]
+  - [location_type_id, "ABS(HASH(location_description))"]
   - [iucr_code, iucr]
   - [primary_type, primary_type]
   - [description, description]
