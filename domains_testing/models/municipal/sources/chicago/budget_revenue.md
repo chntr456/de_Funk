@@ -7,7 +7,7 @@ from: bronze.chicago_budget_revenue
 event_type: REVENUE
 domain_source: "'chicago'"
 aliases:
-  # Inherited from financial_statement
+  # Inherited from financial_event (maps to _fact_budget_events schema)
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [budget_event_id, "ABS(HASH(CONCAT('REVENUE', '_', year, '_', '', '_', COALESCE(revenue_source_code,''))))"]
   - [account_id, "ABS(HASH(COALESCE(revenue_source_code, 'UNCLASSIFIED')))"]

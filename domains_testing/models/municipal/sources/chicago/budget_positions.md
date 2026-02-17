@@ -7,7 +7,7 @@ from: bronze.chicago_budget_positions
 event_type: POSITION
 domain_source: "'chicago'"
 aliases:
-  # Inherited from financial_statement
+  # Inherited from financial_event (maps to _fact_budget_events schema)
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [budget_event_id, "ABS(HASH(CONCAT('POSITION', '_', year, '_', COALESCE(department_code,''), '_', COALESCE(title_code,''))))"]
   - [account_id, "ABS(HASH(COALESCE(title_code, 'UNCLASSIFIED')))"]

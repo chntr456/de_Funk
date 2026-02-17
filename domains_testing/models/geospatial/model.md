@@ -3,7 +3,7 @@ type: domain-model
 model: geospatial
 version: 3.0
 description: "Geographic and location dimensions - foundation for spatial analysis"
-extends: _base.geospatial.geospatial
+extends: _base.geography.geo_spatial
 depends_on: []
 
 storage:

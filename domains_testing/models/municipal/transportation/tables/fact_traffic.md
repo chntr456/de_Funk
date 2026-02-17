@@ -1,7 +1,7 @@
 ---
 type: domain-model-table
 table: fact_traffic
-extends: _base.transportation.transit._fact_traffic
+extends: _base.transportation.traffic._fact_traffic
 table_type: fact
 from: bronze.chicago_traffic
 primary_key: [segment_id, timestamp]

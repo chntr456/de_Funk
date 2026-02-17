@@ -19,9 +19,9 @@ _base_/                          ROOT ABSTRACTIONS
 accounting/                      FINANCIAL ACCOUNTING
   chart_of_accounts.md           Account classification (extends entity)
   fund.md                        Fiscal accounting pools (extends entity)
-  ledger_entry.md                Payments/payroll/contracts (extends event)
-  financial_statement.md         Periodic financial reporting (extends event)
-    financial_event.md           Budget/appropriation events (extends financial_statement)
+  financial_event.md             Generic financial occurrence (extends event) ← NPV, spending_velocity
+    ledger_entry.md              Payments/payroll/contracts (extends financial_event)
+      financial_statement.md     Periodic reporting by chart of accounts (extends ledger_entry)
 
 corporate/                       CORPORATE REPORTING
   earnings.md                    EPS reports and analyst estimates (extends event)

@@ -144,10 +144,12 @@ Financial statements ARE structured ledger entries — periodic summaries organi
 
 ### What Extends This
 
-| Template | report_type values | Use case |
-|----------|-------------------|----------|
-| *(direct use)* | `annual`, `quarterly` | SEC filings (10-K, 10-Q) |
-| `_base.accounting.financial_event` | `budget` | Municipal/corporate budgets |
+This is the leaf of the accounting hierarchy — no other base templates extend it. Concrete domain-models extend this directly:
+
+| Domain Model | report_type values | Use case |
+|-------------|-------------------|----------|
+| `corporate/company` | `annual`, `quarterly` | SEC filings (10-K, 10-Q) |
+| `municipal/finance` | `annual`, `budget` | Municipal financial reporting |
 
 ### Shared Measures
 
@@ -186,7 +188,7 @@ aliases:
 | `net_present_value` | `financial_event` | `amount_col: "amount"`, `date_col: "period_end_date_id"` |
 | `spending_velocity` | `financial_event` | `amount_col: "amount"`, `partition_cols: [legal_entity_id, report_type]` |
 
-**Defined at this level** (inherited by `financial_event` and all implementing models):
+**Defined at this level** (inherited by all implementing models):
 
 | Measure | Description | Key Params |
 |---------|-------------|------------|

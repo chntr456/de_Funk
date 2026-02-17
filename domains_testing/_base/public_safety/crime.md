@@ -1,10 +1,10 @@
 ---
 type: domain-base
-base_name: crime
+model: crime
 namespace: _base.public_safety.crime
 version: 3.0
 description: "Base template for crime/incident data across jurisdictions"
-extends: _base.event
+extends: _base._base_.event
 
 canonical_fields:
   - [incident_id, integer, false, "PK - incident surrogate"]
@@ -25,7 +25,7 @@ canonical_fields:
 
 tables:
   dim_crime_type:
-    table_type: dimension
+    type: dimension
     primary_key: [crime_type_id]
     schema:
       - [crime_type_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(iucr_code, '_', COALESCE(fbi_code, 'UNK'))))"}]
@@ -38,7 +38,7 @@ tables:
       - [is_index_crime, boolean, true, "FBI Part I crime", {default: false}]
 
   dim_location_type:
-    table_type: dimension
+    type: dimension
     primary_key: [location_type_id]
     schema:
       - [location_type_id, integer, false, "PK", {derived: "ABS(HASH(location_description))"}]
@@ -46,7 +46,7 @@ tables:
       - [location_category, string, true, "Grouped category"]
 
   _fact_crimes:
-    table_type: fact
+    type: fact
     primary_key: [incident_id]
     partition_by: [year]
     schema:
@@ -71,7 +71,7 @@ tables:
       - [arrest_rate, expression, "100.0 * SUM(CASE WHEN arrest_made THEN 1 ELSE 0 END) / COUNT(*)", "Arrest rate %", {format: "#,##0.0%"}]
 
   _fact_arrests:
-    table_type: fact
+    type: fact
     primary_key: [arrest_id]
     partition_by: [year]
     schema:

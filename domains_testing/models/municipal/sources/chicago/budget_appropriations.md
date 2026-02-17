@@ -7,7 +7,7 @@ from: bronze.chicago_budget_appropriations
 event_type: APPROPRIATION
 domain_source: "'chicago'"
 aliases:
-  # Inherited from financial_statement
+  # Inherited from financial_event (maps to _fact_budget_events schema)
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [budget_event_id, "ABS(HASH(CONCAT('APPROPRIATION', '_', year, '_', COALESCE(department_code,''), '_', COALESCE(appropriation_account,''))))"]
   - [account_id, "ABS(HASH(COALESCE(appropriation_account, 'UNCLASSIFIED')))"]
