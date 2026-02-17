@@ -6,6 +6,7 @@ maps_to: _fact_splits
 from: bronze.alpha_vantage_splits
 
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', symbol)))"]
   - [action_id, TBD]
   - [security_id, "ABS(HASH(symbol))"]
   - [ticker, symbol]

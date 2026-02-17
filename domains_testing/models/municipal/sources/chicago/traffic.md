@@ -6,6 +6,7 @@ maps_to: _fact_traffic
 from: bronze.chicago_traffic
 
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [segment_id, segmentid]
   - [timestamp, TBD]
   - [date_id, TBD]

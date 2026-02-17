@@ -11,7 +11,7 @@ depends_on: [temporal]
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
   - [earnings_id, integer, nullable: false, description: "Primary key"]
-  - [entity_id, integer, nullable: false, description: "FK to reporting entity (company)"]
+  - [legal_entity_id, integer, nullable: false, description: "FK to reporting entity (company)"]
   - [report_date_id, integer, nullable: false, description: "FK to temporal.dim_calendar (report date)"]
   - [fiscal_date_ending, date, nullable: true, description: "Fiscal period end date"]
   - [reported_eps, double, nullable: true, description: "Reported earnings per share"]
@@ -27,8 +27,8 @@ tables:
 
     # [column, type, nullable, description, {options}]
     schema:
-      - [earnings_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(entity_id, '_', report_date_id)))"}]
-      - [entity_id, integer, false, "FK to reporting entity"]
+      - [earnings_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(legal_entity_id, '_', report_date_id)))"}]
+      - [legal_entity_id, integer, false, "FK to reporting entity"]
       - [report_date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
       - [fiscal_date_ending, date, true, "Fiscal period end"]
       - [reported_eps, double, true, "Reported EPS"]
@@ -68,11 +68,11 @@ Quarterly earnings reports with actual EPS, analyst estimates, and surprise metr
 
 ### Relationship to Entity
 
-The `entity_id` FK links to the reporting entity. Source aliases map it:
+The `legal_entity_id` FK links to the reporting entity. Source aliases map it:
 
 ```yaml
 aliases:
-  - [entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
+  - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
 ```
 
 ### Usage

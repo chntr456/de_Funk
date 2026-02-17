@@ -7,6 +7,7 @@ from: bronze.chicago_contracts
 entry_type: CONTRACT
 domain_source: "'chicago'"
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [source_id, contract_number]
   - [payee, vendor_name]
   - [transaction_amount, award_amount]

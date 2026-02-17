@@ -6,6 +6,7 @@ maps_to: _fact_violations
 from: bronze.chicago_building_violations
 
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [violation_id, "ABS(HASH(CAST(id AS STRING)))"]
   - [violation_date, violation_date]
   - [date_id, "CAST(DATE_FORMAT(violation_date, 'yyyyMMdd') AS INT)"]

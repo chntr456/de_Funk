@@ -6,6 +6,7 @@ maps_to: _fact_crimes
 from: bronze.chicago_crimes
 
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [case_number, case_number]
   - [date_id, "CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT)"]
   - [year, year]

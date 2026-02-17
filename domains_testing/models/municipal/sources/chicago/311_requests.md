@@ -6,6 +6,7 @@ maps_to: _fact_service_requests
 from: bronze.chicago_311_requests
 
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [request_id, "ABS(HASH(sr_number))"]
   - [request_type_id, "ABS(HASH(sr_type))"]
   - [status_id, "ABS(HASH(status))"]

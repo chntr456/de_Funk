@@ -6,6 +6,7 @@ maps_to: fact_bus_ridership
 from: bronze.chicago_cta_bus_ridership
 
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [station_id, "null"]
   - [route_id, route]
   - [date_id, "CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT)"]

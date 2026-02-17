@@ -7,6 +7,7 @@ from: bronze.chicago_payments
 entry_type: VENDOR_PAYMENT
 domain_source: "'chicago'"
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [source_id, voucher_number]
   - [payee, vendor_name]
   - [transaction_amount, amount]

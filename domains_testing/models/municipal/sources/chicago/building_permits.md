@@ -6,6 +6,7 @@ maps_to: _fact_permits
 from: bronze.chicago_building_permits
 
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [permit_number, permit_]
   - [permit_type_id, "ABS(HASH(permit_type))"]
   - [work_type_id, "ABS(HASH(work_description))"]

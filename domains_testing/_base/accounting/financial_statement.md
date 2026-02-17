@@ -9,7 +9,7 @@ extends: _base._base_.event
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
   - [statement_entry_id, integer, nullable: false, description: "Primary key"]
-  - [entity_id, integer, nullable: false, description: "FK to reporting entity (company or municipality)"]
+  - [legal_entity_id, integer, nullable: false, description: "FK to reporting entity (company or municipality)"]
   - [account_id, integer, nullable: false, description: "FK to chart of accounts line item"]
   - [period_end_date_id, integer, nullable: false, description: "FK to temporal.dim_calendar (period end)"]
   - [period_start_date_id, integer, nullable: true, description: "FK to temporal.dim_calendar (period start)"]
@@ -25,8 +25,8 @@ tables:
 
     # [column, type, nullable, description, {options}]
     schema:
-      - [statement_entry_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(entity_id, '_', account_id, '_', period_end_date_id, '_', report_type)))"}]
-      - [entity_id, integer, false, "FK to reporting entity"]
+      - [statement_entry_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(legal_entity_id, '_', account_id, '_', period_end_date_id, '_', report_type)))"}]
+      - [legal_entity_id, integer, false, "FK to reporting entity"]
       - [account_id, integer, false, "FK to chart of accounts", {derived: "ABS(HASH(account_code))"}]
       - [period_end_date_id, integer, false, "FK to calendar (period end)", {fk: temporal.dim_calendar.date_id}]
       - [period_start_date_id, integer, true, "FK to calendar (period start)", {fk: temporal.dim_calendar.date_id}]
@@ -62,16 +62,16 @@ Financial statements are structured by a chart of accounts. The `account_id` FK 
 
 ### Relationship to Entity
 
-The `entity_id` FK is generic. Source aliases map it to the concrete entity:
+The `legal_entity_id` FK is generic. Source aliases map it to the concrete entity:
 
 ```yaml
-# Corporate: entity_id maps to company_id
+# Corporate: legal_entity_id maps to company_id
 aliases:
-  - [entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
+  - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
 
-# Municipal: entity_id maps to municipality_id
+# Municipal: legal_entity_id maps to municipality_id
 aliases:
-  - [entity_id, "ABS(HASH(CONCAT('CITY_', municipality_name)))"]
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', municipality_name)))"]
 ```
 
 ### Unpivot Transform

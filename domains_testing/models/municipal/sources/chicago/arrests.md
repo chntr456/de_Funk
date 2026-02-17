@@ -6,6 +6,7 @@ maps_to: _fact_arrests
 from: bronze.chicago_arrests
 
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [arrest_id, TBD]
   - [incident_id, TBD]
   - [crime_type_id, TBD]

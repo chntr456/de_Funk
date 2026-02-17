@@ -7,7 +7,7 @@ from: bronze.alpha_vantage_earnings
 
 aliases:
   - [earnings_id, TBD]
-  - [entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
+  - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
   - [report_date_id, "CAST(REGEXP_REPLACE(CAST(reportedDate AS STRING), '-', '') AS INT)"]
   - [fiscal_date_ending, fiscalDateEnding]
   - [reported_eps, reportedEPS]

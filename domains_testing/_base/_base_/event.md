@@ -8,6 +8,7 @@ description: "Root template for any timestamped occurrence - transaction, incide
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
   - [event_id, integer, nullable: false, description: "Surrogate primary key"]
+  - [legal_entity_id, integer, nullable: true, description: "FK to owning legal entity (company, municipality, county)"]
   - [event_date, date, nullable: false, description: "When the event occurred"]
   - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar (YYYYMMDD)"]
   - [event_type, string, nullable: false, description: "Discriminator for what kind of event"]
@@ -23,6 +24,7 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [event_id, integer, false, "PK - surrogate", {derived: "ABS(HASH(CONCAT(event_type, '_', source_id)))"}]
+      - [legal_entity_id, integer, true, "FK to owning legal entity", {fk: "_dim_legal_entity.legal_entity_id"}]
       - [date_id, integer, false, "FK to temporal.dim_calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(event_date, 'yyyyMMdd') AS INT)"}]
       - [event_type, string, false, "Discriminator"]
       - [domain_source, string, false, "Origin domain"]
@@ -58,6 +60,19 @@ The most fundamental fact template. Every timestamped occurrence in the system i
 All event PKs are integers: `ABS(HASH(CONCAT(event_type, '_', source_id)))`
 
 The `event_type` prefix in the hash ensures uniqueness across unions of different source types.
+
+### legal_entity_id Pattern
+
+Every event can optionally FK to the legal entity that owns or produced it. This enables cross-domain federation by entity:
+
+| Domain | legal_entity_id derivation |
+|--------|---------------------------|
+| Municipal (Chicago) | `ABS(HASH(CONCAT('CITY_', 'Chicago')))` |
+| County (Cook County) | `ABS(HASH(CONCAT('COUNTY_', 'Cook County')))` |
+| Corporate | `ABS(HASH(CONCAT('COMPANY_', ticker)))` |
+| Securities (market data) | nullable - linked via security_id → company |
+
+The field is nullable because some events (e.g., market prices) relate to entities indirectly through other FKs rather than directly.
 
 ### date_id Pattern
 

@@ -8,7 +8,7 @@ transform: unpivot
 
 aliases:
   - [statement_entry_id, TBD]
-  - [entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
+  - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
   - [account_id, "ABS(HASH(account_code))"]
   - [period_end_date_id, "CAST(REGEXP_REPLACE(CAST(fiscalDateEnding AS STRING), '-', '') AS INT)"]
   - [period_start_date_id, "CAST(REGEXP_REPLACE(CAST(fiscalDateEnding AS STRING), '-', '') AS INT)"]

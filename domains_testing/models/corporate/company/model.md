@@ -15,11 +15,11 @@ storage:
 graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
-    - [statement_to_company, fact_financial_statements, dim_company, [company_id=company_id], many_to_one, null]
+    - [statement_to_company, fact_financial_statements, dim_company, [legal_entity_id=company_id], many_to_one, null]
     - [statement_to_account, fact_financial_statements, dim_financial_account, [account_id=account_id], many_to_one, null]
     - [statement_to_period_start, fact_financial_statements, temporal.dim_calendar, [period_start_date_id=date_id], many_to_one, temporal]
     - [statement_to_period_end, fact_financial_statements, temporal.dim_calendar, [period_end_date_id=date_id], many_to_one, temporal]
-    - [earnings_to_company, fact_earnings, dim_company, [company_id=company_id], many_to_one, null]
+    - [earnings_to_company, fact_earnings, dim_company, [legal_entity_id=company_id], many_to_one, null]
     - [earnings_to_calendar, fact_earnings, temporal.dim_calendar, [report_date_id=date_id], many_to_one, temporal]
 
 build:
@@ -64,7 +64,7 @@ Financial line items from income statements, balance sheets, and cash flow state
 -- Revenue by company over time
 SELECT c.ticker, cal.year, SUM(fs.amount) as revenue
 FROM fact_financial_statements fs
-JOIN dim_company c ON fs.company_id = c.company_id
+JOIN dim_company c ON fs.legal_entity_id = c.company_id
 JOIN dim_financial_account fa ON fs.account_id = fa.account_id
 JOIN temporal.dim_calendar cal ON fs.period_end_date_id = cal.date_id
 WHERE fa.account_code = 'TOTAL_REVENUE' AND fs.report_type = 'annual'

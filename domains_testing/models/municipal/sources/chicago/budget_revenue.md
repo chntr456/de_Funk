@@ -7,6 +7,7 @@ from: bronze.chicago_budget_revenue
 event_type: REVENUE
 domain_source: "'chicago'"
 aliases:
+  - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
   - [fiscal_year, year]
   - [department_code, "null"]
   - [department_description, "null"]
