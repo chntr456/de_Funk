@@ -16,7 +16,7 @@ schema:
   - [org_unit_name, string, false, "Display name", {derived: "COALESCE(organizational_unit, 'UNKNOWN')"}]
   - [org_unit_type, string, false, "Type", {derived: "'DEPARTMENT'"}]
   - [parent_org_unit_id, integer, true, "No hierarchy in source", {derived: "null"}]
-  - [legal_entity_id, integer, true, "City of Chicago", {derived: "null"}]
+  - [legal_entity_id, integer, false, "City of Chicago", {derived: "ABS(HASH(CONCAT('CITY_', 'Chicago')))"}]
   - [is_active, boolean, false, "Operational", {default: true}]
 
 # Enrichment: budget vs actual spending (materialized at build time)
@@ -35,7 +35,7 @@ enrich:
     filter: "event_type = 'APPROPRIATION'"
     columns:
       - [total_appropriated, "decimal(18,2)", true, "Total budgeted", {derived: "SUM(amount)"}]
-      - [budget_line_count, integer, true, "Budget line items", {derived: "COUNT(DISTINCT budget_event_id)"}]
+      - [budget_line_count, integer, true, "Budget line items", {derived: "COUNT(DISTINCT statement_entry_id)"}]
 
   - from: fact_budget_events
     join: [department_id = org_unit_id]

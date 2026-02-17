@@ -1,7 +1,7 @@
 ---
 type: domain-base
 model: service_request
-version: 1.0
+version: 1.1
 description: "Constituent service requests (311-type) - intake, routing, resolution tracking"
 extends: _base._base_.event
 
@@ -9,9 +9,11 @@ extends: _base._base_.event
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
   - [request_id, integer, nullable: false, description: "Primary key"]
-  - [request_type_id, integer, nullable: false, description: "FK to dim_request_type"]
-  - [status_id, integer, nullable: true, description: "FK to dim_status"]
+  - [legal_entity_id, integer, nullable: true, description: "FK to owning jurisdiction"]
+  - [request_type_id, integer, nullable: false, description: "FK to _dim_request_type"]
+  - [status_id, integer, nullable: true, description: "FK to _dim_status"]
   - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar (created date)"]
+  - [location_id, integer, nullable: true, description: "FK to geo_location._dim_location"]
   - [created_date, date, nullable: false, description: "Request creation date"]
   - [closed_date, date, nullable: true, description: "Request close date"]
   - [year, integer, nullable: false, description: "Creation year (partition key)"]
@@ -62,9 +64,11 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [request_id, integer, false, "PK", {derived: "ABS(HASH(source_id))"}]
-      - [request_type_id, integer, false, "FK to dim_request_type", {fk: _dim_request_type.request_type_id}]
-      - [status_id, integer, true, "FK to dim_status", {fk: _dim_status.status_id}]
+      - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [request_type_id, integer, false, "FK to _dim_request_type", {fk: _dim_request_type.request_type_id}]
+      - [status_id, integer, true, "FK to _dim_status", {fk: _dim_status.status_id}]
       - [date_id, integer, false, "FK to calendar (created)", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(created_date, 'yyyyMMdd') AS INT)"}]
+      - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
       - [created_date, date, false, "Request creation date"]
       - [closed_date, date, true, "Request close date"]
       - [year, integer, false, "Creation year", {derived: "YEAR(created_date)"}]
@@ -88,6 +92,7 @@ graph:
     - [request_to_type, _fact_service_requests, _dim_request_type, [request_type_id=request_type_id], many_to_one, null]
     - [request_to_status, _fact_service_requests, _dim_status, [status_id=status_id], many_to_one, null]
     - [request_to_calendar, _fact_service_requests, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    - [request_to_location, _fact_service_requests, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
 domain: operations
 tags: [base, template, operations, 311, service-request]
@@ -97,6 +102,14 @@ status: active
 ## Service Request Base Template
 
 Constituent service requests (311-type systems). Tracks intake, routing, and resolution with time-to-close metrics.
+
+### Inherited from Event Base
+
+| Field | Nullable | Purpose |
+|-------|----------|---------|
+| `legal_entity_id` | yes | FK to jurisdiction (city, county) |
+| `date_id` | no | FK to temporal.dim_calendar |
+| `location_id` | yes | FK to geo_location._dim_location (from lat/lon) |
 
 ### Request Categories
 

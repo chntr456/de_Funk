@@ -1,7 +1,7 @@
 ---
 type: domain-base
 model: permit
-version: 1.0
+version: 1.1
 description: "Building permits - construction, renovation, demolition with cost and fee tracking"
 extends: _base._base_.event
 
@@ -9,10 +9,12 @@ extends: _base._base_.event
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
   - [permit_id, integer, nullable: false, description: "Primary key"]
+  - [legal_entity_id, integer, nullable: true, description: "FK to owning jurisdiction"]
   - [permit_number, string, nullable: true, description: "Official permit number"]
-  - [permit_type_id, integer, nullable: false, description: "FK to dim_permit_type"]
-  - [work_type_id, integer, nullable: true, description: "FK to dim_work_type"]
+  - [permit_type_id, integer, nullable: false, description: "FK to _dim_permit_type"]
+  - [work_type_id, integer, nullable: true, description: "FK to _dim_work_type"]
   - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar (issue date)"]
+  - [location_id, integer, nullable: true, description: "FK to geo_location._dim_location"]
   - [issue_date, date, nullable: false, description: "Permit issue date"]
   - [year, integer, nullable: false, description: "Issue year (partition key)"]
   - [address, string, nullable: true, description: "Construction address"]
@@ -62,10 +64,12 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [permit_id, integer, false, "PK", {derived: "ABS(HASH(permit_number))"}]
+      - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
       - [permit_number, string, true, "Official permit number"]
-      - [permit_type_id, integer, false, "FK to dim_permit_type", {fk: _dim_permit_type.permit_type_id}]
-      - [work_type_id, integer, true, "FK to dim_work_type", {fk: _dim_work_type.work_type_id}]
+      - [permit_type_id, integer, false, "FK to _dim_permit_type", {fk: _dim_permit_type.permit_type_id}]
+      - [work_type_id, integer, true, "FK to _dim_work_type", {fk: _dim_work_type.work_type_id}]
       - [date_id, integer, false, "FK to calendar (issue date)", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(issue_date, 'yyyyMMdd') AS INT)"}]
+      - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
       - [issue_date, date, false, "Permit issue date"]
       - [year, integer, false, "Issue year", {derived: "YEAR(issue_date)"}]
       - [address, string, true, "Construction address"]
@@ -88,6 +92,7 @@ graph:
     - [permit_to_type, _fact_permits, _dim_permit_type, [permit_type_id=permit_type_id], many_to_one, null]
     - [permit_to_work_type, _fact_permits, _dim_work_type, [work_type_id=work_type_id], many_to_one, null]
     - [permit_to_calendar, _fact_permits, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    - [permit_to_location, _fact_permits, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
 domain: housing
 tags: [base, template, housing, permit, construction]
@@ -98,6 +103,14 @@ status: active
 
 Building and construction permits with permit type classification, work type taxonomy, and cost/fee tracking.
 
+### Inherited from Event Base
+
+| Field | Nullable | Purpose |
+|-------|----------|---------|
+| `legal_entity_id` | yes | FK to jurisdiction (city, county) |
+| `date_id` | no | FK to temporal.dim_calendar |
+| `location_id` | yes | FK to geo_location._dim_location (from lat/lon) |
+
 ### Permit Categories
 
 | Category | Description |
@@ -106,15 +119,6 @@ Building and construction permits with permit type classification, work type tax
 | ALTERATION | Renovation, remodeling, addition |
 | DEMOLITION | Building demolition |
 | OTHER | Electrical, plumbing, mechanical |
-
-### Work Categories
-
-| Category | Description |
-|----------|-------------|
-| RESIDENTIAL | Single-family, multi-family |
-| COMMERCIAL | Office, retail, mixed-use |
-| INDUSTRIAL | Manufacturing, warehouse |
-| OTHER | Institutional, government |
 
 ### Usage
 

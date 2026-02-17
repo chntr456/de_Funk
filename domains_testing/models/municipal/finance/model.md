@@ -1,13 +1,14 @@
 ---
 type: domain-model
 model: municipal_finance
-version: 3.0
+version: 3.1
 description: "Municipal payments, contracts, and budget data"
 
 extends:
   - _base.accounting.ledger_entry
-  - _base.accounting.financial_event
+  - _base.accounting.financial_statement
   - _base.entity.organizational_entity
+  - _base.entity.municipality
   - _base.accounting.fund
   - _base.accounting.chart_of_accounts
 
@@ -29,11 +30,15 @@ graph:
     - [entry_to_department, fact_ledger_entries, dim_department, [department_id=org_unit_id], many_to_one, null]
     - [entry_to_contract, fact_ledger_entries, dim_contract, [contract_id=contract_id], many_to_one, null]
 
-    # Budget → dimensions (budget inherits financial_statement schema: account_id, period dates)
+    # Budget → dimensions (budget extends financial_statement: account_id, period dates)
     - [budget_to_calendar, fact_budget_events, temporal.dim_calendar, [period_end_date_id=date_id], many_to_one, temporal]
     - [budget_to_department, fact_budget_events, dim_department, [department_id=org_unit_id], many_to_one, null]
     - [budget_to_fund, fact_budget_events, dim_fund, [fund_id=fund_id], many_to_one, null]
     - [budget_to_account, fact_budget_events, dim_chart_of_accounts, [account_id=account_id], many_to_one, null]
+
+    # Entity → municipality (concrete entity for this jurisdiction)
+    - [entry_to_municipality, fact_ledger_entries, dim_municipality, [legal_entity_id=municipality_id], many_to_one, null]
+    - [budget_to_municipality, fact_budget_events, dim_municipality, [legal_entity_id=municipality_id], many_to_one, null]
 
     # Dimension → dimension
     - [contract_to_vendor, dim_contract, dim_vendor, [vendor_id=vendor_id], many_to_one, null]
@@ -44,10 +49,14 @@ build:
   optimize: true
   phases:
     1:
+      description: "Build entity dimension (seeded)"
+      tables: [dim_municipality]
+      persist: true
+    2:
       description: "Build fact tables from source unions"
       tables: [fact_ledger_entries, fact_budget_events]
       persist: true
-    2:
+    3:
       description: "Build dimensions from facts (+ bronze for dim_contract)"
       tables: [dim_vendor, dim_department, dim_contract, dim_fund, dim_chart_of_accounts]
       persist: true
@@ -61,7 +70,7 @@ measures:
     - [vendor_count, count_distinct, dim_vendor.vendor_id, "Unique vendors", {format: "#,##0"}]
     - [avg_payment, avg, fact_ledger_entries.transaction_amount, "Average payment", {format: "$#,##0.00"}]
     - [total_budget, sum, fact_budget_events.amount, "Total budget amount", {format: "$#,##0.00"}]
-    - [budget_line_count, count_distinct, fact_budget_events.budget_event_id, "Budget line items", {format: "#,##0"}]
+    - [budget_line_count, count_distinct, fact_budget_events.statement_entry_id, "Budget line items", {format: "#,##0"}]
     - [department_count, count_distinct, dim_department.org_unit_id, "City departments", {format: "#,##0"}]
     - [contract_count, count_distinct, dim_contract.contract_id, "Total contracts", {format: "#,##0"}]
 
@@ -70,8 +79,6 @@ measures:
     - [payments_per_vendor, expression, "SUM(fact_ledger_entries.transaction_amount) / NULLIF(COUNT(DISTINCT dim_vendor.vendor_id), 0)", "Average payments per vendor", {format: "$#,##0.00"}]
     - [budget_surplus, expression, "SUM(CASE WHEN fact_budget_events.event_type = 'REVENUE' THEN fact_budget_events.amount ELSE 0 END) - SUM(CASE WHEN fact_budget_events.event_type = 'APPROPRIATION' THEN fact_budget_events.amount ELSE 0 END)", "Revenue minus appropriations", {format: "$#,##0.00"}]
     - [vendor_payment_pct, expression, "SUM(CASE WHEN fact_ledger_entries.entry_type = 'VENDOR_PAYMENT' THEN fact_ledger_entries.transaction_amount ELSE 0 END) / NULLIF(SUM(fact_ledger_entries.transaction_amount), 0)", "Vendor payments as % of total", {format: "0.00%"}]
-    - [contract_pct, expression, "SUM(CASE WHEN fact_ledger_entries.entry_type = 'CONTRACT' THEN fact_ledger_entries.transaction_amount ELSE 0 END) / NULLIF(SUM(fact_ledger_entries.transaction_amount), 0)", "Contracts as % of total", {format: "0.00%"}]
-    - [position_budget_pct, expression, "SUM(CASE WHEN fact_budget_events.event_type = 'POSITION' THEN fact_budget_events.amount ELSE 0 END) / NULLIF(SUM(CASE WHEN fact_budget_events.event_type = 'APPROPRIATION' THEN fact_budget_events.amount ELSE 0 END), 0)", "Personnel as % of appropriations", {format: "0.00%"}]
 
 federation:
   enabled: true
@@ -95,24 +102,23 @@ sources/                        tables/
   contracts.md ────────┤──→ fact_ledger_entries.md ──→ dim_vendor.md (enrich)
                        │                           ──→ dim_department.md (enrich)
   budget_approp.md ────┤                           ──→ dim_contract.md (enrich)
-  budget_revenue.md ───┤──→ fact_budget_events.md ──→ dim_fund.md
-  budget_positions.md ─┘                           ──→ dim_chart_of_accounts.md
+  budget_revenue.md ───┤──→ fact_budget_events.md  ──→ dim_fund.md
+  budget_positions.md ─┘    (extends fin_stmt)     ──→ dim_chart_of_accounts.md
 ```
 
-### Build Order
+### Budget-vs-Actual
 
-1. **Facts first** — union sources, apply aliases, compute FK hashes
-2. **Dimensions second** — aggregate from canonicalized facts (not raw bronze)
-3. **Enrichment** — join facts back to dims for accrual metrics (budget-vs-actual, paid-vs-award)
-
-### Federation
-
-When other domain-models extend the same accounting bases (e.g., `cook_county_finance`, `corporate_finance`), federation views automatically union them:
+Budget line items flow through `fact_budget_events` which extends the `_fact_financial_statements` base with `report_type = 'budget'`. This enables direct comparison:
 
 ```sql
-SELECT domain_source, fiscal_year,
-    SUM(CASE WHEN event_type = 'REVENUE' THEN amount ELSE 0 END) as revenue,
-    SUM(CASE WHEN event_type = 'APPROPRIATION' THEN amount ELSE 0 END) as spending
-FROM accounting.v_all_budget_events
-GROUP BY domain_source, fiscal_year;
+-- Same chart of accounts, same entity, different report_type
+SELECT report_type, coa.account_type, SUM(amount)
+FROM fact_budget_events be
+JOIN dim_chart_of_accounts coa ON be.account_id = coa.account_id
+WHERE be.legal_entity_id = dim_municipality.municipality_id
+GROUP BY report_type, coa.account_type;
 ```
+
+### Entity
+
+The `dim_municipality` dimension is seeded in build phase 1 with the concrete entity for each jurisdiction (e.g., City of Chicago). All fact tables FK to it via `legal_entity_id`.

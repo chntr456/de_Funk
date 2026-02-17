@@ -1,22 +1,22 @@
 ---
 type: domain-model-source
 source: budget_revenue
-extends: _base.accounting.financial_event
+extends: _base.accounting.financial_statement
 maps_to: fact_budget_events
 from: bronze.chicago_budget_revenue
 event_type: REVENUE
 domain_source: "'chicago'"
 aliases:
-  # Inherited from financial_event (maps to _fact_budget_events schema)
+  # Maps to financial_statement base schema
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
-  - [budget_event_id, "ABS(HASH(CONCAT('REVENUE', '_', year, '_', '', '_', COALESCE(revenue_source_code,''))))"]
+  - [statement_entry_id, "ABS(HASH(CONCAT('REVENUE', '_', year, '_', '', '_', COALESCE(revenue_source_code,''))))"]
   - [account_id, "ABS(HASH(COALESCE(revenue_source_code, 'UNCLASSIFIED')))"]
   - [period_end_date_id, "CAST(CONCAT(year, '1231') AS INT)"]
   - [period_start_date_id, "CAST(CONCAT(year, '0101') AS INT)"]
   - [report_type, "'budget'"]
   - [amount, amount]
   - [reported_currency, "'USD'"]
-  # Budget-specific
+  # Budget-specific (model-level additional_schema)
   - [fiscal_year, year]
   - [department_code, "null"]
   - [department_description, "null"]
@@ -29,4 +29,4 @@ aliases:
 
 ## Budget Revenue Source
 
-Annual revenue estimates by fund and revenue source.
+Annual revenue estimates by fund and revenue source. Maps to `fact_budget_events` which extends the financial_statement base with `report_type = 'budget'`.

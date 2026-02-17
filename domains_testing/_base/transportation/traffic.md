@@ -1,7 +1,7 @@
 ---
 type: domain-base
 model: traffic
-version: 1.0
+version: 1.1
 description: "Road traffic - segment speed, congestion, and flow observations"
 extends: _base._base_.event
 
@@ -11,8 +11,10 @@ depends_on: [temporal]
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
   - [segment_id, string, nullable: false, description: "Road segment identifier"]
+  - [legal_entity_id, integer, nullable: true, description: "FK to owning jurisdiction"]
   - [timestamp, timestamp, nullable: false, description: "Observation time"]
   - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar"]
+  - [location_id, integer, nullable: true, description: "FK to geo_location._dim_location (segment centroid)"]
   - [speed, double, nullable: true, description: "Observed speed"]
   - [congestion_level, string, nullable: true, description: "Congestion classification"]
 
@@ -24,8 +26,10 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [segment_id, string, false, "Road segment identifier"]
+      - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
       - [timestamp, timestamp, false, "Observation time"]
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(timestamp, 'yyyyMMdd') AS INT)"}]
+      - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id"}]
       - [speed, double, true, "Observed speed"]
       - [congestion_level, string, true, "Congestion classification"]
 
@@ -36,6 +40,7 @@ graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
     - [traffic_to_calendar, _fact_traffic, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    - [traffic_to_location, _fact_traffic, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
 domain: transportation
 tags: [base, template, transportation, traffic, congestion]
@@ -44,7 +49,15 @@ status: active
 
 ## Traffic Base Template
 
-Road traffic observations — segment-level speed and congestion data. Distinct from `_base.transportation.transit` which covers public transit stations and ridership.
+Road traffic observations — segment-level speed and congestion data.
+
+### Inherited from Event Base
+
+| Field | Nullable | Purpose |
+|-------|----------|---------|
+| `legal_entity_id` | yes | FK to jurisdiction |
+| `date_id` | no | FK to temporal.dim_calendar |
+| `location_id` | yes | FK to geo_location._dim_location (segment centroid) |
 
 ### Traffic vs Transit
 
@@ -53,7 +66,6 @@ Road traffic observations — segment-level speed and congestion data. Distinct 
 | **Subject** | Road segments | Stations / routes |
 | **Grain** | Per-segment per-timestamp | Per-station/route per-day |
 | **Metrics** | Speed, congestion | Ridership count |
-| **Use Case** | Congestion analysis, commute times | Ridership trends, service planning |
 
 ### Usage
 

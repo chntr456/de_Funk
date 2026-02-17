@@ -72,7 +72,8 @@ temporal/                        TIME
 5. **Integer PKs** - All surrogate keys are `ABS(HASH(...))` integers
 6. **date_id everywhere** - All facts FK to `temporal.dim_calendar` via integer date_id
 7. **legal_entity_id** - All event facts FK to owning legal entity (company, municipality, county)
-8. **Shared measures** - Account-type measures on financial_statement work for corporate AND municipal models
+8. **location_id** - All event facts optionally FK to `geo_location._dim_location` (nullable — not all events have geography)
+9. **Shared measures** - Account-type measures on financial_statement work for corporate AND municipal models
 
 ### Canonical Fields Format
 

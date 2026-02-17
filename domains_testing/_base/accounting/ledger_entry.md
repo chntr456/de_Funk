@@ -34,6 +34,7 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [entry_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(entry_type, '_', source_id)))"}]
+      - [legal_entity_id, integer, true, "FK to owning legal entity"]
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(transaction_date, 'yyyyMMdd') AS INT)"}]
       - [entry_type, string, false, "Source discriminator"]
       - [domain_source, string, false, "Origin domain"]

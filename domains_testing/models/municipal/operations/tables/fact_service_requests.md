@@ -8,9 +8,12 @@ primary_key: [request_id]
 partition_by: [year]
 
 schema:
-  - [request_id, string, false, "PK", {derived: "sr_number"}]
+  - [request_id, integer, false, "PK", {derived: "ABS(HASH(sr_number))"}]
+  - [legal_entity_id, integer, false, "City of Chicago", {derived: "ABS(HASH(CONCAT('CITY_', 'Chicago')))"}]
   - [request_type_id, integer, true, "FK to dim_request_type", {fk: dim_request_type.request_type_id, derived: "ABS(HASH(COALESCE(sr_type, 'UNKNOWN')))"}]
   - [status_id, integer, true, "FK to dim_status", {fk: dim_status.status_id, derived: "ABS(HASH(COALESCE(status, 'UNKNOWN')))"}]
+  - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(created_date, 'yyyyMMdd') AS INT)"}]
+  - [location_id, integer, true, "FK to geo_location._dim_location", {derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
   - [created_date, timestamp, true, "Request created"]
   - [closed_date, timestamp, true, "Request closed"]
   - [year, integer, true, "Year created", {derived: "YEAR(created_date)"}]
@@ -20,14 +23,13 @@ schema:
   - [community_area, integer, true, "Community area"]
   - [latitude, double, true, "Latitude"]
   - [longitude, double, true, "Longitude"]
-  - [is_legacy, boolean, true, "From old 311 system", {derived: "legacy_record"}]
   - [days_to_close, integer, true, "Days to close", {derived: "DATEDIFF('day', created_date, closed_date)"}]
 
 measures:
-  - [request_count, count, request_id, "Total requests", {format: "#,##0"}]
+  - [request_count, count_distinct, request_id, "Total requests", {format: "#,##0"}]
   - [avg_days_to_close, avg, days_to_close, "Avg days to close", {format: "#,##0.1"}]
 ---
 
 ## Service Requests Fact Table
 
-311 service requests since 12/18/2018.
+311 service requests since 12/18/2018. Extends `_base.operations.service_request._fact_service_requests`.

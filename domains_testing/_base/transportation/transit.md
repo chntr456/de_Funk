@@ -1,7 +1,7 @@
 ---
 type: domain-base
 model: transit
-version: 1.0
+version: 1.1
 description: "Public transit - stations, routes, and ridership data"
 extends: _base._base_.event
 
@@ -9,12 +9,14 @@ extends: _base._base_.event
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
   - [station_id, integer, nullable: false, description: "PK for transit stations"]
+  - [legal_entity_id, integer, nullable: true, description: "FK to owning transit authority"]
   - [station_name, string, nullable: false, description: "Station display name"]
   - [transit_mode, string, nullable: false, description: "RAIL, BUS, SUBWAY, FERRY, LIGHT_RAIL"]
   - [line_name, string, nullable: true, description: "Route/line name(s)"]
   - [ada_accessible, boolean, nullable: true, description: "ADA accessible"]
   - [latitude, double, nullable: true, description: "Station latitude"]
   - [longitude, double, nullable: true, description: "Station longitude"]
+  - [location_id, integer, nullable: true, description: "FK to geo_location._dim_location"]
   - [route_id, string, nullable: true, description: "Route identifier"]
   - [route_name, string, nullable: true, description: "Route display name"]
   - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar"]
@@ -36,6 +38,7 @@ tables:
       - [ada_accessible, boolean, true, "ADA accessible"]
       - [latitude, double, true, "Station latitude"]
       - [longitude, double, true, "Station longitude"]
+      - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
       - [is_active, boolean, false, "Currently operational", {default: true}]
 
     measures:
@@ -65,11 +68,13 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [ridership_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(COALESCE(CAST(station_id AS STRING), route_id), '_', CAST(date_id AS STRING))))"}]
-      - [station_id, integer, true, "FK to dim_transit_station (null for bus)", {fk: _dim_transit_station.station_id}]
+      - [legal_entity_id, integer, true, "FK to owning transit authority"]
+      - [station_id, integer, true, "FK to _dim_transit_station (null for bus)", {fk: _dim_transit_station.station_id}]
       - [route_id, string, true, "Route identifier (null for rail)"]
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
+      - [location_id, integer, true, "FK to geo_location._dim_location (from station lat/lon)", {fk: "geo_location._dim_location.location_id"}]
       - [year, integer, false, "Ridership year"]
-      - [day_type_id, string, true, "FK to dim_day_type", {fk: _dim_day_type.day_type_id}]
+      - [day_type_id, string, true, "FK to _dim_day_type", {fk: _dim_day_type.day_type_id}]
       - [transit_mode, string, false, "RAIL, BUS, etc."]
       - [rides, long, false, "Ridership count"]
 
@@ -83,7 +88,7 @@ graph:
     - [ridership_to_station, _fact_ridership, _dim_transit_station, [station_id=station_id], many_to_one, null]
     - [ridership_to_day_type, _fact_ridership, _dim_day_type, [day_type_id=day_type_id], many_to_one, null]
     - [ridership_to_calendar, _fact_ridership, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-
+    - [ridership_to_location, _fact_ridership, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
 domain: transportation
 tags: [base, template, transportation, transit, ridership]
@@ -92,7 +97,15 @@ status: active
 
 ## Transit Base Template
 
-Public transit ridership data. Supports multiple transit modes (rail, bus, subway) via the `transit_mode` discriminator on the fact table. For road traffic data, see `_base.transportation.traffic`.
+Public transit ridership data. Supports multiple transit modes (rail, bus, subway) via the `transit_mode` discriminator on the fact table.
+
+### Inherited from Event Base
+
+| Field | Nullable | Purpose |
+|-------|----------|---------|
+| `legal_entity_id` | yes | FK to transit authority entity |
+| `date_id` | no | FK to temporal.dim_calendar |
+| `location_id` | yes | FK to geo_location._dim_location (from station lat/lon) |
 
 ### Transit Modes
 
@@ -104,16 +117,9 @@ Public transit ridership data. Supports multiple transit modes (rail, bus, subwa
 | LIGHT_RAIL | Streetcar / tram | station_id |
 | FERRY | Water transit | station_id |
 
-### Ridership Fact Design
-
-Rail ridership keys on `station_id`, bus ridership keys on `route_id`. Both share the same fact table with `transit_mode` as discriminator.
-
 ### Day Types
 
-Static dimension with 3 rows:
-- **W** - Weekday
-- **A** - Saturday
-- **U** - Sunday/Holiday
+Static dimension with 3 rows: **W** (Weekday), **A** (Saturday), **U** (Sunday/Holiday)
 
 ### Usage
 

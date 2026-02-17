@@ -1,7 +1,7 @@
 ---
 type: domain-base
 model: inspection
-version: 1.0
+version: 1.1
 description: "Regulatory inspections and violations - food safety, building code, business licensing"
 extends: _base._base_.event
 
@@ -9,9 +9,11 @@ extends: _base._base_.event
 # [field_name, type, nullable: bool, description: "meaning"]
 canonical_fields:
   - [inspection_id, integer, nullable: false, description: "Primary key"]
-  - [facility_id, integer, nullable: true, description: "FK to dim_facility"]
-  - [inspection_type_id, integer, nullable: true, description: "FK to dim_inspection_type"]
+  - [legal_entity_id, integer, nullable: true, description: "FK to owning jurisdiction"]
+  - [facility_id, integer, nullable: true, description: "FK to _dim_facility"]
+  - [inspection_type_id, integer, nullable: true, description: "FK to _dim_inspection_type"]
   - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar"]
+  - [location_id, integer, nullable: true, description: "FK to geo_location._dim_location"]
   - [inspection_date, date, nullable: false, description: "Date of inspection"]
   - [year, integer, nullable: false, description: "Inspection year (partition key)"]
   - [result, string, nullable: true, description: "Outcome (PASS, FAIL, CONDITIONAL, etc.)"]
@@ -39,6 +41,7 @@ tables:
       - [community_area, integer, true, "Community area"]
       - [latitude, double, true, "Latitude"]
       - [longitude, double, true, "Longitude"]
+      - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
 
     measures:
       - [facility_count, count_distinct, facility_id, "Number of facilities", {format: "#,##0"}]
@@ -66,9 +69,11 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [inspection_id, integer, false, "PK", {derived: "ABS(HASH(source_id))"}]
-      - [facility_id, integer, true, "FK to dim_facility", {fk: _dim_facility.facility_id}]
-      - [inspection_type_id, integer, true, "FK to dim_inspection_type", {fk: _dim_inspection_type.inspection_type_id}]
+      - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [facility_id, integer, true, "FK to _dim_facility", {fk: _dim_facility.facility_id}]
+      - [inspection_type_id, integer, true, "FK to _dim_inspection_type", {fk: _dim_inspection_type.inspection_type_id}]
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(inspection_date, 'yyyyMMdd') AS INT)"}]
+      - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
       - [inspection_date, date, false, "Inspection date"]
       - [year, integer, false, "Inspection year", {derived: "YEAR(inspection_date)"}]
       - [result, string, true, "Outcome"]
@@ -111,7 +116,9 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [violation_id, integer, false, "PK", {derived: "ABS(HASH(source_id))"}]
+      - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(violation_date, 'yyyyMMdd') AS INT)"}]
+      - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
       - [violation_date, date, false, "Violation date"]
       - [year, integer, false, "Violation year", {derived: "YEAR(violation_date)"}]
       - [violation_type, string, true, "Type of violation"]
@@ -119,6 +126,8 @@ tables:
       - [address, string, true, "Violation address"]
       - [ward, integer, true, "Political ward"]
       - [community_area, integer, true, "Community area"]
+      - [latitude, double, true, "Latitude"]
+      - [longitude, double, true, "Longitude"]
 
     measures:
       - [violation_count, count_distinct, violation_id, "Total violations", {format: "#,##0"}]
@@ -131,14 +140,18 @@ tables:
     # [column, type, nullable, description, {options}]
     schema:
       - [license_id, integer, false, "PK", {derived: "ABS(HASH(source_id))"}]
+      - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
       - [business_name, string, true, "Licensed business name"]
       - [issue_date, date, false, "License issue date"]
       - [date_id, integer, false, "FK to calendar (issue date)", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(issue_date, 'yyyyMMdd') AS INT)"}]
+      - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
       - [expiration_date, date, true, "License expiration"]
       - [year, integer, false, "Issue year", {derived: "YEAR(issue_date)"}]
       - [address, string, true, "Business address"]
       - [ward, integer, true, "Political ward"]
       - [community_area, integer, true, "Community area"]
+      - [latitude, double, true, "Latitude"]
+      - [longitude, double, true, "Longitude"]
       - [status, string, true, "License status"]
       - [license_type, string, true, "License category/description"]
 
@@ -152,8 +165,11 @@ graph:
     - [inspection_to_facility, _fact_inspections, _dim_facility, [facility_id=facility_id], many_to_one, null]
     - [inspection_to_type, _fact_inspections, _dim_inspection_type, [inspection_type_id=inspection_type_id], many_to_one, null]
     - [inspection_to_calendar, _fact_inspections, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    - [inspection_to_location, _fact_inspections, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
     - [violation_to_calendar, _fact_violations, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    - [violation_to_location, _fact_violations, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
     - [license_to_calendar, _fact_licenses, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    - [license_to_location, _fact_licenses, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
 domain: regulatory
 tags: [base, template, regulatory, inspection, violation, license]
@@ -163,6 +179,14 @@ status: active
 ## Inspection Base Template
 
 Regulatory compliance data covering inspections, violations, and business licensing. Supports multiple inspection domains (food safety, building code, etc.) via `inspection_type`.
+
+### Inherited from Event Base
+
+| Field | Nullable | Purpose |
+|-------|----------|---------|
+| `legal_entity_id` | yes | FK to jurisdiction (city, county) |
+| `date_id` | no | FK to temporal.dim_calendar |
+| `location_id` | yes | FK to geo_location._dim_location (from lat/lon) |
 
 ### Inspection Results
 
