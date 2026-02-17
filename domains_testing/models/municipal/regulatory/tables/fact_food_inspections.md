@@ -3,7 +3,6 @@ type: domain-model-table
 table: fact_food_inspections
 extends: _base.regulatory.inspection._fact_inspections
 table_type: fact
-from: bronze.chicago_food_inspections
 primary_key: [inspection_id]
 partition_by: [year]
 

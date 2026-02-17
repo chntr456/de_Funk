@@ -7,6 +7,7 @@ from: bronze.chicago_crimes
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
+  - [domain_source, "'chicago'"]
   - [incident_id, "ABS(HASH(case_number))"]
   - [case_number, case_number]
   - [date_id, "CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT)"]

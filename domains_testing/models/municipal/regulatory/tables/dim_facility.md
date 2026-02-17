@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_facility
 extends: _base.regulatory.inspection._dim_facility
 table_type: dimension
-from: bronze.chicago_food_inspections
 transform: aggregate
 group_by: [license_]
 primary_key: [facility_id]

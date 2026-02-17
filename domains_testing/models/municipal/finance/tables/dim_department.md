@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_department
 extends: _base.entity.organizational_entity._dim_org_unit
 table_type: dimension
-from: fact_ledger_entries
 transform: distinct
 group_by: [organizational_unit]
 primary_key: [org_unit_id]

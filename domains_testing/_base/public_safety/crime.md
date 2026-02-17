@@ -106,6 +106,10 @@ graph:
     - [arrest_to_calendar, _fact_arrests, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [arrest_to_location, _fact_arrests, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 domain: public_safety
 tags: [base, template, public_safety, crime]
 status: active

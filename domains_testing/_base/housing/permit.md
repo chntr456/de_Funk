@@ -94,6 +94,10 @@ graph:
     - [permit_to_calendar, _fact_permits, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [permit_to_location, _fact_permits, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 domain: housing
 tags: [base, template, housing, permit, construction]
 status: active

@@ -2,7 +2,6 @@
 type: domain-model-table
 table: dim_contract
 table_type: dimension
-from: bronze.contracts
 primary_key: [contract_id]
 unique_key: [contract_number]
 

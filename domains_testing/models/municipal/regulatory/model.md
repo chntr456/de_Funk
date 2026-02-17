@@ -33,6 +33,10 @@ measures:
   computed:
     - [pass_rate, expression, "pass_count / inspection_count * 100", "Pass rate %", {format: "#,##0.0%"}]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 metadata:
   domain: municipal
   subdomain: regulatory

@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_township
 extends: _base.geography.geo_spatial._dim_boundary
 table_type: dimension
-from: bronze.cook_county_townships
 primary_key: [township_code]
 
 schema:

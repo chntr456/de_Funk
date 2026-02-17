@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_work_type
 extends: _base.housing.permit._dim_work_type
 table_type: dimension
-from: bronze.chicago_building_permits
 transform: distinct
 group_by: [work_type]
 primary_key: [work_type_id]

@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_patrol_area
 extends: _base.geography.geo_spatial._dim_boundary
 table_type: dimension
-from: bronze.chicago_police_beats
 primary_key: [beat_id]
 unique_key: [beat_number]
 

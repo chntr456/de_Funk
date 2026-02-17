@@ -7,6 +7,7 @@ from: bronze.chicago_business_licenses
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
+  - [domain_source, "'chicago'"]
   - [license_id, "ABS(HASH(CAST(id AS STRING)))"]
   - [business_name, doing_business_as_name]
   - [issue_date, date_issued]

@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_transit_station
 extends: _base.transportation.transit._dim_transit_station
 table_type: dimension
-from: bronze.chicago_cta_l_stops
 primary_key: [station_id]
 
 schema:

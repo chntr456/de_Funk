@@ -42,6 +42,10 @@ graph:
     - [traffic_to_calendar, _fact_traffic, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [traffic_to_location, _fact_traffic, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 domain: transportation
 tags: [base, template, transportation, traffic, congestion]
 status: active

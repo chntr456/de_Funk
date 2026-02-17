@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_patrol_district
 extends: _base.geography.geo_spatial._dim_boundary
 table_type: dimension
-from: bronze.chicago_police_districts
 primary_key: [district_id]
 unique_key: [district_number]
 

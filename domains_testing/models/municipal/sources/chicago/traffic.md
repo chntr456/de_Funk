@@ -7,6 +7,7 @@ from: bronze.chicago_traffic
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
+  - [domain_source, "'chicago'"]
   - [segment_id, segmentid]
   - [timestamp, last_updated]
   - [date_id, "CAST(DATE_FORMAT(last_updated, 'yyyyMMdd') AS INT)"]

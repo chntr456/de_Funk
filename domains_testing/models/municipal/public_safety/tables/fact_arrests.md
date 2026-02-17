@@ -3,7 +3,6 @@ type: domain-model-table
 table: fact_arrests
 extends: _base.public_safety.crime._fact_arrests
 table_type: fact
-from: bronze.chicago_arrests
 primary_key: [arrest_id]
 partition_by: [year]
 

@@ -2,7 +2,6 @@
 type: domain-model-table
 table: dim_city
 table_type: dimension
-from: bronze.us_cities
 primary_key: [city_id]
 unique_key: [city_code]
 

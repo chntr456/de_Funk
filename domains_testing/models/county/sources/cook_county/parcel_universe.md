@@ -6,6 +6,7 @@ maps_to: dim_parcel
 from: bronze.cook_county_parcel_universe
 
 aliases:
+  - [domain_source, "'cook_county'"]
   - [parcel_id, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
   - [parcel_code, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
   - [property_class, class]

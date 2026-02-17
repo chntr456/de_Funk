@@ -94,6 +94,10 @@ graph:
     - [request_to_calendar, _fact_service_requests, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [request_to_location, _fact_service_requests, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 domain: operations
 tags: [base, template, operations, 311, service-request]
 status: active

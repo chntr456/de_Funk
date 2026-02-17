@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_location_type
 extends: _base.public_safety.crime.dim_location_type
 table_type: dimension
-from: bronze.chicago_crimes
 transform: distinct
 group_by: [location_description]
 primary_key: [location_type_id]

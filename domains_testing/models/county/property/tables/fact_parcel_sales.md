@@ -3,7 +3,6 @@ type: domain-model-table
 table: fact_parcel_sales
 extends: _base.property.parcel._fact_parcel_sales
 table_type: fact
-from: bronze.cook_county_parcel_sales
 primary_key: [parcel_id, sale_date]
 partition_by: [year]
 

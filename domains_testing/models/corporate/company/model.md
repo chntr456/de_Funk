@@ -40,6 +40,10 @@ measures:
     - [profit_margin, expression, "SUM(CASE WHEN fa.account_code = 'NET_INCOME' THEN fs.amount ELSE 0 END) / NULLIF(SUM(CASE WHEN fa.account_code = 'TOTAL_REVENUE' THEN fs.amount ELSE 0 END), 0) * 100", "Profit margin %", {format: "#,##0.00%"}]
     - [debt_to_equity, expression, "SUM(CASE WHEN fa.account_code = 'LONG_TERM_DEBT' THEN fs.amount ELSE 0 END) / NULLIF(SUM(CASE WHEN fa.account_code = 'TOTAL_SHAREHOLDER_EQUITY' THEN fs.amount ELSE 0 END), 0)", "Debt to equity ratio", {format: "#,##0.00"}]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 metadata:
   domain: corporate
   owner: data_engineering

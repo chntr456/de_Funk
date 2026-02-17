@@ -3,7 +3,6 @@ type: domain-model-table
 table: fact_bus_ridership
 extends: _base.transportation.transit._fact_ridership
 table_type: fact
-from: bronze.chicago_cta_bus_ridership
 primary_key: [route_id, date]
 partition_by: [year]
 
@@ -11,7 +10,7 @@ schema:
   - [route_id, string, false, "Bus route ID"]
   - [date, date, false, "Ridership date"]
   - [year, integer, false, "Year", {derived: "YEAR(date)"}]
-  - [day_type_id, string, true, "Day type code", {derived: "daytype"}]
+  - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(date, 'yyyyMMdd') AS INT)"}]
   - [rides, long, true, "Total boardings"]
 
 measures:

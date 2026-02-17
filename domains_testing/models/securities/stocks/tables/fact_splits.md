@@ -3,7 +3,6 @@ type: domain-model-table
 table: fact_splits
 table_type: fact
 extends: _base.finance.corporate_action._fact_splits
-from: bronze.alpha_vantage.splits
 primary_key: [split_id]
 partition_by: [effective_date_id]
 

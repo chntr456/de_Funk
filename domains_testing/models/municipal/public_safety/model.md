@@ -40,6 +40,10 @@ measures:
     - [arrest_rate, expression, "arrest_count / crime_count * 100", "Arrest rate %", {format: "#,##0.1%"}]
     - [domestic_rate, expression, "domestic_crime_count / crime_count * 100", "Domestic rate %", {format: "#,##0.1%"}]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 metadata:
   domain: municipal
   subdomain: public_safety

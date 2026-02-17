@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_parcel
 extends: _base.property.parcel._dim_parcel
 table_type: dimension
-from: bronze.cook_county_parcel_universe
 primary_key: [parcel_id]
 
 schema:

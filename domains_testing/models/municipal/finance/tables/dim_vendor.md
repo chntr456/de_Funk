@@ -2,7 +2,6 @@
 type: domain-model-table
 table: dim_vendor
 table_type: dimension
-from: fact_ledger_entries
 transform: aggregate
 group_by: [payee]
 primary_key: [vendor_id]

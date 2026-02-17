@@ -6,6 +6,7 @@ maps_to: dim_ward
 from: bronze.chicago_wards
 
 aliases:
+  - [domain_source, "'chicago'"]
   - [boundary_id, "ABS(HASH(CONCAT('WARD', '_', CAST(ward AS STRING))))"]
   - [boundary_type, "'WARD'"]
   - [boundary_code, "CAST(ward AS STRING)"]

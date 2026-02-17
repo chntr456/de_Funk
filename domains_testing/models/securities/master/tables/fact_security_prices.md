@@ -3,7 +3,6 @@ type: domain-model-table
 table: fact_security_prices
 extends: _base.finance.securities._fact_prices
 table_type: fact
-from: bronze.alpha_vantage.time_series_daily_adjusted
 primary_key: [price_id]
 partition_by: [date_id]
 

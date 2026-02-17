@@ -6,6 +6,7 @@ maps_to: dim_crime_type
 from: bronze.chicago_iucr_codes
 
 aliases:
+  - [domain_source, "'chicago'"]
   - [crime_type_id, "ABS(HASH(CONCAT(iucr, '_', COALESCE(fbi_code, 'UNK'))))"]
   - [iucr_code, iucr]
   - [fbi_code, TBD]

@@ -7,6 +7,7 @@ from: bronze.cook_county_assessed_values
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('COUNTY_', 'Cook County')))"]
+  - [domain_source, "'cook_county'"]
   - [parcel_id, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
   - [year, year]
   - [date_id, "CAST(CONCAT(year, '0101') AS INT)"]

@@ -65,6 +65,10 @@ graph:
     # [edge_name, from, to, on, type, cross_model]
     - [earnings_to_calendar, _fact_earnings, temporal.dim_calendar, [report_date_id=date_id], many_to_one, temporal]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 domain: corporate
 tags: [base, template, corporate, earnings, eps]
 status: active

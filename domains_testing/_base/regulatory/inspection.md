@@ -171,6 +171,10 @@ graph:
     - [license_to_calendar, _fact_licenses, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [license_to_location, _fact_licenses, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 domain: regulatory
 tags: [base, template, regulatory, inspection, violation, license]
 status: active

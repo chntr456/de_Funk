@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_municipal_boundary
 extends: _base.geography.geo_spatial._dim_boundary
 table_type: dimension
-from: bronze.cook_county_municipalities
 primary_key: [municipality_id]
 
 schema:

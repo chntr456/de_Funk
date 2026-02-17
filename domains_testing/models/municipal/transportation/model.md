@@ -15,13 +15,14 @@ storage:
 graph:
   edges:
     - [rail_ridership_to_station, fact_rail_ridership, dim_transit_station, [station_id=station_id], many_to_one, null]
-    - [rail_ridership_to_day_type, fact_rail_ridership, dim_day_type, [day_type_id=day_type_id], many_to_one, null]
+    - [rail_ridership_to_calendar, fact_rail_ridership, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    - [bus_ridership_to_calendar, fact_bus_ridership, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
 
 build:
   partitions: [year]
   optimize: true
   phases:
-    1: { tables: [dim_transit_station, dim_day_type] }
+    1: { tables: [dim_transit_station] }
     2: { tables: [fact_rail_ridership, fact_bus_ridership, fact_traffic] }
 
 measures:
@@ -32,6 +33,10 @@ measures:
   computed:
     - [rides_per_station, expression, "total_rail_rides / station_count", "Rides per station", {format: "#,##0"}]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 metadata:
   domain: municipal
   subdomain: transportation
@@ -41,14 +46,6 @@ status: active
 ## Municipal Transportation Model
 
 Transit ridership and traffic data.
-
-### Day Types
-
-| Code | Meaning |
-|------|---------|
-| W | Weekday |
-| A | Saturday |
-| U | Sunday/Holiday |
 
 ### Notes
 

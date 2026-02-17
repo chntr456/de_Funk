@@ -32,6 +32,10 @@ measures:
   computed:
     - [completion_rate, expression, "(request_count - open_request_count) / request_count * 100", "Completion rate", {format: "#,##0.0%"}]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 metadata:
   domain: municipal
   subdomain: operations

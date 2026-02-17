@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_company
 extends: _base.entity.legal._dim_legal_entity
 table_type: dimension
-from: bronze.alpha_vantage.company_overview
 primary_key: [company_id]
 unique_key: [ticker]
 

@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_status
 extends: _base.operations.service_request._dim_status
 table_type: dimension
-from: bronze.chicago_311_requests
 transform: distinct
 group_by: [status]
 primary_key: [status_id]

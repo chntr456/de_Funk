@@ -20,7 +20,6 @@ canonical_fields:
   - [route_id, string, nullable: true, description: "Route identifier"]
   - [route_name, string, nullable: true, description: "Route display name"]
   - [date_id, integer, nullable: false, description: "FK to temporal.dim_calendar"]
-  - [day_type, string, nullable: true, description: "Weekday, Saturday, Sunday/Holiday"]
   - [rides, long, nullable: false, description: "Ridership count"]
 
 tables:
@@ -44,22 +43,6 @@ tables:
     measures:
       - [station_count, count_distinct, station_id, "Number of stations", {format: "#,##0"}]
 
-  _dim_day_type:
-    type: dimension
-    primary_key: [day_type_id]
-    static: true
-
-    # [column, type, nullable, description, {options}]
-    schema:
-      - [day_type_id, string, false, "PK (W, A, U)"]
-      - [day_type_code, string, false, "Code"]
-      - [day_type_name, string, false, "Display name"]
-
-    data:
-      - [W, W, Weekday]
-      - [A, A, Saturday]
-      - [U, U, "Sunday/Holiday"]
-
   _fact_ridership:
     type: fact
     primary_key: [ridership_id]
@@ -74,7 +57,6 @@ tables:
       - [date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
       - [location_id, integer, true, "FK to geo_location._dim_location (from station lat/lon)", {fk: "geo_location._dim_location.location_id"}]
       - [year, integer, false, "Ridership year"]
-      - [day_type_id, string, true, "FK to _dim_day_type", {fk: _dim_day_type.day_type_id}]
       - [transit_mode, string, false, "RAIL, BUS, etc."]
       - [rides, long, false, "Ridership count"]
 
@@ -86,9 +68,12 @@ graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
     - [ridership_to_station, _fact_ridership, _dim_transit_station, [station_id=station_id], many_to_one, null]
-    - [ridership_to_day_type, _fact_ridership, _dim_day_type, [day_type_id=day_type_id], many_to_one, null]
     - [ridership_to_calendar, _fact_ridership, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [ridership_to_location, _fact_ridership, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
+
+federation:
+  enabled: true
+  union_key: domain_source
 
 domain: transportation
 tags: [base, template, transportation, transit, ridership]
@@ -116,10 +101,6 @@ Public transit ridership data. Supports multiple transit modes (rail, bus, subwa
 | SUBWAY | Underground rail | station_id |
 | LIGHT_RAIL | Streetcar / tram | station_id |
 | FERRY | Water transit | station_id |
-
-### Day Types
-
-Static dimension with 3 rows: **W** (Weekday), **A** (Saturday), **U** (Sunday/Holiday)
 
 ### Usage
 

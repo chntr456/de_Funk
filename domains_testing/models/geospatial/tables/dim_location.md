@@ -2,7 +2,6 @@
 type: domain-model-table
 table: dim_location
 table_type: dimension
-from: self
 primary_key: [location_id]
 
 schema:

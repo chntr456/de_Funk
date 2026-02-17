@@ -34,6 +34,10 @@ measures:
   computed:
     - [avg_project_cost, expression, "total_estimated_cost / permit_count", "Average project cost", {format: "$#,##0"}]
 
+federation:
+  enabled: true
+  union_key: domain_source
+
 metadata:
   domain: municipal
   subdomain: housing

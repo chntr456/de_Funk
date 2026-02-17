@@ -2,7 +2,6 @@
 type: domain-model-table
 table: dim_county
 table_type: dimension
-from: bronze.us_counties
 primary_key: [county_id]
 unique_key: [county_fips]
 

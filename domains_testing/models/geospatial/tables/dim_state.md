@@ -2,7 +2,6 @@
 type: domain-model-table
 table: dim_state
 table_type: dimension
-from: bronze.us_states
 primary_key: [state_id]
 unique_key: [state_fips]
 

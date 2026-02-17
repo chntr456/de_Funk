@@ -6,6 +6,7 @@ maps_to: dim_municipality
 from: bronze.cook_county_municipalities
 
 aliases:
+  - [domain_source, "'cook_county'"]
   - [boundary_id, "ABS(HASH(CONCAT('MUNICIPALITY', '_', municipality_code)))"]
   - [boundary_type, "'MUNICIPALITY'"]
   - [boundary_code, municipality_code]

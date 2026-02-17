@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_chart_of_accounts
 extends: _base.accounting.chart_of_accounts._dim_chart_of_accounts
 table_type: dimension
-from: fact_budget_events
 transform: distinct
 group_by: [account_code]
 primary_key: [account_id]

@@ -3,7 +3,6 @@ type: domain-model-table
 table: fact_building_violations
 extends: _base.regulatory.inspection._fact_violations
 table_type: fact
-from: bronze.chicago_building_violations
 primary_key: [violation_id]
 partition_by: [year]
 

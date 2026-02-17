@@ -6,6 +6,7 @@ maps_to: dim_transit_station
 from: bronze.chicago_cta_l_stops
 
 aliases:
+  - [domain_source, "'chicago'"]
   - [station_id, "ABS(HASH(CONCAT(station_name, '_', 'RAIL')))"]
   - [station_name, station_name]
   - [transit_mode, "'RAIL'"]

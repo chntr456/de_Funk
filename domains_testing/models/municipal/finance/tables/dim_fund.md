@@ -3,7 +3,6 @@ type: domain-model-table
 table: dim_fund
 extends: _base.accounting.fund._dim_fund
 table_type: dimension
-from: fact_budget_events
 transform: distinct
 group_by: [fund_code]
 primary_key: [fund_id]

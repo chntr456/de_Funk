@@ -6,6 +6,7 @@ maps_to: dim_community_area
 from: bronze.chicago_community_areas
 
 aliases:
+  - [domain_source, "'chicago'"]
   - [boundary_id, "ABS(HASH(CONCAT('COMMUNITY_AREA', '_', CAST(area_numbe AS STRING))))"]
   - [boundary_type, "'COMMUNITY_AREA'"]
   - [boundary_code, "CAST(area_numbe AS STRING)"]
