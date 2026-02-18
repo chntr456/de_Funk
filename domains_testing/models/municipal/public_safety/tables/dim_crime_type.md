@@ -1,7 +1,7 @@
 ---
 type: domain-model-table
 table: dim_crime_type
-extends: _base.public_safety.crime.dim_crime_type
+extends: _base.public_safety.crime._dim_crime_type
 table_type: dimension
 primary_key: [crime_type_id]
 unique_key: [iucr_code, fbi_code]

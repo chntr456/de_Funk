@@ -2,7 +2,7 @@
 type: domain-model-source
 source: business_licenses
 extends: _base.regulatory.inspection
-maps_to: fact_licenses
+maps_to: fact_business_licenses
 from: bronze.chicago_business_licenses
 domain_source: "'chicago'"
 

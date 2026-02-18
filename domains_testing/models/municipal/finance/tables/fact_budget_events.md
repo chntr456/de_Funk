@@ -2,6 +2,9 @@
 type: domain-model-table
 table: fact_budget_events
 extends: _base.accounting.financial_statement._fact_financial_statements
+table_type: fact
+primary_key: [statement_entry_id]
+partition_by: [period_end_date_id]
 persist: true
 
 # Budget line items ARE financial statement entries with report_type = 'budget'.

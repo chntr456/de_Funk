@@ -27,6 +27,9 @@ build:
   partitions: [forecast_date]
   sort_by: [security_id, forecast_date]
   optimize: true
+  phases:
+    1: { tables: [dim_model_registry] }
+    2: { tables: [fact_forecast_price, fact_forecast_metrics] }
 
 measures:
   simple:

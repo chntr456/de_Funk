@@ -2,6 +2,9 @@
 type: domain-model-table
 table: fact_ledger_entries
 extends: _base.accounting.ledger_entry._fact_ledger_entries
+table_type: fact
+primary_key: [entry_id]
+partition_by: [date_id]
 persist: true
 
 # Sources auto-discovered: any sources/*.md with maps_to: fact_ledger_entries

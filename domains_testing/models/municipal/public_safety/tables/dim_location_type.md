@@ -1,7 +1,7 @@
 ---
 type: domain-model-table
 table: dim_location_type
-extends: _base.public_safety.crime.dim_location_type
+extends: _base.public_safety.crime._dim_location_type
 table_type: dimension
 transform: distinct
 group_by: [location_description]

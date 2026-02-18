@@ -2,7 +2,7 @@
 type: domain-model-source
 source: building_permits
 extends: _base.housing.permit
-maps_to: fact_permits
+maps_to: fact_building_permits
 from: bronze.chicago_building_permits
 domain_source: "'chicago'"
 

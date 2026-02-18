@@ -14,6 +14,7 @@ storage:
 
 graph:
   edges:
+    # auto_edges inherited: date_id→calendar, location_id→location (all 3 facts)
     # Internal dimension edges
     - [inspection_to_facility, fact_food_inspections, dim_facility, [facility_id=facility_id], many_to_one, null]
     - [inspection_to_type, fact_food_inspections, dim_inspection_type, [inspection_type_id=inspection_type_id], many_to_one, null]

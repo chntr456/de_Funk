@@ -3,6 +3,7 @@ type: domain-model-table
 table: fact_forecast_metrics
 table_type: fact
 generated: true
+primary_key: [ticker, model_name, metric_date]
 partition_by: [metric_date]
 
 schema:

@@ -2,7 +2,7 @@
 type: domain-model-source
 source: time_series_daily
 extends: _base.finance.securities
-maps_to: fact_prices
+maps_to: fact_security_prices
 from: bronze.alpha_vantage_time_series_daily_adjusted
 domain_source: "'alpha_vantage'"
 

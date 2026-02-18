@@ -14,6 +14,7 @@ storage:
 
 graph:
   edges:
+    # No auto_edges: securities extends entity (not event)
     - [stock_to_security, dim_stock, securities_master.dim_security, [security_id=security_id], many_to_one, securities_master]
     - [stock_to_company, dim_stock, company.dim_company, [company_id=company_id], many_to_one, company]
     - [prices_to_stock, fact_stock_prices, dim_stock, [security_id=security_id], many_to_one, null]
@@ -24,7 +25,7 @@ graph:
     - [splits_to_calendar, fact_splits, temporal.dim_calendar, [effective_date_id=date_id], many_to_one, temporal]
     - [technicals_to_stock, fact_stock_technicals, dim_stock, [security_id=security_id], many_to_one, null]
     - [technicals_to_calendar, fact_stock_technicals, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [stock_to_exchange, dim_stock, dim_exchange, [exchange_id=exchange_id], many_to_one, null]
+    - [stock_to_exchange, dim_stock, securities_master.dim_exchange, [exchange_id=exchange_id], many_to_one, securities_master]
   paths:
     company_to_dividends:
       steps:

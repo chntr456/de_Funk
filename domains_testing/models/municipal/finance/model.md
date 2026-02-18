@@ -22,9 +22,9 @@ storage:
 graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
+    # auto_edges inherited: date_id→calendar (ledger_entries, property_tax)
 
     # Ledger → dimensions
-    - [entry_to_calendar, fact_ledger_entries, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [entry_to_vendor, fact_ledger_entries, dim_vendor, [vendor_id=vendor_id], many_to_one, null]
     - [entry_to_department, fact_ledger_entries, dim_department, [department_id=org_unit_id], many_to_one, null]
     - [entry_to_contract, fact_ledger_entries, dim_contract, [contract_id=contract_id], many_to_one, null]
@@ -46,7 +46,6 @@ graph:
     # Property tax → county property
     - [property_tax_to_parcel, fact_property_tax, county_property.dim_parcel, [parcel_id=parcel_id], many_to_one, county_property]
     - [property_tax_to_tax_district, fact_property_tax, dim_tax_district, [tax_district_id=tax_district_id], many_to_one, null]
-    - [property_tax_to_calendar, fact_property_tax, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
 
 build:
   partitions: [date_id]

@@ -16,6 +16,7 @@ graph:
   edges:
     - [prices_to_security, fact_security_prices, dim_security, [security_id=security_id], many_to_one, null]
     - [prices_to_calendar, fact_security_prices, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    - [security_to_exchange, dim_security, dim_exchange, [exchange_id=exchange_id], many_to_one, null]
     - [security_to_stock, dim_security, stocks.dim_stock, [security_id=security_id], one_to_one, stocks]
     - [security_to_company, dim_security, company.dim_company, [security_id=company_id], many_to_one, company]
   paths:
@@ -34,7 +35,7 @@ build:
   sort_by: [security_id, date_id]
   optimize: true
   phases:
-    1: { tables: [dim_security] }
+    1: { tables: [dim_security, dim_exchange] }
     2: { tables: [fact_security_prices] }
 
 measures:
