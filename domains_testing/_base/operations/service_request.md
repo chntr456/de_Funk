@@ -89,12 +89,10 @@ tables:
       - [closed_request_count, expression, "SUM(CASE WHEN closed_date IS NOT NULL THEN 1 ELSE 0 END)", "Closed requests", {format: "#,##0"}]
 
 graph:
+  # auto_edges inherited: date_id→calendar, location_id→location
   edges:
-    # [edge_name, from, to, on, type, cross_model]
     - [request_to_type, _fact_service_requests, _dim_request_type, [request_type_id=request_type_id], many_to_one, null]
     - [request_to_status, _fact_service_requests, _dim_status, [status_id=status_id], many_to_one, null]
-    - [request_to_calendar, _fact_service_requests, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [request_to_location, _fact_service_requests, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
 federation:
   enabled: true

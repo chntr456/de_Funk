@@ -36,11 +36,15 @@ tables:
     measures:
       - [event_count, count_distinct, event_id, "Number of events", {format: "#,##0"}]
 
+auto_edges:
+  # [fk_column, target, on, type, cross_model]
+  # Applied to every fact table whose schema contains fk_column.
+  # Edge name is auto-generated: {fact_name}_to_{target_short_name}
+  - [date_id, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+  - [location_id, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
+
 graph:
-  edges:
-    # [edge_name, from, to, on, type, cross_model]
-    - [event_to_calendar, _fact_event, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [event_to_location, _fact_event, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
+  edges: []
 
 domain: _base
 tags: [base, template, event, root]

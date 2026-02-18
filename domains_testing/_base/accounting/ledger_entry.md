@@ -71,9 +71,8 @@ tables:
           partition_cols: [domain_source, entry_type]
 
 graph:
-  edges:
-    # [edge_name, from, to, on, type, cross_model]
-    - [entry_to_calendar, _fact_ledger_entries, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+  # auto_edges inherited: date_id→calendar
+  edges: []
 
 federation:
   enabled: true

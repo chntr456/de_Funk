@@ -100,10 +100,9 @@ tables:
       - [sale_count, count, parcel_id, "Number of sales", {format: "#,##0"}]
 
 graph:
+  # auto_edges inherited: date_id→calendar (assessed_values only; parcel_sales uses sale_date_id)
   edges:
-    # [edge_name, from, to, on, type, cross_model]
     - [assessment_to_parcel, _fact_assessed_values, _dim_parcel, [parcel_id=parcel_id], many_to_one, null]
-    - [assessment_to_calendar, _fact_assessed_values, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [sale_to_parcel, _fact_parcel_sales, _dim_parcel, [parcel_id=parcel_id], many_to_one, null]
     - [sale_to_calendar, _fact_parcel_sales, temporal.dim_calendar, [sale_date_id=date_id], many_to_one, temporal]
 

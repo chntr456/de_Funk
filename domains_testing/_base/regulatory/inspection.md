@@ -164,16 +164,10 @@ tables:
       - [active_license_count, expression, "SUM(CASE WHEN status IN ('AAI', 'ACTIVE') AND (expiration_date > CURRENT_DATE OR expiration_date IS NULL) THEN 1 ELSE 0 END)", "Active licenses", {format: "#,##0"}]
 
 graph:
+  # auto_edges inherited: date_id→calendar, location_id→location (all 3 facts)
   edges:
-    # [edge_name, from, to, on, type, cross_model]
     - [inspection_to_facility, _fact_inspections, _dim_facility, [facility_id=facility_id], many_to_one, null]
     - [inspection_to_type, _fact_inspections, _dim_inspection_type, [inspection_type_id=inspection_type_id], many_to_one, null]
-    - [inspection_to_calendar, _fact_inspections, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [inspection_to_location, _fact_inspections, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
-    - [violation_to_calendar, _fact_violations, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [violation_to_location, _fact_violations, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
-    - [license_to_calendar, _fact_licenses, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [license_to_location, _fact_licenses, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
 federation:
   enabled: true

@@ -89,12 +89,10 @@ tables:
       - [avg_estimated_cost, avg, estimated_cost, "Avg estimated cost", {format: "$#,##0.00"}]
 
 graph:
+  # auto_edges inherited: date_id→calendar, location_id→location
   edges:
-    # [edge_name, from, to, on, type, cross_model]
     - [permit_to_type, _fact_permits, _dim_permit_type, [permit_type_id=permit_type_id], many_to_one, null]
     - [permit_to_work_type, _fact_permits, _dim_work_type, [work_type_id=work_type_id], many_to_one, null]
-    - [permit_to_calendar, _fact_permits, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [permit_to_location, _fact_permits, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
 federation:
   enabled: true

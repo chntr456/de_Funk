@@ -65,9 +65,8 @@ tables:
         returns: [legal_entity_id, event_type, date_id, spend_30d, spend_90d, spend_365d, trend]
 
 graph:
-  edges:
-    # [edge_name, from, to, on, type, cross_model]
-    - [event_to_calendar, _fact_financial_events, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+  # auto_edges inherited: date_id→calendar (no location_id on financial events)
+  edges: []
 
 federation:
   enabled: true

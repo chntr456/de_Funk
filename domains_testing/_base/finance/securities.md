@@ -192,12 +192,10 @@ tables:
       - [avg_atr, avg, atr_14, "Average ATR", {format: "$#,##0.00"}]
 
 graph:
+  # auto_edges inherited: date_id→calendar (both facts; no location_id on securities)
   edges:
-    # [edge_name, from, to, on, type, cross_model]
     - [prices_to_security, _fact_prices, _dim_security, [security_id=security_id], many_to_one, null]
-    - [prices_to_calendar, _fact_prices, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [technicals_to_security, _fact_technicals, _dim_security, [security_id=security_id], many_to_one, null]
-    - [technicals_to_calendar, _fact_technicals, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [security_to_exchange, _dim_security, _dim_exchange, [exchange_id=exchange_id], many_to_one, null]
 
 domain: finance

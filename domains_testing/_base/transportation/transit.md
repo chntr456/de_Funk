@@ -67,11 +67,9 @@ tables:
       - [avg_daily_rides, avg, rides, "Avg daily ridership", {format: "#,##0"}]
 
 graph:
+  # auto_edges inherited: date_id→calendar, location_id→location
   edges:
-    # [edge_name, from, to, on, type, cross_model]
     - [ridership_to_station, _fact_ridership, _dim_transit_station, [station_id=station_id], many_to_one, null]
-    - [ridership_to_calendar, _fact_ridership, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [ridership_to_location, _fact_ridership, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
 federation:
   enabled: true

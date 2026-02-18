@@ -7,6 +7,33 @@ description: "Guide for graph definitions - edges only in v5.0"
 
 In v5.0, graph only contains `edges`. Source/filter/derive are defined in table definitions.
 
+### auto_edges (Inherited FK Edges)
+
+Base templates can declare `auto_edges` — FK patterns applied automatically to every fact table whose schema contains the matching column. Declared once in the root event base, inherited by all children.
+
+```yaml
+# _base/_base_/event.md — declared once
+auto_edges:
+  # [fk_column, target, on, type, cross_model]
+  - [date_id, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+  - [location_id, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
+```
+
+**How it works:**
+1. Loader collects `auto_edges` from the base inheritance chain
+2. For each fact table, checks if schema contains the `fk_column`
+3. If match → generates edge: `{fact_name}_to_{target_short_name}`
+4. If no match → no edge (safe)
+
+**What still needs explicit edges:**
+
+| Pattern | Example | Why |
+|---------|---------|-----|
+| Non-standard FK column names | `sale_date_id`, `report_date_id`, `period_end_date_id` | Column name doesn't match auto_edge pattern |
+| Natural key joins | `community_area=area_number` | Not a FK column |
+| Fact-to-fact | `arrest_to_crime` via `incident_id` | Business relationship |
+| Domain-specific dim FKs | `inspection_to_facility` | Unique to the domain |
+
 ### Edge Format (Tabular)
 
 ```yaml
@@ -14,7 +41,6 @@ graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
     - [prices_to_stock, fact_stock_prices, dim_stock, [security_id=security_id], many_to_one, null]
-    - [prices_to_calendar, fact_stock_prices, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
 ```
 
 ### Edge Columns
@@ -33,7 +59,6 @@ graph:
 When `to` references another model, set `cross_model`:
 
 ```yaml
-- [entry_to_calendar, fact_entries, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
 - [stock_to_company, dim_stock, company.dim_company, [company_id=company_id], many_to_one, company]
 ```
 

@@ -39,10 +39,8 @@ tables:
       - [avg_speed, avg, speed, "Average speed", {format: "#,##0.0"}]
 
 graph:
-  edges:
-    # [edge_name, from, to, on, type, cross_model]
-    - [traffic_to_calendar, _fact_traffic, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [traffic_to_location, _fact_traffic, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
+  # auto_edges inherited: date_id→calendar, location_id→location
+  edges: []
 
 federation:
   enabled: true

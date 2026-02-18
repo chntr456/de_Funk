@@ -74,6 +74,7 @@ temporal/                        TIME
 7. **legal_entity_id** - All event facts FK to owning legal entity (company, municipality, county)
 8. **location_id** - All event facts optionally FK to `geo_location._dim_location` (nullable — not all events have geography)
 9. **Shared measures** - Account-type measures on financial_statement work for corporate AND municipal models
+10. **auto_edges** - Standard FK edges (date_id→calendar, location_id→location) are declared once in root event base and auto-applied to all fact tables
 
 ### Canonical Fields Format
 
@@ -82,13 +83,25 @@ canonical_fields:
   - [field_name, type, nullable: bool, description: "meaning"]
 ```
 
-### Edge Format
+### auto_edges (Inherited FK Edges)
+
+Declared once in root event base, applied to every fact with matching columns:
+
+```yaml
+auto_edges:
+  - [date_id, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+  - [location_id, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
+```
+
+Child bases only declare domain-specific edges (facility, crime_type, etc.). Facts with non-standard date columns (`sale_date_id`, `report_date_id`) keep explicit edges.
+
+### Explicit Edge Format
 
 ```yaml
 graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
-    - [entry_to_calendar, fact_table, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    - [sale_to_calendar, _fact_sales, temporal.dim_calendar, [sale_date_id=date_id], many_to_one, temporal]
 ```
 
 ### How Models Use Bases

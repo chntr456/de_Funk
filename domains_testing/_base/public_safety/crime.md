@@ -97,17 +97,12 @@ tables:
       - [total_arrests, count_distinct, arrest_id, "Total arrests", {format: "#,##0"}]
 
 graph:
+  # auto_edges inherited: date_id→calendar, location_id→location (both facts)
   edges:
-    # Crime edges
     - [crime_to_type, _fact_crimes, _dim_crime_type, [crime_type_id=crime_type_id], many_to_one, null]
     - [crime_to_location_type, _fact_crimes, _dim_location_type, [location_type_id=location_type_id], many_to_one, null]
-    - [crime_to_calendar, _fact_crimes, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [crime_to_location, _fact_crimes, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
-    # Arrest edges
     - [arrest_to_crime, _fact_arrests, _fact_crimes, [incident_id=incident_id], many_to_one, null]
     - [arrest_to_crime_type, _fact_arrests, _dim_crime_type, [crime_type_id=crime_type_id], many_to_one, null]
-    - [arrest_to_calendar, _fact_arrests, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [arrest_to_location, _fact_arrests, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
 
 federation:
   enabled: true
