@@ -4,7 +4,7 @@ model: municipal_regulatory
 version: 3.0
 description: "Municipal inspections, violations, and business licenses"
 extends: [_base.regulatory.inspection]
-depends_on: [municipal_geospatial]
+depends_on: [temporal, municipal_geospatial]
 
 storage:
   format: delta
@@ -14,8 +14,21 @@ storage:
 
 graph:
   edges:
+    # Internal dimension edges
     - [inspection_to_facility, fact_food_inspections, dim_facility, [facility_id=facility_id], many_to_one, null]
     - [inspection_to_type, fact_food_inspections, dim_inspection_type, [inspection_type_id=inspection_type_id], many_to_one, null]
+
+    # Building violations → geo
+    - [violation_to_community_area, fact_building_violations, municipal_geospatial.dim_community_area, [community_area=area_number], many_to_one, municipal_geospatial]
+    - [violation_to_ward, fact_building_violations, municipal_geospatial.dim_ward, [ward=ward_number], many_to_one, municipal_geospatial]
+
+    # Business licenses → geo
+    - [license_to_community_area, fact_business_licenses, municipal_geospatial.dim_community_area, [community_area=area_number], many_to_one, municipal_geospatial]
+    - [license_to_ward, fact_business_licenses, municipal_geospatial.dim_ward, [ward=ward_number], many_to_one, municipal_geospatial]
+
+    # Food inspections → geo (through dim_facility which has ward + community_area)
+    - [facility_to_community_area, dim_facility, municipal_geospatial.dim_community_area, [community_area=area_number], many_to_one, municipal_geospatial]
+    - [facility_to_ward, dim_facility, municipal_geospatial.dim_ward, [ward=ward_number], many_to_one, municipal_geospatial]
 
 build:
   partitions: [year]

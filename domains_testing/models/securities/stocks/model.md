@@ -22,6 +22,9 @@ graph:
     - [dividends_to_calendar, fact_dividends, temporal.dim_calendar, [ex_dividend_date_id=date_id], many_to_one, temporal]
     - [splits_to_stock, fact_splits, dim_stock, [security_id=security_id], many_to_one, null]
     - [splits_to_calendar, fact_splits, temporal.dim_calendar, [effective_date_id=date_id], many_to_one, temporal]
+    - [technicals_to_stock, fact_stock_technicals, dim_stock, [security_id=security_id], many_to_one, null]
+    - [technicals_to_calendar, fact_stock_technicals, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+    - [stock_to_exchange, dim_stock, dim_exchange, [exchange_id=exchange_id], many_to_one, null]
   paths:
     company_to_dividends:
       steps:

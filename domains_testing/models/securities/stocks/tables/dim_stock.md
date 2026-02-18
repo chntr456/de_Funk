@@ -13,6 +13,7 @@ schema:
   - [ticker, string, false, "Trading symbol"]
   - [security_name, string, true, "Security name"]
   - [exchange_code, string, true, "Exchange code"]
+  - [exchange_id, integer, true, "FK to dim_exchange", {fk: dim_exchange.exchange_id, derived: "ABS(HASH(exchange_code))"}]
   - [asset_type, string, true, "Asset type"]
   - [stock_type, string, true, "Stock type", {enum: [common, preferred, adr, rights, units, warrants], derived: "'common'"}]
 

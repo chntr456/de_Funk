@@ -7,12 +7,11 @@ description: "Municipal payments, contracts, and budget data"
 extends:
   - _base.accounting.ledger_entry
   - _base.accounting.financial_statement
-  - _base.entity.organizational_entity
-  - _base.entity.municipality
   - _base.accounting.fund
   - _base.accounting.chart_of_accounts
+  - _base.property.tax_district
 
-depends_on: [temporal]
+depends_on: [temporal, municipal_entity, county_property]
 
 storage:
   format: delta
@@ -36,29 +35,30 @@ graph:
     - [budget_to_fund, fact_budget_events, dim_fund, [fund_id=fund_id], many_to_one, null]
     - [budget_to_account, fact_budget_events, dim_chart_of_accounts, [account_id=account_id], many_to_one, null]
 
-    # Entity → municipality (concrete entity for this jurisdiction)
-    - [entry_to_municipality, fact_ledger_entries, dim_municipality, [legal_entity_id=municipality_id], many_to_one, null]
-    - [budget_to_municipality, fact_budget_events, dim_municipality, [legal_entity_id=municipality_id], many_to_one, null]
+    # Entity → municipality (cross-model to municipal_entity)
+    - [entry_to_municipality, fact_ledger_entries, municipal_entity.dim_municipality, [legal_entity_id=municipality_id], many_to_one, municipal_entity]
+    - [budget_to_municipality, fact_budget_events, municipal_entity.dim_municipality, [legal_entity_id=municipality_id], many_to_one, municipal_entity]
 
     # Dimension → dimension
     - [contract_to_vendor, dim_contract, dim_vendor, [vendor_id=vendor_id], many_to_one, null]
     - [contract_to_department, dim_contract, dim_department, [department_id=org_unit_id], many_to_one, null]
+
+    # Property tax → county property
+    - [property_tax_to_parcel, fact_property_tax, county_property.dim_parcel, [parcel_id=parcel_id], many_to_one, county_property]
+    - [property_tax_to_tax_district, fact_property_tax, dim_tax_district, [tax_district_id=tax_district_id], many_to_one, null]
+    - [property_tax_to_calendar, fact_property_tax, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
 
 build:
   partitions: [date_id]
   optimize: true
   phases:
     1:
-      description: "Build entity dimension (seeded)"
-      tables: [dim_municipality]
+      description: "Build fact tables from source unions"
+      tables: [fact_ledger_entries, fact_budget_events, fact_property_tax]
       persist: true
     2:
-      description: "Build fact tables from source unions"
-      tables: [fact_ledger_entries, fact_budget_events]
-      persist: true
-    3:
       description: "Build dimensions from facts (+ bronze for dim_contract)"
-      tables: [dim_vendor, dim_department, dim_contract, dim_fund, dim_chart_of_accounts]
+      tables: [dim_vendor, dim_department, dim_contract, dim_fund, dim_chart_of_accounts, dim_tax_district]
       persist: true
       enrich: true
 
@@ -121,4 +121,4 @@ GROUP BY report_type, coa.account_type;
 
 ### Entity
 
-The `dim_municipality` dimension is seeded in build phase 1 with the concrete entity for each jurisdiction (e.g., City of Chicago). All fact tables FK to it via `legal_entity_id`.
+The `dim_municipality` dimension lives in `municipal_entity` (separate entity model). All fact tables FK to it via `legal_entity_id`. This model declares `depends_on: [municipal_entity]` to ensure the entity dimension is built first.

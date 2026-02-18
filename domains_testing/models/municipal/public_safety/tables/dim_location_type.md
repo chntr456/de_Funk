@@ -20,3 +20,11 @@ measures:
 ## Location Type Dimension
 
 Distinct location descriptions extracted from crime incidents.
+
+### Not Geographic
+
+`dim_location_type` classifies the *type* of place (STREET, APARTMENT, SIDEWALK, PARKING LOT, etc.), not the *where*. Geographic analysis for crimes uses:
+- `ward` / `community_area` / `district` columns → geo dimension edges
+- `latitude` / `longitude` → `location_id` FK to `geo_location._dim_location` (root event base)
+
+This dimension answers "what kind of place?" not "where?"

@@ -201,6 +201,30 @@ aliases:
 
 NPV is defined once at `financial_event` and flows through the chain: `financial_event` → `ledger_entry` → `financial_statement`. Each level overrides column params to match its schema. No duplication.
 
+### Budget Integration Pattern
+
+Budget data is modeled as financial statements — **not** as a separate base template. Budget line items extend `_fact_financial_statements` with `report_type = 'budget'`. This enables budget-vs-actual comparison using the same chart of accounts structure.
+
+**How it works:**
+1. Budget sources set `report_type` to `'budget'` and `event_type` to the budget grain (`APPROPRIATION`, `REVENUE`, `POSITION`)
+2. Actual financial data sets `report_type` to `'annual'` or `'quarterly'`
+3. Both share the same `account_id` FK to `_dim_chart_of_accounts`
+4. Same `legal_entity_id` identifies the reporting entity
+
+**Budget-vs-actual query:**
+```sql
+SELECT coa.account_name,
+       SUM(CASE WHEN fs.report_type = 'budget' THEN fs.amount ELSE 0 END) as budget,
+       SUM(CASE WHEN fs.report_type = 'annual' THEN fs.amount ELSE 0 END) as actual,
+       SUM(CASE WHEN fs.report_type = 'annual' THEN fs.amount ELSE 0 END)
+         - SUM(CASE WHEN fs.report_type = 'budget' THEN fs.amount ELSE 0 END) as variance
+FROM _fact_financial_statements fs
+JOIN _dim_chart_of_accounts coa ON fs.account_id = coa.account_id
+GROUP BY coa.account_name;
+```
+
+The `budget_variance` python measure automates this pattern. Budget events do NOT need a separate base — they ARE financial statements, classified by `report_type`.
+
 ### Unpivot Transform
 
 Source data typically arrives as wide tables (one column per line item). Sources use `transform: unpivot` with `unpivot_aliases:` to convert columns into rows:

@@ -3,7 +3,7 @@ type: domain-model
 model: county_property
 version: 3.0
 description: "County property assessments, parcels, and sales"
-extends: [_base.property.parcel]
+extends: [_base.property.parcel, _base.property.tax_district]
 depends_on: [temporal, county_geospatial]
 
 storage:
@@ -19,13 +19,14 @@ graph:
     - [assessed_to_calendar, fact_assessed_values, temporal.dim_calendar, ["CAST(DATE_FORMAT(MAKE_DATE(year, 1, 1), 'yyyyMMdd') AS INT)=date_id"], many_to_one, temporal]
     - [sales_to_calendar, fact_parcel_sales, temporal.dim_calendar, [sale_date_id=date_id], many_to_one, temporal]
     - [parcel_to_township, dim_parcel, county_geospatial.dim_township, [township_code=township_code], many_to_one, county_geospatial]
+    - [parcel_to_tax_district, dim_parcel, dim_tax_district, [tax_code=tax_code], many_to_one, null]
 
 build:
   partitions: [year]
   sort_by: [parcel_id, year]
   optimize: true
   phases:
-    1: { tables: [dim_parcel, dim_property_class] }
+    1: { tables: [dim_parcel, dim_property_class, dim_tax_district] }
     2: { tables: [fact_assessed_values, fact_parcel_sales] }
 
 measures:

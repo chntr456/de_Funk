@@ -70,6 +70,16 @@ EXPENSE (level 1)
     UTILITIES (level 3)
 ```
 
+### Expense vs Revenue Determination
+
+The `account_type` enum is the canonical answer to "is this an expense or revenue?" Every financial statement line item FKs to this dimension via `account_id`. Classification is definitive:
+
+- `account_type = 'EXPENSE'` → spending
+- `account_type = 'REVENUE'` → income
+- `account_type = 'ASSET'` / `'LIABILITY'` / `'EQUITY'` → balance sheet items
+
+This applies uniformly to both corporate (SEC filings) and municipal (government GAAP) models. See `_base.accounting.ledger_entry` for the operational-level classification via `entry_type`.
+
 ### Usage
 
 ```yaml

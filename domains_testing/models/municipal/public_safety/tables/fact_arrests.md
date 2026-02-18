@@ -13,6 +13,7 @@ schema:
   - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(arrest_date, 'yyyyMMdd') AS INT)"}]
   - [beat, string, true, "Police beat"]
   - [district, string, true, "Police district"]
+  - [ward, integer, true, "City ward"]
   - [community_area, integer, true, "Community area"]
   - [year, integer, false, "Arrest year"]
   - [arrest_key, string, true, "Unique arrest identifier"]

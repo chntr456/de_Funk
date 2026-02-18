@@ -4,7 +4,7 @@ model: municipal_housing
 version: 3.0
 description: "Municipal building permits and zoning data"
 extends: [_base.housing.permit, _base.geography.geo_spatial]
-depends_on: [municipal_geospatial]
+depends_on: [temporal, municipal_geospatial]
 
 storage:
   format: delta
@@ -17,6 +17,7 @@ graph:
     - [permit_to_type, fact_building_permits, dim_permit_type, [permit_type_id=permit_type_id], many_to_one, null]
     - [permit_to_work_type, fact_building_permits, dim_work_type, [work_type_id=work_type_id], many_to_one, null]
     - [permit_to_community_area, fact_building_permits, municipal_geospatial.dim_community_area, [community_area=area_number], many_to_one, municipal_geospatial]
+    - [permit_to_ward, fact_building_permits, municipal_geospatial.dim_ward, [ward=ward_number], many_to_one, municipal_geospatial]
 
 build:
   partitions: [year]

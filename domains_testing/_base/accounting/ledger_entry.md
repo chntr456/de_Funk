@@ -111,6 +111,28 @@ Fields marked `nullable: true` are optional. Sources that lack a field must expl
 | `"other_col"` | Use fallback column | `organizational_unit: "company_name"` |
 | `"COALESCE(...)"` | Try multiple | `"COALESCE(dept, division, 'UNKNOWN')"` |
 
+### Expense vs Revenue Categorization
+
+Expense/revenue classification operates at **two levels** of the accounting hierarchy:
+
+**Level 1 — Ledger Entry (this template):** The `entry_type` discriminator classifies by *transaction origin*:
+
+| entry_type | Classification | Example |
+|-----------|---------------|---------|
+| `VENDOR_PAYMENT` | Expense | Paying a supplier |
+| `PAYROLL` | Expense | Employee salaries |
+| `CONTRACT` | Expense | Contracted services |
+
+Computed measures filter on `entry_type` (e.g., `payroll_total`, `vendor_total`). This is a flat, operational classification — it tells you *what kind of payment* but not the GAAP accounting category.
+
+**Level 2 — Financial Statement (child template):** The `account_id` FK links to `_dim_chart_of_accounts`, which has `account_type` enum: `[ASSET, LIABILITY, REVENUE, EXPENSE, EQUITY]`. This is the GAAP-standard classification. Computed measures use:
+
+```sql
+SUM(CASE WHEN coa.account_type = 'EXPENSE' THEN amount ELSE 0 END)
+```
+
+**In practice:** Ledger entries get loaded with `entry_type` at ingestion time. Financial statements (which extend ledger entries) add `account_id` to classify each amount by its chart-of-accounts category. The two levels are complementary, not competing.
+
 ### Federation
 
 When multiple domain-models extend this base, a federation view unions them:
