@@ -16,6 +16,7 @@ canonical_fields:
   - [population, integer, nullable: true, description: "Population estimate"]
   - [latitude, double, nullable: true, description: "Centroid latitude"]
   - [longitude, double, nullable: true, description: "Centroid longitude"]
+  - [geography_id, integer, nullable: true, description: "FK to geospatial.dim_geography (county-level)"]
   - [is_active, boolean, nullable: false, description: "Currently operating"]
 
 tables:
@@ -34,6 +35,7 @@ tables:
       - [population, integer, true, "Population estimate"]
       - [latitude, double, true, "Centroid latitude"]
       - [longitude, double, true, "Centroid longitude"]
+      - [geography_id, integer, true, "FK to geospatial.dim_geography (county-level)", {fk: geospatial.dim_geography.geography_id}]
       - [is_active, boolean, false, "Currently operating", {default: true}]
 
     measures:

@@ -11,6 +11,7 @@ schema:
   - [centroid_lat, double, true, "Centroid latitude"]
   - [centroid_lon, double, true, "Centroid longitude"]
   - [area_sqmi, double, true, "Area in square miles"]
+  - [geography_id, integer, true, "FK to geospatial.dim_geography (Cook County)", {fk: geospatial.dim_geography.geography_id, derived: "ABS(HASH(CONCAT('COUNTY_', '17031')))"}]
   - [geometry, string, true, "Township boundary WKT"]
 
 measures:

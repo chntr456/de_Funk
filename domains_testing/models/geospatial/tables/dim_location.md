@@ -12,7 +12,7 @@ schema:
   - [country_code, string, true, "ISO country code"]
   - [state_code, string, true, "FIPS state code"]
   - [county_code, string, true, "FIPS county code"]
-  - [city_code, string, true, "City identifier"]
+  - [city_code, string, true, "City name (denormalized string, not FK)"]
   - [zip_code, string, true, "ZIP/postal code"]
   - [latitude, double, true, "Centroid latitude"]
   - [longitude, double, true, "Centroid longitude"]

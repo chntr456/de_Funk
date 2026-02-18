@@ -20,6 +20,8 @@ schema:
   - [population, integer, true, "Population estimate"]
   - [latitude, double, true, "Centroid latitude"]
   - [longitude, double, true, "Centroid longitude"]
+  - [county_fips, string, true, "5-digit county FIPS (for geography linkage)"]
+  - [geography_id, integer, true, "FK to geospatial.dim_geography (county-level)", {fk: geospatial.dim_geography.geography_id, derived: "ABS(HASH(CONCAT('COUNTY_', county_fips)))"}]
   - [is_active, boolean, false, "Currently operating", {default: true}]
 
 data:
@@ -31,6 +33,8 @@ data:
     population: 2746388
     latitude: 41.8781
     longitude: -87.6298
+    county_fips: "17031"
+    geography_id: "ABS(HASH(CONCAT('COUNTY_', '17031')))"
     is_active: true
 ---
 

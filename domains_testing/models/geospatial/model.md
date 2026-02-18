@@ -1,8 +1,8 @@
 ---
 type: domain-model
 model: geospatial
-version: 3.0
-description: "Geographic and location dimensions - foundation for spatial analysis"
+version: 4.0
+description: "Foundation geographic reference — US administrative regions and point locations"
 extends: _base.geography.geo_spatial
 depends_on: []
 
@@ -13,18 +13,12 @@ storage:
 
 graph:
   edges:
-    - [county_to_state, dim_county, dim_state, [state_id=state_id], many_to_one, null]
-    - [city_to_state, dim_city, dim_state, [state_id=state_id], many_to_one, null]
-    - [city_to_county, dim_city, dim_county, [county_id=county_id], many_to_one, null]
+    - [geography_hierarchy, dim_geography, dim_geography, [parent_geography_id=geography_id], many_to_one, null]
 
 build:
-  partitions: []
-  sort_by: [location_id]
   optimize: true
   phases:
-    1: { tables: [dim_location, dim_state] }
-    2: { tables: [dim_county] }
-    3: { tables: [dim_city] }
+    1: { tables: [dim_geography, dim_location] }
 
 metadata:
   domain: geospatial
@@ -34,5 +28,9 @@ status: active
 
 ## Geospatial Model
 
-Foundation geographic dimensions (US states, counties, cities).
-Other models link TO geospatial via location FKs.
+Foundation geographic reference for all spatial analysis. Two clean dimensions:
+
+- **dim_geography** — US administrative regions (states, counties) in a single denormalized table with self-referencing hierarchy
+- **dim_location** — Point locations (addresses, coordinates) used by event facts via `location_id` FK
+
+Other models link TO geospatial via `geography_id` (administrative regions) or `location_id` (point locations).

@@ -4,7 +4,7 @@ model: municipal_entity
 version: 3.0
 description: "Municipal government entities - cities, counties, townships, special districts"
 extends: [_base.entity.municipality]
-depends_on: [temporal]
+depends_on: [temporal, geospatial]
 
 storage:
   format: delta
@@ -12,7 +12,8 @@ storage:
     root: storage/silver/municipal/{entity}/entity/
 
 graph:
-  edges: []
+  edges:
+    - [municipality_to_geography, dim_municipality, geospatial.dim_geography, [geography_id=geography_id], many_to_one, geospatial]
 
 build:
   optimize: true

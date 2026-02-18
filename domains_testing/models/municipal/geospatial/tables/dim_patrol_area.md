@@ -14,6 +14,7 @@ schema:
   - [centroid_lat, double, true, "Centroid latitude"]
   - [centroid_lon, double, true, "Centroid longitude"]
   - [geom_wkt, string, true, "Boundary geometry as WKT"]
+  - [municipality_id, integer, false, "FK to municipal_entity.dim_municipality", {fk: municipal_entity.dim_municipality.municipality_id, derived: "ABS(HASH(CONCAT('CITY_', 'Chicago')))"}]
   - [location_id, integer, true, "FK to geospatial.dim_location", {fk: geospatial.dim_location.location_id}]
 
 measures:
