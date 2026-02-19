@@ -56,6 +56,8 @@ tables:
 graph:
   edges: []
 
+behaviors: []  # Target dimension — other templates FK to this, not the other way
+
 domain: temporal
 tags: [base, template, calendar]
 status: active

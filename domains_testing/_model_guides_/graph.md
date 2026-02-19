@@ -9,14 +9,21 @@ In v5.0, graph only contains `edges`. Source/filter/derive are defined in table 
 
 ### auto_edges (Inherited FK Edges)
 
-Base templates can declare `auto_edges` — FK patterns applied automatically to every fact table whose schema contains the matching column. Declared once in the root event base, inherited by all children.
+Base templates can declare `auto_edges` — FK patterns applied automatically to every fact table whose schema contains the matching column. Any base template can declare `auto_edges`, not just the event root — entity-chain bases (securities, parcel) use them too.
 
 ```yaml
-# _base/_base_/event.md — declared once
+# _base/_base_/event.md — event chain (date_id + location_id)
 auto_edges:
-  # [fk_column, target, on, type, cross_model]
   - [date_id, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
   - [location_id, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
+
+# _base/finance/securities.md — entity chain (date_id only)
+auto_edges:
+  - [date_id, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+
+# _base/property/parcel.md — entity chain (date_id only)
+auto_edges:
+  - [date_id, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
 ```
 
 **How it works:**
@@ -24,6 +31,14 @@ auto_edges:
 2. For each fact table, checks if schema contains the `fk_column`
 3. If match → generates edge: `{fact_name}_to_{target_short_name}`
 4. If no match → no edge (safe)
+
+**Which bases declare auto_edges:**
+
+| Base | auto_edges | Inherited By |
+|------|-----------|-------------|
+| `_base._base_.event` | `date_id`, `location_id` | All event-chain bases (crime, inspection, permit, service_request, transit, traffic, financial_event) |
+| `_base.finance.securities` | `date_id` | securities_master, stocks, options, etfs, futures |
+| `_base.property.parcel` | `date_id` | county_property (and any future property models) |
 
 **What still needs explicit edges:**
 

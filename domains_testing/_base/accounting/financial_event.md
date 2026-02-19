@@ -72,6 +72,10 @@ federation:
   enabled: true
   union_key: domain_source
 
+behaviors:
+  - temporal        # Inherited from event
+  - federable       # Has federation: block
+
 domain: accounting
 tags: [base, template, accounting, financial_event]
 status: active

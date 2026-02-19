@@ -31,6 +31,8 @@ tables:
       - [entity_count, count_distinct, entity_id, "Number of entities", {format: "#,##0"}]
       - [active_count, expression, "SUM(CASE WHEN is_active THEN 1 ELSE 0 END)", "Active entities", {format: "#,##0"}]
 
+behaviors: []
+
 domain: _base
 tags: [base, template, entity, root]
 status: active

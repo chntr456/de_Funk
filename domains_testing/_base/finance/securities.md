@@ -191,8 +191,36 @@ tables:
       - [avg_volatility, avg, volatility_20d, "Average 20d volatility", {format: "#,##0.00%"}]
       - [avg_atr, avg, atr_14, "Average ATR", {format: "$#,##0.00"}]
 
+subsets:
+  discriminator: _dim_security.asset_type
+  description: "Securities are subset by asset type into separate domain-models"
+  values:
+    Stock:
+      model: stocks
+      description: "Common and preferred stock equities"
+      filter: "asset_type = 'Stock'"
+    ETF:
+      model: etfs
+      description: "Exchange-traded funds"
+      filter: "asset_type = 'ETF'"
+    Option:
+      model: options
+      description: "Options contracts"
+      filter: "asset_type = 'Option'"
+    Future:
+      model: futures
+      description: "Futures contracts"
+      filter: "asset_type = 'Future'"
+
+auto_edges:
+  - [date_id, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+
+behaviors:
+  - temporal        # Has auto_edges for date_id → calendar
+  - subsettable     # Has subsets: block (asset_type discriminator)
+
 graph:
-  # auto_edges inherited: date_id→calendar (both facts; no location_id on securities)
+  # auto_edges: date_id→calendar (both facts)
   edges:
     - [prices_to_security, _fact_prices, _dim_security, [security_id=security_id], many_to_one, null]
     - [technicals_to_security, _fact_technicals, _dim_security, [security_id=security_id], many_to_one, null]

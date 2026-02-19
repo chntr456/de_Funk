@@ -108,6 +108,26 @@ federation:
   enabled: true
   union_key: domain_source
 
+subsets:
+  discriminator: _dim_crime_type.crime_category
+  description: "Crimes can be subset by category for focused analysis"
+  values:
+    VIOLENT:
+      description: "Homicide, assault, battery, robbery"
+      filter: "crime_category = 'VIOLENT'"
+    PROPERTY:
+      description: "Theft, burglary, motor vehicle theft"
+      filter: "crime_category = 'PROPERTY'"
+    OTHER:
+      description: "All remaining crime types"
+      filter: "crime_category = 'OTHER'"
+
+behaviors:
+  - temporal        # Inherited from event
+  - geo_locatable   # Inherited from event
+  - federable       # Has federation: block
+  - subsettable     # Has subsets: block (crime_category discriminator)
+
 domain: public_safety
 tags: [base, template, public_safety, crime]
 status: active

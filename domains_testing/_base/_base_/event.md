@@ -46,6 +46,10 @@ auto_edges:
 graph:
   edges: []
 
+behaviors:
+  - temporal        # auto_edges: date_id → calendar
+  - geo_locatable   # auto_edges: location_id → geo_location
+
 domain: _base
 tags: [base, template, event, root]
 status: active

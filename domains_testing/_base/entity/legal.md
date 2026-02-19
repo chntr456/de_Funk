@@ -37,6 +37,8 @@ tables:
     measures:
       - [entity_count, count_distinct, legal_entity_id, "Number of legal entities", {format: "#,##0"}]
 
+behaviors: []  # Pure entity — no temporal, geo, federation, or subset capabilities
+
 domain: entity
 tags: [base, template, entity, legal]
 status: active

@@ -46,6 +46,11 @@ federation:
   enabled: true
   union_key: domain_source
 
+behaviors:
+  - temporal        # Inherited from event
+  - geo_locatable   # Inherited from event
+  - federable       # Has federation: block
+
 domain: transportation
 tags: [base, template, transportation, traffic, congestion]
 status: active

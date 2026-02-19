@@ -38,6 +38,8 @@ tables:
     measures:
       - [location_count, count_distinct, location_id, "Number of locations", {format: "#,##0"}]
 
+behaviors: []  # Pure entity — target of auto_edges, not source
+
 domain: geography
 tags: [base, template, geography, location]
 status: active

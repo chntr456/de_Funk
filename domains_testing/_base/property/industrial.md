@@ -4,6 +4,8 @@ model: industrial_parcel
 version: 1.0
 description: "Industrial property parcels - manufacturing, warehouse, distribution"
 extends: _base.property.parcel
+subset_of: _base.property.parcel
+subset_value: INDUSTRIAL
 
 canonical_fields:
   - [industrial_sqft, double, nullable: true, description: "Industrial floor area in square feet"]

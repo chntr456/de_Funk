@@ -41,6 +41,8 @@ tables:
     measures:
       - [municipality_count, count_distinct, municipality_id, "Number of municipalities", {format: "#,##0"}]
 
+behaviors: []  # Pure entity — reference dimension only
+
 domain: entity
 tags: [base, template, entity, municipality, government]
 status: active

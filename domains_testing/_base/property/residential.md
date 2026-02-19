@@ -4,6 +4,8 @@ model: residential_parcel
 version: 1.0
 description: "Residential property parcels - single-family, multi-family, condominiums"
 extends: _base.property.parcel
+subset_of: _base.property.parcel
+subset_value: RESIDENTIAL
 
 canonical_fields:
   - [bedrooms, integer, nullable: true, description: "Number of bedrooms"]

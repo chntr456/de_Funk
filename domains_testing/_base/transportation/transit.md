@@ -75,6 +75,32 @@ federation:
   enabled: true
   union_key: domain_source
 
+subsets:
+  discriminator: _dim_transit_station.transit_mode
+  description: "Transit ridership can be subset by transit mode"
+  values:
+    RAIL:
+      description: "Heavy rail / metro"
+      filter: "transit_mode = 'RAIL'"
+    BUS:
+      description: "Bus routes"
+      filter: "transit_mode = 'BUS'"
+    SUBWAY:
+      description: "Underground rail"
+      filter: "transit_mode = 'SUBWAY'"
+    LIGHT_RAIL:
+      description: "Streetcar / tram"
+      filter: "transit_mode = 'LIGHT_RAIL'"
+    FERRY:
+      description: "Water transit"
+      filter: "transit_mode = 'FERRY'"
+
+behaviors:
+  - temporal        # Inherited from event
+  - geo_locatable   # Inherited from event
+  - federable       # Has federation: block
+  - subsettable     # Has subsets: block (transit_mode discriminator)
+
 domain: transportation
 tags: [base, template, transportation, transit, ridership]
 status: active

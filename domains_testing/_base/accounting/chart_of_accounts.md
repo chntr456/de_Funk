@@ -37,6 +37,8 @@ tables:
       - [expense_account_count, expression, "SUM(CASE WHEN account_type = 'EXPENSE' THEN 1 ELSE 0 END)", "Expense accounts", {format: "#,##0"}]
       - [revenue_account_count, expression, "SUM(CASE WHEN account_type = 'REVENUE' THEN 1 ELSE 0 END)", "Revenue accounts", {format: "#,##0"}]
 
+behaviors: []  # Pure entity — classification dimension only
+
 domain: accounting
 tags: [base, template, accounting, chart_of_accounts]
 status: active

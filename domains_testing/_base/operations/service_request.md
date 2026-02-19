@@ -98,6 +98,35 @@ federation:
   enabled: true
   union_key: domain_source
 
+subsets:
+  discriminator: _dim_request_type.request_category
+  description: "Service requests can be subset by category"
+  values:
+    INFRASTRUCTURE:
+      description: "Potholes, street lights, sidewalks"
+      filter: "request_category = 'INFRASTRUCTURE'"
+    SANITATION:
+      description: "Garbage, recycling, graffiti"
+      filter: "request_category = 'SANITATION'"
+    VEGETATION:
+      description: "Tree trimming, debris, weed complaints"
+      filter: "request_category = 'VEGETATION'"
+    BUILDINGS:
+      description: "Vacant buildings, code violations"
+      filter: "request_category = 'BUILDINGS'"
+    ANIMALS:
+      description: "Stray animals, rodent complaints"
+      filter: "request_category = 'ANIMALS'"
+    OTHER:
+      description: "General complaints, information requests"
+      filter: "request_category = 'OTHER'"
+
+behaviors:
+  - temporal        # Inherited from event
+  - geo_locatable   # Inherited from event
+  - federable       # Has federation: block
+  - subsettable     # Has subsets: block (request_category discriminator)
+
 domain: operations
 tags: [base, template, operations, 311, service-request]
 status: active

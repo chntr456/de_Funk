@@ -173,6 +173,11 @@ federation:
   enabled: true
   union_key: domain_source
 
+behaviors:
+  - temporal        # Inherited from event
+  - geo_locatable   # Inherited from event
+  - federable       # Has federation: block
+
 domain: regulatory
 tags: [base, template, regulatory, inspection, violation, license]
 status: active

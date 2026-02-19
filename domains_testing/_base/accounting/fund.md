@@ -31,6 +31,8 @@ tables:
     measures:
       - [fund_count, count_distinct, fund_id, "Number of funds", {format: "#,##0"}]
 
+behaviors: []  # Pure entity — classification dimension only
+
 domain: accounting
 tags: [base, template, accounting, fund]
 status: active

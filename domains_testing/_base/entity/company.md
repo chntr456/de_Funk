@@ -49,6 +49,8 @@ tables:
     measures:
       - [company_count, count_distinct, company_id, "Number of companies", {format: "#,##0"}]
 
+behaviors: []  # Pure entity — reference dimension only
+
 domain: entity
 tags: [base, template, entity, company, corporate]
 status: active

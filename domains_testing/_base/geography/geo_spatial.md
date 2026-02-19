@@ -42,6 +42,8 @@ tables:
       - [boundary_count, count_distinct, boundary_id, "Number of boundaries", {format: "#,##0"}]
       - [total_population, sum, population, "Total population", {format: "#,##0"}]
 
+behaviors: []  # Pure entity — boundary dimension only
+
 domain: geography
 tags: [base, template, geography, spatial]
 status: active

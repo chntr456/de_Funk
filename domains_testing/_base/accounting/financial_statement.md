@@ -114,6 +114,10 @@ graph:
     - [statement_to_period_end, _fact_financial_statements, temporal.dim_calendar, [period_end_date_id=date_id], many_to_one, temporal]
     - [statement_to_period_start, _fact_financial_statements, temporal.dim_calendar, [period_start_date_id=date_id], many_to_one, temporal]
 
+behaviors:
+  - temporal        # Inherited from event → financial_event → ledger_entry
+  - federable       # Inherited from ledger_entry
+
 domain: accounting
 tags: [base, template, accounting, financial_statement, SEC]
 status: active

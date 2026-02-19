@@ -88,6 +88,10 @@ federation:
   enabled: true
   union_key: domain_source
 
+behaviors:
+  - temporal        # Inherited from event
+  - federable       # Has federation: block
+
 domain: finance
 tags: [base, template, finance, corporate_action, dividend, split]
 status: active

@@ -13,18 +13,16 @@ storage:
     root: storage/silver/stocks/
 
 graph:
+  # auto_edges: date_id→calendar (inherited from _base.finance.securities)
   edges:
-    # No auto_edges: securities extends entity (not event)
     - [stock_to_security, dim_stock, securities_master.dim_security, [security_id=security_id], many_to_one, securities_master]
     - [stock_to_company, dim_stock, company.dim_company, [company_id=company_id], many_to_one, company]
     - [prices_to_stock, fact_stock_prices, dim_stock, [security_id=security_id], many_to_one, null]
-    - [prices_to_calendar, fact_stock_prices, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [dividends_to_stock, fact_dividends, dim_stock, [security_id=security_id], many_to_one, null]
     - [dividends_to_calendar, fact_dividends, temporal.dim_calendar, [ex_dividend_date_id=date_id], many_to_one, temporal]
     - [splits_to_stock, fact_splits, dim_stock, [security_id=security_id], many_to_one, null]
     - [splits_to_calendar, fact_splits, temporal.dim_calendar, [effective_date_id=date_id], many_to_one, temporal]
     - [technicals_to_stock, fact_stock_technicals, dim_stock, [security_id=security_id], many_to_one, null]
-    - [technicals_to_calendar, fact_stock_technicals, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [stock_to_exchange, dim_stock, securities_master.dim_exchange, [exchange_id=exchange_id], many_to_one, securities_master]
   paths:
     company_to_dividends:

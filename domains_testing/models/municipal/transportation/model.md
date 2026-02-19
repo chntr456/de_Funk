@@ -13,10 +13,9 @@ storage:
     root: storage/silver/municipal/{entity}/transportation/
 
 graph:
+  # auto_edges: date_id→calendar (inherited from _base.transportation.transit via event)
   edges:
     - [rail_ridership_to_station, fact_rail_ridership, dim_transit_station, [station_id=station_id], many_to_one, null]
-    - [rail_ridership_to_calendar, fact_rail_ridership, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-    - [bus_ridership_to_calendar, fact_bus_ridership, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
 
 build:
   partitions: [year]

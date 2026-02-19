@@ -98,6 +98,29 @@ federation:
   enabled: true
   union_key: domain_source
 
+subsets:
+  discriminator: _dim_permit_type.permit_category
+  description: "Permits can be subset by category"
+  values:
+    NEW_CONSTRUCTION:
+      description: "New building construction"
+      filter: "permit_category = 'NEW_CONSTRUCTION'"
+    ALTERATION:
+      description: "Renovation, remodeling, addition"
+      filter: "permit_category = 'ALTERATION'"
+    DEMOLITION:
+      description: "Building demolition"
+      filter: "permit_category = 'DEMOLITION'"
+    OTHER:
+      description: "Electrical, plumbing, mechanical"
+      filter: "permit_category = 'OTHER'"
+
+behaviors:
+  - temporal        # Inherited from event
+  - geo_locatable   # Inherited from event
+  - federable       # Has federation: block
+  - subsettable     # Has subsets: block (permit_category discriminator)
+
 domain: housing
 tags: [base, template, housing, permit, construction]
 status: active

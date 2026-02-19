@@ -35,6 +35,8 @@ tables:
     measures:
       - [org_unit_count, count_distinct, org_unit_id, "Number of org units", {format: "#,##0"}]
 
+behaviors: []  # Pure entity — reference dimension only
+
 domain: entity
 tags: [base, template, entity, organizational]
 status: active

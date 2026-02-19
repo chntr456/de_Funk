@@ -4,6 +4,8 @@ model: commercial_parcel
 version: 1.0
 description: "Commercial property parcels - office, retail, mixed-use buildings"
 extends: _base.property.parcel
+subset_of: _base.property.parcel
+subset_value: COMMERCIAL
 
 canonical_fields:
   - [commercial_sqft, double, nullable: true, description: "Commercial floor area in square feet"]
