@@ -27,7 +27,7 @@ graph:
     # Ledger → dimensions
     - [entry_to_vendor, fact_ledger_entries, dim_vendor, [vendor_id=vendor_id], many_to_one, null]
     - [entry_to_department, fact_ledger_entries, dim_department, [department_id=org_unit_id], many_to_one, null]
-    - [entry_to_contract, fact_ledger_entries, dim_contract, [contract_id=contract_id], many_to_one, null]
+    - [entry_to_contract, fact_ledger_entries, dim_contract, [contract_id=contract_id], many_to_one, null, optional: true]
 
     # Budget → dimensions (budget extends financial_statement: account_id, period dates)
     - [budget_to_calendar, fact_budget_events, temporal.dim_calendar, [period_end_date_id=date_id], many_to_one, temporal]
@@ -46,6 +46,23 @@ graph:
     # Property tax → county property
     - [property_tax_to_parcel, fact_property_tax, county_property.dim_parcel, [parcel_id=parcel_id], many_to_one, county_property]
     - [property_tax_to_tax_district, fact_property_tax, dim_tax_district, [tax_district_id=tax_district_id], many_to_one, null]
+
+  paths:
+    payment_to_contract_vendor:
+      description: "Drill from payment → contract → vendor"
+      steps:
+        - {from: fact_ledger_entries, to: dim_contract, via: contract_id}
+        - {from: dim_contract, to: dim_vendor, via: vendor_id}
+    budget_to_account_fund:
+      description: "Budget line item → account classification + fund"
+      steps:
+        - {from: fact_budget_events, to: dim_chart_of_accounts, via: account_id}
+        - {from: fact_budget_events, to: dim_fund, via: fund_id}
+    property_tax_chain:
+      description: "Property tax → parcel → tax district"
+      steps:
+        - {from: fact_property_tax, to: county_property.dim_parcel, via: parcel_id}
+        - {from: fact_property_tax, to: dim_tax_district, via: tax_district_id}
 
 build:
   partitions: [date_id]

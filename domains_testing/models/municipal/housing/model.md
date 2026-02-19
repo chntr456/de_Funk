@@ -16,8 +16,8 @@ graph:
   edges:
     - [permit_to_type, fact_building_permits, dim_permit_type, [permit_type_id=permit_type_id], many_to_one, null]
     - [permit_to_work_type, fact_building_permits, dim_work_type, [work_type_id=work_type_id], many_to_one, null]
-    - [permit_to_community_area, fact_building_permits, municipal_geospatial.dim_community_area, [community_area=area_number], many_to_one, municipal_geospatial]
-    - [permit_to_ward, fact_building_permits, municipal_geospatial.dim_ward, [ward=ward_number], many_to_one, municipal_geospatial]
+    - [permit_to_community_area, fact_building_permits, municipal_geospatial.dim_community_area, [community_area=area_number], many_to_one, municipal_geospatial, optional: true]
+    - [permit_to_ward, fact_building_permits, municipal_geospatial.dim_ward, [ward=ward_number], many_to_one, municipal_geospatial, optional: true]
 
 build:
   partitions: [year]

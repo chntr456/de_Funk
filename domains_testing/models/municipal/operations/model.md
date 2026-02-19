@@ -16,8 +16,8 @@ graph:
   edges:
     - [request_to_type, fact_service_requests, dim_request_type, [request_type_id=request_type_id], many_to_one, null]
     - [request_to_status, fact_service_requests, dim_status, [status_id=status_id], many_to_one, null]
-    - [request_to_community_area, fact_service_requests, municipal_geospatial.dim_community_area, [community_area=area_number], many_to_one, municipal_geospatial]
-    - [request_to_ward, fact_service_requests, municipal_geospatial.dim_ward, [ward=ward_number], many_to_one, municipal_geospatial]
+    - [request_to_community_area, fact_service_requests, municipal_geospatial.dim_community_area, [community_area=area_number], many_to_one, municipal_geospatial, optional: true]
+    - [request_to_ward, fact_service_requests, municipal_geospatial.dim_ward, [ward=ward_number], many_to_one, municipal_geospatial, optional: true]
 
 build:
   partitions: [year]

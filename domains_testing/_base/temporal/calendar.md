@@ -48,6 +48,8 @@ tables:
       - [fiscal_year, integer, false, "Fiscal year"]
       - [fiscal_quarter, integer, false, "Fiscal quarter"]
       - [fiscal_month, integer, false, "Fiscal month"]
+      - [is_trading_day, boolean, true, "Market trading day", {default: true}]
+      - [is_holiday, boolean, true, "Holiday flag", {default: false}]
 
     measures:
       - [day_count, count, date_id, "Number of days", {format: "#,##0"}]
@@ -55,6 +57,14 @@ tables:
 
 graph:
   edges: []
+
+generation:
+  description: "Self-generating dimension — no bronze source. Models override these defaults."
+  params:
+    start_date: {type: date, default: "2000-01-01", description: "First calendar date"}
+    end_date: {type: date, default: "2050-12-31", description: "Last calendar date"}
+    fiscal_year_start_month: {type: integer, default: 1, description: "Fiscal year start month (1=Jan)"}
+    holidays: {type: string, default: "US_FEDERAL", description: "Holiday calendar to apply"}
 
 behaviors: []  # Target dimension — other templates FK to this, not the other way
 
@@ -74,6 +84,17 @@ date: 2025-01-16 → date_id: 20250116
 ```
 
 All facts use `date_id` (integer FK), never raw date columns, for join efficiency.
+
+### Generation
+
+Self-generating — no bronze source needed. Override `generation.params` in your model's `calendar_config:`:
+
+```yaml
+calendar_config:
+  start_date: "2000-01-01"
+  end_date: "2050-12-31"
+  fiscal_year_start_month: 1   # 1=Jan (calendar year = fiscal year)
+```
 
 ### Usage
 

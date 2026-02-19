@@ -41,7 +41,7 @@ auto_edges:
   # Applied to every fact table whose schema contains fk_column.
   # Edge name is auto-generated: {fact_name}_to_{target_short_name}
   - [date_id, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
-  - [location_id, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location]
+  - [location_id, geo_location._dim_location, [location_id=location_id], many_to_one, geo_location, optional: true]
 
 graph:
   edges: []

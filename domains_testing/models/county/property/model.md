@@ -23,6 +23,23 @@ graph:
     - [parcel_to_property_class, dim_parcel, dim_property_class, [property_class=property_class_code], many_to_one, null]
     - [assessment_to_property_class, fact_assessed_values, dim_property_class, [property_class=property_class_code], many_to_one, null]
 
+  paths:
+    assessment_to_tax_district:
+      description: "Property tax calculation chain: assessment → parcel → tax district"
+      steps:
+        - {from: fact_assessed_values, to: dim_parcel, via: parcel_id}
+        - {from: dim_parcel, to: dim_tax_district, via: tax_code}
+    sale_to_township:
+      description: "Sales by geographic area: sale → parcel → township"
+      steps:
+        - {from: fact_parcel_sales, to: dim_parcel, via: parcel_id}
+        - {from: dim_parcel, to: county_geospatial.dim_township, via: township_code}
+    parcel_class_to_tax:
+      description: "Classification chain: parcel → property class + parcel → tax district"
+      steps:
+        - {from: dim_parcel, to: dim_property_class, via: property_class}
+        - {from: dim_parcel, to: dim_tax_district, via: tax_code}
+
 build:
   partitions: [year]
   sort_by: [parcel_id, year]

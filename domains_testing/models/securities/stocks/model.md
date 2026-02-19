@@ -16,7 +16,7 @@ graph:
   # auto_edges: date_id→calendar (inherited from _base.finance.securities)
   edges:
     - [stock_to_security, dim_stock, securities_master.dim_security, [security_id=security_id], many_to_one, securities_master]
-    - [stock_to_company, dim_stock, company.dim_company, [company_id=company_id], many_to_one, company]
+    - [stock_to_company, dim_stock, company.dim_company, [company_id=company_id], many_to_one, company, optional: true]
     - [prices_to_stock, fact_stock_prices, dim_stock, [security_id=security_id], many_to_one, null]
     - [dividends_to_stock, fact_dividends, dim_stock, [security_id=security_id], many_to_one, null]
     - [dividends_to_calendar, fact_dividends, temporal.dim_calendar, [ex_dividend_date_id=date_id], many_to_one, temporal]

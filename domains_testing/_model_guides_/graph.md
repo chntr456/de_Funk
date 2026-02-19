@@ -85,6 +85,31 @@ For nullable FKs, append `optional: true` as a 7th element:
 - [entry_to_chart, fact_entries, dim_chart, [expense_category=account_code], many_to_one, null, optional: true]
 ```
 
+### Paths (Multi-Hop Traversals)
+
+Named multi-hop join sequences. Declare in `graph.paths:` on model files to document common analysis chains.
+
+```yaml
+graph:
+  paths:
+    assessment_to_tax_district:
+      description: "Property tax calculation chain"
+      steps:
+        - {from: fact_assessed_values, to: dim_parcel, via: parcel_id}
+        - {from: dim_parcel, to: dim_tax_district, via: tax_code}
+```
+
+Each step uses an existing edge. Steps can cross model boundaries:
+
+```yaml
+    sale_to_township:
+      steps:
+        - {from: fact_parcel_sales, to: dim_parcel, via: parcel_id}
+        - {from: dim_parcel, to: county_geospatial.dim_township, via: township_code}
+```
+
+**Models with paths**: securities/stocks, securities/master, county/property, municipal/finance, municipal/public_safety, corporate/finance.
+
 ### v5.0 Change
 
 Graph `nodes:` with `select:`, `derive:`, `drop:` are **deprecated**. Those are now in table schema.

@@ -22,6 +22,18 @@ graph:
     - [earnings_to_company, fact_earnings, corporate_entity.dim_company, [legal_entity_id=company_id], many_to_one, corporate_entity]
     - [earnings_to_calendar, fact_earnings, temporal.dim_calendar, [report_date_id=date_id], many_to_one, temporal]
 
+  paths:
+    statement_by_period_account:
+      description: "Financial statements by reporting period and account"
+      steps:
+        - {from: fact_financial_statements, to: temporal.dim_calendar, via: period_end_date_id}
+        - {from: fact_financial_statements, to: dim_financial_account, via: account_id}
+    statement_by_company:
+      description: "Financial statements by company and account category"
+      steps:
+        - {from: fact_financial_statements, to: corporate_entity.dim_company, via: legal_entity_id}
+        - {from: fact_financial_statements, to: dim_financial_account, via: account_id}
+
 build:
   partitions: []
   optimize: true
