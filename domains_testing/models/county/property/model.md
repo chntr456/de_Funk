@@ -3,7 +3,12 @@ type: domain-model
 model: county_property
 version: 3.0
 description: "County property assessments, parcels, and sales"
-extends: [_base.property.parcel, _base.property.tax_district]
+extends:
+  - _base.property.parcel
+  - _base.property.residential
+  - _base.property.commercial
+  - _base.property.industrial
+  - _base.property.tax_district
 depends_on: [temporal, county_geospatial]
 
 storage:
@@ -22,6 +27,10 @@ graph:
     - [parcel_to_tax_district, dim_parcel, dim_tax_district, [tax_code=tax_code], many_to_one, null]
     - [parcel_to_property_class, dim_parcel, dim_property_class, [property_class=property_class_code], many_to_one, null]
     - [assessment_to_property_class, fact_assessed_values, dim_property_class, [property_class=property_class_code], many_to_one, null]
+    # Subset dimensions — LEFT JOIN from dim_parcel for auto-join wide view at query time
+    - [parcel_to_residential, dim_parcel, dim_residential_parcel, [parcel_id=parcel_id], one_to_one, null, optional: true]
+    - [parcel_to_commercial, dim_parcel, dim_commercial_parcel, [parcel_id=parcel_id], one_to_one, null, optional: true]
+    - [parcel_to_industrial, dim_parcel, dim_industrial_parcel, [parcel_id=parcel_id], one_to_one, null, optional: true]
 
   paths:
     assessment_to_tax_district:
@@ -45,7 +54,7 @@ build:
   sort_by: [parcel_id, year]
   optimize: true
   phases:
-    1: { tables: [dim_parcel, dim_property_class, dim_tax_district] }
+    1: { tables: [dim_parcel, dim_property_class, dim_tax_district, dim_residential_parcel, dim_commercial_parcel, dim_industrial_parcel] }
     2: { tables: [fact_assessed_values, fact_parcel_sales] }
 
 measures:
