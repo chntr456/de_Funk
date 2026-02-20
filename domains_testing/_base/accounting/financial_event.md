@@ -68,13 +68,8 @@ graph:
   # auto_edges inherited: date_id→calendar (no location_id on financial events)
   edges: []
 
-federation:
-  enabled: true
-  union_key: domain_source
-
 behaviors:
   - temporal        # Inherited from event
-  - federable       # Has federation: block
 
 domain: accounting
 tags: [base, template, accounting, financial_event]

@@ -104,10 +104,6 @@ graph:
     - [arrest_to_crime, _fact_arrests, _fact_crimes, [incident_id=incident_id], many_to_one, null]
     - [arrest_to_crime_type, _fact_arrests, _dim_crime_type, [crime_type_id=crime_type_id], many_to_one, null]
 
-federation:
-  enabled: true
-  union_key: domain_source
-
 subsets:
   discriminator: _dim_crime_type.crime_category
   description: "Crimes can be subset by category for focused analysis"
@@ -125,7 +121,6 @@ subsets:
 behaviors:
   - temporal        # Inherited from event
   - geo_locatable   # Inherited from event
-  - federable       # Has federation: block
   - subsettable     # Has subsets: block (crime_category discriminator)
 
 domain: public_safety

@@ -84,13 +84,8 @@ graph:
     - [dividend_to_calendar, _fact_dividends, temporal.dim_calendar, [ex_dividend_date_id=date_id], many_to_one, temporal]
     - [split_to_calendar, _fact_splits, temporal.dim_calendar, [effective_date_id=date_id], many_to_one, temporal]
 
-federation:
-  enabled: true
-  union_key: domain_source
-
 behaviors:
   - temporal        # Inherited from event
-  - federable       # Has federation: block
 
 domain: finance
 tags: [base, template, finance, corporate_action, dividend, split]

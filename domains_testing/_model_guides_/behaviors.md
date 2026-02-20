@@ -13,7 +13,6 @@ A `behaviors:` list on a base template documents which cross-cutting capabilitie
 behaviors:
   - temporal        # Has auto_edges for date_id → calendar
   - geo_locatable   # Has auto_edges for location_id → geo_location
-  - federable       # Has federation: block
   - subsettable     # Has subsets: block
 ```
 
@@ -23,8 +22,9 @@ behaviors:
 |----------|---------|---------|
 | `temporal` | Facts FK to `temporal.dim_calendar` via `date_id` | `auto_edges` includes `date_id` (on this template or inherited) |
 | `geo_locatable` | Facts FK to `geo_location._dim_location` via `location_id` | `auto_edges` includes `location_id` (inherited from event) |
-| `federable` | Template supports federation (UNION across models) | `federation:` block is present |
 | `subsettable` | Data can be filtered by a dimension discriminator into subsets | `subsets:` block is present |
+
+**Note:** `federable` was removed as a behavior. Federation is now owned by federation models in `models/_base/`, not by base templates. See federation.md.
 
 ### Inheritance
 
@@ -32,7 +32,7 @@ Behaviors are inherited through the `extends:` chain. A child template inherits 
 
 ```
 _base._base_.event           → [temporal, geo_locatable]
-└── _base.public_safety.crime → [temporal, geo_locatable, federable, subsettable]
+└── _base.public_safety.crime → [temporal, geo_locatable, subsettable]
 ```
 
 Child templates don't need to re-declare inherited behaviors but **do** list them for discoverability.
@@ -50,19 +50,19 @@ Child templates don't need to re-declare inherited behaviors but **do** list the
 
 | Base Template | behaviors |
 |--------------|-----------|
-| `_base.accounting.financial_event` | `[temporal, federable]` |
-| `_base.accounting.ledger_entry` | `[temporal, federable]` |
-| `_base.accounting.financial_statement` | `[temporal, federable]` |
-| `_base.corporate.earnings` | `[temporal, federable]` |
-| `_base.finance.corporate_action` | `[temporal, federable]` |
+| `_base.accounting.financial_event` | `[temporal]` |
+| `_base.accounting.ledger_entry` | `[temporal]` |
+| `_base.accounting.financial_statement` | `[temporal]` |
+| `_base.corporate.earnings` | `[temporal]` |
+| `_base.finance.corporate_action` | `[temporal]` |
 | `_base.finance.securities` | `[temporal, subsettable]` |
 | `_base.property.parcel` | `[temporal, subsettable]` |
-| `_base.public_safety.crime` | `[temporal, geo_locatable, federable, subsettable]` |
-| `_base.regulatory.inspection` | `[temporal, geo_locatable, federable]` |
-| `_base.operations.service_request` | `[temporal, geo_locatable, federable, subsettable]` |
-| `_base.housing.permit` | `[temporal, geo_locatable, federable, subsettable]` |
-| `_base.transportation.transit` | `[temporal, geo_locatable, federable, subsettable]` |
-| `_base.transportation.traffic` | `[temporal, geo_locatable, federable]` |
+| `_base.public_safety.crime` | `[temporal, geo_locatable, subsettable]` |
+| `_base.regulatory.inspection` | `[temporal, geo_locatable]` |
+| `_base.operations.service_request` | `[temporal, geo_locatable, subsettable]` |
+| `_base.housing.permit` | `[temporal, geo_locatable, subsettable]` |
+| `_base.transportation.transit` | `[temporal, geo_locatable, subsettable]` |
+| `_base.transportation.traffic` | `[temporal, geo_locatable]` |
 
 **Entity-chain bases** (inherit from `_base._base_.entity` or its descendants):
 
@@ -95,13 +95,12 @@ Behaviors summarize capabilities defined elsewhere:
 |----------|-----------|
 | `temporal` | `auto_edges:` with `date_id` (on this template or ancestor) |
 | `geo_locatable` | `auto_edges:` with `location_id` (on this template or ancestor) |
-| `federable` | `federation:` block |
 | `subsettable` | `subsets:` block |
 
 ### Why Not Mixins?
 
-Behaviors are informational, not compositional. The actual capability (auto_edges, federation, subsets) is declared via its own YAML block. Behaviors simply document which capabilities are active, enabling:
+Behaviors are informational, not compositional. The actual capability (auto_edges, subsets) is declared via its own YAML block. Behaviors simply document which capabilities are active, enabling:
 
-- **Discovery**: Query "which templates are federable?" without scanning every block
+- **Discovery**: Query "which templates are subsettable?" without scanning every block
 - **Validation**: Loader can verify that claimed behaviors match actual blocks
 - **Documentation**: Single line item summarizes template capabilities

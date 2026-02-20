@@ -169,14 +169,9 @@ graph:
     - [inspection_to_facility, _fact_inspections, _dim_facility, [facility_id=facility_id], many_to_one, null]
     - [inspection_to_type, _fact_inspections, _dim_inspection_type, [inspection_type_id=inspection_type_id], many_to_one, null]
 
-federation:
-  enabled: true
-  union_key: domain_source
-
 behaviors:
   - temporal        # Inherited from event
   - geo_locatable   # Inherited from event
-  - federable       # Has federation: block
 
 domain: regulatory
 tags: [base, template, regulatory, inspection, violation, license]

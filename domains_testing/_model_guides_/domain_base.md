@@ -47,9 +47,8 @@ A `domain-base` is a reusable template that defines canonical schemas, measures,
 
 | Key | Type | Description |
 |-----|------|-------------|
-| `behaviors` | list | Capability tags: `[temporal, geo_locatable, federable, subsettable]` |
+| `behaviors` | list | Capability tags: `[temporal, geo_locatable, subsettable]` |
 | `subsets` | object | Declarative data slicing by dimension discriminator |
-| `federation` | object | Federation config: `{enabled: true, union_key: domain_source}` |
 | `views` | object | Template view definitions with leading underscore names (`_view_*`) |
 
 #### Optional — Generation (temporal only)
@@ -178,9 +177,10 @@ Informational tags documenting which cross-cutting capabilities the template sup
 behaviors:
   - temporal        # auto_edges: date_id → calendar
   - geo_locatable   # auto_edges: location_id → geo_location
-  - federable       # federation: block present
   - subsettable     # subsets: block present
 ```
+
+**Note:** `federable` was removed — federation is now owned by `models/_base/` federation models. See federation.md.
 
 See behaviors.md for full assignment table.
 
@@ -275,17 +275,11 @@ python_measures:
     function: "accounting.measures.calculate_spending_velocity"
     params: {window_days: 30, amount_col: "transaction_amount"}
 
-federation:
-  enabled: true
-  union_key: domain_source
-  primary_key: entry_id
-
 graph:
   edges: []
 
 behaviors:
   - temporal
-  - federable
 
 domain: accounting
 tags: [base, template, accounting, ledger]

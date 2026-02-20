@@ -94,10 +94,6 @@ graph:
     - [permit_to_type, _fact_permits, _dim_permit_type, [permit_type_id=permit_type_id], many_to_one, null]
     - [permit_to_work_type, _fact_permits, _dim_work_type, [work_type_id=work_type_id], many_to_one, null]
 
-federation:
-  enabled: true
-  union_key: domain_source
-
 subsets:
   discriminator: _dim_permit_type.permit_category
   description: "Permits can be subset by category"
@@ -118,7 +114,6 @@ subsets:
 behaviors:
   - temporal        # Inherited from event
   - geo_locatable   # Inherited from event
-  - federable       # Has federation: block
   - subsettable     # Has subsets: block (permit_category discriminator)
 
 domain: housing

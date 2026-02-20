@@ -94,10 +94,6 @@ graph:
     - [request_to_type, _fact_service_requests, _dim_request_type, [request_type_id=request_type_id], many_to_one, null]
     - [request_to_status, _fact_service_requests, _dim_status, [status_id=status_id], many_to_one, null]
 
-federation:
-  enabled: true
-  union_key: domain_source
-
 subsets:
   discriminator: _dim_request_type.request_category
   description: "Service requests can be subset by category"
@@ -124,7 +120,6 @@ subsets:
 behaviors:
   - temporal        # Inherited from event
   - geo_locatable   # Inherited from event
-  - federable       # Has federation: block
   - subsettable     # Has subsets: block (request_category discriminator)
 
 domain: operations

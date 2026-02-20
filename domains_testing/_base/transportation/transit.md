@@ -71,10 +71,6 @@ graph:
   edges:
     - [ridership_to_station, _fact_ridership, _dim_transit_station, [station_id=station_id], many_to_one, null]
 
-federation:
-  enabled: true
-  union_key: domain_source
-
 subsets:
   discriminator: _dim_transit_station.transit_mode
   description: "Transit ridership can be subset by transit mode"
@@ -98,7 +94,6 @@ subsets:
 behaviors:
   - temporal        # Inherited from event
   - geo_locatable   # Inherited from event
-  - federable       # Has federation: block
   - subsettable     # Has subsets: block (transit_mode discriminator)
 
 domain: transportation

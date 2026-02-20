@@ -116,7 +116,6 @@ graph:
 
 behaviors:
   - temporal        # Inherited from event → financial_event → ledger_entry
-  - federable       # Inherited from ledger_entry
 
 domain: accounting
 tags: [base, template, accounting, financial_statement, SEC]

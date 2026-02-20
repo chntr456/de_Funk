@@ -1,63 +1,98 @@
 ---
 type: reference
-description: "Guide for federation - cross-model union queries"
+description: "Guide for federation — cross-model union queries via models/_base/"
 ---
 
 ## federation Guide
 
-Federation enables querying across multiple domain-models that share the same base template.
+Federation enables querying across multiple domain-models that share the same base template by creating UNION views of their fact tables.
 
-### How It Works
+---
 
-1. Multiple domain-models extend the same domain-base
-2. All produce the same canonical schema
-3. Query engine creates UNION views across children
-4. `union_key` column identifies which child each row came from
+### Architecture
 
-### Base Template Config
+Federation is separated into three layers:
+
+| Layer | Location | Responsibility |
+|-------|----------|---------------|
+| **Base templates** | `_base/` | Define canonical schema contract. No federation config — bases stay pure. |
+| **Domain models** | `models/{domain}/` | Produce data. Declare `federation: {enabled: true}` to signal participation. |
+| **Federation models** | `models/_base/` | Own the UNION. Declare `children:` and `union_of:` tables. |
+
+```
+_base/accounting/ledger_entry.md           ← Schema contract (no federation block)
+  ↑ extends
+models/municipal/finance/model.md          ← Produces fact_ledger_entries (domain_source: 'chicago')
+models/corporate/finance/model.md          ← Produces fact_financial_statements
+  ↑ depends_on
+models/_base/accounting/model.md           ← Creates v_all_ledger_entries (UNION)
+```
+
+---
+
+### Federation Model Config (models/_base/)
 
 ```yaml
-# In domain-base (single-fact base — primary_key specified)
-federation:
-  enabled: true
-  union_key: domain_source
-  primary_key: entry_id
+type: domain-model
+model: accounting_federation
+extends: [_base.accounting.ledger_entry, _base.accounting.financial_event]
+depends_on: [municipal_finance, corporate_finance]
 
-# In domain-base (multi-fact base — primary_key omitted)
+federation:
+  union_key: domain_source
+  children:
+    - {model: municipal_finance, domain_source: chicago}
+    - {model: corporate_finance, domain_source: alpha_vantage}
+
+tables:
+  v_all_ledger_entries:
+    type: fact
+    description: "All ledger entries across federated domains"
+    union_of:
+      - municipal_finance.fact_ledger_entries
+    primary_key: [entry_id]
+    schema: inherited
+
+  v_all_financial_events:
+    type: fact
+    union_of:
+      - municipal_finance.fact_budget_events
+      - municipal_finance.fact_property_tax
+      - corporate_finance.fact_financial_statements
+    primary_key: [event_id]
+    schema: inherited
+```
+
+### Federation Model Keys
+
+| Key | Required | Description |
+|-----|----------|-------------|
+| `federation.union_key` | Yes | Column identifying source: `domain_source` |
+| `federation.children` | Yes | List of `{model, domain_source}` objects |
+| `tables.*.union_of` | Yes | List of `model.table` references to UNION |
+| `tables.*.schema` | No | `inherited` = use canonical schema from base |
+| `depends_on` | Yes | All child models must build before federation |
+
+---
+
+### Domain Model Config (participation signal)
+
+Domain models that participate in federation declare a simple block:
+
+```yaml
+# models/municipal/finance/model.md
 federation:
   enabled: true
   union_key: domain_source
 ```
 
-### Fields
+This signals the model produces federated data. The `domain_source` column value comes from each source file's `domain_source:` key.
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `enabled` | Yes | Enable federation |
-| `union_key` | Yes | Column identifying source model |
-| `primary_key` | Conditional | Shared PK across children. Required for single-fact bases (e.g., `ledger_entry`). Omit for multi-fact bases (e.g., `crime` has `_fact_crimes` + `_fact_arrests` with different PKs) |
-| `materialize` | No | Create physical union table (default: false = view) |
-| `refresh` | No | Refresh schedule: `daily`, `hourly` |
-
-### Query Pattern
-
-```sql
--- Auto-generated federation view
-SELECT * FROM accounting.v_all_ledger_entries
--- Unions: chicago_ledger, cook_county_ledger, corporate_ledger
--- All have same canonical columns
-```
-
-### Requirements
-
-- All children must extend the same base
-- All children must output the same canonical schema
-- The `union_key` column (`domain_source`) must exist in every fact table schema in the base template
-- Each source file must declare `domain_source:` as a top-level key with the origin value (e.g., `"'chicago'"`)
+---
 
 ### domain_source Column
 
-The `domain_source` column is defined on the root event base (`_base._base_.event`) and must be carried into every fact table schema throughout the inheritance chain. This column is `nullable: false` — every fact row must identify its origin.
+The `domain_source` column is defined on the root event base (`_base._base_.event`) and carried into every fact table. This column is `nullable: false` — every fact row must identify its origin.
 
 Sources declare it as a top-level key:
 
@@ -75,80 +110,65 @@ The loader injects it as a literal column value in the SELECT.
 
 ---
 
-### Current Federation Membership
+### Query Pattern
 
-Maps each federated base template to its known model implementations. When adding a new model that extends a federated base, add it to the appropriate section below.
+```sql
+-- Federation view (auto-generated from union_of)
+SELECT * FROM _base.accounting.v_all_financial_events
+WHERE domain_source = 'chicago'    -- filter to one city
+-- or
+SELECT * FROM _base.accounting.v_all_financial_events
+-- see all cities/providers side by side
+```
 
-#### Accounting — Ledger Entry
+---
 
-**Base**: `_base.accounting.ledger_entry` | **PK**: `entry_id`
+### Adding a New City
 
-| Model | domain_source | Fact Table |
-|-------|--------------|------------|
-| `municipal/finance` | chicago | fact_ledger_entries |
-| `corporate/finance` | — | (uses financial_statement instead) |
+When onboarding a second municipality (e.g., Detroit):
 
-#### Accounting — Financial Event
+1. Create `models/municipal_detroit/finance/` extending the same bases
+2. Each source file declares `domain_source: "'detroit'"`
+3. Update the federation model:
+   ```yaml
+   # models/_base/accounting/model.md
+   federation:
+     children:
+       - {model: municipal_finance, domain_source: chicago}
+       - {model: municipal_detroit_finance, domain_source: detroit}   # NEW
 
-**Base**: `_base.accounting.financial_event`
+   tables:
+     v_all_ledger_entries:
+       union_of:
+         - municipal_finance.fact_ledger_entries
+         - municipal_detroit_finance.fact_ledger_entries              # NEW
+   ```
 
-| Model | domain_source | Fact Table(s) |
-|-------|--------------|---------------|
-| `municipal/finance` | chicago | fact_budget_events, fact_property_tax |
-| `corporate/finance` | alpha_vantage | fact_financial_statements, fact_earnings |
+---
 
-#### Public Safety — Crime
+### Current Federation Models
 
-**Base**: `_base.public_safety.crime`
+| Federation Model | Location | Children | Union Tables |
+|-----------------|----------|----------|-------------|
+| `accounting_federation` | `models/_base/accounting/` | municipal_finance, corporate_finance | v_all_ledger_entries, v_all_financial_events |
+| `public_safety_federation` | `models/_base/public_safety/` | municipal_public_safety | v_all_crimes, v_all_arrests |
+| `operations_federation` | `models/_base/operations/` | municipal_operations | v_all_service_requests |
+| `regulatory_federation` | `models/_base/regulatory/` | municipal_regulatory | v_all_inspections, v_all_building_violations, v_all_business_licenses |
+| `housing_federation` | `models/_base/housing/` | municipal_housing | v_all_building_permits |
+| `transportation_federation` | `models/_base/transportation/` | municipal_transportation | v_all_ridership, v_all_traffic |
+| `corporate_federation` | `models/_base/corporate/` | corporate_finance | v_all_earnings |
+| `finance_federation` | `models/_base/finance/` | securities_stocks | v_all_dividends, v_all_splits |
 
-| Model | domain_source | Fact Table(s) |
-|-------|--------------|---------------|
-| `municipal/public_safety` | chicago | fact_crimes, fact_arrests |
+---
 
-#### Operations — Service Request
+### Build Order
 
-**Base**: `_base.operations.service_request`
+Federation models are the highest tier — they depend on all child domain models:
 
-| Model | domain_source | Fact Table(s) |
-|-------|--------------|---------------|
-| `municipal/operations` | chicago | fact_service_requests |
-
-#### Regulatory — Inspection
-
-**Base**: `_base.regulatory.inspection`
-
-| Model | domain_source | Fact Table(s) |
-|-------|--------------|---------------|
-| `municipal/regulatory` | chicago | fact_food_inspections, fact_building_violations, fact_business_licenses |
-
-#### Housing — Permit
-
-**Base**: `_base.housing.permit`
-
-| Model | domain_source | Fact Table(s) |
-|-------|--------------|---------------|
-| `municipal/housing` | chicago | fact_building_permits |
-
-#### Transportation — Transit / Traffic
-
-**Base**: `_base.transportation.transit` / `_base.transportation.traffic`
-
-| Model | domain_source | Fact Table(s) |
-|-------|--------------|---------------|
-| `municipal/transportation` | chicago | fact_ridership, fact_traffic_observations |
-
-#### Corporate — Earnings
-
-**Base**: `_base.corporate.earnings`
-
-| Model | domain_source | Fact Table(s) |
-|-------|--------------|---------------|
-| `corporate/finance` | alpha_vantage | fact_earnings |
-
-#### Finance — Corporate Action
-
-**Base**: `_base.finance.corporate_action`
-
-| Model | domain_source | Fact Table(s) |
-|-------|--------------|---------------|
-| `securities/stocks` | alpha_vantage | fact_dividends, fact_splits |
+```
+Tier 0: temporal, geospatial          (foundation)
+Tier 1: entity models                  (corporate_entity, municipal_entity)
+Tier 2: geo subdivisions              (municipal_geospatial, county_geospatial)
+Tier 3: domain models                 (municipal_finance, corporate_finance, ...)
+Tier 4: federation models             (models/_base/accounting, ...)
+```
