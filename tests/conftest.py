@@ -145,7 +145,7 @@ def duckdb_connection(temp_dir, sample_price_data):
 @pytest.fixture
 def mock_model(simple_model_config, duckdb_connection, temp_dir):
     """Create a mock model for testing."""
-from de_funk.models.base.model import BaseModel
+    from de_funk.models.base.model import BaseModel
 
     storage_cfg = {
         'roots': {
