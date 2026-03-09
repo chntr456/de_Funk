@@ -1,14 +1,14 @@
 ---
 type: domain-base
 model: parcel
-version: 2.0
+version: 3.0
 description: "Property parcels - land records, assessments, and sales transactions"
 extends: _base._base_.entity
 
-# CANONICAL FIELDS
-# [field_name, type, nullable: bool, description: "meaning"]
+# CANONICAL FIELDS — common fields only
+# Subset-specific fields are defined in child templates (residential.md, commercial.md, industrial.md)
+# and auto-absorbed into _dim_parcel via the subset_of mechanism
 canonical_fields:
-  # Common (all parcels)
   - [parcel_id, string, nullable: false, description: "Primary key (PIN or parcel number)"]
   - [parcel_code, string, nullable: false, description: "Natural key (standardized PIN)"]
   - [property_class, string, nullable: true, description: "Property classification code"]
@@ -22,27 +22,6 @@ canonical_fields:
   - [longitude, double, nullable: true, description: "Parcel centroid longitude"]
   - [tax_code, string, nullable: true, description: "Tax district code"]
 
-  # Residential (populated when property_category = RESIDENTIAL)
-  - [bedrooms, integer, nullable: true, description: "Number of bedrooms"]
-  - [bathrooms, double, nullable: true, description: "Number of bathrooms (1.5, 2.5, etc.)"]
-  - [stories, double, nullable: true, description: "Number of stories"]
-  - [garage_spaces, integer, nullable: true, description: "Garage/parking spaces"]
-  - [basement, string, nullable: true, description: "Basement type (FULL, PARTIAL, CRAWL, NONE)"]
-  - [exterior_wall, string, nullable: true, description: "Exterior wall material"]
-
-  # Commercial (populated when property_category = COMMERCIAL)
-  - [commercial_sqft, double, nullable: true, description: "Commercial floor area in square feet"]
-  - [commercial_units, integer, nullable: true, description: "Number of commercial units"]
-  - [residential_units, integer, nullable: true, description: "Number of residential units (mixed-use)"]
-  - [space_type, string, nullable: true, description: "OFFICE, RETAIL, MIXED_USE, WAREHOUSE"]
-  - [floors, integer, nullable: true, description: "Number of floors"]
-
-  # Industrial (populated when property_category = INDUSTRIAL)
-  - [industrial_sqft, double, nullable: true, description: "Industrial floor area in square feet"]
-  - [loading_docks, integer, nullable: true, description: "Number of loading docks"]
-  - [ceiling_height, double, nullable: true, description: "Ceiling height in feet"]
-  - [zoning_class, string, nullable: true, description: "Industrial zoning classification"]
-
 tables:
   _dim_parcel:
     type: dimension
@@ -50,9 +29,10 @@ tables:
     unique_key: [parcel_code]
     partition_by: [property_category]
 
+    # Common columns only — subset columns are auto-absorbed from child templates
+    # that declare subset_of: _base.property.parcel
     # [column, type, nullable, description, {options}]
     schema:
-      # Common fields (all parcels)
       - [parcel_id, string, false, "PK (PIN)", {derived: "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"}]
       - [parcel_code, string, false, "Natural key"]
       - [property_class, string, true, "Classification code"]
@@ -66,35 +46,8 @@ tables:
       - [longitude, double, true, "Centroid longitude"]
       - [tax_code, string, true, "Tax district"]
 
-      # Residential fields (null when property_category != RESIDENTIAL)
-      - [bedrooms, integer, true, "Number of bedrooms", {subset: RESIDENTIAL}]
-      - [bathrooms, double, true, "Number of bathrooms", {subset: RESIDENTIAL}]
-      - [stories, double, true, "Number of stories", {subset: RESIDENTIAL}]
-      - [garage_spaces, integer, true, "Garage/parking spaces", {subset: RESIDENTIAL}]
-      - [basement, string, true, "Basement type", {subset: RESIDENTIAL, enum: [FULL, PARTIAL, CRAWL, NONE]}]
-      - [exterior_wall, string, true, "Exterior wall material", {subset: RESIDENTIAL}]
-
-      # Commercial fields (null when property_category != COMMERCIAL)
-      - [commercial_sqft, double, true, "Commercial floor area sq ft", {subset: COMMERCIAL}]
-      - [commercial_units, integer, true, "Number of commercial units", {subset: COMMERCIAL}]
-      - [residential_units, integer, true, "Residential units (mixed-use)", {subset: COMMERCIAL}]
-      - [space_type, string, true, "Space classification", {subset: COMMERCIAL, enum: [OFFICE, RETAIL, MIXED_USE, WAREHOUSE]}]
-      - [floors, integer, true, "Number of floors", {subset: COMMERCIAL}]
-
-      # Industrial fields (null when property_category != INDUSTRIAL)
-      - [industrial_sqft, double, true, "Industrial floor area sq ft", {subset: INDUSTRIAL}]
-      - [loading_docks, integer, true, "Number of loading docks", {subset: INDUSTRIAL}]
-      - [ceiling_height, double, true, "Ceiling height in feet", {subset: INDUSTRIAL}]
-      - [zoning_class, string, true, "Industrial zoning classification", {subset: INDUSTRIAL}]
-
     measures:
       - [parcel_count, count_distinct, parcel_id, "Number of parcels", {format: "#,##0"}]
-      - [avg_bedrooms, avg, bedrooms, "Average bedrooms", {format: "#,##0.0", subset: RESIDENTIAL}]
-      - [avg_bathrooms, avg, bathrooms, "Average bathrooms", {format: "#,##0.0", subset: RESIDENTIAL}]
-      - [avg_commercial_sqft, avg, commercial_sqft, "Average commercial sq ft", {format: "#,##0", subset: COMMERCIAL}]
-      - [total_commercial_units, sum, commercial_units, "Total commercial units", {format: "#,##0", subset: COMMERCIAL}]
-      - [avg_industrial_sqft, avg, industrial_sqft, "Average industrial sq ft", {format: "#,##0", subset: INDUSTRIAL}]
-      - [total_loading_docks, sum, loading_docks, "Total loading docks", {format: "#,##0", subset: INDUSTRIAL}]
 
   _dim_property_class:
     type: dimension
@@ -156,20 +109,21 @@ tables:
 subsets:
   discriminator: _dim_property_class.property_category
   pattern: wide_table
-  description: "Type-specific fields are stored as nullable columns on _dim_parcel, partitioned by property_category. Column metadata {subset: VALUE} marks which fields belong to each category. dim_property_class.applicable_fields lists active fields per class."
+  target_table: _dim_parcel
+  description: "Child templates with subset_of: _base.property.parcel have their canonical_fields and measures auto-absorbed into _dim_parcel as nullable columns with {subset: VALUE} metadata. dim_property_class.applicable_fields lists active fields per class."
   values:
     RESIDENTIAL:
+      extends: _base.property.residential
       description: "Single-family, multi-family, condos"
       filter: "property_category = 'RESIDENTIAL'"
-      fields: [bedrooms, bathrooms, stories, garage_spaces, basement, exterior_wall]
     COMMERCIAL:
+      extends: _base.property.commercial
       description: "Office, retail, mixed-use"
       filter: "property_category = 'COMMERCIAL'"
-      fields: [commercial_sqft, commercial_units, residential_units, space_type, floors]
     INDUSTRIAL:
+      extends: _base.property.industrial
       description: "Manufacturing, warehouse, distribution"
       filter: "property_category = 'INDUSTRIAL'"
-      fields: [industrial_sqft, loading_docks, ceiling_height, zoning_class]
     EXEMPT:
       description: "Government, religious, educational"
       filter: "property_category = 'EXEMPT'"
@@ -259,11 +213,22 @@ status: active
 
 Property parcel data including land records, assessments, and sales. Parcel IDs (PINs) are standardized to 14-digit zero-padded format for cross-dataset joins.
 
-### Wide Table Pattern
+### Wide Table with Auto-Absorption (v3.0)
 
-All property-type-specific fields (residential, commercial, industrial) are stored as nullable columns on a single `_dim_parcel` table, partitioned by `property_category`. The `{subset: VALUE}` metadata on each column marks which property category it belongs to. Columns are null for non-matching categories.
+Type-specific fields (residential, commercial, industrial) are **not listed** on this template. Instead, child templates that declare `subset_of: _base.property.parcel` have their `canonical_fields` and `measures` automatically absorbed into `_dim_parcel` as nullable columns with `{subset: VALUE}` metadata.
 
-`_dim_property_class` serves as the **field dictionary** — `applicable_fields` lists which subset columns are populated for each classification code.
+**To add a field to commercial properties:**
+1. Add it to `_base/property/commercial.md` canonical_fields — done
+2. Add the source alias in the model's source file — done
+
+The loader handles everything else: the field appears on `_dim_parcel` as a nullable column with `{subset: COMMERCIAL}`.
+
+**Loader behavior for `subsets.pattern: wide_table`:**
+1. Scan for templates with `subset_of: _base.property.parcel`
+2. For each child, read `subset_value` (e.g., `COMMERCIAL`)
+3. Append child's `canonical_fields` to `_dim_parcel.schema` as nullable columns with `{subset: VALUE}`
+4. Append child's `measures` to `_dim_parcel.measures` with `{subset: VALUE}`
+5. Update `subsets.values.*.fields` from child canonical_fields
 
 ### Delta Lake Advantages
 
@@ -284,16 +249,11 @@ All property-type-specific fields (residential, commercial, industrial) are stor
 ### Property Categories
 
 ```
-RESIDENTIAL: Single-family, multi-family, condos
-  → bedrooms, bathrooms, stories, garage_spaces, basement, exterior_wall
-COMMERCIAL: Office, retail, mixed-use
-  → commercial_sqft, commercial_units, residential_units, space_type, floors
-INDUSTRIAL: Manufacturing, warehouse
-  → industrial_sqft, loading_docks, ceiling_height, zoning_class
-EXEMPT: Government, religious, educational
-  → (no type-specific fields)
-OTHER: Vacant land, agricultural
-  → (no type-specific fields)
+RESIDENTIAL → fields from _base.property.residential
+COMMERCIAL  → fields from _base.property.commercial
+INDUSTRIAL  → fields from _base.property.industrial
+EXEMPT      → no type-specific fields
+OTHER       → no type-specific fields
 ```
 
 ### Views (Layered Calculations)

@@ -9,53 +9,86 @@ A `subsets:` block on a base template declares that data can be filtered by a di
 
 ### Three Implementation Patterns
 
-#### Pattern 1: Wide Table (Recommended for typed entities)
+#### Pattern 1: Wide Table with Auto-Absorption (Recommended for typed entities)
 
-When subsets have **different columns per type**, absorb all fields into one wide dimension table. Use `{subset: VALUE}` metadata on columns and partition by the discriminator.
+When subsets have **different columns per type**, use child templates with `subset_of` to define type-specific fields. The parent auto-absorbs them into one wide dimension table.
+
+**Parent template** — declares the pattern and references children:
 
 ```yaml
 subsets:
   discriminator: _dim_property_class.property_category
   pattern: wide_table
+  target_table: _dim_parcel
   values:
     RESIDENTIAL:
+      extends: _base.property.residential
       description: "Single-family, multi-family, condos"
       filter: "property_category = 'RESIDENTIAL'"
-      fields: [bedrooms, bathrooms, stories, garage_spaces, basement, exterior_wall]
     COMMERCIAL:
+      extends: _base.property.commercial
       description: "Office, retail, mixed-use"
       filter: "property_category = 'COMMERCIAL'"
-      fields: [commercial_sqft, commercial_units, residential_units, space_type, floors]
 ```
 
-The dimension table includes all fields as nullable columns:
+**Child template** — single source of truth for subset fields:
+
+```yaml
+# _base/property/residential.md
+type: domain-base
+subset_of: _base.property.parcel
+subset_value: RESIDENTIAL
+
+canonical_fields:
+  - [bedrooms, integer, nullable: true, description: "Number of bedrooms"]
+  - [bathrooms, double, nullable: true, description: "Number of bathrooms"]
+
+measures:
+  - [avg_bedrooms, avg, bedrooms, "Average bedrooms", {format: "#,##0.0"}]
+```
+
+**What the loader produces** — the absorbed wide table:
 
 ```yaml
 _dim_parcel:
   partition_by: [property_category]
   schema:
-    # Common fields (all rows)
+    # Common fields (from parent)
     - [parcel_id, string, false, "PK"]
     - [property_category, string, true, "Denormalized from dim_property_class"]
 
-    # Residential fields (null when not RESIDENTIAL)
+    # Auto-absorbed from _base.property.residential
     - [bedrooms, integer, true, "Number of bedrooms", {subset: RESIDENTIAL}]
     - [bathrooms, double, true, "Number of bathrooms", {subset: RESIDENTIAL}]
 
-    # Commercial fields (null when not COMMERCIAL)
+    # Auto-absorbed from _base.property.commercial
     - [commercial_sqft, double, true, "Floor area", {subset: COMMERCIAL}]
+
+  measures:
+    # From parent
+    - [parcel_count, count_distinct, parcel_id, "Number of parcels"]
+    # Auto-absorbed from _base.property.residential
+    - [avg_bedrooms, avg, bedrooms, "Average bedrooms", {format: "#,##0.0", subset: RESIDENTIAL}]
 ```
+
+**Adding a field** — one file change at the base layer:
+
+1. Add to child template's `canonical_fields` (e.g., `commercial.md`)
+2. Add source alias in the model's source file
+3. Optionally add a `derivation:` in the model table if the source column name differs
 
 **When to use**: Entity has different attributes per type but shares the same fact tables. Examples: property parcels (residential vs commercial vs industrial).
 
 **Advantages**:
+- **Single source of truth** — each field defined once in its subset child template
 - Delta Lake partition pruning makes filtered queries fast
 - Columnar null compression makes sparse columns essentially free
 - No join overhead — all fields available in one table
 - Schema evolution handles new types by adding columns
-- Simpler build pipeline (no separate tables, sources, or phases)
 
 **Field dictionary**: The discriminator dimension (e.g., `_dim_property_class`) should include an `applicable_fields` column listing which subset columns are populated for each code.
+
+---
 
 #### Pattern 2: Separate Models (For independent domain models)
 
@@ -77,6 +110,8 @@ subsets:
 
 **When to use**: Each subset is a full domain model with its own fact tables, build pipeline, and graph. Examples: securities (stocks vs options vs ETFs — each has different fact tables).
 
+---
+
 #### Pattern 3: Filter-Only (No type-specific fields)
 
 When subsets share the **exact same schema** and differ only as analytical slices.
@@ -93,7 +128,9 @@ subsets:
       filter: "crime_category = 'PROPERTY'"
 ```
 
-**When to use**: All rows have the same columns. The discriminator is just for analytical filtering. No `fields:`, `extends:`, or `model:` needed.
+**When to use**: All rows have the same columns. The discriminator is just for analytical filtering. No `extends:`, `model:`, or `fields:` needed.
+
+---
 
 ### Pattern Selection Guide
 
@@ -104,18 +141,48 @@ subsets:
 | Same build pipeline? | Yes | No | Yes |
 | Same source data? | Yes | No | Yes |
 
+---
+
 ### Key Properties
+
+**Parent `subsets:` block:**
 
 | Property | Required | Description |
 |----------|----------|-------------|
 | `discriminator` | Yes | `dimension_table.column` — where the enum lives |
 | `pattern` | No | `wide_table` or omit (inferred from context) |
-| `description` | Yes | Human-readable description |
+| `target_table` | Wide table only | Which table absorbs subset columns (e.g., `_dim_parcel`) |
+| `description` | No | Human-readable description of the absorption mechanism |
 | `values` | Yes | Map of enum values to subset definitions |
-| `values.*.fields` | No | Columns on the wide table for this subset |
-| `values.*.model` | No | Child domain-model (separate models pattern) |
+| `values.*.extends` | Wide table only | Reference to child template (e.g., `_base.property.residential`) |
+| `values.*.model` | Separate models only | Child domain-model name |
 | `values.*.description` | Yes | What this subset represents |
 | `values.*.filter` | Yes | SQL predicate for the subset |
+
+**Child template (wide table pattern):**
+
+| Property | Required | Description |
+|----------|----------|-------------|
+| `subset_of` | Yes | Parent base template (e.g., `_base.property.parcel`) |
+| `subset_value` | Yes | Discriminator value (e.g., `RESIDENTIAL`) |
+| `canonical_fields` | Yes | Fields to absorb into parent's target table |
+| `measures` | No | Measures to absorb into parent's target table |
+
+---
+
+### Auto-Absorption Mechanism
+
+When a parent template has `subsets.pattern: wide_table`:
+
+1. **Discovery**: Loader finds child templates with `subset_of: <parent>` (or follows `subsets.values.*.extends` references)
+2. **Field absorption**: Each child's `canonical_fields` → appended to `target_table.schema` as nullable columns with `{subset: child.subset_value}`
+3. **Measure absorption**: Each child's `measures` → appended to `target_table.measures` with `{subset: child.subset_value}`
+4. **Fields list**: `subsets.values.*.fields` auto-derived from child `canonical_fields` (not manually listed)
+5. **Validation**: Verify discriminator column exists, verify no field name collisions across subsets
+
+**Result**: Parent's `target_table` contains common columns + all subset columns. No duplication between parent and children.
+
+---
 
 ### Current Subset Assignments
 
@@ -128,6 +195,8 @@ subsets:
 | `_base.housing.permit` | `_dim_permit_type.permit_category` | Filter-only | NEW_CONSTRUCTION, ALTERATION, DEMOLITION, OTHER |
 | `_base.transportation.transit` | `_dim_transit_station.transit_mode` | Filter-only | RAIL, BUS, SUBWAY, LIGHT_RAIL, FERRY |
 
+---
+
 ### Relationship to Federation
 
 Subsets and federation are complementary:
@@ -136,11 +205,14 @@ Subsets and federation are complementary:
 
 This enables queries like: "Show residential parcels across all federated counties" (subset + federation).
 
+---
+
 ### Loader Behavior
 
 The `subsets:` block is declarative. The loader uses it for:
-1. **Validation**: Verify that `discriminator` column exists in the named dimension
-2. **Filter generation**: Automatically produce filter predicates for downstream queries
-3. **Column metadata**: `{subset: VALUE}` marks which columns belong to which subset
-4. **Field dictionary**: Populate `applicable_fields` on the discriminator dimension
-5. **Documentation**: Discoverable via `behaviors: [subsettable]`
+1. **Auto-absorption**: Merge child template fields and measures into parent's target table
+2. **Validation**: Verify discriminator column exists; no field name collisions across subsets
+3. **Filter generation**: Produce filter predicates for downstream queries
+4. **Column metadata**: `{subset: VALUE}` marks which columns belong to which subset
+5. **Field dictionary**: Populate `applicable_fields` on the discriminator dimension
+6. **Documentation**: Discoverable via `behaviors: [subsettable]`

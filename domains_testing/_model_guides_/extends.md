@@ -170,21 +170,23 @@ The complete inheritance tree is documented in `domain_base.md`.
 
 ### subset_of and subset_value
 
-Used on base templates that define the **field contract** for a typed subset of a parent template. The child's `canonical_fields` are absorbed into the parent's wide dimension table as nullable columns with `{subset: VALUE}` metadata.
+Used on child base templates that define the **field contract** for a typed subset of a parent template. The child's `canonical_fields` and `measures` are **auto-absorbed** into the parent's wide dimension table as nullable columns with `{subset: VALUE}` metadata.
 
 ```yaml
-# _base/property/residential.md
+# _base/property/residential.md — single source of truth for residential fields
 type: domain-base
-model: residential
+model: residential_parcel
 extends: _base.property.parcel
 subset_of: _base.property.parcel
 subset_value: RESIDENTIAL
 
-# Fields absorbed into parent _dim_parcel with {subset: RESIDENTIAL}
 canonical_fields:
   - [bedrooms, integer, nullable: true, description: "Number of bedrooms"]
   - [bathrooms, double, nullable: true, description: "Number of bathrooms"]
   - [stories, double, nullable: true, description: "Number of stories"]
+
+measures:
+  - [avg_bedrooms, avg, bedrooms, "Average bedrooms", {format: "#,##0.0"}]
 ```
 
 | Key | Description |
@@ -192,7 +194,13 @@ canonical_fields:
 | `subset_of` | Parent base template this is a subset of |
 | `subset_value` | Discriminator value that selects this subset |
 
-**Wide table pattern (v2.0):** The child subset's `canonical_fields` become nullable columns on the parent's dimension table (e.g., `_dim_parcel`), tagged with `{subset: RESIDENTIAL}`. No separate dimension tables are created. The parent dimension is partitioned by the discriminator column for fast filtered queries.
+**Auto-absorption (v3.0):** The parent template declares `subsets.pattern: wide_table` with `target_table: _dim_parcel`. The loader discovers child templates by `subset_of` (or explicit `subsets.values.*.extends` references) and automatically:
+
+1. Appends child `canonical_fields` to `target_table.schema` as nullable columns with `{subset: VALUE}`
+2. Appends child `measures` to `target_table.measures` with `{subset: VALUE}`
+3. Updates parent `canonical_fields` with the unioned set
+
+**Adding a field**: Define it in the child template's `canonical_fields` — it auto-propagates to the parent's wide table. No need to edit the parent template.
 
 **Current subsets:**
 

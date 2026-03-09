@@ -27,6 +27,7 @@ A `domain-model-table` defines one materialized table in the Silver layer. Table
 |-----|------|-------------|
 | `extends` | string | Base template table: `_base.accounting.ledger_entry._fact_ledger_entries` |
 | `additional_schema` | list | Extra columns beyond what `extends:` provides |
+| `derivations` | map | Source-specific column expressions — overrides `derived:` on inherited columns |
 
 #### Optional — Natural Key
 
@@ -299,6 +300,47 @@ enrich:
 | `filter:` | Optional SQL WHERE on the source rows |
 | `columns:` | Aggregate columns to add, same `[name, type, nullable, desc, {derived}]` format |
 | `derived:` | Computed columns using previously enriched values (no join needed) |
+
+---
+
+### Derivations (Source-Specific Column Mapping)
+
+`derivations:` is a flat map that overrides the `derived:` option on inherited columns without repeating the full schema. Use it when a model table `extends:` a base table and needs to map canonical column names to source-specific expressions.
+
+**Without derivations** (old pattern — full schema repeated):
+
+```yaml
+extends: _base.property.parcel._dim_parcel
+schema:
+  - [parcel_id, string, false, "PK", {derived: "LPAD(pin, 14, '0')"}]
+  - [parcel_code, string, false, "Natural key", {derived: "pin"}]
+  - [property_class, string, true, "Classification code", {derived: "class"}]
+  - [bedrooms, integer, true, "Number of bedrooms", {subset: RESIDENTIAL, derived: "bdrm"}]
+  # ... every column repeated just to set derived: ...
+```
+
+**With derivations** (new pattern — only the differences):
+
+```yaml
+extends: _base.property.parcel._dim_parcel
+
+derivations:
+  parcel_id: "LPAD(pin, 14, '0')"
+  parcel_code: "pin"
+  property_class: "class"
+  neighborhood_code: "nbhd"
+  bedrooms: "bdrm"
+  bathrooms: "COALESCE(fbath, 0) + COALESCE(hbath, 0) * 0.5"
+  commercial_sqft: "comm_sqft"
+```
+
+**Behavior:**
+- Full schema (types, nullable, descriptions, `{subset}` metadata) inherited from base
+- `derivations:` sets `derived:` on named columns — only those columns need to be listed
+- Columns **not** in `derivations:` use the canonical name as-is (passthrough from source)
+- Can be combined with `additional_schema:` for model-specific columns not in the base
+
+**When to use**: Any table that `extends:` a base template and needs source-specific column transformations. Eliminates repeating the entire schema just to map column names.
 
 ---
 
