@@ -31,6 +31,8 @@ from .extends import (
     resolve_extends_reference,
     resolve_nested_extends,
 )
+from .schema import process_table_schema
+from .subsets import absorb_subsets
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +148,11 @@ class DomainConfigLoaderV4:
 
         # Resolve nested extends (tables, views, graph sections)
         config = resolve_nested_extends(config, self.domains_dir, self._parse_cache)
+
+        # Process table schemas (additional_schema + derivations)
+        for table_name, table_config in config.get("tables", {}).items():
+            if isinstance(table_config, dict) and table_config.get("schema"):
+                process_table_schema(table_config)
 
         self._cache[model_name] = config
         return config
@@ -302,11 +309,25 @@ class DomainConfigLoaderV4:
 
         return result
 
-    def load_base(self, base_ref: str) -> Dict[str, Any]:
-        """Load a base template by dotted reference."""
-        return resolve_extends_reference(
+    def load_base(self, base_ref: str, with_subsets: bool = False) -> Dict[str, Any]:
+        """
+        Load a base template by dotted reference.
+
+        Args:
+            base_ref: Dotted reference (e.g., "_base.simple.base_template")
+            with_subsets: If True, run subset auto-absorption on the result
+
+        Returns:
+            Base config dict, optionally with absorbed subset columns
+        """
+        config = resolve_extends_reference(
             base_ref, self.domains_dir, self._parse_cache
         )
+        if with_subsets and config.get("subsets"):
+            config = absorb_subsets(
+                config, self.domains_dir, self._parse_cache, parent_ref=base_ref
+            )
+        return config
 
     def clear_cache(self):
         """Clear all caches."""

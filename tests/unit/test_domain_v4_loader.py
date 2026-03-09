@@ -266,19 +266,24 @@ class TestPhase2Schema:
 
     @pytest.fixture
     def loader(self, fixtures_dir):
-        try:
-            from de_funk.config.domain import DomainConfigLoaderV4
-            return DomainConfigLoaderV4(fixtures_dir)
-        except ImportError:
-            pytest.skip("Phase 1 not yet implemented")
+        from de_funk.config.domain import DomainConfigLoaderV4
+        return DomainConfigLoaderV4(fixtures_dir)
+
+    def test_canonical_fields_to_schema(self):
+        """canonical_fields keyword format converts to positional schema format."""
+        from de_funk.config.domain.schema import canonical_fields_to_schema
+
+        canonical = [
+            ["field_a", "string", {"nullable": True, "description": "Test field A"}],
+            ["field_b", "integer", {"nullable": False, "description": "Test field B"}],
+        ]
+        schema = canonical_fields_to_schema(canonical)
+        assert len(schema) == 2
+        assert schema[0] == ["field_a", "string", True, "Test field A"]
+        assert schema[1] == ["field_b", "integer", False, "Test field B"]
 
     def test_additional_schema_appended(self, loader):
         """additional_schema columns should be appended to inherited schema."""
-        try:
-            from de_funk.config.domain.schema import merge_additional_schema
-        except ImportError:
-            pytest.skip("Phase 2 not yet implemented")
-
         config = loader.load_model_config("test_model")
         dim_entity = config["tables"]["dim_entity"]
         col_names = [col[0] for col in dim_entity["schema"]]
@@ -286,51 +291,87 @@ class TestPhase2Schema:
         assert "region_code" in col_names
         assert "priority" in col_names
 
+    def test_additional_schema_after_inherited(self, loader):
+        """additional_schema columns appear after inherited base columns."""
+        config = loader.load_model_config("test_model")
+        dim_entity = config["tables"]["dim_entity"]
+        col_names = [col[0] for col in dim_entity["schema"]]
+        # Base has entity_id, entity_name, entity_type, created_date
+        # additional_schema has region_code, priority — they should come after
+        assert col_names.index("entity_id") < col_names.index("region_code")
+        assert col_names.index("entity_name") < col_names.index("priority")
+
     def test_derivations_override_derived(self, loader):
         """derivations: {col: "expr"} should update matching column's derived."""
-        try:
-            from de_funk.config.domain.schema import apply_derivations
-        except ImportError:
-            pytest.skip("Phase 2 not yet implemented")
-
         config = loader.load_model_config("test_model")
         dim_entity = config["tables"]["dim_entity"]
         # Find entity_id column — should have derivation "ABS(HASH(name))" from dim_entity.md
+        found = False
         for col in dim_entity["schema"]:
             if col[0] == "entity_id":
                 options = col[4] if len(col) > 4 else {}
                 assert options.get("derived") == "ABS(HASH(name))"
+                found = True
                 break
+        assert found, "entity_id column not found in dim_entity schema"
 
-    def test_subset_absorption_discovers_children(self, loader):
+    def test_derivations_missing_column_ignored(self):
+        """Derivation for nonexistent column is a safe no-op."""
+        from de_funk.config.domain.schema import apply_derivations
+
+        schema = [["col_a", "string", True, "desc"]]
+        result = apply_derivations(schema, {"nonexistent_col": "EXPR()"})
+        assert len(result) == 1
+        assert result[0][0] == "col_a"
+
+    def test_subset_absorption_discovers_children(self):
         """Loader should find subset children by subset_of reference."""
-        try:
-            from de_funk.config.domain.subsets import absorb_subsets
-        except ImportError:
-            pytest.skip("Phase 2 not yet implemented")
-
         base_config = _parse_front_matter(
             FIXTURES_DIR / "_base/simple/base_template.md"
         )
-        # After absorption, _dim_entity should have subset fields
-        # This tests the mechanism, not the loader integration
         assert "subsets" in base_config
         assert base_config["subsets"]["target_table"] == "_dim_entity"
 
     def test_subset_absorption_adds_nullable_columns(self, loader):
         """Absorbed subset columns should be nullable with {subset: VALUE}."""
-        try:
-            from de_funk.config.domain.subsets import absorb_subsets
-        except ImportError:
-            pytest.skip("Phase 2 not yet implemented")
-
-        # After full processing, base _dim_entity schema should include
-        # field_a1, field_a2 from subset_a and field_b1, field_b2, field_b3 from subset_b
-        config = loader._load_base("_base.simple.base_template")
+        config = loader.load_base("_base.simple.base_template", with_subsets=True)
         dim_entity_schema = config["tables"]["_dim_entity"]["schema"]
         col_names = [col[0] for col in dim_entity_schema]
+        # field_a1, field_a2 from subset_a and field_b1, field_b2, field_b3 from subset_b
         assert "field_a1" in col_names
+        assert "field_a2" in col_names
         assert "field_b1" in col_names
+
+    def test_subset_columns_have_metadata(self, loader):
+        """Absorbed subset columns should have {subset: VALUE} metadata."""
+        config = loader.load_base("_base.simple.base_template", with_subsets=True)
+        dim_entity_schema = config["tables"]["_dim_entity"]["schema"]
+
+        for col in dim_entity_schema:
+            if col[0] == "field_a1":
+                assert len(col) >= 5
+                assert isinstance(col[4], dict)
+                assert col[4].get("subset") == "TYPE_A"
+                break
+        else:
+            pytest.fail("field_a1 not found in absorbed schema")
+
+    def test_subset_absorption_merges_measures(self, loader):
+        """Child measures should be absorbed into parent target table."""
+        config = loader.load_base("_base.simple.base_template", with_subsets=True)
+        dim_entity_measures = config["tables"]["_dim_entity"]["measures"]
+        measure_names = [m[0] for m in dim_entity_measures if isinstance(m, list)]
+        # avg_field_a2 from subset_a
+        assert "avg_field_a2" in measure_names
+
+    def test_subset_columns_are_nullable(self, loader):
+        """All absorbed subset columns should be forced nullable."""
+        config = loader.load_base("_base.simple.base_template", with_subsets=True)
+        dim_entity_schema = config["tables"]["_dim_entity"]["schema"]
+
+        for col in dim_entity_schema:
+            if col[0] in ("field_a1", "field_a2", "field_b1", "field_b2", "field_b3"):
+                assert col[2] is True, f"{col[0]} should be nullable but is {col[2]}"
 
 
 # ===========================================================================
