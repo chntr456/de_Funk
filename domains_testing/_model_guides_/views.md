@@ -11,7 +11,7 @@ A `views:` block declares named views that layer calculations onto physical tabl
 
 | Type | Purpose | Example |
 |------|---------|---------|
-| `derived` | Apply configurable assumptions to compute new columns | assessed_value × equalization_factor = equalized_value |
+| `derived` | Apply configurable assumptions to compute new columns | assessed_value_total × equalization_factor = equalized_value_total |
 | `rollup` | Pre-aggregate to a different (coarser) grain | Parcel-level → township-level summary |
 
 ### Derived View Syntax (Base Template)
@@ -31,9 +31,9 @@ views:
         source: "Joined from dim_tax_district"
     schema:
       - [parcel_id, string, false, "FK to dim_parcel"]
-      - [ev_total, "decimal(18,2)", false, "Equalized value", {derived: "av_total * equalization_factor"}]
+      - [equalized_value_total, "decimal(18,2)", false, "Equalized value", {derived: "assessed_value_total * equalization_factor"}]
     measures:
-      - [total_equalized_value, sum, ev_total, "Total equalized value", {format: "$#,##0.00"}]
+      - [total_equalized_value, sum, equalized_value_total, "Total equalized value", {format: "$#,##0.00"}]
 ```
 
 ### Rollup View Syntax
@@ -48,7 +48,7 @@ views:
     schema:
       - [township_code, string, false, "Township"]
       - [parcel_count, integer, false, "Parcels", {derived: "COUNT(DISTINCT parcel_id)"}]
-      - [total_av, "decimal(18,2)", false, "Total AV", {derived: "SUM(av_total)"}]
+      - [total_assessed_value, "decimal(18,2)", false, "Total assessed value", {derived: "SUM(assessed_value_total)"}]
 ```
 
 ### Key Properties
@@ -85,9 +85,9 @@ Views can reference other views in their `from:` field, creating calculation cha
 ```
 _fact_assessed_values (physical table)
      ↓ join equalization_factor
-_view_equalized_values (ev_total = av_total × factor)
+_view_equalized_values (equalized_value_total = assessed_value_total × factor)
      ↓ join total_rate
-_view_estimated_tax (estimated_tax = ev_total × rate)
+_view_estimated_tax (estimated_tax = equalized_value_total × rate)
 ```
 
 The loader resolves the dependency chain and builds views in order.

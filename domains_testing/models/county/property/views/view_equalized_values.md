@@ -11,9 +11,9 @@ assumptions:
     description: "Cook County equalization factors by township and year"
 
 measures:
-  - [total_equalized_value, sum, ev_total, "Total equalized value", {format: "$#,##0.00"}]
-  - [avg_equalized_value, avg, ev_total, "Average equalized value", {format: "$#,##0.00"}]
-  - [equalization_delta, expression, "SUM(ev_total - av_total)", "Total equalization adjustment", {format: "$#,##0.00"}]
+  - [total_equalized_value, sum, equalized_value_total, "Total equalized value", {format: "$#,##0.00"}]
+  - [avg_equalized_value, avg, equalized_value_total, "Average equalized value", {format: "$#,##0.00"}]
+  - [equalization_delta, expression, "SUM(equalized_value_total - assessed_value_total)", "Total equalization adjustment", {format: "$#,##0.00"}]
 
 status: active
 ---
@@ -25,7 +25,7 @@ Applies Cook County equalization factors to assessed values by township and year
 ### Calculation
 
 ```
-ev_total = av_total × equalization_factor
+equalized_value_total = assessed_value_total × equalization_factor
 ```
 
 The equalization factor adjusts assessed values to reflect the state equalization level. Different townships have different factors depending on assessment ratios relative to the state standard.
@@ -41,8 +41,8 @@ Equalization factors are joined from `dim_tax_district` by `township_code` and `
 SELECT
     township_code,
     year,
-    SUM(av_total) as raw_assessed,
-    SUM(ev_total) as equalized,
+    SUM(assessed_value_total) as raw_assessed,
+    SUM(equalized_value_total) as equalized,
     AVG(equalization_factor) as avg_factor
 FROM view_equalized_values
 GROUP BY township_code, year;

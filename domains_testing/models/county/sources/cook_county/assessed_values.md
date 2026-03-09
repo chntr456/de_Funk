@@ -12,9 +12,9 @@ aliases:
   - [year, year]
   - [date_id, "CAST(CONCAT(year, '0101') AS INT)"]
   - [assessment_stage, stage_name]
-  - [av_land, land]
-  - [av_building, bldg]
-  - [av_total, total]
+  - [assessed_value_land, land]
+  - [assessed_value_building, bldg]
+  - [assessed_value_total, total]
   - [property_class, class]
   - [township_code, township_code]
 ---

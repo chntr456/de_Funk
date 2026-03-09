@@ -76,15 +76,15 @@ tables:
       - [year, integer, false, "Assessment year"]
       - [date_id, integer, false, "FK to calendar (Jan 1 of assessment year)", {fk: temporal.dim_calendar.date_id, derived: "CAST(CONCAT(year, '0101') AS INT)"}]
       - [assessment_stage, string, false, "Stage (mailed, certified, appeal)", {enum: [MAILED, CERTIFIED, BOARD_CERTIFIED, APPEAL]}]
-      - [av_land, "decimal(18,2)", true, "Assessed value - land"]
-      - [av_building, "decimal(18,2)", true, "Assessed value - building"]
-      - [av_total, "decimal(18,2)", true, "Assessed value - total"]
+      - [assessed_value_land, "decimal(18,2)", true, "Assessed value - land"]
+      - [assessed_value_building, "decimal(18,2)", true, "Assessed value - building"]
+      - [assessed_value_total, "decimal(18,2)", true, "Assessed value - total"]
       - [property_class, string, true, "Classification at assessment time"]
       - [township_code, string, true, "Township at assessment time"]
 
     measures:
-      - [total_assessed_value, sum, av_total, "Total assessed value", {format: "$#,##0.00"}]
-      - [avg_assessed_value, avg, av_total, "Average assessed value", {format: "$#,##0.00"}]
+      - [total_assessed_value, sum, assessed_value_total, "Total assessed value", {format: "$#,##0.00"}]
+      - [avg_assessed_value, avg, assessed_value_total, "Average assessed value", {format: "$#,##0.00"}]
       - [assessment_count, count, parcel_id, "Assessment records", {format: "#,##0"}]
 
   _fact_parcel_sales:
@@ -163,12 +163,12 @@ views:
       - [parcel_id, string, false, "FK to dim_parcel"]
       - [year, integer, false, "Assessment year"]
       - [assessment_stage, string, false, "Stage"]
-      - [av_total, "decimal(18,2)", false, "Raw assessed value"]
+      - [assessed_value_total, "decimal(18,2)", false, "Raw assessed value"]
       - [equalization_factor, "decimal(10,6)", false, "Applied factor"]
-      - [ev_total, "decimal(18,2)", false, "Equalized assessed value", {derived: "av_total * equalization_factor"}]
+      - [equalized_value_total, "decimal(18,2)", false, "Equalized assessed value", {derived: "assessed_value_total * equalization_factor"}]
     measures:
-      - [total_equalized_value, sum, ev_total, "Total equalized value", {format: "$#,##0.00"}]
-      - [avg_equalized_value, avg, ev_total, "Average equalized value", {format: "$#,##0.00"}]
+      - [total_equalized_value, sum, equalized_value_total, "Total equalized value", {format: "$#,##0.00"}]
+      - [avg_equalized_value, avg, equalized_value_total, "Average equalized value", {format: "$#,##0.00"}]
 
   _view_estimated_tax:
     type: derived
@@ -184,9 +184,9 @@ views:
     schema:
       - [parcel_id, string, false, "FK to dim_parcel"]
       - [year, integer, false, "Assessment year"]
-      - [ev_total, "decimal(18,2)", false, "Equalized value (from parent view)"]
+      - [equalized_value_total, "decimal(18,2)", false, "Equalized value (from parent view)"]
       - [total_rate, "decimal(10,6)", false, "Composite tax rate"]
-      - [estimated_tax, "decimal(18,2)", false, "Estimated tax bill", {derived: "ev_total * total_rate"}]
+      - [estimated_tax, "decimal(18,2)", false, "Estimated tax bill", {derived: "equalized_value_total * total_rate"}]
     measures:
       - [total_estimated_tax, sum, estimated_tax, "Total estimated tax", {format: "$#,##0.00"}]
       - [avg_estimated_tax, avg, estimated_tax, "Average estimated tax", {format: "$#,##0.00"}]
@@ -201,8 +201,8 @@ views:
       - [year, integer, false, "Assessment year"]
       - [assessment_stage, string, false, "Stage"]
       - [parcel_count, integer, false, "Parcels in township", {derived: "COUNT(DISTINCT parcel_id)"}]
-      - [total_av, "decimal(18,2)", false, "Total assessed value", {derived: "SUM(av_total)"}]
-      - [avg_av, "decimal(18,2)", false, "Average assessed value", {derived: "AVG(av_total)"}]
+      - [total_assessed_value, "decimal(18,2)", false, "Total assessed value", {derived: "SUM(assessed_value_total)"}]
+      - [avg_assessed_value, "decimal(18,2)", false, "Average assessed value", {derived: "AVG(assessed_value_total)"}]
 
 domain: property
 tags: [base, template, property, parcel, assessment]
@@ -261,13 +261,13 @@ OTHER       → no type-specific fields
 ```
 _fact_assessed_values (physical table)
      ↓ (join dim_tax_district for equalization_factor)
-_view_equalized_values (adds ev_total = av_total × equalization_factor)
+_view_equalized_values (adds equalized_value_total = assessed_value_total × equalization_factor)
      ↓ (join dim_tax_district for total_rate)
-_view_estimated_tax (adds estimated_tax = ev_total × total_rate)
+_view_estimated_tax (adds estimated_tax = equalized_value_total × total_rate)
 
 _fact_assessed_values (physical table)
      ↓ (GROUP BY township_code, year, assessment_stage)
-_view_township_summary (parcel_count, total_av, avg_av)
+_view_township_summary (parcel_count, total_assessed_value, avg_assessed_value)
 ```
 
 ### Usage

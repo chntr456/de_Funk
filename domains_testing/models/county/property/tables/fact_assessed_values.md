@@ -11,15 +11,15 @@ schema:
   - [year, integer, false, "Assessment year"]
   - [date_id, integer, false, "FK to calendar (Jan 1 of assessment year)", {fk: temporal.dim_calendar.date_id, derived: "CAST(CONCAT(year, '0101') AS INT)"}]
   - [assessment_stage, string, false, "mailed, certified, bor_certified", {derived: "stage_name"}]
-  - [av_land, double, true, "Assessed value - land", {derived: "av_land"}]
-  - [av_building, double, true, "Assessed value - building", {derived: "av_bldg"}]
-  - [av_total, double, true, "Assessed value - total", {derived: "av_tot"}]
+  - [assessed_value_land, double, true, "Assessed value - land", {derived: "av_land"}]
+  - [assessed_value_building, double, true, "Assessed value - building", {derived: "av_bldg"}]
+  - [assessed_value_total, double, true, "Assessed value - total", {derived: "av_tot"}]
   - [property_class, string, true, "Property class", {derived: "class"}]
   - [township_code, string, true, "Township code"]
 
 measures:
-  - [total_assessed_value, sum, av_total, "Total assessed value", {format: "$#,##0"}]
-  - [avg_assessed_value, avg, av_total, "Average assessed value", {format: "$#,##0"}]
+  - [total_assessed_value, sum, assessed_value_total, "Total assessed value", {format: "$#,##0"}]
+  - [avg_assessed_value, avg, assessed_value_total, "Average assessed value", {format: "$#,##0"}]
 ---
 
 ## Assessed Values Fact Table

@@ -39,4 +39,4 @@ GROUP BY p.township_code;
 
 `transaction_amount = assessed_value * tax_rate`
 
-The assessed value comes from `county_property.fact_assessed_values.av_total` for the corresponding parcel and year.
+The assessed value comes from `county_property.fact_assessed_values.assessed_value_total` for the corresponding parcel and year.

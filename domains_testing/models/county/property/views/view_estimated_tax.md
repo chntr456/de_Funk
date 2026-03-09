@@ -13,7 +13,7 @@ assumptions:
 measures:
   - [total_estimated_tax, sum, estimated_tax, "Total estimated tax", {format: "$#,##0.00"}]
   - [avg_estimated_tax, avg, estimated_tax, "Average estimated tax", {format: "$#,##0.00"}]
-  - [effective_tax_rate, expression, "SUM(estimated_tax) / NULLIF(SUM(ev_total), 0)", "Effective tax rate", {format: "#,##0.000000"}]
+  - [effective_tax_rate, expression, "SUM(estimated_tax) / NULLIF(SUM(equalized_value_total), 0)", "Effective tax rate", {format: "#,##0.000000"}]
 
 status: active
 ---
@@ -26,9 +26,9 @@ Estimates property tax bills by applying composite tax rates to equalized values
 
 ```
 _fact_assessed_values
-     ↓ av_total × equalization_factor
-_view_equalized_values (ev_total)
-     ↓ ev_total × total_rate
+     ↓ assessed_value_total × equalization_factor
+_view_equalized_values (equalized_value_total)
+     ↓ equalized_value_total × total_rate
 _view_estimated_tax (estimated_tax)
 ```
 
@@ -44,7 +44,7 @@ SELECT
     p.parcel_id,
     p.township_code,
     t.estimated_tax,
-    t.ev_total,
+    t.equalized_value_total,
     t.total_rate
 FROM view_estimated_tax t
 JOIN dim_parcel p ON t.parcel_id = p.parcel_id

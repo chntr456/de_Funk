@@ -55,8 +55,8 @@ build:
 measures:
   simple:
     - [parcel_count, count_distinct, dim_parcel.parcel_id, "Number of parcels", {format: "#,##0"}]
-    - [total_assessed_value, sum, fact_assessed_values.av_total, "Total assessed value", {format: "$#,##0"}]
-    - [avg_assessed_value, avg, fact_assessed_values.av_total, "Average assessed value", {format: "$#,##0"}]
+    - [total_assessed_value, sum, fact_assessed_values.assessed_value_total, "Total assessed value", {format: "$#,##0"}]
+    - [avg_assessed_value, avg, fact_assessed_values.assessed_value_total, "Average assessed value", {format: "$#,##0"}]
     - [total_sales_volume, sum, fact_parcel_sales.sale_price, "Total sales volume", {format: "$#,##0"}]
     - [avg_sale_price, avg, fact_parcel_sales.sale_price, "Average sale price", {format: "$#,##0"}]
     - [sale_count, count, fact_parcel_sales.parcel_id, "Number of sales", {format: "#,##0"}]
