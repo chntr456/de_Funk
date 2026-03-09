@@ -9,6 +9,7 @@ partition_by: [year]
 schema:
   - [parcel_id, string, false, "FK to dim_parcel", {fk: dim_parcel.parcel_id, derived: "LPAD(pin, 14, '0')"}]
   - [year, integer, false, "Assessment year"]
+  - [date_id, integer, false, "FK to calendar (Jan 1 of assessment year)", {fk: temporal.dim_calendar.date_id, derived: "CAST(CONCAT(year, '0101') AS INT)"}]
   - [assessment_stage, string, false, "mailed, certified, bor_certified", {derived: "stage_name"}]
   - [av_land, double, true, "Assessed value - land", {derived: "av_land"}]
   - [av_building, double, true, "Assessed value - building", {derived: "av_bldg"}]

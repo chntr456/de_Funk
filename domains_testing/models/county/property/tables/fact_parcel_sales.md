@@ -9,10 +9,10 @@ partition_by: [year]
 schema:
   - [parcel_id, string, false, "FK to dim_parcel", {fk: dim_parcel.parcel_id, derived: "LPAD(pin, 14, '0')"}]
   - [sale_date, date, false, "Sale date"]
-  - [sale_date_id, integer, true, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(sale_date, 'yyyyMMdd') AS INT)"}]
+  - [sale_date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(sale_date, 'yyyyMMdd') AS INT)"}]
   - [sale_price, double, true, "Sale price"]
   - [sale_type, string, true, "Sale type"]
-  - [year, integer, true, "Sale year", {derived: "YEAR(sale_date)"}]
+  - [year, integer, false, "Sale year", {derived: "YEAR(sale_date)"}]
 
 measures:
   - [total_sales_volume, sum, sale_price, "Total sales volume", {format: "$#,##0"}]

@@ -21,6 +21,7 @@ graph:
   # auto_edges: date_id→calendar (inherited from _base.property.parcel)
   edges:
     - [assessed_to_parcel, fact_assessed_values, dim_parcel, [parcel_id=parcel_id], many_to_one, null]
+    - [assessed_to_calendar, fact_assessed_values, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [sales_to_parcel, fact_parcel_sales, dim_parcel, [parcel_id=parcel_id], many_to_one, null]
     - [sales_to_calendar, fact_parcel_sales, temporal.dim_calendar, [sale_date_id=date_id], many_to_one, temporal]
     - [parcel_to_township, dim_parcel, county_geospatial.dim_township, [township_code=township_code], many_to_one, county_geospatial]

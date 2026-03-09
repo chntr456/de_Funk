@@ -12,6 +12,7 @@ schema:
   - [tax_district_name, string, true, "District name"]
   - [municipality, string, true, "Municipality name"]
   - [total_rate, "decimal(10,6)", true, "Combined tax rate"]
+  - [equalization_factor, "decimal(10,6)", true, "State equalization factor (by township/year)"]
 
 measures:
   - [district_count, count_distinct, tax_district_id, "Number of tax districts", {format: "#,##0"}]
