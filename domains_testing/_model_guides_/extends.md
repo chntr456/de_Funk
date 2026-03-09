@@ -170,7 +170,7 @@ The complete inheritance tree is documented in `domain_base.md`.
 
 ### subset_of and subset_value
 
-Used on base templates that represent a typed subset of a parent template's dimension. This is a specialized form of `extends:` for property subtypes.
+Used on base templates that define the **field contract** for a typed subset of a parent template. The child's `canonical_fields` are absorbed into the parent's wide dimension table as nullable columns with `{subset: VALUE}` metadata.
 
 ```yaml
 # _base/property/residential.md
@@ -180,6 +180,7 @@ extends: _base.property.parcel
 subset_of: _base.property.parcel
 subset_value: RESIDENTIAL
 
+# Fields absorbed into parent _dim_parcel with {subset: RESIDENTIAL}
 canonical_fields:
   - [bedrooms, integer, nullable: true, description: "Number of bedrooms"]
   - [bathrooms, double, nullable: true, description: "Number of bathrooms"]
@@ -191,17 +192,17 @@ canonical_fields:
 | `subset_of` | Parent base template this is a subset of |
 | `subset_value` | Discriminator value that selects this subset |
 
-**How it works:** The parent `_base.property.parcel` has a `subsets:` block with a `discriminator:` field (e.g., `property_class`). The child subset back-references the parent and declares which value it represents. When building, rows where `property_class = 'RESIDENTIAL'` get the residential-specific canonical fields.
+**Wide table pattern (v2.0):** The child subset's `canonical_fields` become nullable columns on the parent's dimension table (e.g., `_dim_parcel`), tagged with `{subset: RESIDENTIAL}`. No separate dimension tables are created. The parent dimension is partitioned by the discriminator column for fast filtered queries.
 
 **Current subsets:**
 
-| Parent | Subset | subset_value |
-|--------|--------|-------------|
-| `_base.property.parcel` | `_base.property.residential` | `RESIDENTIAL` |
-| `_base.property.parcel` | `_base.property.commercial` | `COMMERCIAL` |
-| `_base.property.parcel` | `_base.property.industrial` | `INDUSTRIAL` |
+| Parent | Subset | subset_value | Fields |
+|--------|--------|-------------|--------|
+| `_base.property.parcel` | `_base.property.residential` | `RESIDENTIAL` | bedrooms, bathrooms, stories, garage_spaces, basement, exterior_wall |
+| `_base.property.parcel` | `_base.property.commercial` | `COMMERCIAL` | commercial_sqft, commercial_units, residential_units, space_type, floors |
+| `_base.property.parcel` | `_base.property.industrial` | `INDUSTRIAL` | industrial_sqft, loading_docks, ceiling_height, zoning_class |
 
-The securities domain uses a different subsetting pattern — see `subsets.md`.
+The securities domain uses a different pattern (separate models) — see `subsets.md`.
 
 ---
 
