@@ -151,7 +151,7 @@ class BaseModelBuilder(ABC):
         model_config = self.get_model_config()
 
         # Create connection wrapper for Spark
-from de_funk.core.connection import get_spark_connection
+        from de_funk.core.connection import get_spark_connection
         connection = get_spark_connection(self.spark)
 
         # Build params dict

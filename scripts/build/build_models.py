@@ -117,6 +117,15 @@ def discover_builders(repo_root: Path) -> None:
         BuilderRegistry.discover(domains_path)
         logger.debug(f"Discovered builders from models/domains")
 
+    # V4 domain configs: domains/{_base,models}/*.md
+    try:
+        from de_funk.models.base.v4_builder import discover_v4_builders
+        v4_created = discover_v4_builders(repo_root)
+        if v4_created:
+            logger.debug(f"Discovered {len(v4_created)} v4 builders from domains/")
+    except Exception as e:
+        logger.debug(f"V4 builder discovery skipped: {e}")
+
     total = len(BuilderRegistry.all())
     if total > 0:
         logger.info(f"Discovered {total} builders: {', '.join(BuilderRegistry.all().keys())}")
