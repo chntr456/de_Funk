@@ -383,10 +383,7 @@ class TestPhase3Sources:
 
     def test_aliases_to_select_list(self):
         """Alias pairs should convert to SQL SELECT expressions."""
-        try:
-            from de_funk.config.domain.sources import build_select_expressions
-        except ImportError:
-            pytest.skip("Phase 3 not yet implemented")
+        from de_funk.config.domain.sources import build_select_expressions
 
         aliases = [
             ["entity_id", "ABS(HASH(name))"],
@@ -400,22 +397,32 @@ class TestPhase3Sources:
 
     def test_domain_source_injected(self):
         """domain_source literal should be added to SELECT."""
-        try:
-            from de_funk.config.domain.sources import build_select_expressions
-        except ImportError:
-            pytest.skip("Phase 3 not yet implemented")
+        from de_funk.config.domain.sources import build_select_expressions
 
         aliases = [["entity_name", "name"]]
         domain_source = "'test_provider'"
         select_list = build_select_expressions(aliases, domain_source=domain_source)
         assert "'test_provider' AS domain_source" in select_list
 
+    def test_entry_type_injected(self):
+        """entry_type discriminator should be added to SELECT."""
+        from de_funk.config.domain.sources import build_select_expressions
+
+        aliases = [["entity_name", "name"]]
+        select_list = build_select_expressions(aliases, entry_type="VENDOR_PAYMENT")
+        assert "'VENDOR_PAYMENT' AS entry_type" in select_list
+
+    def test_event_type_injected(self):
+        """event_type discriminator should be added to SELECT."""
+        from de_funk.config.domain.sources import build_select_expressions
+
+        aliases = [["entity_name", "name"]]
+        select_list = build_select_expressions(aliases, event_type="APPROPRIATION")
+        assert "'APPROPRIATION' AS event_type" in select_list
+
     def test_multi_source_grouped(self):
         """Two sources with same maps_to should be grouped."""
-        try:
-            from de_funk.config.domain.sources import group_sources_by_target
-        except ImportError:
-            pytest.skip("Phase 3 not yet implemented")
+        from de_funk.config.domain.sources import group_sources_by_target
 
         sources = {
             "source_a": {"maps_to": "fact_events", "from": "bronze.a"},
@@ -425,6 +432,62 @@ class TestPhase3Sources:
         grouped = group_sources_by_target(sources)
         assert len(grouped["fact_events"]) == 2
         assert len(grouped["dim_entity"]) == 1
+
+    def test_unpivot_plan_generated(self):
+        """unpivot config should produce correct column mapping."""
+        from de_funk.config.domain.sources import build_unpivot_plan
+
+        source_config = {
+            "transform": "unpivot",
+            "unpivot_aliases": [
+                ["totalRevenue", "TOTAL_REVENUE"],
+                ["costOfRevenue", "COST_OF_REVENUE"],
+                ["grossProfit", "GROSS_PROFIT"],
+            ],
+        }
+        plan = build_unpivot_plan(source_config)
+        assert plan["transform"] == "unpivot"
+        assert len(plan["mappings"]) == 3
+        assert ("totalRevenue", "TOTAL_REVENUE") in plan["mappings"]
+        assert "totalRevenue" in plan["source_columns"]
+        assert "TOTAL_REVENUE" in plan["key_values"]
+
+    def test_unpivot_plan_empty_for_non_unpivot(self):
+        """Non-unpivot source should return empty plan."""
+        from de_funk.config.domain.sources import build_unpivot_plan
+
+        source_config = {"from": "bronze.some_table"}
+        plan = build_unpivot_plan(source_config)
+        assert plan == {}
+
+    def test_process_source_config(self):
+        """process_source_config should enrich config with select expressions."""
+        from de_funk.config.domain.sources import process_source_config
+
+        source = {
+            "aliases": [["col_a", "source_col_a"], ["col_b", "source_col_b"]],
+            "domain_source": "'test'",
+            "maps_to": "fact_test",
+            "from": "bronze.test",
+        }
+        result = process_source_config(source)
+        assert "_select_expressions" in result
+        assert "source_col_a AS col_a" in result["_select_expressions"]
+        assert "'test' AS domain_source" in result["_select_expressions"]
+
+    def test_loader_discovers_sources_with_aliases(self):
+        """Loader should discover sources with their alias configurations."""
+        from de_funk.config.domain import DomainConfigLoaderV4
+
+        loader = DomainConfigLoaderV4(FIXTURES_DIR)
+        config = loader.load_model_config("test_model")
+        sources = config.get("sources", {})
+        assert len(sources) >= 2
+
+        # Check events source has aliases
+        events_source = sources.get("events", {})
+        assert "aliases" in events_source
+        assert events_source.get("maps_to") == "fact_events"
 
 
 # ===========================================================================
