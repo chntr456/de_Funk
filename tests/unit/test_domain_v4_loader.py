@@ -824,8 +824,122 @@ class TestPhase5Views:
 class TestPhase6Federation:
     """Tests for cross-model union tables."""
 
-    def test_placeholder(self):
-        pytest.skip("Phase 6 not yet implemented")
+    def test_federation_participant_detected(self):
+        """Model with federation.enabled should be recognized."""
+        from de_funk.config.domain.federation import is_federation_participant
+
+        config = {"federation": {"enabled": True, "union_key": "domain_source"}}
+        assert is_federation_participant(config) is True
+
+    def test_non_federation_model(self):
+        """Model without federation should not be flagged."""
+        from de_funk.config.domain.federation import is_federation_participant
+
+        config = {"model": "plain_model", "tables": {}}
+        assert is_federation_participant(config) is False
+
+    def test_federation_model_detected(self):
+        """Model with federation.children is a federation model."""
+        from de_funk.config.domain.federation import is_federation_model
+
+        config = {
+            "federation": {
+                "union_key": "domain_source",
+                "children": [
+                    {"model": "municipal_finance", "domain_source": "chicago"},
+                ],
+            }
+        }
+        assert is_federation_model(config) is True
+
+    def test_union_of_extracted(self):
+        """Tables with union_of should be extracted correctly."""
+        from de_funk.config.domain.federation import get_federation_config
+
+        config = {
+            "federation": {
+                "union_key": "domain_source",
+                "children": [{"model": "child_a", "domain_source": "a"}],
+            },
+            "tables": {
+                "v_all_entries": {
+                    "union_of": [
+                        "child_a.fact_entries",
+                        "child_b.fact_entries",
+                    ],
+                    "schema": "inherited",
+                    "primary_key": ["entry_id"],
+                },
+                "dim_regular": {"schema": [["col", "string"]]},
+            },
+        }
+        fed = get_federation_config(config)
+        assert "v_all_entries" in fed["union_tables"]
+        assert len(fed["union_tables"]["v_all_entries"]["union_of"]) == 2
+        assert fed["union_tables"]["v_all_entries"]["schema_mode"] == "inherited"
+        assert "dim_regular" not in fed["union_tables"]
+
+    def test_resolve_union_references(self):
+        """union_of references should parse to model+table pairs."""
+        from de_funk.config.domain.federation import resolve_union_references
+
+        refs = resolve_union_references([
+            "municipal_finance.fact_ledger_entries",
+            "corporate_finance.fact_financial_statements",
+        ])
+        assert len(refs) == 2
+        assert refs[0] == {"model": "municipal_finance", "table": "fact_ledger_entries"}
+        assert refs[1] == {"model": "corporate_finance", "table": "fact_financial_statements"}
+
+    def test_validate_federation_missing_child(self):
+        """Validation should warn about children not in depends_on."""
+        from de_funk.config.domain.federation import validate_federation
+
+        config = {
+            "depends_on": ["temporal"],
+            "federation": {
+                "children": [{"model": "child_a", "domain_source": "a"}],
+            },
+            "tables": {},
+        }
+        warnings = validate_federation(config)
+        assert any("child_a" in w and "depends_on" in w for w in warnings)
+
+    def test_validate_federation_valid(self):
+        """Valid federation config should produce no warnings."""
+        from de_funk.config.domain.federation import validate_federation
+
+        config = {
+            "depends_on": ["child_a"],
+            "federation": {
+                "children": [{"model": "child_a", "domain_source": "a"}],
+            },
+            "tables": {
+                "v_all": {
+                    "union_of": ["child_a.fact_entries"],
+                    "schema": "inherited",
+                }
+            },
+        }
+        warnings = validate_federation(config)
+        assert len(warnings) == 0
+
+    def test_real_federation_model(self):
+        """Real accounting_federation should parse correctly."""
+        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain.federation import get_federation_config
+
+        loader = DomainConfigLoaderV4(Path(__file__).resolve().parent.parent.parent / "domains_testing")
+        try:
+            config = loader.load_model_config("accounting_federation")
+        except FileNotFoundError:
+            pytest.skip("domains_testing not available")
+
+        fed = get_federation_config(config)
+        assert fed["is_federation_model"] is True
+        assert fed["union_key"] == "domain_source"
+        assert len(fed["children"]) >= 2
+        assert len(fed["union_tables"]) >= 1
 
 
 class TestPhase7Graph:
