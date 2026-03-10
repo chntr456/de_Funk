@@ -667,8 +667,158 @@ class TestPhase4Build:
 class TestPhase5Views:
     """Tests for derived and rollup view materialization."""
 
-    def test_placeholder(self):
-        pytest.skip("Phase 5 not yet implemented")
+    def test_parse_derived_view(self):
+        """Derived view config should have view_type, from, assumptions."""
+        from de_funk.config.domain.views import parse_view_config
+
+        view_config = {
+            "view_type": "derived",
+            "from": "fact_events",
+            "assumptions": {
+                "factor": {
+                    "type": "decimal(10,6)",
+                    "default": 1.0,
+                    "source": "dim_entity.factor",
+                    "join_on": ["entity_id=entity_id"],
+                }
+            },
+            "schema": [
+                ["entity_id", "integer", False, "PK"],
+                ["adjusted_amount", "decimal(18,2)", False, "Adjusted",
+                 {"derived": "amount * factor"}],
+            ],
+        }
+        parsed = parse_view_config(view_config)
+        assert parsed["view_type"] == "derived"
+        assert parsed["from"] == "fact_events"
+        assert "factor" in parsed["assumptions"]
+        assert parsed["assumptions"]["factor"]["default"] == 1.0
+        assert parsed["assumptions"]["factor"]["join_on"] == [("entity_id", "entity_id")]
+
+    def test_parse_rollup_view(self):
+        """Rollup view should have grain and aggregate columns."""
+        from de_funk.config.domain.views import parse_view_config
+
+        view_config = {
+            "view_type": "rollup",
+            "from": "fact_events",
+            "grain": ["entity_id", "category"],
+            "schema": [
+                ["entity_id", "integer", False, "Entity"],
+                ["category", "string", False, "Category"],
+                ["event_count", "integer", False, "Count",
+                 {"derived": "COUNT(DISTINCT event_id)"}],
+            ],
+        }
+        parsed = parse_view_config(view_config)
+        assert parsed["view_type"] == "rollup"
+        assert parsed["grain"] == ["entity_id", "category"]
+
+    def test_view_chain_resolution(self):
+        """Views referencing other views should be ordered correctly."""
+        from de_funk.config.domain.views import resolve_view_chain
+
+        views = {
+            "view_estimated_tax": {"from": "view_equalized_values"},
+            "view_equalized_values": {"from": "fact_assessed_values"},
+            "view_township_summary": {"from": "fact_assessed_values"},
+        }
+        order = resolve_view_chain(views)
+        # view_equalized_values must come before view_estimated_tax
+        idx_eq = order.index("view_equalized_values")
+        idx_tax = order.index("view_estimated_tax")
+        assert idx_eq < idx_tax
+
+    def test_view_chain_independent_views(self):
+        """Views with no dependencies on each other should all appear."""
+        from de_funk.config.domain.views import resolve_view_chain
+
+        views = {
+            "view_a": {"from": "fact_table"},
+            "view_b": {"from": "fact_table"},
+        }
+        order = resolve_view_chain(views)
+        assert len(order) == 2
+
+    def test_assumption_override(self):
+        """Model assumption binding should override base defaults."""
+        from de_funk.config.domain.views import assemble_views
+
+        base_views = {
+            "_view_equalized": {
+                "type": "derived",
+                "from": "_fact_values",
+                "assumptions": {
+                    "eq_factor": {
+                        "type": "decimal(10,6)",
+                        "default": 1.0,
+                        "source": "base default",
+                    }
+                },
+            }
+        }
+        model_views = {
+            "view_equalized": {
+                "assumptions": {
+                    "eq_factor": {
+                        "source": "dim_tax_district.equalization_factor",
+                        "join_on": ["township=township"],
+                    }
+                }
+            }
+        }
+        merged = assemble_views(model_views, base_views)
+        eq = merged["view_equalized"]["assumptions"]["eq_factor"]
+        # Source overridden by model
+        assert eq["source"] == "dim_tax_district.equalization_factor"
+        # Type preserved from base
+        assert eq["type"] == "decimal(10,6)"
+        # Default preserved from base
+        assert eq["default"] == 1.0
+
+    def test_get_derived_columns(self):
+        """Should extract columns with {derived: expr} from schema."""
+        from de_funk.config.domain.views import get_derived_columns
+
+        schema = [
+            ["entity_id", "integer", False, "PK"],
+            ["amount", "decimal(18,2)", False, "Raw amount"],
+            ["adjusted", "decimal(18,2)", False, "Adjusted",
+             {"derived": "amount * factor"}],
+            ["total", "decimal(18,2)", False, "Total",
+             {"derived": "SUM(amount)"}],
+        ]
+        derived = get_derived_columns(schema)
+        assert len(derived) == 2
+        assert derived[0]["name"] == "adjusted"
+        assert derived[0]["expression"] == "amount * factor"
+        assert derived[1]["name"] == "total"
+
+    def test_view_from_loader_fixtures(self):
+        """Loader should discover and assemble views from fixtures."""
+        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain.views import parse_view_config
+
+        loader = DomainConfigLoaderV4(FIXTURES_DIR)
+        config = loader.load_model_config("test_model")
+        views = config.get("views", {})
+        assert "view_entity_summary" in views
+
+        view = views["view_entity_summary"]
+        parsed = parse_view_config(view)
+        assert parsed["view_type"] == "rollup"
+        assert parsed["from"] == "fact_events"
+
+    def test_view_measures_preserved(self):
+        """View measures should be preserved through assembly."""
+        from de_funk.config.domain import DomainConfigLoaderV4
+
+        loader = DomainConfigLoaderV4(FIXTURES_DIR)
+        config = loader.load_model_config("test_model")
+        view = config["views"]["view_entity_summary"]
+        measures = view.get("measures", [])
+        measure_names = [m[0] for m in measures if isinstance(m, list)]
+        assert "grand_total" in measure_names
 
 
 class TestPhase6Federation:
