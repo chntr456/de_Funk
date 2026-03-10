@@ -497,8 +497,171 @@ class TestPhase3Sources:
 class TestPhase4Build:
     """Tests for phased build, enrich, generated, seed."""
 
-    def test_placeholder(self):
-        pytest.skip("Phase 4 not yet implemented")
+    def test_phases_ordered_correctly(self):
+        """Phase numbers should produce correct ordering."""
+        from de_funk.config.domain.build import parse_build_config
+
+        model_config = {
+            "build": {
+                "phases": {
+                    2: {"tables": ["fact_events"]},
+                    1: {"tables": ["dim_entity"]},
+                },
+            },
+            "tables": {"dim_entity": {}, "fact_events": {}},
+        }
+        build = parse_build_config(model_config)
+        assert build["phases"][0]["phase_num"] == 1
+        assert build["phases"][0]["tables"] == ["dim_entity"]
+        assert build["phases"][1]["phase_num"] == 2
+        assert build["phases"][1]["tables"] == ["fact_events"]
+
+    def test_phase_flags_extracted(self):
+        """Phase-level persist and enrich flags should be extracted."""
+        from de_funk.config.domain.build import parse_build_config
+
+        model_config = {
+            "build": {
+                "phases": {
+                    1: {"tables": ["fact_a"], "persist": True},
+                    2: {"tables": ["dim_a"], "persist": True, "enrich": True},
+                },
+            },
+            "tables": {"fact_a": {}, "dim_a": {}},
+        }
+        build = parse_build_config(model_config)
+        assert build["phases"][0]["enrich"] is False
+        assert build["phases"][1]["enrich"] is True
+
+    def test_seed_table_from_data(self):
+        """Inline data block should be extractable from static tables."""
+        from de_funk.config.domain.build import extract_seed_data
+
+        table_config = {
+            "static": True,
+            "data": [
+                {"code": "A", "name": "Alpha"},
+                {"code": "B", "name": "Beta"},
+            ],
+        }
+        rows = extract_seed_data(table_config)
+        assert len(rows) == 2
+        assert rows[0]["code"] == "A"
+        assert rows[1]["name"] == "Beta"
+
+    def test_seed_empty_for_non_static(self):
+        """Non-static table should return empty seed data."""
+        from de_funk.config.domain.build import extract_seed_data
+
+        table_config = {"schema": [["col", "string"]]}
+        rows = extract_seed_data(table_config)
+        assert rows == []
+
+    def test_table_build_flags(self):
+        """Table-level build flags should be extracted."""
+        from de_funk.config.domain.build import get_table_build_flags
+
+        table_config = {
+            "static": True,
+            "generated": False,
+            "transform": "distinct",
+            "group_by": ["name"],
+            "primary_key": ["entity_id"],
+        }
+        flags = get_table_build_flags(table_config)
+        assert flags["static"] is True
+        assert flags["generated"] is False
+        assert flags["transform"] == "distinct"
+        assert flags["group_by"] == ["name"]
+
+    def test_enrich_single_source(self):
+        """Single enrich spec should parse correctly."""
+        from de_funk.config.domain.build import process_enrich_specs
+
+        table_config = {
+            "enrich": [
+                {
+                    "from": "fact_events",
+                    "join": ["entity_id=entity_id"],
+                    "columns": [
+                        ["total_amount", "decimal(18,2)", True, "Total", {"derived": "SUM(amount)"}],
+                    ],
+                }
+            ]
+        }
+        specs = process_enrich_specs(table_config)
+        assert len(specs) == 1
+        assert specs[0]["type"] == "join"
+        assert specs[0]["from"] == "fact_events"
+        assert specs[0]["join"] == [("entity_id", "entity_id")]
+
+    def test_enrich_with_filter(self):
+        """Enrich spec with filter should preserve the filter."""
+        from de_funk.config.domain.build import process_enrich_specs
+
+        table_config = {
+            "enrich": [
+                {
+                    "from": "fact_budget_events",
+                    "join": ["dept_id=org_unit_id"],
+                    "filter": "event_type = 'APPROPRIATION'",
+                    "columns": [["total", "decimal", True, "Total"]],
+                }
+            ]
+        }
+        specs = process_enrich_specs(table_config)
+        assert specs[0]["filter"] == "event_type = 'APPROPRIATION'"
+
+    def test_enrich_derived_columns(self):
+        """Derived-only enrich block should be recognized."""
+        from de_funk.config.domain.build import process_enrich_specs
+
+        table_config = {
+            "enrich": [
+                {"derived": [["variance", "decimal", True, "Budget variance"]]}
+            ]
+        }
+        specs = process_enrich_specs(table_config)
+        assert len(specs) == 1
+        assert specs[0]["type"] == "derived"
+
+    def test_enrich_compact_lookup(self):
+        """Compact enrich syntax should parse correctly."""
+        from de_funk.config.domain.build import process_enrich_specs
+
+        table_config = {
+            "enrich": [
+                {"join": "dim_property_class", "on": ["property_class=property_class_code"], "fields": ["property_category"]}
+            ]
+        }
+        specs = process_enrich_specs(table_config)
+        assert len(specs) == 1
+        assert specs[0]["type"] == "lookup"
+        assert specs[0]["join"] == "dim_property_class"
+        assert specs[0]["fields"] == ["property_category"]
+
+    def test_validate_build_catches_missing_table(self):
+        """Validation should catch tables referenced in phases but not defined."""
+        from de_funk.config.domain.build import validate_build_config
+
+        model_config = {
+            "build": {"phases": {1: {"tables": ["nonexistent_table"]}}},
+            "tables": {"dim_entity": {}},
+        }
+        warnings = validate_build_config(model_config)
+        assert any("nonexistent_table" in w for w in warnings)
+
+    def test_loader_build_config_from_fixtures(self):
+        """Loader should preserve build config from model.md fixtures."""
+        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain.build import parse_build_config
+
+        loader = DomainConfigLoaderV4(FIXTURES_DIR)
+        config = loader.load_model_config("test_model")
+        build = parse_build_config(config)
+        assert len(build["phases"]) == 2
+        assert "dim_entity" in build["phases"][0]["tables"]
+        assert "fact_events" in build["phases"][1]["tables"]
 
 
 class TestPhase5Views:
