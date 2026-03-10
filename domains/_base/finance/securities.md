@@ -1,288 +1,279 @@
 ---
 type: domain-base
-base_name: securities
+model: securities
+version: 3.0
 description: "Base template for all tradable securities (stocks, options, ETFs, futures)"
+extends: _base._base_.entity
 
-# Dependencies - base securities requires temporal for date_id FK pattern
 depends_on: [temporal]
 
-# Storage - provider/dataset for bronze, domain hierarchy for silver
-# NOTE: This is a BASE TEMPLATE (type: domain-base) - NO tables are materialized here!
-# Child models (stocks, options, etfs, futures) inherit schema and write to their own paths.
-storage:
-  format: delta
-  bronze:
-    provider: alpha_vantage
-    tables:
-      # Table names match endpoint_id from API config
-      listing_status: alpha_vantage/listing_status  # All tickers from LISTING_STATUS
-      time_series_daily_adjusted: alpha_vantage/time_series_daily_adjusted  # Daily OHLCV
-  silver:
-    # NOT USED - base templates don't write to Silver
-    root: storage/silver/_base_securities_UNUSED
+# CANONICAL FIELDS
+# [field_name, type, nullable: bool, description: "meaning"]
+canonical_fields:
+  - [security_id, integer, nullable: false, description: "Surrogate primary key"]
+  - [ticker, string, nullable: false, description: "Trading symbol"]
+  - [security_name, string, nullable: true, description: "Display name"]
+  - [asset_type, string, nullable: true, description: "Stock, ETF, Option, Future"]
+  - [exchange_code, string, nullable: true, description: "Primary exchange (NYSE, NASDAQ)"]
+  - [currency, string, nullable: true, description: "Trading currency"]
+  - [is_active, boolean, nullable: true, description: "Currently trading"]
+  - [open, double, nullable: true, description: "Opening price"]
+  - [high, double, nullable: true, description: "High price"]
+  - [low, double, nullable: true, description: "Low price"]
+  - [close, double, nullable: false, description: "Closing price"]
+  - [volume, long, nullable: true, description: "Trading volume"]
+  - [adjusted_close, double, nullable: true, description: "Split/dividend adjusted close"]
 
-# Base Tables (TEMPLATES - prefix with _ to exclude from materialization)
-# Tables starting with _ are templates for inheritance, not built directly
 tables:
   _dim_security:
     type: dimension
-    description: "TEMPLATE: Master security dimension - inherit via extends"
     primary_key: [security_id]
     unique_key: [ticker]
 
-    # Schema: [column, type, nullable, description, {options}]
+    # [column, type, nullable, description, {options}]
     schema:
-      # Keys
-      - [security_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(ticker))"}]
-      - [ticker, string, false, "Natural key - trading symbol", {unique: true}]
-
-      # Attributes
+      - [security_id, integer, false, "PK", {derived: "ABS(HASH(ticker))"}]
+      - [ticker, string, false, "Natural key", {unique: true}]
       - [security_name, string, true, "Display name"]
-      - [asset_type, string, true, "Stock, ETF, Option, Future", {enum: [Stock, ETF, "Mutual Fund", Option, Future]}]
-      - [exchange_code, string, true, "Primary exchange (NYSE, NASDAQ)"]
+      - [asset_type, string, true, "Classification", {enum: [Stock, ETF, "Mutual Fund", Option, Future]}]
+      - [exchange_code, string, true, "Primary exchange"]
+      - [exchange_id, integer, true, "FK to dim_exchange", {fk: _dim_exchange.exchange_id, derived: "ABS(HASH(exchange_code))"}]
       - [currency, string, true, "Trading currency", {default: "USD"}]
       - [is_active, boolean, true, "Currently trading", {default: true}]
 
-    # Measures on the table
     measures:
       - [security_count, count_distinct, security_id, "Number of securities", {format: "#,##0"}]
 
-  _fact_prices_base:
+  _dim_exchange:
+    type: dimension
+    primary_key: [exchange_id]
+    unique_key: [exchange_code]
+
+    # [column, type, nullable, description, {options}]
+    schema:
+      - [exchange_id, integer, false, "PK", {derived: "ABS(HASH(exchange_code))"}]
+      - [exchange_code, string, false, "MIC code (NYSE, NASDAQ, etc.)", {unique: true}]
+      - [exchange_name, string, true, "Full exchange name"]
+      - [country, string, true, "Country"]
+      - [timezone, string, true, "Trading timezone"]
+      - [is_active, boolean, true, "Currently operating", {default: true}]
+
+    measures:
+      - [exchange_count, count_distinct, exchange_id, "Number of exchanges", {format: "#,##0"}]
+
+  _fact_prices:
     type: fact
-    description: "Base OHLCV price data with technical indicators"
     primary_key: [price_id]
     partition_by: [date_id]
 
-    # Schema: [column, type, nullable, description, {options}]
-    # NOTE: Technical indicators are computed post-build by scripts/build/compute_technicals.py
+    # [column, type, nullable, description, {options}]
     schema:
-      # Keys - all integers
-      - [price_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT(security_id, '_', date_id)))"}]
-      - [security_id, integer, false, "FK to dim_security", {fk: dim_security.security_id}]
+      - [price_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(security_id, '_', date_id)))"}]
+      - [security_id, integer, false, "FK to dim_security", {fk: _dim_security.security_id}]
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
-
-      # Price data (from bronze)
       - [open, double, true, "Opening price"]
       - [high, double, true, "High price"]
       - [low, double, true, "Low price"]
       - [close, double, false, "Closing price"]
       - [volume, long, true, "Trading volume"]
-      - [adjusted_close, double, true, "Split/dividend adjusted close"]
+      - [adjusted_close, double, true, "Adjusted close"]
 
-      # Technical Indicators (computed by scripts/build/compute_technicals.py)
-      # Moving Averages
-      - [sma_20, double, true, "20-day Simple Moving Average", {computed: true}]
-      - [sma_50, double, true, "50-day Simple Moving Average", {computed: true}]
-      - [sma_200, double, true, "200-day Simple Moving Average", {computed: true}]
+      # Returns
+      - [daily_return, double, true, "Daily return %", {derived: "(adjusted_close - LAG(adjusted_close)) / LAG(adjusted_close) * 100"}]
 
-      # Returns & Volatility
-      - [daily_return, double, true, "Daily return percentage", {computed: true}]
-      - [volatility_20d, double, true, "20-day annualized volatility", {computed: true}]
-      - [volatility_60d, double, true, "60-day annualized volatility", {computed: true}]
-
-      # Momentum Indicators
-      - [rsi_14, double, true, "14-day Relative Strength Index", {computed: true, range: [0, 100]}]
-
-      # Bollinger Bands
-      - [bollinger_upper, double, true, "Bollinger Band Upper (SMA20 + 2*StdDev)", {computed: true}]
-      - [bollinger_middle, double, true, "Bollinger Band Middle (SMA20)", {computed: true}]
-      - [bollinger_lower, double, true, "Bollinger Band Lower (SMA20 - 2*StdDev)", {computed: true}]
-
-      # Volume Indicators
-      - [volume_sma_20, double, true, "20-day volume SMA", {computed: true}]
-      - [volume_ratio, double, true, "Volume ratio (current/SMA20)", {computed: true}]
-
-    # Measures on the table
     measures:
-      # Price measures
       - [avg_close, avg, close, "Average closing price", {format: "$#,##0.00"}]
       - [total_volume, sum, volume, "Total trading volume", {format: "#,##0"}]
-      - [max_high, max, high, "Maximum high price", {format: "$#,##0.00"}]
-      - [min_low, min, low, "Minimum low price", {format: "$#,##0.00"}]
-      - [price_range, expression, "AVG(high - low)", "Average price range", {format: "$#,##0.00"}]
-      - [intraday_return, expression, "AVG((close - open) / open * 100)", "Average intraday return %", {format: "#,##0.00%"}]
+      - [max_high, max, high, "Maximum high", {format: "$#,##0.00"}]
+      - [min_low, min, low, "Minimum low", {format: "$#,##0.00"}]
+      - [price_range, expression, "AVG(high - low)", "Average daily range", {format: "$#,##0.00"}]
+      - [avg_daily_return, avg, daily_return, "Average daily return %", {format: "#,##0.00%"}]
 
-      # Technical indicator measures
-      - [avg_rsi, avg, rsi_14, "Average RSI", {format: "#,##0.00"}]
-      - [avg_volatility, avg, volatility_20d, "Average 20-day volatility", {format: "#,##0.00%"}]
-      - [overbought_days, expression, "SUM(CASE WHEN rsi_14 > 70 THEN 1 ELSE 0 END)", "Days RSI > 70", {format: "#,##0"}]
-      - [oversold_days, expression, "SUM(CASE WHEN rsi_14 < 30 THEN 1 ELSE 0 END)", "Days RSI < 30", {format: "#,##0"}]
+    python_measures:
+      sharpe_ratio:
+        function: "securities.measures.calculate_sharpe_ratio"
+        description: "Rolling Sharpe ratio — risk-adjusted return vs risk-free rate"
+        params:
+          risk_free_rate: 0.045
+          window_days: 252
+          price_col: "close"
+        returns: [security_id, date_id, sharpe_ratio]
 
-# Graph Templates (nodes starting with _ are templates for inheritance)
+      drawdown:
+        function: "securities.measures.calculate_drawdown"
+        description: "Maximum drawdown from rolling peak price"
+        params:
+          window_days: 252
+          price_col: "close"
+        returns: [security_id, date_id, drawdown, peak_price]
+
+      rolling_beta:
+        function: "securities.measures.calculate_rolling_beta"
+        description: "Rolling beta vs market benchmark (covariance / variance)"
+        params:
+          market_ticker: "SPY"
+          window_days: 252
+          price_col: "close"
+        returns: [security_id, date_id, beta]
+
+      momentum_score:
+        function: "securities.measures.calculate_momentum_score"
+        description: "Composite momentum score from RSI, MACD, and price trend"
+        params:
+          weights: {rsi: 0.3, macd: 0.3, price_trend: 0.4}
+        returns: [security_id, date_id, momentum_score, rsi_norm, macd_norm, price_trend_norm]
+
+      volatility_regime:
+        function: "securities.measures.calculate_volatility_regime"
+        description: "Classify volatility regime (LOW/NORMAL/HIGH) from short vs long vol ratio"
+        params:
+          short_window: 20
+          long_window: 60
+          price_col: "close"
+        returns: [security_id, date_id, vol_short_ann, vol_long_ann, vol_ratio, regime]
+
+      relative_strength:
+        function: "securities.measures.calculate_relative_strength"
+        description: "Relative strength vs benchmark — rolling cumulative return differential"
+        params:
+          benchmark_ticker: "SPY"
+          window_days: 20
+          price_col: "close"
+        returns: [security_id, date_id, relative_strength, outperforming]
+
+  _fact_technicals:
+    type: fact
+    generated: true
+    primary_key: [technical_id]
+    partition_by: [date_id]
+
+    # [column, type, nullable, description, {options}]
+    schema:
+      - [technical_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(security_id, '_', date_id, '_TECH')))"}]
+      - [security_id, integer, false, "FK to dim_security", {fk: _dim_security.security_id}]
+      - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
+
+      # Simple Moving Averages
+      - [sma_20, double, true, "20-day SMA", {derived: "AVG(adjusted_close) OVER (PARTITION BY security_id ORDER BY date_id ROWS 19 PRECEDING)"}]
+      - [sma_50, double, true, "50-day SMA", {derived: "AVG(adjusted_close) OVER (PARTITION BY security_id ORDER BY date_id ROWS 49 PRECEDING)"}]
+      - [sma_200, double, true, "200-day SMA", {derived: "AVG(adjusted_close) OVER (PARTITION BY security_id ORDER BY date_id ROWS 199 PRECEDING)"}]
+
+      # Exponential Moving Averages
+      - [ema_12, double, true, "12-day EMA", {derived: "EMA(adjusted_close, 12)"}]
+      - [ema_26, double, true, "26-day EMA", {derived: "EMA(adjusted_close, 26)"}]
+
+      # MACD
+      - [macd, double, true, "MACD line (EMA12 - EMA26)", {derived: "ema_12 - ema_26"}]
+      - [macd_signal, double, true, "MACD signal line (9-day EMA of MACD)", {derived: "EMA(macd, 9)"}]
+      - [macd_histogram, double, true, "MACD histogram (MACD - signal)", {derived: "macd - macd_signal"}]
+
+      # RSI
+      - [rsi_14, double, true, "14-day RSI", {derived: "100 - (100 / (1 + AVG(gain_14) / AVG(loss_14)))"}]
+
+      # Average True Range
+      - [atr_14, double, true, "14-day Average True Range", {derived: "AVG(TRUE_RANGE(high, low, prev_close)) OVER (ROWS 13 PRECEDING)"}]
+
+      # Bollinger Bands
+      - [bollinger_upper, double, true, "Upper Bollinger Band (SMA20 + 2*std)", {derived: "sma_20 + 2 * STDDEV(adjusted_close) OVER (ROWS 19 PRECEDING)"}]
+      - [bollinger_middle, double, true, "Middle Bollinger Band (SMA20)", {derived: "sma_20"}]
+      - [bollinger_lower, double, true, "Lower Bollinger Band (SMA20 - 2*std)", {derived: "sma_20 - 2 * STDDEV(adjusted_close) OVER (ROWS 19 PRECEDING)"}]
+
+      # Volatility
+      - [volatility_20d, double, true, "20-day annualized volatility", {derived: "STDDEV(daily_return) OVER (ROWS 19 PRECEDING) * SQRT(252)"}]
+      - [volatility_60d, double, true, "60-day annualized volatility", {derived: "STDDEV(daily_return) OVER (ROWS 59 PRECEDING) * SQRT(252)"}]
+
+      # Volume indicators
+      - [volume_sma_20, double, true, "20-day volume SMA", {derived: "AVG(volume) OVER (ROWS 19 PRECEDING)"}]
+      - [volume_ratio, double, true, "Volume vs 20-day average", {derived: "volume / NULLIF(volume_sma_20, 0)"}]
+
+    measures:
+      - [avg_rsi, avg, rsi_14, "Average RSI", {format: "#,##0.0"}]
+      - [avg_volatility, avg, volatility_20d, "Average 20d volatility", {format: "#,##0.00%"}]
+      - [avg_atr, avg, atr_14, "Average ATR", {format: "$#,##0.00"}]
+
+subsets:
+  discriminator: _dim_security.asset_type
+  description: "Securities are subset by asset type into separate domain-models"
+  values:
+    Stock:
+      model: stocks
+      description: "Common and preferred stock equities"
+      filter: "asset_type = 'Stock'"
+    ETF:
+      model: etfs
+      description: "Exchange-traded funds"
+      filter: "asset_type = 'ETF'"
+    Option:
+      model: options
+      description: "Options contracts"
+      filter: "asset_type = 'Option'"
+    Future:
+      model: futures
+      description: "Futures contracts"
+      filter: "asset_type = 'Future'"
+
+auto_edges:
+  - [date_id, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
+
+behaviors:
+  - temporal        # Has auto_edges for date_id → calendar
+  - subsettable     # Has subsets: block (asset_type discriminator)
+
 graph:
-  nodes:
-    _dim_security:
-      from: bronze.alpha_vantage.listing_status
-      type: dimension
-      # TEMPLATE: listing_status comes from LISTING_STATUS endpoint (bulk ticker list)
-      # Child models override this node (e.g., stocks uses dim_stock)
-      select:
-        ticker: ticker
-        security_name: security_name
-        exchange_code: exchange_code
-        asset_type: asset_type
-      derive:
-        security_id: "ABS(HASH(ticker))"
-        # Default currency and is_active
-        currency: "'USD'"
-        is_active: "true"
-      primary_key: [security_id]
-      unique_key: [ticker]
-      tags: [dim, master, security, template]
-
-    _fact_prices_base:
-      from: bronze.alpha_vantage.time_series_daily_adjusted
-      type: fact
-      select:
-        ticker: ticker
-        trade_date: trade_date
-        open: open
-        high: high
-        low: low
-        close: close
-        volume: volume
-        adjusted_close: adjusted_close
-      derive:
-        # Integer surrogate keys - facts use FKs, not natural keys
-        # security_id: FK to dim_security (derived from ticker)
-        security_id: "ABS(HASH(ticker))"
-        # date_id: FK to dim_calendar (YYYYMMDD format, works with both DATE and STRING)
-        date_id: "CAST(REGEXP_REPLACE(CAST(trade_date AS STRING), '-', '') AS INT)"
-        # price_id: PK (surrogate from ticker + date)
-        price_id: "ABS(HASH(CONCAT(ticker, '_', CAST(trade_date AS STRING))))"
-      # Drop natural keys after deriving FKs - facts should only have surrogate/FK columns
-      drop: [ticker, trade_date]
-      primary_key: [price_id]
-      unique_key: [ticker, trade_date]
-      foreign_keys:
-        - {column: security_id, references: dim_security.security_id}
-        - {column: date_id, references: temporal.dim_calendar.date_id}
-
-    # NOTE: Technical indicators are computed post-build by scripts/build/compute_technicals.py
-    # and added as columns to _fact_prices_base. There is no separate technicals table.
-
-  # TEMPLATE EDGES - These are inherited and overridden by child models
-  # Child models should replace references to _dim_security with their concrete dimension
-  # e.g., stocks replaces _dim_security -> dim_stock
+  # auto_edges: date_id→calendar (both facts)
   edges:
-    _prices_to_security:
-      from: _fact_prices_base
-      to: _dim_security  # Template reference - override in child model
-      on: [security_id=security_id]
-      type: many_to_one
+    - [prices_to_security, _fact_prices, _dim_security, [security_id=security_id], many_to_one, null]
+    - [technicals_to_security, _fact_technicals, _dim_security, [security_id=security_id], many_to_one, null]
+    - [security_to_exchange, _dim_security, _dim_exchange, [exchange_id=exchange_id], many_to_one, null]
 
-    prices_to_calendar:
-      from: _fact_prices_base
-      to: temporal.dim_calendar
-      on: [date_id=date_id]
-      type: many_to_one
-      cross_model: temporal
-
-# Metadata
-domain: securities
+domain: finance
 tags: [base, template, securities]
 status: active
 ---
 
 ## Base Securities Template
 
-**⚠️ TEMPLATE ONLY - NEVER MATERIALIZED**
+Reusable template for all tradable securities. Child models inherit schema and add asset-specific fields.
 
-This is a base template (`type: domain-base`) that provides reusable schema definitions
-for all tradable securities. It is inherited by child models but **NO TABLES ARE BUILT**
-from this template directly.
+### Build-Time Technical Indicators
 
-**Child models using this template:**
-- `stocks` → produces `dim_stock` and `fact_stock_prices`
-- `options` → produces `dim_option` and `fact_option_prices`
-- `etfs` → produces `dim_etf` and `fact_etf_prices`
-- `futures` → produces `dim_future` and `fact_future_prices`
+Technical indicators are defined in the separate `_fact_technicals` table (not `_fact_prices`). These are computed at build time by `builder.post_build()` and materialized, not calculated on query. The `_fact_prices` table contains only OHLCV data and daily returns.
 
-**Inheritance pattern:**
-Child models use `extends: _base.finance.securities` to inherit schema definitions.
-The schema columns are COPIED into the child dimension, creating a denormalized
-document-style table. There is no FK relationship to a shared `dim_security` table.
+| Category | Columns | Window |
+|----------|---------|--------|
+| Moving Averages | `sma_20`, `sma_50`, `sma_200` | Simple rolling |
+| EMA | `ema_12`, `ema_26` | Exponential |
+| MACD | `macd`, `macd_signal`, `macd_histogram` | 12/26/9 EMA |
+| RSI | `rsi_14` | 14-day |
+| ATR | `atr_14` | 14-day |
+| Bollinger | `bollinger_upper`, `bollinger_middle`, `bollinger_lower` | 20-day SMA ± 2σ |
+| Volatility | `volatility_20d`, `volatility_60d` | Annualized stddev |
+| Volume | `volume_sma_20`, `volume_ratio` | 20-day avg |
 
-### Integer Surrogate Keys
+### Python Measures (Inherited by All Security Types)
 
-### Dependencies
+| Measure | Description | Key Params |
+|---------|-------------|------------|
+| `sharpe_ratio` | Rolling risk-adjusted return vs risk-free rate | `risk_free_rate: 0.045`, `window_days: 252` |
+| `drawdown` | Maximum drawdown from rolling peak | `window_days: 252` |
+| `rolling_beta` | Covariance/variance vs market benchmark | `market_ticker: "SPY"` |
+| `momentum_score` | Composite RSI + MACD + price trend score | Weighted: RSI 0.3, MACD 0.3, trend 0.4 |
+| `volatility_regime` | LOW/NORMAL/HIGH classification | Short 20d vs long 60d vol |
+| `relative_strength` | Rolling return differential vs benchmark | `benchmark_ticker: "SPY"` |
 
-This base template depends on:
-- **temporal** - For `date_id` FK pattern (all dates reference dim_calendar)
+These measures are defined at the securities base so stocks, ETFs, options, and futures all inherit them. Child models can override `params` (e.g., futures might use a different `market_ticker`).
 
-### Key Design
+### Child Models
 
-All keys are **integers** for storage efficiency:
+| Model | Extends | Adds |
+|-------|---------|------|
+| stocks | _dim_security, _dim_exchange, _fact_prices, _fact_technicals | company_id, cik, market_cap |
+| options | _dim_security, _dim_exchange, _fact_prices, _fact_technicals | strike, expiry, greeks |
+| etfs | _dim_security, _dim_exchange, _fact_prices, _fact_technicals | holdings, nav |
+| futures | _dim_security, _dim_exchange, _fact_prices, _fact_technicals | contract_size, margin |
 
-| Key | Type | Derivation |
-|-----|------|------------|
-| `security_id` | integer | `ABS(HASH(ticker))` |
-| `date_id` | integer | `YYYYMMDD` format |
-| `price_id` | integer | `ABS(HASH(ticker + date))` |
-
-### No Date Columns on Facts
-
-Facts have `date_id` (integer FK), not date columns:
-
-```sql
--- Join to get actual date and technicals (all on same table)
-SELECT c.date AS trade_date, p.close, p.rsi_14, p.sma_50
-FROM fact_stock_prices p
-JOIN temporal.dim_calendar c ON p.date_id = c.date_id
-WHERE p.rsi_14 < 30  -- oversold condition
-```
-
-### Technical Indicators
-
-Technical indicators are **computed columns** on `_fact_prices_base`, not a separate table.
-They are calculated post-build by `scripts/build/compute_technicals.py`.
-
-**Moving Averages:**
-- SMA (20, 50, 200 day)
-
-**Returns & Volatility:**
-- Daily return percentage
-- 20-day and 60-day annualized volatility
-
-**Momentum:**
-- RSI (14 day)
-
-**Bollinger Bands:**
-- Upper, Middle, Lower (20 day, 2 std dev)
-
-**Volume:**
-- 20-day volume SMA
-- Volume ratio (current/SMA)
-
-### Build Workflow
-
-1. Main silver build creates `fact_stock_prices` with OHLCV data
-2. `scripts/build/compute_technicals.py` runs post-build to add technical columns
-3. Technical columns are computed in batches to avoid OOM on large datasets
-
-### Inheritance
-
-Child models inherit using `extends`:
+### Usage
 
 ```yaml
-tables:
-  dim_stock:
-    extends: _base.finance.securities.dim_security
-    schema:
-      # Inherited: security_id, ticker, security_name, asset_type, etc.
-      # Add stock-specific:
-      - [company_id, integer, false, "FK to dim_company", {fk: corporate.dim_company.company_id}]
-      - [cik, string, true, "SEC Central Index Key"]
-      - [market_cap, double, true, "Market capitalization"]
-
-  fact_stock_prices:
-    extends: _base.finance.securities._fact_prices_base
-    # Inherits OHLCV + technical indicator columns
+extends: _base.finance.securities
 ```
-
-### Models Using This Base
-
-- `stocks` - Common stock equities
-- `options` - Options contracts
-- `etfs` - Exchange-traded funds
-- `futures` - Futures contracts

@@ -1,218 +1,158 @@
 ---
 type: domain-base
-base_name: crime
-version: 3.0
+model: crime
+version: 3.1
 description: "Base template for crime/incident data across jurisdictions"
-tags: [crime, public-safety, base, template]
+extends: _base._base_.event
 
-# Base Tables
+canonical_fields:
+  - [incident_id, integer, false, "PK - incident surrogate"]
+  - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+  - [domain_source, string, nullable: false, description: "Origin domain"]
+  - [case_number, string, true, "Police case number"]
+  - [crime_type_id, integer, false, "FK to _dim_crime_type"]
+  - [location_type_id, integer, true, "FK to _dim_location_type"]
+  - [date_id, integer, false, "FK to dim_calendar"]
+  - [location_id, integer, true, "FK to geo_location._dim_location"]
+  - [year, integer, false, "Incident year (partition key)"]
+  - [block, string, true, "Block-level address"]
+  - [beat, string, true, "Police beat"]
+  - [district, string, true, "Police district"]
+  - [ward, integer, true, "Political ward"]
+  - [community_area, integer, true, "Community area number"]
+  - [latitude, double, true, "Latitude"]
+  - [longitude, double, true, "Longitude"]
+  - [arrest_made, boolean, true, "Whether arrest was made"]
+  - [domestic, boolean, true, "Domestic-related"]
+
 tables:
-  dim_crime_type:
+  _dim_crime_type:
     type: dimension
-    description: "Crime type classification dimension"
     primary_key: [crime_type_id]
-
-    # Schema: [column, type, nullable, description, {options}]
     schema:
-      # Keys - integer surrogate
-      - [crime_type_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(CONCAT(iucr_code, '_', COALESCE(fbi_code, 'UNK'))))"}]
-
-      # Crime classification
+      - [crime_type_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(iucr_code, '_', COALESCE(fbi_code, 'UNK'))))"}]
       - [iucr_code, string, true, "Illinois Uniform Crime Reporting code"]
-      - [fbi_code, string, true, "FBI Uniform Crime Reporting code"]
-      - [primary_type, string, false, "Primary crime type (e.g., THEFT, ASSAULT)"]
-      - [description, string, true, "Detailed crime description"]
-      - [crime_category, string, true, "High-level category (VIOLENT, PROPERTY, OTHER)"]
-      - [crime_subcategory, string, true, "Subcategory for grouping"]
-      - [is_index_crime, boolean, true, "FBI Part I (index) crime", {default: false}]
+      - [fbi_code, string, true, "FBI UCR code"]
+      - [primary_type, string, false, "Primary crime type"]
+      - [description, string, true, "Detailed description"]
+      - [crime_category, string, true, "VIOLENT, PROPERTY, OTHER"]
+      - [crime_subcategory, string, true, "Subcategory"]
+      - [is_index_crime, boolean, true, "FBI Part I crime", {default: false}]
 
-    measures:
-      - [crime_type_count, count_distinct, crime_type_id, "Number of crime types", {format: "#,##0"}]
-
-  dim_location_type:
+  _dim_location_type:
     type: dimension
-    description: "Location type dimension for crime locations"
     primary_key: [location_type_id]
-
     schema:
-      - [location_type_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(location_description))"}]
+      - [location_type_id, integer, false, "PK", {derived: "ABS(HASH(location_description))"}]
       - [location_description, string, false, "Location description"]
-      - [location_category, string, true, "Grouped location category"]
+      - [location_category, string, true, "Grouped category"]
 
-    measures:
-      - [location_type_count, count_distinct, location_type_id, "Number of location types", {format: "#,##0"}]
-
-  _fact_crimes_base:
+  _fact_crimes:
     type: fact
-    description: "Base crime incident fact table template"
     primary_key: [incident_id]
-    partition_by: [date_id]
-
+    partition_by: [year]
     schema:
-      # Keys - integer surrogates
-      - [incident_id, integer, false, "PK - Integer surrogate", {derived: "ABS(HASH(case_number))"}]
-      - [crime_type_id, integer, false, "FK to dim_crime_type", {fk: dim_crime_type.crime_type_id}]
-      - [location_type_id, integer, true, "FK to dim_location_type", {fk: dim_location_type.location_type_id}]
+      - [incident_id, integer, false, "PK", {derived: "ABS(HASH(case_number))"}]
+      - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [domain_source, string, false, "Origin domain"]
+      - [crime_type_id, integer, false, "FK to _dim_crime_type", {fk: _dim_crime_type.crime_type_id}]
+      - [location_type_id, integer, true, "FK to _dim_location_type", {fk: _dim_location_type.location_type_id}]
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
-      - [location_id, integer, true, "FK to geospatial.dim_location", {fk: geospatial.dim_location.location_id}]
-
-      # Incident identifiers
-      - [case_number, string, true, "Police case number", {unique: true}]
-      - [year, integer, false, "Incident year (for partitioning)"]
-
-      # Geographic
+      - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
+      - [case_number, string, true, "Police case number"]
+      - [year, integer, false, "Incident year"]
       - [block, string, true, "Block-level address"]
       - [beat, string, true, "Police beat"]
       - [district, string, true, "Police district"]
       - [ward, integer, true, "Political ward"]
-      - [community_area, integer, true, "Community area number"]
-      - [latitude, double, true, "Latitude coordinate"]
-      - [longitude, double, true, "Longitude coordinate"]
-
-      # Flags
-      - [arrest_made, boolean, true, "Whether arrest was made", {default: false}]
-      - [domestic, boolean, true, "Domestic-related incident", {default: false}]
-
+      - [community_area, integer, true, "Community area"]
+      - [latitude, double, true, "Latitude"]
+      - [longitude, double, true, "Longitude"]
+      - [arrest_made, boolean, true, "Arrest made", {default: false}]
+      - [domestic, boolean, true, "Domestic-related", {default: false}]
     measures:
-      - [crime_count, count_distinct, incident_id, "Total crime incidents", {format: "#,##0"}]
+      - [crime_count, count_distinct, incident_id, "Total crimes", {format: "#,##0"}]
       - [arrest_count, expression, "SUM(CASE WHEN arrest_made THEN 1 ELSE 0 END)", "Crimes with arrest", {format: "#,##0"}]
-      - [domestic_count, expression, "SUM(CASE WHEN domestic THEN 1 ELSE 0 END)", "Domestic crimes", {format: "#,##0"}]
-      - [arrest_rate, expression, "100.0 * SUM(CASE WHEN arrest_made THEN 1 ELSE 0 END) / COUNT(*)", "Arrest rate %", {format: "#,##0.0%"}]
+      - [arrest_rate, expression, "100.0 * SUM(CASE WHEN arrest_made THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0)", "Arrest rate %", {format: "#,##0.0%"}]
 
-  _fact_arrests_base:
+  _fact_arrests:
     type: fact
-    description: "Base arrest record fact table template"
     primary_key: [arrest_id]
-    partition_by: [date_id]
-
+    partition_by: [year]
     schema:
-      - [arrest_id, integer, false, "PK - Integer surrogate"]
-      - [incident_id, integer, true, "FK to fact_crimes", {fk: _fact_crimes_base.incident_id}]
-      - [crime_type_id, integer, false, "FK to dim_crime_type", {fk: dim_crime_type.crime_type_id}]
+      - [arrest_id, integer, false, "PK"]
+      - [incident_id, integer, true, "FK to _fact_crimes (nullable — not all arrests link to a crime report)"]
+      - [legal_entity_id, integer, true, "FK to owning jurisdiction"]
+      - [domain_source, string, false, "Origin domain"]
+      - [crime_type_id, integer, false, "FK to _dim_crime_type", {fk: _dim_crime_type.crime_type_id}]
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
-      - [location_id, integer, true, "FK to geospatial.dim_location", {fk: geospatial.dim_location.location_id}]
+      - [location_id, integer, true, "FK to geo_location._dim_location", {fk: "geo_location._dim_location.location_id", derived: "CASE WHEN latitude IS NOT NULL AND longitude IS NOT NULL THEN ABS(HASH(CONCAT(CAST(latitude AS STRING), '_', CAST(longitude AS STRING)))) ELSE null END"}]
       - [beat, string, true, "Police beat"]
       - [district, string, true, "Police district"]
-      - [community_area, integer, true, "Community area number"]
-
+      - [community_area, integer, true, "Community area"]
+      - [latitude, double, true, "Latitude"]
+      - [longitude, double, true, "Longitude"]
+      - [year, integer, false, "Arrest year"]
     measures:
       - [total_arrests, count_distinct, arrest_id, "Total arrests", {format: "#,##0"}]
 
-# Graph Templates
 graph:
-  nodes:
-    dim_crime_type:
-      type: dimension
-      description: "Crime type dimension populated from IUCR codes or similar"
-      derive:
-        crime_type_id: "ABS(HASH(CONCAT(iucr_code, '_', COALESCE(fbi_code, 'UNK'))))"
-        crime_category: "CASE WHEN primary_type IN ('HOMICIDE', 'ASSAULT', 'BATTERY', 'ROBBERY') THEN 'VIOLENT' WHEN primary_type IN ('THEFT', 'BURGLARY', 'MOTOR VEHICLE THEFT') THEN 'PROPERTY' ELSE 'OTHER' END"
-      primary_key: [crime_type_id]
-      unique_key: [iucr_code, fbi_code]
-      tags: [dim, crime]
-
-    dim_location_type:
-      type: dimension
-      description: "Location type dimension from distinct location descriptions"
-      derive:
-        location_type_id: "ABS(HASH(location_description))"
-      primary_key: [location_type_id]
-      unique_key: [location_description]
-      tags: [dim, location]
-
-    _fact_crimes_base:
-      type: fact
-      description: "Base crime facts template"
-      derive:
-        crime_type_id: "ABS(HASH(CONCAT(iucr, '_', COALESCE(fbi_code, 'UNK'))))"
-        location_type_id: "ABS(HASH(COALESCE(location_description, 'UNKNOWN')))"
-        date_id: "CAST(DATE_FORMAT(incident_date, 'yyyyMMdd') AS INT)"
-        incident_id: "ABS(HASH(case_number))"
-      primary_key: [incident_id]
-      unique_key: [case_number]
-      foreign_keys:
-        - {column: crime_type_id, references: dim_crime_type.crime_type_id}
-        - {column: location_type_id, references: dim_location_type.location_type_id}
-        - {column: date_id, references: temporal.dim_calendar.date_id}
-      tags: [fact, crime]
-
+  # auto_edges inherited: date_id→calendar, location_id→location (both facts)
   edges:
-    crime_to_type:
-      from: _fact_crimes_base
-      to: dim_crime_type
-      on: [crime_type_id=crime_type_id]
-      type: many_to_one
+    - [crime_to_type, _fact_crimes, _dim_crime_type, [crime_type_id=crime_type_id], many_to_one, null]
+    - [crime_to_location_type, _fact_crimes, _dim_location_type, [location_type_id=location_type_id], many_to_one, null]
+    - [arrest_to_crime, _fact_arrests, _fact_crimes, [incident_id=incident_id], many_to_one, null]
+    - [arrest_to_crime_type, _fact_arrests, _dim_crime_type, [crime_type_id=crime_type_id], many_to_one, null]
 
-    crime_to_location_type:
-      from: _fact_crimes_base
-      to: dim_location_type
-      on: [location_type_id=location_type_id]
-      type: many_to_one
+subsets:
+  discriminator: _dim_crime_type.crime_category
+  description: "Crimes can be subset by category for focused analysis"
+  values:
+    VIOLENT:
+      description: "Homicide, assault, battery, robbery"
+      filter: "crime_category = 'VIOLENT'"
+    PROPERTY:
+      description: "Theft, burglary, motor vehicle theft"
+      filter: "crime_category = 'PROPERTY'"
+    OTHER:
+      description: "All remaining crime types"
+      filter: "crime_category = 'OTHER'"
 
-    crime_to_calendar:
-      from: _fact_crimes_base
-      to: temporal.dim_calendar
-      on: [date_id=date_id]
-      type: many_to_one
-      cross_model: temporal
+behaviors:
+  - temporal        # Inherited from event
+  - geo_locatable   # Inherited from event
+  - subsettable     # Has subsets: block (crime_category discriminator)
 
-# Metadata
 domain: public_safety
-tags: [base, template, crime]
+tags: [base, template, public_safety, crime]
 status: active
 ---
 
 ## Base Crime Template
 
-Reusable base template for crime/public safety data with integer surrogate keys.
+Reusable template for crime/public safety data. Two separate fact tables for distinct concepts:
 
-### Key Design
+- **`_fact_crimes`** — Reported incidents (a crime report filed by police)
+- **`_fact_arrests`** — Actions taken (a person arrested, may or may not link to a crime report)
 
-All keys are **integers** for storage efficiency:
-
-| Key | Type | Derivation |
-|-----|------|------------|
-| `crime_type_id` | integer | `HASH(iucr + fbi_code)` |
-| `location_type_id` | integer | `HASH(location_description)` |
-| `date_id` | integer | `YYYYMMDD` format |
-| `incident_id` | integer | `HASH(case_number)` |
+Not every crime leads to an arrest. Not every arrest ties to a single crime report. The `incident_id` FK on arrests is nullable for this reason.
 
 ### Crime Categories
 
-Standard taxonomy:
-
 ```
-VIOLENT
-├── HOMICIDE
-├── ASSAULT
-├── BATTERY
-└── ROBBERY
-
-PROPERTY
-├── THEFT
-├── BURGLARY
-└── MOTOR VEHICLE THEFT
-
-OTHER
-└── All remaining types
+VIOLENT: HOMICIDE, ASSAULT, BATTERY, ROBBERY
+PROPERTY: THEFT, BURGLARY, MOTOR VEHICLE THEFT
+OTHER: All remaining types
 ```
 
-### Inheritance
+### Inherited from Event Base
 
-City-specific models inherit using `extends`:
-
-```yaml
-# In city/chicago/public_safety.md
-extends: _base.crime
-
-tables:
-  fact_crimes:
-    extends: _base.crime._fact_crimes_base
-    # Add Chicago-specific columns...
-```
+| Field | Nullable | Purpose |
+|-------|----------|---------|
+| `legal_entity_id` | yes | FK to jurisdiction (city, county) |
+| `date_id` | no | FK to temporal.dim_calendar |
+| `location_id` | yes | FK to geo_location._dim_location (from lat/lon) |
 
 ### Models Using This Base
 
-- `chicago_public_safety` - Chicago crime data
-- (future) `nyc_public_safety` - NYC crime data
-- (future) `la_public_safety` - LA crime data
+- `chicago_public_safety` — Chicago crime data (extends with Chicago-specific geography)

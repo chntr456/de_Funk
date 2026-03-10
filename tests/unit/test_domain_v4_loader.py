@@ -929,11 +929,11 @@ class TestPhase6Federation:
         from de_funk.config.domain import DomainConfigLoaderV4
         from de_funk.config.domain.federation import get_federation_config
 
-        loader = DomainConfigLoaderV4(Path(__file__).resolve().parent.parent.parent / "domains_testing")
+        loader = DomainConfigLoaderV4(Path(__file__).resolve().parent.parent.parent / "domains")
         try:
             config = loader.load_model_config("accounting_federation")
         except FileNotFoundError:
-            pytest.skip("domains_testing not available")
+            pytest.skip("domains not available")
 
         fed = get_federation_config(config)
         assert fed["is_federation_model"] is True
@@ -1083,7 +1083,79 @@ class TestPhase7Graph:
 
 
 class TestPhase8Migration:
-    """Tests for domains_testing → domains migration."""
+    """Tests for domains/ directory (v4 format) after migration."""
 
-    def test_placeholder(self):
-        pytest.skip("Phase 8 not yet implemented")
+    DOMAINS_DIR = Path(__file__).resolve().parent.parent.parent / "domains"
+
+    def test_domains_dir_has_v4_structure(self):
+        """domains/ should have v4 structure (_base, _model_guides_, models)."""
+        if not self.DOMAINS_DIR.exists():
+            pytest.skip("domains not available")
+        assert (self.DOMAINS_DIR / "_base").is_dir()
+        assert (self.DOMAINS_DIR / "_model_guides_").is_dir()
+        assert (self.DOMAINS_DIR / "models").is_dir()
+
+    def test_all_168_files_parse(self):
+        """Every .md file in domains/ should parse without error."""
+        if not self.DOMAINS_DIR.exists():
+            pytest.skip("domains not available")
+        from de_funk.config.domain.extends import parse_front_matter
+
+        errors = []
+        md_files = sorted(self.DOMAINS_DIR.rglob("*.md"))
+        for md_file in md_files:
+            if md_file.name.lower() == "readme.md":
+                continue
+            try:
+                config = parse_front_matter(md_file)
+                if not config:
+                    errors.append(f"{md_file.name}: empty front matter")
+            except Exception as e:
+                errors.append(f"{md_file.name}: {e}")
+
+        assert len(errors) == 0, f"Parse errors:\n" + "\n".join(errors)
+        assert len(md_files) >= 100, f"Expected 100+ files, got {len(md_files)}"
+
+    def test_build_order_resolves(self):
+        """Topological sort should succeed for all models."""
+        if not self.DOMAINS_DIR.exists():
+            pytest.skip("domains not available")
+        from de_funk.config.domain import DomainConfigLoaderV4
+
+        loader = DomainConfigLoaderV4(self.DOMAINS_DIR)
+        models = loader.list_models()
+        assert len(models) >= 5, f"Expected 5+ models, got {len(models)}"
+
+        build_order = loader.get_build_order()
+        assert len(build_order) == len(models)
+        assert set(build_order) == set(models)
+
+    def test_factory_returns_v4_for_domains(self):
+        """get_domain_loader should return V4 loader for domains/."""
+        if not self.DOMAINS_DIR.exists():
+            pytest.skip("domains not available")
+        from de_funk.config.domain import get_domain_loader, DomainConfigLoaderV4
+
+        loader = get_domain_loader(self.DOMAINS_DIR)
+        assert isinstance(loader, DomainConfigLoaderV4)
+
+    def test_cross_model_extends_resolve(self):
+        """Extends references across models should resolve."""
+        if not self.DOMAINS_DIR.exists():
+            pytest.skip("domains not available")
+        from de_funk.config.domain import DomainConfigLoaderV4
+
+        loader = DomainConfigLoaderV4(self.DOMAINS_DIR)
+        models = loader.list_models()
+
+        # Try loading each model — extends failures would raise
+        errors = []
+        for model_name in models:
+            try:
+                config = loader.load_model_config(model_name)
+                assert "tables" in config or "views" in config or "sources" in config, \
+                    f"{model_name}: no tables, views, or sources"
+            except Exception as e:
+                errors.append(f"{model_name}: {e}")
+
+        assert len(errors) == 0, f"Load errors:\n" + "\n".join(errors)

@@ -1,7 +1,7 @@
 """
 Domain Config Loader V4 — multi-file domain model configuration.
 
-Loads model configurations from the domains_testing/ (v4) directory structure
+Loads model configurations from the domains/ (v4) directory structure
 where models are split across multiple files:
 
     domains/
@@ -17,7 +17,7 @@ where models are split across multiple files:
 Usage:
     from de_funk.config.domain import DomainConfigLoaderV4, get_domain_loader
 
-    loader = DomainConfigLoaderV4(Path("domains_testing"))
+    loader = DomainConfigLoaderV4(Path("domains"))
     config = loader.load_model_config("county_property")
 """
 
