@@ -945,8 +945,141 @@ class TestPhase6Federation:
 class TestPhase7Graph:
     """Tests for auto_edges, optional edges, paths."""
 
-    def test_placeholder(self):
-        pytest.skip("Phase 7 not yet implemented")
+    def test_parse_edge_basic(self):
+        """Basic edge should parse correctly."""
+        from de_funk.config.domain.graph import parse_edge
+
+        edge = ["prices_to_stock", "fact_prices", "dim_stock",
+                ["security_id=security_id"], "many_to_one", "null"]
+        parsed = parse_edge(edge)
+        assert parsed["name"] == "prices_to_stock"
+        assert parsed["from"] == "fact_prices"
+        assert parsed["to"] == "dim_stock"
+        assert parsed["on"] == [("security_id", "security_id")]
+        assert parsed["type"] == "many_to_one"
+        assert parsed["optional"] is False
+
+    def test_parse_edge_cross_model(self):
+        """Cross-model edge should detect target model."""
+        from de_funk.config.domain.graph import parse_edge
+
+        edge = ["stock_to_company", "dim_stock", "company.dim_company",
+                ["company_id=company_id"], "many_to_one", "company"]
+        parsed = parse_edge(edge)
+        assert parsed["cross_model"] is True
+        assert parsed["target_model"] == "company"
+        assert parsed["target_table"] == "dim_company"
+
+    def test_parse_edge_optional(self):
+        """Edge with optional: true should be detected."""
+        from de_funk.config.domain.graph import parse_edge
+
+        edge = ["entry_to_contract", "fact_entries", "dim_contract",
+                ["contract_id=contract_id"], "many_to_one", "null",
+                {"optional": True}]
+        parsed = parse_edge(edge)
+        assert parsed["optional"] is True
+
+    def test_parse_graph_config(self):
+        """Full graph config should be parsed from model config."""
+        from de_funk.config.domain.graph import parse_graph_config
+
+        model_config = {
+            "graph": {
+                "edges": [
+                    ["e1", "fact_a", "dim_b", ["b_id=b_id"], "many_to_one", "null"],
+                    ["e2", "fact_a", "dim_c", ["c_id=c_id"], "many_to_one", "null"],
+                ],
+                "paths": {
+                    "a_to_c": {
+                        "description": "A to C via B",
+                        "steps": [
+                            {"from": "fact_a", "to": "dim_b", "via": "b_id"},
+                            {"from": "dim_b", "to": "dim_c", "via": "c_id"},
+                        ],
+                    }
+                },
+            }
+        }
+        parsed = parse_graph_config(model_config)
+        assert len(parsed["edges"]) == 2
+        assert "a_to_c" in parsed["paths"]
+        assert len(parsed["paths"]["a_to_c"]["steps"]) == 2
+
+    def test_resolve_auto_edges(self):
+        """Auto-edges should generate edges for matching fact tables."""
+        from de_funk.config.domain.graph import resolve_auto_edges
+
+        model_config = {
+            "auto_edges": [
+                ["date_id", "temporal.dim_calendar", ["date_id=date_id"],
+                 "many_to_one", "temporal"],
+            ]
+        }
+        tables = {
+            "fact_events": {
+                "type": "fact",
+                "table_type": "fact",
+                "schema": [
+                    ["event_id", "integer", False, "PK"],
+                    ["date_id", "integer", False, "FK to calendar"],
+                ],
+            },
+            "dim_entity": {
+                "type": "dimension",
+                "table_type": "dimension",
+                "schema": [
+                    ["entity_id", "integer", False, "PK"],
+                ],
+            },
+        }
+        generated = resolve_auto_edges(model_config, tables)
+        assert len(generated) == 1
+        assert generated[0]["from"] == "fact_events"
+        assert "dim_calendar" in generated[0]["name"]
+        assert generated[0]["auto_generated"] is True
+
+    def test_auto_edge_skip_missing_column(self):
+        """Auto-edge should be skipped if fact table lacks FK column."""
+        from de_funk.config.domain.graph import resolve_auto_edges
+
+        model_config = {
+            "auto_edges": [
+                ["location_id", "geo._dim_location", ["location_id=location_id"],
+                 "many_to_one", "geo"],
+            ]
+        }
+        tables = {
+            "fact_events": {
+                "table_type": "fact",
+                "schema": [["event_id", "integer", False, "PK"]],
+            },
+        }
+        generated = resolve_auto_edges(model_config, tables)
+        assert len(generated) == 0
+
+    def test_path_validation(self):
+        """Path steps should have via column."""
+        from de_funk.config.domain.graph import validate_paths
+
+        paths = {
+            "broken_path": {
+                "steps": [{"from": "a", "to": "b"}],  # missing via
+            }
+        }
+        warnings = validate_paths(paths, [])
+        assert any("via" in w for w in warnings)
+
+    def test_loader_graph_from_fixtures(self):
+        """Loader should preserve graph config from model.md."""
+        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain.graph import parse_graph_config
+
+        loader = DomainConfigLoaderV4(FIXTURES_DIR)
+        config = loader.load_model_config("test_model")
+        graph = parse_graph_config(config)
+        assert len(graph["edges"]) >= 2
+        assert "event_to_type" in graph["paths"]
 
 
 class TestPhase8Migration:
