@@ -9,20 +9,18 @@ domain_source: "'alpha_vantage'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
-  - [statement_entry_id, "ABS(HASH(CONCAT(legal_entity_id, '_', account_id, '_', period_end_date_id, '_', report_type)))"]
-  - [account_id, "ABS(HASH(account_code))"]
-  - [period_end_date_id, "CAST(REGEXP_REPLACE(CAST(fiscalDateEnding AS STRING), '-', '') AS INT)"]
-  - [period_start_date_id, "CAST(REGEXP_REPLACE(CAST(fiscalDateEnding AS STRING), '-', '') AS INT)"]
-  - [report_type, reportType]
+  - [period_end_date_id, "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"]
+  - [period_start_date_id, "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"]
+  - [report_type, report_type]
   - [amount, value]
-  - [reported_currency, reportedCurrency]
+  - [reported_currency, reported_currency]
 
 unpivot_aliases:
-  - [operatingCashflow, OPERATING_CASHFLOW]
-  - [capitalExpenditures, CAPITAL_EXPENDITURES]
-  - [cashflowFromInvestment, CASHFLOW_FROM_INVESTMENT]
-  - [cashflowFromFinancing, CASHFLOW_FROM_FINANCING]
-  - [dividendPayout, DIVIDEND_PAYOUT]
+  - [operating_cashflow, OPERATING_CASHFLOW]
+  - [capital_expenditures, CAPITAL_EXPENDITURES]
+  - [cashflow_from_investment, CASHFLOW_FROM_INVESTMENT]
+  - [cashflow_from_financing, CASHFLOW_FROM_FINANCING]
+  - [dividend_payout, DIVIDEND_PAYOUT]
 ---
 
 ## Cash Flow

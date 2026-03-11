@@ -8,11 +8,11 @@ domain_source: "'alpha_vantage'"
 
 aliases:
   - [legal_entity_id, "null"]
-  - [security_id, "ABS(HASH(symbol))"]
-  - [price_id, "ABS(HASH(CONCAT(symbol, '_', timestamp)))"]
-  - [ticker, symbol]
-  - [trade_date, timestamp]
-  - [date_id, "CAST(REGEXP_REPLACE(CAST(timestamp AS STRING), '-', '') AS INT)"]
+  - [security_id, "ABS(HASH(ticker))"]
+  - [price_id, "ABS(HASH(CONCAT(ticker, '_', trade_date)))"]
+  - [ticker, ticker]
+  - [trade_date, trade_date]
+  - [date_id, "CAST(REGEXP_REPLACE(CAST(trade_date AS STRING), '-', '') AS INT)"]
   - [open, open]
   - [high, high]
   - [low, low]

@@ -4,6 +4,7 @@ table: fact_traffic
 extends: _base.transportation.traffic._fact_traffic
 table_type: fact
 primary_key: [segment_id, timestamp]
+optional: true
 
 schema:
   - [segment_id, string, false, "Traffic segment ID"]

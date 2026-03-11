@@ -220,7 +220,15 @@ class ModelWriter:
             self._print(f"  Writing {name} to {path}...")
             start_time = time.time()
 
+            # Skip empty tables (e.g. generated tables with no data yet)
+            if not df.columns:
+                self._print(f"    ⊘ Skipping {name}: no columns (empty schema)")
+                continue
+
             row_count = df.count()
+            if row_count == 0:
+                self._print(f"    ⊘ Skipping {name}: 0 rows")
+                continue
             writer = df.write.mode(mode).format(format)
             if format == "delta":
                 writer = writer.option("overwriteSchema", "true")
@@ -251,8 +259,16 @@ class ModelWriter:
             self._print(f"  Writing {name} to {path}...")
             start_time = time.time()
 
+            # Skip empty tables (e.g. generated tables with no data yet)
+            if not df.columns:
+                self._print(f"    ⊘ Skipping {name}: no columns (empty schema)")
+                continue
+
             # Count rows first for progress tracking
             row_count = df.count()
+            if row_count == 0:
+                self._print(f"    ⊘ Skipping {name}: 0 rows")
+                continue
             self._print(f"    Rows: {row_count:,}")
 
             # For large datasets, provide guidance on expected time

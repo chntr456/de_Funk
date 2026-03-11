@@ -12,10 +12,12 @@ aliases:
   - [boundary_code, "CAST(beat_num AS STRING)"]
   - [boundary_name, "CONCAT('Beat ', CAST(beat_num AS STRING))"]
   - [parent_boundary_id, "ABS(HASH(CONCAT('PATROL_DISTRICT_', CAST(district AS STRING))))"]
-  - [centroid_lat, TBD]
-  - [centroid_lon, TBD]
+  - [centroid_lat, "null"]
+  - [centroid_lon, "null"]
   - [geom_wkt, the_geom]
-  - [area_sqmi, shape_area]
+  - [district, "CAST(district AS STRING)"]
+  - [beat_code, beat]
+  - [sector, sector]
   - [population, "null"]
 ---
 

@@ -8,13 +8,13 @@ domain_source: "'alpha_vantage'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
-  - [earnings_id, "ABS(HASH(CONCAT(ticker, '_', CAST(reportedDate AS STRING))))"]
-  - [report_date_id, "CAST(REGEXP_REPLACE(CAST(reportedDate AS STRING), '-', '') AS INT)"]
-  - [fiscal_date_ending, fiscalDateEnding]
-  - [reported_eps, reportedEPS]
-  - [estimated_eps, estimatedEPS]
+  - [earnings_id, "ABS(HASH(CONCAT(ticker, '_', CAST(reported_date AS STRING))))"]
+  - [report_date_id, "CAST(REGEXP_REPLACE(CAST(reported_date AS STRING), '-', '') AS INT)"]
+  - [fiscal_date_ending, fiscal_date_ending]
+  - [reported_eps, reported_eps]
+  - [estimated_eps, estimated_eps]
   - [surprise_eps, surprise]
-  - [surprise_percentage, surprisePercentage]
+  - [surprise_percentage, surprise_percentage]
 ---
 
 ## Earnings

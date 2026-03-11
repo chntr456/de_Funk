@@ -28,4 +28,4 @@ measures:
 
 ## Stock Prices Fact Table
 
-Filtered from securities_master.fact_security_prices for stocks only.
+Filtered from securities.fact_security_prices for stocks only.

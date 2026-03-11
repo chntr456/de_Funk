@@ -110,6 +110,10 @@ class GraphBuilder:
             # List format (legacy YAML): [{id: node_id, from: ..., select: ...}]
             node_items = [(node_config['id'], node_config) for node_config in nodes_config]
 
+        # Store in-progress nodes on model for Phase 2 tables that
+        # reference Phase 1 tables (e.g., distinct dims from facts)
+        self.model._building_nodes = nodes
+
         for node_id, node_config in node_items:
 
             # Try custom loading first
@@ -120,6 +124,12 @@ class GraphBuilder:
 
             # Check if loading from bronze, silver (another model), or another node
             from_spec = node_config['from']
+
+            # Skip domain-config markers that custom_node_loading didn't handle
+            if from_spec.startswith('__') and from_spec.endswith('__'):
+                logger.info(f"Skipping unhandled marker node '{node_id}' (from: {from_spec})")
+                continue
+
             if '.' in from_spec:
                 # Has a dot - could be bronze.table or model.table (silver)
                 layer, table = from_spec.split('.', 1)

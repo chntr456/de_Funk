@@ -7,8 +7,8 @@ primary_key: [ward_id]
 unique_key: [ward_number]
 
 schema:
-  - [ward_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT('CHICAGO_WARD_', ward_number)))"}]
-  - [ward_number, integer, false, "Ward number (1-50)", {derived: "CAST(ward AS INT)"}]
+  - [ward_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT('CHICAGO_WARD_', boundary_code)))"}]
+  - [ward_number, integer, false, "Ward number (1-50)", {derived: "CAST(boundary_code AS INT)"}]
   - [alderman, string, true, "Current alderman name"]
   - [centroid_lat, double, true, "Centroid latitude"]
   - [centroid_lon, double, true, "Centroid longitude"]

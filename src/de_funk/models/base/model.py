@@ -278,14 +278,51 @@ class BaseModel:
     # ============================================================
 
     def _select_columns(self, df: DataFrame, select_config: Dict[str, str]) -> DataFrame:
-        """Backend-agnostic column selection."""
+        """Backend-agnostic column selection with fallback for mismatched names.
+
+        Handles the case where v4 source aliases reference raw API column names
+        (e.g., 'Symbol') but Bronze already has normalized names (e.g., 'ticker').
+
+        Strategy:
+        1. Build a raw->clean column name map from aliases where the source
+           doesn't exist in Bronze but the output name does.
+        2. For simple column refs: fall back to the output name.
+        3. For expressions: replace raw column refs with clean names.
+        """
         if self.backend == 'spark':
             if not PYSPARK_AVAILABLE:
                 raise ImportError("PySpark not available but Spark backend detected")
-            cols = [
-                F.col(expr).alias(out_name)
-                for out_name, expr in select_config.items()
-            ]
+            existing_cols = set(df.columns)
+
+            # Build raw-to-clean column name map for expression rewriting.
+            # If alias says [ticker, Symbol] and Bronze has 'ticker' not 'Symbol',
+            # then 'Symbol' -> 'ticker' is a replacement we can apply in expressions.
+            col_remap = {}
+            for out_name, expr in select_config.items():
+                if expr not in existing_cols and out_name in existing_cols:
+                    col_remap[expr] = out_name
+
+            cols = []
+            for out_name, expr in select_config.items():
+                if expr in existing_cols:
+                    # Direct column reference matches a Bronze column
+                    cols.append(F.col(expr).alias(out_name))
+                elif out_name in existing_cols and expr not in col_remap:
+                    # Simple column ref that doesn't exist — use output name
+                    cols.append(F.col(out_name))
+                else:
+                    # Expression (computed column, literal, etc.)
+                    # Replace raw API column names with Bronze names
+                    resolved = expr
+                    for raw, clean in col_remap.items():
+                        resolved = resolved.replace(raw, clean)
+                    try:
+                        cols.append(F.expr(resolved).alias(out_name))
+                    except Exception:
+                        logger.warning(
+                            f"Select: cannot resolve '{resolved}' for '{out_name}', using NULL"
+                        )
+                        cols.append(F.lit(None).alias(out_name))
             return df.select(*cols)
         else:
             # DuckDB - use project() method

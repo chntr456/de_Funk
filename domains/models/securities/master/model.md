@@ -1,6 +1,6 @@
 ---
 type: domain-model
-model: securities_master
+model: securities
 version: 3.0
 description: "Master securities domain - unified dimension and prices for all tradable instruments"
 extends: [_base.finance.securities]
@@ -18,7 +18,7 @@ graph:
     - [prices_to_security, fact_security_prices, dim_security, [security_id=security_id], many_to_one, null]
     - [security_to_exchange, dim_security, dim_exchange, [exchange_id=exchange_id], many_to_one, null]
     - [security_to_stock, dim_security, stocks.dim_stock, [security_id=security_id], one_to_one, stocks, optional: true]
-    - [security_to_company, dim_security, company.dim_company, [security_id=company_id], many_to_one, company, optional: true]
+    - [security_to_company, dim_security, corporate_entity.dim_company, [security_id=company_id], many_to_one, corporate_entity, optional: true]
   paths:
     security_prices_by_date:
       steps:
@@ -28,7 +28,7 @@ graph:
       steps:
         - {from: fact_security_prices, to: dim_security, via: security_id}
         - {from: dim_security, to: stocks.dim_stock, via: security_id}
-        - {from: stocks.dim_stock, to: company.dim_company, via: company_id}
+        - {from: stocks.dim_stock, to: corporate_entity.dim_company, via: company_id}
 
 build:
   partitions: [date_id]

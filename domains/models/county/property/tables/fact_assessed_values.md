@@ -7,7 +7,8 @@ primary_key: [parcel_id, year, assessment_stage]
 partition_by: [year]
 
 schema:
-  - [parcel_id, string, false, "FK to dim_parcel", {fk: dim_parcel.parcel_id, derived: "LPAD(pin, 14, '0')"}]
+  # Bronze columns: pin, year, township_code, class, stage_name, av_land, av_bldg, av_tot
+  - [parcel_id, string, false, "FK to dim_parcel", {fk: dim_parcel.parcel_id, derived: "LPAD(CAST(pin AS VARCHAR), 14, '0')"}]
   - [year, integer, false, "Assessment year"]
   - [date_id, integer, false, "FK to calendar (Jan 1 of assessment year)", {fk: temporal.dim_calendar.date_id, derived: "CAST(CONCAT(year, '0101') AS INT)"}]
   - [assessment_stage, string, false, "mailed, certified, bor_certified", {derived: "stage_name"}]

@@ -20,7 +20,7 @@ schema:
   - [cash_flow_category, string, true, "Cash flow bucket", {enum: [OPERATING, INVESTING, FINANCING]}]
   - [normal_balance, string, true, "Balance direction", {enum: [DEBIT, CREDIT]}]
   - [is_contra, boolean, true, "Contra account flag", {default: false}]
-  - [is_rollup, boolean, false, "Summary/rollup account", {default: false}]
+  - [is_rollup, boolean, true, "Summary/rollup account", {default: false}]
   - [format_type, string, true, "Display format", {enum: [CURRENCY, PERCENTAGE, RATIO], default: "CURRENCY"}]
   - [display_order, integer, true, "Sort order within statement"]
 

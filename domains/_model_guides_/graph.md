@@ -37,7 +37,7 @@ auto_edges:
 | Base | auto_edges | Inherited By |
 |------|-----------|-------------|
 | `_base._base_.event` | `date_id`, `location_id` | All event-chain bases (crime, inspection, permit, service_request, transit, traffic, financial_event) |
-| `_base.finance.securities` | `date_id` | securities_master, stocks, options, etfs, futures |
+| `_base.finance.securities` | `date_id` | securities, stocks, options, etfs, futures |
 | `_base.property.parcel` | `date_id` | county_property (and any future property models) |
 
 **What still needs explicit edges:**

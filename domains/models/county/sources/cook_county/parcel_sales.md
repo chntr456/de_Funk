@@ -7,13 +7,20 @@ from: bronze.cook_county_parcel_sales
 domain_source: "'cook_county'"
 
 aliases:
+  # Available in bronze.cook_county_parcel_sales:
+  # pin, year, township_code, class, sale_date, sale_price, sale_document_num, deed_type, seller_name, buyer_name
   - [legal_entity_id, "ABS(HASH(CONCAT('COUNTY_', 'Cook County')))"]
-  - [parcel_id, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
+  - [parcel_id, "LPAD(CAST(pin AS STRING), 14, '0')"]
   - [sale_date, sale_date]
   - [sale_date_id, "CAST(DATE_FORMAT(sale_date, 'yyyyMMdd') AS INT)"]
-  - [year, "YEAR(sale_date)"]
+  - [year, year]
   - [sale_price, sale_price]
-  - [sale_type, sale_type]
+  - [sale_type, deed_type]
+  - [sale_document_num, sale_document_num]
+  - [seller_name, seller_name]
+  - [buyer_name, buyer_name]
+  - [property_class, class]
+  - [township_code, township_code]
 ---
 
 ## Parcel Sales

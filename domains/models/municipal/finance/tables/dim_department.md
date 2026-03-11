@@ -4,6 +4,8 @@ table: dim_department
 extends: _base.entity.organizational_entity._dim_org_unit
 table_type: dimension
 transform: distinct
+from: fact_ledger_entries
+union_from: [fact_ledger_entries, fact_budget_events]
 group_by: [organizational_unit]
 primary_key: [org_unit_id]
 unique_key: [org_unit_code]

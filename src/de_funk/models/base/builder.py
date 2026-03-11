@@ -433,14 +433,13 @@ class BuilderRegistry:
         Discover and register builders from model directories.
 
         Args:
-            models_path: Path to models/domains directory (new unified structure)
+            models_path: Path to models/domains directory
 
-        The new structure is nested:
-            models/domains/
+        Structure:
+            src/de_funk/models/domains/
                 foundation/temporal/builder.py
                 corporate/company/builder.py
                 securities/stocks/builder.py
-                municipal/city_finance/builder.py
         """
         import importlib
 
@@ -453,18 +452,26 @@ class BuilderRegistry:
                 continue
 
             # Build module name from path
-            # e.g., models/domains/foundation/temporal/builder.py
-            #    -> models.domains.foundation.temporal.builder
+            # e.g., src/de_funk/models/domains/foundation/temporal/builder.py
+            #    -> de_funk.models.domains.foundation.temporal.builder
             try:
-                # Get path relative to the parent of models_path
-                # models_path is typically models/domains
-                models_root = models_path.parent  # models/
-                rel_path = builder_file.relative_to(models_root)
-
-                # Convert path to module name
-                module_parts = list(rel_path.parts[:-1])  # Remove 'builder.py'
-                module_parts.append('builder')
-                module_name = 'models.' + '.'.join(module_parts)
+                # Find de_funk package root in the path
+                parts = builder_file.parts
+                try:
+                    de_funk_idx = parts.index("de_funk")
+                except ValueError:
+                    # Fallback: try relative to models_path parent
+                    models_root = models_path.parent
+                    rel_path = builder_file.relative_to(models_root)
+                    module_parts = list(rel_path.parts[:-1])
+                    module_parts.append('builder')
+                    module_name = 'de_funk.models.' + '.'.join(module_parts)
+                else:
+                    # Build from de_funk root
+                    rel_parts = parts[de_funk_idx:]  # de_funk/models/domains/.../builder.py
+                    module_parts = list(rel_parts[:-1])  # Remove builder.py
+                    module_parts.append('builder')
+                    module_name = '.'.join(module_parts)
 
                 module = importlib.import_module(module_name)
 

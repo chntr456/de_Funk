@@ -3,7 +3,7 @@ type: domain-model-source
 source: cta_bus_ridership
 extends: _base.transportation.transit
 maps_to: fact_bus_ridership
-from: bronze.chicago_cta_bus_ridership
+from: bronze.chicago_cta_bus_ridership_daily
 domain_source: "'chicago'"
 
 aliases:

@@ -4,6 +4,8 @@ table: dim_chart_of_accounts
 extends: _base.accounting.chart_of_accounts._dim_chart_of_accounts
 table_type: dimension
 transform: distinct
+from: fact_budget_events
+union_from: [fact_budget_events, fact_ledger_entries]
 group_by: [account_code]
 primary_key: [account_id]
 unique_key: [account_code]

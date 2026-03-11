@@ -9,16 +9,16 @@ domain_source: "'chicago'"
 aliases:
   # Maps to financial_statement base schema
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
-  - [statement_entry_id, "ABS(HASH(CONCAT('APPROPRIATION', '_', year, '_', COALESCE(department_code,''), '_', COALESCE(appropriation_account,''))))"]
+  - [statement_entry_id, "ABS(HASH(CONCAT('APPROPRIATION', '_', CAST(year AS INT), '_', COALESCE(department_number,''), '_', COALESCE(appropriation_account,''))))"]
   - [account_id, "ABS(HASH(COALESCE(appropriation_account, 'UNCLASSIFIED')))"]
-  - [period_end_date_id, "CAST(CONCAT(year, '1231') AS INT)"]
-  - [period_start_date_id, "CAST(CONCAT(year, '0101') AS INT)"]
+  - [period_end_date_id, "CAST(CONCAT(CAST(CAST(year AS INT) AS STRING), '1231') AS INT)"]
+  - [period_start_date_id, "CAST(CONCAT(CAST(CAST(year AS INT) AS STRING), '0101') AS INT)"]
   - [report_type, "'budget'"]
   - [amount, amount]
   - [reported_currency, "'USD'"]
   # Budget-specific (model-level additional_schema)
-  - [fiscal_year, year]
-  - [department_code, department_code]
+  - [fiscal_year, "CAST(year AS INT)"]
+  - [department_code, department_number]
   - [department_description, department_description]
   - [fund_code, fund_code]
   - [fund_description, fund_description]

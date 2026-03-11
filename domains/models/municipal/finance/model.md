@@ -28,6 +28,7 @@ graph:
     - [entry_to_vendor, fact_ledger_entries, dim_vendor, [vendor_id=vendor_id], many_to_one, null]
     - [entry_to_department, fact_ledger_entries, dim_department, [department_id=org_unit_id], many_to_one, null]
     - [entry_to_contract, fact_ledger_entries, dim_contract, [contract_id=contract_id], many_to_one, null, optional: true]
+    - [entry_to_account, fact_ledger_entries, dim_chart_of_accounts, [account_id=account_id], many_to_one, null]
 
     # Budget → dimensions (budget extends financial_statement: account_id, period dates)
     - [budget_to_calendar, fact_budget_events, temporal.dim_calendar, [period_end_date_id=date_id], many_to_one, temporal]

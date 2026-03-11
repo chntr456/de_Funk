@@ -64,7 +64,7 @@ def get_spark_session(app_name: str = "ModelBuilder"):
     Returns:
         SparkSession
     """
-from de_funk.orchestration.common.spark_session import get_spark
+    from de_funk.orchestration.common.spark_session import get_spark
 
     return get_spark(
         app_name=app_name,
@@ -91,7 +91,7 @@ def load_storage_config(repo_root: Path, storage_root: Optional[Path] = None) ->
     Raises:
         ValueError: If storage_path not configured in run_config.json
     """
-    from config import ConfigLoader
+    from de_funk.config import ConfigLoader
 
     # Load only storage config (silver build doesn't need API/provider configs)
     # This is faster and cleaner than loading the full config
@@ -110,27 +110,21 @@ def load_storage_config(repo_root: Path, storage_root: Optional[Path] = None) ->
 
 
 def discover_builders(repo_root: Path) -> None:
-    """Discover and register all model builders from the unified domains directory."""
-    # New unified structure: models/domains/{category}/{model}/builder.py
-    domains_path = repo_root / "models" / "domains"
-    if domains_path.exists():
-        BuilderRegistry.discover(domains_path)
-        logger.debug(f"Discovered builders from models/domains")
+    """Discover and register all model builders from domain configs."""
+    from de_funk.models.base.domain_builder import discover_domain_builders
 
-    # V4 domain configs: domains/{_base,models}/*.md
     try:
-        from de_funk.models.base.v4_builder import discover_v4_builders
-        v4_created = discover_v4_builders(repo_root)
-        if v4_created:
-            logger.debug(f"Discovered {len(v4_created)} v4 builders from domains/")
+        domain_created = discover_domain_builders(repo_root)
+        if domain_created:
+            logger.debug(f"Discovered {len(domain_created)} domain builders from domains/")
     except Exception as e:
-        logger.debug(f"V4 builder discovery skipped: {e}")
+        logger.warning(f"Domain builder discovery failed: {e}")
 
     total = len(BuilderRegistry.all())
     if total > 0:
         logger.info(f"Discovered {total} builders: {', '.join(BuilderRegistry.all().keys())}")
     else:
-        logger.warning("No builders discovered. Check models/domains/*/builder.py")
+        logger.warning("No builders discovered. Check domains/models/*/model.md")
 
 
 def build_models(

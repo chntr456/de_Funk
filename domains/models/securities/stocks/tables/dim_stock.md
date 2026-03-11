@@ -8,7 +8,7 @@ unique_key: [ticker]
 
 schema:
   - [stock_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT('STOCK_', ticker)))"}]
-  - [security_id, integer, false, "FK to securities.dim_security", {fk: securities_master.dim_security.security_id, derived: "ABS(HASH(ticker))"}]
+  - [security_id, integer, false, "FK to securities.dim_security", {fk: securities.dim_security.security_id, derived: "ABS(HASH(ticker))"}]
   - [company_id, integer, true, "FK to dim_company", {fk: company.dim_company.company_id, derived: "ABS(HASH(CONCAT('COMPANY_', ticker)))"}]
   - [ticker, string, false, "Trading symbol"]
   - [security_name, string, true, "Security name"]

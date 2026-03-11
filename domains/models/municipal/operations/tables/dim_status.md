@@ -4,6 +4,7 @@ table: dim_status
 extends: _base.operations.service_request._dim_status
 table_type: dimension
 transform: distinct
+from: bronze.chicago_service_requests_311
 group_by: [status]
 primary_key: [status_id]
 unique_key: [status_name]

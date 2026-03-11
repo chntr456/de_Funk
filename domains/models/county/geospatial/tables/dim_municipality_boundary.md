@@ -4,6 +4,7 @@ table: dim_municipality_boundary
 extends: _base.geography.geo_spatial._dim_boundary
 table_type: dimension
 primary_key: [municipality_id]
+optional: true
 
 schema:
   - [municipality_id, string, false, "PK"]

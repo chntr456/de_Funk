@@ -143,48 +143,53 @@ tables:
 
   _fact_technicals:
     type: fact
-    generated: true
+    transform: window
+    from: _fact_prices   # concrete models override with their specific prices table
     primary_key: [technical_id]
     partition_by: [date_id]
 
     # [column, type, nullable, description, {options}]
+    # Column ORDER matters: dependent indicators must follow their prerequisites.
+    #   sma_20 → bollinger_*
+    #   ema_12, ema_26 → macd → macd_signal → macd_histogram
+    #   volume_sma_20 → volume_ratio
     schema:
       - [technical_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(security_id, '_', date_id, '_TECH')))"}]
       - [security_id, integer, false, "FK to dim_security", {fk: _dim_security.security_id}]
       - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
 
-      # Simple Moving Averages
-      - [sma_20, double, true, "20-day SMA", {derived: "AVG(adjusted_close) OVER (PARTITION BY security_id ORDER BY date_id ROWS 19 PRECEDING)"}]
-      - [sma_50, double, true, "50-day SMA", {derived: "AVG(adjusted_close) OVER (PARTITION BY security_id ORDER BY date_id ROWS 49 PRECEDING)"}]
-      - [sma_200, double, true, "200-day SMA", {derived: "AVG(adjusted_close) OVER (PARTITION BY security_id ORDER BY date_id ROWS 199 PRECEDING)"}]
+      # Simple Moving Averages — sma must precede bollinger
+      - [sma_20,  double, true, "20-day Simple Moving Average",  {indicator: sma, period: 20,  source: adjusted_close}]
+      - [sma_50,  double, true, "50-day Simple Moving Average",  {indicator: sma, period: 50,  source: adjusted_close}]
+      - [sma_200, double, true, "200-day Simple Moving Average", {indicator: sma, period: 200, source: adjusted_close}]
 
-      # Exponential Moving Averages
-      - [ema_12, double, true, "12-day EMA", {derived: "EMA(adjusted_close, 12)"}]
-      - [ema_26, double, true, "26-day EMA", {derived: "EMA(adjusted_close, 26)"}]
+      # Exponential Moving Averages — ema must precede macd_line
+      - [ema_12, double, true, "12-day Exponential Moving Average", {indicator: ema, period: 12, source: adjusted_close}]
+      - [ema_26, double, true, "26-day Exponential Moving Average", {indicator: ema, period: 26, source: adjusted_close}]
 
-      # MACD
-      - [macd, double, true, "MACD line (EMA12 - EMA26)", {derived: "ema_12 - ema_26"}]
-      - [macd_signal, double, true, "MACD signal line (9-day EMA of MACD)", {derived: "EMA(macd, 9)"}]
-      - [macd_histogram, double, true, "MACD histogram (MACD - signal)", {derived: "macd - macd_signal"}]
+      # MACD — macd_line → macd_signal → macd_histogram
+      - [macd,           double, true, "MACD Line (EMA12 − EMA26)",          {indicator: macd_line,      fast: 12, slow: 26}]
+      - [macd_signal,    double, true, "MACD Signal Line (9-day EMA of MACD)", {indicator: macd_signal,    signal: 9}]
+      - [macd_histogram, double, true, "MACD Histogram (MACD − signal)",      {indicator: macd_histogram}]
 
       # RSI
-      - [rsi_14, double, true, "14-day RSI", {derived: "100 - (100 / (1 + AVG(gain_14) / AVG(loss_14)))"}]
+      - [rsi_14, double, true, "14-day Relative Strength Index", {indicator: rsi, period: 14, source: adjusted_close}]
 
-      # Average True Range
-      - [atr_14, double, true, "14-day Average True Range", {derived: "AVG(TRUE_RANGE(high, low, prev_close)) OVER (ROWS 13 PRECEDING)"}]
+      # Average True Range — requires high, low, close columns
+      - [atr_14, double, true, "14-day Average True Range", {indicator: atr, period: 14}]
 
-      # Bollinger Bands
-      - [bollinger_upper, double, true, "Upper Bollinger Band (SMA20 + 2*std)", {derived: "sma_20 + 2 * STDDEV(adjusted_close) OVER (ROWS 19 PRECEDING)"}]
-      - [bollinger_middle, double, true, "Middle Bollinger Band (SMA20)", {derived: "sma_20"}]
-      - [bollinger_lower, double, true, "Lower Bollinger Band (SMA20 - 2*std)", {derived: "sma_20 - 2 * STDDEV(adjusted_close) OVER (ROWS 19 PRECEDING)"}]
+      # Bollinger Bands — requires sma_20 computed above
+      - [bollinger_upper,  double, true, "Upper Bollinger Band (SMA20 + 2σ)", {indicator: bollinger, band: upper,  period: 20, std_dev: 2}]
+      - [bollinger_middle, double, true, "Middle Bollinger Band (SMA20)",      {indicator: bollinger, band: middle, period: 20}]
+      - [bollinger_lower,  double, true, "Lower Bollinger Band (SMA20 − 2σ)", {indicator: bollinger, band: lower,  period: 20, std_dev: 2}]
 
       # Volatility
-      - [volatility_20d, double, true, "20-day annualized volatility", {derived: "STDDEV(daily_return) OVER (ROWS 19 PRECEDING) * SQRT(252)"}]
-      - [volatility_60d, double, true, "60-day annualized volatility", {derived: "STDDEV(daily_return) OVER (ROWS 59 PRECEDING) * SQRT(252)"}]
+      - [volatility_20d, double, true, "20-day Annualized Volatility", {indicator: volatility, period: 20, source: adjusted_close}]
+      - [volatility_60d, double, true, "60-day Annualized Volatility", {indicator: volatility, period: 60, source: adjusted_close}]
 
-      # Volume indicators
-      - [volume_sma_20, double, true, "20-day volume SMA", {derived: "AVG(volume) OVER (ROWS 19 PRECEDING)"}]
-      - [volume_ratio, double, true, "Volume vs 20-day average", {derived: "volume / NULLIF(volume_sma_20, 0)"}]
+      # Volume — volume_sma_20 must precede volume_ratio
+      - [volume_sma_20, double, true, "20-day Volume Simple Moving Average", {indicator: sma, period: 20, source: volume}]
+      - [volume_ratio,  double, true, "Volume vs 20-day Average",            {indicator: volume_ratio, sma_col: volume_sma_20}]
 
     measures:
       - [avg_rsi, avg, rsi_14, "Average RSI", {format: "#,##0.0"}]
@@ -194,23 +199,12 @@ tables:
 subsets:
   discriminator: _dim_security.asset_type
   description: "Securities are subset by asset type into separate domain-models"
+  # [label, model, filter, description]
   values:
-    Stock:
-      model: stocks
-      description: "Common and preferred stock equities"
-      filter: "asset_type = 'Stock'"
-    ETF:
-      model: etfs
-      description: "Exchange-traded funds"
-      filter: "asset_type = 'ETF'"
-    Option:
-      model: options
-      description: "Options contracts"
-      filter: "asset_type = 'Option'"
-    Future:
-      model: futures
-      description: "Futures contracts"
-      filter: "asset_type = 'Future'"
+    - [Stock, stocks, "asset_type = 'stocks'", "Common and preferred stock equities"]
+    - [ETF, etfs, "asset_type = 'etfs'", "Exchange-traded funds"]
+    - [Option, options, "asset_type = 'options'", "Options contracts"]
+    - [Future, futures, "asset_type = 'futures'", "Futures contracts"]
 
 auto_edges:
   - [date_id, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]

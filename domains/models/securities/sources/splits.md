@@ -7,14 +7,14 @@ from: bronze.alpha_vantage_splits
 domain_source: "'alpha_vantage'"
 
 aliases:
-  - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', symbol)))"]
-  - [split_id, "ABS(HASH(CONCAT(symbol, '_', CAST(effective_date AS STRING))))"]
-  - [security_id, "ABS(HASH(symbol))"]
-  - [ticker, symbol]
+  - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
+  - [split_id, "ABS(HASH(CONCAT(ticker, '_', CAST(effective_date AS STRING))))"]
+  - [security_id, "ABS(HASH(ticker))"]
+  - [ticker, ticker]
   - [action_type, "'SPLIT'"]
   - [effective_date, effective_date]
   - [effective_date_id, "CAST(REGEXP_REPLACE(CAST(effective_date AS STRING), '-', '') AS INT)"]
-  - [split_factor, split_coefficient]
+  - [split_factor, split_factor]
 ---
 
 ## Splits

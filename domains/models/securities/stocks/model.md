@@ -4,7 +4,7 @@ model: stocks
 version: 3.1
 description: "Stock equities with company linkage, technicals, dividends, and splits"
 extends: [_base.finance.securities]
-depends_on: [temporal, securities_master, company]
+depends_on: [temporal, securities, corporate_entity]
 
 sources_from: sources/
 storage:
@@ -15,19 +15,19 @@ storage:
 graph:
   # auto_edges: date_id→calendar (inherited from _base.finance.securities)
   edges:
-    - [stock_to_security, dim_stock, securities_master.dim_security, [security_id=security_id], many_to_one, securities_master]
-    - [stock_to_company, dim_stock, company.dim_company, [company_id=company_id], many_to_one, company, optional: true]
+    - [stock_to_security, dim_stock, securities.dim_security, [security_id=security_id], many_to_one, securities]
+    - [stock_to_company, dim_stock, corporate_entity.dim_company, [company_id=company_id], many_to_one, corporate_entity, optional: true]
     - [prices_to_stock, fact_stock_prices, dim_stock, [security_id=security_id], many_to_one, null]
     - [dividends_to_stock, fact_dividends, dim_stock, [security_id=security_id], many_to_one, null]
     - [dividends_to_calendar, fact_dividends, temporal.dim_calendar, [ex_dividend_date_id=date_id], many_to_one, temporal]
     - [splits_to_stock, fact_splits, dim_stock, [security_id=security_id], many_to_one, null]
     - [splits_to_calendar, fact_splits, temporal.dim_calendar, [effective_date_id=date_id], many_to_one, temporal]
     - [technicals_to_stock, fact_stock_technicals, dim_stock, [security_id=security_id], many_to_one, null]
-    - [stock_to_exchange, dim_stock, securities_master.dim_exchange, [exchange_id=exchange_id], many_to_one, securities_master]
+    - [stock_to_exchange, dim_stock, securities.dim_exchange, [exchange_id=exchange_id], many_to_one, securities]
   paths:
     company_to_dividends:
       steps:
-        - {from: company.dim_company, to: dim_stock, via: company_id}
+        - {from: corporate_entity.dim_company, to: dim_stock, via: company_id}
         - {from: dim_stock, to: fact_dividends, via: security_id}
     prices_to_sector:
       steps:
@@ -39,7 +39,8 @@ build:
   optimize: true
   phases:
     1: { tables: [dim_stock] }
-    2: { tables: [fact_stock_prices, fact_stock_technicals, fact_dividends, fact_splits] }
+    2: { tables: [fact_stock_prices, fact_dividends, fact_splits] }
+    3: { tables: [fact_stock_technicals] }  # depends on fact_stock_prices
 
 measures:
   simple:
@@ -62,5 +63,5 @@ Stock equities with company linkage, technical indicators, dividends, and splits
 ### Build Order
 
 ```
-temporal -> securities_master -> company -> stocks
+temporal -> securities -> corporate_entity -> stocks
 ```

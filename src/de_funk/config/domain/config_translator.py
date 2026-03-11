@@ -1,15 +1,15 @@
 """
-V4-to-V3 config translator for domain model builds.
+Domain config translator for model builds.
 
-Converts v4 model config (tables + sources + build phases) into
-v3-compatible config with synthesized `graph.nodes` that GraphBuilder
+Converts domain model config (tables + sources + build phases) into
+build-compatible config with synthesized `graph.nodes` that GraphBuilder
 can process directly.
 
 The translator produces one graph.node entry per table by combining:
-- Source config → node `from` (Bronze path) + `select` (alias dict)
-- Table config → node `derive` (from schema {derived:}), `filters`, `unique_key`
-- Enrich specs → node `join` entries (dimension lookups)
-- Seed/static → flagged for custom_node_loading in V4Model
+- Source config -> node `from` (Bronze path) + `select` (alias dict)
+- Table config -> node `derive` (from schema {derived:}), `filters`, `unique_key`
+- Enrich specs -> node `join` entries (dimension lookups)
+- Seed/static -> flagged for custom_node_loading in DomainModel
 """
 
 import logging
@@ -29,20 +29,20 @@ from de_funk.config.domain.build import (
 logger = logging.getLogger(__name__)
 
 
-def translate_v4_config(v4_config: Dict[str, Any]) -> Dict[str, Any]:
+def translate_domain_config(domain_config: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Translate a v4 model config into v3-compatible format with graph.nodes.
+    Translate a domain model config into build-compatible format with graph.nodes.
 
-    The output preserves all v4-specific keys (tables, sources, build, views)
+    The output preserves all domain-specific keys (tables, sources, build, views)
     and ADDS a synthesized `graph.nodes` dict so GraphBuilder can process it.
 
     Args:
-        v4_config: Config dict from DomainConfigLoaderV4.load_model_config()
+        domain_config: Config dict from DomainConfigLoaderV4.load_model_config()
 
     Returns:
         Translated config dict with graph.nodes added
     """
-    config = dict(v4_config)
+    config = dict(domain_config)
     tables = config.get("tables", {})
     sources = config.get("sources", {})
 
@@ -74,17 +74,24 @@ def translate_v4_config(v4_config: Dict[str, Any]) -> Dict[str, Any]:
             nodes[table_name] = node
 
     # Inject synthesized nodes into config
+    # Merge: synthesized nodes fill gaps, existing nodes take precedence
     graph = config.get("graph", {})
     if not isinstance(graph, dict):
         graph = {}
-    graph["nodes"] = nodes
+    existing_nodes = graph.get("nodes", {})
+    merged_nodes = {**nodes, **existing_nodes}
+    graph["nodes"] = merged_nodes
     config["graph"] = graph
 
-    # Store build metadata for V4Model
-    config["_v4_build"] = build_config
-    config["_v4_sources_by_target"] = by_target
+    # Store build metadata for DomainModel
+    config["_domain_build"] = build_config
+    config["_domain_sources_by_target"] = by_target
 
     return config
+
+
+# Keep backward-compatible alias
+translate_v4_config = translate_domain_config
 
 
 def _get_phase_ordered_tables(
@@ -124,15 +131,15 @@ def _synthesize_node(
     matching_sources: List[Dict[str, Any]],
 ) -> Optional[Dict[str, Any]]:
     """
-    Synthesize a single v3 graph.node from v4 table + source configs.
+    Synthesize a single graph.node from table + source configs.
 
     Args:
         table_name: Name of the table (e.g., "dim_parcel")
-        table_config: Table config from v4
+        table_config: Table config from domain model
         matching_sources: Source configs that map_to this table
 
     Returns:
-        V3-compatible node dict, or None if cannot be built
+        Build-compatible node dict, or None if cannot be built
     """
     flags = get_table_build_flags(table_config)
 
@@ -142,9 +149,9 @@ def _synthesize_node(
         return {
             "from": "__seed__",
             "type": _table_type(table_name),
-            "_v4_seed": True,
-            "_v4_seed_data": seed_data,
-            "_v4_schema": table_config.get("schema", []),
+            "_seed": True,
+            "_seed_data": seed_data,
+            "_schema": table_config.get("schema", []),
             "primary_key": flags["primary_key"],
             "unique_key": flags["unique_key"],
         }
@@ -154,16 +161,50 @@ def _synthesize_node(
         return {
             "from": "__generated__",
             "type": _table_type(table_name),
-            "_v4_generated": True,
-            "_v4_table_config": table_config,
+            "_generated": True,
+            "_table_config": table_config,
             "primary_key": flags["primary_key"],
             "unique_key": flags["unique_key"],
         }
 
+    # Window-transform tables — computed from a sibling Silver node via indicator configs
+    if flags.get("transform") == "window":
+        return {
+            "from": "__window__",
+            "type": _table_type(table_name),
+            "_transform": "window",
+            "_window_source": table_config.get("from", ""),
+            "_schema": table_config.get("schema", []),
+            "primary_key": flags["primary_key"],
+            "unique_key": flags["unique_key"],
+        }
+
+    # Distinct/aggregate-transform tables — GROUP BY group_by cols, then derive
+    if flags.get("transform") in ("distinct", "aggregate"):
+        direct_from = table_config.get("from")
+        if direct_from:
+            # Normalize only if it's a Bronze reference (has dot notation)
+            normalized_from = (
+                _normalize_from(direct_from) if "." in direct_from else direct_from
+            )
+            union_from = table_config.get("union_from", [])
+            return {
+                "from": "__distinct__",
+                "type": _table_type(table_name),
+                "_distinct": True,
+                "_aggregate": flags["transform"] == "aggregate",
+                "_distinct_from": normalized_from,
+                "_distinct_union_from": union_from,
+                "_distinct_group_by": flags.get("group_by", []),
+                "_schema": table_config.get("schema", []),
+                "primary_key": flags["primary_key"],
+                "unique_key": flags["unique_key"],
+            }
+
     # Standard table — needs at least one source
     if not matching_sources:
         # Table has no source — might inherit from parent or be enrichment-only
-        # Check if table has a `from` key directly (some v4 tables do)
+        # Check if table has a `from` key directly (some tables do)
         direct_from = table_config.get("from")
         if direct_from:
             node = _build_node_from_table(table_name, table_config, direct_from)
@@ -174,12 +215,12 @@ def _synthesize_node(
         )
         return None
 
-    # Single source → straightforward node
+    # Single source -> straightforward node
     if len(matching_sources) == 1:
         source = matching_sources[0]
         return _build_node_from_source(table_name, table_config, source, flags)
 
-    # Multiple sources → UNION node (handled by V4Model.custom_node_loading)
+    # Multiple sources -> UNION node (handled by DomainModel.custom_node_loading)
     return _build_union_node(table_name, table_config, matching_sources, flags)
 
 
@@ -189,11 +230,11 @@ def _build_node_from_source(
     source: Dict[str, Any],
     flags: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """Build a v3 node from a single source mapping."""
-    # Convert source `from` to v3 bronze path format
+    """Build a node from a single source mapping."""
+    # Convert source `from` to bronze path format
     from_spec = _normalize_from(source.get("from", ""))
 
-    # Convert aliases to v3 select dict: {canonical_name: expression}
+    # Convert aliases to select dict: {canonical_name: expression}
     select = _aliases_to_select_dict(source.get("aliases", []))
 
     # Add discriminator columns to select
@@ -212,7 +253,20 @@ def _build_node_from_source(
     if isinstance(derivations, dict):
         derive.update(derivations)
 
-    # Build enrich → join specs
+    # Remove derive entries for columns already computed by source select.
+    # Source aliases handle the Bronze->canonical mapping during the select phase;
+    # keeping a derive for the same column would fail because derives run AFTER
+    # select and reference pre-select (raw Bronze) column names that no longer exist.
+    if select and derive:
+        overlap = set(derive.keys()) & set(select.keys())
+        if overlap:
+            logger.debug(
+                f"Table '{table_name}': removing {len(overlap)} derive entries "
+                f"already covered by source select: {sorted(overlap)}"
+            )
+            derive = {k: v for k, v in derive.items() if k not in select}
+
+    # Build enrich -> join specs
     join_specs = _enrich_to_join_specs(table_config)
 
     node = {
@@ -222,8 +276,17 @@ def _build_node_from_source(
 
     if select:
         node["select"] = select
-    if flags.get("filters"):
-        node["filters"] = flags["filters"]
+
+    # Merge filters from both table config and source config
+    filters = list(flags.get("filters") or [])
+    source_filter = source.get("filter")
+    if source_filter:
+        if isinstance(source_filter, list):
+            filters.extend(source_filter)
+        else:
+            filters.append(source_filter)
+    if filters:
+        node["filters"] = filters
     if derive:
         node["derive"] = derive
     if flags.get("unique_key"):
@@ -233,11 +296,15 @@ def _build_node_from_source(
     if join_specs:
         node["join"] = join_specs
 
-    # Store v4-specific metadata for advanced processing
+    # Pass optional flag for nodes with potentially missing Bronze data
+    if table_config.get("optional"):
+        node["optional"] = True
+
+    # Store transform metadata for advanced processing
     if source.get("transform"):
-        node["_v4_transform"] = source["transform"]
+        node["_transform"] = source["transform"]
         if source.get("_unpivot_plan"):
-            node["_v4_unpivot_plan"] = source["_unpivot_plan"]
+            node["_unpivot_plan"] = source["_unpivot_plan"]
 
     return node
 
@@ -247,7 +314,7 @@ def _build_node_from_table(
     table_config: Dict[str, Any],
     from_spec: str,
 ) -> Dict[str, Any]:
-    """Build a v3 node from a table config that has a direct `from` key."""
+    """Build a node from a table config that has a direct `from` key."""
     from_normalized = _normalize_from(from_spec)
     flags = get_table_build_flags(table_config)
     derive = _extract_derive_from_schema(table_config.get("schema", []))
@@ -266,6 +333,9 @@ def _build_node_from_table(
     elif flags.get("primary_key"):
         node["unique_key"] = flags["primary_key"]
 
+    if table_config.get("optional"):
+        node["optional"] = True
+
     return node
 
 
@@ -281,9 +351,9 @@ def _build_union_node(
     return {
         "from": "__union__",
         "type": _table_type(table_name),
-        "_v4_union": True,
-        "_v4_union_sources": sources,
-        "_v4_schema": table_config.get("schema", []),
+        "_union": True,
+        "_union_sources": sources,
+        "_schema": table_config.get("schema", []),
         "derive": derive if derive else {},
         "unique_key": flags.get("unique_key") or flags.get("primary_key", []),
     }
@@ -291,11 +361,17 @@ def _build_union_node(
 
 def _normalize_from(from_spec: str) -> str:
     """
-    Normalize a v4 `from` spec to v3 format.
+    Normalize a `from` spec to build format.
 
-    v4: "bronze.cook_county_parcel_sales"  → "bronze.cook_county_parcel_sales"
-    v4: "bronze.alpha_vantage.listing_status" → "bronze.alpha_vantage.listing_status"
-    v4: "silver.temporal.dim_calendar" → "temporal.dim_calendar"
+    Sources use underscores: "bronze.alpha_vantage_company_overview"
+    StorageRouter expects dots:  "bronze.alpha_vantage.company_overview"
+
+    Conversion: split known provider prefix from table name with a dot.
+
+    "bronze.alpha_vantage_company_overview" -> "bronze.alpha_vantage.company_overview"
+    "bronze.cook_county_parcel_sales"       -> "bronze.cook_county.parcel_sales"
+    "bronze.chicago_crimes"                 -> "bronze.chicago.crimes"
+    "silver.temporal.dim_calendar"          -> "temporal.dim_calendar"
     """
     if not from_spec:
         return from_spec
@@ -303,15 +379,31 @@ def _normalize_from(from_spec: str) -> str:
     parts = from_spec.split(".", 1)
     if parts[0] == "silver" and len(parts) > 1:
         return parts[1]  # Strip "silver." prefix for GraphBuilder
+
+    if parts[0] == "bronze" and len(parts) > 1:
+        table_part = parts[1]
+        # Already has dots (e.g., "alpha_vantage.listing_status") — pass through
+        if "." in table_part:
+            return from_spec
+        # Convert provider_table underscore to dot for StorageRouter
+        # Known providers ordered longest-first to avoid partial matches
+        for provider in ["alpha_vantage", "cook_county", "chicago"]:
+            prefix = provider + "_"
+            if table_part.startswith(prefix):
+                table_name = table_part[len(prefix):]
+                return f"bronze.{provider}.{table_name}"
+        # Unknown provider — return as-is (StorageRouter may have a mapping)
+        logger.debug(f"Unknown bronze provider in from spec: {from_spec}")
+
     return from_spec
 
 
 def _aliases_to_select_dict(aliases: List[List]) -> Dict[str, str]:
     """
-    Convert v4 alias pairs to v3 select dict.
+    Convert alias pairs to select dict.
 
-    v4 aliases: [["parcel_id", "LPAD(pin, 14, '0')"], ["sale_date", "sale_date"]]
-    v3 select:  {"parcel_id": "LPAD(pin, 14, '0')", "sale_date": "sale_date"}
+    aliases: [["parcel_id", "LPAD(pin, 14, '0')"], ["sale_date", "sale_date"]]
+    select:  {"parcel_id": "LPAD(pin, 14, '0')", "sale_date": "sale_date"}
     """
     select = {}
     for alias in aliases:
@@ -324,13 +416,13 @@ def _aliases_to_select_dict(aliases: List[List]) -> Dict[str, str]:
 
 def _extract_derive_from_schema(schema: List) -> Dict[str, str]:
     """
-    Extract {derived: "expr"} from v4 schema column definitions.
+    Extract {derived: "expr"} from schema column definitions.
 
     Schema format: [name, type, nullable, description, {options}]
     Options may contain: {derived: "SQL_EXPRESSION"}
 
     Returns:
-        Dict of column_name → derive expression
+        Dict of column_name -> derive expression
     """
     derive = {}
     for col in schema:
@@ -344,10 +436,10 @@ def _extract_derive_from_schema(schema: List) -> Dict[str, str]:
 
 def _enrich_to_join_specs(table_config: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Convert v4 enrich specs to v3 join format.
+    Convert enrich specs to join format.
 
-    v4 enrich: [{join: dim_x, on: [col1=col2], fields: [field1]}]
-    v3 join:   [{table: dim_x, on: ["col1=col2"], type: "left"}]
+    enrich: [{join: dim_x, on: [col1=col2], fields: [field1]}]
+    join:   [{table: dim_x, on: ["col1=col2"], type: "left"}]
     """
     enrich_specs = process_enrich_specs(table_config)
     join_specs = []
@@ -361,7 +453,7 @@ def _enrich_to_join_specs(table_config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "table": spec["join"],
                 "on": on_strings,
                 "type": "left",
-                "_v4_fields": spec.get("fields", []),
+                "_fields": spec.get("fields", []),
             })
         elif spec["type"] == "join":
             # Standard enrich from fact table
@@ -372,7 +464,7 @@ def _enrich_to_join_specs(table_config: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "on": on_strings,
                 "type": "left",
                 "filter": spec.get("filter"),
-                "_v4_columns": spec.get("columns", []),
+                "_columns": spec.get("columns", []),
             })
 
     return join_specs

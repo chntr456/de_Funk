@@ -3,19 +3,21 @@ type: domain-model-source
 source: neighborhoods
 extends: _base.geography.geo_spatial
 maps_to: dim_neighborhood
-from: bronze.cook_county_neighborhoods
+from: bronze.cook_county_neighborhood_boundaries
 domain_source: "'cook_county'"
 
 aliases:
-  - [boundary_id, "ABS(HASH(CONCAT('NEIGHBORHOOD', '_', nbhd_code)))"]
+  - [boundary_id, "ABS(HASH(CONCAT('NEIGHBORHOOD', '_', CAST(neighborhood_id AS STRING))))"]
   - [boundary_type, "'NEIGHBORHOOD'"]
-  - [boundary_code, nbhd_code]
-  - [boundary_name, nbhd_name]
-  - [parent_boundary_id, TBD]
-  - [centroid_lat, TBD]
-  - [centroid_lon, TBD]
+  - [boundary_code, "CAST(neighborhood_id AS STRING)"]
+  - [boundary_name, "CONCAT('Neighborhood ', CAST(neighborhood_id AS STRING))"]
+  - [parent_boundary_id, "null"]
+  - [nbhd_code, "CAST(neighborhood_id AS STRING)"]
+  - [township_code, township_code]
+  - [centroid_lat, "null"]
+  - [centroid_lon, "null"]
   - [geom_wkt, the_geom]
-  - [area_sqmi, TBD]
+  - [area_sqmi, "null"]
   - [population, "null"]
 ---
 

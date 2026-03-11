@@ -12,27 +12,34 @@ enrich:
 
 # Source-specific column derivations — overrides derived: on inherited columns
 # Full schema (types, nullable, descriptions, subset metadata) inherited from base
+# Bronze columns available: pin, year, township_code, class, municipality, school_district, park_district, latitude, longitude
 derivations:
-  # Common fields
-  parcel_id: "LPAD(pin, 14, '0')"
-  parcel_code: "pin"
+  # Common fields — direct mappings to Bronze columns
+  parcel_id: "LPAD(CAST(pin AS VARCHAR), 14, '0')"
+  parcel_code: "CAST(pin AS VARCHAR)"
   property_class: "class"
-  neighborhood_code: "nbhd"
-  # Residential (from _base.property.residential via auto-absorption)
-  bedrooms: "bdrm"
-  bathrooms: "COALESCE(fbath, 0) + COALESCE(hbath, 0) * 0.5"
-  basement: "bsmt_desc"
-  exterior_wall: "ext_wall"
-  # Commercial (from _base.property.commercial via auto-absorption)
-  commercial_sqft: "comm_sqft"
-  commercial_units: "comm_units"
-  residential_units: "res_units"
-  space_type: "use_type"
-  floors: "num_floors"
-  # Industrial (from _base.property.industrial via auto-absorption)
-  industrial_sqft: "ind_sqft"
-  ceiling_height: "ceiling_ht"
-  zoning_class: "zoning"
+  township_code: "township_code"
+  municipality: "municipality"
+  latitude: "latitude"
+  longitude: "longitude"
+  year: "year"
+  # Not available in this Bronze source — NULL placeholders
+  neighborhood_code: "CAST(NULL AS VARCHAR)"
+  # Residential (from _base.property.residential via auto-absorption) — not in Bronze
+  bedrooms: "CAST(NULL AS INT)"
+  bathrooms: "CAST(NULL AS DOUBLE)"
+  basement: "CAST(NULL AS VARCHAR)"
+  exterior_wall: "CAST(NULL AS VARCHAR)"
+  # Commercial (from _base.property.commercial via auto-absorption) — not in Bronze
+  commercial_sqft: "CAST(NULL AS DOUBLE)"
+  commercial_units: "CAST(NULL AS INT)"
+  residential_units: "CAST(NULL AS INT)"
+  space_type: "CAST(NULL AS VARCHAR)"
+  floors: "CAST(NULL AS INT)"
+  # Industrial (from _base.property.industrial via auto-absorption) — not in Bronze
+  industrial_sqft: "CAST(NULL AS DOUBLE)"
+  ceiling_height: "CAST(NULL AS DOUBLE)"
+  zoning_class: "CAST(NULL AS VARCHAR)"
 
 measures:
   - [residential_count, count_distinct, parcel_id, "Residential parcels", {format: "#,##0", filters: ["property_category = 'RESIDENTIAL'"]}]

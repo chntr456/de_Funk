@@ -132,7 +132,14 @@ def extract_seed_data(
     if not is_static:
         return []
 
+    # Data can be under "data:" key or directly under "seed:" key
     data = table_config.get("data", [])
+    if not isinstance(data, list) or not data:
+        # Check if seed key itself contains the data rows
+        seed_val = table_config.get("seed", [])
+        if isinstance(seed_val, list) and seed_val:
+            data = seed_val
+
     if not isinstance(data, list):
         return []
 

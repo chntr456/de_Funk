@@ -1,11 +1,11 @@
 """
-End-to-end pipeline test for v4 domain models.
+End-to-end pipeline test for domain models.
 
-Validates the full path from v4 config → translated graph.nodes →
+Validates the full path from domain config -> translated graph.nodes ->
 table building using DuckDB in-memory mode with synthetic Bronze data.
 
 This test verifies:
-1. V4 configs translate to valid graph.nodes
+1. Domain configs translate to valid graph.nodes
 2. Synthetic Bronze data seeds correctly
 3. Tables can be built (SELECT with aliases, derive, joins)
 4. Cross-model references resolve
@@ -42,21 +42,21 @@ def domains_dir():
 
 
 @pytest.fixture(scope="module")
-def v4_loader(domains_dir):
+def domain_loader(domains_dir):
     """V4 config loader instance."""
     from de_funk.config.domain import DomainConfigLoaderV4
     return DomainConfigLoaderV4(domains_dir)
 
 
 @pytest.fixture(scope="module")
-def translated_configs(v4_loader):
+def translated_configs(domain_loader):
     """All v4 configs translated to v3-compatible format."""
-    from de_funk.config.domain.v4_to_nodes import translate_v4_config
+    from de_funk.config.domain.config_translator import translate_domain_config
 
     configs = {}
-    for model_name in v4_loader.list_models():
-        v4_config = v4_loader.load_model_config(model_name)
-        configs[model_name] = translate_v4_config(v4_config)
+    for model_name in domain_loader.list_models():
+        config = domain_loader.load_model_config(model_name)
+        configs[model_name] = translate_domain_config(config)
     return configs
 
 
@@ -129,7 +129,7 @@ class TestTranslationE2E:
     def test_translated_model_has_build_metadata(self, translated_configs):
         """Translated configs include _v4_build metadata."""
         for model_name, config in translated_configs.items():
-            assert "_v4_build" in config, \
+            assert "_domain_build" in config, \
                 f"{model_name}: missing _v4_build metadata"
 
 
@@ -242,8 +242,8 @@ class TestBuildSimulationE2E:
         for model_name, config in translated_configs.items():
             nodes = config.get("graph", {}).get("nodes", {})
             for node_name, node in nodes.items():
-                if node.get("_v4_seed"):
-                    seed_data = node.get("_v4_seed_data", [])
+                if node.get("_seed"):
+                    seed_data = node.get("_seed_data", [])
                     assert isinstance(seed_data, list)
                     if seed_data:
                         assert isinstance(seed_data[0], dict), \
@@ -259,9 +259,9 @@ class TestBuildSimulationE2E:
         for model_name, config in translated_configs.items():
             nodes = config.get("graph", {}).get("nodes", {})
             for node_name, node in nodes.items():
-                if not node.get("_v4_seed"):
+                if not node.get("_seed"):
                     continue
-                seed_data = node.get("_v4_seed_data", [])
+                seed_data = node.get("_seed_data", [])
                 if not seed_data:
                     continue
 
@@ -322,9 +322,9 @@ class TestCrossModelReferences:
                         f"from='{from_table}' not in nodes"
                     )
 
-    def test_depends_on_resolves(self, v4_loader, translated_configs):
+    def test_depends_on_resolves(self, domain_loader, translated_configs):
         """Most depends_on references point to known models."""
-        all_models = set(v4_loader.list_models())
+        all_models = set(domain_loader.list_models())
         unresolved = []
 
         for model_name, config in translated_configs.items():
@@ -368,9 +368,9 @@ class TestPipelineSummary:
             total_edges += len(edges)
 
             for node in nodes.values():
-                if node.get("_v4_seed"):
+                if node.get("_seed"):
                     total_seed += 1
-                if node.get("_v4_union"):
+                if node.get("_union"):
                     total_union += 1
 
         assert total_nodes > 0, "Should have at least one node"

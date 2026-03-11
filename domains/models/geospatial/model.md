@@ -6,6 +6,7 @@ description: "Foundation geographic reference — US administrative regions and 
 extends: _base.geography.geo_spatial
 depends_on: []
 
+sources_from: sources/
 storage:
   format: delta
   silver:

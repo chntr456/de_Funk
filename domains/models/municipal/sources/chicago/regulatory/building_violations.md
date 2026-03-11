@@ -11,12 +11,18 @@ aliases:
   - [violation_id, "ABS(HASH(CAST(id AS STRING)))"]
   - [violation_date, violation_date]
   - [date_id, "CAST(DATE_FORMAT(violation_date, 'yyyyMMdd') AS INT)"]
+  - [last_modified_date, violation_last_modified_date]
   - [year, "YEAR(violation_date)"]
   - [violation_type, violation_code]
+  - [violation_description, violation_description]
   - [status, violation_status]
+  - [violation_location, violation_location]
+  - [property_group, property_group]
   - [address, address]
-  - [ward, TBD]
-  - [community_area, TBD]
+  - [ward, "CAST(NULL AS INT)"]
+  - [community_area, "CAST(NULL AS INT)"]
+  - [latitude, latitude]
+  - [longitude, longitude]
 ---
 
 ## Building Violations

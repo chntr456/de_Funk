@@ -16,6 +16,8 @@ additional_schema:
   - [vendor_id, integer, true, "FK to dim_vendor", {fk: dim_vendor.vendor_id, derived: "ABS(HASH(COALESCE(payee, 'UNKNOWN')))"}]
   - [department_id, integer, true, "FK to dim_department", {fk: dim_department.org_unit_id, derived: "ABS(HASH(COALESCE(organizational_unit, 'UNKNOWN')))"}]
   - [contract_id, integer, true, "FK to dim_contract", {fk: dim_contract.contract_id, derived: "CASE WHEN contract_number IS NOT NULL THEN ABS(HASH(contract_number)) ELSE null END"}]
+  - [account_code, string, true, "Department-level account for chart of accounts"]
+  - [account_id, integer, true, "FK to dim_chart_of_accounts", {fk: dim_chart_of_accounts.account_id}]
 ---
 
 ## Ledger Entries Fact

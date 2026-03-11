@@ -7,9 +7,9 @@ primary_key: [community_area_id]
 unique_key: [area_number]
 
 schema:
-  - [community_area_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT('CHICAGO_CA_', area_number)))"}]
-  - [area_number, integer, false, "Community area number (1-77)", {derived: "CAST(area_numbe AS INT)"}]
-  - [community_name, string, false, "Community area name", {derived: "community"}]
+  - [community_area_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT('CHICAGO_CA_', boundary_code)))"}]
+  - [area_number, integer, false, "Community area number (1-77)", {derived: "CAST(boundary_code AS INT)"}]
+  - [community_name, string, false, "Community area name", {derived: "boundary_name"}]
   - [centroid_lat, double, true, "Centroid latitude"]
   - [centroid_lon, double, true, "Centroid longitude"]
   - [area_sqmi, double, true, "Area in square miles"]

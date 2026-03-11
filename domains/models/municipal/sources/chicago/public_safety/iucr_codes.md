@@ -7,14 +7,12 @@ from: bronze.chicago_iucr_codes
 domain_source: "'chicago'"
 
 aliases:
-  - [crime_type_id, "ABS(HASH(CONCAT(iucr, '_', COALESCE(fbi_code, 'UNK'))))"]
+  - [crime_type_id, "ABS(HASH(CONCAT(iucr, '_', COALESCE(index_code, 'UNK'))))"]
   - [iucr_code, iucr]
-  - [fbi_code, TBD]
   - [primary_type, primary_description]
   - [description, secondary_description]
-  - [crime_category, TBD]
-  - [crime_subcategory, TBD]
-  - [is_index_crime, TBD]
+  - [is_index_crime, "CASE WHEN index_code = 'I' THEN true ELSE false END"]
+  - [is_active, "CASE WHEN active = 'Y' THEN true ELSE false END"]
 ---
 
 ## IUCR Codes

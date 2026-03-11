@@ -7,41 +7,47 @@ from: bronze.cook_county_parcel_universe
 domain_source: "'cook_county'"
 
 aliases:
-  # Common fields
-  - [parcel_id, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
-  - [parcel_code, "LPAD(REGEXP_REPLACE(pin, '[^0-9]', ''), 14, '0')"]
+  # Common fields — available in bronze.cook_county_parcel_universe
+  - [parcel_id, "LPAD(CAST(pin AS STRING), 14, '0')"]
+  - [parcel_code, "LPAD(CAST(pin AS STRING), 14, '0')"]
   - [property_class, class]
   - [township_code, township_code]
-  - [neighborhood_code, nbhd]
-  - [year_built, year_built]
-  - [land_sqft, land_sqft]
-  - [building_sqft, building_sqft]
-  - [latitude, TBD]
-  - [longitude, TBD]
-  - [tax_code, tax_code]
+  - [municipality, municipality]
+  - [school_district, school_district]
+  - [park_district, park_district]
+  - [latitude, latitude]
+  - [longitude, longitude]
+  - [year, year]
 
-  # Residential fields (populated for class 200-299)
-  - [bedrooms, bdrm]
-  - [bathrooms, "COALESCE(fbath, 0) + COALESCE(hbath, 0) * 0.5"]
-  - [stories, stories]
-  - [garage_spaces, garage_spaces]
-  - [basement, bsmt_desc]
-  - [exterior_wall, ext_wall]
+  # Fields not available in this Bronze source — NULL placeholders
+  - [neighborhood_code, "CAST(NULL AS STRING)"]
+  - [year_built, "CAST(NULL AS INT)"]
+  - [land_sqft, "CAST(NULL AS DOUBLE)"]
+  - [building_sqft, "CAST(NULL AS DOUBLE)"]
+  - [tax_code, "CAST(NULL AS STRING)"]
 
-  # Commercial fields (populated for class 500-599)
-  - [commercial_sqft, comm_sqft]
-  - [commercial_units, comm_units]
-  - [residential_units, res_units]
-  - [space_type, use_type]
-  - [floors, num_floors]
+  # Residential fields — not available in this Bronze source
+  - [bedrooms, "CAST(NULL AS INT)"]
+  - [bathrooms, "CAST(NULL AS DOUBLE)"]
+  - [stories, "CAST(NULL AS INT)"]
+  - [garage_spaces, "CAST(NULL AS INT)"]
+  - [basement, "CAST(NULL AS STRING)"]
+  - [exterior_wall, "CAST(NULL AS STRING)"]
 
-  # Industrial fields (populated for class 300-399)
-  - [industrial_sqft, ind_sqft]
-  - [loading_docks, loading_docks]
-  - [ceiling_height, ceiling_ht]
-  - [zoning_class, zoning]
+  # Commercial fields — not available in this Bronze source
+  - [commercial_sqft, "CAST(NULL AS DOUBLE)"]
+  - [commercial_units, "CAST(NULL AS INT)"]
+  - [residential_units, "CAST(NULL AS INT)"]
+  - [space_type, "CAST(NULL AS STRING)"]
+  - [floors, "CAST(NULL AS INT)"]
+
+  # Industrial fields — not available in this Bronze source
+  - [industrial_sqft, "CAST(NULL AS DOUBLE)"]
+  - [loading_docks, "CAST(NULL AS INT)"]
+  - [ceiling_height, "CAST(NULL AS DOUBLE)"]
+  - [zoning_class, "CAST(NULL AS STRING)"]
 ---
 
 ## Parcel Universe
 
-Complete inventory of all Cook County parcels. Single source provides common fields plus all type-specific columns (residential, commercial, industrial). Columns are naturally null for non-matching property types in the source data.
+Complete inventory of all Cook County parcels. Bronze columns: `pin`, `year`, `township_code`, `class`, `municipality`, `school_district`, `park_district`, `latitude`, `longitude`. Detailed property characteristics (bedrooms, sqft, etc.) are not available in this dataset and are mapped as NULL placeholders for schema compatibility with the base template.

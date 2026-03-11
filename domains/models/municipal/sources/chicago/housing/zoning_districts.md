@@ -15,7 +15,8 @@ aliases:
   - [centroid_lat, "null"]
   - [centroid_lon, "null"]
   - [geom_wkt, the_geom]
-  - [area_sqmi, TBD]
+  - [area_sqmi, shape_area]
+  - [ordinance_date, ordinance_date]
   - [population, "null"]
 ---
 

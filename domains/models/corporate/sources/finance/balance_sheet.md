@@ -9,24 +9,22 @@ domain_source: "'alpha_vantage'"
 
 aliases:
   - [legal_entity_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
-  - [statement_entry_id, "ABS(HASH(CONCAT(legal_entity_id, '_', account_id, '_', period_end_date_id, '_', report_type)))"]
-  - [account_id, "ABS(HASH(account_code))"]
-  - [period_end_date_id, "CAST(REGEXP_REPLACE(CAST(fiscalDateEnding AS STRING), '-', '') AS INT)"]
-  - [period_start_date_id, "CAST(REGEXP_REPLACE(CAST(fiscalDateEnding AS STRING), '-', '') AS INT)"]
-  - [report_type, reportType]
+  - [period_end_date_id, "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"]
+  - [period_start_date_id, "CAST(REGEXP_REPLACE(CAST(fiscal_date_ending AS STRING), '-', '') AS INT)"]
+  - [report_type, report_type]
   - [amount, value]
-  - [reported_currency, reportedCurrency]
+  - [reported_currency, reported_currency]
 
 unpivot_aliases:
-  - [totalAssets, TOTAL_ASSETS]
-  - [totalCurrentAssets, TOTAL_CURRENT_ASSETS]
-  - [cashAndCashEquivalentsAtCarryingValue, CASH_AND_EQUIVALENTS]
-  - [totalLiabilities, TOTAL_LIABILITIES]
-  - [totalCurrentLiabilities, TOTAL_CURRENT_LIABILITIES]
-  - [longTermDebt, LONG_TERM_DEBT]
-  - [totalShareholderEquity, TOTAL_SHAREHOLDER_EQUITY]
-  - [retainedEarnings, RETAINED_EARNINGS]
-  - [commonStockSharesOutstanding, SHARES_OUTSTANDING]
+  - [total_assets, TOTAL_ASSETS]
+  - [total_current_assets, TOTAL_CURRENT_ASSETS]
+  - [cash_and_equivalents, CASH_AND_EQUIVALENTS]
+  - [total_liabilities, TOTAL_LIABILITIES]
+  - [total_current_liabilities, TOTAL_CURRENT_LIABILITIES]
+  - [long_term_debt, LONG_TERM_DEBT]
+  - [total_shareholder_equity, TOTAL_SHAREHOLDER_EQUITY]
+  - [retained_earnings, RETAINED_EARNINGS]
+  - [shares_outstanding, SHARES_OUTSTANDING]
 ---
 
 ## Balance Sheet

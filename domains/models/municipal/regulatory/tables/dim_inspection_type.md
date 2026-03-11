@@ -4,6 +4,7 @@ table: dim_inspection_type
 extends: _base.regulatory.inspection._dim_inspection_type
 table_type: dimension
 transform: distinct
+from: bronze.chicago_food_inspections
 group_by: [inspection_type]
 primary_key: [inspection_type_id]
 

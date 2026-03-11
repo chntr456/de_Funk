@@ -3,21 +3,21 @@ type: domain-model-source
 source: budget_positions
 extends: _base.accounting.financial_statement
 maps_to: fact_budget_events
-from: bronze.chicago_budget_positions
+from: bronze.chicago_budget_positions_salaries
 event_type: POSITION
 domain_source: "'chicago'"
 aliases:
   # Maps to financial_statement base schema
   - [legal_entity_id, "ABS(HASH(CONCAT('CITY_', 'Chicago')))"]
-  - [statement_entry_id, "ABS(HASH(CONCAT('POSITION', '_', year, '_', COALESCE(department_code,''), '_', COALESCE(title_code,''))))"]
+  - [statement_entry_id, "ABS(HASH(CONCAT('POSITION', '_', CAST(year AS INT), '_', COALESCE(department_code,''), '_', COALESCE(title_code,''))))"]
   - [account_id, "ABS(HASH(COALESCE(title_code, 'UNCLASSIFIED')))"]
-  - [period_end_date_id, "CAST(CONCAT(year, '1231') AS INT)"]
-  - [period_start_date_id, "CAST(CONCAT(year, '0101') AS INT)"]
+  - [period_end_date_id, "CAST(CONCAT(CAST(CAST(year AS INT) AS STRING), '1231') AS INT)"]
+  - [period_start_date_id, "CAST(CONCAT(CAST(CAST(year AS INT) AS STRING), '0101') AS INT)"]
   - [report_type, "'budget'"]
   - [amount, total_budgeted_amount]
   - [reported_currency, "'USD'"]
   # Budget-specific (model-level additional_schema)
-  - [fiscal_year, year]
+  - [fiscal_year, "CAST(year AS INT)"]
   - [department_code, department_code]
   - [department_description, department_description]
   - [fund_code, "null"]

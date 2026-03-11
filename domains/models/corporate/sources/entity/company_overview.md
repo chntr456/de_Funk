@@ -7,19 +7,19 @@ from: bronze.alpha_vantage_company_overview
 domain_source: "'alpha_vantage'"
 
 aliases:
-  - [company_id, "ABS(HASH(CONCAT('COMPANY_', Symbol)))"]
-  - [ticker, Symbol]
-  - [company_name, Name]
-  - [cik, CIK]
-  - [asset_type, AssetType]
-  - [exchange_code, Exchange]
-  - [sector, Sector]
-  - [industry, Industry]
-  - [country, Country]
-  - [currency, Currency]
-  - [address, Address]
-  - [official_site, TBD]
-  - [fiscal_year_end, FiscalYearEnd]
+  - [company_id, "ABS(HASH(CONCAT('COMPANY_', ticker)))"]
+  - [ticker, ticker]
+  - [company_name, company_name]
+  - [cik, cik]
+  - [asset_type, asset_type]
+  - [exchange_code, exchange_code]
+  - [sector, sector]
+  - [industry, industry]
+  - [country, country]
+  - [currency, currency]
+  - [address, address]
+  - [official_site, official_site]
+  - [fiscal_year_end, fiscal_year_end]
   - [is_active, "true"]
 ---
 

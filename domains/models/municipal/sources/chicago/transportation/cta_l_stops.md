@@ -10,10 +10,10 @@ aliases:
   - [station_id, "ABS(HASH(CONCAT(station_name, '_', 'RAIL')))"]
   - [station_name, station_name]
   - [transit_mode, "'RAIL'"]
-  - [line_name, TBD]
+  - [line_name, "'TBD'"]
   - [ada_accessible, ada]
-  - [latitude, TBD]
-  - [longitude, TBD]
+  - [latitude, "CAST(NULL AS DOUBLE)"]
+  - [longitude, "CAST(NULL AS DOUBLE)"]
 ---
 
 ## CTA L Stops

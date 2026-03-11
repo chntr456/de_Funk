@@ -7,9 +7,9 @@ primary_key: [district_id]
 unique_key: [district_number]
 
 schema:
-  - [district_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT('CHICAGO_DIST_', dist_num)))"}]
-  - [district_number, string, false, "District number", {derived: "dist_num"}]
-  - [district_name, string, true, "District name", {derived: "dist_label"}]
+  - [district_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT('CHICAGO_DIST_', boundary_code)))"}]
+  - [district_number, string, false, "District number", {derived: "boundary_code"}]
+  - [district_name, string, true, "District name", {derived: "boundary_name"}]
   - [centroid_lat, double, true, "Centroid latitude"]
   - [centroid_lon, double, true, "Centroid longitude"]
   - [area_sqmi, double, true, "Area in square miles"]

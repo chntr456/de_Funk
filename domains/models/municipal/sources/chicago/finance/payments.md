@@ -19,6 +19,8 @@ aliases:
   - [fund_code, "null"]
   - [contract_number, contract_number]
   - [description, description]
+  - [account_code, "CONCAT('ACTUAL_', COALESCE(department, 'UNCLASSIFIED'))"]
+  - [account_id, "ABS(HASH(CONCAT('ACTUAL_', COALESCE(department, 'UNCLASSIFIED'))))"]
 ---
 
 ## Payments Source

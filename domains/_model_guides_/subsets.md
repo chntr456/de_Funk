@@ -101,11 +101,11 @@ subsets:
     Stock:
       model: stocks
       description: "Common and preferred stock equities"
-      filter: "asset_type = 'Stock'"
+      filter: "asset_type = 'stocks'"
     ETF:
       model: etfs
       description: "Exchange-traded funds"
-      filter: "asset_type = 'ETF'"
+      filter: "asset_type = 'etfs'"
 ```
 
 **When to use**: Each subset is a full domain model with its own fact tables, build pipeline, and graph. Examples: securities (stocks vs options vs ETFs — each has different fact tables).

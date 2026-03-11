@@ -131,7 +131,7 @@ auto_edges:
 | Base | auto_edges | Inherited By |
 |------|-----------|-------------|
 | `_base._base_.event` | `date_id`, `location_id` | All event-chain bases |
-| `_base.finance.securities` | `date_id` | securities_master, stocks |
+| `_base.finance.securities` | `date_id` | securities, stocks |
 | `_base.property.parcel` | `date_id` | county_property |
 
 ---

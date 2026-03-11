@@ -4,6 +4,7 @@ table: dim_request_type
 extends: _base.operations.service_request._dim_request_type
 table_type: dimension
 transform: distinct
+from: bronze.chicago_service_requests_311
 group_by: [sr_type]
 primary_key: [request_type_id]
 unique_key: [sr_type]

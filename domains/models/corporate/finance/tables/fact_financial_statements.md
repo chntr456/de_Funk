@@ -11,9 +11,9 @@ transform: unpivot
 
 # [column, type, nullable, description, {options}]
 schema:
-  - [statement_entry_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT(company_id, '_', account_id, '_', period_end_date_id, '_', report_type)))"}]
+  - [statement_entry_id, integer, true, "PK - populated post-unpivot", {}]
   - [company_id, integer, false, "FK to dim_company", {fk: dim_company.company_id}]
-  - [account_id, integer, false, "FK to dim_financial_account", {fk: dim_financial_account.account_id, derived: "ABS(HASH(account_code))"}]
+  - [account_id, integer, true, "FK to dim_financial_account - populated post-unpivot", {fk: dim_financial_account.account_id}]
   - [period_start_date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
   - [period_end_date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
   - [report_type, string, false, "annual or quarterly"]

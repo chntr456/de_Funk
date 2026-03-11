@@ -258,16 +258,29 @@ class ModelConfigLoader:
 
         return self._parse_front_matter(file_path)
 
-    def _load_extends(self, extends_path: str) -> Dict[str, Any]:
+    def _load_extends(self, extends_path) -> Dict[str, Any]:
         """
         Load configuration from extends path.
 
         Args:
-            extends_path: Path like '_base/securities/securities.md', '_base.securities', or model name
+            extends_path: Path string, or list of path strings to merge in order.
+                Supports: '_base/securities/securities.md', '_base.securities', model name
 
         Returns:
-            Extended configuration
+            Extended configuration (merged if list)
         """
+        # Handle list of extends — merge each base config in order
+        if isinstance(extends_path, list):
+            merged = {}
+            for path in extends_path:
+                if isinstance(path, str) and path.strip():
+                    parent = self._load_extends(path)
+                    merged = self._deep_merge(merged, parent)
+            return merged
+
+        if not isinstance(extends_path, str) or not extends_path.strip():
+            return {}
+
         file_path = None
 
         # Check if it's a path with slashes

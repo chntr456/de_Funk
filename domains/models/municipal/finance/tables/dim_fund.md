@@ -4,6 +4,7 @@ table: dim_fund
 extends: _base.accounting.fund._dim_fund
 table_type: dimension
 transform: distinct
+from: fact_budget_events
 group_by: [fund_code]
 primary_key: [fund_id]
 unique_key: [fund_code]

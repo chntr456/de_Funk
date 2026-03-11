@@ -4,6 +4,7 @@ table: dim_township
 extends: _base.geography.geo_spatial._dim_boundary
 table_type: dimension
 primary_key: [township_code]
+optional: true
 
 schema:
   - [township_code, string, false, "PK - 2-digit township code"]
