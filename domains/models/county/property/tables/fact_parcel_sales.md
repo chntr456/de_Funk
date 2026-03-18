@@ -9,9 +9,9 @@ partition_by: [year]
 schema:
   # Bronze columns: pin, year, township_code, class, sale_date, sale_price, sale_document_num, deed_type, seller_name, buyer_name
   - [parcel_id, string, false, "FK to dim_parcel", {fk: dim_parcel.parcel_id, derived: "LPAD(CAST(pin AS VARCHAR), 14, '0')"}]
-  - [sale_date, date, false, "Sale date"]
+  - [sale_date, date, false, "Sale date", {format: date}]
   - [sale_date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id, derived: "CAST(DATE_FORMAT(sale_date, 'yyyyMMdd') AS INT)"}]
-  - [sale_price, double, true, "Sale price"]
+  - [sale_price, double, true, "Sale price", {format: $}]
   - [sale_type, string, true, "Sale type (deed type)", {derived: "deed_type"}]
   - [year, integer, false, "Sale year"]
 

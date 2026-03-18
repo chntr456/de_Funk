@@ -1,12 +1,12 @@
 ---
 type: domain-model
-model: county_property
+model: county.property
 version: 4.0
 description: "County property assessments, parcels, and sales"
 extends:
   - _base.property.parcel
   - _base.property.tax_district
-depends_on: [temporal, county_geospatial]
+depends_on: [temporal, county.geospatial]
 
 storage:
   format: delta
@@ -21,7 +21,7 @@ graph:
     - [assessed_to_calendar, fact_assessed_values, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [sales_to_parcel, fact_parcel_sales, dim_parcel, [parcel_id=parcel_id], many_to_one, null]
     - [sales_to_calendar, fact_parcel_sales, temporal.dim_calendar, [sale_date_id=date_id], many_to_one, temporal]
-    - [parcel_to_township, dim_parcel, county_geospatial.dim_township, [township_code=township_code], many_to_one, county_geospatial]
+    - [parcel_to_township, dim_parcel, county.geospatial.dim_township, [township_code=township_code], many_to_one, county.geospatial]
     - [parcel_to_tax_district, dim_parcel, dim_tax_district, [tax_code=tax_code], many_to_one, null]
     - [parcel_to_property_class, dim_parcel, dim_property_class, [property_class=property_class_code], many_to_one, null]
     - [assessment_to_property_class, fact_assessed_values, dim_property_class, [property_class=property_class_code], many_to_one, null]
@@ -36,7 +36,7 @@ graph:
       description: "Sales by geographic area: sale → parcel → township"
       steps:
         - {from: fact_parcel_sales, to: dim_parcel, via: parcel_id}
-        - {from: dim_parcel, to: county_geospatial.dim_township, via: township_code}
+        - {from: dim_parcel, to: county.geospatial.dim_township, via: township_code}
     parcel_class_to_tax:
       description: "Classification chain: parcel → property class + parcel → tax district"
       steps:

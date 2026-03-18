@@ -299,7 +299,7 @@ from de_funk.core.context import RepoContext
         storage_cfg = load_storage_config()
 
         # Build models in dependency order
-        models = ['temporal', 'company', 'stocks', 'macro']
+        models = ['temporal', 'corporate.entity', 'securities.stocks', 'macro']
 
         for model_name in models:
             try:
@@ -324,7 +324,7 @@ def job_weekly_forecasts():
     Weekly forecast job.
 
     Runs at 2:00 AM Sunday for full forecast run.
-    Uses Ray cluster if available.
+    Uses Spark for distributed processing.
     """
     logger.info(f"[{datetime.now()}] Starting weekly forecast run...")
 
@@ -332,63 +332,27 @@ def job_weekly_forecasts():
         from de_funk.utils.repo import setup_repo_imports
         repo_root = setup_repo_imports()
 
-        from de_funk.orchestration.distributed.ray_cluster import RayCluster, get_ray
+        from de_funk.core.context import RepoContext
 
-        ray = get_ray()
-        if ray is None:
-            logger.warning("Ray not installed, skipping distributed forecasts")
-            return
+        ctx = RepoContext.from_repo_root(connection_type="spark")
 
-        # Try to connect to cluster
-        cluster = RayCluster(address="auto")
+        from de_funk.models.domains.securities.forecast.builder import ForecastBuilder
+        from de_funk.models.base.builder import BuildContext
 
-        try:
-            cluster.connect()
-            logger.info(f"Connected to Ray cluster: {cluster.resources.num_nodes} nodes")
+        build_ctx = BuildContext(
+            repo_root=Path(repo_root),
+            storage_config=ctx.storage,
+            spark=ctx.spark,
+            max_tickers=500,
+        )
 
-            # Import tasks
-            from de_funk.orchestration.distributed.tasks import forecast_ticker
+        builder = ForecastBuilder(build_ctx)
+        result = builder.build()
 
-            # Get tickers
-from de_funk.core.context import RepoContext
-            from de_funk.pipelines.providers.alpha_vantage.alpha_vantage_provider import create_alpha_vantage_provider
-
-            ctx = RepoContext.from_repo_root(connection_type="spark")
-            provider = create_alpha_vantage_provider(
-                ctx.get_api_config('alpha_vantage'),
-                ctx.spark
-            )
-
-            tickers = provider.get_tickers_by_market_cap(
-                max_tickers=500,
-                storage_cfg=ctx.storage
-            )
-
-            if not tickers:
-                logger.warning("No tickers found for forecasting")
-                return
-
-            logger.info(f"Running forecasts for {len(tickers)} tickers...")
-
-            # Submit tasks
-            futures = [
-                forecast_ticker.remote(
-                    ticker=ticker,
-                    models=['arima'],
-                    horizon=30,
-                    storage_path=str(Path(repo_root) / "storage")
-                )
-                for ticker in tickers
-            ]
-
-            # Collect results
-            results = cluster.get(futures)
-
-            successful = sum(1 for r in results if r.get('status') == 'success')
-            logger.info(f"Forecasts complete: {successful}/{len(tickers)} successful")
-
-        finally:
-            cluster.disconnect()
+        if result.success:
+            logger.info(f"Forecasts complete: {result.rows_written} forecasts generated")
+        else:
+            logger.error(f"Forecast build failed: {result.error}")
 
         logger.info(f"[{datetime.now()}] Weekly forecasts complete")
 

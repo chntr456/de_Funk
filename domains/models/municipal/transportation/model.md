@@ -1,10 +1,10 @@
 ---
 type: domain-model
-model: municipal_transportation
+model: municipal.transportation
 version: 3.0
 description: "Municipal transit ridership and traffic data"
 extends: [_base.transportation.transit, _base.transportation.traffic]
-depends_on: [temporal, municipal_geospatial]
+depends_on: [temporal, municipal.geospatial]
 
 storage:
   format: delta

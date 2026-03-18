@@ -12,8 +12,8 @@ aliases:
   - [transit_mode, "'RAIL'"]
   - [line_name, "'TBD'"]
   - [ada_accessible, ada]
-  - [latitude, "CAST(NULL AS DOUBLE)"]
-  - [longitude, "CAST(NULL AS DOUBLE)"]
+  - [latitude, "CAST(get_json_object(location, '$.latitude') AS DOUBLE)"]
+  - [longitude, "CAST(get_json_object(location, '$.longitude') AS DOUBLE)"]
 ---
 
 ## CTA L Stops

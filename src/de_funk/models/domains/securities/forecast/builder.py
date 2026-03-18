@@ -36,8 +36,8 @@ class ForecastBuilder(BaseModelBuilder):
     - sample: Train on subset for testing (uses max_tickers from context)
     """
 
-    model_name = "forecast"
-    depends_on = ["temporal", "stocks"]
+    model_name = "securities.forecast"
+    depends_on = ["temporal", "securities.stocks"]
 
     # Default forecast configuration
     DEFAULT_MODELS = ["arima_7d", "prophet_7d"]  # Fast models for pipeline builds
@@ -127,15 +127,15 @@ class ForecastBuilder(BaseModelBuilder):
 
         from de_funk.models.domains.corporate.company.model import CompanyModel
 from de_funk.core.connection import get_spark_connection
-        from de_funk.config.domain_loader import ModelConfigLoader
+        from de_funk.config.domain import get_domain_loader
 
         # Create connection wrapper
         connection = get_spark_connection(self.spark)
 
         # Load company model config
         domains_dir = self.repo_root / "domains"
-        loader = ModelConfigLoader(domains_dir)
-        company_config = loader.load_model_config("company")
+        loader = get_domain_loader(domains_dir)
+        company_config = loader.load_model_config("corporate.entity")
 
         # Instantiate company model
         company_model = CompanyModel(
@@ -199,10 +199,10 @@ from de_funk.core.connection import get_spark_connection
         connection = get_spark_connection(self.spark)
 
         # Load stocks model config
-        from de_funk.config.domain_loader import ModelConfigLoader
+        from de_funk.config.domain import get_domain_loader
         domains_dir = self.repo_root / "domains"
-        loader = ModelConfigLoader(domains_dir)
-        stocks_config = loader.load_model_config("stocks")
+        loader = get_domain_loader(domains_dir)
+        stocks_config = loader.load_model_config("securities.stocks")
 
         # Instantiate model
         return StocksModel(

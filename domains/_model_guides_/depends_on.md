@@ -23,7 +23,7 @@ Tier 0 (Foundation — no dependencies):
   geospatial            depends_on: []     (dim_geography, dim_location)
 
 Tier 1 (Entity — depends on foundation):
-  corporate_entity      depends_on: [temporal]
+  corporate.entity      depends_on: [temporal]
   municipal_entity      depends_on: [temporal, geospatial]
 
 Tier 2 (Geospatial subdivisions — depends on foundation + entity):

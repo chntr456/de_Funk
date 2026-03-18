@@ -528,9 +528,9 @@ class AutoJoinHandler:
 
                         # Tables from 'securities' base schema (when model IS securities)
                         # or from a closely related schema get medium-high priority
-                        if model_name == 'securities' and table_schema == 'securities':
+                        if model_name == 'securities.master' and table_schema == 'securities':
                             return 0
-                        if model_name == 'stocks' and table_schema in ('stocks', 'securities'):
+                        if model_name == 'securities.stocks' and table_schema in ('stocks', 'securities'):
                             # For stocks model, prefer stocks tables, then securities
                             return 0 if table_schema == 'stocks' else 1
 

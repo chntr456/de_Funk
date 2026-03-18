@@ -1,10 +1,10 @@
 ---
 type: domain-model
-model: municipal_geospatial
+model: municipal.geospatial
 version: 3.0
 description: "Municipal geographic boundaries and hierarchies"
 extends: [_base.geography.geo_spatial]
-depends_on: [geospatial, municipal_entity]
+depends_on: [geospatial, municipal.entity]
 
 storage:
   format: delta
@@ -15,9 +15,9 @@ storage:
 graph:
   edges:
     - [patrol_area_to_district, dim_patrol_area, dim_patrol_district, [district_id=district_id], many_to_one, null]
-    - [community_to_entity, dim_community_area, municipal_entity.dim_municipality, [municipality_id=municipality_id], many_to_one, municipal_entity]
-    - [ward_to_entity, dim_ward, municipal_entity.dim_municipality, [municipality_id=municipality_id], many_to_one, municipal_entity]
-    - [district_to_entity, dim_patrol_district, municipal_entity.dim_municipality, [municipality_id=municipality_id], many_to_one, municipal_entity]
+    - [community_to_entity, dim_community_area, municipal.entity.dim_municipality, [municipality_id=municipality_id], many_to_one, municipal.entity]
+    - [ward_to_entity, dim_ward, municipal.entity.dim_municipality, [municipality_id=municipality_id], many_to_one, municipal.entity]
+    - [district_to_entity, dim_patrol_district, municipal.entity.dim_municipality, [municipality_id=municipality_id], many_to_one, municipal.entity]
     - [community_to_foundation, dim_community_area, geospatial.dim_location, [location_id=location_id], many_to_one, geospatial]
 
 build:

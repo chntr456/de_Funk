@@ -21,11 +21,11 @@ CUSTOM_MODEL_CLASSES = {
         "de_funk.models.domains.foundation.temporal.model",
         "TemporalModel",
     ),
-    "corporate_entity": (
+    "corporate.entity": (
         "de_funk.models.domains.corporate.company.model",
         "CompanyModel",
     ),
-    "stocks": (
+    "securities.stocks": (
         "de_funk.models.domains.securities.stocks.model",
         "StocksModel",
     ),
@@ -123,7 +123,7 @@ class DomainBuilderFactory:
         """
         from de_funk.models.base.builder import BaseModelBuilder
 
-        class_name = f"DomainBuilder_{model_name.replace('-', '_')}"
+        class_name = f"DomainBuilder_{model_name.replace('-', '_').replace('.', '_')}"
 
         # Determine the model class to use
         custom_spec = CUSTOM_MODEL_CLASSES.get(model_name)
@@ -157,8 +157,26 @@ class DomainBuilderFactory:
             logger.info(f"Pre-build for domain model: {self.model_name}")
 
         def post_build(self, result) -> None:
-            """Post-build hook — currently a no-op; window transforms run in-graph."""
-            pass
+            """Run post_build steps declared in model YAML via the appropriate engine."""
+            from de_funk.models.base.enrichers import ComputedColumnsEnricher
+            cfg = self.get_model_config()
+            build_cfg = cfg.get("build", {}) if isinstance(cfg, dict) else {}
+            steps = build_cfg.get("post_build", [])
+            if not steps:
+                return
+            graph_cfg = cfg.get("graph", {}) if isinstance(cfg, dict) else {}
+            logger.info(f"Running {len(steps)} post_build step(s) for {self.model_name}...")
+            for step in steps:
+                step_type = step.get("type", "computed_columns")
+                if step_type == "computed_columns":
+                    ComputedColumnsEnricher().run(
+                        self.spark, self.storage_config, graph_cfg, step
+                    )
+                else:
+                    logger.warning(
+                        f"Unknown post_build type '{step_type}' "
+                        f"in {self.model_name} — skipping"
+                    )
 
         # Build the class with type()
         attrs = {

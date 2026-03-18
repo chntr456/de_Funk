@@ -177,22 +177,38 @@ class BaseModel:
         return self._python_measures
 
     def _load_python_measures(self):
-        """Load Python measures module for this model."""
+        """Load Python measures module for this model.
+
+        Uses convention-based module discovery: looks for a measures.py
+        file alongside the model's Python class.
+        """
         try:
-            from de_funk.config.domain_loader import ModelConfigLoader
-            from pathlib import Path
+            import importlib
 
-            # Use domains/ directory (markdown with YAML front matter)
-            domains_dir = self.storage_cfg.get('domains_dir', 'domains')
-            loader = ModelConfigLoader(Path(domains_dir))
-            measures_instance = loader.load_python_measures(self.model_name, model_instance=self)
+            # Convention: measures module lives next to the model class
+            model_module = type(self).__module__
+            package = model_module.rsplit('.', 1)[0]
+            measures_module_name = f"{package}.measures"
 
-            if measures_instance:
-                logger.info(f"Loaded Python measures for model '{self.model_name}'")
-                return measures_instance
-            else:
-                logger.debug(f"No Python measures found for model '{self.model_name}'")
+            try:
+                module = importlib.import_module(measures_module_name)
+            except ImportError:
+                logger.debug(f"No Python measures module at {measures_module_name}")
                 return None
+
+            # Look for {ModelName}Measures class
+            class_name = ''.join(
+                word.title() for word in self.model_name.replace('.', '_').split('_')
+            ) + 'Measures'
+
+            if hasattr(module, class_name):
+                measures_class = getattr(module, class_name)
+                instance = measures_class(self)
+                logger.info(f"Loaded Python measures for model '{self.model_name}'")
+                return instance
+
+            logger.debug(f"Measures class '{class_name}' not found in {measures_module_name}")
+            return None
 
         except Exception as e:
             logger.warning(f"Failed to load Python measures for '{self.model_name}': {e}")
@@ -316,13 +332,17 @@ class BaseModel:
                     resolved = expr
                     for raw, clean in col_remap.items():
                         resolved = resolved.replace(raw, clean)
+                    # Bare "null" produces a void/NullType column that DuckDB delta
+                    # extension cannot read. Cast to BIGINT so Delta log has a real type.
+                    if resolved.strip().lower() == "null":
+                        resolved = "CAST(null AS BIGINT)"
                     try:
                         cols.append(F.expr(resolved).alias(out_name))
                     except Exception:
                         logger.warning(
                             f"Select: cannot resolve '{resolved}' for '{out_name}', using NULL"
                         )
-                        cols.append(F.lit(None).alias(out_name))
+                        cols.append(F.lit(None).cast("long").alias(out_name))
             return df.select(*cols)
         else:
             # DuckDB - use project() method
@@ -853,5 +873,83 @@ class BaseModel:
         return dims, facts
 
     def custom_node_loading(self, node_id: str, node_config: Dict) -> Optional[DataFrame]:
-        """Override to customize how specific nodes are loaded."""
+        """Handle built-in transform markers. Override to add model-specific loaders."""
+        transform = node_config.get("_transform")
+        if transform == "window":
+            return self._build_window_node(node_id, node_config)
         return None
+
+    def _build_window_node(
+        self, node_id: str, node_config: Dict
+    ) -> Optional[DataFrame]:
+        """
+        Build a table by applying indicator configs from the schema to a sibling node.
+        Delegates to DomainModel._build_window_node if available (has full implementation).
+        Base implementation: skip with warning if source not in _building_nodes.
+        """
+        from de_funk.models.base.indicators import apply_indicator
+
+        source = node_config.get("_window_source", "")
+        schema = node_config.get("_schema", [])
+
+        if not source:
+            logger.warning(f"Window node '{node_id}': no _window_source — skipping")
+            return None
+
+        building = getattr(self, "_building_nodes", {})
+        if source not in building:
+            logger.warning(
+                f"Window node '{node_id}': source '{source}' not yet built — "
+                f"ensure it is in an earlier phase"
+            )
+            return None
+
+        df = building[source]
+        cols = set(df.columns)
+
+        if "security_id" in cols and "date_id" in cols:
+            partition_col, order_col = "security_id", "date_id"
+        elif "ticker" in cols and "trade_date" in cols:
+            partition_col, order_col = "ticker", "trade_date"
+        else:
+            logger.error(
+                f"Window node '{node_id}': cannot determine partition/order columns "
+                f"from {sorted(cols)[:10]}"
+            )
+            return None
+
+        logger.info(
+            f"Building window table '{node_id}' from '{source}' "
+            f"(partition={partition_col}, order={order_col})"
+        )
+
+        for col_def in schema:
+            if not isinstance(col_def, list):
+                continue
+            col_name = col_def[0]
+            options  = col_def[4] if len(col_def) >= 5 else {}
+            if not isinstance(options, dict):
+                continue
+            if "indicator" in options:
+                try:
+                    df = apply_indicator(df, col_name, options, partition_col, order_col)
+                except Exception as e:
+                    logger.error(
+                        f"Window node '{node_id}': indicator '{col_name}' failed: {e}",
+                        exc_info=True,
+                    )
+            elif "derived" in options:
+                try:
+                    from pyspark.sql import functions as F  # noqa: PLC0415
+                    df = df.withColumn(col_name, F.expr(options["derived"]))
+                except Exception as e:
+                    logger.warning(
+                        f"Window node '{node_id}': derive '{col_name}' failed: {e}"
+                    )
+
+        col_names = [c[0] for c in schema if isinstance(c, list)]
+        available = [c for c in col_names if c in df.columns]
+        if available:
+            df = df.select(*available)
+
+        return df

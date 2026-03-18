@@ -38,7 +38,7 @@ class SecuritiesBuilder(BaseModelBuilder):
     since they FK to dim_security.
     """
 
-    model_name = "securities"
+    model_name = "securities.master"
     depends_on = ["temporal"]  # Securities depends only on temporal
 
     def get_model_class(self) -> Type:

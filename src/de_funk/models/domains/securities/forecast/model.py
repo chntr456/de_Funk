@@ -31,7 +31,7 @@ class ForecastModel(TimeSeriesForecastModel):
 
     def get_source_model_name(self) -> str:
         """Source model for training data."""
-        return 'stocks'
+        return 'securities.stocks'
 
     def get_source_table_name(self) -> str:
         """Source table for training data."""
@@ -80,7 +80,7 @@ class ForecastModel(TimeSeriesForecastModel):
             date_from = (datetime.now() - timedelta(days=lookback_days)).strftime('%Y-%m-%d')
 
         # Load stocks model
-        source_model = self.session.load_model('stocks')
+        source_model = self.session.load_model('securities.stocks')
 
         # Get fact and dimension tables
         fact_df = source_model.get_table('fact_stock_prices')

@@ -7,7 +7,10 @@ Provides central registry of available models with their schemas, storage, and m
 from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 from dataclasses import dataclass
+import logging
 import yaml
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -405,23 +408,17 @@ class ModelRegistry:
         if not self.models_dir.exists():
             raise ValueError(f"Models directory not found: {self.models_dir}")
 
-        # Use domain_loader for markdown-based configs
-        try:
-            from de_funk.config.domain_loader import ModelConfigLoader
-            # Cache the loader for reuse in get_model_config()
-            self._domain_loader = ModelConfigLoader(self.models_dir)
+        # Use v4 domain loader for markdown-based configs
+        from de_funk.config.domain import get_domain_loader
+        self._domain_loader = get_domain_loader(self.models_dir)
 
-            # Load all discovered domain models
-            for model_name in self._domain_loader.list_models():
-                try:
-                    config_dict = self._domain_loader.load_model_config(model_name)
-                    model = ModelConfig(config_dict)
-                    self.models[model.name] = model
-                except Exception as e:
-                    print(f"Warning: Failed to load model '{model_name}': {e}")
-
-        except ImportError as e:
-            print(f"Warning: Could not import domain_loader: {e}")
+        for model_name in self._domain_loader.list_models():
+            try:
+                config_dict = self._domain_loader.load_model_config(model_name)
+                model = ModelConfig(config_dict)
+                self.models[model.name] = model
+            except Exception as e:
+                logger.warning(f"Failed to load model '{model_name}': {e}")
 
     def list_models(self) -> List[str]:
         """List all available model names."""
@@ -520,14 +517,14 @@ class ModelRegistry:
         # Corporate domain
         try:
             from de_funk.models.domains.corporate.company import CompanyModel
-            self.register_model_class('company', CompanyModel)
+            self.register_model_class('corporate.entity', CompanyModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
         # Securities domain
         try:
             from de_funk.models.domains.securities.stocks import StocksModel
-            self.register_model_class('stocks', StocksModel)
+            self.register_model_class('securities.stocks', StocksModel)
         except Exception:
             pass  # Will use auto-registration on first access
 
@@ -632,6 +629,6 @@ class ModelRegistry:
             return self._domain_loader.load_model_config(model_name)
 
         # Fallback: create loader if not cached (shouldn't happen normally)
-        from de_funk.config.domain_loader import ModelConfigLoader
-        self._domain_loader = ModelConfigLoader(self.models_dir)
+        from de_funk.config.domain import get_domain_loader
+        self._domain_loader = get_domain_loader(self.models_dir)
         return self._domain_loader.load_model_config(model_name)

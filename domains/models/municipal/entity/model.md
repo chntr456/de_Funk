@@ -1,6 +1,6 @@
 ---
 type: domain-model
-model: municipal_entity
+model: municipal.entity
 version: 3.0
 description: "Municipal government entities - cities, counties, townships, special districts"
 extends: [_base.entity.municipality]

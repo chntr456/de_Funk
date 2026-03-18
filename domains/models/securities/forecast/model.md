@@ -1,9 +1,9 @@
 ---
 type: domain-model
-model: forecast
+model: securities.forecast
 version: 3.0
 description: "Time series forecasting for securities prices and volumes"
-depends_on: [temporal, stocks]
+depends_on: [temporal, securities.stocks]
 
 storage:
   format: delta

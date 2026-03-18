@@ -1,6 +1,6 @@
 ---
 type: domain-model
-model: municipal_finance
+model: municipal.finance
 version: 3.1
 description: "Municipal payments, contracts, and budget data"
 
@@ -11,7 +11,7 @@ extends:
   - _base.accounting.chart_of_accounts
   - _base.property.tax_district
 
-depends_on: [temporal, municipal_entity, county_property]
+depends_on: [temporal, municipal.entity, county.property]
 
 storage:
   format: delta
@@ -32,20 +32,20 @@ graph:
 
     # Budget → dimensions (budget extends financial_statement: account_id, period dates)
     - [budget_to_calendar, fact_budget_events, temporal.dim_calendar, [period_end_date_id=date_id], many_to_one, temporal]
-    - [budget_to_department, fact_budget_events, dim_department, [department_id=org_unit_id], many_to_one, null]
-    - [budget_to_fund, fact_budget_events, dim_fund, [fund_id=fund_id], many_to_one, null]
+    - [budget_to_department, fact_budget_events, dim_department, [department_description=org_unit_code], many_to_one, null]
+    - [budget_to_fund, fact_budget_events, dim_fund, [fund_code=fund_code], many_to_one, null]
     - [budget_to_account, fact_budget_events, dim_chart_of_accounts, [account_id=account_id], many_to_one, null]
 
-    # Entity → municipality (cross-model to municipal_entity)
-    - [entry_to_municipality, fact_ledger_entries, municipal_entity.dim_municipality, [legal_entity_id=municipality_id], many_to_one, municipal_entity]
-    - [budget_to_municipality, fact_budget_events, municipal_entity.dim_municipality, [legal_entity_id=municipality_id], many_to_one, municipal_entity]
+    # Entity → municipality (cross-model to municipal.entity)
+    - [entry_to_municipality, fact_ledger_entries, municipal.entity.dim_municipality, [legal_entity_id=municipality_id], many_to_one, municipal.entity]
+    - [budget_to_municipality, fact_budget_events, municipal.entity.dim_municipality, [legal_entity_id=municipality_id], many_to_one, municipal.entity]
 
     # Dimension → dimension
     - [contract_to_vendor, dim_contract, dim_vendor, [vendor_id=vendor_id], many_to_one, null]
     - [contract_to_department, dim_contract, dim_department, [department_id=org_unit_id], many_to_one, null]
 
     # Property tax → county property
-    - [property_tax_to_parcel, fact_property_tax, county_property.dim_parcel, [parcel_id=parcel_id], many_to_one, county_property]
+    - [property_tax_to_parcel, fact_property_tax, county.property.dim_parcel, [parcel_id=parcel_id], many_to_one, county.property]
     - [property_tax_to_tax_district, fact_property_tax, dim_tax_district, [tax_district_id=tax_district_id], many_to_one, null]
 
   paths:
@@ -62,7 +62,7 @@ graph:
     property_tax_chain:
       description: "Property tax → parcel → tax district"
       steps:
-        - {from: fact_property_tax, to: county_property.dim_parcel, via: parcel_id}
+        - {from: fact_property_tax, to: county.property.dim_parcel, via: parcel_id}
         - {from: fact_property_tax, to: dim_tax_district, via: tax_district_id}
 
 build:
@@ -138,4 +138,4 @@ GROUP BY report_type, coa.account_type;
 
 ### Entity
 
-The `dim_municipality` dimension lives in `municipal_entity` (separate entity model). All fact tables FK to it via `legal_entity_id`. This model declares `depends_on: [municipal_entity]` to ensure the entity dimension is built first.
+The `dim_municipality` dimension lives in `municipal.entity` (separate entity model). All fact tables FK to it via `legal_entity_id`. This model declares `depends_on: [municipal.entity]` to ensure the entity dimension is built first.

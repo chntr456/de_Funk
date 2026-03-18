@@ -23,31 +23,31 @@ schema:
 # Enrichment: budget vs actual spending (materialized at build time)
 enrich:
   - from: fact_ledger_entries
-    join: [department_id = org_unit_id]
+    join: [organizational_unit = org_unit_code]
     # [column, type, nullable, description, {options}]
     columns:
-      - [total_paid, "decimal(18,2)", true, "Total actual spending", {derived: "SUM(transaction_amount)"}]
-      - [payment_count, integer, true, "Number of payments", {derived: "COUNT(DISTINCT entry_id)"}]
-      - [first_payment_date, date, true, "Earliest payment", {derived: "MIN(transaction_date)"}]
-      - [last_payment_date, date, true, "Most recent payment", {derived: "MAX(transaction_date)"}]
+      - [total_paid, "decimal(18,2)", true, "Total actual spending", {derived: "SUM(transaction_amount)", format: $}]
+      - [payment_count, integer, true, "Number of payments", {derived: "COUNT(DISTINCT entry_id)", format: number}]
+      - [first_payment_date, date, true, "Earliest payment", {derived: "MIN(transaction_date)", format: date}]
+      - [last_payment_date, date, true, "Most recent payment", {derived: "MAX(transaction_date)", format: date}]
 
   - from: fact_budget_events
-    join: [department_id = org_unit_id]
+    join: [department_description = org_unit_code]
     filter: "event_type = 'APPROPRIATION'"
     columns:
-      - [total_appropriated, "decimal(18,2)", true, "Total budgeted", {derived: "SUM(amount)"}]
-      - [budget_line_count, integer, true, "Budget line items", {derived: "COUNT(DISTINCT statement_entry_id)"}]
+      - [total_appropriated, "decimal(18,2)", true, "Total budgeted", {derived: "SUM(amount)", format: $}]
+      - [budget_line_count, integer, true, "Budget line items", {derived: "COUNT(DISTINCT statement_entry_id)", format: number}]
 
   - from: fact_budget_events
-    join: [department_id = org_unit_id]
+    join: [department_description = org_unit_code]
     filter: "event_type = 'POSITION'"
     columns:
-      - [total_personnel_budget, "decimal(18,2)", true, "Budgeted personnel costs", {derived: "SUM(amount)"}]
+      - [total_personnel_budget, "decimal(18,2)", true, "Budgeted personnel costs", {derived: "SUM(amount)", format: $}]
 
   - derived:
-      - [budget_variance, "decimal(18,2)", true, "Budget minus actual", {derived: "COALESCE(total_appropriated, 0) - COALESCE(total_paid, 0)"}]
-      - [budget_utilization_pct, "decimal(5,4)", true, "% of budget used", {derived: "COALESCE(total_paid, 0) / NULLIF(total_appropriated, 0)"}]
-      - [personnel_pct, "decimal(5,4)", true, "Personnel as % of budget", {derived: "COALESCE(total_personnel_budget, 0) / NULLIF(total_appropriated, 0)"}]
+      - [budget_variance, "decimal(18,2)", true, "Budget minus actual", {derived: "COALESCE(total_appropriated, 0) - COALESCE(total_paid, 0)", format: $}]
+      - [budget_utilization_pct, "decimal(5,4)", true, "% of budget used", {derived: "COALESCE(total_paid, 0) / NULLIF(total_appropriated, 0)", format: "%"}]
+      - [personnel_pct, "decimal(5,4)", true, "Personnel as % of budget", {derived: "COALESCE(total_personnel_budget, 0) / NULLIF(total_appropriated, 0)", format: "%"}]
 
 measures:
   - [department_count, count_distinct, org_unit_id, "Number of departments", {format: "#,##0"}]

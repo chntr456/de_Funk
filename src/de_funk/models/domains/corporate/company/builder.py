@@ -30,7 +30,7 @@ class CompanyBuilder(BaseModelBuilder):
     - alpha_vantage/company_overview
     """
 
-    model_name = "company"
+    model_name = "corporate.entity"
     depends_on = ["temporal"]  # Requires temporal for date dimension
 
     def get_model_class(self) -> Type:

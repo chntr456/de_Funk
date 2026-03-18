@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 def main():
-from de_funk.config.domain_loader import ModelConfigLoader
+from de_funk.config.domain import get_domain_loader
 
     repo_root = Path(__file__).resolve().parents[2]
     domains_dir = repo_root / "domains"
@@ -28,7 +28,7 @@ from de_funk.config.domain_loader import ModelConfigLoader
     print(f"Domains dir: {domains_dir}")
 
     # Load stocks config
-    loader = ModelConfigLoader(domains_dir)
+    loader = get_domain_loader(domains_dir)
     stocks_config = loader.load_model_config('stocks')
 
     print("\n=== STOCKS MODEL CONFIG ===")

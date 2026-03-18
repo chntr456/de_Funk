@@ -123,13 +123,13 @@ def check_domain_loader():
     print_header("STEP 3: Domain Loader Config")
 
     try:
-from de_funk.config.domain_loader import ModelConfigLoader
+from de_funk.config.domain import get_domain_loader
         from pathlib import Path
 
         repo_root = Path(__file__).resolve().parents[2]
         domains_dir = repo_root / "domains"
 
-        loader = ModelConfigLoader(domains_dir)
+        loader = get_domain_loader(domains_dir)
 
         print(f"Models found: {loader.list_models()}")
 
@@ -335,7 +335,7 @@ from de_funk.models.registry import ModelRegistry
         print_subheader("Join Plan: fact_stock_prices + ticker, date, close")
         try:
             plan = auto_join.plan_auto_joins(
-                model_name="stocks",
+                model_name="securities.stocks",
                 base_table="fact_stock_prices",
                 requested_columns=["ticker", "date", "close", "volume"]
             )

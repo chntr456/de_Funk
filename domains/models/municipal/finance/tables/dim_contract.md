@@ -17,9 +17,9 @@ schema:
   - [department, string, true, "Awarding department"]
   - [department_id, integer, true, "FK to dim_department", {fk: dim_department.org_unit_id, derived: "ABS(HASH(COALESCE(department, 'UNKNOWN')))"}]
   - [procurement_type, string, true, "Procurement method"]
-  - [award_amount, "decimal(18,2)", true, "Contract award value"]
-  - [start_date, date, true, "Contract start"]
-  - [end_date, date, true, "Contract end"]
+  - [award_amount, "decimal(18,2)", true, "Contract award value", {format: $}]
+  - [start_date, date, true, "Contract start", {format: date}]
+  - [end_date, date, true, "Contract end", {format: date}]
   - [is_active, boolean, false, "Currently active", {derived: "end_date >= CURRENT_DATE OR end_date IS NULL"}]
 
 # Enrichment: payment accrual tracking (materialized at build time)
@@ -29,13 +29,13 @@ enrich:
     join: [contract_id = contract_id]
     # [column, type, nullable, description, {options}]
     columns:
-      - [total_paid, "decimal(18,2)", true, "Total payments against contract", {derived: "SUM(transaction_amount)"}]
-      - [payment_count, integer, true, "Number of payments made", {derived: "COUNT(DISTINCT entry_id)"}]
-      - [first_payment_date, date, true, "First payment date", {derived: "MIN(transaction_date)"}]
-      - [last_payment_date, date, true, "Most recent payment", {derived: "MAX(transaction_date)"}]
+      - [total_paid, "decimal(18,2)", true, "Total payments against contract", {derived: "SUM(transaction_amount)", format: $}]
+      - [payment_count, integer, true, "Number of payments made", {derived: "COUNT(DISTINCT entry_id)", format: number}]
+      - [first_payment_date, date, true, "First payment date", {derived: "MIN(transaction_date)", format: date}]
+      - [last_payment_date, date, true, "Most recent payment", {derived: "MAX(transaction_date)", format: date}]
 
   - derived:
-      - [remaining_balance, "decimal(18,2)", true, "Award minus paid", {derived: "COALESCE(award_amount, 0) - COALESCE(total_paid, 0)"}]
+      - [remaining_balance, "decimal(18,2)", true, "Award minus paid", {derived: "COALESCE(award_amount, 0) - COALESCE(total_paid, 0)", format: $}]
       - [utilization_pct, "decimal(5,4)", true, "Percent of award utilized", {derived: "COALESCE(total_paid, 0) / NULLIF(award_amount, 0)"}]
       - [is_fully_paid, boolean, true, "All funds disbursed", {derived: "COALESCE(total_paid, 0) >= COALESCE(award_amount, 0) AND award_amount > 0"}]
 

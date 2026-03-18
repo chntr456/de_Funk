@@ -1,10 +1,10 @@
 ---
 type: domain-model
-model: county_geospatial
+model: county.geospatial
 version: 4.0
 description: "County geospatial boundaries and hierarchies"
 extends: [_base.geography.geo_spatial]
-depends_on: [geospatial, municipal_entity]
+depends_on: [geospatial, municipal.entity]
 
 storage:
   format: delta
@@ -18,7 +18,7 @@ graph:
     - [neighborhood_to_township, dim_neighborhood, dim_township, [township_code=township_code], many_to_one, null]
     - [township_to_geography, dim_township, geospatial.dim_geography, [geography_id=geography_id], many_to_one, geospatial]
     - [boundary_to_geography, dim_municipality_boundary, geospatial.dim_geography, [geography_id=geography_id], many_to_one, geospatial]
-    - [boundary_to_entity, dim_municipality_boundary, municipal_entity.dim_municipality, [entity_municipality_id=municipality_id], many_to_one, municipal_entity]
+    - [boundary_to_entity, dim_municipality_boundary, municipal.entity.dim_municipality, [entity_municipality_id=municipality_id], many_to_one, municipal.entity]
 
 build:
   partitions: []
@@ -56,5 +56,5 @@ Geographic boundaries and hierarchies for a county. Connected to foundation geos
 ```
 dim_township ──geography_id──→ geospatial.dim_geography (Cook County)
 dim_municipality_boundary ──geography_id──→ geospatial.dim_geography (Cook County)
-dim_municipality_boundary ──entity_municipality_id──→ municipal_entity.dim_municipality
+dim_municipality_boundary ──entity_municipality_id──→ municipal.entity.dim_municipality
 ```

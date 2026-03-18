@@ -14,7 +14,7 @@ aliases:
   - [period_end_date_id, "CAST(CONCAT(CAST(CAST(year AS INT) AS STRING), '1231') AS INT)"]
   - [period_start_date_id, "CAST(CONCAT(CAST(CAST(year AS INT) AS STRING), '0101') AS INT)"]
   - [report_type, "'budget'"]
-  - [amount, "CAST(estimated_revenue AS DECIMAL(18,2))"]
+  - [amount, "COALESCE(CAST(estimated_revenue AS DECIMAL(18,2)), CAST(ordinance_amount AS DOUBLE))"]
   - [reported_currency, "'USD'"]
   # Budget-specific (model-level additional_schema)
   - [fiscal_year, "CAST(year AS INT)"]

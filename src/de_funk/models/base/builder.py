@@ -122,18 +122,11 @@ class BaseModelBuilder(ABC):
             Markdown files have YAML front matter with full model config.
         """
         if self._model_config is None:
-            from de_funk.config.domain_loader import ModelConfigLoader
+            from de_funk.config.domain import get_domain_loader
 
-            # Load from domains/ (markdown with YAML front matter)
             domains_dir = self.repo_root / "domains"
-            if domains_dir.exists():
-                loader = ModelConfigLoader(domains_dir)
-                self._model_config = loader.load_model_config(self.model_name)
-            else:
-                raise FileNotFoundError(
-                    f"Domains directory not found: {domains_dir}. "
-                    f"Expected markdown config at domains/{{category}}/{self.model_name}.md"
-                )
+            loader = get_domain_loader(domains_dir)
+            self._model_config = loader.load_model_config(self.model_name)
 
         return self._model_config
 

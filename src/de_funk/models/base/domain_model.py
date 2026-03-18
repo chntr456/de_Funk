@@ -22,6 +22,57 @@ logger = logging.getLogger(__name__)
 # Type alias for DataFrame (can be Spark or DuckDB)
 DataFrame = Any
 
+import re as _re
+
+
+def _find_derived_source_cols(
+    schema: List,
+    group_by: List[str],
+    available_columns: List[str],
+) -> List[str]:
+    """
+    Identify source columns referenced by derived expressions in the schema.
+
+    For a distinct transform, group_by columns are always kept. But derived
+    expressions may reference other source columns — either as simple passthrough
+    (e.g., ``{derived: "fund_description"}``) or embedded in expressions
+    (e.g., ``CASE WHEN event_type = 'REVENUE' ...``).
+
+    We scan each derived expression for tokens that match actual source column
+    names. This is safe because SQL keywords/functions won't collide with
+    column names in practice.
+
+    Returns a deduplicated list of extra source column names not already in group_by.
+    """
+    group_set = set(group_by)
+    # Build a set of candidate source columns (excluding group_by, already included)
+    candidates = {c for c in available_columns if c not in group_set}
+    if not candidates:
+        return []
+
+    extras = []
+    seen = set()
+
+    for col_def in schema:
+        if not isinstance(col_def, list) or len(col_def) < 5:
+            continue
+        options = col_def[4]
+        if not isinstance(options, dict) or "derived" not in options:
+            continue
+
+        expr = str(options["derived"])
+
+        # Extract all identifier-like tokens from the expression
+        tokens = set(_re.findall(r"[a-zA-Z_][a-zA-Z0-9_]*", expr))
+
+        # Include any token that matches an actual source column name
+        for token in tokens:
+            if token in candidates and token not in seen:
+                extras.append(token)
+                seen.add(token)
+
+    return extras
+
 
 class DomainModel:
     """
@@ -348,13 +399,29 @@ class DomainModel:
             else:
                 raise NotImplementedError("Aggregate transform not yet supported for DuckDB")
         else:
-            # DISTINCT — keep all columns, deduplicate on group_by
+            # DISTINCT — select group_by columns + source columns needed by
+            # derived expressions, then deduplicate on group_by only.
+            #
+            # Derived expressions may reference source columns either as
+            # simple passthroughs ("fund_description") or embedded in
+            # expressions ("CASE WHEN event_type = 'REVENUE' ...").
             if self.backend == "spark":
-                df = df.dropDuplicates(group_by)
+                available = df.columns
+                extra_source_cols = _find_derived_source_cols(
+                    schema, group_by, available,
+                )
+                select_cols = list(group_by) + extra_source_cols
+                select_cols = [c for c in select_cols if c in set(available)]
+                df = df.select(*select_cols).dropDuplicates(group_by)
             else:
-                cols = ", ".join(group_by)
+                extra_source_cols = _find_derived_source_cols(
+                    schema, group_by, [],  # DuckDB: TODO pass actual columns
+                )
+                select_cols = list(group_by) + extra_source_cols
+                cols = ", ".join(select_cols)
+                gb = ", ".join(group_by)
                 df = self.connection.conn.sql(
-                    f"SELECT DISTINCT {cols} FROM df"
+                    f"SELECT DISTINCT ON ({gb}) {cols} FROM df"
                 )
 
             # Apply derived columns from schema
@@ -362,6 +429,113 @@ class DomainModel:
 
         row_count = df.count() if self.backend == "spark" else len(df.fetchall())
         logger.info(f"  {node_id}: {row_count} {transform_type.lower()} values")
+
+        # Apply enrichment JOINs (aggregate columns from fact tables)
+        enrich_specs = node_config.get("_enrich", [])
+        if enrich_specs and self.backend == "spark":
+            df = self._apply_distinct_enrichments(df, enrich_specs, node_id)
+
+        return df
+
+    def _apply_distinct_enrichments(
+        self,
+        df: DataFrame,
+        enrich_specs: List[Dict],
+        node_id: str,
+    ) -> DataFrame:
+        """
+        Apply enrich specs to a distinct dimension table.
+
+        Handles:
+          - type=join: Load source fact table, apply optional filter, GROUP BY
+            the join key, compute aggregate columns, LEFT JOIN onto dimension.
+          - type=derived: Compute expressions from already-enriched columns.
+        """
+        from pyspark.sql import functions as F  # noqa: PLC0415
+
+        for spec in enrich_specs:
+            spec_type = spec.get("type")
+
+            if spec_type == "join":
+                source_table = spec["from"]
+                join_pairs = spec.get("join", [])
+                columns = spec.get("columns", [])
+                filter_expr = spec.get("filter")
+
+                if not join_pairs or not columns:
+                    continue
+
+                # join_pairs: list of (left_col, right_col)
+                left_col, right_col = join_pairs[0]
+
+                try:
+                    source_df = self._load_internal_or_bronze(source_table, node_id)
+                except Exception as e:
+                    logger.warning(
+                        f"  {node_id} enrich: cannot load '{source_table}': {e}"
+                    )
+                    continue
+
+                # Apply filter if specified
+                if filter_expr:
+                    source_df = source_df.filter(filter_expr)
+
+                # Build aggregate expressions from column schema
+                # Column format: [name, type, nullable, description, {options}]
+                agg_exprs = []
+                col_names = []
+                for col_def in columns:
+                    if not isinstance(col_def, list) or len(col_def) < 5:
+                        continue
+                    col_name = col_def[0]
+                    options = col_def[4]
+                    if isinstance(options, dict) and "derived" in options:
+                        expr = options["derived"]
+                        agg_exprs.append(F.expr(expr).alias(col_name))
+                        col_names.append(col_name)
+
+                if not agg_exprs:
+                    continue
+
+                agg_df = source_df.groupBy(left_col).agg(*agg_exprs)
+
+                # Rename the join key in agg_df to avoid column ambiguity
+                # after the join (Spark's .drop(agg_df[col]) can fail to
+                # resolve correctly when multiple DataFrames share a name).
+                join_key_alias = f"__enrich_jk_{left_col}"
+                agg_df = agg_df.withColumnRenamed(left_col, join_key_alias)
+
+                # LEFT JOIN the aggregated results onto the dimension
+                df = df.join(
+                    agg_df,
+                    df[right_col] == agg_df[join_key_alias],
+                    how="left",
+                ).drop(join_key_alias)
+
+                logger.debug(
+                    f"  {node_id} enrich: joined {len(col_names)} columns "
+                    f"from {source_table}"
+                )
+
+            elif spec_type == "derived":
+                # Computed columns from already-enriched columns
+                for col_def in spec.get("columns", []):
+                    if not isinstance(col_def, list) or len(col_def) < 5:
+                        continue
+                    col_name = col_def[0]
+                    options = col_def[4]
+                    if isinstance(options, dict) and "derived" in options:
+                        expr = options["derived"]
+                        try:
+                            df = df.withColumn(col_name, F.expr(expr))
+                            logger.debug(
+                                f"  {node_id} enrich: derived '{col_name}' = {expr}"
+                            )
+                        except Exception as e:
+                            logger.warning(
+                                f"  {node_id} enrich: failed derived "
+                                f"'{col_name}': {e}"
+                            )
 
         return df
 

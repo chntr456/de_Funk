@@ -132,9 +132,9 @@ class GraphBuilder:
 
             if '.' in from_spec:
                 # Has a dot - could be bronze.table or model.table (silver)
-                layer, table = from_spec.split('.', 1)
-                if layer == 'bronze':
+                if from_spec.startswith('bronze.'):
                     # Loading from bronze: bronze.provider.table_name
+                    table = from_spec.split('.', 1)[1]
                     try:
                         df = self._load_bronze_table(table)
                     except Exception as e:
@@ -147,12 +147,14 @@ class GraphBuilder:
                             raise
                 else:
                     # Loading from silver: model.table_name (e.g., securities.fact_security_prices)
+                    # Use rsplit to support dot-separated model names (e.g., municipal.entity.dim_municipality)
+                    model_name, table = from_spec.rsplit('.', 1)
                     try:
-                        df = self._load_silver_table(layer, table)
+                        df = self._load_silver_table(model_name, table)
                     except Exception as e:
                         # Check if this node is marked as optional
                         if node_config.get('optional', False):
-                            logger.warning(f"Skipping optional node {node_id}: silver table '{layer}.{table}' not found")
+                            logger.warning(f"Skipping optional node {node_id}: silver table '{model_name}.{table}' not found")
                             continue
                         else:
                             raise
@@ -421,11 +423,13 @@ class GraphBuilder:
             subdir = None
 
         # Build config-style table reference with slashes
-        # e.g., "silver.securities/facts/fact_security_prices"
+        # Convert dot-separated model names to path: municipal.entity → municipal/entity
+        model_path = model_name.replace(".", "/")
+        # e.g., "silver.municipal/entity/facts/fact_ledger_entries"
         if subdir:
-            table_ref = f"silver.{model_name}/{subdir}/{table_name}"
+            table_ref = f"silver.{model_path}/{subdir}/{table_name}"
         else:
-            table_ref = f"silver.{model_name}/{table_name}"
+            table_ref = f"silver.{model_path}/{table_name}"
         logger.debug(f"Loading silver table: {table_ref}")
 
         # Use backend type to determine how to load

@@ -4,7 +4,7 @@ title: Company Financial Statements
 description: Publication-quality financial tables using Great Tables with grid layouts
 author: de_Funk
 version: 2.0
-models: [company, stocks, core]
+models: [corporate.entity, stocks, temporal]
 tags: [financials, great_tables, example, grid_layout]
 ---
 
@@ -75,7 +75,7 @@ All data is sourced from SEC filings via Alpha Vantage. Amounts shown in million
 $exhibits${
   grid_cell: 2
   type: great_table
-  source: company.fact_income_statement
+  source: corporate.entity.fact_income_statement
   title: Income Statement
   theme: financial
   scroll: true
@@ -98,7 +98,7 @@ $exhibits${
 $exhibits${
   grid_cell: 3
   type: great_table
-  source: company.fact_balance_sheet
+  source: corporate.entity.fact_balance_sheet
   title: Balance Sheet
   theme: financial
   scroll: true
@@ -117,7 +117,7 @@ $exhibits${
 $exhibits${
   grid_cell: 4
   type: great_table
-  source: company.fact_cash_flow
+  source: corporate.entity.fact_cash_flow
   title: Cash Flow
   theme: financial
   scroll: true
@@ -137,7 +137,7 @@ $exhibits${
 $exhibits${
   grid_cell: 5
   type: great_table
-  source: company.fact_earnings
+  source: corporate.entity.fact_earnings
   title: Earnings
   theme: financial
   scroll: true
@@ -161,11 +161,11 @@ $exhibits${
 $exhibits${
   grid_cell: 6
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   title: Daily Closing Prices
   x: temporal.dim_calendar.date
-  y: stocks.fact_stock_prices.close
-  color: stocks.dim_stock.ticker
+  y: securities.stocks.fact_stock_prices.close
+  color: securities.stocks.dim_stock.ticker
   height: 400
 }
 
@@ -182,7 +182,7 @@ $/grid$
 
 $exhibits${
   type: great_table
-  source: company.fact_income_statement
+  source: corporate.entity.fact_income_statement
   title: Consolidated Statement of Operations
   theme: financial
   scroll: true
@@ -213,7 +213,7 @@ $exhibits${
 
 $exhibits${
   type: great_table
-  source: company.fact_balance_sheet
+  source: corporate.entity.fact_balance_sheet
   title: Consolidated Balance Sheet
   theme: financial
   scroll: true
@@ -245,7 +245,7 @@ $exhibits${
 
 $exhibits${
   type: great_table
-  source: company.fact_cash_flow
+  source: corporate.entity.fact_cash_flow
   title: Consolidated Statement of Cash Flows
   theme: financial
   scroll: true
@@ -279,7 +279,7 @@ $exhibits${
 
 $exhibits${
   type: great_table
-  source: company.fact_earnings
+  source: corporate.entity.fact_earnings
   title: Earnings History
   theme: financial
   scroll: true

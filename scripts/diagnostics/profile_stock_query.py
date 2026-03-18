@@ -69,9 +69,9 @@ from de_funk.models.registry import ModelRegistry
 
     # Get stocks model
     start = time.perf_counter()
-    model = registry.get_model("stocks")
+    model = registry.get_model("securities.stocks")
     timings['get_model'] = time.perf_counter() - start
-    print(f"   Get model 'stocks': {format_time(timings['get_model'])}")
+    print(f"   Get model 'securities.stocks': {format_time(timings['get_model'])}")
 
     # Get table path
     start = time.perf_counter()

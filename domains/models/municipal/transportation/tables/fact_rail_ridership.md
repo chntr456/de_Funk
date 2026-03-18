@@ -10,7 +10,7 @@ schema:
   - [station_id, integer, false, "FK to dim_transit_station", {fk: dim_transit_station.station_id}]
   - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
   - [year, integer, false, "Year"]
-  - [rides, long, true, "Total station entries"]
+  - [rides, long, true, "Total station entries", {format: number}]
 
 measures:
   - [total_rides, sum, rides, "Total rides", {format: "#,##0"}]

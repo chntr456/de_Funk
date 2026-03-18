@@ -15,6 +15,18 @@ persist: true
 # Sources auto-discovered: any sources/*.md with maps_to: fact_budget_events
 # Currently: budget_appropriations (APPROPRIATION) + budget_revenue (REVENUE) + budget_positions (POSITION)
 
+# Base financial_statement fields (inherited from extends, listed here for resolver indexing)
+# [column, type, nullable, description, {options}]
+schema:
+  - [statement_entry_id, integer, false, "PK", {}]
+  - [legal_entity_id, integer, false, "FK to reporting entity"]
+  - [account_id, integer, false, "FK to chart of accounts", {fk: dim_chart_of_accounts.account_id}]
+  - [period_end_date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
+  - [period_start_date_id, integer, true, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
+  - [report_type, string, false, "budget"]
+  - [amount, double, false, "Line item value", {format: $}]
+  - [reported_currency, string, true, "Reporting currency"]
+
 # Budget-specific columns beyond base financial_statement schema
 # [column, type, nullable, description, {options}]
 additional_schema:

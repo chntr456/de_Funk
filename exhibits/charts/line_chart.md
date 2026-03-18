@@ -43,7 +43,7 @@ schema:
         measure:
           type: string
           description: Static measure reference
-          example: stocks.measures.close_price
+          example: securities.stocks.measures.close_price
         available:
           type: array
           items: string
@@ -108,11 +108,11 @@ examples:
         label: Date
 
       y_axis:
-        measure: stocks.measures.close_price
+        measure: securities.stocks.measures.close_price
         label: Price ($)
 
       color:
-        dimension: stocks.dim_stock.ticker
+        dimension: securities.stocks.dim_stock.ticker
       ```
 
   dynamic_selectors:
@@ -133,17 +133,17 @@ examples:
 
       y_axis:
         available:
-          - stocks.measures.close_price
-          - stocks.measures.volume
-          - stocks.measures.daily_return
-        default: stocks.measures.close_price
+          - securities.stocks.measures.close_price
+          - securities.stocks.measures.volume
+          - securities.stocks.measures.daily_return
+        default: securities.stocks.measures.close_price
         multi: true
 
       color:
         available:
-          - stocks.dim_stock.ticker
-          - stocks.dim_stock.sector
-        default: stocks.dim_stock.ticker
+          - securities.stocks.dim_stock.ticker
+          - securities.stocks.dim_stock.sector
+        default: securities.stocks.dim_stock.ticker
       ```
 
   with_filters:
@@ -163,13 +163,13 @@ examples:
         - id: min_price
           type: slider
           label: Minimum Price
-          source: stocks.fact_stock_prices.close
+          source: securities.stocks.fact_stock_prices.close
           min: 0
           max: 1000
           default: 100
 
       metrics:
-        - column: stocks.measures.close_price
+        - column: securities.stocks.measures.close_price
           label: Avg Close
           aggregation: avg
           format: "$,.2f"
@@ -178,10 +178,10 @@ examples:
         dimension: temporal.dim_calendar.date
 
       y_axis:
-        measure: stocks.measures.close_price
+        measure: securities.stocks.measures.close_price
 
       color:
-        dimension: stocks.dim_stock.ticker
+        dimension: securities.stocks.dim_stock.ticker
       ```
 ---
 
@@ -206,10 +206,10 @@ x_axis:
   dimension: temporal.dim_calendar.date
 
 y_axis:
-  measure: stocks.measures.close_price
+  measure: securities.stocks.measures.close_price
 
 color:
-  dimension: stocks.dim_stock.ticker
+  dimension: securities.stocks.dim_stock.ticker
 ```
 ```
 
@@ -272,7 +272,7 @@ x_axis:
 **Single Measure:**
 ```yaml
 y_axis:
-  measure: stocks.measures.close_price
+  measure: securities.stocks.measures.close_price
   label: Price ($)
 ```
 
@@ -280,9 +280,9 @@ y_axis:
 ```yaml
 y_axis:
   available:
-    - stocks.measures.close_price
-    - stocks.measures.volume
-  default: [stocks.measures.close_price]
+    - securities.stocks.measures.close_price
+    - securities.stocks.measures.volume
+  default: [securities.stocks.measures.close_price]
   multi: true
 ```
 
@@ -292,7 +292,7 @@ Groups data by dimension, creating separate traces:
 
 ```yaml
 color:
-  dimension: stocks.dim_stock.ticker
+  dimension: securities.stocks.dim_stock.ticker
 ```
 
 ### Plotly Options
@@ -329,7 +329,7 @@ filters:
   - id: min_price
     type: slider
     label: Min Price
-    source: stocks.fact_stock_prices.close
+    source: securities.stocks.fact_stock_prices.close
     default: 100
 
   - id: show_weekends
@@ -344,12 +344,12 @@ Display KPI cards above the chart:
 
 ```yaml
 metrics:
-  - column: stocks.measures.close_price
+  - column: securities.stocks.measures.close_price
     label: Avg Close
     aggregation: avg
     format: "$,.2f"
 
-  - column: stocks.measures.volume
+  - column: securities.stocks.measures.volume
     label: Total Volume
     aggregation: sum
     format: ",.0f"
@@ -361,8 +361,8 @@ Use domain model references instead of raw columns:
 
 | Reference | Resolves To |
 |-----------|-------------|
-| `stocks.measures.close_price` | Measure definition in `domains/securities/stocks.md` |
-| `stocks.dim_stock.ticker` | Column in dimension table |
+| `securities.stocks.measures.close_price` | Measure definition in `domains/securities/securities.stocks.md` |
+| `securities.stocks.dim_stock.ticker` | Column in dimension table |
 | `temporal.dim_calendar.date` | Cross-domain calendar reference |
 
 ## Complete Example
@@ -383,17 +383,17 @@ filters:
   - id: min_volume
     type: slider
     label: Min Daily Volume
-    source: stocks.fact_stock_prices.volume
+    source: securities.stocks.fact_stock_prices.volume
     min: 0
     max: 100000000
     default: 1000000
 
 metrics:
-  - column: stocks.measures.close_price
+  - column: securities.stocks.measures.close_price
     label: Avg Close
     aggregation: avg
     format: "$,.2f"
-  - column: stocks.measures.daily_return
+  - column: securities.stocks.measures.daily_return
     label: Period Return
     aggregation: sum
     format: "+.2%"
@@ -408,15 +408,15 @@ x_axis:
 
 y_axis:
   available:
-    - stocks.measures.close_price
-    - stocks.measures.open_price
-    - stocks.measures.volume
-  default: stocks.measures.close_price
+    - securities.stocks.measures.close_price
+    - securities.stocks.measures.open_price
+    - securities.stocks.measures.volume
+  default: securities.stocks.measures.close_price
   multi: true
   label: Value
 
 color:
-  dimension: stocks.dim_stock.ticker
+  dimension: securities.stocks.dim_stock.ticker
 
 display:
   height: 450

@@ -1,6 +1,6 @@
 ---
 type: domain-model
-model: corporate_entity
+model: corporate.entity
 version: 3.0
 description: "Corporate legal entities - SEC-registered companies with CIK identifiers"
 extends: [_base.entity.company]
@@ -38,7 +38,7 @@ Company identity data: ticker, CIK, sector, industry, exchange. This is the "who
 
 ### Relationship to Finance
 
-Financial reporting (income statements, balance sheets, cash flows, earnings) lives in `corporate_finance`, which depends on this model. The `legal_entity_id` on financial facts FKs to `dim_company.company_id`.
+Financial reporting (income statements, balance sheets, cash flows, earnings) lives in `corporate.finance`, which depends on this model. The `legal_entity_id` on financial facts FKs to `dim_company.company_id`.
 
 ### Data Sources
 

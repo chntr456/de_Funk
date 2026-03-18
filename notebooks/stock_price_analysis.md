@@ -3,7 +3,7 @@ id: stock_price_analysis
 title: Stock Price Analysis
 description: Comprehensive stock price analysis with sector breakdown and time aggregations
 tags: [stocks, prices, analysis, sectors]
-models: [stocks, company, temporal]
+models: [stocks, corporate.entity, temporal]
 author: de_Funk Analytics
 created: 2025-12-05
 ---
@@ -45,12 +45,12 @@ Analyze stock price movements, trading volume, and key metrics for selected equi
 
 $exhibits${
   type: metric_cards
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   metrics: [
-    { column: stocks.fact_stock_prices.close, label: "Avg Close", aggregation: avg, format: "$,.2f" },
-    { column: stocks.fact_stock_prices.volume, label: "Total Volume", aggregation: sum, format: ",.0f" },
-    { column: stocks.fact_stock_prices.high, label: "Max High", aggregation: max, format: "$,.2f" },
-    { column: stocks.fact_stock_prices.low, label: "Min Low", aggregation: min, format: "$,.2f" }
+    { column: securities.stocks.fact_stock_prices.close, label: "Avg Close", aggregation: avg, format: "$,.2f" },
+    { column: securities.stocks.fact_stock_prices.volume, label: "Total Volume", aggregation: sum, format: ",.0f" },
+    { column: securities.stocks.fact_stock_prices.high, label: "Max High", aggregation: max, format: "$,.2f" },
+    { column: securities.stocks.fact_stock_prices.low, label: "Min Low", aggregation: min, format: "$,.2f" }
   ]
 }
 
@@ -60,10 +60,10 @@ Daily closing prices grouped by security. Uses auto-join to get ticker from dim_
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.date
-  y: stocks.fact_stock_prices.close
-  color: stocks.dim_stock.ticker
+  y: securities.stocks.fact_stock_prices.close
+  color: securities.stocks.dim_stock.ticker
   title: Daily Closing Prices by Ticker
   height: 450
 }
@@ -74,14 +74,14 @@ Annual average closing price - aggregated by year from calendar dimension.
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.year
-  y: stocks.fact_stock_prices.close
+  y: securities.stocks.fact_stock_prices.close
   y_agg: avg
-  color: stocks.dim_stock.ticker
+  color: securities.stocks.dim_stock.ticker
   title: Annual Average Closing Price
   height: 400
-  group_by: [temporal.dim_calendar.year, stocks.dim_stock.ticker]
+  group_by: [temporal.dim_calendar.year, securities.stocks.dim_stock.ticker]
 }
 
 ## Sector Analysis
@@ -89,26 +89,26 @@ $exhibits${
 <details>
 <summary>Price by Sector</summary>
 
-Average closing prices grouped by sector (via auto-join to company.dim_company).
+Average closing prices grouped by sector (via auto-join to corporate.entity.dim_company).
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
-  x: company.dim_company.sector
-  y: stocks.fact_stock_prices.close
+  source: securities.stocks.fact_stock_prices
+  x: corporate.entity.dim_corporate.entity.sector
+  y: securities.stocks.fact_stock_prices.close
   y_agg: avg
   title: Average Close Price by Sector
   height: 400
-  group_by: [company.dim_company.sector]
+  group_by: [corporate.entity.dim_corporate.entity.sector]
 }
 
 ### Volume by Sector
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
-  x: company.dim_company.sector
-  y: stocks.fact_stock_prices.volume
+  source: securities.stocks.fact_stock_prices
+  x: corporate.entity.dim_corporate.entity.sector
+  y: securities.stocks.fact_stock_prices.volume
   y_agg: sum
   title: Total Volume by Sector
   height: 350
@@ -125,10 +125,10 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.date
-  y: stocks.fact_stock_prices.volume
-  color: stocks.dim_stock.ticker
+  y: securities.stocks.fact_stock_prices.volume
+  color: securities.stocks.dim_stock.ticker
   title: Daily Trading Volume
   height: 300
 }
@@ -137,14 +137,14 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.month
-  y: stocks.fact_stock_prices.volume
+  y: securities.stocks.fact_stock_prices.volume
   y_agg: sum
-  color: stocks.dim_stock.ticker
+  color: securities.stocks.dim_stock.ticker
   title: Monthly Trading Volume
   height: 350
-  group_by: [temporal.dim_calendar.month, stocks.dim_stock.ticker]
+  group_by: [temporal.dim_calendar.month, securities.stocks.dim_stock.ticker]
 }
 
 </details>
@@ -158,10 +158,10 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.date
-  y: [stocks.fact_stock_prices.high, stocks.fact_stock_prices.low]
-  color: stocks.dim_stock.ticker
+  y: [securities.stocks.fact_stock_prices.high, securities.stocks.fact_stock_prices.low]
+  color: securities.stocks.dim_stock.ticker
   title: Daily High and Low Prices
   height: 350
 }
@@ -170,14 +170,14 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.quarter
-  y: [stocks.fact_stock_prices.high, stocks.fact_stock_prices.low]
+  y: [securities.stocks.fact_stock_prices.high, securities.stocks.fact_stock_prices.low]
   y_agg: [max, min]
-  color: stocks.dim_stock.ticker
+  color: securities.stocks.dim_stock.ticker
   title: Quarterly Price Range
   height: 350
-  group_by: [temporal.dim_calendar.quarter, stocks.dim_stock.ticker]
+  group_by: [temporal.dim_calendar.quarter, securities.stocks.dim_stock.ticker]
 }
 
 </details>
@@ -195,10 +195,10 @@ Moving averages help identify trends. SMA-20 shows short-term trend, SMA-50 medi
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.date
-  y: [stocks.fact_stock_prices.close, stocks.fact_stock_prices.sma_20, stocks.fact_stock_prices.sma_50, stocks.fact_stock_prices.sma_200]
-  color: stocks.dim_stock.ticker
+  y: [securities.stocks.fact_stock_prices.close, securities.stocks.fact_stock_prices.sma_20, securities.stocks.fact_stock_prices.sma_50, securities.stocks.fact_stock_prices.sma_200]
+  color: securities.stocks.dim_stock.ticker
   title: Price with Moving Averages
   height: 450
 }
@@ -216,10 +216,10 @@ RSI measures momentum. Values above 70 suggest overbought conditions, below 30 s
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.date
-  y: stocks.fact_stock_prices.rsi_14
-  color: stocks.dim_stock.ticker
+  y: securities.stocks.fact_stock_prices.rsi_14
+  color: securities.stocks.dim_stock.ticker
   title: RSI (14-day)
   height: 350
 }
@@ -237,10 +237,10 @@ Bollinger Bands show price volatility. Prices near the upper band may be overbou
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.date
-  y: [stocks.fact_stock_prices.close, stocks.fact_stock_prices.bollinger_upper, stocks.fact_stock_prices.bollinger_middle, stocks.fact_stock_prices.bollinger_lower]
-  color: stocks.dim_stock.ticker
+  y: [securities.stocks.fact_stock_prices.close, securities.stocks.fact_stock_prices.bollinger_upper, securities.stocks.fact_stock_prices.bollinger_middle, securities.stocks.fact_stock_prices.bollinger_lower]
+  color: securities.stocks.dim_stock.ticker
   title: Bollinger Bands (20-day, 2 std dev)
   height: 400
 }
@@ -251,10 +251,10 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.date
-  y: [stocks.fact_stock_prices.volatility_20d, stocks.fact_stock_prices.volatility_60d]
-  color: stocks.dim_stock.ticker
+  y: [securities.stocks.fact_stock_prices.volatility_20d, securities.stocks.fact_stock_prices.volatility_60d]
+  color: securities.stocks.dim_stock.ticker
   title: Annualized Volatility
   height: 350
 }
@@ -272,10 +272,10 @@ Volume ratio shows current volume relative to 20-day average. High ratios indica
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
+  source: securities.stocks.fact_stock_prices
   x: temporal.dim_calendar.date
-  y: [stocks.fact_stock_prices.volume, stocks.fact_stock_prices.volume_sma_20]
-  color: stocks.dim_stock.ticker
+  y: [securities.stocks.fact_stock_prices.volume, securities.stocks.fact_stock_prices.volume_sma_20]
+  color: securities.stocks.dim_stock.ticker
   title: Volume vs 20-day SMA
   height: 350
 }
@@ -293,8 +293,8 @@ Price data with auto-joined ticker from dim_stock:
 
 $exhibits${
   type: data_table
-  source: stocks.fact_stock_prices
-  columns: [stocks.dim_stock.ticker, temporal.dim_calendar.date, stocks.fact_stock_prices.open, stocks.fact_stock_prices.high, stocks.fact_stock_prices.low, stocks.fact_stock_prices.close, stocks.fact_stock_prices.volume]
+  source: securities.stocks.fact_stock_prices
+  columns: [securities.stocks.dim_stock.ticker, temporal.dim_calendar.date, securities.stocks.fact_stock_prices.open, securities.stocks.fact_stock_prices.high, securities.stocks.fact_stock_prices.low, securities.stocks.fact_stock_prices.close, securities.stocks.fact_stock_prices.volume]
   sort_by: temporal.dim_calendar.date
   sort_order: desc
   page_size: 20
@@ -310,9 +310,9 @@ Stock details including sector, industry (via company), and market cap:
 
 $exhibits${
   type: data_table
-  source: stocks.dim_stock
-  columns: [stocks.dim_stock.ticker, stocks.dim_stock.stock_id, company.dim_company.sector, company.dim_company.industry, stocks.dim_stock.market_cap, stocks.dim_stock.shares_outstanding, stocks.dim_stock.exchange_code]
-  sort_by: stocks.dim_stock.market_cap
+  source: securities.stocks.dim_stock
+  columns: [securities.stocks.dim_stock.ticker, securities.stocks.dim_stock.stock_id, corporate.entity.dim_corporate.entity.sector, corporate.entity.dim_corporate.entity.industry, securities.stocks.dim_stock.market_cap, securities.stocks.dim_stock.shares_outstanding, securities.stocks.dim_stock.exchange_code]
+  sort_by: securities.stocks.dim_stock.market_cap
   sort_order: desc
   page_size: 25
   download: true
@@ -327,10 +327,10 @@ Annual aggregated metrics per stock:
 
 $exhibits${
   type: data_table
-  source: stocks.fact_stock_prices
-  columns: [stocks.dim_stock.ticker, temporal.dim_calendar.year, stocks.fact_stock_prices.close, stocks.fact_stock_prices.volume, stocks.fact_stock_prices.high, stocks.fact_stock_prices.low]
+  source: securities.stocks.fact_stock_prices
+  columns: [securities.stocks.dim_stock.ticker, temporal.dim_calendar.year, securities.stocks.fact_stock_prices.close, securities.stocks.fact_stock_prices.volume, securities.stocks.fact_stock_prices.high, securities.stocks.fact_stock_prices.low]
   aggregations: {close: avg, volume: sum, high: max, low: min}
-  group_by: [stocks.dim_stock.ticker, temporal.dim_calendar.year]
+  group_by: [securities.stocks.dim_stock.ticker, temporal.dim_calendar.year]
   sort_by: temporal.dim_calendar.year
   sort_order: desc
   page_size: 20
@@ -346,8 +346,8 @@ Master stock dimension:
 
 $exhibits${
   type: data_table
-  source: stocks.dim_stock
-  columns: [stocks.dim_stock.ticker, stocks.dim_stock.security_name, stocks.dim_stock.asset_type, stocks.dim_stock.exchange_code, stocks.dim_stock.is_active]
+  source: securities.stocks.dim_stock
+  columns: [securities.stocks.dim_stock.ticker, securities.stocks.dim_stock.security_name, securities.stocks.dim_stock.asset_type, securities.stocks.dim_stock.exchange_code, securities.stocks.dim_stock.is_active]
   download: true
 }
 

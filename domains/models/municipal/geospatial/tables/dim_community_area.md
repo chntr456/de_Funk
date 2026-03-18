@@ -10,11 +10,11 @@ schema:
   - [community_area_id, integer, false, "PK", {derived: "ABS(HASH(CONCAT('CHICAGO_CA_', boundary_code)))"}]
   - [area_number, integer, false, "Community area number (1-77)", {derived: "CAST(boundary_code AS INT)"}]
   - [community_name, string, false, "Community area name", {derived: "boundary_name"}]
-  - [centroid_lat, double, true, "Centroid latitude"]
-  - [centroid_lon, double, true, "Centroid longitude"]
-  - [area_sqmi, double, true, "Area in square miles"]
+  - [centroid_lat, double, true, "Centroid latitude", {format: decimal}]
+  - [centroid_lon, double, true, "Centroid longitude", {format: decimal}]
+  - [area_sqmi, double, true, "Area in square miles", {format: decimal}]
   - [geom_wkt, string, true, "Boundary geometry as WKT"]
-  - [municipality_id, integer, false, "FK to municipal_entity.dim_municipality", {fk: municipal_entity.dim_municipality.municipality_id, derived: "ABS(HASH(CONCAT('CITY_', 'Chicago')))"}]
+  - [municipality_id, integer, false, "FK to municipal.entity.dim_municipality", {fk: municipal.entity.dim_municipality.municipality_id, derived: "ABS(HASH(CONCAT('CITY_', 'Chicago')))"}]
   - [location_id, integer, true, "FK to geospatial.dim_location", {fk: geospatial.dim_location.location_id}]
 
 measures:

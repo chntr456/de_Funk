@@ -28,10 +28,10 @@ def check_domain_files():
     print("1. CHECKING DOMAIN FILES")
     print("=" * 60)
 
-from de_funk.config.domain_loader import ModelConfigLoader
+from de_funk.config.domain import get_domain_loader
 
     domains_dir = repo_root / "domains"
-    loader = ModelConfigLoader(domains_dir)
+    loader = get_domain_loader(domains_dir)
 
     # List all discovered models
     models = loader.list_models()

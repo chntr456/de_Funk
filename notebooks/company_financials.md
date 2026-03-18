@@ -3,7 +3,7 @@ id: company_financials
 title: Company Financials Analysis
 description: Comprehensive company financial statements analysis
 tags: [company, financials, fundamentals, analysis]
-models: [company]
+models: [corporate.entity]
 author: de_Funk Analytics
 created: 2025-12-05
 ---
@@ -56,7 +56,7 @@ Analyze company financial statements including income, balance sheet, cash flows
 
 $exhibits${
   type: data_table
-  source: company.dim_company
+  source: corporate.entity.dim_company
   columns: [ticker, company_name, sector, industry, market_cap, pe_ratio, eps, dividend_yield]
   download: true
 }
@@ -67,7 +67,7 @@ $exhibits${
 
 $exhibits${
   type: metric_cards
-  source: company.fact_income_statement
+  source: corporate.entity.fact_income_statement
   metrics: [
     { column: total_revenue, label: "Total Revenue", aggregation: sum, format: "$,.0f" },
     { column: gross_profit, label: "Gross Profit", aggregation: sum, format: "$,.0f" },
@@ -80,10 +80,10 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: company.fact_income_statement
+  source: corporate.entity.fact_income_statement
   x: temporal.dim_calendar.date
-  y: company.fact_income_statement.total_revenue
-  color: company.dim_company.ticker
+  y: corporate.entity.fact_income_statement.total_revenue
+  color: corporate.entity.dim_corporate.entity.ticker
   title: Total Revenue by Period
   height: 400
 }
@@ -92,10 +92,10 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: company.fact_income_statement
+  source: corporate.entity.fact_income_statement
   x: temporal.dim_calendar.date
-  y: [company.fact_income_statement.gross_profit, company.fact_income_statement.operating_income, company.fact_income_statement.net_income]
-  color: company.dim_company.ticker
+  y: [corporate.entity.fact_income_statement.gross_profit, corporate.entity.fact_income_statement.operating_income, corporate.entity.fact_income_statement.net_income]
+  color: corporate.entity.dim_corporate.entity.ticker
   title: Profitability Metrics Over Time
   height: 400
 }
@@ -107,10 +107,10 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: company.fact_income_statement
+  source: corporate.entity.fact_income_statement
   x: temporal.dim_calendar.date
-  y: [company.fact_income_statement.operating_income]
-  color: company.dim_company.ticker
+  y: [corporate.entity.fact_income_statement.operating_income]
+  color: corporate.entity.dim_corporate.entity.ticker
   title: Operating Income by Period
   height: 350
 }
@@ -119,10 +119,10 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: company.fact_income_statement
+  source: corporate.entity.fact_income_statement
   x: temporal.dim_calendar.date
-  y: [company.fact_income_statement.ebitda]
-  color: company.dim_company.ticker
+  y: [corporate.entity.fact_income_statement.ebitda]
+  color: corporate.entity.dim_corporate.entity.ticker
   title: EBITDA Over Time
   height: 350
 }
@@ -131,9 +131,9 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: company.fact_income_statement
-  columns: [company.dim_company.ticker, company.fact_income_statement.report_type, company.fact_income_statement.total_revenue, company.fact_income_statement.gross_profit, company.fact_income_statement.operating_income, company.fact_income_statement.net_income, company.fact_income_statement.ebitda]
-  sort_by: company.fact_income_statement.period_end_date_id
+  source: corporate.entity.fact_income_statement
+  columns: [corporate.entity.dim_corporate.entity.ticker, corporate.entity.fact_income_statement.report_type, corporate.entity.fact_income_statement.total_revenue, corporate.entity.fact_income_statement.gross_profit, corporate.entity.fact_income_statement.operating_income, corporate.entity.fact_income_statement.net_income, corporate.entity.fact_income_statement.ebitda]
+  sort_by: corporate.entity.fact_income_statement.period_end_date_id
   sort_order: desc
   page_size: 20
   download: true
@@ -147,7 +147,7 @@ $exhibits${
 
 $exhibits${
   type: metric_cards
-  source: company.fact_balance_sheet
+  source: corporate.entity.fact_balance_sheet
   metrics: [
     { column: total_assets, label: "Total Assets", aggregation: last, format: "$,.0f" },
     { column: total_liabilities, label: "Total Liabilities", aggregation: last, format: "$,.0f" },
@@ -160,10 +160,10 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: company.fact_balance_sheet
+  source: corporate.entity.fact_balance_sheet
   x: temporal.dim_calendar.date
-  y: [company.fact_balance_sheet.total_current_assets, company.fact_balance_sheet.total_non_current_assets]
-  color: company.dim_company.ticker
+  y: [corporate.entity.fact_balance_sheet.total_current_assets, corporate.entity.fact_balance_sheet.total_non_current_assets]
+  color: corporate.entity.dim_corporate.entity.ticker
   title: Current vs Non-Current Assets
   height: 400
 }
@@ -175,10 +175,10 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: company.fact_balance_sheet
+  source: corporate.entity.fact_balance_sheet
   x: temporal.dim_calendar.date
-  y: [company.fact_balance_sheet.long_term_debt, company.fact_balance_sheet.short_long_term_debt_total, company.fact_balance_sheet.cash_and_equivalents]
-  color: company.dim_company.ticker
+  y: [corporate.entity.fact_balance_sheet.long_term_debt, corporate.entity.fact_balance_sheet.short_long_term_debt_total, corporate.entity.fact_balance_sheet.cash_and_equivalents]
+  color: corporate.entity.dim_corporate.entity.ticker
   title: Debt vs Cash Position
   height: 350
 }
@@ -187,9 +187,9 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: company.fact_balance_sheet
-  columns: [company.dim_company.ticker, company.fact_balance_sheet.report_type, company.fact_balance_sheet.total_assets, company.fact_balance_sheet.total_liabilities, company.fact_balance_sheet.total_shareholder_equity, company.fact_balance_sheet.cash_and_equivalents, company.fact_balance_sheet.short_long_term_debt_total]
-  sort_by: company.fact_balance_sheet.period_end_date_id
+  source: corporate.entity.fact_balance_sheet
+  columns: [corporate.entity.dim_corporate.entity.ticker, corporate.entity.fact_balance_sheet.report_type, corporate.entity.fact_balance_sheet.total_assets, corporate.entity.fact_balance_sheet.total_liabilities, corporate.entity.fact_balance_sheet.total_shareholder_equity, corporate.entity.fact_balance_sheet.cash_and_equivalents, corporate.entity.fact_balance_sheet.short_long_term_debt_total]
+  sort_by: corporate.entity.fact_balance_sheet.period_end_date_id
   sort_order: desc
   page_size: 20
   download: true
@@ -203,7 +203,7 @@ $exhibits${
 
 $exhibits${
   type: metric_cards
-  source: company.fact_cash_flow
+  source: corporate.entity.fact_cash_flow
   metrics: [
     { column: operating_cashflow, label: "Operating Cash Flow", aggregation: sum, format: "$,.0f" },
     { column: cashflow_from_investment, label: "Investing Cash Flow", aggregation: sum, format: "$,.0f" },
@@ -216,10 +216,10 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: company.fact_cash_flow
+  source: corporate.entity.fact_cash_flow
   x: temporal.dim_calendar.date
-  y: [company.fact_cash_flow.operating_cashflow, company.fact_cash_flow.cashflow_from_investment, company.fact_cash_flow.cashflow_from_financing]
-  color: company.dim_company.ticker
+  y: [corporate.entity.fact_cash_flow.operating_cashflow, corporate.entity.fact_cash_flow.cashflow_from_investment, corporate.entity.fact_cash_flow.cashflow_from_financing]
+  color: corporate.entity.dim_corporate.entity.ticker
   title: Cash Flow Components Over Time
   height: 400
 }
@@ -231,10 +231,10 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: company.fact_cash_flow
+  source: corporate.entity.fact_cash_flow
   x: temporal.dim_calendar.date
-  y: company.fact_cash_flow.operating_cashflow
-  color: company.dim_company.ticker
+  y: corporate.entity.fact_cash_flow.operating_cashflow
+  color: corporate.entity.dim_corporate.entity.ticker
   title: Operating Cash Flow by Period
   height: 350
 }
@@ -243,10 +243,10 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: company.fact_cash_flow
+  source: corporate.entity.fact_cash_flow
   x: temporal.dim_calendar.date
-  y: [company.fact_cash_flow.capital_expenditures, company.fact_cash_flow.dividend_payout]
-  color: company.dim_company.ticker
+  y: [corporate.entity.fact_cash_flow.capital_expenditures, corporate.entity.fact_cash_flow.dividend_payout]
+  color: corporate.entity.dim_corporate.entity.ticker
   title: CapEx and Dividends
   height: 350
 }
@@ -255,9 +255,9 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: company.fact_cash_flow
-  columns: [company.dim_company.ticker, company.fact_cash_flow.report_type, company.fact_cash_flow.operating_cashflow, company.fact_cash_flow.cashflow_from_investment, company.fact_cash_flow.cashflow_from_financing, company.fact_cash_flow.capital_expenditures]
-  sort_by: company.fact_cash_flow.period_end_date_id
+  source: corporate.entity.fact_cash_flow
+  columns: [corporate.entity.dim_corporate.entity.ticker, corporate.entity.fact_cash_flow.report_type, corporate.entity.fact_cash_flow.operating_cashflow, corporate.entity.fact_cash_flow.cashflow_from_investment, corporate.entity.fact_cash_flow.cashflow_from_financing, corporate.entity.fact_cash_flow.capital_expenditures]
+  sort_by: corporate.entity.fact_cash_flow.period_end_date_id
   sort_order: desc
   page_size: 20
   download: true
@@ -271,7 +271,7 @@ $exhibits${
 
 $exhibits${
   type: metric_cards
-  source: company.fact_earnings
+  source: corporate.entity.fact_earnings
   metrics: [
     { column: reported_eps, label: "Latest EPS", aggregation: last, format: "$,.2f" },
     { column: estimated_eps, label: "Estimated EPS", aggregation: last, format: "$,.2f" },
@@ -283,10 +283,10 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: company.fact_earnings
+  source: corporate.entity.fact_earnings
   x: temporal.dim_calendar.date
-  y: [company.fact_earnings.reported_eps, company.fact_earnings.estimated_eps]
-  color: company.dim_company.ticker
+  y: [corporate.entity.fact_earnings.reported_eps, corporate.entity.fact_earnings.estimated_eps]
+  color: corporate.entity.dim_corporate.entity.ticker
   title: Reported EPS vs Analyst Estimates
   height: 400
 }
@@ -298,10 +298,10 @@ $exhibits${
 
 $exhibits${
   type: line_chart
-  source: company.fact_earnings
+  source: corporate.entity.fact_earnings
   x: temporal.dim_calendar.date
-  y: company.fact_earnings.surprise_percentage
-  color: company.dim_company.ticker
+  y: corporate.entity.fact_earnings.surprise_percentage
+  color: corporate.entity.dim_corporate.entity.ticker
   title: Earnings Surprise Percentage Over Time
   height: 350
 }
@@ -310,9 +310,9 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: company.fact_earnings
-  columns: [company.dim_company.ticker, company.fact_earnings.report_type, company.fact_earnings.reported_date, company.fact_earnings.reported_eps, company.fact_earnings.estimated_eps, company.fact_earnings.surprise, company.fact_earnings.surprise_percentage]
-  sort_by: company.fact_earnings.period_end_date_id
+  source: corporate.entity.fact_earnings
+  columns: [corporate.entity.dim_corporate.entity.ticker, corporate.entity.fact_earnings.report_type, corporate.entity.fact_earnings.reported_date, corporate.entity.fact_earnings.reported_eps, corporate.entity.fact_earnings.estimated_eps, corporate.entity.fact_earnings.surprise, corporate.entity.fact_earnings.surprise_percentage]
+  sort_by: corporate.entity.fact_earnings.period_end_date_id
   sort_order: desc
   page_size: 20
   download: true

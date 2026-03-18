@@ -9,7 +9,7 @@ optional: true
 schema:
   - [segment_id, string, false, "Traffic segment ID"]
   - [timestamp, timestamp, true, "Measurement timestamp"]
-  - [speed, double, true, "Average speed"]
+  - [speed, double, true, "Average speed", {format: decimal2}]
   - [congestion_level, string, true, "Congestion level"]
 ---
 

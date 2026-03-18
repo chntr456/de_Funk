@@ -18,7 +18,7 @@ Usage:
     from de_funk.config.domain import DomainConfigLoaderV4, get_domain_loader
 
     loader = DomainConfigLoaderV4(Path("domains"))
-    config = loader.load_model_config("county_property")
+    config = loader.load_model_config("county.property")
 """
 
 import logging
@@ -335,22 +335,22 @@ class DomainConfigLoaderV4:
         self._parse_cache.clear()
 
 
-def get_domain_loader(domains_dir: Path):
+def get_domain_loader(domains_dir: Path) -> DomainConfigLoaderV4:
     """
-    Factory: return V4 loader if directory has v4 structure, else V3.
+    Factory: return V4 domain config loader.
 
-    V4 structure is detected by presence of _model_guides_/ or
-    models/ subdirectory with model.md files.
+    Args:
+        domains_dir: Path to the domains/ directory
+
+    Returns:
+        DomainConfigLoaderV4 instance
+
+    Raises:
+        FileNotFoundError: If domains_dir doesn't exist or has no v4 structure
     """
     domains_dir = Path(domains_dir)
 
-    # V4 indicators
-    has_model_guides = (domains_dir / "_model_guides_").is_dir()
-    has_models_subdir = (domains_dir / "models").is_dir()
+    if not domains_dir.exists():
+        raise FileNotFoundError(f"Domains directory not found: {domains_dir}")
 
-    if has_model_guides or has_models_subdir:
-        return DomainConfigLoaderV4(domains_dir)
-
-    # Fall back to V3 loader
-    from de_funk.config.domain_loader import ModelConfigLoader
-    return ModelConfigLoader(domains_dir)
+    return DomainConfigLoaderV4(domains_dir)

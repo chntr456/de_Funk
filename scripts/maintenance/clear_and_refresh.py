@@ -156,7 +156,7 @@ from de_funk.pipelines.providers.alpha_vantage import AlphaVantageIngestor
 
 def rebuild_silver(ctx, date_from: str, date_to: str, tickers: list):
     """Rebuild silver layer models using v2.0 modular architecture."""
-from de_funk.config.domain_loader import ModelConfigLoader
+from de_funk.config.domain import get_domain_loader
 from de_funk.models.domains.corporate.company import CompanyModel
 from de_funk.models.domains.securities.stocks import StocksModel
 from de_funk.models.api.session import UniversalSession
@@ -169,7 +169,7 @@ from de_funk.models.api.session import UniversalSession
     try:
         # Initialize model config loader (from domains/ directory)
         domains_dir = ctx.repo / "domains"
-        loader = ModelConfigLoader(domains_dir)
+        loader = get_domain_loader(domains_dir)
 
         # Create session for cross-model references
         session = UniversalSession(ctx.connection, ctx.storage, ctx.repo)
@@ -184,7 +184,7 @@ from de_funk.models.api.session import UniversalSession
         # --- Build Company Model ---
         print("Building company model...")
         print("-" * 80)
-        company_cfg = loader.load_model_config("company")
+        company_cfg = loader.load_model_config("corporate.entity")
         company_model = CompanyModel(
             ctx.connection,
             model_cfg=company_cfg,
@@ -208,7 +208,7 @@ from de_funk.models.api.session import UniversalSession
         # --- Build Stocks Model ---
         print("Building stocks model...")
         print("-" * 80)
-        stocks_cfg = loader.load_model_config("stocks")
+        stocks_cfg = loader.load_model_config("securities.stocks")
         stocks_model = StocksModel(
             ctx.connection,
             model_cfg=stocks_cfg,

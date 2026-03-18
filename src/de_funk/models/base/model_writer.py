@@ -168,8 +168,9 @@ class ModelWriter:
             if model_silver_key in self.storage_cfg.get('roots', {}):
                 output_root = self.storage_cfg['roots'][model_silver_key]
             else:
-                # Fallback to generic silver root
-                output_root = f"{self.storage_cfg.get('roots', {}).get('silver', 'storage/silver')}/{self.model_name}"
+                # Fallback to generic silver root (dots → slashes for nested layout)
+                model_path = self.model_name.replace(".", "/")
+                output_root = f"{self.storage_cfg.get('roots', {}).get('silver', 'storage/silver')}/{model_path}"
 
         self._print(f"\n{'=' * 70}")
         self._print(f"Writing {self.model_name.upper()} Model to Silver Layer")

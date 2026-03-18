@@ -1,10 +1,10 @@
 ---
 type: domain-model
-model: corporate_finance
+model: corporate.finance
 version: 3.0
 description: "Corporate financial statements and earnings reports"
 extends: [_base.accounting.financial_statement, _base.corporate.earnings]
-depends_on: [temporal, corporate_entity]
+depends_on: [temporal, corporate.entity]
 
 sources_from: sources/finance/
 storage:
@@ -15,11 +15,11 @@ storage:
 graph:
   edges:
     # [edge_name, from, to, on, type, cross_model]
-    - [statement_to_company, fact_financial_statements, corporate_entity.dim_company, [legal_entity_id=company_id], many_to_one, corporate_entity]
+    - [statement_to_company, fact_financial_statements, corporate.entity.dim_company, [legal_entity_id=company_id], many_to_one, corporate.entity]
     - [statement_to_account, fact_financial_statements, dim_financial_account, [account_id=account_id], many_to_one, null]
     - [statement_to_period_start, fact_financial_statements, temporal.dim_calendar, [period_start_date_id=date_id], many_to_one, temporal]
     - [statement_to_period_end, fact_financial_statements, temporal.dim_calendar, [period_end_date_id=date_id], many_to_one, temporal]
-    - [earnings_to_company, fact_earnings, corporate_entity.dim_company, [legal_entity_id=company_id], many_to_one, corporate_entity]
+    - [earnings_to_company, fact_earnings, corporate.entity.dim_company, [legal_entity_id=company_id], many_to_one, corporate.entity]
     - [earnings_to_calendar, fact_earnings, temporal.dim_calendar, [report_date_id=date_id], many_to_one, temporal]
 
   paths:
@@ -31,7 +31,7 @@ graph:
     statement_by_company:
       description: "Financial statements by company and account category"
       steps:
-        - {from: fact_financial_statements, to: corporate_entity.dim_company, via: legal_entity_id}
+        - {from: fact_financial_statements, to: corporate.entity.dim_company, via: legal_entity_id}
         - {from: fact_financial_statements, to: dim_financial_account, via: account_id}
 
 build:
@@ -63,7 +63,7 @@ status: active
 
 ## Corporate Finance Model
 
-SEC-filed financial statements and quarterly earnings, normalized into a chart-of-accounts structure. Depends on `corporate_entity` for the company dimension.
+SEC-filed financial statements and quarterly earnings, normalized into a chart-of-accounts structure. Depends on `corporate.entity` for the company dimension.
 
 ### Financial Statement Normalization
 
@@ -79,7 +79,7 @@ Financial line items from income statements, balance sheets, and cash flow state
 -- Revenue by company over time
 SELECT c.ticker, cal.year, SUM(fs.amount) as revenue
 FROM fact_financial_statements fs
-JOIN corporate_entity.dim_company c ON fs.legal_entity_id = c.company_id
+JOIN corporate.entity.dim_company c ON fs.legal_entity_id = c.company_id
 JOIN dim_financial_account fa ON fs.account_id = fa.account_id
 JOIN temporal.dim_calendar cal ON fs.period_end_date_id = cal.date_id
 WHERE fa.account_code = 'TOTAL_REVENUE' AND fs.report_type = 'annual'

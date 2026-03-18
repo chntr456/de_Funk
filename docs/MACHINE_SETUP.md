@@ -267,8 +267,8 @@ cp .env.example .env 2>/dev/null || touch .env
 cat > .env << 'EOF'
 # API Keys
 ALPHA_VANTAGE_API_KEYS=your_alpha_vantage_key_here
-BLS_API_KEYS=your_bls_key_here
 CHICAGO_API_KEYS=your_chicago_key_here
+COOK_COUNTY_API_KEYS=your_cook_county_key_here
 
 # Connection type (duckdb or spark)
 CONNECTION_TYPE=duckdb
@@ -549,8 +549,8 @@ After successful setup, your environment should have:
 
 1. **Get API Keys**: Register for free API keys:
    - [Alpha Vantage](https://www.alphavantage.co/support/#api-key) (free tier: 5 calls/min)
-   - [BLS](https://www.bls.gov/developers/) (free, optional key for higher limits)
    - [Chicago Data Portal](https://data.cityofchicago.org/) (free app token)
+   - [Cook County Data Portal](https://datacatalog.cookcountyil.gov/) (same Socrata token)
 
 2. **Run Initial Ingestion**:
    ```bash

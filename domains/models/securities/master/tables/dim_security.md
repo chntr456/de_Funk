@@ -14,8 +14,8 @@ schema:
   - [exchange_code, string, true, "Primary exchange"]
   - [currency, string, true, "Trading currency", {derived: "'USD'"}]
   - [is_active, boolean, true, "Currently trading", {derived: "delisting_date IS NULL"}]
-  - [ipo_date, date, true, "IPO or listing date"]
-  - [delisting_date, date, true, "Delisting date"]
+  - [ipo_date, date, true, "IPO or listing date", {format: date}]
+  - [delisting_date, date, true, "Delisting date", {format: date}]
 
 measures:
   - [security_count, count_distinct, security_id, "Number of securities", {format: "#,##0"}]

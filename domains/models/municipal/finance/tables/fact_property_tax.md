@@ -7,10 +7,10 @@ primary_key: [entry_id]
 partition_by: [tax_year]
 
 additional_schema:
-  - [parcel_id, string, true, "FK to county property dim_parcel", {fk: county_property.dim_parcel.parcel_id}]
+  - [parcel_id, string, true, "FK to county property dim_parcel", {fk: county.property.dim_parcel.parcel_id}]
   - [tax_year, integer, false, "Tax levy year"]
-  - [assessed_value, "decimal(18,2)", true, "Assessed value at time of levy"]
-  - [tax_rate, "decimal(10,6)", true, "Effective tax rate"]
+  - [assessed_value, "decimal(18,2)", true, "Assessed value at time of levy", {format: $}]
+  - [tax_rate, "decimal(10,6)", true, "Effective tax rate", {format: decimal}]
   - [tax_district_id, integer, true, "FK to dim_tax_district", {fk: dim_tax_district.tax_district_id, derived: "ABS(HASH(tax_code))"}]
 
 measures:
@@ -25,13 +25,13 @@ Property tax ledger entries. Each row is a tax payment for one parcel in one tax
 
 ### Cross-Domain Relationship
 
-The `parcel_id` column FKs to `county_property.dim_parcel`, enabling:
+The `parcel_id` column FKs to `county.property.dim_parcel`, enabling:
 
 ```sql
 -- Property tax by township
 SELECT p.township_code, SUM(pt.transaction_amount) as total_tax
 FROM fact_property_tax pt
-JOIN county_property.dim_parcel p ON pt.parcel_id = p.parcel_id
+JOIN county.property.dim_parcel p ON pt.parcel_id = p.parcel_id
 GROUP BY p.township_code;
 ```
 
@@ -39,4 +39,4 @@ GROUP BY p.township_code;
 
 `transaction_amount = assessed_value * tax_rate`
 
-The assessed value comes from `county_property.fact_assessed_values.assessed_value_total` for the corresponding parcel and year.
+The assessed value comes from `county.property.fact_assessed_values.assessed_value_total` for the corresponding parcel and year.

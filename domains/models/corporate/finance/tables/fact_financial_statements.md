@@ -11,13 +11,15 @@ transform: unpivot
 
 # [column, type, nullable, description, {options}]
 schema:
-  - [statement_entry_id, integer, true, "PK - populated post-unpivot", {}]
+  - [statement_entry_id, integer, false, "PK — HASH(ticker + date + account)", {}]
+  - [legal_entity_id, integer, false, "Company hash (legacy)", {}]
   - [company_id, integer, false, "FK to dim_company", {fk: dim_company.company_id}]
-  - [account_id, integer, true, "FK to dim_financial_account - populated post-unpivot", {fk: dim_financial_account.account_id}]
-  - [period_start_date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
-  - [period_end_date_id, integer, false, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
+  - [account_id, integer, false, "FK to dim_financial_account", {fk: dim_financial_account.account_id}]
+  - [account_code, string, false, "Line item code (TOTAL_REVENUE, NET_INCOME, etc.)"]
+  - [period_start_date_id, integer, true, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
+  - [period_end_date_id, integer, true, "FK to calendar", {fk: temporal.dim_calendar.date_id}]
   - [report_type, string, false, "annual or quarterly"]
-  - [amount, double, false, "Line item value"]
+  - [amount, double, false, "Line item value", {format: $}]
   - [reported_currency, string, true, "Reporting currency"]
 
 measures:

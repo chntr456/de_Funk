@@ -10,7 +10,7 @@ schema:
   - [route_id, string, false, "Bus route ID"]
   - [date_id, integer, false, "FK to dim_calendar", {fk: temporal.dim_calendar.date_id}]
   - [year, integer, false, "Year"]
-  - [rides, long, true, "Total boardings"]
+  - [rides, long, true, "Total boardings", {format: number}]
 
 measures:
   - [total_bus_rides, sum, rides, "Total bus rides", {format: "#,##0"}]

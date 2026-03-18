@@ -45,8 +45,8 @@ class StocksBuilder(BaseModelBuilder):
     Technical indicators are computed from those prices in post_build.
     """
 
-    model_name = "stocks"
-    depends_on = ["temporal", "securities", "corporate"]  # Normalized architecture
+    model_name = "securities.stocks"
+    depends_on = ["temporal", "securities.master", "corporate.entity"]
 
     def get_model_class(self) -> Type:
         """Return the StocksModel class."""

@@ -1,175 +1,126 @@
 ---
-title: Exhibit Types Reference
-description: Documentation for all de_Funk exhibit types
-version: 1.0.0
+title: Exhibit Types Catalog
+description: All de_funk block types — scanned from exhibits/types/*.md at plugin startup
+version: 2.0
 
-categories:
-  - name: charts
-    description: Interactive visualizations using Plotly.js
-    types: [line_chart, bar_chart, scatter_chart, area_chart, heatmap, pie_chart]
+catalog:
+  - key: plotly.line
+    aliases: [line, line_chart, time_series]
+    data_mode: graphical
+    renderer: graphical
+    file: types/plotly.line.md
 
-  - name: tables
-    description: Tabular data displays
-    types: [data_table, pivot_table, great_table]
+  - key: plotly.bar
+    aliases: [bar, bar_chart]
+    data_mode: graphical
+    renderer: graphical
+    file: types/plotly.bar.md
 
-  - name: metrics
-    description: KPI and metric displays
-    types: [metric_cards]
+  - key: plotly.scatter
+    aliases: [scatter]
+    data_mode: graphical
+    renderer: graphical
+    file: types/plotly.scatter.md
 
-common_properties:
-  id:
-    type: string
-    required: true
-    description: Unique identifier for this exhibit
+  - key: plotly.area
+    aliases: [area]
+    data_mode: graphical
+    renderer: graphical
+    file: types/plotly.area.md
 
-  domain:
-    type: string
-    required: true
-    description: Primary domain model (e.g., stocks, company)
+  - key: plotly.pie
+    aliases: [pie]
+    data_mode: graphical
+    renderer: graphical
+    file: types/plotly.pie.md
 
-  title:
-    type: string
-    required: false
-    description: Display title above the exhibit
+  - key: plotly.heatmap
+    aliases: [heatmap]
+    data_mode: graphical
+    renderer: graphical
+    file: types/plotly.heatmap.md
 
-  description:
-    type: string
-    required: false
-    description: Subtitle or description text
+  - key: plotly.box
+    aliases: [box, ohlcv, candlestick]
+    data_mode: graphical
+    renderer: graphical
+    file: types/plotly.box.md
 
-  page_filters:
-    type: object
-    required: false
-    default: { inherit: true }
-    description: Controls inheritance from page-level filters
-    properties:
-      inherit:
-        type: boolean
-        default: true
-        description: Whether to inherit filters from frontmatter
-      ignore:
-        type: array
-        items: string
-        description: List of filter IDs to ignore
+  - key: table.data
+    aliases: [data_table]
+    data_mode: tabular
+    renderer: tabular
+    file: types/table.data.md
 
-  filters:
-    type: array
-    required: false
-    description: Exhibit-specific filters (render inside exhibit)
-    items:
-      type: object
-      properties:
-        id: { type: string, required: true }
-        type: { type: string, required: true, enum: [select, date_range, date, number_range, slider, boolean] }
-        label: { type: string }
-        source: { type: string, required: true }
-        default: { type: any }
+  - key: table.pivot
+    aliases: [pivot_table, pivot, great_table, gt]
+    data_mode: tabular
+    renderer: pivot
+    file: types/table.pivot.md
 
-  metrics:
-    type: array
-    required: false
-    description: KPI cards to display in exhibit header
-    items:
-      type: object
-      properties:
-        id: { type: string }
-        column: { type: string, required: true }
-        label: { type: string }
-        aggregation: { type: string, enum: [sum, avg, min, max, count] }
-        format: { type: string }
+  - key: cards.metric
+    aliases: [metric_cards, kpi]
+    data_mode: metric
+    renderer: metric-cards
+    file: types/cards.metric.md
 
-  display:
-    type: object
-    required: false
-    description: Display options
-    properties:
-      height: { type: number, default: 400 }
-      show_legend: { type: boolean, default: true }
-      show_filters: { type: boolean, default: true }
-      show_metrics: { type: boolean, default: true }
-      interactive: { type: boolean, default: true }
+  - key: control.config
+    aliases: [config]
+    data_mode: ~
+    renderer: config-panel
+    file: types/control.config.md
 ---
 
-# Exhibit Types Reference
+# Exhibit Types Catalog
 
-This folder contains documentation for all de_Funk exhibit types. Each exhibit type has its own markdown file with:
+The plugin scans `exhibits/types/*.md` at startup and builds this catalog from frontmatter.
+No separate registry file — the markdown files ARE the registry.
 
-1. **YAML frontmatter** - Schema definition (required/optional fields, types, defaults)
-2. **Markdown body** - Documentation, examples, and usage guidelines
+## Type Catalog
 
-## How to Use
+| Key | Aliases | Mode | Description |
+|-----|---------|------|-------------|
+| `plotly.line` | `line`, `line_chart` | graphical | Time-series or categorical line chart |
+| `plotly.bar` | `bar`, `bar_chart` | graphical | Grouped or stacked bar chart |
+| `plotly.scatter` | `scatter` | graphical | X-Y scatter with optional size/color |
+| `plotly.area` | `area` | graphical | Filled area chart |
+| `plotly.pie` | `pie` | graphical | Proportional pie/donut chart |
+| `plotly.heatmap` | `heatmap` | graphical | 2D color matrix |
+| `plotly.box` | `box`, `ohlcv` | graphical | Box-and-whisker / OHLCV candlestick |
+| `table.data` | `data_table` | tabular | Scrollable flat data table |
+| `table.pivot` | `pivot`, `gt` | tabular | Pivot table with optional Great Tables rendering |
+| `cards.metric` | `kpi` | metric | KPI metric cards |
+| `control.config` | `config` | — | Interactive control panel |
 
-In your Obsidian notes, use code blocks with the exhibit type:
+`table.pivot` with `formatting.renderer: great_tables` enables Great Tables styled output.
+`gt` and `great_table` are aliases that set this renderer as the default.
 
-```yaml
-```exhibit
-type: line_chart          # The exhibit type
-domain: stocks            # Primary domain model
-# ... type-specific options
-```
-```
+## Base Files
 
-## Categories
+| File | Purpose |
+|------|---------|
+| [`_base/exhibit.md`](_base/exhibit.md) | Base defaults all types inherit |
+| [`_base/computations.md`](_base/computations.md) | Typed function catalog for derived measures |
 
-### Charts (`exhibits/charts/`)
-
-Interactive visualizations powered by Plotly.js:
-
-| Type | Description | Best For |
-|------|-------------|----------|
-| `line_chart` | Time series lines | Trends over time |
-| `bar_chart` | Categorical bars | Comparisons |
-| `scatter_chart` | X-Y scatter plot | Correlations |
-| `area_chart` | Filled area | Cumulative trends |
-| `heatmap` | 2D color matrix | Density/patterns |
-| `pie_chart` | Proportional slices | Part-of-whole |
-
-### Tables (`exhibits/tables/`)
-
-Tabular data displays:
-
-| Type | Description | Best For |
-|------|-------------|----------|
-| `data_table` | Interactive table | Raw data exploration |
-| `pivot_table` | Grouped pivot | Aggregated summaries |
-| `great_table` | Publication quality | Reports |
-
-### Metrics (`exhibits/metrics/`)
-
-KPI and summary displays:
-
-| Type | Description | Best For |
-|------|-------------|----------|
-| `metric_cards` | KPI cards | Key numbers |
-
-## Common Properties
-
-All exhibits share these common properties. See `_index.md` frontmatter for full schema.
-
-### Required
-
-- `type` - The exhibit type (e.g., `line_chart`)
-- `domain` - Primary domain model
-
-### Filter Inheritance
+## Quick Start
 
 ```yaml
-page_filters:
-  inherit: true           # Use page filters (default)
-  ignore: [ticker]        # Skip specific filters
-
-filters:                  # Add exhibit-specific filters
-  - id: price_min
-    type: slider
-    source: stocks.fact_stock_prices.close
+type: plotly.line
+data:
+  x: temporal.date
+  y: securities.stocks.adjusted_close
+  group_by: securities.stocks.ticker
+formatting:
+  title: Daily Close Prices
+  height: 420
 ```
 
-### Metrics Header
+See [`testing/stock_analysis_test.md`](testing/stock_analysis_test.md) for a full example note
+with all block types.
 
-```yaml
-metrics:
-  - column: stocks.measures.close_price
-    label: Avg Price
-    aggregation: avg
-    format: "$,.2f"
-```
+## Notes
+
+- `temporal` is always auto-injected — omit it from `models:` in note frontmatter
+- Field references use `domain.field` dot notation resolved by the backend
+- All multi-field lists use positional tuple syntax: `[key, field, aggregation, format, label]`
+- Derived measures use the computation catalog — see `_base/computations.md`

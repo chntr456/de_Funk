@@ -188,6 +188,7 @@ def _synthesize_node(
                 _normalize_from(direct_from) if "." in direct_from else direct_from
             )
             union_from = table_config.get("union_from", [])
+            enrich_specs = process_enrich_specs(table_config)
             return {
                 "from": "__distinct__",
                 "type": _table_type(table_name),
@@ -197,6 +198,7 @@ def _synthesize_node(
                 "_distinct_union_from": union_from,
                 "_distinct_group_by": flags.get("group_by", []),
                 "_schema": table_config.get("schema", []),
+                "_enrich": enrich_specs,
                 "primary_key": flags["primary_key"],
                 "unique_key": flags["unique_key"],
             }

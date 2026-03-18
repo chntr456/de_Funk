@@ -167,7 +167,7 @@ Federation models are the highest tier — they depend on all child domain model
 
 ```
 Tier 0: temporal, geospatial          (foundation)
-Tier 1: entity models                  (corporate_entity, municipal_entity)
+Tier 1: entity models                  (corporate.entity, municipal_entity)
 Tier 2: geo subdivisions              (municipal_geospatial, county_geospatial)
 Tier 3: domain models                 (municipal_finance, corporate_finance, ...)
 Tier 4: federation models             (models/_base/accounting, ...)

@@ -16,19 +16,19 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from de_funk.config.domain_loader import ModelConfigLoader
+from de_funk.config.domain import get_domain_loader
 
 
 def main():
     domains_dir = project_root / "domains"
-    loader = ModelConfigLoader(domains_dir)
+    loader = get_domain_loader(domains_dir)
 
     print("=" * 70)
     print("DEBUG: Domain Config Loading for stocks")
     print("=" * 70)
 
     # Load stocks config
-    config = loader.load_model_config("stocks")
+    config = loader.load_model_config("securities.stocks")
 
     print(f"\nModel: {config.get('model')}")
     print(f"Extends: {config.get('extends')}")

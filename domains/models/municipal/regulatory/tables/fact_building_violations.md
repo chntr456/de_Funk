@@ -8,7 +8,7 @@ partition_by: [year]
 
 schema:
   - [violation_id, integer, false, "PK", {derived: "ABS(HASH(CAST(id AS STRING)))"}]
-  - [violation_date, date, true, "Violation date"]
+  - [violation_date, date, true, "Violation date", {format: date}]
   - [year, integer, true, "Year", {derived: "YEAR(violation_date)"}]
   - [address, string, true, "Address"]
   - [ward, integer, true, "Ward"]

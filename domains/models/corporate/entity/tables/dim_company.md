@@ -22,6 +22,16 @@ schema:
   - [official_site, string, true, "Website URL"]
   - [fiscal_year_end, string, true, "Fiscal year end month"]
   - [is_active, boolean, true, "Active", {default: true}]
+  - [shares_outstanding, long, true, "Total shares outstanding", {format: number}]
+  - [shares_float, long, true, "Float shares", {format: number}]
+  - [beta, double, true, "Beta vs S&P 500", {format: decimal2}]
+  - [pe_ratio, double, true, "Trailing P/E ratio", {format: decimal2}]
+  - [eps, double, true, "Earnings per share (TTM)", {format: $}]
+  - [dividend_yield, double, true, "Dividend yield", {format: "%2"}]
+  - [profit_margin, double, true, "Net profit margin", {format: "%2"}]
+  - [revenue_ttm, long, true, "Revenue trailing 12 months", {format: "$M"}]
+  - [week_52_high, double, true, "52-week high price", {format: $}]
+  - [week_52_low, double, true, "52-week low price", {format: $}]
 
 measures:
   - [company_count, count_distinct, company_id, "Number of companies", {format: "#,##0"}]

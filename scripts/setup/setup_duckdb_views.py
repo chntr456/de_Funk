@@ -23,7 +23,7 @@ Features:
 - Auto-detects Delta Lake vs Parquet format (uses delta_scan or read_parquet)
 - Points views to Silver layer tables (zero data duplication)
 - Creates alias views (stocks.fact_prices → securities.fact_security_prices) for DuckDB caching
-- Backend-agnostic base measures work via schema aliases (ModelConfigLoader)
+- Backend-agnostic base measures work via schema aliases (DomainConfigLoaderV4)
 - This script provides performance optimization by pre-creating database views
 - Handles missing tables gracefully (skips if not built yet)
 - Validates views after creation

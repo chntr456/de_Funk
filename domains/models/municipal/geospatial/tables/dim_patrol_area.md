@@ -11,10 +11,10 @@ schema:
   - [beat_number, string, false, "Beat number", {derived: "boundary_code"}]
   - [district_id, integer, false, "FK to dim_patrol_district", {fk: dim_patrol_district.district_id, derived: "ABS(HASH(CONCAT('CHICAGO_DIST_', district)))"}]
   - [district_number, string, false, "Parent district number", {derived: "district"}]
-  - [centroid_lat, double, true, "Centroid latitude"]
-  - [centroid_lon, double, true, "Centroid longitude"]
+  - [centroid_lat, double, true, "Centroid latitude", {format: decimal}]
+  - [centroid_lon, double, true, "Centroid longitude", {format: decimal}]
   - [geom_wkt, string, true, "Boundary geometry as WKT"]
-  - [municipality_id, integer, false, "FK to municipal_entity.dim_municipality", {fk: municipal_entity.dim_municipality.municipality_id, derived: "ABS(HASH(CONCAT('CITY_', 'Chicago')))"}]
+  - [municipality_id, integer, false, "FK to municipal.entity.dim_municipality", {fk: municipal.entity.dim_municipality.municipality_id, derived: "ABS(HASH(CONCAT('CITY_', 'Chicago')))"}]
   - [location_id, integer, true, "FK to geospatial.dim_location", {fk: geospatial.dim_location.location_id}]
 
 measures:

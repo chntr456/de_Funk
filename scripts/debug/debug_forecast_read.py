@@ -85,10 +85,10 @@ from de_funk.core.connection import get_spark_connection
         'bronze_root': str(storage_root / 'bronze'),
     }
 
-from de_funk.config.domain_loader import ModelConfigLoader
+from de_funk.config.domain import get_domain_loader
     domains_dir = repo_root / "domains"
-    loader = ModelConfigLoader(domains_dir)
-    stocks_config = loader.load_model_config("stocks")
+    loader = get_domain_loader(domains_dir)
+    stocks_config = loader.load_model_config("securities.stocks")
 
 from de_funk.models.domains.securities.stocks.model import StocksModel
     stocks_model = StocksModel(

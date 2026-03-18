@@ -3,7 +3,7 @@ id: sector_analysis
 title: Sector Analysis
 description: Cross-sector and industry-level aggregated analysis
 tags: [sector, industry, aggregates, comparison]
-models: [stocks, company]
+models: [stocks, corporate.entity]
 author: de_Funk Analytics
 created: 2025-12-05
 ---
@@ -55,9 +55,9 @@ Aggregate analysis across sectors and industries. Compare performance, volume, a
 
 $exhibits${
   type: bar_chart
-  source: company.dim_company
-  x: company.dim_company.sector
-  y: company.dim_company.ticker
+  source: corporate.entity.dim_company
+  x: corporate.entity.dim_corporate.entity.sector
+  y: corporate.entity.dim_corporate.entity.ticker
   aggregation: count
   title: Number of Companies by Sector
   height: 350
@@ -67,9 +67,9 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: company.dim_company
-  x: company.dim_company.sector
-  y: company.dim_company.market_cap
+  source: corporate.entity.dim_company
+  x: corporate.entity.dim_corporate.entity.sector
+  y: corporate.entity.dim_corporate.entity.market_cap
   aggregation: sum
   title: Total Market Cap by Sector ($)
   height: 350
@@ -81,12 +81,12 @@ $exhibits${
 
 $exhibits${
   type: metric_cards
-  source: company.dim_company
+  source: corporate.entity.dim_company
   metrics: [
-    { column: company.dim_company.ticker, label: "Total Companies", aggregation: count },
-    { column: company.dim_company.market_cap, label: "Total Market Cap", aggregation: sum, format: "$,.0f" },
-    { column: company.dim_company.market_cap, label: "Avg Market Cap", aggregation: avg, format: "$,.0f" },
-    { column: company.dim_company.shares_outstanding, label: "Total Shares", aggregation: sum, format: ",.0f" }
+    { column: corporate.entity.dim_corporate.entity.ticker, label: "Total Companies", aggregation: count },
+    { column: corporate.entity.dim_corporate.entity.market_cap, label: "Total Market Cap", aggregation: sum, format: "$,.0f" },
+    { column: corporate.entity.dim_corporate.entity.market_cap, label: "Avg Market Cap", aggregation: avg, format: "$,.0f" },
+    { column: corporate.entity.dim_corporate.entity.shares_outstanding, label: "Total Shares", aggregation: sum, format: ",.0f" }
   ]
 }
 
@@ -96,14 +96,14 @@ Sector-level metrics including total market cap, stock count, and average market
 
 $exhibits${
   type: data_table
-  source: company.dim_company
-  columns: [company.dim_company.sector, company.dim_company.ticker, company.dim_company.market_cap, company.dim_company.shares_outstanding]
-  group_by: [company.dim_company.sector]
+  source: corporate.entity.dim_company
+  columns: [corporate.entity.dim_corporate.entity.sector, corporate.entity.dim_corporate.entity.ticker, corporate.entity.dim_corporate.entity.market_cap, corporate.entity.dim_corporate.entity.shares_outstanding]
+  group_by: [corporate.entity.dim_corporate.entity.sector]
   aggregations: [
-    { column: company.dim_company.ticker, aggregation: count, label: "# Stocks" },
-    { column: company.dim_company.market_cap, aggregation: sum, label: "Total Market Cap", format: "$,.0f" },
-    { column: company.dim_company.market_cap, aggregation: avg, label: "Avg Market Cap", format: "$,.0f" },
-    { column: company.dim_company.shares_outstanding, aggregation: sum, label: "Total Shares", format: ",.0f" }
+    { column: corporate.entity.dim_corporate.entity.ticker, aggregation: count, label: "# Stocks" },
+    { column: corporate.entity.dim_corporate.entity.market_cap, aggregation: sum, label: "Total Market Cap", format: "$,.0f" },
+    { column: corporate.entity.dim_corporate.entity.market_cap, aggregation: avg, label: "Avg Market Cap", format: "$,.0f" },
+    { column: corporate.entity.dim_corporate.entity.shares_outstanding, aggregation: sum, label: "Total Shares", format: ",.0f" }
   ]
   sort_by: market_cap_sum
   sort_order: desc
@@ -116,13 +116,13 @@ Total trading volume aggregated by sector. Uses auto-join from prices to company
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
-  x: company.dim_company.sector
-  y: stocks.fact_stock_prices.volume
+  source: securities.stocks.fact_stock_prices
+  x: corporate.entity.dim_corporate.entity.sector
+  y: securities.stocks.fact_stock_prices.volume
   aggregation: sum
   title: Total Trading Volume by Sector
   height: 350
-  group_by: [company.dim_company.sector]
+  group_by: [corporate.entity.dim_corporate.entity.sector]
 }
 
 ## Industry Breakdown
@@ -134,9 +134,9 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: company.dim_company
-  x: company.dim_company.industry
-  y: company.dim_company.ticker
+  source: corporate.entity.dim_company
+  x: corporate.entity.dim_corporate.entity.industry
+  y: corporate.entity.dim_corporate.entity.ticker
   aggregation: count
   title: Companies by Industry
   height: 500
@@ -147,9 +147,9 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: company.dim_company
-  x: company.dim_company.industry
-  y: company.dim_company.market_cap
+  source: corporate.entity.dim_company
+  x: corporate.entity.dim_corporate.entity.industry
+  y: corporate.entity.dim_corporate.entity.market_cap
   aggregation: sum
   title: Market Cap by Industry
   height: 500
@@ -167,9 +167,9 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: company.dim_company
-  columns: [company.dim_company.ticker, company.dim_company.company_name, company.dim_company.sector, company.dim_company.industry, company.dim_company.market_cap, company.dim_company.shares_outstanding]
-  sort_by: company.dim_company.market_cap
+  source: corporate.entity.dim_company
+  columns: [corporate.entity.dim_corporate.entity.ticker, corporate.entity.dim_corporate.entity.company_name, corporate.entity.dim_corporate.entity.sector, corporate.entity.dim_corporate.entity.industry, corporate.entity.dim_corporate.entity.market_cap, corporate.entity.dim_corporate.entity.shares_outstanding]
+  sort_by: corporate.entity.dim_corporate.entity.market_cap
   sort_order: desc
   page_size: 25
   download: true
@@ -186,14 +186,14 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: company.dim_company
-  columns: [company.dim_company.sector, company.dim_company.ticker, company.dim_company.market_cap]
+  source: corporate.entity.dim_company
+  columns: [corporate.entity.dim_corporate.entity.sector, corporate.entity.dim_corporate.entity.ticker, corporate.entity.dim_corporate.entity.market_cap]
   aggregations: [
-    { column: company.dim_company.ticker, aggregation: count, label: "Companies" },
-    { column: company.dim_company.market_cap, aggregation: sum, label: "Total Market Cap" },
-    { column: company.dim_company.market_cap, aggregation: avg, label: "Avg Market Cap" }
+    { column: corporate.entity.dim_corporate.entity.ticker, aggregation: count, label: "Companies" },
+    { column: corporate.entity.dim_corporate.entity.market_cap, aggregation: sum, label: "Total Market Cap" },
+    { column: corporate.entity.dim_corporate.entity.market_cap, aggregation: avg, label: "Avg Market Cap" }
   ]
-  group_by: company.dim_company.sector
+  group_by: corporate.entity.dim_corporate.entity.sector
   sort_by: market_cap_sum
   sort_order: desc
   download: true
@@ -203,13 +203,13 @@ $exhibits${
 
 $exhibits${
   type: data_table
-  source: company.dim_company
-  columns: [company.dim_company.industry, company.dim_company.sector, company.dim_company.ticker, company.dim_company.market_cap]
+  source: corporate.entity.dim_company
+  columns: [corporate.entity.dim_corporate.entity.industry, corporate.entity.dim_corporate.entity.sector, corporate.entity.dim_corporate.entity.ticker, corporate.entity.dim_corporate.entity.market_cap]
   aggregations: [
-    { column: company.dim_company.ticker, aggregation: count, label: "Companies" },
-    { column: company.dim_company.market_cap, aggregation: sum, label: "Total Market Cap" }
+    { column: corporate.entity.dim_corporate.entity.ticker, aggregation: count, label: "Companies" },
+    { column: corporate.entity.dim_corporate.entity.market_cap, aggregation: sum, label: "Total Market Cap" }
   ]
-  group_by: [company.dim_company.sector, company.dim_company.industry]
+  group_by: [corporate.entity.dim_corporate.entity.sector, corporate.entity.dim_corporate.entity.industry]
   sort_by: market_cap_sum
   sort_order: desc
   download: true
@@ -226,13 +226,13 @@ $exhibits${
 
 $exhibits${
   type: bar_chart
-  source: stocks.fact_stock_prices
-  x: company.dim_company.sector
-  y: stocks.fact_stock_prices.close
+  source: securities.stocks.fact_stock_prices
+  x: corporate.entity.dim_corporate.entity.sector
+  y: securities.stocks.fact_stock_prices.close
   aggregation: avg
   title: Average Close Price by Sector
   height: 400
-  group_by: [company.dim_company.sector]
+  group_by: [corporate.entity.dim_corporate.entity.sector]
 }
 
 </details>

@@ -34,9 +34,9 @@ def test_inherited_measure():
     print("\n[1] LOADING CONFIGURATION")
     print("-" * 80)
 
-from de_funk.config.domain_loader import ModelConfigLoader
-    loader = ModelConfigLoader(Path("domains"))
-    config = loader.load_model_config("stocks")
+from de_funk.config.domain import get_domain_loader
+    loader = get_domain_loader(Path("domains"))
+    config = loader.load_model_config("securities.stocks")
 
     print(f"✓ Loaded stocks model config")
 

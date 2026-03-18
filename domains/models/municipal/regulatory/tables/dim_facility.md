@@ -18,8 +18,8 @@ schema:
   - [city, string, true, "City", {derived: "FIRST(city)"}]
   - [state, string, true, "State", {derived: "FIRST(state)"}]
   - [zip, string, true, "ZIP code", {derived: "FIRST(zip)"}]
-  - [latitude, double, true, "Latitude", {derived: "FIRST(CAST(latitude AS DOUBLE))"}]
-  - [longitude, double, true, "Longitude", {derived: "FIRST(CAST(longitude AS DOUBLE))"}]
+  - [latitude, double, true, "Latitude", {derived: "FIRST(CAST(latitude AS DOUBLE))", format: decimal}]
+  - [longitude, double, true, "Longitude", {derived: "FIRST(CAST(longitude AS DOUBLE))", format: decimal}]
   # ward and community_area not available in chicago_food_inspections bronze data
 
 measures:

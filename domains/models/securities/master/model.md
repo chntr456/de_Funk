@@ -1,6 +1,6 @@
 ---
 type: domain-model
-model: securities
+model: securities.master
 version: 3.0
 description: "Master securities domain - unified dimension and prices for all tradable instruments"
 extends: [_base.finance.securities]
@@ -13,12 +13,12 @@ storage:
     root: storage/silver/securities/
 
 graph:
-  # auto_edges: date_id→calendar (inherited from _base.finance.securities)
   edges:
+    - [prices_to_calendar, fact_security_prices, temporal.dim_calendar, [date_id=date_id], many_to_one, temporal]
     - [prices_to_security, fact_security_prices, dim_security, [security_id=security_id], many_to_one, null]
     - [security_to_exchange, dim_security, dim_exchange, [exchange_id=exchange_id], many_to_one, null]
-    - [security_to_stock, dim_security, stocks.dim_stock, [security_id=security_id], one_to_one, stocks, optional: true]
-    - [security_to_company, dim_security, corporate_entity.dim_company, [security_id=company_id], many_to_one, corporate_entity, optional: true]
+    - [security_to_stock, dim_security, securities.stocks.dim_stock, [security_id=security_id], one_to_one, securities.stocks, optional: true]
+    - [security_to_company, dim_security, corporate.entity.dim_company, [security_id=company_id], many_to_one, corporate.entity, optional: true]
   paths:
     security_prices_by_date:
       steps:
@@ -27,8 +27,8 @@ graph:
     prices_to_company:
       steps:
         - {from: fact_security_prices, to: dim_security, via: security_id}
-        - {from: dim_security, to: stocks.dim_stock, via: security_id}
-        - {from: stocks.dim_stock, to: corporate_entity.dim_company, via: company_id}
+        - {from: dim_security, to: securities.stocks.dim_stock, via: security_id}
+        - {from: securities.stocks.dim_stock, to: corporate.entity.dim_company, via: company_id}
 
 build:
   partitions: [date_id]

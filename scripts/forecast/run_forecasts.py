@@ -259,10 +259,10 @@ from de_funk.core.connection import ConnectionFactory
     storage_cfg = config.storage
 
     # v3.0: Load forecast config from domain markdown file
-from de_funk.config.domain_loader import ModelConfigLoader
+from de_funk.config.domain import get_domain_loader
     domains_root = get_repo_root() / "domains"
-    domain_loader = ModelConfigLoader(domains_root)
-    forecast_cfg = domain_loader.load_model_config("forecast")
+    domain_loader = get_domain_loader(domains_root)
+    forecast_cfg = domain_loader.load_model_config("securities.forecast")
 
     logger.debug("Configurations loaded")
     if not minimal_progress:
