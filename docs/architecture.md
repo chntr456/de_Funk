@@ -16,20 +16,21 @@ Obsidian Note (```de_funk block)
 |  Obsidian Plugin   | ----------------------> |   FastAPI Backend             |
 |  (TypeScript)      |                         |   :8765                      |
 |                    | <---------------------- |                              |
-|  * filter-sidebar  |    Plotly traces /      |  +-------------+            |
-|  * de-funk.ts      |    GT HTML /            |  | FieldResolver|            |
-|  * render/*        |    metric values        |  | (metadata)   |            |
-+--------------------+                         |  +------+------+            |
-                                               |         | resolve           |
-                                               |  +------v------+            |
-                                               |  | QueryEngine  |            |
-                                               |  | (DuckDB SQL) |            |
-                                               |  +------+------+            |
-                                               |         | read              |
-                                               |  +------v------+            |
-                                               |  | Delta Lake   |            |
-                                               |  | Silver Tables|            |
-                                               |  +-------------+            |
+|  * filter-sidebar  |    Plotly traces /      |  +-------------+  +----------------+
+|  * de-funk.ts      |    GT HTML /            |  | FieldResolver|  | BronzeResolver |
+|  * render/*        |    metric values        |  | (Silver)     |  | (Bronze)       |
++--------------------+                         |  +------+------+  +-------+--------+
+                                               |         | resolve          | resolve
+                                               |  +------v------------------v------+
+                                               |  |          QueryEngine           |
+                                               |  |          (DuckDB SQL)          |
+                                               |  +------+------------------------+
+                                               |         | read
+                                               |  +------v------+  +------v------+
+                                               |  | Silver Layer |  | Bronze Layer|
+                                               |  | (Delta Lake) |  | (Delta Lake)|
+                                               |  | dims/ facts/ |  | raw API data|
+                                               |  +-------------+  +-------------+
                                                +------------------------------+
 
 Build Pipeline (offline, Spark):
@@ -40,9 +41,11 @@ Build Pipeline (offline, Spark):
   incremental                           per domain model
 ```
 
-There are two distinct paths through the system:
+There are three execution paths through the system:
 
-**Query path (interactive)**: An Obsidian code block fires a POST to `/api/query`. The `FieldResolver` translates domain.field references into Silver table paths. The `QueryEngine` generates SQL with automatic joins via BFS over a graph, executes against DuckDB, and returns Plotly traces, Great Tables HTML, or metric values.
+**Silver query path (interactive)**: An Obsidian code block fires a POST to `/api/query`. The `FieldResolver` translates `domain.field` references into Silver table paths. The `QueryEngine` generates SQL with automatic joins via BFS over a graph, executes against DuckDB, and returns Plotly traces, Great Tables HTML, or metric values.
+
+**Bronze query path (interactive)**: An Obsidian code block with `layer: bronze` fires a POST to `/api/bronze/query`. The `BronzeResolver` translates `provider.endpoint.field` references into Bronze table paths. Queries hit raw provider data directly — no joins, no model build required. Useful for data exploration and validation.
 
 **Build path (batch)**: `DomainBuilderFactory` scans `domains/models/` for all `model.md` files, creates dynamic builder classes, resolves dependencies with Kahn's algorithm, and builds each model's Silver tables from Bronze using Spark.
 
@@ -90,14 +93,21 @@ On startup, `create_app()` does the following:
 storage_overrides, api_cfg = _load_storage_config(repo_root)
 # api_cfg contains: duckdb_memory_limit, max_sql_rows, max_dimension_values, max_response_mb
 
-# 2. Create FieldResolver by scanning all domains/models/**/model.md
+# 2. Create FieldResolver (Silver) by scanning all domains/models/**/model.md
 app.state.resolver = FieldResolver(
     domains_root=_domains_root,       # domains/
     storage_root=_storage_root,       # /shared/storage/silver
     domain_overrides=storage_overrides,
 )
 
-# 3. Create QueryEngine connected to DuckDB
+# 3. Create BronzeResolver by scanning data_sources/Endpoints/
+app.state.bronze_resolver = BronzeResolver(
+    docs_root=_docs_root,             # data_sources/
+    bronze_root=_bronze_root,         # /shared/storage/bronze
+)
+# Indexes all providers, endpoints, fields, and Delta paths
+
+# 4. Create QueryEngine connected to DuckDB
 app.state.executor = QueryEngine(
     storage_root=_storage_root,
     memory_limit=api_cfg["duckdb_memory_limit"],
@@ -106,7 +116,7 @@ app.state.executor = QueryEngine(
     max_response_mb=float(api_cfg["max_response_mb"]),
 )
 
-# 4. Build handler registry — maps type strings to handler instances
+# 5. Build handler registry — maps type strings to handler instances
 app.state.registry = build_registry(**engine_kwargs)
 ```
 
@@ -834,12 +844,12 @@ The query pipeline (Part 1) always uses DuckDB. The build pipeline (Part 2) alwa
 
 ### Two-Layer Architecture
 
-| Layer | Format | Path | Purpose |
-|-------|--------|------|---------|
-| **Bronze** | Delta Lake | `/shared/storage/bronze/{provider}/{table}/` | Raw API data, partitioned by snapshot date. Mirrors API response structure. |
-| **Silver** | Delta Lake | `/shared/storage/silver/{domain}/{table}/` | Dimensional snowflake schemas. `dims/` for dimensions, `facts/` for fact tables. |
+| Layer | Format | Path | Queryable | Purpose |
+|-------|--------|------|-----------|---------|
+| **Bronze** | Delta Lake | `/shared/storage/bronze/{provider}/{endpoint}/` | Yes — `/api/bronze/query` | Raw API data, partitioned by snapshot date. Mirrors API response structure. |
+| **Silver** | Delta Lake | `/shared/storage/silver/{domain}/{subdomain}/{dims\|facts}/{table}/` | Yes — `/api/query` | Dimensional snowflake schemas with automatic joins via graph edges. |
 
-There is no separate Gold layer. DuckDB queries Silver directly for interactive analytics. The DuckDB file at `storage/duckdb/analytics.db` stores catalog metadata and query workspace but does not duplicate the data.
+There is no separate Gold layer. DuckDB queries both Bronze and Silver directly for interactive analytics. Bronze queries are single-table scans (no joins); Silver queries use BFS-based automatic joins across the domain graph.
 
 ### Storage Path Resolution
 

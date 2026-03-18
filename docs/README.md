@@ -67,8 +67,8 @@ This design means:
 
 1. **Ingest** — Pull data from open APIs (Chicago Data Portal, Cook County, Alpha Vantage) into a Bronze layer of raw Delta Lake tables
 2. **Build** — Read the markdown configs, resolve the dependency graph, and transform Bronze into Silver dimensional models (fact + dimension tables) via Spark
-3. **Query** — A FastAPI backend resolves field references across domains, builds joins from the graph edges defined in `model.md`, and executes SQL against DuckDB
-4. **Visualize** — An Obsidian plugin renders `de_funk` code blocks as interactive charts, tables, pivots, and metric cards — querying the API in real time
+3. **Query** — A FastAPI backend resolves field references across domains, builds joins from the graph edges defined in `model.md`, and executes SQL against DuckDB. Two query layers: Silver (dimensional, with automatic joins) and Bronze (raw provider data, single-table)
+4. **Visualize** — An Obsidian plugin renders `de_funk` code blocks as interactive charts, tables, pivots, and metric cards — querying either Silver or Bronze via the API in real time
 
 ## Architecture at a Glance
 
@@ -76,16 +76,16 @@ This design means:
 Obsidian Note                 FastAPI                    DuckDB
 ┌─────────────┐    POST     ┌──────────────┐  SQL     ┌──────────────┐
 │ ```de_funk   │──────────→│ FieldResolver │────────→│ Silver Layer │
-│ type: ...    │            │ QueryEngine  │          │ (Delta Lake) │
-│ rows: [...]  │←──────────│ Handlers     │←────────│ Snowflake Schema │
-│ ```          │  JSON/HTML └──────────────┘          └──────────────┘
-└─────────────┘                                              ↑
-                                                     Build Pipeline
-                                                     (Spark reads YAML
-                                                      from markdown)
-                                                             ↑
-                                                      Bronze Layer
-                                                      (Raw API Data)
+│ type: ...    │            │ BronzeResolver│────────→│ Bronze Layer │
+│ rows: [...]  │←──────────│ QueryEngine   │←────────│ (Delta Lake) │
+│ ```          │  JSON/HTML │ Handlers      │          └──────────────┘
+└─────────────┘             └──────────────┘                  ↑
+                                                       Build Pipeline
+                                                       (Spark reads YAML
+                                                        from markdown)
+                                                              ↑
+                                                        Bronze Layer
+                                                        (Raw API Data)
 ```
 
 The markdown files in `domains/models/` drive both the build pipeline (Spark reads them to know what tables to create and how to join them) and the query pipeline (the API reads them to resolve field references and build SQL joins).

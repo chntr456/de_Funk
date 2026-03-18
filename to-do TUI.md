@@ -1,1 +1,0 @@
-UI event handling had many issue with filter interactions

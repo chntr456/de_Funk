@@ -1,6 +1,6 @@
 # Obsidian Plugin -- Practical Guide
 
-The de_funk Obsidian plugin turns markdown notes into live data dashboards. You write YAML inside fenced code blocks, and the plugin renders interactive Plotly charts, pivot tables, metric cards, and data tables -- all powered by your Silver layer data through a FastAPI backend.
+The de_funk Obsidian plugin turns markdown notes into live data dashboards. You write YAML inside fenced code blocks, and the plugin renders interactive Plotly charts, pivot tables, metric cards, and data tables -- powered by both the **Silver layer** (dimensional star schemas) and the **Bronze layer** (raw provider data) through a FastAPI backend.
 
 This guide walks through everything from installation to building a multi-exhibit dashboard.
 
@@ -12,17 +12,20 @@ This guide walks through everything from installation to building a multi-exhibi
 
 Before the plugin can render anything, you need two things running:
 
-1. **Silver layer built with data.** The plugin queries dimensional models (municipal finance, public safety, regulatory, etc.) that live in your Silver layer. If you have not built models yet:
+1. **Data layer available.** The plugin can query two layers:
+   - **Silver** (dimensional models) — requires ingestion + model build
+   - **Bronze** (raw provider data) — only requires ingestion, no build step
 
+   For Silver queries:
    ```bash
-   # Seed calendar dimension
    python -m scripts.seed.seed_calendar --storage-path /shared/storage
-
-   # Ingest bronze data
    python -m scripts.ingest.run_bronze_ingestion --domains municipal
-
-   # Build silver models
    python -m scripts.build.build_models
+   ```
+
+   For Bronze-only queries, skip the build step — just ingest:
+   ```bash
+   python -m scripts.ingest.run_bronze_ingestion --domains municipal
    ```
 
 2. **FastAPI backend running on localhost:8765.** The plugin POSTs query payloads to this server and gets back rendered data. Start it with:
@@ -100,7 +103,9 @@ When Obsidian renders this block, the plugin executes an 8-step pipeline:
 
 5. **Payload construction.** `buildRequest()` in `resolver.ts` merges the block data, active note filters, exhibit-level filters, and control state into a single JSON payload.
 
-6. **API call.** The `ApiClient` POSTs the payload to `http://localhost:8765/api/query` and gets back a typed response (series data, table rows, metric values, or pivot HTML).
+6. **API call.** The `ApiClient` POSTs the payload to the appropriate endpoint based on the page's `layer` setting:
+   - Silver (default): `POST /api/query`
+   - Bronze: `POST /api/bronze/query`
 
 7. **Rendering.** Based on the `type` field, the processor dispatches to the correct renderer:
    - Chart types --> `render/graphical.ts` (Plotly.js)
@@ -389,6 +394,93 @@ formatting:
 ````
 
 **Metric type aliases:** `cards.metric`, `kpi`, `metric_cards`.
+
+---
+
+## Part 3b: Bronze Layer Exhibits
+
+Bronze exhibits query raw provider data directly — no Silver build required. Add `layer: bronze` to the frontmatter and use `provider.endpoint.field` references instead of Silver domain.field references.
+
+### Bronze Frontmatter
+
+```yaml
+---
+title: Chicago Crime Analysis
+layer: bronze
+models: [chicago.crimes]
+filters:
+  crime_type:
+    source: chicago.crimes.primary_type
+    type: select
+    multi: true
+    layer: bronze
+  year_range:
+    source: chicago.crimes.year
+    type: range
+    layer: bronze
+    default: [2020, 2025]
+---
+```
+
+The `layer: bronze` in frontmatter tells the plugin to route all queries to `/api/bronze/query` instead of `/api/query`. Each filter also needs `layer: bronze` so the sidebar fetches distinct values from `/api/bronze/dimensions/` instead of `/api/dimensions/`.
+
+### Bronze Exhibit Blocks
+
+Bronze blocks use the same `type:` values as Silver. The only difference is the field reference format:
+
+**Silver**: `municipal.public_safety.primary_type` (domain.field → resolved via joins)
+**Bronze**: `chicago.crimes.primary_type` (provider.endpoint.field → single table scan)
+
+````markdown
+```de_funk
+type: cards.metric
+data:
+  metrics:
+    - [total, chicago.crimes.id, count, "#,##0", Total Incidents]
+    - [arrests, chicago.crimes.arrest, sum, "#,##0", Total Arrests]
+    - [districts, chicago.crimes.district, count_distinct, "#,##0", Districts]
+```
+````
+
+````markdown
+```de_funk
+type: plotly.bar
+data:
+  x: chicago.crimes.primary_type
+  y: chicago.crimes.id
+  aggregation: count
+formatting:
+  title: "Top Crime Types"
+```
+````
+
+````markdown
+```de_funk
+type: plotly.line
+data:
+  x: chicago.crimes.year
+  y: chicago.crimes.id
+  aggregation: count
+formatting:
+  title: "Crimes by Year"
+```
+````
+
+### Bronze vs Silver: When to Use Which
+
+| Scenario | Layer | Why |
+|----------|-------|-----|
+| Exploring a new data source | **Bronze** | No build step, see raw data immediately |
+| Cross-domain analysis (crimes + budgets) | **Silver** | Automatic joins via graph edges |
+| Quick KPIs on a single endpoint | **Bronze** | Faster, simpler field refs |
+| Dimensional rollups (by community area, department) | **Silver** | Dimension tables with clean labels |
+| Validating ingested data | **Bronze** | See exactly what the API returned |
+
+### Limitations
+
+- All fields in a Bronze query must come from the **same endpoint** (no cross-endpoint joins)
+- No computed measures, no graph-based joins, no dimension lookups
+- Filter cascading works within the endpoint but cannot cross to Silver dimensions
 
 ---
 
@@ -832,15 +924,21 @@ The `ApiClient` class wraps `fetch()` with caching and error handling:
 
 ```typescript
 class ApiClient {
-  async query(payload: unknown): Promise<ApiResponse>     // POST /api/query
-  async getDimensions(ref, orderBy?, orderDir?, contextFilters?): Promise<DimensionValuesResponse>
+  async query(payload: unknown, layer?: string): Promise<ApiResponse>
+  // layer="bronze" → POST /api/bronze/query
+  // layer=undefined → POST /api/query (Silver)
+
+  async getDimensions(ref, orderBy?, orderDir?, contextFilters?, layer?: string): Promise<DimensionValuesResponse>
+  // layer="bronze" → GET /api/bronze/dimensions/{provider}/{endpoint}/{field}
+  // layer=undefined → GET /api/dimensions/{domain}/{field}
+
   async getDomains(): Promise<Record<string, unknown>>    // GET /api/domains
   async health(): Promise<{ status: string }>             // GET /api/health
   clearCache(): void                                      // Called on filter change
 }
 ```
 
-Responses are cached by a key derived from method + path + body. The cache uses a configurable TTL (default 30 seconds). `clearCache()` is called whenever a filter changes to ensure fresh data.
+Responses are cached by a key derived from method + path + body. The cache uses a configurable TTL (default 30 seconds). In-flight request deduplication prevents concurrent identical API calls from hitting the server multiple times (e.g., when a filter change triggers 10 exhibits to re-render simultaneously, only 1 API call per unique payload is made).
 
 ### Filter Sidebar (`filter-sidebar.ts`)
 

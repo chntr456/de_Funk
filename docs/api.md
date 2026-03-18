@@ -26,15 +26,22 @@ Expected output:
 {"status": "ok", "version": "1.0"}
 ```
 
-The server reads `configs/storage.json` on startup to find Silver table paths
-and runtime limits. If required keys are missing, it exits with an explicit
-error. Interactive API docs are available at
+The server reads `configs/storage.json` on startup to find Silver table paths,
+Bronze provider configs, and runtime limits. If required keys are missing, it
+exits with an explicit error. Interactive API docs are available at
 `http://localhost:8765/api/docs` (Swagger) and
 `http://localhost:8765/api/redoc` (ReDoc).
+
+The API serves two query layers:
+- **Silver** (`/api/query`) — dimensional star schemas with automatic joins via BFS
+- **Bronze** (`/api/bronze/query`) — raw provider tables queried by `provider.endpoint.field` references
 
 **Source files**:
 - Server entry: `scripts/serve/run_api.py`
 - App factory: `src/de_funk/api/main.py`
+- Silver resolver: `src/de_funk/api/resolver.py`
+- Bronze resolver: `src/de_funk/api/bronze_resolver.py`
+- Bronze router: `src/de_funk/api/routers/bronze.py`
 
 ---
 
@@ -261,6 +268,177 @@ print(response.json())
 
 **Source**: `src/de_funk/api/routers/query.py` dispatches to the handler
 registry. Request models are defined in `src/de_funk/api/models/requests.py`.
+
+---
+
+## Part 1b: Bronze Query Endpoints
+
+The Bronze query layer provides direct access to raw provider data without
+requiring Silver model builds. Field references use `provider.endpoint.field`
+format (e.g., `chicago.crimes.primary_type`).
+
+**Source files**:
+- Resolver: `src/de_funk/api/bronze_resolver.py`
+- Router: `src/de_funk/api/routers/bronze.py`
+- Handlers: `src/de_funk/api/handlers/bronze_*.py`
+
+### GET /api/bronze/endpoints
+
+List all available Bronze providers, endpoints, and fields.
+
+```bash
+curl http://localhost:8765/api/bronze/endpoints | python -m json.tool
+```
+
+Response structure:
+
+```json
+{
+  "chicago": {
+    "endpoints": {
+      "crimes": {
+        "fields": ["id", "case_number", "date", "primary_type", "description",
+                   "arrest", "domestic", "district", "ward", "year"],
+        "row_count": 8478133
+      },
+      "budget_appropriations": {
+        "fields": ["fund_code", "department_description", "amount"],
+        "row_count": 4521
+      }
+    }
+  },
+  "alpha_vantage": {
+    "endpoints": {
+      "daily_adjusted": { "fields": ["date", "open", "high", "low", "close", "volume"], "row_count": 2841000 }
+    }
+  }
+}
+```
+
+**Source**: `src/de_funk/api/routers/bronze.py` delegates to
+`BronzeResolver.get_endpoints_catalog()`.
+
+---
+
+### GET /api/bronze/dimensions/{provider}/{endpoint}/{field}
+
+Return sorted distinct values for a Bronze field. Powers sidebar filter
+dropdowns on `layer: bronze` pages.
+
+```bash
+curl "http://localhost:8765/api/bronze/dimensions/chicago/crimes/primary_type"
+```
+
+```json
+{
+  "field": "chicago.crimes.primary_type",
+  "values": ["ARSON", "ASSAULT", "BATTERY", "BURGLARY", "CRIM SEXUAL ASSAULT",
+             "CRIMINAL DAMAGE", "CRIMINAL TRESPASS", "DECEPTIVE PRACTICE",
+             "HOMICIDE", "KIDNAPPING", "MOTOR VEHICLE THEFT", "NARCOTICS",
+             "OTHER OFFENSE", "ROBBERY", "SEX OFFENSE", "THEFT",
+             "WEAPONS VIOLATION"]
+}
+```
+
+**Query parameters**: Same as Silver dimensions — `order_by`, `order_dir`, `filters`.
+
+**Source**: `src/de_funk/api/routers/bronze.py` calls
+`BronzeResolver.distinct_values()`.
+
+---
+
+### POST /api/bronze/query
+
+Execute a query against Bronze tables. Same exhibit types as Silver
+(`plotly.line`, `plotly.bar`, `table.pivot`, `cards.metric`, etc.), but field
+references use `provider.endpoint.field` instead of `domain.field`.
+
+**Key difference from Silver**: No automatic joins. All fields in a single
+query must come from the same endpoint (same Bronze table). Cross-endpoint
+queries are not supported — use Silver for that.
+
+**Metric cards example**:
+
+```bash
+curl -X POST http://localhost:8765/api/bronze/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "cards.metric",
+    "metrics": [
+      {"key": "total", "field": "chicago.crimes.id", "aggregation": "count", "label": "Total Incidents"},
+      {"key": "arrests", "field": "chicago.crimes.arrest", "aggregation": "sum", "label": "Total Arrests"},
+      {"key": "districts", "field": "chicago.crimes.district", "aggregation": "count_distinct", "label": "Districts"}
+    ]
+  }'
+```
+
+```json
+{
+  "metrics": [
+    {"key": "total", "label": "Total Incidents", "value": 8478133, "format": null},
+    {"key": "arrests", "label": "Total Arrests", "value": 2133691, "format": null},
+    {"key": "districts", "label": "Districts", "value": 25, "format": null}
+  ]
+}
+```
+
+**Bar chart example**:
+
+```bash
+curl -X POST http://localhost:8765/api/bronze/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "plotly.bar",
+    "x": "chicago.crimes.primary_type",
+    "y": "chicago.crimes.id",
+    "aggregation": "count"
+  }'
+```
+
+**Line chart example**:
+
+```bash
+curl -X POST http://localhost:8765/api/bronze/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "plotly.line",
+    "x": "chicago.crimes.year",
+    "y": "chicago.crimes.id",
+    "aggregation": "count"
+  }'
+```
+
+**Pivot table example**:
+
+```bash
+curl -X POST http://localhost:8765/api/bronze/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "table.pivot",
+    "rows": "chicago.crimes.primary_type",
+    "measures": [
+      {"key": "incidents", "field": "chicago.crimes.id", "aggregation": "count", "label": "Incidents"}
+    ]
+  }'
+```
+
+**How Bronze resolution works**:
+
+```
+Field: "chicago.crimes.primary_type"
+  |
+  v
+1. Split: provider="chicago", endpoint="crimes", field="primary_type"
+2. Lookup: BronzeResolver index -> bronze_path=/shared/storage/bronze/chicago/crimes
+3. Validate: "primary_type" exists in endpoint schema
+4. Return: BronzeResolvedField(table="chicago__crimes", column="primary_type", path=...)
+```
+
+All fields in a query are validated against the same endpoint. If fields from
+different endpoints are mixed, the query returns a 400 error.
+
+**Source**: `src/de_funk/api/routers/bronze.py` dispatches to the same handler
+registry used by Silver, but with `BronzeResolver` for field resolution.
 
 ---
 
@@ -1039,11 +1217,13 @@ ip addr show | grep "inet " | grep -v 127.0.0.1
 
 ### Startup sequence
 
-1. `create_app()` reads `configs/storage.json` for Silver root paths and API limits
+1. `create_app()` reads `configs/storage.json` for Silver/Bronze root paths and API limits
 2. CORS middleware is configured
-3. Routers are mounted at `/api/health`, `/api/domains`, `/api/dimensions`, `/api/query`
+3. Routers are mounted at `/api/health`, `/api/domains`, `/api/dimensions`, `/api/query`, `/api/bronze/*`
 4. On `startup` event:
-   - `FieldResolver` scans `domains/models/` and builds the field index + join graph
+   - `FieldResolver` scans `domains/models/` and builds the Silver field index + join graph
+   - `BronzeResolver` scans `data_sources/Endpoints/` and builds the Bronze field index
+     (providers, endpoints, fields, Delta paths)
    - `QueryEngine` initializes a DuckDB connection with the configured memory limit,
      installs and loads the Delta extension
    - `HandlerRegistry` instantiates all five handler classes with shared config
