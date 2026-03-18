@@ -70,10 +70,42 @@
 - Incorporate simple big table function to support access and adjustments
 - Example would be enabling functions like month() on date fields so simple bin and aggregations can be empowered
 
+### Embedded cosine similarity in data pipeline
+- Add an embedding + cosine similarity step to the Silver build pipeline
+- Use case: find similar entities across dimensions (similar companies by financials, similar crimes by attributes, similar properties by characteristics)
+- Pipeline step: after Silver tables are built, compute embeddings on key dimension columns and store similarity scores
+- Could use sentence-transformers or a lightweight embedding model for text fields, numeric normalization for quantitative fields
+- Store as a similarity matrix table (entity_a, entity_b, similarity_score) per domain
+- Enables "find similar" queries from the Obsidian plugin and recommendation-style analytics
+- Enable analytical reduction of dimensions example chicago budget having changing field names over years
+
 ### Grouped candlestick charts
 - Plotly doesn't support grouped candlesticks natively
 - Sector-level OHLC: `group_by` added to box handler, renders as grouped box plots instead
 - For true candlestick grouping: would need subplot layout (one candlestick per group)
+
+
+---
+
+## Model Guide Audit (2026-03-18)
+
+Audit of `domains/_model_guides_/` — each guide now has inline `> Status: PLANNED` notes on unimplemented features.
+
+### Parse-only features (config reads, build/query never uses)
+
+| Guide | Feature | What's missing |
+|-------|---------|---------------|
+| **views.md** | Views (derived, rollup, assumptions, grain) | Build pipeline has no view materialization code |
+| **federation.md** | Federation (children, union_key, union_of) | Build pipeline has no Silver-to-Silver union code. Note: `__union__` is Bronze source union, not federation |
+| **graph.md** | `auto_edges` | Edges must be declared explicitly; auto-injection not implemented |
+| **graph.md** | `graph.paths` (multi-hop traversals) | Dead code in old `models/api/`; FastAPI query layer doesn't use paths |
+| **behaviors.md** | Behavior validation | Parsed as metadata, never enforced against actual config blocks |
+| **subsets.md** | Pattern 2 (separate models) | No special handling — each model builds independently |
+| **subsets.md** | Pattern 3 (filter-only) | Discriminator filters not auto-generated |
+| **tables.md** | `unique_key` enforcement | Parsed but no dedup or uniqueness validation during build |
+
+### Fully implemented guides
+depends_on, domain_model, extends, materialization, measures, source_onboarding, sources, storage, tables (except unique_key), subsets Pattern 1 (wide table auto-absorption), domain_base (except auto_edges/behaviors)
 
 ---
 

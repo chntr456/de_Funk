@@ -1,6 +1,10 @@
 # de_Funk
 
-**de_Funk** is a graph-based analytical data warehouse that turns markdown domain configs into a queryable snowflake-schema layer over Delta Lake. It serves interactive analytics — charts, tables, pivots, metric cards — directly inside Obsidian notes.
+**de_Funk** is a graph-based analytical data warehouse that turns markdown domain configs into a queryable snowflake-schema like layer over a Delta Lake. It serves as an nteractive analytics — charts, tables, pivots, metric cards — directly inside Obsidian notes. 
+
+## History
+
+**de_Funk** started as a homelab setup goal from the idea of bringing dispart sources of information into a single interactive queryable space. The goal to simplify the interaction of data sources and create a news paper experience of open source data feeds. 
 
 ## The Core Idea: Markdown is the Config
 
@@ -67,8 +71,8 @@ This design means:
 
 1. **Ingest** — Pull data from open APIs (Chicago Data Portal, Cook County, Alpha Vantage) into a Bronze layer of raw Delta Lake tables
 2. **Build** — Read the markdown configs, resolve the dependency graph, and transform Bronze into Silver dimensional models (fact + dimension tables) via Spark
-3. **Query** — A FastAPI backend resolves field references across domains, builds joins from the graph edges defined in `model.md`, and executes SQL against DuckDB. Two query layers: Silver (dimensional, with automatic joins) and Bronze (raw provider data, single-table)
-4. **Visualize** — An Obsidian plugin renders `de_funk` code blocks as interactive charts, tables, pivots, and metric cards — querying either Silver or Bronze via the API in real time
+3. **Query** — A FastAPI backend resolves field references across domains, builds joins from the graph edges defined in `model.md`, and executes SQL against DuckDB
+4. **Visualize** — An Obsidian plugin renders `de_funk` code blocks as interactive charts, tables, pivots, and metric cards — querying the API in real time
 
 ## Architecture at a Glance
 

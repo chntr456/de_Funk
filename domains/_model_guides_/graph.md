@@ -9,6 +9,10 @@ In v5.0, graph only contains `edges`. Source/filter/derive are defined in table 
 
 ### auto_edges (Inherited FK Edges)
 
+> **Status: PLANNED** — Config parsing reads `auto_edges` from base templates
+> (`config/domain/graph.py`), but the build pipeline and query API do not
+> auto-inject these edges. All edges must be explicitly declared in `graph.edges`.
+
 Base templates can declare `auto_edges` — FK patterns applied automatically to every fact table whose schema contains the matching column. Any base template can declare `auto_edges`, not just the event root — entity-chain bases (securities, parcel) use them too.
 
 ```yaml
@@ -86,6 +90,11 @@ For nullable FKs, append `optional: true` as a 7th element:
 ```
 
 ### Paths (Multi-Hop Traversals)
+
+> **Status: PLANNED** — Config parsing reads `graph.paths` (`config/domain/graph.py`),
+> but neither the build pipeline nor the FastAPI query API uses them. The old
+> `models/api/graph.py` had path traversal code, but that's dead code from the
+> pre-FastAPI query layer.
 
 Named multi-hop join sequences. Declare in `graph.paths:` on model files to document common analysis chains.
 

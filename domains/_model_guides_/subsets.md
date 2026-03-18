@@ -92,6 +92,10 @@ _dim_parcel:
 
 #### Pattern 2: Separate Models (For independent domain models)
 
+> **Status: PLANNED** — Parsed in config but no special handling in the build
+> pipeline. Each model builds independently; the subset relationship is
+> informational only.
+
 When subsets have **completely different fact tables and build pipelines**, use separate domain models that independently extend the base.
 
 ```yaml
@@ -113,6 +117,10 @@ subsets:
 ---
 
 #### Pattern 3: Filter-Only (No type-specific fields)
+
+> **Status: PLANNED** — Parsed in config but filter predicates are not
+> auto-generated or enforced during build. The discriminator values serve as
+> documentation only.
 
 When subsets share the **exact same schema** and differ only as analytical slices.
 

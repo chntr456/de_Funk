@@ -1,7 +1,12 @@
 ---
 type: reference
 description: "Guide for the views convention — layered calculations and rollup aggregations"
+status: planned
 ---
+
+> **Status: PLANNED** — Config parsing is implemented (`config/domain/views.py`), but
+> the build pipeline does not yet materialize views. Views declared in model configs
+> are parsed and validated but never built into Silver tables.
 
 ## views Guide
 

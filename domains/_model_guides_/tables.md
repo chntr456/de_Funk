@@ -35,6 +35,10 @@ A `domain-model-table` defines one materialized table in the Silver layer. Table
 |-----|------|-------------|
 | `unique_key` | list | Business/natural key columns that must be unique (distinct from surrogate PK) |
 
+> **Note:** `unique_key` is parsed but **not enforced** during build — no dedup
+> or uniqueness validation occurs. Duplicate rows are allowed. It serves as
+> documentation of the intended natural key.
+
 `unique_key` is used on 18+ dimension tables. It declares the natural key that identifies a real-world entity, while `primary_key` is the surrogate hash-based key.
 
 ```yaml

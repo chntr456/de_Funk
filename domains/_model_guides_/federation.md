@@ -1,7 +1,14 @@
 ---
 type: reference
 description: "Guide for federation — cross-model union queries via models/_base/"
+status: planned
 ---
+
+> **Status: PLANNED** — Config parsing is implemented (`config/domain/federation.py`),
+> but the build pipeline does not yet execute federation. `federation.enabled`,
+> `children`, `union_key`, and `union_of` are parsed but never built into Silver
+> tables. Note: `DomainModel._build_union_node()` unions multiple Bronze sources
+> into one Silver fact — that is source-level union, not federation.
 
 ## federation Guide
 
