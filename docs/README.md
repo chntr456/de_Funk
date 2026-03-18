@@ -4,7 +4,7 @@
 
 ## History
 
-**de_Funk** started as a homelab setup goal from the idea of bringing dispart sources of information into a single interactive queryable space. The goal to simplify the interaction of data sources and create a news paper experience of open source data feeds. 
+**de_Funk** started as a homelab setup goal from the idea of bringing dispart sources of information into a single interactive queryable space. The goal to simplify the interaction of data sources and create a news paper experience of open source data feeds. Overtime, these could become pre-built semantic models for open and public data.
 
 ## The Core Idea: Markdown is the Config
 
