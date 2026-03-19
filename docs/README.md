@@ -1,6 +1,6 @@
 # de_Funk
 
-**de_Funk** is a graph-based analytical data warehouse that turns markdown domain configs into a queryable snowflake-schema like layer over a Delta Lake. It serves as an nteractive analytics — charts, tables, pivots, metric cards — directly inside Obsidian notes. 
+**de_Funk** is a graph-based analytical data warehouse that turns markdown domain configs into a queryable snowflake-schema like layer over a Delta Lake. It enables interactive analytics — charts, tables, pivots, metric cards — directly inside Obsidian notes. 
 
 ## History
 
