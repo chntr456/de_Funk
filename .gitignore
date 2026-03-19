@@ -60,3 +60,7 @@ logs/*.json
 .env
 .env.local
 .claude/
+
+# Obsidian plugin build artifacts
+node_modules/
+obsidian-plugin/main.js
