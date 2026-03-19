@@ -1,0 +1,32 @@
+digraph "packages_config" {
+rankdir=BT
+charset="utf-8"
+"de_funk.config" [color="black", label=<de_funk.config>, shape="box", style="solid"];
+"de_funk.config.constants" [color="black", label=<de_funk.config.constants>, shape="box", style="solid"];
+"de_funk.config.domain" [color="black", label=<de_funk.config.domain>, shape="box", style="solid"];
+"de_funk.config.domain.build" [color="black", label=<de_funk.config.domain.build>, shape="box", style="solid"];
+"de_funk.config.domain.config_translator" [color="black", label=<de_funk.config.domain.config_translator>, shape="box", style="solid"];
+"de_funk.config.domain.extends" [color="black", label=<de_funk.config.domain.extends>, shape="box", style="solid"];
+"de_funk.config.domain.schema" [color="black", label=<de_funk.config.domain.schema>, shape="box", style="solid"];
+"de_funk.config.domain.sources" [color="black", label=<de_funk.config.domain.sources>, shape="box", style="solid"];
+"de_funk.config.domain.subsets" [color="black", label=<de_funk.config.domain.subsets>, shape="box", style="solid"];
+"de_funk.config.loader" [color="black", label=<de_funk.config.loader>, shape="box", style="solid"];
+"de_funk.config.logging" [color="black", label=<de_funk.config.logging>, shape="box", style="solid"];
+"de_funk.config.markdown_loader" [color="black", label=<de_funk.config.markdown_loader>, shape="box", style="solid"];
+"de_funk.config.models" [color="black", label=<de_funk.config.models>, shape="box", style="solid"];
+"de_funk.config" -> "de_funk.config.loader" [arrowhead="open", arrowtail="none"];
+"de_funk.config" -> "de_funk.config.logging" [arrowhead="open", arrowtail="none"];
+"de_funk.config" -> "de_funk.config.models" [arrowhead="open", arrowtail="none"];
+"de_funk.config.domain" -> "de_funk.config.domain.extends" [arrowhead="open", arrowtail="none"];
+"de_funk.config.domain" -> "de_funk.config.domain.schema" [arrowhead="open", arrowtail="none"];
+"de_funk.config.domain" -> "de_funk.config.domain.subsets" [arrowhead="open", arrowtail="none"];
+"de_funk.config.domain.config_translator" -> "de_funk.config.domain.build" [arrowhead="open", arrowtail="none"];
+"de_funk.config.domain.config_translator" -> "de_funk.config.domain.sources" [arrowhead="open", arrowtail="none"];
+"de_funk.config.domain.subsets" -> "de_funk.config.domain.extends" [arrowhead="open", arrowtail="none"];
+"de_funk.config.domain.subsets" -> "de_funk.config.domain.schema" [arrowhead="open", arrowtail="none"];
+"de_funk.config.loader" -> "de_funk.config.constants" [arrowhead="open", arrowtail="none"];
+"de_funk.config.loader" -> "de_funk.config.logging" [arrowhead="open", arrowtail="none"];
+"de_funk.config.loader" -> "de_funk.config.markdown_loader" [arrowhead="open", arrowtail="none"];
+"de_funk.config.loader" -> "de_funk.config.models" [arrowhead="open", arrowtail="none"];
+"de_funk.config.markdown_loader" -> "de_funk.config.logging" [arrowhead="open", arrowtail="none"];
+}

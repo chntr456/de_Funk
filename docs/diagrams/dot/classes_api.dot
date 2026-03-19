@@ -1,0 +1,29 @@
+digraph "classes_api" {
+rankdir=BT
+charset="utf-8"
+"de_funk.api.handlers.box.BoxHandler" [color="black", fontcolor="black", label=<{BoxHandler|handles : set<br ALIGN="LEFT"/>|execute(payload: dict[str, Any], resolver: FieldResolver): dict<br ALIGN="LEFT"/>}>, shape="record", style="solid"];
+"de_funk.api.handlers.base.ExhibitHandler" [color="black", fontcolor="black", label=<{ExhibitHandler|handles : set[str]<br ALIGN="LEFT"/>|<I>execute</I>(payload: dict[str, Any], resolver: Any): Any<br ALIGN="LEFT"/>}>, shape="record", style="solid"];
+"de_funk.api.models.requests.ExpandableData" [color="black", fontcolor="black", label=<{ExpandableData|children : dict[str, list[list[Any]]]<br ALIGN="LEFT"/>columns : list[dict[str, Any]]<br ALIGN="LEFT"/>total_rows : int<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
+"de_funk.api.resolver.FieldRef" [color="black", fontcolor="black", label=<{FieldRef|domain : str<br ALIGN="LEFT"/>field : str<br ALIGN="LEFT"/>raw : str<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
+"de_funk.api.handlers.graphical.GraphicalHandler" [color="black", fontcolor="black", label=<{GraphicalHandler|handles : set<br ALIGN="LEFT"/>max_response_mb<br ALIGN="LEFT"/>storage_root<br ALIGN="LEFT"/>|execute(payload: dict[str, Any], resolver: FieldResolver): GraphicalResponse<br ALIGN="LEFT"/>}>, shape="record", style="solid"];
+"de_funk.api.models.requests.GreatTablesResponse" [color="black", fontcolor="black", label=<{GreatTablesResponse|expandable : Optional[ExpandableData]<br ALIGN="LEFT"/>html : str<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
+"de_funk.api.handlers.HandlerRegistry" [color="black", fontcolor="black", label=<{HandlerRegistry|shared_engine<br ALIGN="LEFT"/>supported_types<br ALIGN="LEFT"/>|get(type_str: str): ExhibitHandler \| None<br ALIGN="LEFT"/>register(handler: ExhibitHandler): None<br ALIGN="LEFT"/>}>, shape="record", style="solid"];
+"de_funk.api.handlers.metrics.MetricsHandler" [color="black", fontcolor="black", label=<{MetricsHandler|handles : set<br ALIGN="LEFT"/>|execute(payload: dict[str, Any], resolver: FieldResolver): MetricResponse<br ALIGN="LEFT"/>}>, shape="record", style="solid"];
+"de_funk.api.handlers.pivot.PivotHandler" [color="black", fontcolor="black", label=<{PivotHandler|handles : set<br ALIGN="LEFT"/>|execute(payload: dict[str, Any], resolver: FieldResolver): GreatTablesResponse<br ALIGN="LEFT"/>}>, shape="record", style="solid"];
+"de_funk.api.executor.QueryEngine" [color="black", fontcolor="black", label=<{QueryEngine|max_response_mb : float<br ALIGN="LEFT"/>storage_root : Path<br ALIGN="LEFT"/>|distinct_values(resolved: ResolvedField, extra_filters: list[tuple[ResolvedField \| str, Any]] \| None, resolver: Any): list[Any]<br ALIGN="LEFT"/>distinct_values_by_measure(resolved: ResolvedField, order_by: ResolvedField, order_dir: str, extra_filters: list[tuple[ResolvedField \| str, Any]] \| None, resolver: Any): list[Any]<br ALIGN="LEFT"/>}>, shape="record", style="solid"];
+"de_funk.api.resolver.ResolvedField" [color="black", fontcolor="black", label=<{ResolvedField|column : str<br ALIGN="LEFT"/>domain<br ALIGN="LEFT"/>format_code : Optional[str]<br ALIGN="LEFT"/>ref<br ALIGN="LEFT"/>silver_path : Path<br ALIGN="LEFT"/>table_name : str<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
+"de_funk.api.handlers.table_data.TableDataHandler" [color="black", fontcolor="black", label=<{TableDataHandler|handles : set<br ALIGN="LEFT"/>|execute(payload: dict[str, Any], resolver: FieldResolver): TableResponse<br ALIGN="LEFT"/>}>, shape="record", style="solid"];
+"de_funk.api.handlers.box.BoxHandler" -> "de_funk.api.executor.QueryEngine" [arrowhead="empty", arrowtail="none"];
+"de_funk.api.handlers.box.BoxHandler" -> "de_funk.api.handlers.base.ExhibitHandler" [arrowhead="empty", arrowtail="none"];
+"de_funk.api.handlers.graphical.GraphicalHandler" -> "de_funk.api.executor.QueryEngine" [arrowhead="empty", arrowtail="none"];
+"de_funk.api.handlers.graphical.GraphicalHandler" -> "de_funk.api.handlers.base.ExhibitHandler" [arrowhead="empty", arrowtail="none"];
+"de_funk.api.handlers.metrics.MetricsHandler" -> "de_funk.api.executor.QueryEngine" [arrowhead="empty", arrowtail="none"];
+"de_funk.api.handlers.metrics.MetricsHandler" -> "de_funk.api.handlers.base.ExhibitHandler" [arrowhead="empty", arrowtail="none"];
+"de_funk.api.handlers.pivot.PivotHandler" -> "de_funk.api.executor.QueryEngine" [arrowhead="empty", arrowtail="none"];
+"de_funk.api.handlers.pivot.PivotHandler" -> "de_funk.api.handlers.base.ExhibitHandler" [arrowhead="empty", arrowtail="none"];
+"de_funk.api.handlers.table_data.TableDataHandler" -> "de_funk.api.executor.QueryEngine" [arrowhead="empty", arrowtail="none"];
+"de_funk.api.handlers.table_data.TableDataHandler" -> "de_funk.api.handlers.base.ExhibitHandler" [arrowhead="empty", arrowtail="none"];
+"de_funk.api.executor.QueryEngine" -> "de_funk.api.handlers.HandlerRegistry" [arrowhead="odiamond", arrowtail="none", fontcolor="green", label="shared_engine", style="solid"];
+"de_funk.api.models.requests.ExpandableData" -> "de_funk.api.models.requests.GreatTablesResponse" [arrowhead="odiamond", arrowtail="none", fontcolor="green", label="expandable", style="solid"];
+"de_funk.api.resolver.FieldRef" -> "de_funk.api.resolver.ResolvedField" [arrowhead="odiamond", arrowtail="none", fontcolor="green", label="ref", style="solid"];
+}
