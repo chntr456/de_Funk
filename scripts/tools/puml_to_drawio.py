@@ -320,6 +320,75 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
                 f'<mxGeometry relative="1" as="geometry"/></mxCell>')
             cid += 1
 
+    # Render legend
+    all_positions = [positions[c.name] for c in classes if c.name in positions]
+    legend_x = max(p[0] for p in all_positions) + COL_W + 60 if all_positions else 20
+    legend_y = 60
+
+    # Title
+    cells.append(
+        f'      <mxCell id="{cid}" value="{xe("LEGEND")}" '
+        f'style="text;fontSize=14;fontStyle=1;fontFamily=Courier New;align=left;verticalAlign=middle;" '
+        f'vertex="1" parent="1">'
+        f'<mxGeometry x="{legend_x}" y="{legend_y}" width="200" height="25" as="geometry"/></mxCell>')
+    cid += 1
+    legend_y += 30
+
+    # Package color swatches
+    for pkg_name in sorted(pkg_colors.keys()):
+        color = pkg_colors[pkg_name]
+        cells.append(
+            f'      <mxCell id="{cid}" value="{xe(pkg_name)}" '
+            f'style="rounded=1;whiteSpace=wrap;html=1;fillColor={color};strokeColor=#666666;'
+            f'fontSize=10;fontFamily=Courier New;align=left;spacingLeft=8;" '
+            f'vertex="1" parent="1">'
+            f'<mxGeometry x="{legend_x}" y="{legend_y}" width="220" height="22" as="geometry"/></mxCell>')
+        cid += 1
+        legend_y += 26
+
+    # Edge legend
+    legend_y += 15
+    cells.append(
+        f'      <mxCell id="{cid}" value="{xe("ARROWS")}" '
+        f'style="text;fontSize=12;fontStyle=1;fontFamily=Courier New;align=left;verticalAlign=middle;" '
+        f'vertex="1" parent="1">'
+        f'<mxGeometry x="{legend_x}" y="{legend_y}" width="200" height="22" as="geometry"/></mxCell>')
+    cid += 1
+    legend_y += 28
+
+    for label, style_desc in [
+        ("hollow triangle = inherits", "endArrow=block;endFill=0;strokeColor=#555555;"),
+        ("filled diamond = composes", "endArrow=diamond;endFill=1;strokeColor=#555555;"),
+        ("dashed arrow = delegates", "endArrow=open;endFill=0;strokeColor=#999999;dashed=1;"),
+    ]:
+        # Arrow sample line
+        src_id = cid
+        cells.append(
+            f'      <mxCell id="{cid}" value="" '
+            f'style="ellipse;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#999999;" '
+            f'vertex="1" parent="1">'
+            f'<mxGeometry x="{legend_x}" y="{legend_y + 4}" width="12" height="12" as="geometry"/></mxCell>')
+        cid += 1
+        tgt_id = cid
+        cells.append(
+            f'      <mxCell id="{cid}" value="" '
+            f'style="ellipse;whiteSpace=wrap;html=1;fillColor=#E6E6E6;strokeColor=#999999;" '
+            f'vertex="1" parent="1">'
+            f'<mxGeometry x="{legend_x + 50}" y="{legend_y + 4}" width="12" height="12" as="geometry"/></mxCell>')
+        cid += 1
+        cells.append(
+            f'      <mxCell id="{cid}" value="" style="{style_desc}" '
+            f'edge="1" parent="1" source="{src_id}" target="{tgt_id}">'
+            f'<mxGeometry relative="1" as="geometry"/></mxCell>')
+        cid += 1
+        cells.append(
+            f'      <mxCell id="{cid}" value="{xe(label)}" '
+            f'style="text;fontSize=10;fontFamily=Courier New;align=left;verticalAlign=middle;" '
+            f'vertex="1" parent="1">'
+            f'<mxGeometry x="{legend_x + 70}" y="{legend_y}" width="200" height="20" as="geometry"/></mxCell>')
+        cid += 1
+        legend_y += 28
+
     content = '\n'.join(cells)
 
     # Calculate page size from actual bounds

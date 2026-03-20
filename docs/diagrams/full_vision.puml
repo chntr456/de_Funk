@@ -834,4 +834,20 @@ PipelineScheduler ..> DependencyGraph : order
 GraphBuilder ..> BackendOps : delegates
 MeasureExecutor ..> BackendAdapter : uses
 
+' ══════════════════════════════════════════════════════════
+' COLOR LEGEND
+' ══════════════════════════════════════════════════════════
+legend right
+  | Color | Layer |
+  |<#80E0D0> Teal | Resolution Layer (shared by build + query) |
+  |<#FFCC66> Gold | Domain Config Loading |
+  |<#FF9933> Orange | Build Path (Spark) |
+  |<#3399FF> Blue | Query Path (DuckDB / Spark) |
+  |<#B3D9FF> Light Blue | REST API (handlers, routers) |
+  |<#B3FFB3> Green | Plugin System |
+  |<#CC9966> Brown | Ingestion (providers, Bronze sink) |
+  |<#CC99FF> Purple | Orchestration (scheduler, deps) |
+  |<#E6E6E6> Gray | Infrastructure (config, connections, exceptions) |
+endlegend
+
 @enduml
