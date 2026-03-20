@@ -1,0 +1,799 @@
+@startuml "de_Funk Full Vision — Target Architecture"
+
+skinparam classAttributeIconSize 0
+skinparam classFontName "Courier New"
+skinparam classFontSize 10
+skinparam packageFontSize 12
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+title de_Funk Full Vision — Target Architecture\nThe model IS the markdown. Spark and DuckDB are symmetric backends.
+
+' ══════════════════════════════════════════════════════════
+' RESOLUTION LAYER (shared by build + query)
+' ══════════════════════════════════════════════════════════
+package "Resolution Layer (shared)" #80E0D0 {
+
+  class FieldRef {
+    - _known_domains : set
+    + domain : str
+    + field : str
+    + raw : str
+    --
+    + __init__(raw: str)
+    + {static} _match_domain(cls, raw) : tuple
+  }
+
+  class ResolvedField {
+    + ref : FieldRef
+    + table_name : str
+    + column : str
+    + silver_path : Path
+    + format_code : Optional[str]
+    + domain : str <<property>>
+  }
+
+  class FieldResolver {
+    - domains_root : Path
+    - storage_root : Path
+    - _domain_overrides : dict
+    - _cache : dict
+    - _index : dict
+    - _table_columns : dict
+    - _join_graph : dict
+    - _domain_deps : dict
+    - _table_to_domain : dict
+    - _built : bool
+    --
+    + __init__(domains_root, storage_root, domain_overrides)
+    - _build_index()
+    - _build_dir_to_model_map(models_root) : dict
+    - {static} _table_name_from_ref(ref) : str
+    - _register_edge(edge)
+    - _domain_for_table(md_file, dir_map) : str
+    - _resolve_temporal(ref) : ResolvedField
+    - _resolve_domain_field(ref) : ResolvedField
+    + reachable_domains(core_domains) : set
+    + find_join_path(src, dst, allowed_domains) : list
+    + resolve(ref_str) : ResolvedField
+    + resolve_many(refs) : dict
+    + get_field_catalog() : dict
+  }
+
+  class StorageRouter <<frozen dataclass>> {
+    + storage_cfg : dict
+    + repo_root : Optional[Path]
+    --
+    + parse_table_ref(table_ref) : tuple
+    + resolve(table_ref) : str
+    + bronze_path(logical_table) : str
+    + silver_path(logical_rel) : str
+  }
+
+  class FilterEngine {
+    + {static} _convert_date_to_date_id(date_str) : int
+    + {static} _format_sql_value(value) : str
+    + {static} apply_filters(df, filters, backend) : Any
+    + {static} apply_from_session(df, filters, session) : Any
+    + {static} _apply_spark_filters(df, filters) : SparkDF
+    + {static} _apply_duckdb_filters(df, filters) : Any
+    + {static} build_filter_sql(filters) : str
+  }
+
+  class Aggregator {
+    + {static} aggregate(df, group_by, aggs, backend, conn) : Any
+    + {static} infer_aggregations(model_name, cols, registry) : dict
+    + {static} default_aggregation(column_name) : str
+    - {static} _aggregate_spark(df, group_by, aggs) : Any
+    - {static} _aggregate_duckdb(df, group_by, aggs, conn) : Any
+  }
+
+  class BackendOps {
+    + connection
+    + backend : str
+    --
+    + select_columns(df, select_config) : Any
+    + apply_filters(df, filters) : Any
+    + apply_derive(df, col_name, expr) : Any
+    + union_dataframes(dfs) : Any
+    + drop_duplicates(df, subset) : Any
+    + create_empty_df(columns) : Any
+    + read_delta_or_parquet(path) : Any
+    + join(left, right, on, how) : Any
+    + with_column(df, name, expr) : Any
+    + count(df) : int
+  }
+}
+
+' ══════════════════════════════════════════════════════════
+' CONFIG LOADING
+' ══════════════════════════════════════════════════════════
+package "Config Loading" #FFCC66 {
+
+  class DomainConfigLoader {
+    - domains_dir : Path
+    - _type_index : dict
+    - _model_to_path : dict
+    - _parse_cache : dict
+    --
+    + load_model_config(model_name) : dict
+    - _discover_tables(model_dir) : dict
+    - _discover_sources(model_dir) : dict
+    - _discover_views(model_dir) : dict
+  }
+
+  class config_translator <<module>> {
+    + {static} translate_domain_config(config) : dict
+    - {static} _synthesize_node(table_name, table_cfg, sources) : dict
+    - {static} _build_node_from_source(table_cfg, source) : dict
+    - {static} _normalize_from(from_spec) : str
+    - {static} _aliases_to_select_dict(aliases) : dict
+    - {static} _enrich_to_join_specs(table_config) : list
+  }
+
+  class extends_resolver <<module>> {
+    + {static} parse_front_matter(file_path) : dict
+    + {static} deep_merge(base, override) : dict
+    + {static} resolve_extends_reference(ref, dir, cache) : dict
+    + {static} resolve_nested_extends(config, dir, cache) : dict
+  }
+
+  DomainConfigLoader ..> config_translator : uses
+  DomainConfigLoader ..> extends_resolver : uses
+}
+
+' ══════════════════════════════════════════════════════════
+' CONNECTION HIERARCHY
+' ══════════════════════════════════════════════════════════
+package "Connection Hierarchy" #E6E6E6 {
+
+  abstract class DataConnection {
+    + {abstract} read_table(path, format) : Any
+    + {abstract} apply_filters(df, filters) : Any
+    + {abstract} to_pandas(df) : DataFrame
+    + {abstract} count(df) : int
+    + {abstract} cache(df) : Any
+    + {abstract} uncache(df)
+    + {abstract} stop()
+  }
+
+  class DuckDBConnection #3399FF {
+    + conn : duckdb.Connection
+    + db_path : str
+    + delta_enabled : bool
+    --
+    + read_table(path, format, version, timestamp)
+    + execute_sql(query) : Any
+    + read_parquet(path) : Any
+    + write_delta_table(df, path, mode, partition_by)
+    + apply_filters(df, filters) : Any
+    + to_pandas(df) : DataFrame
+    + count(df) : int
+    + table(view_name) : Any
+    + has_view(view_name) : bool
+  }
+
+  class SparkConnection #FF9933 {
+    + spark_session
+    --
+    + read_table(path, format, version, timestamp)
+    + write_delta_table(df, path, mode, partition_by)
+    + merge_delta_table(source_df, target_path, condition)
+    + optimize_delta_table(path, zorder_by)
+    + vacuum_delta_table(path, retention_hours)
+    + apply_filters(df, filters) : Any
+    + to_pandas(df) : DataFrame
+    + count(df) : int
+  }
+
+  DataConnection <|-- DuckDBConnection
+  DataConnection <|-- SparkConnection
+}
+
+' ══════════════════════════════════════════════════════════
+' BACKEND ADAPTER HIERARCHY
+' ══════════════════════════════════════════════════════════
+package "Backend Adapters" #E6E6E6 {
+
+  abstract class BackendAdapter {
+    + connection
+    + backend_type : str
+    --
+    + {abstract} get_dialect() : str
+    + {abstract} execute_sql(sql, params) : QueryResult
+    + {abstract} get_table_reference(table_name) : str
+    + supports_feature(feature) : bool
+    + format_limit(n) : str
+    + format_date_literal(date_str) : str
+  }
+
+  class SparkAdapter #FF9933 {
+    + execute_sql(sql, params) : QueryResult
+    + get_table_reference(table_name) : str
+    + supports_feature(feature) : bool
+    + set_enriched_table(name, df)
+  }
+
+  class DuckDBAdapter #3399FF {
+    + execute_sql(sql, params) : QueryResult
+    + get_table_reference(table_name) : str
+    + supports_feature(feature) : bool
+    + set_enriched_table(name, df)
+  }
+
+  BackendAdapter <|-- SparkAdapter
+  BackendAdapter <|-- DuckDBAdapter
+}
+
+' ══════════════════════════════════════════════════════════
+' MODEL HIERARCHY (build)
+' ══════════════════════════════════════════════════════════
+package "Model Hierarchy (build)" #FF9933 {
+
+  class BaseModel {
+    + connection
+    + storage_cfg : dict
+    + model_cfg : dict
+    + params : dict
+    + repo_root : Path
+    + backend : str <<property>>
+    + backend_ops : BackendOps <<property>>
+    - _dims : dict
+    - _facts : dict
+    - _built : bool
+    --
+    + __init__(connection, storage_cfg, model_cfg, params, repo_root)
+    + set_session(session)
+    + build() : tuple[dict, dict]
+    + ensure_built()
+    + before_build()
+    + after_build(dims, facts) : tuple[dict, dict]
+    + custom_node_loading(node_id, config) : Optional[DF]
+    + write_tables(output_root, format, mode)
+    + get_table(name) : Any
+    + has_table(name) : bool
+    + list_tables() : list[str]
+    + get_table_schema(name) : dict
+  }
+
+  class DomainModel {
+    .. default for all domains ..
+    + custom_node_loading(node_id, config)
+    - _build_seed_node(node_id, config) : DF
+    - _seed_to_spark_df(rows, schema) : SparkDF
+    - _seed_to_duckdb_df(rows, schema) : Any
+    - _apply_seed_derived_columns(df, schema) : DF
+    - _build_union_node(node_id, config) : DF
+    - _load_internal_or_bronze(ref) : DF
+    - _build_distinct_node(node_id, config) : DF
+    - _apply_distinct_enrichments(df, config) : DF
+    - _build_window_node(node_id, config) : DF
+    - _build_unpivot_node(node_id, config) : DF
+    - _create_empty_df(columns) : DF
+  }
+
+  class CompanyModel {
+    .. hook only ..
+    + after_build(dims, facts)
+    ' CIK->ticker FK enrichment
+  }
+
+  class TemporalModel {
+    .. hook only ..
+    + custom_node_loading(node_id, config)
+    - _generate_calendar() : DF
+    - _generate_calendar_spark(start, end, fiscal) : SparkDF
+    - _generate_calendar_duckdb(start, end, fiscal) : DF
+  }
+
+  class TimeSeriesForecastModel {
+    + {abstract} get_source_model_name() : str
+    + get_training_data(entity_id, date_from, date_to)
+    - _prepare_training_data(entity_id, lookback)
+  }
+
+  class ForecastModel {
+    + get_source_model_name() : str
+    + get_source_table_name() : str
+    + get_entity_column() : str
+    + get_date_column() : str
+    + get_training_data(entity_id, date_from, date_to)
+    + run_forecast_for_ticker(ticker, config)
+  }
+
+  BaseModel <|-- DomainModel
+  BaseModel <|-- CompanyModel
+  BaseModel <|-- TemporalModel
+  BaseModel <|-- TimeSeriesForecastModel
+  TimeSeriesForecastModel <|-- ForecastModel
+  BaseModel *-- GraphBuilder
+  BaseModel *-- ModelWriter
+  BaseModel *-- BackendOps
+}
+
+' ══════════════════════════════════════════════════════════
+' MODEL COMPOSITION
+' ══════════════════════════════════════════════════════════
+package "Model Composition" #FF9933 {
+
+  class GraphBuilder {
+    + model : BaseModel
+    --
+    + build() : tuple[dict, dict]
+    - _build_nodes() : dict[str, DF]
+    - _apply_joins(df, join_specs, nodes, node_id) : DF
+    - _load_bronze_table(table_name) : DF
+    - _load_silver_table(model_name, table_name) : DF
+    - _apply_derive(df, col_name, expr, node_id) : DF
+    + resolve_node(node_id, nodes) : DF
+    __ static __
+    + JoinUtils.join_pairs_from_strings(specs)
+    + JoinUtils.infer_join_pairs(left, right)
+    + JoinUtils.join_with_dedupe(left, right, pairs, how)
+  }
+
+  class ModelWriter {
+    + model : BaseModel
+    + auto_vacuum : bool <<property>>
+    --
+    + write_tables(dims, facts, root, format, mode)
+    - _vacuum_table(path)
+  }
+
+  class ModelGraph {
+    + graph : nx.DiGraph
+    + join_graph : nx.DiGraph
+    - _model_configs : dict
+    --
+    + build_from_registry(registry)
+    + are_related(model_a, model_b) : bool
+    + get_dependencies(model, transitive) : set
+    + get_dependents(model, transitive) : set
+    + get_join_path(model_a, model_b) : list
+    + get_build_order() : list
+    + validate_no_cycles()
+    + to_mermaid() : str
+  }
+
+  class ModelRegistry {
+    - _registry : dict
+    - _configs : dict
+    --
+    + register(name, cls_or_config)
+    + get(model_name) : type
+    + discover(repo_root)
+    + list_models() : list[str]
+  }
+}
+
+' ══════════════════════════════════════════════════════════
+' QUERY PATH
+' ══════════════════════════════════════════════════════════
+package "Query Path" #3399FF {
+
+  class QuerySession {
+    + connection
+    + storage_cfg : dict
+    + repo_root : Path
+    + registry : ModelRegistry
+    + model_graph : ModelGraph
+    + backend : str <<property>>
+    --
+    + __init__(connection, storage_cfg, repo_root, models)
+    + load_model(model_name) : BaseModel
+    + get_table(model_name, table_name, columns, filters, group_by, aggs)
+    + should_apply_cross_model_filter(source, target) : bool
+    + list_models() : list[str]
+    + list_tables(model) : dict
+    + filter_by_value(df, column, value) : Any
+    + filter_by_range(df, column, min_val, max_val) : Any
+    + join(left, right, on, how) : Any
+    + distinct_values(df, column) : list
+    + order_by(df, column, ascending) : Any
+    + limit(df, n) : Any
+    + row_count(df) : int
+    + to_pandas(df) : DataFrame
+    + select_columns(df, columns) : Any
+  }
+
+  class DuckDBEngine {
+    + max_response_mb : float
+    + storage_root : Path
+    - _conn : duckdb.Connection
+    - _delta_available : bool
+    - _max_sql_rows : int
+    - _scan_cache : dict
+    --
+    + execute(sql, max_rows) : list
+    + scan(path) : str
+    + safe_scan(path) : str
+    + {static} collect_tables(fields) : dict
+    + build_from(tables, resolver, allowed_domains) : str
+    + build_where(filters, resolver, from_tables) : list[str]
+    + build_order(sort, x_resolved) : str
+    + distinct_values(resolved, extra_filters, resolver) : list
+    + distinct_values_by_measure(resolved, order_by, order_dir) : list
+  }
+
+  class SparkEngine {
+    + spark_session
+    + storage_root : Path
+    --
+    + execute(sql, max_rows) : list
+    + read_table(path) : SparkDF
+    + build_from(tables, resolver) : str
+    + build_where(filters, resolver) : list[str]
+    + build_order(sort, x_resolved) : str
+    + distinct_values(resolved, extra_filters, resolver) : list
+  }
+
+  class JoinPlanner {
+    + session : QuerySession
+    --
+    + build_column_index(model_name) : dict
+    + find_materialized_view(model, required_cols) : str
+    + plan_auto_joins(model, base_table, missing_cols, filters) : dict
+    + select_columns(df, columns) : Any
+    + execute_auto_joins(model, plan, cols, filters, group_by, aggs)
+    - _execute_spark_joins(model, plan, cols, filters)
+    - _execute_duckdb_joins(model, plan, cols, filters)
+    - _build_where_clause(filters, base, available_cols) : str
+    - _parse_join_condition(condition) : tuple
+  }
+
+  class BronzeResolver {
+    - data_sources_root : Path
+    - bronze_root : Path
+    - _index : dict
+    - _known_providers : set
+    - _cache : dict
+    --
+    + resolve(ref_str) : ResolvedField
+    - _build_index()
+    - _parse_ref(ref_str) : tuple
+    + reachable_domains(core_domains) : set
+    + get_endpoint_catalog() : dict
+  }
+
+  QuerySession ..> DuckDBEngine : interactive
+  QuerySession ..> SparkEngine : batch
+  QuerySession *-- JoinPlanner
+}
+
+' ══════════════════════════════════════════════════════════
+' HANDLER HIERARCHY (API)
+' ══════════════════════════════════════════════════════════
+package "Handler Hierarchy (API)" #B3D9FF {
+
+  abstract class ExhibitHandler {
+    + handles : set[str]
+    --
+    + {abstract} execute(payload: dict, resolver: Any) : Any
+  }
+
+  class HandlerRegistry {
+    - _handlers : dict
+    + shared_engine : DuckDBEngine
+    --
+    + register(handler)
+    + get(type_str) : ExhibitHandler
+    + supported_types : set <<property>>
+  }
+
+  class GraphicalHandler {
+    + handles : {line, bar, scatter, area, pie, heatmap}
+    --
+    + execute(payload, resolver) : GraphicalResponse
+    - _shape_graphical(rows, has_group, y_count) : GraphicalResponse
+  }
+
+  class PivotHandler {
+    + handles : {pivot, great_table, gt}
+    --
+    + execute(payload, resolver) : GreatTablesResponse
+    - _row_labels(fields) : list
+    - _totals_sql(row_exprs, col_exprs, has_totals) : str
+    - _discover_col_values(col_exprs, from, where) : list
+    - _generate_wide_sql(...) : str
+    - _query_2d_wide(req, rows, cols, measures, ...) : tuple
+    - _query_1d(req, rows, measures, ...) : tuple
+  }
+
+  class MetricsHandler {
+    + handles : {cards.metric, kpi}
+    + execute(payload, resolver) : MetricResponse
+  }
+
+  class BoxHandler {
+    + handles : {box, ohlcv, candlestick}
+    + execute(payload, resolver) : dict
+  }
+
+  class TableDataHandler {
+    + handles : {table.data}
+    + execute(payload, resolver) : TableResponse
+  }
+
+  ExhibitHandler <|-- GraphicalHandler
+  ExhibitHandler <|-- PivotHandler
+  ExhibitHandler <|-- MetricsHandler
+  ExhibitHandler <|-- BoxHandler
+  ExhibitHandler <|-- TableDataHandler
+
+  GraphicalHandler --|> DuckDBEngine : mixin
+  PivotHandler --|> DuckDBEngine : mixin
+  MetricsHandler --|> DuckDBEngine : mixin
+  BoxHandler --|> DuckDBEngine : mixin
+  TableDataHandler --|> DuckDBEngine : mixin
+}
+
+' ══════════════════════════════════════════════════════════
+' BUILDER HIERARCHY
+' ══════════════════════════════════════════════════════════
+package "Builder Hierarchy" #FF9933 {
+
+  abstract class BaseModelBuilder {
+    + model_name : str
+    + depends_on : list[str]
+    + context : BuildContext
+    --
+    + {abstract} get_model_class() : Type
+    + validate()
+    + pre_build()
+    + post_build(result)
+    + build() : BuildResult
+  }
+
+  class DomainBuilderFactory {
+    + CUSTOM_MODEL_CLASSES : dict
+    --
+    + {static} create_builders(domains_dir, repo_root) : dict
+    - {static} _create_builder_class(model_name, config, loader) : type
+  }
+
+  class TemporalBuilder { depends_on : [] }
+  class SecuritiesBuilder { depends_on : [temporal] }
+  class StocksBuilder { depends_on : [temporal, securities, corporate]\n+ post_build(result) }
+  class CompanyBuilder { depends_on : [temporal]\n+ post_build(result) }
+  class ForecastBuilder { depends_on : [temporal, stocks]\n+ build() : BuildResult\n+ validate() : bool }
+
+  BaseModelBuilder <|-- TemporalBuilder
+  BaseModelBuilder <|-- SecuritiesBuilder
+  BaseModelBuilder <|-- StocksBuilder
+  BaseModelBuilder <|-- CompanyBuilder
+  BaseModelBuilder <|-- ForecastBuilder
+}
+
+' ══════════════════════════════════════════════════════════
+' PROVIDER HIERARCHY (ingestion)
+' ══════════════════════════════════════════════════════════
+package "Provider Hierarchy (ingestion)" #CC9966 {
+
+  abstract class BaseProvider {
+    + provider_name : str
+    + storage_cfg : dict
+    + config : ProviderConfig
+    --
+    + {abstract} list_work_items(**kwargs) : list
+    + {abstract} fetch(work_item, **kwargs) : Generator
+    + {abstract} normalize(records, work_item) : DF
+    + {abstract} get_table_name(work_item) : str
+  }
+
+  class AlphaVantageProvider {
+    - api_keys : list
+    - _key_pool : ApiKeyPool
+    --
+    + fetch(ticker) : Generator
+    + normalize(records, ticker) : DF
+    + list_work_items(tickers) : list
+  }
+
+  class SocrataBaseProvider {
+    - _client : SocrataClient
+    + fetch(endpoint) : Generator
+    - _paginate(endpoint, limit, offset)
+    - _transform_dates(records) : list
+  }
+
+  class ChicagoProvider { }
+  class CookCountyProvider { - _get_endpoint_config() : dict }
+
+  BaseProvider <|-- AlphaVantageProvider
+  BaseProvider <|-- SocrataBaseProvider
+  SocrataBaseProvider <|-- ChicagoProvider
+  SocrataBaseProvider <|-- CookCountyProvider
+}
+
+' ══════════════════════════════════════════════════════════
+' INGESTION ENGINE
+' ══════════════════════════════════════════════════════════
+package "Ingestion" #CC9966 {
+
+  class IngestorEngine {
+    + providers : dict
+    + sink : BronzeSink
+    + progress : BatchProgressTracker
+    --
+    + run(provider_name, work_items, **kwargs)
+    - _process_work_item(provider, work_item)
+  }
+
+  class BronzeSink {
+    + storage_cfg : dict
+    --
+    + write_if_missing(table, partitions, df) : bool
+    + append_immutable(df, table, key_cols, partitions, date_col) : str
+    + upsert(df, table, merge_keys, partitions) : str
+  }
+
+  class HttpClient {
+    + base_url : str
+    - _token_bucket : TokenBucket
+    - _circuit_breaker : CircuitBreaker
+    --
+    + get(path, params) : Response
+    - _retry_request(method, url, **kwargs)
+  }
+
+  class TokenBucket {
+    + rate : float
+    + capacity : int
+    --
+    + acquire(timeout) : bool
+    + reset()
+  }
+
+  class CircuitBreaker {
+    + config : CircuitBreakerConfig
+    - _state : str
+    --
+    + call(fn, *args, **kwargs) : Any
+    + reset()
+    + state : str <<property>>
+  }
+
+  class ApiKeyPool {
+    - _keys : list
+    - _current_index : int
+    --
+    + next_key() : str
+    + mark_exhausted(key)
+  }
+
+  IngestorEngine *-- BronzeSink
+  HttpClient *-- TokenBucket
+  HttpClient *-- CircuitBreaker
+}
+
+' ══════════════════════════════════════════════════════════
+' MEASURE HIERARCHY
+' ══════════════════════════════════════════════════════════
+package "Measure System" #80E0D0 {
+
+  abstract class BaseMeasure {
+    + name : str
+    + source : str
+    + data_type : str
+    + format : str
+    + tags : list
+    --
+    + {abstract} to_sql(adapter) : str
+    + execute(adapter, **kwargs) : Any
+  }
+
+  class SimpleMeasure { + aggregation : str\n+ to_sql(adapter) : str }
+  class ComputedMeasure { + expression : str\n+ to_sql(adapter) : str }
+
+  abstract class DomainMeasures {
+    + model : BaseModel
+    --
+    + get_table(table_name) : DF
+    + ticker_window(partition_col) : WindowSpec
+    + rolling_window(partition, order, rows) : WindowSpec
+    + add_returns(df, col, periods) : DF
+    + add_rolling_mean(df, col, window) : DF
+    + to_pandas(df) : DataFrame
+  }
+
+  class MeasureExecutor {
+    + model : BaseModel
+    + adapter : BackendAdapter
+    --
+    + execute(measure_name, **kwargs) : Any
+    - _resolve_measure(name) : BaseMeasure
+  }
+
+  class MeasureRegistry {
+    - _registry : dict
+    --
+    + {static} register(measure_type) : Callable
+    + {static} create_measure(config) : BaseMeasure
+  }
+
+  BaseMeasure <|-- SimpleMeasure
+  BaseMeasure <|-- ComputedMeasure
+}
+
+' ══════════════════════════════════════════════════════════
+' ORCHESTRATION
+' ══════════════════════════════════════════════════════════
+package "Orchestration" #CC99FF {
+
+  class PipelineScheduler {
+    - _scheduler
+    - _blocking : bool
+    --
+    + add_job(func, trigger, **trigger_args)
+    + start()
+    + pause()
+    + resume()
+    + shutdown()
+  }
+
+  class DependencyGraph {
+    - _graph : dict
+    - _configs_path : Path
+    --
+    + build()
+    + topological_sort() : list[str]
+    + filter_buildable(model_names) : list[str]
+    + has_circular_dependency() : bool
+    + visualize() : str
+  }
+}
+
+' ══════════════════════════════════════════════════════════
+' APP CONFIG
+' ══════════════════════════════════════════════════════════
+package "App Configuration" #E6E6E6 {
+  class ConfigLoader {
+    + repo_root : Optional[Path]
+    --
+    + load(connection_type, log_level) : AppConfig
+    - _discover_repo_root(start) : Path
+  }
+
+  class AppConfig <<dataclass>> {
+    + repo_root : Path
+    + connection : ConnectionConfig
+    + storage : StorageConfig
+    + apis : dict[str, APIConfig]
+    + debug : DebugConfig
+  }
+
+  class ConnectionFactory {
+    + {static} create(connection_type, **kwargs) : DataConnection
+    + {static} get_spark_connection(session) : SparkConnection
+    + {static} get_duckdb_connection(db_path, **kwargs) : DuckDBConnection
+  }
+}
+
+' ══════════════════════════════════════════════════════════
+' PLUGIN SYSTEM
+' ══════════════════════════════════════════════════════════
+package "Plugin System" #B3FFB3 {
+  class BuildPluginRegistry {
+    - _plugins : dict[str, dict[str, list[Callable]]]
+    --
+    + {static} register(hook_type, model_name, fn)
+    + {static} get(hook_type, model_name) : list
+    + {static} discover(plugins_dir)
+  }
+}
+
+' ══════════════════════════════════════════════════════════
+' KEY RELATIONSHIPS
+' ══════════════════════════════════════════════════════════
+QuerySession *-- StorageRouter
+QuerySession *-- ModelGraph
+QuerySession ..> FieldResolver : resolve
+QuerySession ..> FilterEngine : filters
+QuerySession ..> Aggregator : agg
+DomainBuilderFactory ..> DomainConfigLoader : loads configs
+HandlerRegistry *-- DuckDBEngine
+PipelineScheduler ..> DependencyGraph : order
+GraphBuilder ..> BackendOps : delegates
+MeasureExecutor ..> BackendAdapter : uses
+
+@enduml
