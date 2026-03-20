@@ -25,6 +25,10 @@ package "Engine Context (universal runtime)" #80E0D0 {
     + field_resolver : FieldResolver
     + domain_loader : DomainConfigLoader
     + registry : ModelRegistry
+    .. storage mounts (from storage.json) ..
+    + raw_root : Path
+    + bronze_root : Path
+    + silver_root : Path
     .. private strategy ..
     - _ops : DataOps
     - _sql : SqlOps
@@ -173,12 +177,26 @@ package "Field Resolution" #80E0D0 {
   class StorageRouter <<frozen dataclass>> {
     + storage_cfg : dict
     + repo_root : Optional[Path]
+    .. mount points (different physical storage) ..
+    + raw_root : Path
+    + bronze_root : Path
+    + silver_root : Path
     --
     + parse_table_ref(table_ref) : tuple
     + resolve(table_ref) : str
-    + bronze_path(logical_table) : str
-    + silver_path(logical_rel) : str
+    + raw_path(provider, endpoint) : str
+    + bronze_path(provider, endpoint) : str
+    + silver_path(domain, model) : str
   }
+
+  note bottom of StorageRouter
+    Raw: HDD/NAS (bulk, cheap, archival)
+      /mnt/disk/storage/raw/{provider}/{endpoint}/
+    Bronze + Silver: SSD (fast Delta Lake scans)
+      /shared/storage/bronze/{provider}/{endpoint}/
+      /shared/storage/silver/{domain}/{model}/
+    Mount points configured in storage.json
+  end note
 
   class Aggregator {
     + {static} aggregate(ctx: EngineContext, df, group_by, aggs) : Any
@@ -683,7 +701,8 @@ package "Ingestion Pipeline" #CC9966 {
   }
 
   note bottom of RawSink
-    /storage/raw/{provider}/{endpoint}/{partition}/
+    HDD/NAS mount (bulk, cheap):
+    /mnt/disk/storage/raw/{provider}/{endpoint}/{partition}/
     Preserves original downloaded data.
     Re-ingestion reads from Raw, not from API.
   end note
@@ -699,8 +718,9 @@ package "Ingestion Pipeline" #CC9966 {
   }
 
   note bottom of BronzeSink
-    /storage/bronze/{provider}/{endpoint}/
-    Reads from Raw, applies schema, writes Delta.
+    SSD mount (fast Delta scans):
+    /shared/storage/bronze/{provider}/{endpoint}/
+    Reads from Raw (HDD), applies schema, writes Delta (SSD).
     Can rebuild Bronze from Raw without re-downloading.
   end note
 
@@ -895,10 +915,10 @@ legend right
   |<#CC99FF> Purple | Orchestration (scheduler, deps) |
   |<#E6E6E6> Gray | Infrastructure (config, connections) |
 
-  | Layer | Storage Path |
-  | Raw | /storage/raw/{provider}/{endpoint}/ |
-  | Bronze | /storage/bronze/{provider}/{endpoint}/ |
-  | Silver | /storage/silver/{domain}/{model}/ |
+  | Layer | Mount | Path |
+  | Raw | HDD/NAS | /mnt/disk/storage/raw/{provider}/{endpoint}/ |
+  | Bronze | SSD | /shared/storage/bronze/{provider}/{endpoint}/ |
+  | Silver | SSD | /shared/storage/silver/{domain}/{model}/ |
 endlegend
 
 @enduml
