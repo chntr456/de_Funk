@@ -15,24 +15,21 @@ title de_Funk Full Vision — Target Architecture\nEngineContext is the universa
 package "Engine Context (universal runtime)" #80E0D0 {
 
   class EngineContext {
-    .. identity ..
+    .. identity (set once at creation) ..
     + repo_root : Path
     + app_config : AppConfig
-    .. connection (created once) ..
     + connection : DataConnection
     + backend : str
-    - _engine : Engine
-    .. paths (created once from storage.json) ..
+    .. composed objects (set once at creation) ..
     + storage_router : StorageRouter
-    + bronze_root : Path
-    + silver_root : Path
-    + domains_root : Path
-    .. resolution (created once from domain configs) ..
     + field_resolver : FieldResolver
     + domain_loader : DomainConfigLoader
     + registry : ModelRegistry
+    .. private strategy ..
+    - _ops : DataOps
+    - _sql : SqlOps
     --
-    .. DataFrame ops (delegated to _engine) ..
+    .. DataFrame ops (flat API, delegates to _ops) ..
     + select(df, columns: dict) : Any
     + filter(df, filters: list) : Any
     + derive(df, col: str, expr: str) : Any
@@ -44,85 +41,91 @@ package "Engine Context (universal runtime)" #80E0D0 {
     + empty_df(columns: list) : Any
     + count(df) : int
     + to_pandas(df) : DataFrame
-    .. SQL ops (delegated to _engine) ..
+    .. SQL ops (flat API, delegates to _sql) ..
     + execute_sql(sql: str) : Any
     + scan(path: str) : str
     + build_from(tables, resolver, allowed_domains) : str
     + build_where(filters: list) : str
     + build_order(sort, x_resolved) : str
     + distinct_values(resolved, extra_filters, resolver) : list
-    + distinct_values_by_measure(resolved, order_by, dir) : list
-    .. model ops (absorbed from QuerySession) ..
+    .. model ops (flat API) ..
     + load_model(model_name) : BaseModel
     + get_table(model_name, table_name, columns, filters) : Any
     + list_models() : list[str]
     + list_tables(model_name) : dict
-    + get_model_metadata(model_name) : dict
     --
     + {static} from_config(config: AppConfig) : EngineContext
     + {static} for_build(spark, storage_cfg, repo_root) : EngineContext
     + {static} for_query(duckdb_path, storage_cfg, repo_root) : EngineContext
   }
 
-  abstract class Engine <<internal>> {
-    .. strategy interface (private to EngineContext) ..
-    + {abstract} execute_sql(sql, max_rows) : list
-    + {abstract} scan(path) : str
-    + {abstract} read_table(path) : Any
+  abstract class DataOps <<internal>> {
+    .. backend-specific DataFrame operations ..
     + {abstract} select(df, columns) : Any
     + {abstract} filter(df, filters) : Any
     + {abstract} derive(df, col, expr) : Any
     + {abstract} join(left, right, on, how) : Any
     + {abstract} union(dfs) : Any
     + {abstract} dedup(df, subset) : Any
+    + {abstract} read(path) : Any
     + {abstract} write(df, path, format, mode) : Any
+    + {abstract} empty_df(columns) : Any
     + {abstract} count(df) : int
     + {abstract} to_pandas(df) : DataFrame
+  }
+
+  abstract class SqlOps <<internal>> {
+    .. backend-specific SQL generation + execution ..
+    + {abstract} execute_sql(sql, max_rows) : list
+    + {abstract} scan(path) : str
     + {abstract} build_from(tables, resolver) : str
     + {abstract} build_where(filters) : str
+    + {abstract} build_order(sort) : str
     + {abstract} distinct_values(resolved) : list
   }
 
-  class DuckDBEngine <<internal>> {
+  class DuckDBOps <<internal>> {
     - _conn : duckdb.Connection
     - _scan_cache : dict
     - _delta_available : bool
-    - _max_sql_rows : int
     --
-    .. implements Engine for DuckDB ..
-    + execute_sql(sql, max_rows) : list
-    + scan(path) : str
-    + safe_scan(path) : str
-    + build_from(tables, resolver, allowed_domains) : str
-    + build_where(filters, resolver, from_tables) : list
-    + distinct_values(resolved, extra_filters, resolver) : list
-    + distinct_values_by_measure(resolved, order_by, dir) : list
+    .. DuckDB implementations ..
   }
 
-  class SparkEngine <<internal>> {
+  class SparkOps <<internal>> {
     - _spark_session
     --
-    .. implements Engine for Spark ..
-    + execute_sql(sql, max_rows) : list
-    + read_table(path) : SparkDF
-    + build_from(tables, resolver) : str
-    + build_where(filters, resolver) : list
-    + distinct_values(resolved, extra_filters, resolver) : list
+    .. Spark implementations ..
   }
 
-  EngineContext *-- Engine : _engine (private)
-  Engine <|-- DuckDBEngine
-  Engine <|-- SparkEngine
+  class DuckDBSql <<internal>> {
+    - _conn : duckdb.Connection
+    - _max_sql_rows : int
+    --
+    .. DuckDB SQL generation ..
+  }
+
+  class SparkSql <<internal>> {
+    - _spark_session
+    --
+    .. Spark SQL generation ..
+  }
+
+  EngineContext *-- DataOps : _ops (private)
+  EngineContext *-- SqlOps : _sql (private)
+  DataOps <|-- DuckDBOps
+  DataOps <|-- SparkOps
+  SqlOps <|-- DuckDBSql
+  SqlOps <|-- SparkSql
 
   note right of EngineContext
-    Absorbs QuerySession:
-    - load_model, get_table, list_models (model-aware queries)
-    Absorbs FilterEngine + BackendOps:
-    - filter, select, derive, join, union, dedup
-    Contains Engine strategy (private):
-    - DuckDBEngine or SparkEngine selected at creation
-    - All 113 backend branches resolved internally
-    Created once, passed everywhere as ctx
+    Flat API externally (ctx.join, ctx.filter, ctx.execute_sql)
+    Composed internally:
+      _ops: DataOps (DuckDBOps or SparkOps)
+      _sql: SqlOps (DuckDBSql or SparkSql)
+    No FilterEngine, no BackendOps, no QuerySession.
+    113 backend branches -> internal dispatch.
+    Created once, passed everywhere as ctx.
   end note
 }
 
@@ -657,24 +660,49 @@ package "Provider Hierarchy (ingestion)" #CC9966 {
 ' ══════════════════════════════════════════════════════════
 ' INGESTION ENGINE
 ' ══════════════════════════════════════════════════════════
-package "Ingestion" #CC9966 {
+package "Ingestion Pipeline" #CC9966 {
 
   class IngestorEngine {
     + providers : dict
-    + sink : BronzeSink
+    + raw_sink : RawSink
+    + bronze_sink : BronzeSink
     + progress : BatchProgressTracker
     --
     + run(provider_name, work_items, **kwargs)
     - _process_work_item(provider, work_item)
   }
 
+  class RawSink {
+    .. downloads -> raw files (CSV, JSON, API responses) ..
+    + raw_root : Path
+    --
+    + write(data: bytes, provider: str, endpoint: str, partition: str) : Path
+    + exists(provider: str, endpoint: str, partition: str) : bool
+    + read(provider: str, endpoint: str, partition: str) : Any
+    + list_partitions(provider: str, endpoint: str) : list
+  }
+
+  note bottom of RawSink
+    /storage/raw/{provider}/{endpoint}/{partition}/
+    Preserves original downloaded data.
+    Re-ingestion reads from Raw, not from API.
+  end note
+
   class BronzeSink {
+    .. raw files -> typed Delta Lake tables ..
     + ctx : EngineContext
     --
     + write_if_missing(table, partitions, df) : bool
     + append_immutable(df, table, key_cols, partitions, date_col) : str
     + upsert(df, table, merge_keys, partitions) : str
+    + rebuild_from_raw(provider: str, endpoint: str) : str
   }
+
+  note bottom of BronzeSink
+    /storage/bronze/{provider}/{endpoint}/
+    Reads from Raw, applies schema, writes Delta.
+    Can rebuild Bronze from Raw without re-downloading.
+  end note
 
   class HttpClient {
     + base_url : str
@@ -710,7 +738,9 @@ package "Ingestion" #CC9966 {
     + mark_exhausted(key)
   }
 
+  IngestorEngine *-- RawSink
   IngestorEngine *-- BronzeSink
+  RawSink ..> BronzeSink : feeds
   HttpClient *-- TokenBucket
   HttpClient *-- CircuitBreaker
 }
@@ -861,9 +891,14 @@ legend right
   |<#3399FF> Blue | Query Path (DuckDB / Spark) |
   |<#B3D9FF> Light Blue | REST API (handlers, routers) |
   |<#B3FFB3> Green | Plugin System |
-  |<#CC9966> Brown | Ingestion (providers, Bronze sink) |
+  |<#CC9966> Brown | Ingestion (providers, Raw + Bronze sinks) |
   |<#CC99FF> Purple | Orchestration (scheduler, deps) |
   |<#E6E6E6> Gray | Infrastructure (config, connections) |
+
+  | Layer | Storage Path |
+  | Raw | /storage/raw/{provider}/{endpoint}/ |
+  | Bronze | /storage/bronze/{provider}/{endpoint}/ |
+  | Silver | /storage/silver/{domain}/{model}/ |
 endlegend
 
 @enduml
