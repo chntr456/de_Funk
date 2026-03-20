@@ -122,72 +122,187 @@ def parse_puml(text: str) -> tuple[list[PumlClass], list[PumlEdge], dict[str, st
     return list(classes.values()), edges, pkg_colors
 
 
-def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
-                     pkg_colors: dict[str, str]) -> str:
-    cells = []
-    cid = 2
-    node_ids: dict[str, int] = {}
+def _node_height(c: PumlClass) -> int:
+    return max(50, 22 + max(len(c.attrs), 1) * 13 + max(len(c.methods), 1) * 13 + 10)
 
+
+def _sugiyama_layout(
+    classes: list[PumlClass],
+    edges: list[PumlEdge],
+    pkg_colors: dict[str, str],
+) -> dict[str, tuple[int, int]]:
+    """Sugiyama hierarchical layout: ABCs at top, children below, packages as columns.
+
+    Steps:
+      1. Build inheritance graph, compute rank (depth from root ABCs)
+      2. Order packages left-to-right by a dependency heuristic
+      3. Within each package, sort classes by rank (ABCs first)
+      4. Assign x by package column, y by rank within package
+      5. Minimize edge crossings by reordering within ranks
+    """
+    class_map = {c.name: c for c in classes}
+    COL_W = 380
+    NODE_W = COL_W - 30
+    RANK_GAP = 30  # vertical gap between nodes
+    PKG_LABEL_H = 30
+    PKG_GAP_X = 40  # horizontal gap between package columns
+    PKG_GAP_Y = 60  # vertical gap between package rows
+
+    # Step 1: compute inheritance rank (depth from root)
+    children: dict[str, list[str]] = {}
+    parent_of: dict[str, str] = {}
+    for e in edges:
+        if e.style == 'inherit':
+            children.setdefault(e.tgt, []).append(e.src)
+            parent_of[e.src] = e.tgt
+
+    def rank_of(name: str, _memo: dict = {}) -> int:
+        if name in _memo:
+            return _memo[name]
+        p = parent_of.get(name)
+        r = (rank_of(p, _memo) + 1) if p else 0
+        _memo[name] = r
+        return r
+
+    ranks = {c.name: rank_of(c.name) for c in classes}
+
+    # Step 2: order packages by dependency (packages with ABCs first)
     packages: dict[str, list[PumlClass]] = {}
     for c in classes:
         pkg = c.package or "Other"
         packages.setdefault(pkg, []).append(c)
 
-    col_width = 380
-    pkg_idx = 0
+    # Heuristic: packages with lower average rank come first (more abstract)
+    def pkg_sort_key(pkg_name: str) -> tuple:
+        pkg_classes = packages[pkg_name]
+        avg_rank = sum(ranks.get(c.name, 0) for c in pkg_classes) / max(len(pkg_classes), 1)
+        # Also consider cross-package edges: packages that are depended on come first
+        depended_on = sum(
+            1 for e in edges
+            if e.style == 'inherit'
+            and class_map.get(e.tgt, PumlClass("")).package == pkg_name
+            and class_map.get(e.src, PumlClass("")).package != pkg_name
+        )
+        return (-depended_on, avg_rank, pkg_name)
 
+    sorted_pkgs = sorted(packages.keys(), key=pkg_sort_key)
+
+    # Step 3: within each package, sort by rank then alphabetically
+    for pkg_name in sorted_pkgs:
+        packages[pkg_name].sort(key=lambda c: (ranks.get(c.name, 0), c.name))
+
+    # Step 4: assign positions
+    # Arrange packages in rows of up to 5 columns
+    MAX_COLS = 5
+    positions: dict[str, tuple[int, int]] = {}
+    col_heights: list[int] = [0] * MAX_COLS  # track height per column
+
+    for pkg_i, pkg_name in enumerate(sorted_pkgs):
+        col = pkg_i % MAX_COLS
+        # Find the starting y for this package (below previous package in same column)
+        base_x = col * (COL_W + PKG_GAP_X) + 20
+        base_y = col_heights[col] + PKG_GAP_Y
+
+        y = base_y + PKG_LABEL_H
+        for c in packages[pkg_name]:
+            h = _node_height(c)
+            positions[c.name] = (base_x, y)
+            y += h + RANK_GAP
+
+        col_heights[col] = y
+
+    return positions
+
+
+def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
+                     pkg_colors: dict[str, str]) -> str:
+    """Generate draw.io XML with Sugiyama hierarchical layout."""
+    cells = []
+    cid = 2
+    node_ids: dict[str, int] = {}
+    COL_W = 380
+    NODE_W = COL_W - 30
+    PKG_GAP_X = 40
+    PKG_GAP_Y = 60
+    PKG_LABEL_H = 30
+
+    # Compute positions
+    positions = _sugiyama_layout(classes, edges, pkg_colors)
+
+    # Group by package for labels
+    packages: dict[str, list[PumlClass]] = {}
+    for c in classes:
+        pkg = c.package or "Other"
+        packages.setdefault(pkg, []).append(c)
+
+    # Render package labels (at top of each package's bounding box)
+    pkg_bounds: dict[str, tuple[int, int, int, int]] = {}
     for pkg_name, pkg_classes in packages.items():
-        base_x = (pkg_idx % 5) * col_width + 20
-        base_y = (pkg_idx // 5) * 2000 + 20
-        color = pkg_colors.get(pkg_name, "#E6E6E6")
+        if not pkg_classes:
+            continue
+        xs = [positions[c.name][0] for c in pkg_classes if c.name in positions]
+        ys = [positions[c.name][1] for c in pkg_classes if c.name in positions]
+        if not xs:
+            continue
+        min_x, max_x = min(xs), max(xs)
+        min_y = min(ys)
+        # Find the tallest class for bottom bound
+        max_y = max(positions[c.name][1] + _node_height(c)
+                     for c in pkg_classes if c.name in positions)
+        pkg_bounds[pkg_name] = (min_x, min_y - PKG_LABEL_H, max_x + NODE_W, max_y)
 
+        color = pkg_colors.get(pkg_name, "#E6E6E6")
+        # Package background rectangle
+        bx, by, bx2, by2 = min_x - 10, min_y - PKG_LABEL_H - 5, max_x + NODE_W + 10, max_y + 10
         cells.append(
             f'      <mxCell id="{cid}" value="{xe(pkg_name)}" '
-            f'style="text;fontSize=13;fontStyle=1;fontFamily=Courier New;align=left;'
-            f'verticalAlign=middle;fillColor={color};rounded=1;strokeColor=#999999;" '
+            f'style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;'
+            f'verticalAlign=top;dashed=1;dashPattern=5 5;opacity=30;'
+            f'fillColor={color};strokeColor=#999999;" '
             f'vertex="1" parent="1">'
-            f'<mxGeometry x="{base_x}" y="{base_y}" width="{col_width - 30}" height="22" as="geometry"/>'
+            f'<mxGeometry x="{bx}" y="{by}" width="{bx2 - bx}" height="{by2 - by}" as="geometry"/>'
             f'</mxCell>')
         cid += 1
 
-        y = base_y + 30
-        for c in pkg_classes:
-            title = c.name
-            if c.stereotype:
-                title = f"<<{c.stereotype}>> {title}"
-            if c.is_abstract:
-                title = f"abstract {title}"
+    # Render classes
+    for c in classes:
+        if c.name not in positions:
+            continue
+        x, y = positions[c.name]
 
-            rows = [f'<tr><td align="center"><b>{xe(title)}</b></td></tr>']
-            if c.attrs:
-                attr_html = '<br/>'.join(xe(a) for a in c.attrs)
-                rows.append(f'<tr><td align="left"><font point-size="9">{attr_html}</font></td></tr>')
-            else:
-                rows.append('<tr><td><font point-size="9"> </font></td></tr>')
-            if c.methods:
-                meth_html = '<br/>'.join(xe(m) for m in c.methods)
-                rows.append(f'<tr><td align="left"><font point-size="9">{meth_html}</font></td></tr>')
-            else:
-                rows.append('<tr><td><font point-size="9"> </font></td></tr>')
+        title = c.name
+        if c.stereotype:
+            title = f"<<{c.stereotype}>> {title}"
+        if c.is_abstract:
+            title = f"abstract {title}"
 
-            html = ''.join(rows)
-            value = xe(f'<table border="0" cellspacing="0" cellpadding="3" width="100%">{html}</table>')
-            h = max(50, 22 + max(len(c.attrs), 1) * 13 + max(len(c.methods), 1) * 13 + 10)
-            w = col_width - 30
+        rows = [f'<tr><td align="center"><b>{xe(title)}</b></td></tr>']
+        if c.attrs:
+            attr_html = '<br/>'.join(xe(a) for a in c.attrs)
+            rows.append(f'<tr><td align="left"><font point-size="9">{attr_html}</font></td></tr>')
+        else:
+            rows.append('<tr><td><font point-size="9"> </font></td></tr>')
+        if c.methods:
+            meth_html = '<br/>'.join(xe(m) for m in c.methods)
+            rows.append(f'<tr><td align="left"><font point-size="9">{meth_html}</font></td></tr>')
+        else:
+            rows.append('<tr><td><font point-size="9"> </font></td></tr>')
 
-            cells.append(
-                f'      <mxCell id="{cid}" value="{value}" '
-                f'style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;'
-                f'strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor={c.color};" '
-                f'vertex="1" parent="1">'
-                f'<mxGeometry x="{base_x}" y="{y}" width="{w}" height="{h}" as="geometry"/>'
-                f'</mxCell>')
-            node_ids[c.name] = cid
-            cid += 1
-            y += h + 6
+        html = ''.join(rows)
+        value = xe(f'<table border="0" cellspacing="0" cellpadding="3" width="100%">{html}</table>')
+        h = _node_height(c)
 
-        pkg_idx += 1
+        cells.append(
+            f'      <mxCell id="{cid}" value="{value}" '
+            f'style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;'
+            f'strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor={c.color};" '
+            f'vertex="1" parent="1">'
+            f'<mxGeometry x="{x}" y="{y}" width="{NODE_W}" height="{h}" as="geometry"/>'
+            f'</mxCell>')
+        node_ids[c.name] = cid
+        cid += 1
 
+    # Render edges
     edge_styles = {
         'inherit': 'endArrow=block;endFill=0;strokeColor=#555555;',
         'compose': 'endArrow=diamond;endFill=1;strokeColor=#555555;',
@@ -206,10 +321,17 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             cid += 1
 
     content = '\n'.join(cells)
+
+    # Calculate page size from actual bounds
+    all_x = [positions[c.name][0] for c in classes if c.name in positions]
+    all_y = [positions[c.name][1] + _node_height(c) for c in classes if c.name in positions]
+    page_w = max(all_x) + COL_W + 200 if all_x else 3000
+    page_h = max(all_y) + 200 if all_y else 4000
+
     return f'''<?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="app.diagrams.net" type="device">
   <diagram id="puml-converted" name="Full Vision (from PlantUML)">
-    <mxGraphModel dx="2800" dy="2400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="2400" pageHeight="4000" math="0" shadow="0">
+    <mxGraphModel dx="2800" dy="2400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="{page_w}" pageHeight="{page_h}" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
