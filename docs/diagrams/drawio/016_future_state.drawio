@@ -1140,4 +1140,456 @@
       </root>
     </mxGraphModel>
   </diagram>
+  <diagram id="vision" name="Full Vision (target state)">
+    <mxGraphModel dx="2200" dy="1800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1600" pageHeight="1900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="v2" value="de_Funk Full Vision — Target Architecture" style="text;fontSize=22;fontStyle=1;fontFamily=Courier New;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="500" y="10" width="800" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="v3" value="The model IS the markdown. Spark and DuckDB are symmetric backends." style="text;fontSize=11;fontStyle=1;fontFamily=Courier New;align=center;verticalAlign=middle;fontStyle=0;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="500" y="50" width="800" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v4" value="THE SPINE — Domain Markdown Configs" style="text;fontSize=13;fontStyle=1;fontFamily=Courier New;align=center;verticalAlign=middle;align=left;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="85" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v5" value="Domain Configs (THE model — everything derives from here)" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#FFCC66;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="110" width="1200" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="v6" value="model.md extends, depends_on, graph.edges measures, build phases" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FFCC66;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="40" y="150" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="v7" value="tables/*.md schema (columns, types, FK) primary_key, partition_by measures per table" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FFCC66;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="260" y="150" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="v8" value="sources/**/*.md maps_to, from (Bronze ref) aliases (field mapping) filter, discriminator" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FFCC66;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="480" y="150" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="v9" value="domains/_base/*.md reusable templates inheritable schema shared across models" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FFCC66;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="700" y="150" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="v10" value="Endpoints/*.md Bronze API configs field listings provider metadata" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FFCC66;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="920" y="150" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="v11" value="RESOLUTION LAYER (shared)" style="text;fontSize=13;fontStyle=1;fontFamily=Courier New;align=center;verticalAlign=middle;align=left;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="280" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v12" value="Unified Resolution — reads configs, serves both build and query paths" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#80E0D0;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="305" width="1200" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="v13" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;DomainConfigLoaderV4&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;domains_dir&lt;br/&gt;_type_index&lt;br/&gt;_model_to_path&lt;br/&gt;_parse_cache&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;load_model_config(model_name)&lt;br/&gt;_discover_tables&lt;br/&gt;_discover_sources&lt;br/&gt;_discover_views&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#80E0D0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="345" width="280" height="136" as="geometry" />
+        </mxCell>
+        <mxCell id="v14" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;config_translator&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;translate_domain_config(config)&lt;br/&gt;_synthesize_node&lt;br/&gt;_build_node_from_source&lt;br/&gt;_normalize_from&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#80E0D0;" vertex="1" parent="1">
+          <mxGeometry x="340" y="345" width="280" height="97" as="geometry" />
+        </mxCell>
+        <mxCell id="v15" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;FieldResolver&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;_index&lt;br/&gt;_join_graph&lt;br/&gt;_domain_deps&lt;br/&gt;_table_to_domain&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;resolve(ref_str)&lt;br/&gt;find_join_path(src, dst)&lt;br/&gt;reachable_domains(core)&lt;br/&gt;get_field_catalog()&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#80E0D0;" vertex="1" parent="1">
+          <mxGeometry x="640" y="345" width="280" height="136" as="geometry" />
+        </mxCell>
+        <mxCell id="v16" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;StorageRouter&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;storage_cfg&lt;br/&gt;repo_root&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;resolve(table_ref)&lt;br/&gt;parse_table_ref&lt;br/&gt;bronze_path&lt;br/&gt;silver_path&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#80E0D0;" vertex="1" parent="1">
+          <mxGeometry x="940" y="345" width="280" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="v17" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;FilterEngine&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;apply_filters [static]&lt;br/&gt;build_filter_sql [static]&lt;br/&gt;_convert_date_to_date_id [static]&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#80E0D0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="430" width="280" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="v18" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;Aggregator&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;aggregate [static]&lt;br/&gt;infer_aggregations [static]&lt;br/&gt;_aggregate_spark [static]&lt;br/&gt;_aggregate_duckdb [static]&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#80E0D0;" vertex="1" parent="1">
+          <mxGeometry x="340" y="430" width="280" height="97" as="geometry" />
+        </mxCell>
+        <mxCell id="v19" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;BackendOps&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;connection&lt;br/&gt;backend&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;select_columns&lt;br/&gt;apply_filters&lt;br/&gt;apply_derive&lt;br/&gt;join&lt;br/&gt;union_dataframes&lt;br/&gt;drop_duplicates&lt;br/&gt;read_delta_or_parquet&lt;br/&gt;count&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#80E0D0;" vertex="1" parent="1">
+          <mxGeometry x="640" y="430" width="280" height="162" as="geometry" />
+        </mxCell>
+        <mxCell id="v20" value="raw config" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;" edge="1" parent="1" source="v13" target="v14">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v21" value="graph.nodes" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;" edge="1" parent="1" source="v14" target="v15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v22" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;dashed=1;strokeColor=#999999;" edge="1" parent="1" source="v6" target="v13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v23" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;dashed=1;strokeColor=#999999;" edge="1" parent="1" source="v7" target="v13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v24" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;dashed=1;strokeColor=#999999;" edge="1" parent="1" source="v8" target="v13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v25" value="EXECUTION (symmetric backends)" style="text;fontSize=13;fontStyle=1;fontFamily=Courier New;align=center;verticalAlign=middle;align=left;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="520" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v26" value="BUILD PATH" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#FF9933;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="545" width="590" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="v27" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;PipelineScheduler&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;_scheduler&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;add_job&lt;br/&gt;start&lt;br/&gt;pause&lt;br/&gt;resume&lt;br/&gt;shutdown&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#CC99FF;" vertex="1" parent="1">
+          <mxGeometry x="40" y="585" width="280" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="v28" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;DependencyGraph&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;_graph&lt;br/&gt;_configs_path&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;build&lt;br/&gt;topological_sort&lt;br/&gt;filter_buildable&lt;br/&gt;visualize&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#CC99FF;" vertex="1" parent="1">
+          <mxGeometry x="320" y="585" width="280" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="v29" value="order" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;" edge="1" parent="1" source="v28" target="v27">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v30" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;DomainBuilderFactory&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;CUSTOM_MODEL_CLASSES&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;create_builders&lt;br/&gt;_create_builder_class&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="40" y="660" width="280" height="71" as="geometry" />
+        </mxCell>
+        <mxCell id="v31" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;BaseModel (slimmed)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;connection&lt;br/&gt;model_cfg&lt;br/&gt;backend [prop]&lt;br/&gt;backend_ops [prop]&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;__init__&lt;br/&gt;build&lt;br/&gt;ensure_built&lt;br/&gt;before_build&lt;br/&gt;after_build&lt;br/&gt;custom_node_loading&lt;br/&gt;write_tables&lt;br/&gt;get_table&lt;br/&gt;has_table&lt;br/&gt;list_tables&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="320" y="660" width="280" height="214" as="geometry" />
+        </mxCell>
+        <mxCell id="v32" value="creates" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;" edge="1" parent="1" source="v30" target="v31">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v33" value="delegates" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;dashed=1;" edge="1" parent="1" source="v31" target="v19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v34" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;GraphBuilder&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;model&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;build&lt;br/&gt;_build_nodes&lt;br/&gt;_apply_joins&lt;br/&gt;_load_bronze_table&lt;br/&gt;_load_silver_table&lt;br/&gt;_apply_derive&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="40" y="760" width="280" height="123" as="geometry" />
+        </mxCell>
+        <mxCell id="v35" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;ModelWriter&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;model&lt;br/&gt;auto_vacuum [prop]&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;write_tables&lt;br/&gt;_vacuum_table&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="320" y="760" width="280" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="v36" value="compose" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;strokeColor=#555555;endArrow=diamond;endFill=1;" edge="1" parent="1" source="v31" target="v34">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v37" value="compose" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;strokeColor=#555555;endArrow=diamond;endFill=1;" edge="1" parent="1" source="v31" target="v35">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v38" value="delegates" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;dashed=1;" edge="1" parent="1" source="v34" target="v19">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v39" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;DomainModel&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;(extends BaseModel)&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;custom_node_loading&lt;br/&gt;_build_seed_node&lt;br/&gt;_build_union_node&lt;br/&gt;_build_distinct_node&lt;br/&gt;_build_window_node&lt;br/&gt;_build_unpivot_node&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="40" y="845" width="280" height="123" as="geometry" />
+        </mxCell>
+        <mxCell id="v40" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v39" target="v31">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v41" value="Build Plugins (registered hooks) temporal: _generate_calendar corporate.entity: after_build (CIK) securities.stocks: post_build (technicals) securities.forecast: custom build (ML)" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#B3FFB3;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="320" y="845" width="280" height="65" as="geometry" />
+        </mxCell>
+        <mxCell id="v42" value="QUERY PATH" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#3399FF;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="630" y="545" width="590" height="420" as="geometry" />
+        </mxCell>
+        <mxCell id="v43" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;QuerySession&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;connection&lt;br/&gt;storage_cfg&lt;br/&gt;registry&lt;br/&gt;model_graph&lt;br/&gt;backend [prop]&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;__init__&lt;br/&gt;load_model&lt;br/&gt;get_table&lt;br/&gt;should_apply_cross_model_filter&lt;br/&gt;list_models&lt;br/&gt;list_tables&lt;br/&gt;filter_by_value&lt;br/&gt;filter_by_range&lt;br/&gt;join&lt;br/&gt;distinct_values&lt;br/&gt;order_by&lt;br/&gt;limit&lt;br/&gt;to_pandas&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#3399FF;" vertex="1" parent="1">
+          <mxGeometry x="650" y="585" width="280" height="266" as="geometry" />
+        </mxCell>
+        <mxCell id="v44" value="resolve" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;dashed=1;" edge="1" parent="1" source="v15" target="v43">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v45" value="filters" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;dashed=1;" edge="1" parent="1" source="v17" target="v43">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v46" value="agg" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;dashed=1;" edge="1" parent="1" source="v18" target="v43">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v47" value="paths" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;dashed=1;" edge="1" parent="1" source="v16" target="v43">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v48" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;DuckDBEngine&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;_conn&lt;br/&gt;_scan_cache&lt;br/&gt;max_response_mb&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;execute&lt;br/&gt;scan&lt;br/&gt;safe_scan&lt;br/&gt;build_from&lt;br/&gt;build_where&lt;br/&gt;build_order&lt;br/&gt;distinct_values&lt;br/&gt;distinct_values_by_measure&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#3399FF;" vertex="1" parent="1">
+          <mxGeometry x="650" y="700" width="280" height="175" as="geometry" />
+        </mxCell>
+        <mxCell id="v49" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;SparkEngine (NEW)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;spark_session&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;execute&lt;br/&gt;read_table&lt;br/&gt;build_from&lt;br/&gt;build_where&lt;br/&gt;build_order&lt;br/&gt;distinct_values&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#3399FF;" vertex="1" parent="1">
+          <mxGeometry x="940" y="700" width="280" height="123" as="geometry" />
+        </mxCell>
+        <mxCell id="v50" value="interactive" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;" edge="1" parent="1" source="v43" target="v48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v51" value="batch" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;" edge="1" parent="1" source="v43" target="v49">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v52" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;BronzeResolver&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;_index&lt;br/&gt;_known_providers&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;resolve&lt;br/&gt;_parse_ref&lt;br/&gt;get_endpoint_catalog&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#3399FF;" vertex="1" parent="1">
+          <mxGeometry x="650" y="810" width="280" height="97" as="geometry" />
+        </mxCell>
+        <mxCell id="v53" value="REST API (thin presentation)" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#B3D9FF;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="630" y="860" width="590" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="v54" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;HandlerRegistry&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;_handlers&lt;br/&gt;shared_engine&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;register&lt;br/&gt;get&lt;br/&gt;supported_types [prop]&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#B3D9FF;" vertex="1" parent="1">
+          <mxGeometry x="650" y="890" width="280" height="97" as="geometry" />
+        </mxCell>
+        <mxCell id="v55" value="FastAPI Routers /query /dimensions /domains /bronze/query /bronze/dimensions" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#B3D9FF;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="940" y="890" width="260" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="v56" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;" edge="1" parent="1" source="v55" target="v54">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v57" value="ABSTRACT BASE CLASSES + INHERITANCE" style="text;fontSize=13;fontStyle=1;fontFamily=Courier New;align=center;verticalAlign=middle;align=left;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="980" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v58" value="Connection Hierarchy" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#E6E6E6;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1005" width="590" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="v59" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;DataConnection (ABC)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;read_table [abstract]&lt;br/&gt;apply_filters [abstract]&lt;br/&gt;to_pandas [abstract]&lt;br/&gt;count [abstract]&lt;br/&gt;cache [abstract]&lt;br/&gt;stop [abstract]&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#E6E6E6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1040" width="280" height="123" as="geometry" />
+        </mxCell>
+        <mxCell id="v60" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;DuckDBConnection&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;conn&lt;br/&gt;db_path&lt;br/&gt;delta_enabled&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;read_table&lt;br/&gt;execute_sql&lt;br/&gt;read_parquet&lt;br/&gt;write_delta_table&lt;br/&gt;apply_filters&lt;br/&gt;to_pandas&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#3399FF;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1115" width="280" height="149" as="geometry" />
+        </mxCell>
+        <mxCell id="v61" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;SparkConnection&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;spark_session&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;read_table&lt;br/&gt;write_delta_table&lt;br/&gt;merge_delta_table&lt;br/&gt;optimize_delta_table&lt;br/&gt;apply_filters&lt;br/&gt;to_pandas&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="320" y="1115" width="280" height="123" as="geometry" />
+        </mxCell>
+        <mxCell id="v62" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v60" target="v59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v63" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v61" target="v59">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v64" value="Backend Adapter Hierarchy" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#E6E6E6;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="630" y="1005" width="590" height="170" as="geometry" />
+        </mxCell>
+        <mxCell id="v65" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;BackendAdapter (ABC)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;connection&lt;br/&gt;backend_type&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;get_dialect [abstract]&lt;br/&gt;execute_sql [abstract]&lt;br/&gt;get_table_reference [abstract]&lt;br/&gt;supports_feature&lt;br/&gt;format_limit&lt;br/&gt;format_date_literal&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#E6E6E6;" vertex="1" parent="1">
+          <mxGeometry x="650" y="1040" width="280" height="136" as="geometry" />
+        </mxCell>
+        <mxCell id="v66" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;SparkAdapter&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;execute_sql&lt;br/&gt;get_table_reference&lt;br/&gt;supports_feature&lt;br/&gt;set_enriched_table&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="650" y="1115" width="280" height="97" as="geometry" />
+        </mxCell>
+        <mxCell id="v67" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;DuckDBAdapter&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;execute_sql&lt;br/&gt;get_table_reference&lt;br/&gt;supports_feature&lt;br/&gt;set_enriched_table&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#3399FF;" vertex="1" parent="1">
+          <mxGeometry x="940" y="1115" width="280" height="97" as="geometry" />
+        </mxCell>
+        <mxCell id="v68" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v66" target="v65">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v69" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v67" target="v65">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v70" value="Model Hierarchy (build hooks only)" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#FF9933;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1190" width="590" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="v71" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;BaseModel (ABC for builds)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;connection&lt;br/&gt;model_cfg&lt;br/&gt;backend&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;build [template method]&lt;br/&gt;before_build&lt;br/&gt;after_build&lt;br/&gt;custom_node_loading&lt;br/&gt;write_tables&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1225" width="280" height="136" as="geometry" />
+        </mxCell>
+        <mxCell id="v72" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;DomainModel&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;(default for all domains)&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;custom_node_loading (seed/union/distinct/window/unpivot)&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1310" width="280" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="v73" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;CompanyModel (hook only)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;after_build (CIK enrichment)&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="320" y="1310" width="280" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="v74" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;TemporalModel (hook only)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;custom_node_loading&lt;br/&gt;_generate_calendar_spark&lt;br/&gt;_generate_calendar_duckdb&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1370" width="280" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="v75" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;ForecastModel&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;(extends TimeSeriesForecastModel)&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;get_training_data&lt;br/&gt;run_forecast_for_ticker&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="320" y="1370" width="280" height="71" as="geometry" />
+        </mxCell>
+        <mxCell id="v76" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v72" target="v71">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v77" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v73" target="v71">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v78" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v74" target="v71">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v79" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v75" target="v71">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v80" value="Provider Hierarchy (ingestion)" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#CC9966;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="630" y="1190" width="590" height="175" as="geometry" />
+        </mxCell>
+        <mxCell id="v81" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;BaseProvider (ABC)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;provider_name&lt;br/&gt;config&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;list_work_items [abstract]&lt;br/&gt;fetch [abstract]&lt;br/&gt;normalize [abstract]&lt;br/&gt;get_table_name [abstract]&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#CC9966;" vertex="1" parent="1">
+          <mxGeometry x="650" y="1225" width="280" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="v82" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;AlphaVantageProvider&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;fetch&lt;br/&gt;normalize&lt;br/&gt;list_work_items&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#CC9966;" vertex="1" parent="1">
+          <mxGeometry x="650" y="1305" width="280" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="v83" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;ChicagoProvider&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;(extends SocrataBase)&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#CC9966;" vertex="1" parent="1">
+          <mxGeometry x="940" y="1305" width="280" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="v84" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;SocrataBaseProvider&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;fetch&lt;br/&gt;_paginate&lt;br/&gt;_transform_dates&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#CC9966;" vertex="1" parent="1">
+          <mxGeometry x="650" y="1345" width="280" height="84" as="geometry" />
+        </mxCell>
+        <mxCell id="v85" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;CookCountyProvider&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td&gt;&lt;font point-size=&quot;9&quot;&gt; &lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;(extends SocrataBase)&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#CC9966;" vertex="1" parent="1">
+          <mxGeometry x="940" y="1345" width="280" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="v86" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v82" target="v81">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v87" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v84" target="v81">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v88" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v83" target="v84">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v89" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v85" target="v84">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v90" value="Handler Hierarchy (API response shaping)" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#B3D9FF;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1455" width="590" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="v91" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;ExhibitHandler (ABC)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;handles: set[str]&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;execute(payload, resolver) [abstract]&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#B3D9FF;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1490" width="280" height="58" as="geometry" />
+        </mxCell>
+        <mxCell id="v92" value="GraphicalHandler line/bar/scatter/pie" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#B3D9FF;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1565" width="130" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v93" value="PivotHandler pivot/gt" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#B3D9FF;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="180" y="1565" width="130" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v94" value="MetricsHandler cards.metric/kpi" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#B3D9FF;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="320" y="1565" width="130" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v95" value="BoxHandler box/ohlcv/candlestick" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#B3D9FF;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1600" width="130" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v96" value="TableDataHandler table.data" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#B3D9FF;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="180" y="1600" width="130" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v97" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v92" target="v91">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v98" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#3399FF;dashed=1;" edge="1" parent="1" source="v92" target="v48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v99" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v93" target="v91">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v100" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#3399FF;dashed=1;" edge="1" parent="1" source="v93" target="v48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v101" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v94" target="v91">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v102" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#3399FF;dashed=1;" edge="1" parent="1" source="v94" target="v48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v103" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v95" target="v91">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v104" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#3399FF;dashed=1;" edge="1" parent="1" source="v95" target="v48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v105" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v96" target="v91">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v106" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#3399FF;dashed=1;" edge="1" parent="1" source="v96" target="v48">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v107" value="Builder Hierarchy (build orchestration)" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#FF9933;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="630" y="1455" width="590" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="v108" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;BaseModelBuilder (ABC)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;model_name&lt;br/&gt;depends_on&lt;br/&gt;context: BuildContext&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;get_model_class [abstract]&lt;br/&gt;validate&lt;br/&gt;pre_build&lt;br/&gt;post_build&lt;br/&gt;build&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#FF9933;" vertex="1" parent="1">
+          <mxGeometry x="650" y="1490" width="280" height="136" as="geometry" />
+        </mxCell>
+        <mxCell id="v109" value="TemporalBuilder deps: []" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FF9933;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="650" y="1570" width="130" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v110" value="SecuritiesBuilder deps: [temporal]" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FF9933;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="790" y="1570" width="130" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v111" value="StocksBuilder deps: [t,s,c]" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FF9933;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="930" y="1570" width="130" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v112" value="CompanyBuilder deps: [temporal]" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FF9933;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="650" y="1600" width="130" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v113" value="ForecastBuilder deps: [t,s.stocks]" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FF9933;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="790" y="1600" width="130" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v114" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v109" target="v108">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v115" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v110" target="v108">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v116" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v111" target="v108">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v117" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v112" target="v108">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v118" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v113" target="v108">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v119" value="Measure Hierarchy" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#80E0D0;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="20" y="1650" width="400" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="v120" value="&lt;table border=&quot;0&quot; cellspacing=&quot;0&quot; cellpadding=&quot;3&quot; width=&quot;100%&quot;&gt;&lt;tr&gt;&lt;td align=&quot;center&quot;&gt;&lt;b&gt;BaseMeasure (ABC)&lt;/b&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;name&lt;br/&gt;source&lt;br/&gt;data_type&lt;br/&gt;format&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;tr&gt;&lt;td align=&quot;left&quot;&gt;&lt;font point-size=&quot;9&quot;&gt;to_sql [abstract]&lt;br/&gt;execute&lt;/font&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;" style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor=#80E0D0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1680" width="280" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="v121" value="SimpleMeasure aggregation" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#80E0D0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1740" width="110" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v122" value="ComputedMeasure expression" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#80E0D0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="170" y="1740" width="110" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v123" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v121" target="v120">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v124" value="" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;endArrow=block;endFill=0;strokeColor=#555555;" edge="1" parent="1" source="v122" target="v120">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v125" value="Exception Hierarchy" style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;verticalAlign=top;dashed=1;dashPattern=5 5;opacity=50;fillColor=#E6E6E6;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="440" y="1650" width="400" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="v126" value="DeFunkError (base)" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#E6E6E6;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="460" y="1680" width="360" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v127" value="ConfigurationError MissingConfig / InvalidConfig" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#E6E6E6;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="460" y="1710" width="170" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v128" value="PipelineError Ingestion / RateLimit / Transform" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#E6E6E6;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="640" y="1710" width="170" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v129" value="ModelError NotFound / Table / Measure / Dep" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#E6E6E6;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="460" y="1740" width="170" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v130" value="QueryError / StorageError Filter / Join / Write" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#E6E6E6;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="640" y="1740" width="170" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v131" value="Obsidian Plugin (TypeScript) Event Loop + State Store + Reconciler Renderers: Plotly / Great Tables / Cards" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#E0B3FF;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="860" y="1650" width="350" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="v132" value="Bronze (Delta Lake) raw API data" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#C0C0C0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="860" y="1720" width="160" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v133" value="Silver (Delta Lake) dims + facts" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#C0C0C0;strokeColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="1040" y="1720" width="160" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="v134" value="write" style="endArrow=block;endFill=1;strokeColor=#333333;fontSize=9;fontFamily=Courier New;dashed=1;strokeColor=#999999;" edge="1" parent="1" source="v34" target="v133">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="v135" value="LEGEND" style="text;fontSize=14;fontStyle=1;fontFamily=Courier New;align=center;verticalAlign=middle;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="85" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v136" value="Domain Configs (spine)" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FFCC66;strokeColor=#333333;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="115" width="180" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="v137" value="Resolution (shared)" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#80E0D0;strokeColor=#333333;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="141" width="180" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="v138" value="Build Path" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#FF9933;strokeColor=#333333;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="167" width="180" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="v139" value="Query Path" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#3399FF;strokeColor=#333333;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="193" width="180" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="v140" value="REST API" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#B3D9FF;strokeColor=#333333;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="219" width="180" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="v141" value="Build Plugins" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#B3FFB3;strokeColor=#333333;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="245" width="180" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="v142" value="Storage (Delta)" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#C0C0C0;strokeColor=#333333;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="271" width="180" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="v143" value="Ingestion" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#CC9966;strokeColor=#333333;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="297" width="180" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="v144" value="Orchestration" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#CC99FF;strokeColor=#333333;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="323" width="180" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="v145" value="Infrastructure" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#E6E6E6;strokeColor=#333333;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="349" width="180" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="v146" value="PRINCIPLES" style="text;fontSize=14;fontStyle=1;fontFamily=Courier New;align=center;verticalAlign=middle;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="390" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v147" value="1. Model = markdown config    No Python class needed  2. Build + Query share    the resolution layer  3. Spark and DuckDB are    symmetric backends  4. Custom Python only    via registered plugins  5. All ABCs have clear    extension points" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#E6E6E6;strokeColor=#333333;fontSize=10;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="420" width="200" height="140" as="geometry" />
+        </mxCell>
+        <mxCell id="v148" value="ARROWS" style="text;fontSize=14;fontStyle=1;fontFamily=Courier New;align=center;verticalAlign=middle;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="575" width="200" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="v149" value="hollow triangle = inherits filled diamond = composes dashed = delegates/reads solid = direct call" style="rounded=1;whiteSpace=wrap;fontSize=11;fontFamily=Courier New;verticalAlign=middle;spacing=5;fillColor=#E6E6E6;strokeColor=#333333;fontSize=10;align=left;verticalAlign=top;" vertex="1" parent="1">
+          <mxGeometry x="1240" y="605" width="200" height="70" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
 </mxfile>
