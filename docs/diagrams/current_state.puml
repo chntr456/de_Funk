@@ -220,7 +220,9 @@ package "Legacy Query Layer (models/api/) — TO CONSOLIDATE" #FFB3B3 {
     + find_tables_with_column(column_name) : list
   }
 
-  class ModelGraph {
+  class ModelGraph #FFB3B3 {
+    .. DEAD — duplicates DependencyGraph (build order) ..
+    .. and FieldResolver._join_graph (join paths) ..
     + graph : nx.DiGraph
     + join_graph : nx.DiGraph
     --
@@ -270,9 +272,11 @@ package "Model Hierarchy (build)" #FFFFB3 {
     + storage_cfg : dict
     + model_cfg : dict
     + backend : str <<property>>
-    + measures <<property>>
-    + query_planner <<property>>
+    + measures <<property>> #FFB3B3
+    + query_planner <<property>> #FFB3B3
+    + python_measures <<property>> #FFB3B3
     --
+    .. alive (build) ..
     + build() : tuple[dict, dict]
     + ensure_built()
     + before_build()
@@ -282,13 +286,18 @@ package "Model Hierarchy (build)" #FFFFB3 {
     + has_table(name) : bool
     + list_tables() : list
     + get_table_schema(name) : dict
-    .. dead query methods ..
-    + get_denormalized() : Any
-    + calculate_measure(name, filters) : Any
-    + calculate_measure_by_entity(name, entity, filters) : Any
-    + get_fk_relationships() : dict
-    + get_relations() : dict
-    + get_metadata() : dict
+    + write_tables(output_root, format, mode)
+    --
+    .. DEAD query methods (~600 lines) ..
+    + <color:#CC0000>get_denormalized() : Any (210 lines)</color>
+    + <color:#CC0000>calculate_measure(name, filters)</color>
+    + <color:#CC0000>calculate_measure_by_entity(name, entity, filters)</color>
+    + <color:#CC0000>get_fk_relationships() : dict</color>
+    + <color:#CC0000>get_relations() : dict</color>
+    + <color:#CC0000>get_metadata() : dict</color>
+    + <color:#CC0000>_detect_backend()</color>
+    + <color:#CC0000>_parse_join_conditions()</color>
+    .. 12x if backend == spark/duckdb branches ..
   }
 
   class DomainModel {
@@ -382,34 +391,36 @@ package "Domain Models" #FFFFB3 {
 
   class CompanyModel {
     .. 212 lines ..
-    .. dead query methods ..
-    + get_company_by_cik(cik) : Any
-    + get_company_by_ticker(ticker) : Any
-    + get_companies_by_sector(sector) : Any
-    + get_active_companies() : Any
-    + list_sectors() : list
-    + get_company_count_by_sector() : dict
-    .. alive build hook ..
+    .. ALIVE build hook ..
     + after_build(dims, facts)
     '  CIK->ticker FK enrichment
+    --
+    .. DEAD query methods (150 lines) ..
+    + <color:#CC0000>get_company_by_cik(cik) : Any</color>
+    + <color:#CC0000>get_company_by_ticker(ticker) : Any</color>
+    + <color:#CC0000>get_companies_by_sector(sector) : Any</color>
+    + <color:#CC0000>get_active_companies() : Any</color>
+    + <color:#CC0000>list_sectors() : list</color>
+    + <color:#CC0000>get_company_count_by_sector() : dict</color>
   }
 
   class TemporalModel {
     .. 457 lines ..
-    .. dead query methods ..
-    + get_calendar(date_from, date_to) : DF
-    + get_weekdays(...) : DF
-    + get_weekends(...) : DF
-    + get_fiscal_year_dates(fiscal_year) : DF
-    + get_quarter_dates(year, quarter) : DF
-    + get_month_dates(year, month) : DF
-    + get_date_range_info(from, to) : dict
-    + get_calendar_config() : dict
-    .. alive build hook ..
+    .. ALIVE build hook ..
     + custom_node_loading(node_id, config)
-    + _generate_calendar() : DF
-    + _generate_calendar_spark(start, end, fiscal) : SparkDF
-    + _generate_calendar_duckdb(start, end, fiscal) : DF
+    - _generate_calendar() : DF
+    - _generate_calendar_spark(start, end, fiscal) : SparkDF
+    - _generate_calendar_duckdb(start, end, fiscal) : DF
+    --
+    .. DEAD query methods (250 lines) ..
+    + <color:#CC0000>get_calendar(date_from, date_to) : DF</color>
+    + <color:#CC0000>get_weekdays(...) : DF</color>
+    + <color:#CC0000>get_weekends(...) : DF</color>
+    + <color:#CC0000>get_fiscal_year_dates(fiscal_year) : DF</color>
+    + <color:#CC0000>get_quarter_dates(year, quarter) : DF</color>
+    + <color:#CC0000>get_month_dates(year, month) : DF</color>
+    + <color:#CC0000>get_date_range_info(from, to) : dict</color>
+    + <color:#CC0000>get_calendar_config() : dict</color>
   }
 
   class CityFinanceModel #FFB3B3 {
@@ -548,9 +559,10 @@ package "Measure System" #FFFFB3 {
     + to_pandas(df) : DataFrame
   }
 
-  class StocksMeasures {
-    .. extends DomainMeasures ..
+  class StocksMeasures #FFB3B3 {
+    .. DEAD — extends DomainMeasures ..
     .. stocks-specific Spark measures ..
+    .. no external callers ..
   }
 
   class MeasureExecutor {
@@ -875,11 +887,37 @@ package "Notebook (DEAD — Streamlit removed)" #FFB3B3 {
   class FolderFilterContextManager #FFB3B3 { .. dead .. }
   class GTColumnConfig #FFB3B3 { .. dead .. }
   class GTRowConfig #FFB3B3 { .. dead .. }
+  class GTSpannerConfig #FFB3B3 { .. dead .. }
+  class GTDateDimensionConfig #FFB3B3 { .. dead .. }
+  class GTFootnoteConfig #FFB3B3 { .. dead .. }
   class GreatTableConfig #FFB3B3 { .. dead .. }
+  class WeightingMethod #FFB3B3 { .. dead .. }
   class WeightingConfig #FFB3B3 { .. dead .. }
   class BlockPosition #FFB3B3 { .. dead .. }
   class MarkdownNotebook #FFB3B3 { .. dead .. }
   class VariableResolver #FFB3B3 { .. dead .. }
+}
+
+' ══════════════════════════════════════════════════════════
+' DEAD UTILS + IMPORTS
+' ══════════════════════════════════════════════════════════
+package "Dead Utils / Imports" #FFB3B3 {
+  class "env_loader dead functions" as DeadEnv #FFB3B3 {
+    + <color:#CC0000>find_dotenv()</color>
+    + <color:#CC0000>get_api_keys()</color>
+    + <color:#CC0000>get_bls_api_keys()</color>
+    + <color:#CC0000>get_chicago_api_keys()</color>
+    + <color:#CC0000>get_polygon_api_keys()</color>
+  }
+  class "repo.py dead" as DeadRepo #FFB3B3 {
+    + <color:#CC0000>repo_root_for_script()</color>
+  }
+  class "Dead Imports (runtime error)" as DeadImports #FFB3B3 {
+    .. scripts/debug/test_ui_model_access.py ..
+    + <color:#CC0000>from notebook.managers import NotebookManager</color>
+    .. tests/diagnose_stocks_tab.py ..
+    + <color:#CC0000>from notebook.exhibits.registry import ExhibitTypeRegistry</color>
+  }
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -898,7 +936,7 @@ MeasureExecutor ..> BackendAdapter : uses
 legend right
   | Color | Meaning |
   |<#B3D9FF> Light Blue | API Layer (FastAPI — active) |
-  |<#FFB3B3> Red | Dead / sunset code |
+  |<#FFB3B3> Red / red text | Dead / sunset code |
   |<#FFFFB3> Yellow | Models (build pipeline — alive) |
   |<#FFCC66> Gold | Config loading |
   |<#CC9966> Brown | Ingestion (providers, Bronze) |
@@ -906,6 +944,18 @@ legend right
   |<#E6E6E6> Gray | Infrastructure |
   |<#FF9933> Orange | Spark backend |
   |<#3399FF> Blue | DuckDB backend |
+
+  | Dead Code Summary | Lines |
+  | Legacy query layer (UniversalSession, AutoJoin, etc.) | ~4,600 |
+  | Dead domain model classes (Stocks, Securities, CityFinance) | ~960 |
+  | Dead query methods on CompanyModel + TemporalModel | ~400 |
+  | Dead BaseModel methods (get_denormalized, etc.) | ~600 |
+  | Dead composition (TableAccessor, MeasureCalculator) | ~670 |
+  | ModelGraph (duplicates DependencyGraph + FieldResolver) | ~470 |
+  | Notebook dead classes | ~250 |
+  | Dead utils + imports | ~50 |
+  | StocksMeasures | ~30 |
+  | **Total dead code** | **~8,030** |
 endlegend
 
 @enduml
