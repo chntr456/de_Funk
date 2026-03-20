@@ -551,11 +551,34 @@ package "Builder Hierarchy" #FF9933 {
     - {static} _create_builder_class(model_name, config, loader) : type
   }
 
-  class TemporalBuilder { depends_on : [] }
-  class SecuritiesBuilder { depends_on : [temporal] }
-  class StocksBuilder { depends_on : [temporal, securities, corporate]\n+ post_build(result) }
-  class CompanyBuilder { depends_on : [temporal]\n+ post_build(result) }
-  class ForecastBuilder { depends_on : [temporal, stocks]\n+ build() : BuildResult\n+ validate() : bool }
+  class TemporalBuilder {
+    + depends_on : none
+    + get_model_class() : TemporalModel
+  }
+
+  class SecuritiesBuilder {
+    + depends_on : temporal
+    + get_model_class() : DomainModel
+  }
+
+  class StocksBuilder {
+    + depends_on : temporal, securities, corporate
+    + get_model_class() : DomainModel
+    + post_build(result)
+  }
+
+  class CompanyBuilder {
+    + depends_on : temporal
+    + get_model_class() : CompanyModel
+    + post_build(result)
+  }
+
+  class ForecastBuilder {
+    + depends_on : temporal, stocks
+    + get_model_class() : ForecastModel
+    + build() : BuildResult
+    + validate() : bool
+  }
 
   BaseModelBuilder <|-- TemporalBuilder
   BaseModelBuilder <|-- SecuritiesBuilder
@@ -596,8 +619,14 @@ package "Provider Hierarchy (ingestion)" #CC9966 {
     - _transform_dates(records) : list
   }
 
-  class ChicagoProvider { }
-  class CookCountyProvider { - _get_endpoint_config() : dict }
+  class ChicagoProvider {
+    .. extends SocrataBaseProvider ..
+  }
+
+  class CookCountyProvider {
+    .. extends SocrataBaseProvider ..
+    - _get_endpoint_config() : dict
+  }
 
   BaseProvider <|-- AlphaVantageProvider
   BaseProvider <|-- SocrataBaseProvider
@@ -682,8 +711,17 @@ package "Measure System" #80E0D0 {
     + execute(adapter, **kwargs) : Any
   }
 
-  class SimpleMeasure { + aggregation : str\n+ to_sql(adapter) : str }
-  class ComputedMeasure { + expression : str\n+ to_sql(adapter) : str }
+  class SimpleMeasure {
+    + aggregation : str
+    --
+    + to_sql(adapter) : str
+  }
+
+  class ComputedMeasure {
+    + expression : str
+    --
+    + to_sql(adapter) : str
+  }
 
   abstract class DomainMeasures {
     + model : BaseModel
