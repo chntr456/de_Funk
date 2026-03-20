@@ -7,12 +7,68 @@ skinparam packageFontSize 12
 skinparam packageStyle rectangle
 skinparam linetype ortho
 
-title de_Funk Full Vision — Target Architecture\nThe model IS the markdown. Spark and DuckDB are symmetric backends.
+title de_Funk Full Vision — Target Architecture\nEngineContext is the universal runtime. The model IS the markdown.
 
 ' ══════════════════════════════════════════════════════════
-' RESOLUTION LAYER (shared by build + query)
+' ENGINE CONTEXT (the universal runtime — replaces all parameter threading)
 ' ══════════════════════════════════════════════════════════
-package "Resolution Layer (shared)" #80E0D0 {
+package "Engine Context (universal runtime)" #80E0D0 {
+
+  class EngineContext {
+    .. identity ..
+    + repo_root : Path
+    + app_config : AppConfig
+    .. connection (created once) ..
+    + connection : DataConnection
+    + backend : str
+    .. paths (created once from storage.json) ..
+    + storage_router : StorageRouter
+    + bronze_root : Path
+    + silver_root : Path
+    + domains_root : Path
+    .. resolution (created once from domain configs) ..
+    + field_resolver : FieldResolver
+    + domain_loader : DomainConfigLoader
+    --
+    .. DataFrame operations (backend-agnostic) ..
+    + select(df, columns: dict) : Any
+    + filter(df, filters: list) : Any
+    + derive(df, col: str, expr: str) : Any
+    + join(left, right, on: list, how: str) : Any
+    + union(dfs: list) : Any
+    + dedup(df, subset: list) : Any
+    + read(path: str) : Any
+    + write(df, path: str, format: str, mode: str) : Any
+    + empty_df(columns: list) : Any
+    + count(df) : int
+    + to_pandas(df) : DataFrame
+    .. SQL operations ..
+    + execute_sql(sql: str) : Any
+    + build_where(filters: list) : str
+    + build_filter_sql(filters: dict) : str
+    + convert_date_to_date_id(date_str) : int
+    --
+    + {static} from_config(config: AppConfig) : EngineContext
+    + {static} for_build(spark, storage_cfg, repo_root) : EngineContext
+    + {static} for_query(duckdb_path, storage_cfg, repo_root) : EngineContext
+  }
+
+  note right of EngineContext
+    Replaces:
+    - FilterEngine (static methods -> ctx.filter, ctx.build_where)
+    - BackendOps (proposed -> ctx.select, ctx.derive, ctx.join)
+    - StorageRouter threading (-> ctx.storage_router)
+    - connection threading (-> ctx.connection)
+    - repo_root threading (-> ctx.repo_root)
+    - backend detection (-> ctx.backend, set once)
+    - 113 "if backend == spark/duckdb" branches -> dispatch internally
+  end note
+}
+
+' ══════════════════════════════════════════════════════════
+' FIELD RESOLUTION (lives on EngineContext, shared by build + query)
+' ══════════════════════════════════════════════════════════
+package "Field Resolution" #80E0D0 {
 
   class FieldRef {
     - _known_domains : set
@@ -34,25 +90,15 @@ package "Resolution Layer (shared)" #80E0D0 {
   }
 
   class FieldResolver {
-    - domains_root : Path
-    - storage_root : Path
-    - _domain_overrides : dict
     - _cache : dict
     - _index : dict
     - _table_columns : dict
     - _join_graph : dict
     - _domain_deps : dict
     - _table_to_domain : dict
-    - _built : bool
     --
-    + __init__(domains_root, storage_root, domain_overrides)
+    + __init__(ctx: EngineContext)
     - _build_index()
-    - _build_dir_to_model_map(models_root) : dict
-    - {static} _table_name_from_ref(ref) : str
-    - _register_edge(edge)
-    - _domain_for_table(md_file, dir_map) : str
-    - _resolve_temporal(ref) : ResolvedField
-    - _resolve_domain_field(ref) : ResolvedField
     + reachable_domains(core_domains) : set
     + find_join_path(src, dst, allowed_domains) : list
     + resolve(ref_str) : ResolvedField
@@ -70,39 +116,15 @@ package "Resolution Layer (shared)" #80E0D0 {
     + silver_path(logical_rel) : str
   }
 
-  class FilterEngine {
-    + {static} _convert_date_to_date_id(date_str) : int
-    + {static} _format_sql_value(value) : str
-    + {static} apply_filters(df, filters, backend) : Any
-    + {static} apply_from_session(df, filters, session) : Any
-    + {static} _apply_spark_filters(df, filters) : SparkDF
-    + {static} _apply_duckdb_filters(df, filters) : Any
-    + {static} build_filter_sql(filters) : str
-  }
-
   class Aggregator {
-    + {static} aggregate(df, group_by, aggs, backend, conn) : Any
+    + {static} aggregate(ctx: EngineContext, df, group_by, aggs) : Any
     + {static} infer_aggregations(model_name, cols, registry) : dict
     + {static} default_aggregation(column_name) : str
-    - {static} _aggregate_spark(df, group_by, aggs) : Any
-    - {static} _aggregate_duckdb(df, group_by, aggs, conn) : Any
   }
 
-  class BackendOps {
-    + connection
-    + backend : str
-    --
-    + select_columns(df, select_config) : Any
-    + apply_filters(df, filters) : Any
-    + apply_derive(df, col_name, expr) : Any
-    + union_dataframes(dfs) : Any
-    + drop_duplicates(df, subset) : Any
-    + create_empty_df(columns) : Any
-    + read_delta_or_parquet(path) : Any
-    + join(left, right, on, how) : Any
-    + with_column(df, name, expr) : Any
-    + count(df) : int
-  }
+  FieldResolver ..> EngineContext : reads config from
+  EngineContext *-- StorageRouter
+  EngineContext *-- FieldResolver
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -140,6 +162,7 @@ package "Config Loading" #FFCC66 {
 
   DomainConfigLoader ..> config_translator : uses
   DomainConfigLoader ..> extends_resolver : uses
+  EngineContext *-- DomainConfigLoader
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -188,62 +211,22 @@ package "Connection Hierarchy" #E6E6E6 {
 
   DataConnection <|-- DuckDBConnection
   DataConnection <|-- SparkConnection
+  EngineContext *-- DataConnection : holds one
 }
 
 ' ══════════════════════════════════════════════════════════
-' BACKEND ADAPTER HIERARCHY
-' ══════════════════════════════════════════════════════════
-package "Backend Adapters" #E6E6E6 {
-
-  abstract class BackendAdapter {
-    + connection
-    + backend_type : str
-    --
-    + {abstract} get_dialect() : str
-    + {abstract} execute_sql(sql, params) : QueryResult
-    + {abstract} get_table_reference(table_name) : str
-    + supports_feature(feature) : bool
-    + format_limit(n) : str
-    + format_date_literal(date_str) : str
-  }
-
-  class SparkAdapter #FF9933 {
-    + execute_sql(sql, params) : QueryResult
-    + get_table_reference(table_name) : str
-    + supports_feature(feature) : bool
-    + set_enriched_table(name, df)
-  }
-
-  class DuckDBAdapter #3399FF {
-    + execute_sql(sql, params) : QueryResult
-    + get_table_reference(table_name) : str
-    + supports_feature(feature) : bool
-    + set_enriched_table(name, df)
-  }
-
-  BackendAdapter <|-- SparkAdapter
-  BackendAdapter <|-- DuckDBAdapter
-}
-
-' ══════════════════════════════════════════════════════════
-' MODEL HIERARCHY (build)
+' MODEL HIERARCHY (build — uses EngineContext)
 ' ══════════════════════════════════════════════════════════
 package "Model Hierarchy (build)" #FF9933 {
 
   class BaseModel {
-    + connection
-    + storage_cfg : dict
+    + ctx : EngineContext
     + model_cfg : dict
-    + params : dict
-    + repo_root : Path
-    + backend : str <<property>>
-    + backend_ops : BackendOps <<property>>
     - _dims : dict
     - _facts : dict
     - _built : bool
     --
-    + __init__(connection, storage_cfg, model_cfg, params, repo_root)
-    + set_session(session)
+    + __init__(ctx: EngineContext, model_cfg: dict)
     + build() : tuple[dict, dict]
     + ensure_built()
     + before_build()
@@ -256,34 +239,44 @@ package "Model Hierarchy (build)" #FF9933 {
     + get_table_schema(name) : dict
   }
 
+  note right of BaseModel
+    ctx replaces:
+    - connection (ctx.connection)
+    - storage_cfg (ctx.storage_router)
+    - repo_root (ctx.repo_root)
+    - backend detection (ctx.backend)
+    - all if/else branching (ctx.select, ctx.filter, etc.)
+    Constructor: 5 params -> 2 params
+  end note
+
   class DomainModel {
     .. default for all domains ..
     + custom_node_loading(node_id, config)
     - _build_seed_node(node_id, config) : DF
-    - _seed_to_spark_df(rows, schema) : SparkDF
-    - _seed_to_duckdb_df(rows, schema) : Any
-    - _apply_seed_derived_columns(df, schema) : DF
     - _build_union_node(node_id, config) : DF
-    - _load_internal_or_bronze(ref) : DF
     - _build_distinct_node(node_id, config) : DF
-    - _apply_distinct_enrichments(df, config) : DF
     - _build_window_node(node_id, config) : DF
     - _build_unpivot_node(node_id, config) : DF
     - _create_empty_df(columns) : DF
   }
 
+  note bottom of DomainModel
+    Uses ctx.select(), ctx.filter(), ctx.derive(),
+    ctx.join(), ctx.union(), ctx.dedup(), ctx.read()
+    instead of if backend == spark/duckdb branching
+  end note
+
   class CompanyModel {
     .. hook only ..
     + after_build(dims, facts)
-    ' CIK->ticker FK enrichment
+    ' CIK->ticker FK enrichment via ctx.join()
   }
 
   class TemporalModel {
     .. hook only ..
     + custom_node_loading(node_id, config)
     - _generate_calendar() : DF
-    - _generate_calendar_spark(start, end, fiscal) : SparkDF
-    - _generate_calendar_duckdb(start, end, fiscal) : DF
+    ' Uses ctx.execute_sql() for backend-specific calendar gen
   }
 
   class TimeSeriesForecastModel {
@@ -308,7 +301,7 @@ package "Model Hierarchy (build)" #FF9933 {
   TimeSeriesForecastModel <|-- ForecastModel
   BaseModel *-- GraphBuilder
   BaseModel *-- ModelWriter
-  BaseModel *-- BackendOps
+  BaseModel ..> EngineContext : uses ctx
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -331,6 +324,12 @@ package "Model Composition" #FF9933 {
     + JoinUtils.infer_join_pairs(left, right)
     + JoinUtils.join_with_dedupe(left, right, pairs, how)
   }
+
+  note bottom of GraphBuilder
+    All DataFrame ops go through
+    model.ctx.select(), model.ctx.join(), etc.
+    No direct Spark/DuckDB imports
+  end note
 
   class ModelWriter {
     + model : BaseModel
@@ -367,90 +366,75 @@ package "Model Composition" #FF9933 {
 }
 
 ' ══════════════════════════════════════════════════════════
-' QUERY PATH
+' QUERY PATH (uses EngineContext)
 ' ══════════════════════════════════════════════════════════
 package "Query Path" #3399FF {
 
   class QuerySession {
-    + connection
-    + storage_cfg : dict
-    + repo_root : Path
+    + ctx : EngineContext
     + registry : ModelRegistry
     + model_graph : ModelGraph
-    + backend : str <<property>>
     --
-    + __init__(connection, storage_cfg, repo_root, models)
+    + __init__(ctx: EngineContext)
     + load_model(model_name) : BaseModel
     + get_table(model_name, table_name, columns, filters, group_by, aggs)
     + should_apply_cross_model_filter(source, target) : bool
     + list_models() : list[str]
     + list_tables(model) : dict
-    + filter_by_value(df, column, value) : Any
-    + filter_by_range(df, column, min_val, max_val) : Any
-    + join(left, right, on, how) : Any
-    + distinct_values(df, column) : list
-    + order_by(df, column, ascending) : Any
-    + limit(df, n) : Any
-    + row_count(df) : int
-    + to_pandas(df) : DataFrame
-    + select_columns(df, columns) : Any
+    + get_model_metadata(model) : dict
   }
 
+  note right of QuerySession
+    All DataFrame ops delegated to ctx:
+    ctx.filter(), ctx.join(), ctx.select(), etc.
+    No more 24 backend-agnostic wrapper methods.
+    No more storage_cfg, repo_root, connection params.
+  end note
+
   class DuckDBEngine {
-    + max_response_mb : float
-    + storage_root : Path
-    - _conn : duckdb.Connection
-    - _delta_available : bool
-    - _max_sql_rows : int
+    + ctx : EngineContext
     - _scan_cache : dict
+    - _from_tables : set
     --
     + execute(sql, max_rows) : list
     + scan(path) : str
     + safe_scan(path) : str
     + {static} collect_tables(fields) : dict
     + build_from(tables, resolver, allowed_domains) : str
-    + build_where(filters, resolver, from_tables) : list[str]
     + build_order(sort, x_resolved) : str
     + distinct_values(resolved, extra_filters, resolver) : list
     + distinct_values_by_measure(resolved, order_by, order_dir) : list
   }
 
   class SparkEngine {
-    + spark_session
-    + storage_root : Path
+    + ctx : EngineContext
     --
     + execute(sql, max_rows) : list
     + read_table(path) : SparkDF
     + build_from(tables, resolver) : str
-    + build_where(filters, resolver) : list[str]
     + build_order(sort, x_resolved) : str
     + distinct_values(resolved, extra_filters, resolver) : list
   }
 
   class JoinPlanner {
-    + session : QuerySession
+    + ctx : EngineContext
     --
     + build_column_index(model_name) : dict
     + find_materialized_view(model, required_cols) : str
     + plan_auto_joins(model, base_table, missing_cols, filters) : dict
-    + select_columns(df, columns) : Any
     + execute_auto_joins(model, plan, cols, filters, group_by, aggs)
-    - _execute_spark_joins(model, plan, cols, filters)
-    - _execute_duckdb_joins(model, plan, cols, filters)
     - _build_where_clause(filters, base, available_cols) : str
     - _parse_join_condition(condition) : tuple
   }
 
   class BronzeResolver {
-    - data_sources_root : Path
-    - bronze_root : Path
+    + ctx : EngineContext
     - _index : dict
     - _known_providers : set
     - _cache : dict
     --
     + resolve(ref_str) : ResolvedField
     - _build_index()
-    - _parse_ref(ref_str) : tuple
     + reachable_domains(core_domains) : set
     + get_endpoint_catalog() : dict
   }
@@ -458,10 +442,11 @@ package "Query Path" #3399FF {
   QuerySession ..> DuckDBEngine : interactive
   QuerySession ..> SparkEngine : batch
   QuerySession *-- JoinPlanner
+  QuerySession ..> EngineContext : uses ctx
 }
 
 ' ══════════════════════════════════════════════════════════
-' HANDLER HIERARCHY (API)
+' HANDLER HIERARCHY (API — uses EngineContext via DuckDBEngine)
 ' ══════════════════════════════════════════════════════════
 package "Handler Hierarchy (API)" #B3D9FF {
 
@@ -528,7 +513,7 @@ package "Handler Hierarchy (API)" #B3D9FF {
 }
 
 ' ══════════════════════════════════════════════════════════
-' BUILDER HIERARCHY
+' BUILDER HIERARCHY (uses EngineContext via BuildContext)
 ' ══════════════════════════════════════════════════════════
 package "Builder Hierarchy" #FF9933 {
 
@@ -542,6 +527,31 @@ package "Builder Hierarchy" #FF9933 {
     + pre_build()
     + post_build(result)
     + build() : BuildResult
+  }
+
+  class BuildContext {
+    + ctx : EngineContext
+    + date_from : str
+    + date_to : str
+    + max_tickers : Optional[int]
+    + dry_run : bool
+    + verbose : bool
+  }
+
+  note right of BuildContext
+    Replaces: spark, storage_config, repo_root
+    All absorbed into ctx: EngineContext
+  end note
+
+  class BuildResult {
+    + model_name : str
+    + success : bool
+    + dimensions : dict
+    + facts : dict
+    + rows_written : int
+    + duration_seconds : float
+    + error : str
+    + warnings : list
   }
 
   class DomainBuilderFactory {
@@ -585,17 +595,18 @@ package "Builder Hierarchy" #FF9933 {
   BaseModelBuilder <|-- StocksBuilder
   BaseModelBuilder <|-- CompanyBuilder
   BaseModelBuilder <|-- ForecastBuilder
+
+  BuildContext *-- EngineContext
 }
 
 ' ══════════════════════════════════════════════════════════
-' PROVIDER HIERARCHY (ingestion)
+' PROVIDER HIERARCHY (ingestion — uses EngineContext for paths)
 ' ══════════════════════════════════════════════════════════
 package "Provider Hierarchy (ingestion)" #CC9966 {
 
   abstract class BaseProvider {
     + provider_name : str
-    + storage_cfg : dict
-    + config : ProviderConfig
+    + ctx : EngineContext
     --
     + {abstract} list_work_items(**kwargs) : list
     + {abstract} fetch(work_item, **kwargs) : Generator
@@ -649,7 +660,7 @@ package "Ingestion" #CC9966 {
   }
 
   class BronzeSink {
-    + storage_cfg : dict
+    + ctx : EngineContext
     --
     + write_if_missing(table, partitions, df) : bool
     + append_immutable(df, table, key_cols, partitions, date_col) : str
@@ -707,24 +718,24 @@ package "Measure System" #80E0D0 {
     + format : str
     + tags : list
     --
-    + {abstract} to_sql(adapter) : str
-    + execute(adapter, **kwargs) : Any
+    + {abstract} to_sql(ctx: EngineContext) : str
+    + execute(ctx: EngineContext, **kwargs) : Any
   }
 
   class SimpleMeasure {
     + aggregation : str
     --
-    + to_sql(adapter) : str
+    + to_sql(ctx) : str
   }
 
   class ComputedMeasure {
     + expression : str
     --
-    + to_sql(adapter) : str
+    + to_sql(ctx) : str
   }
 
   abstract class DomainMeasures {
-    + model : BaseModel
+    + ctx : EngineContext
     --
     + get_table(table_name) : DF
     + ticker_window(partition_col) : WindowSpec
@@ -735,8 +746,7 @@ package "Measure System" #80E0D0 {
   }
 
   class MeasureExecutor {
-    + model : BaseModel
-    + adapter : BackendAdapter
+    + ctx : EngineContext
     --
     + execute(measure_name, **kwargs) : Any
     - _resolve_measure(name) : BaseMeasure
@@ -805,6 +815,9 @@ package "App Configuration" #E6E6E6 {
     + {static} get_spark_connection(session) : SparkConnection
     + {static} get_duckdb_connection(db_path, **kwargs) : DuckDBConnection
   }
+
+  ConfigLoader ..> AppConfig : produces
+  AppConfig ..> EngineContext : feeds into
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -823,23 +836,18 @@ package "Plugin System" #B3FFB3 {
 ' ══════════════════════════════════════════════════════════
 ' KEY RELATIONSHIPS
 ' ══════════════════════════════════════════════════════════
-QuerySession *-- StorageRouter
-QuerySession *-- ModelGraph
-QuerySession ..> FieldResolver : resolve
-QuerySession ..> FilterEngine : filters
-QuerySession ..> Aggregator : agg
+QuerySession ..> EngineContext
 DomainBuilderFactory ..> DomainConfigLoader : loads configs
 HandlerRegistry *-- DuckDBEngine
 PipelineScheduler ..> DependencyGraph : order
-GraphBuilder ..> BackendOps : delegates
-MeasureExecutor ..> BackendAdapter : uses
+MeasureExecutor ..> EngineContext : uses ctx
 
 ' ══════════════════════════════════════════════════════════
 ' COLOR LEGEND
 ' ══════════════════════════════════════════════════════════
 legend right
   | Color | Layer |
-  |<#80E0D0> Teal | Resolution Layer (shared by build + query) |
+  |<#80E0D0> Teal | Engine Context + Resolution + Measures (shared) |
   |<#FFCC66> Gold | Domain Config Loading |
   |<#FF9933> Orange | Build Path (Spark) |
   |<#3399FF> Blue | Query Path (DuckDB / Spark) |
@@ -847,7 +855,7 @@ legend right
   |<#B3FFB3> Green | Plugin System |
   |<#CC9966> Brown | Ingestion (providers, Bronze sink) |
   |<#CC99FF> Purple | Orchestration (scheduler, deps) |
-  |<#E6E6E6> Gray | Infrastructure (config, connections, exceptions) |
+  |<#E6E6E6> Gray | Infrastructure (config, connections) |
 endlegend
 
 @enduml
