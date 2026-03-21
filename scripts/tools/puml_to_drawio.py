@@ -73,12 +73,15 @@ def parse_puml(text: str) -> tuple[list[PumlClass], list[PumlEdge], dict[str, st
             continue
 
         cls_match = re.match(
-            r'(abstract\s+)?class\s+(\S+?)(?:\s+<<(\w+)>>)?\s*(?:(#\w+))?\s*\{', stripped)
+            r'(abstract\s+)?(?:class|interface)\s+(\S+?)(?:\s+<<(\w+)>>)?\s*(?:(#\w+))?\s*\{', stripped)
         if cls_match:
             is_abstract = bool(cls_match.group(1))
             name = cls_match.group(2).strip('"')
             stereotype = cls_match.group(3) or ""
             color = cls_match.group(4) or current_pkg_color
+            # Auto-detect interface keyword
+            if stripped.startswith('interface ') and not stereotype:
+                stereotype = 'interface'
             current_class = PumlClass(
                 name=name, is_abstract=is_abstract,
                 stereotype=stereotype, package=current_pkg,
@@ -118,12 +121,23 @@ def parse_puml(text: str) -> tuple[list[PumlClass], list[PumlEdge], dict[str, st
             if m:
                 edges.append(PumlEdge(src=m.group(1), tgt=m.group(2), style='delegate'))
                 continue
+            # A <|.. B (B realizes interface A)
+            m = re.match(r'(\S+)\s+<\|\.\.\s+(\S+)', stripped)
+            if m:
+                edges.append(PumlEdge(src=m.group(2), tgt=m.group(1), style='realize'))
+                continue
 
     return list(classes.values()), edges, pkg_colors
 
 
 def _node_height(c: PumlClass) -> int:
-    return max(50, 22 + max(len(c.attrs), 1) * 13 + max(len(c.methods), 1) * 13 + 10)
+    ITEM_H = 20
+    SEP_H = 8
+    header_lines = 1 + (1 if c.stereotype else 0) + (1 if c.is_abstract else 0)
+    start_size = max(26, header_lines * 18 + 4)
+    attr_count = max(len(c.attrs), 1)
+    method_count = max(len(c.methods), 1)
+    return start_size + attr_count * ITEM_H + SEP_H + method_count * ITEM_H
 
 
 def _sugiyama_layout(
@@ -264,49 +278,95 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             f'</mxCell>')
         cid += 1
 
-    # Render classes
+    # Render classes as UML 2.5 swimlane containers with stacked children
+    ITEM_H = 20
+    SEP_H = 8
+
     for c in classes:
         if c.name not in positions:
             continue
         x, y = positions[c.name]
 
-        title = c.name
+        # Build header value: <<stereotype>>\n<b>Name</b>\n{abstract}
+        header_parts = []
         if c.stereotype:
-            title = f"<<{c.stereotype}>> {title}"
+            header_parts.append(f"&amp;lt;&amp;lt;{xe(c.stereotype)}&amp;gt;&amp;gt;")
+        header_parts.append(f"&lt;b&gt;{xe(c.name)}&lt;/b&gt;")
         if c.is_abstract:
-            title = f"abstract {title}"
+            header_parts.append("{abstract}")
+        header_value = "&lt;br&gt;".join(header_parts)
 
-        rows = [f'<tr><td align="center"><b>{xe(title)}</b></td></tr>']
-        if c.attrs:
-            attr_html = '<br/>'.join(xe(a) for a in c.attrs)
-            rows.append(f'<tr><td align="left"><font point-size="9">{attr_html}</font></td></tr>')
-        else:
-            rows.append('<tr><td><font point-size="9"> </font></td></tr>')
-        if c.methods:
-            meth_html = '<br/>'.join(xe(m) for m in c.methods)
-            rows.append(f'<tr><td align="left"><font point-size="9">{meth_html}</font></td></tr>')
-        else:
-            rows.append('<tr><td><font point-size="9"> </font></td></tr>')
+        # Calculate header height based on lines
+        header_lines = len(header_parts)
+        start_size = max(26, header_lines * 18 + 4)
 
-        html = ''.join(rows)
-        value = xe(f'<table border="0" cellspacing="0" cellpadding="3" width="100%">{html}</table>')
-        h = _node_height(c)
+        # Calculate total height
+        attr_count = max(len(c.attrs), 1)
+        method_count = max(len(c.methods), 1)
+        body_h = attr_count * ITEM_H + SEP_H + method_count * ITEM_H
+        total_h = start_size + body_h
 
+        # Font style: 1=bold for concrete, 0 for abstract/interface
+        font_style = 0 if (c.is_abstract or c.stereotype in ('interface', 'abstract')) else 1
+
+        # Swimlane container (the UML 2.5 classifier box)
         cells.append(
-            f'      <mxCell id="{cid}" value="{value}" '
-            f'style="verticalAlign=top;align=left;overflow=fill;html=1;rounded=0;'
-            f'strokeColor=#333333;fontFamily=Courier New;fontSize=10;fillColor={c.color};" '
+            f'      <mxCell id="{cid}" value="{header_value}" '
+            f'style="swimlane;fontStyle={font_style};align=center;verticalAlign=top;'
+            f'childLayout=stackLayout;horizontal=1;startSize={start_size};'
+            f'horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;'
+            f'collapsible=0;marginBottom=0;html=1;whiteSpace=wrap;'
+            f'fillColor={c.color};strokeColor=#333333;fontFamily=Courier New;fontSize=10;" '
             f'vertex="1" parent="1">'
-            f'<mxGeometry x="{x}" y="{y}" width="{NODE_W}" height="{h}" as="geometry"/>'
+            f'<mxGeometry x="{x}" y="{y}" width="{NODE_W}" height="{total_h}" as="geometry"/>'
             f'</mxCell>')
+        container_id = cid
         node_ids[c.name] = cid
         cid += 1
+
+        # Attribute items
+        for attr in (c.attrs or [' ']):
+            cells.append(
+                f'      <mxCell id="{cid}" value="{xe(attr)}" '
+                f'style="text;html=1;strokeColor=none;fillColor=none;align=left;'
+                f'verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;'
+                f'rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;'
+                f'fontFamily=Courier New;fontSize=10;" '
+                f'vertex="1" parent="{container_id}">'
+                f'<mxGeometry width="{NODE_W}" height="{ITEM_H}" as="geometry"/>'
+                f'</mxCell>')
+            cid += 1
+
+        # Separator line between attributes and methods
+        cells.append(
+            f'      <mxCell id="{cid}" value="" '
+            f'style="line;strokeWidth=1;fillColor=none;align=left;'
+            f'verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;'
+            f'rotatable=0;labelPosition=left;points=[];portConstraint=eastwest;" '
+            f'vertex="1" parent="{container_id}">'
+            f'<mxGeometry width="{NODE_W}" height="{SEP_H}" as="geometry"/>'
+            f'</mxCell>')
+        cid += 1
+
+        # Method items
+        for method in (c.methods or [' ']):
+            cells.append(
+                f'      <mxCell id="{cid}" value="{xe(method)}" '
+                f'style="text;html=1;strokeColor=none;fillColor=none;align=left;'
+                f'verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;'
+                f'rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;'
+                f'fontFamily=Courier New;fontSize=10;" '
+                f'vertex="1" parent="{container_id}">'
+                f'<mxGeometry width="{NODE_W}" height="{ITEM_H}" as="geometry"/>'
+                f'</mxCell>')
+            cid += 1
 
     # Render edges
     edge_styles = {
         'inherit': 'endArrow=block;endFill=0;strokeColor=#555555;',
         'compose': 'endArrow=diamond;endFill=1;strokeColor=#555555;',
         'delegate': 'endArrow=open;endFill=0;strokeColor=#999999;dashed=1;',
+        'realize': 'endArrow=block;endFill=0;strokeColor=#555555;dashed=1;',
     }
 
     for e in edges:
