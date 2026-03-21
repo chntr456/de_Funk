@@ -444,7 +444,7 @@ package "Sessions (the nouns — what to operate on)" #80E0D0 {
 }
 
 ' ══════════════════════════════════════════════════════════
-' FIELD RESOLUTION (lives on Engine, shared by build + query)
+' FIELD RESOLUTION (lives on QuerySession, built from DomainModelConfig)
 ' ══════════════════════════════════════════════════════════
 package "Field Resolution" #80E0D0 {
 
@@ -672,14 +672,14 @@ package "Model Hierarchy (build)" #FF9933 {
   class CompanyModel {
     .. hook only ..
     + after_build(dims, facts)
-    ' CIK->ticker FK enrichment via ctx.join()
+    ' CIK->ticker FK enrichment via session.engine.join()
   }
 
   class TemporalModel {
     .. hook only ..
     + custom_node_loading(node_id, config)
     - _generate_calendar() : DF
-    ' Uses ctx.execute_sql() for backend-specific calendar gen
+    ' Uses session.engine.execute_sql() for calendar gen
   }
 
   class TimeSeriesForecastModel {
@@ -742,30 +742,12 @@ package "Model Composition" #FF9933 {
     - _vacuum_table(path)
   }
 
-  class ModelGraph {
-    + graph : nx.DiGraph
-    + join_graph : nx.DiGraph
-    - _model_configs : dict
-    --
-    + build_from_registry(registry)
-    + are_related(model_a, model_b) : bool
-    + get_dependencies(model, transitive) : set
-    + get_dependents(model, transitive) : set
-    + get_join_path(model_a, model_b) : list
-    + get_build_order() : list
-    + validate_no_cycles()
-    + to_mermaid() : str
-  }
-
-  class ModelRegistry {
-    - _registry : dict
-    - _configs : dict
-    --
-    + register(name, cls_or_config)
-    + get(model_name) : type
-    + discover(repo_root)
-    + list_models() : list[str]
-  }
+  note as ModelCompNote
+    ModelGraph removed (dead):
+    - Build ordering -> DependencyGraph (orchestration)
+    - Join paths -> FieldResolver._join_graph (resolution)
+    ModelRegistry absorbed into DomainBuilderFactory.
+  end note
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -1164,7 +1146,7 @@ legend right
   |<#FFCC66> Gold | Domain Data Classes (from markdown YAML) |
   |<#CC9966> Brown | Provider Data Classes + Ingestion |
   |<#E6E6E6> Gray | Infrastructure Data Classes (from JSON/env) |
-  |<#80E0D0> Teal | Engine Context + Resolution (shared) |
+  |<#80E0D0> Teal | Engine + Sessions + Resolution |
   |<#FF9933> Orange | Build Path (Spark) |
   |<#3399FF> Blue | Query Path (DuckDB / Spark) |
   |<#B3D9FF> Light Blue | REST API (handlers, routers) |
