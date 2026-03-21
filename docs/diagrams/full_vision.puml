@@ -280,28 +280,27 @@ package "Infrastructure Data Classes (from storage.json, run_config.json, .env)"
 }
 
 ' ══════════════════════════════════════════════════════════
-' ENGINE CONTEXT (operates on typed data classes)
+' ENGINE (long-lived — connection + read/write mechanics)
 ' ══════════════════════════════════════════════════════════
-package "Engine Context (initialized system state — NOT a god object)" #80E0D0 {
+package "Engine (the verbs — read, write, join, filter)" #80E0D0 {
 
-  note as CtxNote
-    Container of ready-to-use objects. Has no logic itself.
-    DOES: Hold references to configs, resolver, connection, ops.
-    DOES NOT: Load configs, build graphs, execute SQL, build models.
-    Flat API (ctx.join, ctx.filter) delegates to internal _ops/_sql.
+  note as EngineNote
+    Pattern: SQLAlchemy Engine/Session.
+    Engine is long-lived (app lifetime).
+    Sessions are short-lived (per task/request).
+    Engine handles connection + backend ops.
+    Sessions hold what to operate on (configs).
   end note
 
-  class EngineContext {
-    .. shared infrastructure ..
-    + storage : StorageConfig
+  class Engine {
+    .. created once at app startup ..
     + conn : DataConnection
     + backend : str
-    + repo_root : Path
-    .. private strategy ..
+    + storage : StorageConfig
     - _ops : DataOps
     - _sql : SqlOps
     --
-    .. DataFrame ops (delegates to _ops) ..
+    .. DataFrame operations ..
     + select(df, columns) : Any
     + filter(df, filters) : Any
     + derive(df, col, expr) : Any
@@ -312,55 +311,17 @@ package "Engine Context (initialized system state — NOT a god object)" #80E0D0
     + write(df, path, format, mode) : Any
     + count(df) : int
     + to_pandas(df) : DataFrame
-    .. SQL ops (delegates to _sql) ..
+    .. SQL operations ..
     + execute_sql(sql) : Any
     + scan(path) : str
     --
-    + {static} for_spark(spark, storage) : EngineContext
-    + {static} for_duckdb(duckdb_path, storage) : EngineContext
-  }
-
-  class IngestContext {
-    .. Ingestion path: reads APIs, writes Raw + Bronze ..
-    + engine : EngineContext
-    + providers : dict[str, ProviderConfig]
-    + endpoints : dict[str, EndpointConfig]
-    + run : RunConfig
+    .. session factories ..
+    + ingest_session(providers, endpoints, run) : IngestSession
+    + build_session(models, date_from, date_to) : BuildSession
+    + query_session(models) : QuerySession
     --
-    + get_provider(provider_id) : ProviderConfig
-    + get_endpoint(provider_id, endpoint_id) : EndpointConfig
-    + raw_path(provider, endpoint) : str
-    + bronze_path(provider, endpoint) : str
-  }
-
-  class BuildContext {
-    .. Build path: reads Bronze+Silver, writes Silver ..
-    + engine : EngineContext
-    + models : dict[str, DomainModelConfig]
-    + loader : DomainConfigLoader
-    + date_from : str
-    + date_to : str
-    + max_tickers : Optional[int]
-    + dry_run : bool
-    --
-    + get_model(model_name) : DomainModelConfig
-    + get_dependencies(model_name) : list[str]
-    + silver_path(domain, model) : str
-    + bronze_path(provider, endpoint) : str
-  }
-
-  class QueryContext {
-    .. Query path: reads Silver (+Bronze), writes nothing ..
-    + engine : EngineContext
-    + models : dict[str, DomainModelConfig]
-    + resolver : FieldResolver
-    + storage_router : StorageRouter
-    --
-    + resolve(ref_str) : ResolvedField
-    + find_join_path(src, dst) : list
-    + distinct_values(resolved) : list
-    + build_from(tables, allowed_domains) : str
-    + build_where(filters) : str
+    + {static} for_spark(spark, storage) : Engine
+    + {static} for_duckdb(duckdb_path, storage) : Engine
   }
 
   abstract class DataOps <<internal>> {
@@ -387,60 +348,103 @@ package "Engine Context (initialized system state — NOT a god object)" #80E0D0
   class DuckDBOps <<internal>> {
     - _conn : duckdb.Connection
     - _scan_cache : dict
-    --
-    .. DuckDB implementations ..
   }
 
   class SparkOps <<internal>> {
     - _spark_session
-    --
-    .. Spark implementations ..
   }
 
   class DuckDBSql <<internal>> {
     - _conn : duckdb.Connection
-    --
-    .. DuckDB SQL generation ..
   }
 
   class SparkSql <<internal>> {
     - _spark_session
-    --
-    .. Spark SQL generation ..
   }
 
-  EngineContext *-- DataOps : _ops
-  EngineContext *-- SqlOps : _sql
+  Engine *-- DataOps : _ops
+  Engine *-- SqlOps : _sql
   DataOps <|-- DuckDBOps
   DataOps <|-- SparkOps
   SqlOps <|-- DuckDBSql
   SqlOps <|-- SparkSql
-
-  IngestContext *-- EngineContext : engine
-  IngestContext *-- ProviderConfig : holds many
-  IngestContext *-- EndpointConfig : holds many
-  IngestContext *-- RunConfig
-
-  BuildContext *-- EngineContext : engine
-  BuildContext *-- DomainModelConfig : holds many
-
-  QueryContext *-- EngineContext : engine
-  QueryContext *-- DomainModelConfig : holds many
-  QueryContext *-- FieldResolver
-  QueryContext *-- StorageRouter
-
-  note right of EngineContext
-    Shared base: connection + backend-agnostic ops.
-    No configs, no domain knowledge.
-    Sub-contexts add path-specific state:
-      IngestContext: providers + endpoints
-      BuildContext: models + sources + date range
-      QueryContext: models + resolver + storage router
-  end note
+  Engine *-- StorageConfig
 }
 
 ' ══════════════════════════════════════════════════════════
-' FIELD RESOLUTION (lives on EngineContext, shared by build + query)
+' SESSIONS (short-lived — scoped configs for each path)
+' ══════════════════════════════════════════════════════════
+package "Sessions (the nouns — what to operate on)" #80E0D0 {
+
+  note as SessionNote
+    Each session type holds path-specific configs.
+    Created by engine.xxx_session().
+    Engine does the work, session says what to work on.
+  end note
+
+  class IngestSession {
+    .. reads APIs, writes Raw + Bronze ..
+    + engine : Engine
+    + providers : dict[str, ProviderConfig]
+    + endpoints : dict[str, EndpointConfig]
+    + run : RunConfig
+    --
+    + get_provider(provider_id) : ProviderConfig
+    + get_endpoint(provider_id, endpoint_id) : EndpointConfig
+    + raw_path(provider, endpoint) : str
+    + bronze_path(provider, endpoint) : str
+    + ingest(provider_id, work_items) : IngestResult
+  }
+
+  class BuildSession {
+    .. reads Bronze+Silver, writes Silver ..
+    + engine : Engine
+    + models : dict[str, DomainModelConfig]
+    + loader : DomainConfigLoader
+    + date_from : str
+    + date_to : str
+    + max_tickers : Optional[int]
+    + dry_run : bool
+    --
+    + get_model(model_name) : DomainModelConfig
+    + get_dependencies(model_name) : list[str]
+    + build(model_name) : BuildResult
+    + build_all() : list[BuildResult]
+    + silver_path(domain, model) : str
+    + bronze_path(provider, endpoint) : str
+  }
+
+  class QuerySession {
+    .. reads Silver (+Bronze), writes nothing ..
+    + engine : Engine
+    + models : dict[str, DomainModelConfig]
+    + resolver : FieldResolver
+    + storage_router : StorageRouter
+    --
+    + resolve(ref_str) : ResolvedField
+    + find_join_path(src, dst) : list
+    + distinct_values(resolved) : list
+    + build_from(tables, allowed_domains) : str
+    + build_where(filters) : str
+  }
+
+  Engine ..> IngestSession : creates
+  Engine ..> BuildSession : creates
+  Engine ..> QuerySession : creates
+
+  IngestSession *-- ProviderConfig : holds many
+  IngestSession *-- EndpointConfig : holds many
+  IngestSession *-- RunConfig
+
+  BuildSession *-- DomainModelConfig : holds many
+
+  QuerySession *-- DomainModelConfig : holds many
+  QuerySession *-- FieldResolver
+  QuerySession *-- StorageRouter
+}
+
+' ══════════════════════════════════════════════════════════
+' FIELD RESOLUTION (lives on Engine, shared by build + query)
 ' ══════════════════════════════════════════════════════════
 package "Field Resolution" #80E0D0 {
 
@@ -471,7 +475,7 @@ package "Field Resolution" #80E0D0 {
     - _domain_deps : dict
     - _table_to_domain : dict
     --
-    + __init__(ctx: EngineContext)
+    + __init__(models: dict[str, DomainModelConfig])
     - _build_index()
     + reachable_domains(core_domains) : set
     + find_join_path(src, dst, allowed_domains) : list
@@ -505,13 +509,13 @@ package "Field Resolution" #80E0D0 {
   end note
 
   class Aggregator {
-    + {static} aggregate(ctx: EngineContext, df, group_by, aggs) : Any
+    + {static} aggregate(engine: Engine, df, group_by, aggs) : Any
     + {static} infer_aggregations(model_name, cols, registry) : dict
     + {static} default_aggregation(column_name) : str
   }
 
   class JoinPlanner {
-    + ctx : EngineContext
+    + session : QuerySession
     --
     + build_column_index(model_name) : dict
     + find_materialized_view(model, required_cols) : str
@@ -521,11 +525,13 @@ package "Field Resolution" #80E0D0 {
     - _parse_join_condition(condition) : tuple
   }
 
-  FieldResolver ..> EngineContext : reads config from
+  FieldResolver ..> DomainModelConfig : reads edges + schema from
   JoinPlanner ..> FieldResolver : uses join graph
-  EngineContext *-- StorageRouter
-  EngineContext *-- FieldResolver
-  EngineContext *-- JoinPlanner
+  note bottom of FieldResolver
+    Built from DomainModelConfig objects.
+    Lives on QuerySession, not on Engine.
+    Engine doesn't know about domain configs.
+  end note
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -563,7 +569,7 @@ package "Config Loading (parse files -> produce data classes)" #FFCC66 {
 
   DomainConfigLoader ..> config_translator : uses
   DomainConfigLoader ..> extends_resolver : uses
-  EngineContext *-- DomainConfigLoader
+  BuildSession ..> DomainConfigLoader : uses
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -612,22 +618,22 @@ package "Connection Hierarchy" #E6E6E6 {
 
   DataConnection <|-- DuckDBConnection
   DataConnection <|-- SparkConnection
-  EngineContext *-- DataConnection : holds one
+  Engine *-- DataConnection : conn
 }
 
 ' ══════════════════════════════════════════════════════════
-' MODEL HIERARCHY (build — uses EngineContext)
+' MODEL HIERARCHY (build — uses Engine)
 ' ══════════════════════════════════════════════════════════
 package "Model Hierarchy (build)" #FF9933 {
 
   class BaseModel {
-    + ctx : BuildContext
+    + session : BuildSession
     + config : DomainModelConfig
     - _dims : dict
     - _facts : dict
     - _built : bool
     --
-    + __init__(ctx: BuildContext, config: DomainModelConfig)
+    + __init__(session: BuildSession, config: DomainModelConfig)
     + build() : tuple[dict, dict]
     + ensure_built()
     + before_build()
@@ -641,10 +647,10 @@ package "Model Hierarchy (build)" #FF9933 {
   }
 
   note right of BaseModel
-    Takes BuildContext (build path state) +
-    DomainModelConfig (typed YAML, not raw dict).
-    Reads Bronze + Silver from dependencies.
-    Writes Silver tables.
+    Takes BuildSession (scoped build state) +
+    DomainModelConfig (typed YAML).
+    session.engine handles read/write.
+    session holds which models to build.
   end note
 
   class DomainModel {
@@ -659,8 +665,7 @@ package "Model Hierarchy (build)" #FF9933 {
   }
 
   note bottom of DomainModel
-    Uses ctx.select(), ctx.filter(), ctx.derive(),
-    ctx.join(), ctx.union(), ctx.dedup(), ctx.read()
+    Uses session.engine.select(), session.engine.join()
     instead of if backend == spark/duckdb branching
   end note
 
@@ -699,7 +704,7 @@ package "Model Hierarchy (build)" #FF9933 {
   TimeSeriesForecastModel <|-- ForecastModel
   BaseModel *-- GraphBuilder
   BaseModel *-- ModelWriter
-  BaseModel ..> BuildContext : uses ctx
+  BaseModel ..> BuildSession : uses session
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -725,7 +730,7 @@ package "Model Composition" #FF9933 {
 
   note bottom of GraphBuilder
     All DataFrame ops go through
-    model.ctx.select(), model.ctx.join(), etc.
+    model.session.engine.select(), etc.
     No direct Spark/DuckDB imports
   end note
 
@@ -769,7 +774,7 @@ package "Model Composition" #FF9933 {
 package "Bronze Resolution" #CC9966 {
 
   class BronzeResolver {
-    + ctx : EngineContext
+    + session : QuerySession
     - _index : dict
     - _known_providers : set
     - _cache : dict
@@ -782,20 +787,20 @@ package "Bronze Resolution" #CC9966 {
 }
 
 ' ══════════════════════════════════════════════════════════
-' HANDLER HIERARCHY (API — uses EngineContext)
+' HANDLER HIERARCHY (API — uses Engine)
 ' ══════════════════════════════════════════════════════════
 package "Handler Hierarchy (API)" #B3D9FF {
 
   abstract class ExhibitHandler {
     + handles : set[str]
-    + ctx : QueryContext
+    + session : QuerySession
     --
     + {abstract} execute(payload: dict, resolver: Any) : Any
   }
 
   class HandlerRegistry {
     - _handlers : dict
-    + ctx : QueryContext
+    + session : QuerySession
     --
     + register(handler)
     + get(type_str) : ExhibitHandler
@@ -842,18 +847,18 @@ package "Handler Hierarchy (API)" #B3D9FF {
   ExhibitHandler <|-- BoxHandler
   ExhibitHandler <|-- TableDataHandler
 
-  ExhibitHandler ..> QueryContext : uses ctx
+  ExhibitHandler ..> QuerySession : uses session
 }
 
 ' ══════════════════════════════════════════════════════════
-' BUILDER HIERARCHY (uses EngineContext via BuildContext)
+' BUILDER HIERARCHY (uses Engine via BuildContext)
 ' ══════════════════════════════════════════════════════════
 package "Builder Hierarchy" #FF9933 {
 
   abstract class BaseModelBuilder {
     + model_name : str
     + depends_on : list[str]
-    + context : BuildContext
+    + session : BuildSession
     --
     + {abstract} get_model_class() : Type
     + validate()
@@ -862,18 +867,11 @@ package "Builder Hierarchy" #FF9933 {
     + build() : BuildResult
   }
 
-  class BuildContext {
-    + ctx : EngineContext
-    + date_from : str
-    + date_to : str
-    + max_tickers : Optional[int]
-    + dry_run : bool
-    + verbose : bool
-  }
-
-  note right of BuildContext
-    Replaces: spark, storage_config, repo_root
-    All absorbed into ctx: EngineContext
+  note right of BaseModelBuilder
+    session: BuildSession (created by engine.build_session())
+    session.engine: read/write mechanics
+    session.models: what to build
+    session.build(model_name): orchestrates one model
   end note
 
   class BuildResult {
@@ -929,17 +927,17 @@ package "Builder Hierarchy" #FF9933 {
   BaseModelBuilder <|-- CompanyBuilder
   BaseModelBuilder <|-- ForecastBuilder
 
-  BuildContext *-- EngineContext
+  BaseModelBuilder ..> BuildSession : uses session
 }
 
 ' ══════════════════════════════════════════════════════════
-' PROVIDER HIERARCHY (ingestion — uses EngineContext for paths)
+' PROVIDER HIERARCHY (ingestion — uses Engine for paths)
 ' ══════════════════════════════════════════════════════════
 package "Provider Hierarchy (ingestion)" #CC9966 {
 
   abstract class BaseProvider {
     + provider_name : str
-    + ctx : EngineContext
+    + session : IngestSession
     --
     + {abstract} list_work_items(**kwargs) : list
     + {abstract} fetch(work_item, **kwargs) : Generator
@@ -1012,7 +1010,7 @@ package "Ingestion Pipeline" #CC9966 {
 
   class BronzeSink {
     .. raw files -> typed Delta Lake tables ..
-    + ctx : EngineContext
+    + engine : Engine
     --
     + write_if_missing(table, partitions, df) : bool
     + append_immutable(df, table, key_cols, partitions, date_col) : str
@@ -1133,7 +1131,9 @@ package "App Configuration" #E6E6E6 {
   }
 
   ConfigLoader ..> AppConfig : produces
-  AppConfig ..> EngineContext : feeds into
+  AppConfig ..> Engine : creates engine from
+  AppConfig ..> BuildSession : creates session from
+  AppConfig ..> QuerySession : creates session from
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -1154,7 +1154,7 @@ package "Plugin System" #B3FFB3 {
 ' ══════════════════════════════════════════════════════════
 DomainBuilderFactory ..> DomainConfigLoader : loads configs
 PipelineScheduler ..> DependencyGraph : order
-BronzeResolver ..> QueryContext : uses ctx
+BronzeResolver ..> QuerySession : uses session
 
 ' ══════════════════════════════════════════════════════════
 ' COLOR LEGEND
