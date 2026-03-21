@@ -6,8 +6,9 @@ skinparam classFontSize 10
 skinparam packageFontSize 12
 skinparam packageStyle rectangle
 skinparam linetype ortho
+skinparam interfaceBackgroundColor #F0F0F0
 
-title de_Funk Full Vision — Target Architecture\nThree paths: Ingest (write Raw+Bronze), Build (read+write Silver), Query (read Silver)
+title de_Funk Full Vision — Target Architecture\nEngine/Session pattern. Typed data classes. Three paths.
 
 note as ThreePaths
   | Path | Reads | Writes | Config Needed |
@@ -17,15 +18,9 @@ note as ThreePaths
 end note
 
 ' ══════════════════════════════════════════════════════════
-' DOMAIN DATA CLASSES (mirror the markdown YAML frontmatter)
+' DOMAIN DATA CLASSES
 ' ══════════════════════════════════════════════════════════
-package "Domain Data Classes (from markdown frontmatter)" #FFCC66 {
-
-  note as DomainNote
-    Passive @dataclasses mirroring YAML structure.
-    No behavior — just typed shape.
-    Used by: Build path + Query path
-  end note
+package "Domain Data Classes" #FFCC66 {
 
   class SchemaField <<dataclass>> {
     + name : str
@@ -138,14 +133,9 @@ package "Domain Data Classes (from markdown frontmatter)" #FFCC66 {
 }
 
 ' ══════════════════════════════════════════════════════════
-' PROVIDER DATA CLASSES (from endpoint/provider markdown)
+' PROVIDER DATA CLASSES
 ' ══════════════════════════════════════════════════════════
-package "Provider Data Classes (from data source markdown)" #CC9966 {
-
-  note as ProviderNote
-    Passive @dataclasses mirroring provider/endpoint YAML.
-    Used by: Ingestion path only
-  end note
+package "Provider Data Classes" #CC9966 {
 
   class EndpointSchemaField <<dataclass>> {
     + name : str
@@ -169,7 +159,6 @@ package "Provider Data Classes (from data source markdown)" #CC9966 {
     + pagination_type : str
     + bulk_download : bool
     + json_structure : str
-    + raw_schema : list[list]
     + schema : list[EndpointSchemaField]
     + bronze : Optional[str]
     + partitions : list[str]
@@ -178,7 +167,6 @@ package "Provider Data Classes (from data source markdown)" #CC9966 {
     + date_column : Optional[str]
     + domain : str
     + status : str
-    + update_cadence : str
   }
 
   class ProviderConfig <<dataclass>> {
@@ -194,7 +182,6 @@ package "Provider Data Classes (from data source markdown)" #CC9966 {
     + endpoints : list[str]
     + models : list[str]
     + category : str
-    + data_domains : list[str]
     + status : str
   }
 
@@ -202,15 +189,9 @@ package "Provider Data Classes (from data source markdown)" #CC9966 {
 }
 
 ' ══════════════════════════════════════════════════════════
-' INFRASTRUCTURE DATA CLASSES (from JSON/env — not markdown)
+' INFRASTRUCTURE DATA CLASSES
 ' ══════════════════════════════════════════════════════════
-package "Infrastructure Data Classes (from storage.json, run_config.json, .env)" #E6E6E6 {
-
-  note as InfraNote
-    Passive @dataclasses from JSON/env.
-    Describes where/how to run, not what data exists.
-    Used by: All three paths
-  end note
+package "Infrastructure Data Classes" #E6E6E6 {
 
   class RootsConfig <<dataclass>> {
     + raw : str
@@ -218,23 +199,11 @@ package "Infrastructure Data Classes (from storage.json, run_config.json, .env)"
     + silver : str
   }
 
-  note bottom of RootsConfig
-    Different physical storage:
-    raw = HDD/NAS (bulk, archival)
-    bronze + silver = SSD (fast scans)
-  end note
-
   class ApiLimits <<dataclass>> {
     + duckdb_memory_limit : str
     + max_sql_rows : int
     + max_dimension_values : int
     + max_response_mb : float
-  }
-
-  class TablePath <<dataclass>> {
-    + root : str
-    + rel : str
-    + partitions : list[str]
   }
 
   class StorageConfig <<dataclass>> {
@@ -251,18 +220,6 @@ package "Infrastructure Data Classes (from storage.json, run_config.json, .env)"
     + duckdb : Optional[DuckDBConfig]
   }
 
-  class ClusterConfig <<dataclass>> {
-    + spark_master : str
-    + fallback_to_local : bool
-    + task_batch_size : int
-  }
-
-  class RetryConfig <<dataclass>> {
-    + max_retries : int
-    + retry_delay_seconds : float
-    + exponential_backoff : bool
-  }
-
   class RunConfig <<dataclass>> {
     + defaults : dict
     + providers : dict[str, dict]
@@ -274,33 +231,20 @@ package "Infrastructure Data Classes (from storage.json, run_config.json, .env)"
 
   StorageConfig *-- RootsConfig
   StorageConfig *-- ApiLimits
-  StorageConfig *-- TablePath
-  RunConfig *-- ClusterConfig
-  RunConfig *-- RetryConfig
 }
 
 ' ══════════════════════════════════════════════════════════
 ' ENGINE (long-lived — connection + read/write mechanics)
 ' ══════════════════════════════════════════════════════════
-package "Engine (the verbs — read, write, join, filter)" #80E0D0 {
-
-  note as EngineNote
-    Pattern: SQLAlchemy Engine/Session.
-    Engine is long-lived (app lifetime).
-    Sessions are short-lived (per task/request).
-    Engine handles connection + backend ops.
-    Sessions hold what to operate on (configs).
-  end note
+package "Engine" #80E0D0 {
 
   class Engine {
-    .. created once at app startup ..
     + conn : DataConnection
     + backend : str
     + storage : StorageConfig
     - _ops : DataOps
     - _sql : SqlOps
     --
-    .. DataFrame operations ..
     + select(df, columns) : Any
     + filter(df, filters) : Any
     + derive(df, col, expr) : Any
@@ -311,79 +255,76 @@ package "Engine (the verbs — read, write, join, filter)" #80E0D0 {
     + write(df, path, format, mode) : Any
     + count(df) : int
     + to_pandas(df) : DataFrame
-    .. SQL operations ..
     + execute_sql(sql) : Any
     + scan(path) : str
     --
-    .. session factories ..
-    + ingest_session(providers, endpoints, run) : IngestSession
-    + build_session(models, date_from, date_to) : BuildSession
-    + query_session(models) : QuerySession
+    + ingest_session(**kwargs) : IngestSession
+    + build_session(**kwargs) : BuildSession
+    + query_session(**kwargs) : QuerySession
     --
     + {static} for_spark(spark, storage) : Engine
     + {static} for_duckdb(duckdb_path, storage) : Engine
   }
 
-  abstract class DataOps <<internal>> {
-    + {abstract} select(df, columns) : Any
-    + {abstract} filter(df, filters) : Any
-    + {abstract} derive(df, col, expr) : Any
-    + {abstract} join(left, right, on, how) : Any
-    + {abstract} union(dfs) : Any
-    + {abstract} dedup(df, subset) : Any
-    + {abstract} read(path) : Any
-    + {abstract} write(df, path, format, mode) : Any
-    + {abstract} count(df) : int
-    + {abstract} to_pandas(df) : DataFrame
+  interface DataOps <<interface>> {
+    + select(df, columns) : Any
+    + filter(df, filters) : Any
+    + derive(df, col, expr) : Any
+    + join(left, right, on, how) : Any
+    + union(dfs) : Any
+    + dedup(df, subset) : Any
+    + read(path) : Any
+    + write(df, path, format, mode) : Any
+    + count(df) : int
+    + to_pandas(df) : DataFrame
   }
 
-  abstract class SqlOps <<internal>> {
-    + {abstract} execute_sql(sql, max_rows) : list
-    + {abstract} scan(path) : str
-    + {abstract} build_from(tables, resolver) : str
-    + {abstract} build_where(filters) : str
-    + {abstract} distinct_values(resolved) : list
+  interface SqlOps <<interface>> {
+    + execute_sql(sql, max_rows) : list
+    + scan(path) : str
+    + build_from(tables, resolver) : str
+    + build_where(filters) : str
+    + distinct_values(resolved) : list
   }
 
-  class DuckDBOps <<internal>> {
+  class DuckDBOps {
     - _conn : duckdb.Connection
     - _scan_cache : dict
   }
 
-  class SparkOps <<internal>> {
+  class SparkOps {
     - _spark_session
   }
 
-  class DuckDBSql <<internal>> {
+  class DuckDBSql {
     - _conn : duckdb.Connection
   }
 
-  class SparkSql <<internal>> {
+  class SparkSql {
     - _spark_session
   }
 
   Engine *-- DataOps : _ops
   Engine *-- SqlOps : _sql
-  DataOps <|-- DuckDBOps
-  DataOps <|-- SparkOps
-  SqlOps <|-- DuckDBSql
-  SqlOps <|-- SparkSql
+  DataOps <|.. DuckDBOps
+  DataOps <|.. SparkOps
+  SqlOps <|.. DuckDBSql
+  SqlOps <|.. SparkSql
   Engine *-- StorageConfig
 }
 
 ' ══════════════════════════════════════════════════════════
-' SESSIONS (short-lived — scoped configs for each path)
+' SESSIONS (short-lived — scoped to a path)
 ' ══════════════════════════════════════════════════════════
-package "Sessions (the nouns — what to operate on)" #80E0D0 {
+package "Sessions" #80E0D0 {
 
-  note as SessionNote
-    Each session type holds path-specific configs.
-    Created by engine.xxx_session().
-    Engine does the work, session says what to work on.
-  end note
+  abstract class Session <<abstract>> {
+    + engine : Engine
+    --
+    + {abstract} close()
+  }
 
   class IngestSession {
-    .. reads APIs, writes Raw + Bronze ..
     + engine : Engine
     + providers : dict[str, ProviderConfig]
     + endpoints : dict[str, EndpointConfig]
@@ -393,18 +334,12 @@ package "Sessions (the nouns — what to operate on)" #80E0D0 {
     + get_endpoint(provider_id, endpoint_id) : EndpointConfig
     + raw_path(provider, endpoint) : str
     + bronze_path(provider, endpoint) : str
-    + ingest(provider_id, work_items) : IngestResult
   }
 
   class BuildSession {
-    .. reads Bronze+Silver, writes Silver ..
     + engine : Engine
     + models : dict[str, DomainModelConfig]
     + loader : DomainConfigLoader
-    + date_from : str
-    + date_to : str
-    + max_tickers : Optional[int]
-    + dry_run : bool
     --
     + get_model(model_name) : DomainModelConfig
     + get_dependencies(model_name) : list[str]
@@ -415,7 +350,6 @@ package "Sessions (the nouns — what to operate on)" #80E0D0 {
   }
 
   class QuerySession {
-    .. reads Silver (+Bronze), writes nothing ..
     + engine : Engine
     + models : dict[str, DomainModelConfig]
     + resolver : FieldResolver
@@ -428,37 +362,37 @@ package "Sessions (the nouns — what to operate on)" #80E0D0 {
     + build_where(filters) : str
   }
 
+  Session <|-- IngestSession
+  Session <|-- BuildSession
+  Session <|-- QuerySession
+
   Engine ..> IngestSession : creates
   Engine ..> BuildSession : creates
   Engine ..> QuerySession : creates
 
-  IngestSession *-- ProviderConfig : holds many
-  IngestSession *-- EndpointConfig : holds many
+  IngestSession *-- ProviderConfig
+  IngestSession *-- EndpointConfig
   IngestSession *-- RunConfig
 
-  BuildSession *-- DomainModelConfig : holds many
+  BuildSession *-- DomainModelConfig
 
-  QuerySession *-- DomainModelConfig : holds many
+  QuerySession *-- DomainModelConfig
   QuerySession *-- FieldResolver
   QuerySession *-- StorageRouter
 }
 
 ' ══════════════════════════════════════════════════════════
-' FIELD RESOLUTION (lives on QuerySession, built from DomainModelConfig)
+' FIELD RESOLUTION
 ' ══════════════════════════════════════════════════════════
 package "Field Resolution" #80E0D0 {
 
-  class FieldRef {
-    - _known_domains : set
+  class FieldRef <<dataclass>> {
     + domain : str
     + field : str
     + raw : str
-    --
-    + __init__(raw: str)
-    + {static} _match_domain(cls, raw) : tuple
   }
 
-  class ResolvedField {
+  class ResolvedField <<dataclass>> {
     + ref : FieldRef
     + table_name : str
     + column : str
@@ -468,312 +402,174 @@ package "Field Resolution" #80E0D0 {
   }
 
   class FieldResolver {
-    - _cache : dict
     - _index : dict
-    - _table_columns : dict
     - _join_graph : dict
     - _domain_deps : dict
-    - _table_to_domain : dict
     --
     + __init__(models: dict[str, DomainModelConfig])
-    - _build_index()
-    + reachable_domains(core_domains) : set
-    + find_join_path(src, dst, allowed_domains) : list
     + resolve(ref_str) : ResolvedField
     + resolve_many(refs) : dict
+    + find_join_path(src, dst, allowed_domains) : list
+    + reachable_domains(core_domains) : set
     + get_field_catalog() : dict
   }
 
-  class StorageRouter <<frozen dataclass>> {
-    + storage_cfg : dict
-    + repo_root : Optional[Path]
-    .. mount points (different physical storage) ..
-    + raw_root : Path
-    + bronze_root : Path
-    + silver_root : Path
+  class StorageRouter <<dataclass>> {
+    + roots : RootsConfig
+    + domain_roots : dict[str, str]
+    + tables : dict[str, TablePath]
     --
-    + parse_table_ref(table_ref) : tuple
     + resolve(table_ref) : str
     + raw_path(provider, endpoint) : str
     + bronze_path(provider, endpoint) : str
     + silver_path(domain, model) : str
   }
 
-  note bottom of StorageRouter
-    Raw: HDD/NAS (bulk, cheap, archival)
-      /mnt/disk/storage/raw/{provider}/{endpoint}/
-    Bronze + Silver: SSD (fast Delta Lake scans)
-      /shared/storage/bronze/{provider}/{endpoint}/
-      /shared/storage/silver/{domain}/{model}/
-    Mount points configured in storage.json
-  end note
-
-  class Aggregator {
-    + {static} aggregate(engine: Engine, df, group_by, aggs) : Any
-    + {static} infer_aggregations(model_name, cols, registry) : dict
-    + {static} default_aggregation(column_name) : str
-  }
-
-  class JoinPlanner {
-    + session : QuerySession
-    --
-    + build_column_index(model_name) : dict
-    + find_materialized_view(model, required_cols) : str
-    + plan_auto_joins(model, base_table, missing_cols, filters) : dict
-    + execute_auto_joins(model, plan, cols, filters, group_by, aggs)
-    - _build_where_clause(filters, base, available_cols) : str
-    - _parse_join_condition(condition) : tuple
-  }
-
-  FieldResolver ..> DomainModelConfig : reads edges + schema from
-  JoinPlanner ..> FieldResolver : uses join graph
-  note bottom of FieldResolver
-    Built from DomainModelConfig objects.
-    Lives on QuerySession, not on Engine.
-    Engine doesn't know about domain configs.
-  end note
+  FieldResolver ..> DomainModelConfig : reads edges + schema
 }
 
 ' ══════════════════════════════════════════════════════════
 ' CONFIG LOADING
 ' ══════════════════════════════════════════════════════════
-package "Config Loading (parse files -> produce data classes)" #FFCC66 {
+package "Config Loading" #FFCC66 {
 
   class DomainConfigLoader {
     - domains_dir : Path
-    - _type_index : dict
-    - _model_to_path : dict
     - _parse_cache : dict
     --
-    + load_model_config(model_name) : dict
-    - _discover_tables(model_dir) : dict
-    - _discover_sources(model_dir) : dict
-    - _discover_views(model_dir) : dict
+    + load_model_config(model_name) : DomainModelConfig
+    + load_all() : dict[str, DomainModelConfig]
   }
 
   class config_translator <<module>> {
     + {static} translate_domain_config(config) : dict
-    - {static} _synthesize_node(table_name, table_cfg, sources) : dict
-    - {static} _build_node_from_source(table_cfg, source) : dict
-    - {static} _normalize_from(from_spec) : str
-    - {static} _aliases_to_select_dict(aliases) : dict
-    - {static} _enrich_to_join_specs(table_config) : list
   }
 
   class extends_resolver <<module>> {
     + {static} parse_front_matter(file_path) : dict
     + {static} deep_merge(base, override) : dict
     + {static} resolve_extends_reference(ref, dir, cache) : dict
-    + {static} resolve_nested_extends(config, dir, cache) : dict
   }
 
-  DomainConfigLoader ..> config_translator : uses
-  DomainConfigLoader ..> extends_resolver : uses
-  BuildSession ..> DomainConfigLoader : uses
+  DomainConfigLoader ..> config_translator
+  DomainConfigLoader ..> extends_resolver
 }
 
 ' ══════════════════════════════════════════════════════════
 ' CONNECTION HIERARCHY
 ' ══════════════════════════════════════════════════════════
-package "Connection Hierarchy" #E6E6E6 {
+package "Connections" #E6E6E6 {
 
-  abstract class DataConnection {
-    + {abstract} read_table(path, format) : Any
-    + {abstract} apply_filters(df, filters) : Any
-    + {abstract} to_pandas(df) : DataFrame
-    + {abstract} count(df) : int
-    + {abstract} cache(df) : Any
-    + {abstract} uncache(df)
-    + {abstract} stop()
+  interface DataConnection <<interface>> {
+    + read_table(path, format) : Any
+    + apply_filters(df, filters) : Any
+    + to_pandas(df) : DataFrame
+    + count(df) : int
+    + cache(df) : Any
+    + stop()
   }
 
-  class DuckDBConnection #3399FF {
+  class DuckDBConnection {
     + conn : duckdb.Connection
     + db_path : str
     + delta_enabled : bool
     --
     + read_table(path, format, version, timestamp)
     + execute_sql(query) : Any
-    + read_parquet(path) : Any
     + write_delta_table(df, path, mode, partition_by)
     + apply_filters(df, filters) : Any
     + to_pandas(df) : DataFrame
     + count(df) : int
-    + table(view_name) : Any
-    + has_view(view_name) : bool
   }
 
-  class SparkConnection #FF9933 {
+  class SparkConnection {
     + spark_session
     --
     + read_table(path, format, version, timestamp)
     + write_delta_table(df, path, mode, partition_by)
     + merge_delta_table(source_df, target_path, condition)
-    + optimize_delta_table(path, zorder_by)
-    + vacuum_delta_table(path, retention_hours)
     + apply_filters(df, filters) : Any
     + to_pandas(df) : DataFrame
     + count(df) : int
   }
 
-  DataConnection <|-- DuckDBConnection
-  DataConnection <|-- SparkConnection
+  DataConnection <|.. DuckDBConnection
+  DataConnection <|.. SparkConnection
   Engine *-- DataConnection : conn
 }
 
 ' ══════════════════════════════════════════════════════════
-' MODEL HIERARCHY (build — uses Engine)
+' BUILD PATH
 ' ══════════════════════════════════════════════════════════
-package "Model Hierarchy (build)" #FF9933 {
+package "Build Path" #FF9933 {
 
-  class BaseModel {
+  class BaseModel <<abstract>> {
     + session : BuildSession
     + config : DomainModelConfig
     - _dims : dict
     - _facts : dict
-    - _built : bool
     --
-    + __init__(session: BuildSession, config: DomainModelConfig)
     + build() : tuple[dict, dict]
-    + ensure_built()
     + before_build()
-    + after_build(dims, facts) : tuple[dict, dict]
+    + after_build(dims, facts)
     + custom_node_loading(node_id, config) : Optional[DF]
     + write_tables(output_root, format, mode)
     + get_table(name) : Any
     + has_table(name) : bool
     + list_tables() : list[str]
-    + get_table_schema(name) : dict
   }
-
-  note right of BaseModel
-    Takes BuildSession (scoped build state) +
-    DomainModelConfig (typed YAML).
-    session.engine handles read/write.
-    session holds which models to build.
-  end note
 
   class DomainModel {
     .. default for all domains ..
     + custom_node_loading(node_id, config)
-    - _build_seed_node(node_id, config) : DF
-    - _build_union_node(node_id, config) : DF
-    - _build_distinct_node(node_id, config) : DF
-    - _build_window_node(node_id, config) : DF
-    - _build_unpivot_node(node_id, config) : DF
-    - _create_empty_df(columns) : DF
+    .. handles: seed, union, distinct, window, unpivot ..
   }
 
-  note bottom of DomainModel
-    Uses session.engine.select(), session.engine.join()
-    instead of if backend == spark/duckdb branching
+  class BaseModelBuilder <<abstract>> {
+    + model_name : str
+    + depends_on : list[str]
+    + session : BuildSession
+    --
+    + {abstract} get_model_class() : Type
+    + validate()
+    + pre_build()
+    + post_build(result)
+    + build() : BuildResult
+  }
+
+  class DomainBuilderFactory {
+    --
+    + {static} create_builders(domains_dir) : dict
+  }
+
+  class BuildResult <<dataclass>> {
+    + model_name : str
+    + success : bool
+    + rows_written : int
+    + duration_seconds : float
+    + error : Optional[str]
+  }
+
+  note as BuildHooks
+    Known build hooks (registered as plugins):
+    - temporal: generate dim_calendar programmatically
+    - corporate.entity: after_build CIK enrichment
+    - securities.stocks: post_build technical indicators
+    - securities.forecast: custom ML training build
   end note
-
-  class CompanyModel {
-    .. hook only ..
-    + after_build(dims, facts)
-    ' CIK->ticker FK enrichment via session.engine.join()
-  }
-
-  class TemporalModel {
-    .. hook only ..
-    + custom_node_loading(node_id, config)
-    - _generate_calendar() : DF
-    ' Uses session.engine.execute_sql() for calendar gen
-  }
-
-  class TimeSeriesForecastModel {
-    + {abstract} get_source_model_name() : str
-    + get_training_data(entity_id, date_from, date_to)
-    - _prepare_training_data(entity_id, lookback)
-  }
-
-  class ForecastModel {
-    + get_source_model_name() : str
-    + get_source_table_name() : str
-    + get_entity_column() : str
-    + get_date_column() : str
-    + get_training_data(entity_id, date_from, date_to)
-    + run_forecast_for_ticker(ticker, config)
-  }
 
   BaseModel <|-- DomainModel
-  BaseModel <|-- CompanyModel
-  BaseModel <|-- TemporalModel
-  BaseModel <|-- TimeSeriesForecastModel
-  TimeSeriesForecastModel <|-- ForecastModel
-  BaseModel *-- GraphBuilder
-  BaseModel *-- ModelWriter
   BaseModel ..> BuildSession : uses session
+  BaseModelBuilder ..> BuildSession : uses session
+  BaseModelBuilder ..> BaseModel : creates + builds
 }
 
 ' ══════════════════════════════════════════════════════════
-' MODEL COMPOSITION
-' ══════════════════════════════════════════════════════════
-package "Model Composition" #FF9933 {
-
-  class GraphBuilder {
-    + model : BaseModel
-    --
-    + build() : tuple[dict, dict]
-    - _build_nodes() : dict[str, DF]
-    - _apply_joins(df, join_specs, nodes, node_id) : DF
-    - _load_bronze_table(table_name) : DF
-    - _load_silver_table(model_name, table_name) : DF
-    - _apply_derive(df, col_name, expr, node_id) : DF
-    + resolve_node(node_id, nodes) : DF
-    __ static __
-    + JoinUtils.join_pairs_from_strings(specs)
-    + JoinUtils.infer_join_pairs(left, right)
-    + JoinUtils.join_with_dedupe(left, right, pairs, how)
-  }
-
-  note bottom of GraphBuilder
-    All DataFrame ops go through
-    model.session.engine.select(), etc.
-    No direct Spark/DuckDB imports
-  end note
-
-  class ModelWriter {
-    + model : BaseModel
-    + auto_vacuum : bool <<property>>
-    --
-    + write_tables(dims, facts, root, format, mode)
-    - _vacuum_table(path)
-  }
-
-  note as ModelCompNote
-    ModelGraph removed (dead):
-    - Build ordering -> DependencyGraph (orchestration)
-    - Join paths -> FieldResolver._join_graph (resolution)
-    ModelRegistry absorbed into DomainBuilderFactory.
-  end note
-}
-
-' ══════════════════════════════════════════════════════════
-' BRONZE RESOLUTION (separate data source, same resolve interface)
-' ══════════════════════════════════════════════════════════
-package "Bronze Resolution" #CC9966 {
-
-  class BronzeResolver {
-    + session : QuerySession
-    - _index : dict
-    - _known_providers : set
-    - _cache : dict
-    --
-    + resolve(ref_str) : ResolvedField
-    - _build_index()
-    + reachable_domains(core_domains) : set
-    + get_endpoint_catalog() : dict
-  }
-}
-
-' ══════════════════════════════════════════════════════════
-' HANDLER HIERARCHY (API — uses Engine)
+' HANDLER HIERARCHY (API)
 ' ══════════════════════════════════════════════════════════
 package "Handler Hierarchy (API)" #B3D9FF {
 
-  abstract class ExhibitHandler {
+  abstract class ExhibitHandler <<abstract>> {
     + handles : set[str]
     + session : QuerySession
     --
@@ -793,33 +589,29 @@ package "Handler Hierarchy (API)" #B3D9FF {
     + handles : {line, bar, scatter, area, pie, heatmap}
     --
     + execute(payload, resolver) : GraphicalResponse
-    - _shape_graphical(rows, has_group, y_count) : GraphicalResponse
   }
 
   class PivotHandler {
     + handles : {pivot, great_table, gt}
     --
     + execute(payload, resolver) : GreatTablesResponse
-    - _row_labels(fields) : list
-    - _totals_sql(row_exprs, col_exprs, has_totals) : str
-    - _discover_col_values(col_exprs, from, where) : list
-    - _generate_wide_sql(...) : str
-    - _query_2d_wide(req, rows, cols, measures, ...) : tuple
-    - _query_1d(req, rows, measures, ...) : tuple
   }
 
   class MetricsHandler {
     + handles : {cards.metric, kpi}
+    --
     + execute(payload, resolver) : MetricResponse
   }
 
   class BoxHandler {
     + handles : {box, ohlcv, candlestick}
+    --
     + execute(payload, resolver) : dict
   }
 
   class TableDataHandler {
     + handles : {table.data}
+    --
     + execute(payload, resolver) : TableResponse
   }
 
@@ -833,92 +625,11 @@ package "Handler Hierarchy (API)" #B3D9FF {
 }
 
 ' ══════════════════════════════════════════════════════════
-' BUILDER HIERARCHY (uses Engine via BuildContext)
+' INGESTION PATH
 ' ══════════════════════════════════════════════════════════
-package "Builder Hierarchy" #FF9933 {
+package "Ingestion Path" #CC9966 {
 
-  abstract class BaseModelBuilder {
-    + model_name : str
-    + depends_on : list[str]
-    + session : BuildSession
-    --
-    + {abstract} get_model_class() : Type
-    + validate()
-    + pre_build()
-    + post_build(result)
-    + build() : BuildResult
-  }
-
-  note right of BaseModelBuilder
-    session: BuildSession (created by engine.build_session())
-    session.engine: read/write mechanics
-    session.models: what to build
-    session.build(model_name): orchestrates one model
-  end note
-
-  class BuildResult {
-    + model_name : str
-    + success : bool
-    + dimensions : dict
-    + facts : dict
-    + rows_written : int
-    + duration_seconds : float
-    + error : str
-    + warnings : list
-  }
-
-  class DomainBuilderFactory {
-    + CUSTOM_MODEL_CLASSES : dict
-    --
-    + {static} create_builders(domains_dir, repo_root) : dict
-    - {static} _create_builder_class(model_name, config, loader) : type
-  }
-
-  class TemporalBuilder {
-    + depends_on : none
-    + get_model_class() : TemporalModel
-  }
-
-  class SecuritiesBuilder {
-    + depends_on : temporal
-    + get_model_class() : DomainModel
-  }
-
-  class StocksBuilder {
-    + depends_on : temporal, securities, corporate
-    + get_model_class() : DomainModel
-    + post_build(result)
-  }
-
-  class CompanyBuilder {
-    + depends_on : temporal
-    + get_model_class() : CompanyModel
-    + post_build(result)
-  }
-
-  class ForecastBuilder {
-    + depends_on : temporal, stocks
-    + get_model_class() : ForecastModel
-    + build() : BuildResult
-    + validate() : bool
-  }
-
-  BaseModelBuilder <|-- TemporalBuilder
-  BaseModelBuilder <|-- SecuritiesBuilder
-  BaseModelBuilder <|-- StocksBuilder
-  BaseModelBuilder <|-- CompanyBuilder
-  BaseModelBuilder <|-- ForecastBuilder
-
-  BaseModelBuilder ..> BuildSession : uses session
-}
-
-' ══════════════════════════════════════════════════════════
-' PROVIDER HIERARCHY (ingestion — uses Engine for paths)
-' ══════════════════════════════════════════════════════════
-package "Provider Hierarchy (ingestion)" #CC9966 {
-
-  abstract class BaseProvider {
-    + provider_name : str
+  abstract class BaseProvider <<abstract>> {
     + session : IngestSession
     --
     + {abstract} list_work_items(**kwargs) : list
@@ -927,85 +638,29 @@ package "Provider Hierarchy (ingestion)" #CC9966 {
     + {abstract} get_table_name(work_item) : str
   }
 
-  class AlphaVantageProvider {
-    - api_keys : list
-    - _key_pool : ApiKeyPool
-    --
-    + fetch(ticker) : Generator
-    + normalize(records, ticker) : DF
-    + list_work_items(tickers) : list
-  }
-
-  class SocrataBaseProvider {
-    - _client : SocrataClient
-    + fetch(endpoint) : Generator
-    - _paginate(endpoint, limit, offset)
-    - _transform_dates(records) : list
-  }
-
-  class ChicagoProvider {
-    .. extends SocrataBaseProvider ..
-  }
-
-  class CookCountyProvider {
-    .. extends SocrataBaseProvider ..
-    - _get_endpoint_config() : dict
-  }
-
-  BaseProvider <|-- AlphaVantageProvider
-  BaseProvider <|-- SocrataBaseProvider
-  SocrataBaseProvider <|-- ChicagoProvider
-  SocrataBaseProvider <|-- CookCountyProvider
-}
-
-' ══════════════════════════════════════════════════════════
-' INGESTION ENGINE
-' ══════════════════════════════════════════════════════════
-package "Ingestion Pipeline" #CC9966 {
-
   class IngestorEngine {
-    + providers : dict
+    + session : IngestSession
     + raw_sink : RawSink
     + bronze_sink : BronzeSink
-    + progress : BatchProgressTracker
     --
-    + run(provider_name, work_items, **kwargs)
-    - _process_work_item(provider, work_item)
+    + run(provider_id, work_items, **kwargs)
   }
 
   class RawSink {
-    .. downloads -> raw files (CSV, JSON, API responses) ..
     + raw_root : Path
     --
-    + write(data: bytes, provider: str, endpoint: str, partition: str) : Path
-    + exists(provider: str, endpoint: str, partition: str) : bool
-    + read(provider: str, endpoint: str, partition: str) : Any
-    + list_partitions(provider: str, endpoint: str) : list
+    + write(data, provider, endpoint, partition) : Path
+    + exists(provider, endpoint, partition) : bool
+    + read(provider, endpoint, partition) : Any
   }
 
-  note bottom of RawSink
-    HDD/NAS mount (bulk, cheap):
-    /mnt/disk/storage/raw/{provider}/{endpoint}/{partition}/
-    Preserves original downloaded data.
-    Re-ingestion reads from Raw, not from API.
-  end note
-
   class BronzeSink {
-    .. raw files -> typed Delta Lake tables ..
     + engine : Engine
     --
     + write_if_missing(table, partitions, df) : bool
-    + append_immutable(df, table, key_cols, partitions, date_col) : str
     + upsert(df, table, merge_keys, partitions) : str
-    + rebuild_from_raw(provider: str, endpoint: str) : str
+    + rebuild_from_raw(provider, endpoint) : str
   }
-
-  note bottom of BronzeSink
-    SSD mount (fast Delta scans):
-    /shared/storage/bronze/{provider}/{endpoint}/
-    Reads from Raw (HDD), applies schema, writes Delta (SSD).
-    Can rebuild Bronze from Raw without re-downloading.
-  end note
 
   class HttpClient {
     + base_url : str
@@ -1013,7 +668,6 @@ package "Ingestion Pipeline" #CC9966 {
     - _circuit_breaker : CircuitBreaker
     --
     + get(path, params) : Response
-    - _retry_request(method, url, **kwargs)
   }
 
   class TokenBucket {
@@ -1021,26 +675,23 @@ package "Ingestion Pipeline" #CC9966 {
     + capacity : int
     --
     + acquire(timeout) : bool
-    + reset()
   }
 
   class CircuitBreaker {
-    + config : CircuitBreakerConfig
     - _state : str
     --
     + call(fn, *args, **kwargs) : Any
     + reset()
-    + state : str <<property>>
   }
 
   class ApiKeyPool {
     - _keys : list
-    - _current_index : int
     --
     + next_key() : str
     + mark_exhausted(key)
   }
 
+  BaseProvider ..> IngestSession : uses session
   IngestorEngine *-- RawSink
   IngestorEngine *-- BronzeSink
   RawSink ..> BronzeSink : feeds
@@ -1049,53 +700,33 @@ package "Ingestion Pipeline" #CC9966 {
 }
 
 ' ══════════════════════════════════════════════════════════
-' MEASURES — handled by YAML config + build_measure_sql()
-' No class hierarchy needed. Measures are defined in domain
-' markdown frontmatter and translated to SQL by a function
-' in the handler layer (api/measures.py build_measure_sql).
-' The models/measures/ class hierarchy (BaseMeasure,
-' SimpleMeasure, ComputedMeasure, MeasureExecutor,
-' MeasureRegistry, DomainMeasures, StocksMeasures)
-' is dead code — removed in this vision.
-' ══════════════════════════════════════════════════════════
-
-' ══════════════════════════════════════════════════════════
 ' ORCHESTRATION
 ' ══════════════════════════════════════════════════════════
 package "Orchestration" #CC99FF {
 
   class PipelineScheduler {
-    - _scheduler
-    - _blocking : bool
     --
     + add_job(func, trigger, **trigger_args)
     + start()
-    + pause()
-    + resume()
     + shutdown()
   }
 
   class DependencyGraph {
-    - _graph : dict
-    - _configs_path : Path
     --
     + build()
     + topological_sort() : list[str]
     + filter_buildable(model_names) : list[str]
-    + has_circular_dependency() : bool
-    + visualize() : str
   }
 }
 
 ' ══════════════════════════════════════════════════════════
-' APP CONFIG
+' APP CONFIGURATION
 ' ══════════════════════════════════════════════════════════
 package "App Configuration" #E6E6E6 {
+
   class ConfigLoader {
-    + repo_root : Optional[Path]
     --
     + load(connection_type, log_level) : AppConfig
-    - _discover_repo_root(start) : Path
   }
 
   class AppConfig <<dataclass>> {
@@ -1103,19 +734,14 @@ package "App Configuration" #E6E6E6 {
     + connection : ConnectionConfig
     + storage : StorageConfig
     + apis : dict[str, APIConfig]
-    + debug : DebugConfig
   }
 
   class ConnectionFactory {
     + {static} create(connection_type, **kwargs) : DataConnection
-    + {static} get_spark_connection(session) : SparkConnection
-    + {static} get_duckdb_connection(db_path, **kwargs) : DuckDBConnection
   }
 
   ConfigLoader ..> AppConfig : produces
-  AppConfig ..> Engine : creates engine from
-  AppConfig ..> BuildSession : creates session from
-  AppConfig ..> QuerySession : creates session from
+  AppConfig ..> Engine : creates
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -1123,7 +749,6 @@ package "App Configuration" #E6E6E6 {
 ' ══════════════════════════════════════════════════════════
 package "Plugin System" #B3FFB3 {
   class BuildPluginRegistry {
-    - _plugins : dict[str, dict[str, list[Callable]]]
     --
     + {static} register(hook_type, model_name, fn)
     + {static} get(hook_type, model_name) : list
@@ -1135,28 +760,42 @@ package "Plugin System" #B3FFB3 {
 ' KEY RELATIONSHIPS
 ' ══════════════════════════════════════════════════════════
 DomainBuilderFactory ..> DomainConfigLoader : loads configs
-PipelineScheduler ..> DependencyGraph : order
-BronzeResolver ..> QuerySession : uses session
+PipelineScheduler ..> DependencyGraph : build order
+BuildSession ..> DomainConfigLoader : loads models
+
+' ══════════════════════════════════════════════════════════
+' MEASURES NOTE
+' ══════════════════════════════════════════════════════════
+note as MeasureNote
+  Measures: defined in DomainModelConfig.measures (YAML).
+  Translated to SQL by build_measure_sql() function.
+  No class hierarchy — YAML is the definition.
+  Used by: PivotHandler, MetricsHandler.
+end note
+
+' ══════════════════════════════════════════════════════════
+' STORAGE NOTE
+' ══════════════════════════════════════════════════════════
+note as StorageNote
+  | Layer | Mount | Path |
+  | Raw | HDD/NAS | /mnt/disk/storage/raw/{provider}/{endpoint}/ |
+  | Bronze | SSD | /shared/storage/bronze/{provider}/{endpoint}/ |
+  | Silver | SSD | /shared/storage/silver/{domain}/{model}/ |
+end note
 
 ' ══════════════════════════════════════════════════════════
 ' COLOR LEGEND
 ' ══════════════════════════════════════════════════════════
 legend right
   | Color | Layer |
-  |<#FFCC66> Gold | Domain Data Classes (from markdown YAML) |
-  |<#CC9966> Brown | Provider Data Classes + Ingestion |
-  |<#E6E6E6> Gray | Infrastructure Data Classes (from JSON/env) |
+  |<#FFCC66> Gold | Data Classes (from YAML/JSON) |
   |<#80E0D0> Teal | Engine + Sessions + Resolution |
-  |<#FF9933> Orange | Build Path (Spark) |
-  |<#3399FF> Blue | Query Path (DuckDB / Spark) |
-  |<#B3D9FF> Light Blue | REST API (handlers, routers) |
+  |<#FF9933> Orange | Build Path |
+  |<#B3D9FF> Light Blue | API Handlers |
+  |<#CC9966> Brown | Ingestion Path |
+  |<#CC99FF> Purple | Orchestration |
+  |<#E6E6E6> Gray | Infrastructure + Connections |
   |<#B3FFB3> Green | Plugin System |
-  |<#CC99FF> Purple | Orchestration (scheduler, deps) |
-
-  | Layer | Mount | Path |
-  | Raw | HDD/NAS | /mnt/disk/storage/raw/{provider}/{endpoint}/ |
-  | Bronze | SSD | /shared/storage/bronze/{provider}/{endpoint}/ |
-  | Silver | SSD | /shared/storage/silver/{domain}/{model}/ |
 endlegend
 
 @enduml
