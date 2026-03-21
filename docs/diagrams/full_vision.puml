@@ -766,61 +766,15 @@ package "Ingestion Pipeline" #CC9966 {
 }
 
 ' ══════════════════════════════════════════════════════════
-' MEASURE HIERARCHY
+' MEASURES — handled by YAML config + build_measure_sql()
+' No class hierarchy needed. Measures are defined in domain
+' markdown frontmatter and translated to SQL by a function
+' in the handler layer (api/measures.py build_measure_sql).
+' The models/measures/ class hierarchy (BaseMeasure,
+' SimpleMeasure, ComputedMeasure, MeasureExecutor,
+' MeasureRegistry, DomainMeasures, StocksMeasures)
+' is dead code — removed in this vision.
 ' ══════════════════════════════════════════════════════════
-package "Measure System" #80E0D0 {
-
-  abstract class BaseMeasure {
-    + name : str
-    + source : str
-    + data_type : str
-    + format : str
-    + tags : list
-    --
-    + {abstract} to_sql(ctx: EngineContext) : str
-    + execute(ctx: EngineContext, **kwargs) : Any
-  }
-
-  class SimpleMeasure {
-    + aggregation : str
-    --
-    + to_sql(ctx) : str
-  }
-
-  class ComputedMeasure {
-    + expression : str
-    --
-    + to_sql(ctx) : str
-  }
-
-  abstract class DomainMeasures {
-    + ctx : EngineContext
-    --
-    + get_table(table_name) : DF
-    + ticker_window(partition_col) : WindowSpec
-    + rolling_window(partition, order, rows) : WindowSpec
-    + add_returns(df, col, periods) : DF
-    + add_rolling_mean(df, col, window) : DF
-    + to_pandas(df) : DataFrame
-  }
-
-  class MeasureExecutor {
-    + ctx : EngineContext
-    --
-    + execute(measure_name, **kwargs) : Any
-    - _resolve_measure(name) : BaseMeasure
-  }
-
-  class MeasureRegistry {
-    - _registry : dict
-    --
-    + {static} register(measure_type) : Callable
-    + {static} create_measure(config) : BaseMeasure
-  }
-
-  BaseMeasure <|-- SimpleMeasure
-  BaseMeasure <|-- ComputedMeasure
-}
 
 ' ══════════════════════════════════════════════════════════
 ' ORCHESTRATION
@@ -897,7 +851,6 @@ package "Plugin System" #B3FFB3 {
 ' ══════════════════════════════════════════════════════════
 DomainBuilderFactory ..> DomainConfigLoader : loads configs
 PipelineScheduler ..> DependencyGraph : order
-MeasureExecutor ..> EngineContext : uses ctx
 BronzeResolver ..> EngineContext : uses ctx
 
 ' ══════════════════════════════════════════════════════════

@@ -523,9 +523,16 @@ package "Builder Hierarchy" #FFFFB3 {
 ' ══════════════════════════════════════════════════════════
 ' MEASURE SYSTEM
 ' ══════════════════════════════════════════════════════════
-package "Measure System" #FFFFB3 {
+package "Measure System (DEAD — entire hierarchy)" #FFB3B3 {
+  note as MeasureNote
+    Entire class hierarchy is dead.
+    Only caller: BaseModel.calculate_measure() — which is also dead.
+    Live measure logic is api/measures.py build_measure_sql()
+    (a function, not a class — used by PivotHandler + MetricsHandler).
+    ~500 lines across 6 files, zero external callers.
+  end note
 
-  abstract class BaseMeasure {
+  abstract class BaseMeasure #FFB3B3 {
     + name : str
     + source : str
     + data_type : str
@@ -536,19 +543,19 @@ package "Measure System" #FFFFB3 {
     + execute(adapter, **kwargs) : Any
   }
 
-  class SimpleMeasure {
+  class SimpleMeasure #FFB3B3 {
     + aggregation : str
     --
     + to_sql(adapter) : str
   }
 
-  class ComputedMeasure {
+  class ComputedMeasure #FFB3B3 {
     + expression : str
     --
     + to_sql(adapter) : str
   }
 
-  abstract class DomainMeasures {
+  abstract class DomainMeasures #FFB3B3 {
     + model : BaseModel
     --
     + get_table(table_name) : DF
@@ -560,12 +567,10 @@ package "Measure System" #FFFFB3 {
   }
 
   class StocksMeasures #FFB3B3 {
-    .. DEAD — extends DomainMeasures ..
     .. stocks-specific Spark measures ..
-    .. no external callers ..
   }
 
-  class MeasureExecutor {
+  class MeasureExecutor #FFB3B3 {
     + model : BaseModel
     + adapter : BackendAdapter
     --
@@ -573,7 +578,7 @@ package "Measure System" #FFFFB3 {
     - _resolve_measure(name) : BaseMeasure
   }
 
-  class MeasureRegistry {
+  class MeasureRegistry #FFB3B3 {
     - _registry : dict
     --
     + {static} register(measure_type) : Callable
@@ -928,7 +933,7 @@ UniversalSession *-- StorageRouter
 DomainBuilderFactory ..> DomainConfigLoaderV4 : loads configs
 HandlerRegistry *-- QueryEngine
 PipelineScheduler ..> DependencyGraph : order
-MeasureExecutor ..> BackendAdapter : uses
+MeasureExecutor ..> BackendAdapter : uses (dead chain)
 
 ' ══════════════════════════════════════════════════════════
 ' COLOR LEGEND
