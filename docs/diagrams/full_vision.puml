@@ -1,12 +1,11 @@
 @startuml "de_Funk Full Vision — Target Architecture"
 
-skinparam classAttributeIconSize 0
 skinparam classFontName "Courier New"
 skinparam classFontSize 10
 skinparam packageFontSize 12
 skinparam packageStyle rectangle
 skinparam linetype ortho
-skinparam interfaceBackgroundColor #F0F0F0
+skinparam style strictuml
 
 title de_Funk Full Vision — Target Architecture\nEngine/Session pattern. Typed data classes. Three paths.
 
