@@ -7,12 +7,25 @@ skinparam packageFontSize 12
 skinparam packageStyle rectangle
 skinparam linetype ortho
 
-title de_Funk Full Vision — Target Architecture\nTyped data classes mirror the YAML. EngineContext operates on them.
+title de_Funk Full Vision — Target Architecture\nThree paths: Ingest (write Raw+Bronze), Build (read+write Silver), Query (read Silver)
+
+note as ThreePaths
+  | Path | Reads | Writes | Config Needed |
+  | **Ingestion** | External APIs | Raw + Bronze | ProviderConfig + EndpointConfig |
+  | **Build** | Bronze + Silver | Silver | DomainModelConfig + SourceConfig |
+  | **Query** | Silver (+ Bronze) | nothing | DomainModelConfig (tables, graph, measures) |
+end note
 
 ' ══════════════════════════════════════════════════════════
 ' DOMAIN DATA CLASSES (mirror the markdown YAML frontmatter)
 ' ══════════════════════════════════════════════════════════
 package "Domain Data Classes (from markdown frontmatter)" #FFCC66 {
+
+  note as DomainNote
+    Passive @dataclasses mirroring YAML structure.
+    No behavior — just typed shape.
+    Used by: Build path + Query path
+  end note
 
   class SchemaField <<dataclass>> {
     + name : str
@@ -129,6 +142,11 @@ package "Domain Data Classes (from markdown frontmatter)" #FFCC66 {
 ' ══════════════════════════════════════════════════════════
 package "Provider Data Classes (from data source markdown)" #CC9966 {
 
+  note as ProviderNote
+    Passive @dataclasses mirroring provider/endpoint YAML.
+    Used by: Ingestion path only
+  end note
+
   class EndpointSchemaField <<dataclass>> {
     + name : str
     + type : str
@@ -187,6 +205,12 @@ package "Provider Data Classes (from data source markdown)" #CC9966 {
 ' INFRASTRUCTURE DATA CLASSES (from JSON/env — not markdown)
 ' ══════════════════════════════════════════════════════════
 package "Infrastructure Data Classes (from storage.json, run_config.json, .env)" #E6E6E6 {
+
+  note as InfraNote
+    Passive @dataclasses from JSON/env.
+    Describes where/how to run, not what data exists.
+    Used by: All three paths
+  end note
 
   class RootsConfig <<dataclass>> {
     + raw : str
@@ -258,60 +282,88 @@ package "Infrastructure Data Classes (from storage.json, run_config.json, .env)"
 ' ══════════════════════════════════════════════════════════
 ' ENGINE CONTEXT (operates on typed data classes)
 ' ══════════════════════════════════════════════════════════
-package "Engine Context (universal runtime)" #80E0D0 {
+package "Engine Context (initialized system state — NOT a god object)" #80E0D0 {
+
+  note as CtxNote
+    Container of ready-to-use objects. Has no logic itself.
+    DOES: Hold references to configs, resolver, connection, ops.
+    DOES NOT: Load configs, build graphs, execute SQL, build models.
+    Flat API (ctx.join, ctx.filter) delegates to internal _ops/_sql.
+  end note
 
   class EngineContext {
-    .. infrastructure (from JSON/env) ..
+    .. shared infrastructure ..
     + storage : StorageConfig
-    + connection : ConnectionConfig
-    + run : RunConfig
-    + repo_root : Path
-    .. domain knowledge (from markdown) ..
-    + models : dict[str, DomainModelConfig]
-    + providers : dict[str, ProviderConfig]
-    + endpoints : dict[str, EndpointConfig]
-    .. live connection (created from config) ..
     + conn : DataConnection
     + backend : str
-    .. composed objects (built from above) ..
-    + field_resolver : FieldResolver
-    + domain_loader : DomainConfigLoader
+    + repo_root : Path
     .. private strategy ..
     - _ops : DataOps
     - _sql : SqlOps
     --
-    .. DataFrame ops (flat API, delegates to _ops) ..
-    + select(df, columns: dict) : Any
-    + filter(df, filters: list) : Any
-    + derive(df, col: str, expr: str) : Any
-    + join(left, right, on: list, how: str) : Any
-    + union(dfs: list) : Any
-    + dedup(df, subset: list) : Any
-    + read(path: str) : Any
-    + write(df, path: str, format: str, mode: str) : Any
-    + empty_df(columns: list) : Any
+    .. DataFrame ops (delegates to _ops) ..
+    + select(df, columns) : Any
+    + filter(df, filters) : Any
+    + derive(df, col, expr) : Any
+    + join(left, right, on, how) : Any
+    + union(dfs) : Any
+    + dedup(df, subset) : Any
+    + read(path) : Any
+    + write(df, path, format, mode) : Any
     + count(df) : int
     + to_pandas(df) : DataFrame
-    .. SQL ops (flat API, delegates to _sql) ..
-    + execute_sql(sql: str) : Any
-    + scan(path: str) : str
-    + build_from(tables, resolver, allowed_domains) : str
-    + build_where(filters: list) : str
-    + build_order(sort, x_resolved) : str
-    + distinct_values(resolved, extra_filters, resolver) : list
-    .. model ops (flat API) ..
-    + load_model(model_name) : BaseModel
-    + get_table(model_name, table_name, columns, filters) : Any
-    + list_models() : list[str]
-    + list_tables(model_name) : dict
+    .. SQL ops (delegates to _sql) ..
+    + execute_sql(sql) : Any
+    + scan(path) : str
     --
-    + {static} from_config(config: AppConfig) : EngineContext
-    + {static} for_build(spark, storage_cfg, repo_root) : EngineContext
-    + {static} for_query(duckdb_path, storage_cfg, repo_root) : EngineContext
+    + {static} for_spark(spark, storage) : EngineContext
+    + {static} for_duckdb(duckdb_path, storage) : EngineContext
+  }
+
+  class IngestContext {
+    .. Ingestion path: reads APIs, writes Raw + Bronze ..
+    + engine : EngineContext
+    + providers : dict[str, ProviderConfig]
+    + endpoints : dict[str, EndpointConfig]
+    + run : RunConfig
+    --
+    + get_provider(provider_id) : ProviderConfig
+    + get_endpoint(provider_id, endpoint_id) : EndpointConfig
+    + raw_path(provider, endpoint) : str
+    + bronze_path(provider, endpoint) : str
+  }
+
+  class BuildContext {
+    .. Build path: reads Bronze+Silver, writes Silver ..
+    + engine : EngineContext
+    + models : dict[str, DomainModelConfig]
+    + loader : DomainConfigLoader
+    + date_from : str
+    + date_to : str
+    + max_tickers : Optional[int]
+    + dry_run : bool
+    --
+    + get_model(model_name) : DomainModelConfig
+    + get_dependencies(model_name) : list[str]
+    + silver_path(domain, model) : str
+    + bronze_path(provider, endpoint) : str
+  }
+
+  class QueryContext {
+    .. Query path: reads Silver (+Bronze), writes nothing ..
+    + engine : EngineContext
+    + models : dict[str, DomainModelConfig]
+    + resolver : FieldResolver
+    + storage_router : StorageRouter
+    --
+    + resolve(ref_str) : ResolvedField
+    + find_join_path(src, dst) : list
+    + distinct_values(resolved) : list
+    + build_from(tables, allowed_domains) : str
+    + build_where(filters) : str
   }
 
   abstract class DataOps <<internal>> {
-    .. backend-specific DataFrame operations ..
     + {abstract} select(df, columns) : Any
     + {abstract} filter(df, filters) : Any
     + {abstract} derive(df, col, expr) : Any
@@ -320,25 +372,21 @@ package "Engine Context (universal runtime)" #80E0D0 {
     + {abstract} dedup(df, subset) : Any
     + {abstract} read(path) : Any
     + {abstract} write(df, path, format, mode) : Any
-    + {abstract} empty_df(columns) : Any
     + {abstract} count(df) : int
     + {abstract} to_pandas(df) : DataFrame
   }
 
   abstract class SqlOps <<internal>> {
-    .. backend-specific SQL generation + execution ..
     + {abstract} execute_sql(sql, max_rows) : list
     + {abstract} scan(path) : str
     + {abstract} build_from(tables, resolver) : str
     + {abstract} build_where(filters) : str
-    + {abstract} build_order(sort) : str
     + {abstract} distinct_values(resolved) : list
   }
 
   class DuckDBOps <<internal>> {
     - _conn : duckdb.Connection
     - _scan_cache : dict
-    - _delta_available : bool
     --
     .. DuckDB implementations ..
   }
@@ -351,7 +399,6 @@ package "Engine Context (universal runtime)" #80E0D0 {
 
   class DuckDBSql <<internal>> {
     - _conn : duckdb.Connection
-    - _max_sql_rows : int
     --
     .. DuckDB SQL generation ..
   }
@@ -362,29 +409,34 @@ package "Engine Context (universal runtime)" #80E0D0 {
     .. Spark SQL generation ..
   }
 
-  EngineContext *-- DataOps : _ops (private)
-  EngineContext *-- SqlOps : _sql (private)
+  EngineContext *-- DataOps : _ops
+  EngineContext *-- SqlOps : _sql
   DataOps <|-- DuckDBOps
   DataOps <|-- SparkOps
   SqlOps <|-- DuckDBSql
   SqlOps <|-- SparkSql
 
-  note right of EngineContext
-    Takes typed data classes, not raw dicts:
-      ctx.storage.roots.silver (not storage_cfg["roots"]["silver"])
-      ctx.models["stocks"].graph.edges[0].join_keys (not dict chains)
-    Composed internally:
-      _ops: DataOps (DuckDBOps or SparkOps)
-      _sql: SqlOps (DuckDBSql or SparkSql)
-    Created once from configs, passed everywhere as ctx.
-  end note
+  IngestContext *-- EngineContext : engine
+  IngestContext *-- ProviderConfig : holds many
+  IngestContext *-- EndpointConfig : holds many
+  IngestContext *-- RunConfig
 
-  EngineContext *-- StorageConfig
-  EngineContext *-- ConnectionConfig
-  EngineContext *-- RunConfig
-  EngineContext *-- DomainModelConfig : holds many
-  EngineContext *-- ProviderConfig : holds many
-  EngineContext *-- EndpointConfig : holds many
+  BuildContext *-- EngineContext : engine
+  BuildContext *-- DomainModelConfig : holds many
+
+  QueryContext *-- EngineContext : engine
+  QueryContext *-- DomainModelConfig : holds many
+  QueryContext *-- FieldResolver
+  QueryContext *-- StorageRouter
+
+  note right of EngineContext
+    Shared base: connection + backend-agnostic ops.
+    No configs, no domain knowledge.
+    Sub-contexts add path-specific state:
+      IngestContext: providers + endpoints
+      BuildContext: models + sources + date range
+      QueryContext: models + resolver + storage router
+  end note
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -479,7 +531,7 @@ package "Field Resolution" #80E0D0 {
 ' ══════════════════════════════════════════════════════════
 ' CONFIG LOADING
 ' ══════════════════════════════════════════════════════════
-package "Config Loading" #FFCC66 {
+package "Config Loading (parse files -> produce data classes)" #FFCC66 {
 
   class DomainConfigLoader {
     - domains_dir : Path
@@ -569,13 +621,13 @@ package "Connection Hierarchy" #E6E6E6 {
 package "Model Hierarchy (build)" #FF9933 {
 
   class BaseModel {
-    + ctx : EngineContext
+    + ctx : BuildContext
     + config : DomainModelConfig
     - _dims : dict
     - _facts : dict
     - _built : bool
     --
-    + __init__(ctx: EngineContext, config: DomainModelConfig)
+    + __init__(ctx: BuildContext, config: DomainModelConfig)
     + build() : tuple[dict, dict]
     + ensure_built()
     + before_build()
@@ -589,11 +641,10 @@ package "Model Hierarchy (build)" #FF9933 {
   }
 
   note right of BaseModel
-    Takes typed objects:
-    - ctx: EngineContext (infra + connection + ops)
-    - config: DomainModelConfig (typed YAML, not raw dict)
-    Reads config.graph.edges (not model_cfg["graph"]["edges"])
-    Constructor: 5 untyped params -> 2 typed params
+    Takes BuildContext (build path state) +
+    DomainModelConfig (typed YAML, not raw dict).
+    Reads Bronze + Silver from dependencies.
+    Writes Silver tables.
   end note
 
   class DomainModel {
@@ -648,7 +699,7 @@ package "Model Hierarchy (build)" #FF9933 {
   TimeSeriesForecastModel <|-- ForecastModel
   BaseModel *-- GraphBuilder
   BaseModel *-- ModelWriter
-  BaseModel ..> EngineContext : uses ctx
+  BaseModel ..> BuildContext : uses ctx
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -737,14 +788,14 @@ package "Handler Hierarchy (API)" #B3D9FF {
 
   abstract class ExhibitHandler {
     + handles : set[str]
-    + ctx : EngineContext
+    + ctx : QueryContext
     --
     + {abstract} execute(payload: dict, resolver: Any) : Any
   }
 
   class HandlerRegistry {
     - _handlers : dict
-    + ctx : EngineContext
+    + ctx : QueryContext
     --
     + register(handler)
     + get(type_str) : ExhibitHandler
@@ -791,7 +842,7 @@ package "Handler Hierarchy (API)" #B3D9FF {
   ExhibitHandler <|-- BoxHandler
   ExhibitHandler <|-- TableDataHandler
 
-  ExhibitHandler ..> EngineContext : uses ctx
+  ExhibitHandler ..> QueryContext : uses ctx
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -1103,7 +1154,7 @@ package "Plugin System" #B3FFB3 {
 ' ══════════════════════════════════════════════════════════
 DomainBuilderFactory ..> DomainConfigLoader : loads configs
 PipelineScheduler ..> DependencyGraph : order
-BronzeResolver ..> EngineContext : uses ctx
+BronzeResolver ..> QueryContext : uses ctx
 
 ' ══════════════════════════════════════════════════════════
 ' COLOR LEGEND
