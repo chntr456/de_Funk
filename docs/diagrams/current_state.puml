@@ -926,6 +926,31 @@ package "Dead Utils / Imports" #FFB3B3 {
 }
 
 ' ══════════════════════════════════════════════════════════
+' CONFIG GAP — YAML structure exists but no typed data classes
+' ══════════════════════════════════════════════════════════
+package "Config Gap (YAML -> raw dicts, no types)" #FFFFCC {
+
+  note as ConfigGapNote
+    YAML frontmatter has rich nested structure:
+    - DomainModelConfig: model, graph.edges, build.phases, measures, tables, sources
+    - TableConfig: schema (SchemaField[]), primary_key, enrich
+    - SourceConfig: aliases (AliasSpec[]), maps_to, from
+    - ProviderConfig: provider_id, endpoints, rate_limit
+    - EndpointConfig: schema, write_strategy, pagination
+
+    But Python loads it all as Dict[str, Any]:
+    - model_cfg["graph"]["edges"][0][3]  (no IDE help)
+    - storage_cfg.get("roots", {}).get("silver", "")
+    - config.get("build", {}).get("phases", {}).get("1", {})
+
+    No validation, no completion, no documentation.
+    Key typos fail at runtime, not parse time.
+
+    See Proposal 018: typed @dataclass for every YAML structure.
+  end note
+}
+
+' ══════════════════════════════════════════════════════════
 ' KEY CROSS-LAYER RELATIONSHIPS
 ' ══════════════════════════════════════════════════════════
 BaseModel *-- StorageRouter

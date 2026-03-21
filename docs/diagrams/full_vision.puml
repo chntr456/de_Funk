@@ -7,28 +7,275 @@ skinparam packageFontSize 12
 skinparam packageStyle rectangle
 skinparam linetype ortho
 
-title de_Funk Full Vision — Target Architecture\nEngineContext is the universal runtime. The model IS the markdown.
+title de_Funk Full Vision — Target Architecture\nTyped data classes mirror the YAML. EngineContext operates on them.
 
 ' ══════════════════════════════════════════════════════════
-' ENGINE CONTEXT (the universal runtime — replaces all parameter threading)
+' DOMAIN DATA CLASSES (mirror the markdown YAML frontmatter)
+' ══════════════════════════════════════════════════════════
+package "Domain Data Classes (from markdown frontmatter)" #FFCC66 {
+
+  class SchemaField <<dataclass>> {
+    + name : str
+    + type : str
+    + nullable : bool
+    + description : str
+    + derived : Optional[str]
+    + fk : Optional[str]
+    + format : Optional[str]
+  }
+
+  class EdgeSpec <<dataclass>> {
+    + name : str
+    + from_table : str
+    + to_table : str
+    + join_keys : list[str]
+    + cardinality : str
+    + target_domain : Optional[str]
+    + optional : bool
+  }
+
+  class MeasureDef <<dataclass>> {
+    + name : str
+    + aggregation : str
+    + field : str | dict
+    + label : str
+    + format : Optional[str]
+    + options : dict
+  }
+
+  class AliasSpec <<dataclass>> {
+    + target_column : str
+    + expression : str
+  }
+
+  class EnrichSpec <<dataclass>> {
+    + from_table : str
+    + join : list[str]
+    + columns : list[str]
+  }
+
+  class TableConfig <<dataclass>> {
+    + table : str
+    + table_type : str
+    + schema : list[SchemaField]
+    + primary_key : list[str]
+    + unique_key : list[str]
+    + partition_by : list[str]
+    + measures : list[MeasureDef]
+    + enrich : list[EnrichSpec]
+    + extends : Optional[str]
+  }
+
+  class SourceConfig <<dataclass>> {
+    + source : str
+    + maps_to : str
+    + from_ref : str
+    + aliases : list[AliasSpec]
+    + domain_source : Optional[str]
+    + filter : list[str]
+    + extends : Optional[str]
+  }
+
+  class GraphSpec <<dataclass>> {
+    + edges : list[EdgeSpec]
+    + paths : dict[str, Any]
+  }
+
+  class BuildSpec <<dataclass>> {
+    + sort_by : list[str]
+    + optimize : bool
+    + partitions : list[str]
+    + phases : dict[str, PhaseSpec]
+  }
+
+  class MeasuresSpec <<dataclass>> {
+    + simple : list[MeasureDef]
+    + computed : list[MeasureDef]
+  }
+
+  class DomainModelConfig <<dataclass>> {
+    + model : str
+    + version : str
+    + description : str
+    + extends : list[str]
+    + depends_on : list[str]
+    + status : str
+    + storage : ModelStorageSpec
+    + graph : GraphSpec
+    + build : BuildSpec
+    + measures : MeasuresSpec
+    + metadata : dict
+    --
+    + tables : dict[str, TableConfig]
+    + sources : dict[str, SourceConfig]
+    + views : dict[str, Any]
+  }
+
+  DomainModelConfig *-- GraphSpec
+  DomainModelConfig *-- BuildSpec
+  DomainModelConfig *-- MeasuresSpec
+  DomainModelConfig *-- TableConfig
+  DomainModelConfig *-- SourceConfig
+  TableConfig *-- SchemaField
+  TableConfig *-- MeasureDef
+  TableConfig *-- EnrichSpec
+  SourceConfig *-- AliasSpec
+  GraphSpec *-- EdgeSpec
+  MeasuresSpec *-- MeasureDef
+}
+
+' ══════════════════════════════════════════════════════════
+' PROVIDER DATA CLASSES (from endpoint/provider markdown)
+' ══════════════════════════════════════════════════════════
+package "Provider Data Classes (from data source markdown)" #CC9966 {
+
+  class EndpointSchemaField <<dataclass>> {
+    + name : str
+    + type : str
+    + source_field : str
+    + nullable : bool
+    + description : str
+    + transform : Optional[str]
+    + coerce : Optional[str]
+    + default : Optional[Any]
+  }
+
+  class EndpointConfig <<dataclass>> {
+    + endpoint_id : str
+    + provider : str
+    + method : str
+    + endpoint_pattern : str
+    + format : str
+    + default_query : dict
+    + required_params : list[str]
+    + pagination_type : str
+    + bulk_download : bool
+    + json_structure : str
+    + raw_schema : list[list]
+    + schema : list[EndpointSchemaField]
+    + bronze : Optional[str]
+    + partitions : list[str]
+    + write_strategy : str
+    + key_columns : list[str]
+    + date_column : Optional[str]
+    + domain : str
+    + status : str
+    + update_cadence : str
+  }
+
+  class ProviderConfig <<dataclass>> {
+    + provider_id : str
+    + provider : str
+    + api_type : str
+    + base_url : str
+    + auth_model : str
+    + env_api_key : str
+    + rate_limit_per_sec : float
+    + default_headers : dict
+    + provider_settings : dict
+    + endpoints : list[str]
+    + models : list[str]
+    + category : str
+    + data_domains : list[str]
+    + status : str
+  }
+
+  EndpointConfig *-- EndpointSchemaField
+}
+
+' ══════════════════════════════════════════════════════════
+' INFRASTRUCTURE DATA CLASSES (from JSON/env — not markdown)
+' ══════════════════════════════════════════════════════════
+package "Infrastructure Data Classes (from storage.json, run_config.json, .env)" #E6E6E6 {
+
+  class RootsConfig <<dataclass>> {
+    + raw : str
+    + bronze : str
+    + silver : str
+  }
+
+  note bottom of RootsConfig
+    Different physical storage:
+    raw = HDD/NAS (bulk, archival)
+    bronze + silver = SSD (fast scans)
+  end note
+
+  class ApiLimits <<dataclass>> {
+    + duckdb_memory_limit : str
+    + max_sql_rows : int
+    + max_dimension_values : int
+    + max_response_mb : float
+  }
+
+  class TablePath <<dataclass>> {
+    + root : str
+    + rel : str
+    + partitions : list[str]
+  }
+
+  class StorageConfig <<dataclass>> {
+    + roots : RootsConfig
+    + api : ApiLimits
+    + default_format : str
+    + domain_roots : dict[str, str]
+    + tables : dict[str, TablePath]
+  }
+
+  class ConnectionConfig <<dataclass>> {
+    + type : str
+    + spark : Optional[SparkConfig]
+    + duckdb : Optional[DuckDBConfig]
+  }
+
+  class ClusterConfig <<dataclass>> {
+    + spark_master : str
+    + fallback_to_local : bool
+    + task_batch_size : int
+  }
+
+  class RetryConfig <<dataclass>> {
+    + max_retries : int
+    + retry_delay_seconds : float
+    + exponential_backoff : bool
+  }
+
+  class RunConfig <<dataclass>> {
+    + defaults : dict
+    + providers : dict[str, dict]
+    + silver_models : list[str]
+    + cluster : ClusterConfig
+    + retry : RetryConfig
+    + profiles : dict[str, dict]
+  }
+
+  StorageConfig *-- RootsConfig
+  StorageConfig *-- ApiLimits
+  StorageConfig *-- TablePath
+  RunConfig *-- ClusterConfig
+  RunConfig *-- RetryConfig
+}
+
+' ══════════════════════════════════════════════════════════
+' ENGINE CONTEXT (operates on typed data classes)
 ' ══════════════════════════════════════════════════════════
 package "Engine Context (universal runtime)" #80E0D0 {
 
   class EngineContext {
-    .. identity (set once at creation) ..
+    .. infrastructure (from JSON/env) ..
+    + storage : StorageConfig
+    + connection : ConnectionConfig
+    + run : RunConfig
     + repo_root : Path
-    + app_config : AppConfig
-    + connection : DataConnection
+    .. domain knowledge (from markdown) ..
+    + models : dict[str, DomainModelConfig]
+    + providers : dict[str, ProviderConfig]
+    + endpoints : dict[str, EndpointConfig]
+    .. live connection (created from config) ..
+    + conn : DataConnection
     + backend : str
-    .. composed objects (set once at creation) ..
-    + storage_router : StorageRouter
+    .. composed objects (built from above) ..
     + field_resolver : FieldResolver
     + domain_loader : DomainConfigLoader
-    + registry : ModelRegistry
-    .. storage mounts (from storage.json) ..
-    + raw_root : Path
-    + bronze_root : Path
-    + silver_root : Path
     .. private strategy ..
     - _ops : DataOps
     - _sql : SqlOps
@@ -123,14 +370,21 @@ package "Engine Context (universal runtime)" #80E0D0 {
   SqlOps <|-- SparkSql
 
   note right of EngineContext
-    Flat API externally (ctx.join, ctx.filter, ctx.execute_sql)
+    Takes typed data classes, not raw dicts:
+      ctx.storage.roots.silver (not storage_cfg["roots"]["silver"])
+      ctx.models["stocks"].graph.edges[0].join_keys (not dict chains)
     Composed internally:
       _ops: DataOps (DuckDBOps or SparkOps)
       _sql: SqlOps (DuckDBSql or SparkSql)
-    No FilterEngine, no BackendOps, no QuerySession.
-    113 backend branches -> internal dispatch.
-    Created once, passed everywhere as ctx.
+    Created once from configs, passed everywhere as ctx.
   end note
+
+  EngineContext *-- StorageConfig
+  EngineContext *-- ConnectionConfig
+  EngineContext *-- RunConfig
+  EngineContext *-- DomainModelConfig : holds many
+  EngineContext *-- ProviderConfig : holds many
+  EngineContext *-- EndpointConfig : holds many
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -316,12 +570,12 @@ package "Model Hierarchy (build)" #FF9933 {
 
   class BaseModel {
     + ctx : EngineContext
-    + model_cfg : dict
+    + config : DomainModelConfig
     - _dims : dict
     - _facts : dict
     - _built : bool
     --
-    + __init__(ctx: EngineContext, model_cfg: dict)
+    + __init__(ctx: EngineContext, config: DomainModelConfig)
     + build() : tuple[dict, dict]
     + ensure_built()
     + before_build()
@@ -335,13 +589,11 @@ package "Model Hierarchy (build)" #FF9933 {
   }
 
   note right of BaseModel
-    ctx replaces:
-    - connection (ctx.connection)
-    - storage_cfg (ctx.storage_router)
-    - repo_root (ctx.repo_root)
-    - backend detection (ctx.backend)
-    - all if/else branching (ctx.select, ctx.filter, etc.)
-    Constructor: 5 params -> 2 params
+    Takes typed objects:
+    - ctx: EngineContext (infra + connection + ops)
+    - config: DomainModelConfig (typed YAML, not raw dict)
+    Reads config.graph.edges (not model_cfg["graph"]["edges"])
+    Constructor: 5 untyped params -> 2 typed params
   end note
 
   class DomainModel {
@@ -858,15 +1110,15 @@ BronzeResolver ..> EngineContext : uses ctx
 ' ══════════════════════════════════════════════════════════
 legend right
   | Color | Layer |
-  |<#80E0D0> Teal | Engine Context + Resolution + Measures (shared) |
-  |<#FFCC66> Gold | Domain Config Loading |
+  |<#FFCC66> Gold | Domain Data Classes (from markdown YAML) |
+  |<#CC9966> Brown | Provider Data Classes + Ingestion |
+  |<#E6E6E6> Gray | Infrastructure Data Classes (from JSON/env) |
+  |<#80E0D0> Teal | Engine Context + Resolution (shared) |
   |<#FF9933> Orange | Build Path (Spark) |
   |<#3399FF> Blue | Query Path (DuckDB / Spark) |
   |<#B3D9FF> Light Blue | REST API (handlers, routers) |
   |<#B3FFB3> Green | Plugin System |
-  |<#CC9966> Brown | Ingestion (providers, Raw + Bronze sinks) |
   |<#CC99FF> Purple | Orchestration (scheduler, deps) |
-  |<#E6E6E6> Gray | Infrastructure (config, connections) |
 
   | Layer | Mount | Path |
   | Raw | HDD/NAS | /mnt/disk/storage/raw/{provider}/{endpoint}/ |
