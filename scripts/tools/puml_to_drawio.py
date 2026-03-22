@@ -36,6 +36,7 @@ class PumlEdge:
     src: str
     tgt: str
     style: str
+    label: str = ""
 
 
 def parse_puml(text: str) -> tuple[list[PumlClass], list[PumlEdge], dict[str, str]]:
@@ -105,26 +106,26 @@ def parse_puml(text: str) -> tuple[list[PumlClass], list[PumlEdge], dict[str, st
                 current_class.methods.append(member)
 
         if not current_class:
-            m = re.match(r'(\S+)\s+<\|--\s+(\S+)', stripped)
+            m = re.match(r'(\S+)\s+<\|--\s+(\S+)(?:\s*:\s*(.+))?', stripped)
             if m:
-                edges.append(PumlEdge(src=m.group(2), tgt=m.group(1), style='inherit'))
+                edges.append(PumlEdge(src=m.group(2), tgt=m.group(1), style='inherit', label=m.group(3) or ''))
                 continue
-            m = re.match(r'(\S+)\s+--\|>\s+(\S+)', stripped)
+            m = re.match(r'(\S+)\s+--\|>\s+(\S+)(?:\s*:\s*(.+))?', stripped)
             if m:
-                edges.append(PumlEdge(src=m.group(1), tgt=m.group(2), style='inherit'))
+                edges.append(PumlEdge(src=m.group(1), tgt=m.group(2), style='inherit', label=m.group(3) or ''))
                 continue
-            m = re.match(r'(\S+)\s+\*--\s+(\S+)', stripped)
+            m = re.match(r'(\S+)\s+\*--\s+(\S+)(?:\s*:\s*(.+))?', stripped)
             if m:
-                edges.append(PumlEdge(src=m.group(1), tgt=m.group(2), style='compose'))
+                edges.append(PumlEdge(src=m.group(1), tgt=m.group(2), style='compose', label=m.group(3) or ''))
                 continue
-            m = re.match(r'(\S+)\s+\.\.>\s+(\S+)', stripped)
+            m = re.match(r'(\S+)\s+\.\.>\s+(\S+)(?:\s*:\s*(.+))?', stripped)
             if m:
-                edges.append(PumlEdge(src=m.group(1), tgt=m.group(2), style='delegate'))
+                edges.append(PumlEdge(src=m.group(1), tgt=m.group(2), style='delegate', label=m.group(3) or ''))
                 continue
             # A <|.. B (B realizes interface A)
-            m = re.match(r'(\S+)\s+<\|\.\.\s+(\S+)', stripped)
+            m = re.match(r'(\S+)\s+<\|\.\.\s+(\S+)(?:\s*:\s*(.+))?', stripped)
             if m:
-                edges.append(PumlEdge(src=m.group(2), tgt=m.group(1), style='realize'))
+                edges.append(PumlEdge(src=m.group(2), tgt=m.group(1), style='realize', label=m.group(3) or ''))
                 continue
 
     return list(classes.values()), edges, pkg_colors
@@ -381,8 +382,10 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
         tgt_id = node_ids.get(e.tgt)
         if src_id and tgt_id:
             style = edge_styles.get(e.style, edge_styles['delegate'])
+            label = xe(e.label.strip()) if e.label else ''
             cells.append(
-                f'      <mxCell id="{cid}" value="" style="{style}" '
+                f'      <mxCell id="{cid}" value="{label}" style="{style}'
+                f'fontSize=9;fontFamily=Courier New;" '
                 f'edge="1" parent="1" source="{src_id}" target="{tgt_id}">'
                 f'<mxGeometry relative="1" as="geometry"/></mxCell>')
             cid += 1
