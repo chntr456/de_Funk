@@ -287,17 +287,16 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             continue
         x, y = positions[c.name]
 
-        # Build header value for swimlane (html=1 mode)
-        # draw.io uses a lenient HTML parser — raw <br> and <b> tags work
-        # in value attributes even though they're technically invalid XML.
-        # The &amp; escaping is for << >> chevrons only.
+        # Build header value — plain text, no HTML tags
+        # draw.io swimlane headers render value as plain text
+        # Use &#xa; for newlines within the attribute value
         header_lines = []
         if c.stereotype:
-            header_lines.append(f"&amp;lt;&amp;lt;{c.stereotype}&amp;gt;&amp;gt;")
-        header_lines.append(f"<b>{c.name}</b>")
+            header_lines.append(f"&lt;&lt;{xe(c.stereotype)}&gt;&gt;")
+        header_lines.append(xe(c.name))
         if c.is_abstract:
             header_lines.append("{abstract}")
-        header_value = "<br>".join(header_lines)
+        header_value = "&#xa;".join(header_lines)
 
         # Calculate header height based on lines
         num_header_lines = len(header_lines)
@@ -318,7 +317,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             f'style="swimlane;fontStyle={font_style};align=center;verticalAlign=top;'
             f'childLayout=stackLayout;horizontal=1;startSize={start_size};'
             f'horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;'
-            f'collapsible=0;marginBottom=0;html=1;whiteSpace=wrap;'
+            f'collapsible=0;marginBottom=0;whiteSpace=wrap;'
             f'fillColor={c.color};strokeColor=#333333;fontFamily=Courier New;fontSize=10;" '
             f'vertex="1" parent="1">'
             f'<mxGeometry x="{x}" y="{y}" width="{NODE_W}" height="{total_h}" as="geometry"/>'
@@ -488,9 +487,8 @@ def main():
     classes, edges, pkg_colors = parse_puml(text)
     xml = generate_drawio(classes, edges, pkg_colors)
 
-    # draw.io uses lenient HTML parsing in value attributes.
-    # Raw <br> and <b> tags are technically invalid XML but required by draw.io.
-    # Skip strict XML validation.
+    ET.fromstring(xml)
+
     out_path = puml_path.with_suffix('.drawio')
     out_path.write_text(xml)
     print(f"Converted: {puml_path} -> {out_path}")
