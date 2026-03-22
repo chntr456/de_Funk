@@ -156,12 +156,12 @@ def _sugiyama_layout(
       5. Minimize edge crossings by reordering within ranks
     """
     class_map = {c.name: c for c in classes}
-    COL_W = 380
-    NODE_W = COL_W - 30
-    RANK_GAP = 30  # vertical gap between nodes
+    COL_W = 400
+    NODE_W = COL_W - 50
+    RANK_GAP = 20  # vertical gap between nodes
     PKG_LABEL_H = 30
-    PKG_GAP_X = 40  # horizontal gap between package columns
-    PKG_GAP_Y = 60  # vertical gap between package rows
+    PKG_GAP_X = 60  # horizontal gap between package columns
+    PKG_GAP_Y = 40  # vertical gap between package rows
 
     # Step 1: compute inheritance rank (depth from root)
     children: dict[str, list[str]] = {}
@@ -241,21 +241,13 @@ def _sugiyama_layout(
             y += PKG_LABEL_H
             pkg_classes = packages.get(pkg_name, [])
 
-            # Within package: use 2 columns if > 6 classes
-            if len(pkg_classes) > 6:
-                inner_cols = 2
-            else:
-                inner_cols = 1
-
-            inner_col_y = [y] * inner_cols
-            for i, c in enumerate(pkg_classes):
-                ic = i % inner_cols
+            # Single column within package
+            for c in pkg_classes:
                 h = _node_height(c)
-                cx = base_x + ic * (NODE_W + 10)
-                positions[c.name] = (cx, inner_col_y[ic])
-                inner_col_y[ic] += h + RANK_GAP
+                positions[c.name] = (base_x, y)
+                y += h + RANK_GAP
 
-            y = max(inner_col_y) + PKG_GAP_Y
+            y += PKG_GAP_Y
 
     return positions
 
