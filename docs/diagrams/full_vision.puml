@@ -492,16 +492,30 @@ package "Field Resolution" #80E0D0 {
     + domain : str <<property>>
   }
 
+  class DomainGraph {
+    - _adjacency : dict[str, list[tuple]]
+    - _domain_deps : dict[str, set[str]]
+    - _table_to_domain : dict[str, str]
+    --
+    + __init__(models: dict[str, DomainModelConfig])
+    + find_join_path(src, dst, allowed_domains) : list[tuple]
+    + reachable_domains(core_domains) : set[str]
+    + neighbors(table_name) : list[str]
+    + domains_for_table(table_name) : str
+    + all_tables() : list[str]
+    + all_edges() : list[EdgeSpec]
+    + subgraph(domains) : DomainGraph
+    + distance(table_a, table_b) : int
+    + connected_components() : list[set[str]]
+  }
+
   class FieldResolver {
     - _index : dict
-    - _join_graph : dict
-    - _domain_deps : dict
+    + graph : DomainGraph
     --
     + __init__(models: dict[str, DomainModelConfig])
     + resolve(ref_str) : ResolvedField
     + resolve_many(refs) : dict
-    + find_join_path(src, dst, allowed_domains) : list
-    + reachable_domains(core_domains) : set
     + get_field_catalog() : dict
   }
 
@@ -516,7 +530,10 @@ package "Field Resolution" #80E0D0 {
     + silver_path(domain, model) : str
   }
 
-  FieldResolver ..> DomainModelConfig : reads edges + schema
+  DomainGraph ..> DomainModelConfig : reads GraphSpec.edges
+  DomainGraph ..> EdgeSpec : built from
+  FieldResolver *-- DomainGraph : graph
+  FieldResolver ..> DomainModelConfig : reads schema
 }
 
 ' ══════════════════════════════════════════════════════════
