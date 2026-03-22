@@ -89,12 +89,23 @@ package "Domain Data Classes" #FFCC66 {
     + paths : dict[str, Any]
   }
 
+  class ModelStorageSpec <<dataclass>> {
+    + format : str
+    + silver_root : Optional[str]
+  }
+
+  class PhaseSpec <<dataclass>> {
+    + tables : list[str]
+  }
+
   class BuildSpec <<dataclass>> {
     + sort_by : list[str]
     + optimize : bool
     + partitions : list[str]
     + phases : dict[str, PhaseSpec]
   }
+
+  BuildSpec *-- PhaseSpec
 
   class MeasuresSpec <<dataclass>> {
     + simple : list[MeasureDef]
@@ -138,6 +149,7 @@ package "Domain Data Classes" #FFCC66 {
     + views : dict[str, Any]
   }
 
+  DomainModelConfig *-- ModelStorageSpec
   DomainModelConfig *-- GraphSpec
   DomainModelConfig *-- BuildSpec
   DomainModelConfig *-- MeasuresSpec
@@ -228,18 +240,50 @@ package "Infrastructure Data Classes" #E6E6E6 {
     + max_response_mb : float
   }
 
-  class StorageConfig <<dataclass>> {
-    + roots : RootsConfig
-    + api : ApiLimits
-    + default_format : str
-    + domain_roots : dict[str, str]
-    + tables : dict[str, TablePath]
+  class TablePath <<dataclass>> {
+    + root : str
+    + rel : str
+    + partitions : list[str]
+  }
+
+  class SparkConfig <<dataclass>> {
+    + driver_memory : str
+    + executor_memory : str
+    + shuffle_partitions : int
+    + timezone : str
+  }
+
+  class DuckDBConfig <<dataclass>> {
+    + database_path : str
+    + memory_limit : str
+    + threads : int
+    + read_only : bool
   }
 
   class ConnectionConfig <<dataclass>> {
     + type : str
     + spark : Optional[SparkConfig]
     + duckdb : Optional[DuckDBConfig]
+  }
+
+  class ClusterConfig <<dataclass>> {
+    + spark_master : str
+    + fallback_to_local : bool
+    + task_batch_size : int
+  }
+
+  class RetryConfig <<dataclass>> {
+    + max_retries : int
+    + retry_delay_seconds : float
+    + exponential_backoff : bool
+  }
+
+  class StorageConfig <<dataclass>> {
+    + roots : RootsConfig
+    + api : ApiLimits
+    + default_format : str
+    + domain_roots : dict[str, str]
+    + tables : dict[str, TablePath]
   }
 
   class RunConfig <<dataclass>> {
@@ -253,6 +297,11 @@ package "Infrastructure Data Classes" #E6E6E6 {
 
   StorageConfig *-- RootsConfig
   StorageConfig *-- ApiLimits
+  StorageConfig *-- TablePath
+  ConnectionConfig *-- SparkConfig
+  ConnectionConfig *-- DuckDBConfig
+  RunConfig *-- ClusterConfig
+  RunConfig *-- RetryConfig
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -892,8 +941,24 @@ package "App Configuration" #E6E6E6 {
     + repo_root : Path
     + connection : ConnectionConfig
     + storage : StorageConfig
+    + run : RunConfig
     + apis : dict[str, APIConfig]
+    + domains : dict[str, DomainModelConfig]
+    + providers : dict[str, ProviderConfig]
+    + endpoints : dict[str, EndpointConfig]
   }
+
+  note right of AppConfig
+    Single config object assembled from:
+    - .env → connection, apis
+    - storage.json → storage
+    - run_config.json → run
+    - domains/models/ → domains
+    - domains/Data Sources/ → providers, endpoints
+    Engine and sessions are created from this.
+  end note
+
+  AppConfig *-- RunConfig
 
   class ConnectionFactory {
     + {static} create(connection_type, **kwargs) : DataConnection

@@ -293,7 +293,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
         # Use &#xa; for line breaks (works in both XML and draw.io)
         header_lines = []
         if c.stereotype:
-            header_lines.append(f"&lt;&lt;{xe(c.stereotype)}&gt;&gt;")
+            header_lines.append(f"&#171;{xe(c.stereotype)}&#187;")
         header_lines.append(xe(c.name))
         if c.is_abstract:
             header_lines.append("{abstract}")
@@ -559,7 +559,7 @@ def update_drawio(drawio_path: Path, classes: list[PumlClass]) -> int:
             # Update header value
             header_lines = []
             if puml_class.stereotype:
-                header_lines.append(f"&lt;&lt;{xe(puml_class.stereotype)}&gt;&gt;")
+                header_lines.append(f"&#171;{xe(puml_class.stereotype)}&#187;")
             header_lines.append(xe(puml_class.name))
             if puml_class.is_abstract:
                 header_lines.append("{abstract}")
@@ -686,7 +686,7 @@ def update_drawio(drawio_path: Path, classes: list[PumlClass]) -> int:
             # Header
             header_lines = []
             if c.stereotype:
-                header_lines.append(f"&lt;&lt;{xe(c.stereotype)}&gt;&gt;")
+                header_lines.append(f"&#171;{xe(c.stereotype)}&#187;")
             header_lines.append(xe(c.name))
             if c.is_abstract:
                 header_lines.append("{abstract}")
