@@ -405,7 +405,6 @@ package "Engine" #80E0D0 {
   DataOps <|.. SparkOps
   SqlOps <|.. DuckDBSql
   SqlOps <|.. SparkSql
-  Engine ..> StorageConfig : reads from AppConfig
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -462,13 +461,6 @@ package "Sessions" #80E0D0 {
 
   Session *-- StorageRouter : path resolution
 
-  IngestSession ..> ProviderConfig : refs from AppConfig
-  IngestSession ..> EndpointConfig : refs from AppConfig
-  IngestSession ..> RunConfig : refs from AppConfig
-
-  BuildSession ..> DomainModelConfig : refs from AppConfig
-
-  QuerySession ..> DomainModelConfig : refs from AppConfig
   QuerySession *-- FieldResolver : field resolution
 }
 
@@ -1003,7 +995,6 @@ package "Plugin System" #B3FFB3 {
 ' Config loading
 DomainBuilderFactory ..> DomainConfigLoader : loads configs
 DomainConfigLoader ..> DomainModelConfig : produces
-StorageRouter ..> StorageConfig : built from AppConfig
 AppConfig *-- ConnectionConfig : connection
 AppConfig *-- StorageConfig : storage
 ConnectionFactory ..> DataConnection : creates
