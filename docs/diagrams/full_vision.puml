@@ -565,43 +565,61 @@ package "Pipeline Executor" #FF9933 {
     .. calls engine operations in sequence ..
     + session : BuildSession
     --
+    .. orchestration ..
     + execute_all(nodes_config: dict) : dict[str, DF]
     + execute_node(node_id, node_config, built_nodes) : DF
-    - _load_source(from_spec) : DF
+    .. source loading ..
+    - _load_bronze(table_ref) : DF
+    - _load_silver(model_name, table_name) : DF
+    - _load_from_node(node_id, built_nodes) : DF
+    .. standard pipeline ops (in order) ..
     - _apply_filters(df, filters) : DF
     - _apply_joins(df, join_specs, built_nodes) : DF
     - _apply_select(df, select_config) : DF
     - _apply_derive(df, derive_config) : DF
     - _apply_dedup(df, unique_key) : DF
+    - _apply_drop(df, drop_cols) : DF
+    - _apply_enrich(df, enrich_specs) : DF
+    .. special node types (via custom_node_loading) ..
+    - _build_seed(node_id, config) : DF
+    - _build_union(node_id, config) : DF
+    - _build_distinct(node_id, config) : DF
+    - _build_window(node_id, config) : DF
+    - _build_unpivot(node_id, config) : DF
+    - _build_generated(node_id, config) : DF
   }
 
   note as ExecutorFlow
     Execution sequence per node (from config):
-    ┌─────────────────────────────────────────┐
-    │ 1. HOOK: custom_node_loading(node_id)   │
-    │    → seed, union, calendar, distinct     │
-    │    → if handled, skip steps 2-7         │
-    ├─────────────────────────────────────────┤
-    │ 2. READ: _load_source(from_spec)        │
-    │    → engine.read(bronze_path)            │
-    │    → engine.read(silver_path)            │
-    │    → reference built_nodes[other_node]   │
-    ├─────────────────────────────────────────┤
-    │ 3. FILTER: _apply_filters(df, filters)  │
-    │    → engine.filter(df, conditions)       │
-    ├─────────────────────────────────────────┤
-    │ 4. JOIN: _apply_joins(df, join_specs)    │
-    │    → engine.join(df, other_df, on, how)  │
-    ├─────────────────────────────────────────┤
-    │ 5. SELECT: _apply_select(df, aliases)    │
-    │    → engine.select(df, column_map)       │
-    ├─────────────────────────────────────────┤
-    │ 6. DERIVE: _apply_derive(df, exprs)      │
-    │    → engine.derive(df, col, expr)        │
-    ├─────────────────────────────────────────┤
-    │ 7. DEDUP: _apply_dedup(df, unique_key)   │
-    │    → engine.dedup(df, columns)           │
-    └─────────────────────────────────────────┘
+    ┌──────────────────────────────────────────────┐
+    │ 1. HOOK: custom_node_loading(node_id)        │
+    │    → _build_seed (inline YAML data)           │
+    │    → _build_union (multiple sources UNION)    │
+    │    → _build_distinct (GROUP BY → dim)         │
+    │    → _build_window (RSI, MACD indicators)     │
+    │    → _build_unpivot (wide → long)             │
+    │    → _build_generated (deferred/calendar)     │
+    │    → if handled, skip steps 2-8               │
+    ├──────────────────────────────────────────────┤
+    │ 2. READ source:                               │
+    │    → _load_bronze(bronze.provider_table)       │
+    │    → _load_silver(model.table) (cross-dep)    │
+    │    → _load_from_node(other_node) (same model) │
+    ├──────────────────────────────────────────────┤
+    │ 3. FILTER: engine.filter(df, conditions)      │
+    ├──────────────────────────────────────────────┤
+    │ 4. JOIN: engine.join(df, other, on, how)      │
+    ├──────────────────────────────────────────────┤
+    │ 5. SELECT: engine.select(df, alias_map)       │
+    ├──────────────────────────────────────────────┤
+    │ 6. DERIVE: engine.derive(df, col, expr)       │
+    ├──────────────────────────────────────────────┤
+    │ 7. DEDUP: engine.dedup(df, unique_key)        │
+    ├──────────────────────────────────────────────┤
+    │ 8. DROP: engine.drop(df, columns)             │
+    ├──────────────────────────────────────────────┤
+    │ 9. ENRICH: engine.join(df, enrich_src, cols)  │
+    └──────────────────────────────────────────────┘
   end note
 
   note as BuildFlow
