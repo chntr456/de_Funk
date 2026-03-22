@@ -105,7 +105,7 @@ package "Domain Data Classes" #FFCC66 {
     + phases : dict[str, PhaseSpec]
   }
 
-  BuildSpec *-- PhaseSpec
+  BuildSpec *-- PhaseSpec : phases
 
   class MeasuresSpec <<dataclass>> {
     + simple : list[MeasureDef]
@@ -149,21 +149,21 @@ package "Domain Data Classes" #FFCC66 {
     + views : dict[str, Any]
   }
 
-  DomainModelConfig *-- ModelStorageSpec
-  DomainModelConfig *-- GraphSpec
-  DomainModelConfig *-- BuildSpec
-  DomainModelConfig *-- MeasuresSpec
-  DomainModelConfig *-- HooksConfig
-  DomainModelConfig *-- TableConfig
-  DomainModelConfig *-- SourceConfig
-  HooksConfig *-- HookDef
-  TableConfig *-- PipelineStep
-  TableConfig *-- SchemaField
-  TableConfig *-- MeasureDef
-  TableConfig *-- EnrichSpec
-  SourceConfig *-- AliasSpec
-  GraphSpec *-- EdgeSpec
-  MeasuresSpec *-- MeasureDef
+  DomainModelConfig *-- ModelStorageSpec : storage
+  DomainModelConfig *-- GraphSpec : graph
+  DomainModelConfig *-- BuildSpec : build
+  DomainModelConfig *-- MeasuresSpec : measures
+  DomainModelConfig *-- HooksConfig : hooks
+  DomainModelConfig *-- TableConfig : tables
+  DomainModelConfig *-- SourceConfig : sources
+  HooksConfig *-- HookDef : hook definitions
+  TableConfig *-- PipelineStep : pipeline steps
+  TableConfig *-- SchemaField : schema columns
+  TableConfig *-- MeasureDef : table measures
+  TableConfig *-- EnrichSpec : enrichments
+  SourceConfig *-- AliasSpec : field aliases
+  GraphSpec *-- EdgeSpec : join edges
+  MeasuresSpec *-- MeasureDef : definitions
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -219,7 +219,7 @@ package "Provider Data Classes" #CC9966 {
     + status : str
   }
 
-  EndpointConfig *-- EndpointSchemaField
+  EndpointConfig *-- EndpointSchemaField : schema fields
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -295,13 +295,13 @@ package "Infrastructure Data Classes" #E6E6E6 {
     + profiles : dict[str, dict]
   }
 
-  StorageConfig *-- RootsConfig
-  StorageConfig *-- ApiLimits
-  StorageConfig *-- TablePath
-  ConnectionConfig *-- SparkConfig
-  ConnectionConfig *-- DuckDBConfig
-  RunConfig *-- ClusterConfig
-  RunConfig *-- RetryConfig
+  StorageConfig *-- RootsConfig : mount points
+  StorageConfig *-- ApiLimits : query limits
+  StorageConfig *-- TablePath : table paths
+  ConnectionConfig *-- SparkConfig : spark settings
+  ConnectionConfig *-- DuckDBConfig : duckdb settings
+  RunConfig *-- ClusterConfig : cluster settings
+  RunConfig *-- RetryConfig : retry policy
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -405,7 +405,7 @@ package "Engine" #80E0D0 {
   DataOps <|.. SparkOps
   SqlOps <|.. DuckDBSql
   SqlOps <|.. SparkSql
-  Engine *-- StorageConfig
+  Engine *-- StorageConfig : storage paths
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -460,16 +460,16 @@ package "Sessions" #80E0D0 {
   Engine ..> BuildSession : creates
   Engine ..> QuerySession : creates
 
-  Session *-- StorageRouter
+  Session *-- StorageRouter : path resolution
 
-  IngestSession *-- ProviderConfig
-  IngestSession *-- EndpointConfig
-  IngestSession *-- RunConfig
+  IngestSession *-- ProviderConfig : providers
+  IngestSession *-- EndpointConfig : endpoints
+  IngestSession *-- RunConfig : run settings
 
-  BuildSession *-- DomainModelConfig
+  BuildSession *-- DomainModelConfig : models to build
 
-  QuerySession *-- DomainModelConfig
-  QuerySession *-- FieldResolver
+  QuerySession *-- DomainModelConfig : models to query
+  QuerySession *-- FieldResolver : field resolution
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -542,8 +542,8 @@ package "Config Loading" #FFCC66 {
     + {static} resolve_extends_reference(ref, dir, cache) : dict
   }
 
-  DomainConfigLoader ..> config_translator
-  DomainConfigLoader ..> extends_resolver
+  DomainConfigLoader ..> config_translator : translates
+  DomainConfigLoader ..> extends_resolver : resolves inheritance
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -768,7 +768,7 @@ package "Pipeline Executor" #FF9933 {
 
   NodeExecutor ..> BuildSession : calls session.engine ops
   NodeExecutor ..> DomainModelConfig : reads pipeline config
-  BaseModel *-- NodeExecutor
+  BaseModel *-- NodeExecutor : pipeline execution
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -899,11 +899,11 @@ package "Ingestion Path" #CC9966 {
   }
 
   BaseProvider ..> IngestSession : uses session
-  IngestorEngine *-- RawSink
-  IngestorEngine *-- BronzeSink
+  IngestorEngine *-- RawSink : writes raw
+  IngestorEngine *-- BronzeSink : writes bronze
   RawSink ..> BronzeSink : feeds
-  HttpClient *-- TokenBucket
-  HttpClient *-- CircuitBreaker
+  HttpClient *-- TokenBucket : rate limiting
+  HttpClient *-- CircuitBreaker : fault tolerance
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -957,7 +957,7 @@ package "App Configuration" #E6E6E6 {
     Engine and sessions are created from this.
   end note
 
-  AppConfig *-- RunConfig
+  AppConfig *-- RunConfig : runtime settings
 
   class ConnectionFactory {
     + {static} create(connection_type, **kwargs) : DataConnection
@@ -987,8 +987,8 @@ package "Plugin System" #B3FFB3 {
 DomainBuilderFactory ..> DomainConfigLoader : loads configs
 DomainConfigLoader ..> DomainModelConfig : produces
 StorageRouter ..> StorageConfig : built from
-AppConfig *-- ConnectionConfig
-AppConfig *-- StorageConfig
+AppConfig *-- ConnectionConfig : connection
+AppConfig *-- StorageConfig : storage
 ConnectionFactory ..> DataConnection : creates
 
 ' Orchestration → Build
