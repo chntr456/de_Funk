@@ -649,25 +649,18 @@ package "Pipeline Executor" #FF9933 {
     # model.md frontmatter
     hooks:
       after_build:
-        - fn: plugins.company_cik.fix_ids
-          params: {ticker_col: ticker}
+        - {fn: plugins.company_cik.fix_ids, params: {ticker_col: ticker}}
       post_build:
-        - fn: plugins.technicals.compute_rsi
-          params: {periods: [14, 30]}
+        - {fn: plugins.technicals.compute_rsi, params: {periods: [14, 30]}}
 
     # Per-node pipeline (in table config or graph.nodes)
     node: fact_prices
       from: bronze.alpha_vantage_daily
       pipeline:
-        - op: filter
-          conditions: ["asset_type = 'stock'"]
-        - op: derive
-          expressions: {security_id: "HASH(ticker)"}
-        - op: hook
-          fn: plugins.company_cik.fix_ids
-          params: {ticker_col: ticker}
-        - op: dedup
-          keys: [security_id, date_id]
+        - {op: filter, conditions: ["asset_type = 'stock'"]}
+        - {op: derive, expressions: {security_id: "HASH(ticker)"}}
+        - {op: hook, fn: plugins.company_cik.fix_ids, params: {ticker_col: ticker}}
+        - {op: dedup, keys: [security_id, date_id]}
 
     Backward compatible: no pipeline key =
     implicit order (filter→join→select→derive→dedup)
