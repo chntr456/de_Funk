@@ -648,8 +648,9 @@ def update_drawio(drawio_path: Path, classes: list[PumlClass]) -> int:
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python -m scripts.tools.puml_to_drawio <file.puml> [--update]")
-        print("  --update: update existing .drawio in-place (preserve positions)")
+        print("Usage: python -m scripts.tools.puml_to_drawio <file.puml> [--full]")
+        print("  Default: update existing .drawio in-place (preserve positions)")
+        print("  --full:  full regenerate (replaces everything including layout)")
         sys.exit(1)
 
     puml_path = Path(sys.argv[1])
@@ -657,13 +658,13 @@ def main():
         print(f"File not found: {puml_path}")
         sys.exit(1)
 
-    update_mode = '--update' in sys.argv
+    full_regen = '--full' in sys.argv
     out_path = puml_path.with_suffix('.drawio')
 
     text = puml_path.read_text()
     classes, edges, pkg_colors = parse_puml(text)
 
-    if update_mode and out_path.exists():
+    if not full_regen and out_path.exists():
         count = update_drawio(out_path, classes)
         print(f"Updated: {out_path} ({count} classes updated in-place)")
     else:
