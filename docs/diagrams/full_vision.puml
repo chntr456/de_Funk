@@ -70,6 +70,7 @@ package "Domain Data Classes" #FFCC66 {
     + partition_by : list[str]
     + measures : list[MeasureDef]
     + enrich : list[EnrichSpec]
+    + pipeline : list[PipelineStep]
     + extends : Optional[str]
   }
 
@@ -100,6 +101,24 @@ package "Domain Data Classes" #FFCC66 {
     + computed : list[MeasureDef]
   }
 
+  class HookDef <<dataclass>> {
+    + fn : str
+    + params : dict
+  }
+
+  class PipelineStep <<dataclass>> {
+    + op : str
+    + fn : Optional[str]
+    + params : dict
+  }
+
+  class HooksConfig <<dataclass>> {
+    + pre_build : list[HookDef]
+    + before_build : list[HookDef]
+    + after_build : list[HookDef]
+    + post_build : list[HookDef]
+  }
+
   class DomainModelConfig <<dataclass>> {
     + model : str
     + version : str
@@ -111,6 +130,7 @@ package "Domain Data Classes" #FFCC66 {
     + graph : GraphSpec
     + build : BuildSpec
     + measures : MeasuresSpec
+    + hooks : HooksConfig
     + metadata : dict
     --
     + tables : dict[str, TableConfig]
@@ -121,8 +141,11 @@ package "Domain Data Classes" #FFCC66 {
   DomainModelConfig *-- GraphSpec
   DomainModelConfig *-- BuildSpec
   DomainModelConfig *-- MeasuresSpec
+  DomainModelConfig *-- HooksConfig
   DomainModelConfig *-- TableConfig
   DomainModelConfig *-- SourceConfig
+  HooksConfig *-- HookDef
+  TableConfig *-- PipelineStep
   TableConfig *-- SchemaField
   TableConfig *-- MeasureDef
   TableConfig *-- EnrichSpec
@@ -621,8 +644,18 @@ package "Pipeline Executor" #FF9933 {
   }
 
   note as PipelineConfig
-    Config-driven pipeline (explicit steps + order):
+    All hooks declared in YAML config:
 
+    # model.md frontmatter
+    hooks:
+      after_build:
+        - fn: plugins.company_cik.fix_ids
+          params: {ticker_col: ticker}
+      post_build:
+        - fn: plugins.technicals.compute_rsi
+          params: {periods: [14, 30]}
+
+    # Per-node pipeline (in table config or graph.nodes)
     node: fact_prices
       from: bronze.alpha_vantage_daily
       pipeline:
@@ -630,18 +663,14 @@ package "Pipeline Executor" #FF9933 {
           conditions: ["asset_type = 'stock'"]
         - op: derive
           expressions: {security_id: "HASH(ticker)"}
-        - op: join
-          specs: [{to: dim_stock, on: [security_id]}]
-        - op: select
-          columns: {date_id: "...", close: "adjusted_close"}
-        - op: hook                    ← PYTHON HOOK
-          fn: my_custom_transform
-          params: {threshold: 0.05}
+        - op: hook
+          fn: plugins.company_cik.fix_ids
+          params: {ticker_col: ticker}
         - op: dedup
           keys: [security_id, date_id]
 
-    Backward compatible: if no pipeline key,
-    falls back to implicit order (filter→join→select→derive→dedup)
+    Backward compatible: no pipeline key =
+    implicit order (filter→join→select→derive→dedup)
   end note
 
   note as OpRegistryNote
@@ -665,38 +694,38 @@ package "Pipeline Executor" #FF9933 {
   end note
 
   note as BuildFlow
-    Full build orchestration with hooks:
-    ┌──────────────────────────────────────────┐
-    │ BaseModelBuilder.build()                 │
-    │  ├─ validate()                           │
-    │  ├─ pre_build()           ← PYTHON HOOK  │
-    │  ├─ BaseModel.build()                    │
-    │  │   ├─ before_build()    ← PYTHON HOOK  │
-    │  │   ├─ NodeExecutor.execute_all()       │
-    │  │   │   for each node:                  │
-    │  │   │     ├─ custom_node_loading() HOOK │
-    │  │   │     │  (seed/union/calendar/etc)  │
-    │  │   │     ├─ READ source                │
-    │  │   │     └─ execute_pipeline(steps):   │
-    │  │   │         for each step:            │
-    │  │   │           dispatch _ops[step.op]  │
-    │  │   │           (includes hook steps)   │
-    │  │   ├─ separate dims / facts            │
-    │  │   ├─ after_build()     ← PYTHON HOOK  │
-    │  │   └─ write_tables()                   │
-    │  └─ post_build(result)    ← PYTHON HOOK  │
-    └──────────────────────────────────────────┘
+    Full build orchestration:
+    ┌───────────────────────────────────────────────┐
+    │ BaseModelBuilder.build()                      │
+    │  ├─ validate()                                │
+    │  ├─ run config.hooks.pre_build[]   ← FROM CFG │
+    │  ├─ BaseModel.build()                         │
+    │  │   ├─ run config.hooks.before_build[] ← CFG │
+    │  │   ├─ NodeExecutor.execute_all()            │
+    │  │   │   for each node:                       │
+    │  │   │     ├─ custom_node_loading()           │
+    │  │   │     │  (seed/union/calendar)            │
+    │  │   │     ├─ READ source                     │
+    │  │   │     └─ execute_pipeline(steps):        │
+    │  │   │         for each step in node.pipeline:│
+    │  │   │           _ops[step.op](df, step)      │
+    │  │   │           if op=hook: call step.fn()   │
+    │  │   ├─ separate dims / facts                 │
+    │  │   ├─ run config.hooks.after_build[] ← CFG  │
+    │  │   └─ write_tables()                        │
+    │  └─ run config.hooks.post_build[]      ← CFG  │
+    └───────────────────────────────────────────────┘
 
-    Python hooks at every level:
-    • pre_build    → setup, validation
-    • before_build → model-level prep
-    • custom_node_loading → intercept any node
-    • pipeline op: hook → inline Python in pipeline
-    • after_build  → cross-table enrichment
-    • post_build   → technicals, stats, ML
+    All hooks declared in YAML frontmatter:
+    • hooks.pre_build: [{fn, params}]
+    • hooks.before_build: [{fn, params}]
+    • hooks.after_build: [{fn, params}]
+    • hooks.post_build: [{fn, params}]
+    • node.pipeline: [{op: hook, fn, params}]
 
-    Models are always free to deploy
-    any Python solution at any hook point.
+    Hook fn signature:
+      def my_hook(df, engine, config, **params) -> DF
+    Always free to deploy any Python.
   end note
 
   NodeExecutor ..> Engine : calls engine ops
