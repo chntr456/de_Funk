@@ -640,10 +640,138 @@ def update_drawio(drawio_path: Path, classes: list[PumlClass]) -> int:
 
             updated += 1
 
+    # Add new classes that don't exist in the drawio yet — staging area
+    new_classes = [c for c in classes if c.name not in containers]
+    if new_classes:
+        # Find bottom-right of existing content for staging area
+        max_y = 0
+        for cell in rt.findall('mxCell'):
+            geo = cell.find('mxGeometry')
+            if geo is not None:
+                cy = float(geo.get('y', '0')) + float(geo.get('height', '0'))
+                if cy > max_y:
+                    max_y = cy
+
+        staging_x = 20
+        staging_y = int(max_y) + 80
+
+        # Find max ID
+        max_id = max(
+            (int(c.get('id', '0')) for c in rt.findall('mxCell')
+             if c.get('id', '').isdigit()),
+            default=1000
+        )
+        cid = max_id + 1
+
+        # Add staging label
+        label = ET.SubElement(rt, 'mxCell', {
+            'id': str(cid),
+            'value': 'NEW (drag into place)',
+            'style': ('text;fontSize=14;fontStyle=1;fontFamily=Courier New;'
+                      'align=left;verticalAlign=middle;fontColor=#CC0000;'),
+            'vertex': '1',
+            'parent': '1',
+        })
+        ET.SubElement(label, 'mxGeometry', {
+            'x': str(staging_x), 'y': str(staging_y),
+            'width': '300', 'height': '25', 'as': 'geometry',
+        })
+        cid += 1
+        staging_y += 35
+        NODE_W = 350
+        ITEM_H = 20
+        SEP_H = 8
+
+        for c in new_classes:
+            # Header
+            header_lines = []
+            if c.stereotype:
+                header_lines.append(f"&lt;&lt;{xe(c.stereotype)}&gt;&gt;")
+            header_lines.append(xe(c.name))
+            if c.is_abstract:
+                header_lines.append("{abstract}")
+            header_value = "&#xa;".join(header_lines)
+
+            num_lines = len(header_lines)
+            start_size = max(26, num_lines * 18 + 4)
+            font_style = 0 if (c.is_abstract or c.stereotype in ('interface', 'abstract')) else 1
+
+            attr_count = max(len(c.attrs), 1)
+            method_count = max(len(c.methods), 1)
+            total_h = start_size + attr_count * ITEM_H + SEP_H + method_count * ITEM_H
+
+            container = ET.SubElement(rt, 'mxCell', {
+                'id': str(cid),
+                'value': header_value,
+                'style': (f'swimlane;fontStyle={font_style};align=center;verticalAlign=top;'
+                          f'childLayout=stackLayout;horizontal=1;startSize={start_size};'
+                          f'horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;'
+                          f'collapsible=0;marginBottom=0;html=1;whiteSpace=wrap;'
+                          f'fillColor={c.color};strokeColor=#333333;'
+                          f'fontFamily=Courier New;fontSize=10;'),
+                'vertex': '1',
+                'parent': '1',
+            })
+            ET.SubElement(container, 'mxGeometry', {
+                'x': str(staging_x), 'y': str(staging_y),
+                'width': str(NODE_W), 'height': str(total_h), 'as': 'geometry',
+            })
+            container_id = str(cid)
+            cid += 1
+
+            child_y = start_size
+            for attr in (c.attrs or [' ']):
+                child = ET.SubElement(rt, 'mxCell', {
+                    'id': str(cid), 'value': xe(attr),
+                    'style': ('text;html=1;strokeColor=none;fillColor=none;align=left;'
+                              'verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;'
+                              'rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;'
+                              'fontFamily=Courier New;fontSize=10;whiteSpace=wrap;'),
+                    'vertex': '1', 'parent': container_id,
+                })
+                ET.SubElement(child, 'mxGeometry', {
+                    'y': str(child_y), 'width': str(NODE_W), 'height': str(ITEM_H),
+                    'as': 'geometry',
+                })
+                cid += 1
+                child_y += ITEM_H
+
+            sep = ET.SubElement(rt, 'mxCell', {
+                'id': str(cid), 'value': '',
+                'style': ('line;strokeWidth=1;fillColor=none;align=left;'
+                          'verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;'
+                          'rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;'),
+                'vertex': '1', 'parent': container_id,
+            })
+            ET.SubElement(sep, 'mxGeometry', {
+                'y': str(child_y), 'width': str(NODE_W), 'height': str(SEP_H),
+                'as': 'geometry',
+            })
+            cid += 1
+            child_y += SEP_H
+
+            for method in (c.methods or [' ']):
+                child = ET.SubElement(rt, 'mxCell', {
+                    'id': str(cid), 'value': xe(method),
+                    'style': ('text;html=1;strokeColor=none;fillColor=none;align=left;'
+                              'verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;'
+                              'rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;'
+                              'fontFamily=Courier New;fontSize=10;whiteSpace=wrap;'),
+                    'vertex': '1', 'parent': container_id,
+                })
+                ET.SubElement(child, 'mxGeometry', {
+                    'y': str(child_y), 'width': str(NODE_W), 'height': str(ITEM_H),
+                    'as': 'geometry',
+                })
+                cid += 1
+                child_y += ITEM_H
+
+            staging_y += total_h + 15
+
     # Write back
     ET.indent(tree, space='  ')
     tree.write(drawio_path, encoding='unicode', xml_declaration=True)
-    return updated
+    return updated, len(new_classes) if new_classes else 0
 
 
 def main():
@@ -665,8 +793,11 @@ def main():
     classes, edges, pkg_colors = parse_puml(text)
 
     if not full_regen and out_path.exists():
-        count = update_drawio(out_path, classes)
-        print(f"Updated: {out_path} ({count} classes updated in-place)")
+        updated, new = update_drawio(out_path, classes)
+        msg = f"Updated: {out_path} ({updated} classes updated in-place)"
+        if new:
+            msg += f", {new} new classes added to staging area (drag into place)"
+        print(msg)
     else:
         xml = generate_drawio(classes, edges, pkg_colors)
         ET.fromstring(xml)
