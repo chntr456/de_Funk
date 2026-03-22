@@ -366,24 +366,24 @@ package "Sessions" #80E0D0 {
 
   abstract class Session <<abstract>> {
     + engine : Engine
+    + storage_router : StorageRouter
     --
+    + raw_path(provider, endpoint) : str
+    + bronze_path(provider, endpoint) : str
+    + silver_path(domain, model) : str
     + {abstract} close()
   }
 
   class IngestSession {
-    + engine : Engine
     + providers : dict[str, ProviderConfig]
     + endpoints : dict[str, EndpointConfig]
     + run : RunConfig
     --
     + get_provider(provider_id) : ProviderConfig
     + get_endpoint(provider_id, endpoint_id) : EndpointConfig
-    + raw_path(provider, endpoint) : str
-    + bronze_path(provider, endpoint) : str
   }
 
   class BuildSession {
-    + engine : Engine
     + models : dict[str, DomainModelConfig]
     + loader : DomainConfigLoader
     --
@@ -391,15 +391,11 @@ package "Sessions" #80E0D0 {
     + get_dependencies(model_name) : list[str]
     + build(model_name) : BuildResult
     + build_all() : list[BuildResult]
-    + silver_path(domain, model) : str
-    + bronze_path(provider, endpoint) : str
   }
 
   class QuerySession {
-    + engine : Engine
     + models : dict[str, DomainModelConfig]
     + resolver : FieldResolver
-    + storage_router : StorageRouter
     --
     + resolve(ref_str) : ResolvedField
     + find_join_path(src, dst) : list
@@ -416,6 +412,8 @@ package "Sessions" #80E0D0 {
   Engine ..> BuildSession : creates
   Engine ..> QuerySession : creates
 
+  Session *-- StorageRouter
+
   IngestSession *-- ProviderConfig
   IngestSession *-- EndpointConfig
   IngestSession *-- RunConfig
@@ -424,7 +422,6 @@ package "Sessions" #80E0D0 {
 
   QuerySession *-- DomainModelConfig
   QuerySession *-- FieldResolver
-  QuerySession *-- StorageRouter
 }
 
 ' ══════════════════════════════════════════════════════════
