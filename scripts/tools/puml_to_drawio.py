@@ -206,25 +206,56 @@ def _sugiyama_layout(
     for pkg_name in sorted_pkgs:
         packages[pkg_name].sort(key=lambda c: (ranks.get(c.name, 0), c.name))
 
-    # Step 4: assign positions
-    # Arrange packages in rows of up to 5 columns
-    MAX_COLS = 5
+    # Step 4: assign positions using balanced grid layout
+    # Goal: minimize total canvas area by balancing column heights
+    MAX_COLS = 4
     positions: dict[str, tuple[int, int]] = {}
-    col_heights: list[int] = [0] * MAX_COLS  # track height per column
 
-    for pkg_i, pkg_name in enumerate(sorted_pkgs):
-        col = pkg_i % MAX_COLS
-        # Find the starting y for this package (below previous package in same column)
+    # Calculate total height per package
+    pkg_heights: dict[str, int] = {}
+    for pkg_name, pkg_classes in packages.items():
+        total = PKG_LABEL_H
+        for c in pkg_classes:
+            total += _node_height(c) + RANK_GAP
+        pkg_heights[pkg_name] = total
+
+    # Greedy bin-packing: assign each package to the shortest column
+    col_heights: list[int] = [0] * MAX_COLS
+    col_packages: list[list[str]] = [[] for _ in range(MAX_COLS)]
+
+    # Sort packages by height descending (pack tallest first for better balance)
+    sorted_by_height = sorted(sorted_pkgs, key=lambda p: -pkg_heights.get(p, 0))
+
+    for pkg_name in sorted_by_height:
+        # Find shortest column
+        min_col = min(range(MAX_COLS), key=lambda c: col_heights[c])
+        col_packages[min_col].append(pkg_name)
+        col_heights[min_col] += pkg_heights[pkg_name] + PKG_GAP_Y
+
+    # Assign positions: each column gets its packages stacked vertically
+    for col in range(MAX_COLS):
         base_x = col * (COL_W + PKG_GAP_X) + 20
-        base_y = col_heights[col] + PKG_GAP_Y
+        y = PKG_GAP_Y
 
-        y = base_y + PKG_LABEL_H
-        for c in packages[pkg_name]:
-            h = _node_height(c)
-            positions[c.name] = (base_x, y)
-            y += h + RANK_GAP
+        for pkg_name in col_packages[col]:
+            y += PKG_LABEL_H
+            pkg_classes = packages.get(pkg_name, [])
 
-        col_heights[col] = y
+            # Within package: use 2 columns if > 6 classes
+            if len(pkg_classes) > 6:
+                inner_cols = 2
+            else:
+                inner_cols = 1
+
+            inner_col_y = [y] * inner_cols
+            for i, c in enumerate(pkg_classes):
+                ic = i % inner_cols
+                h = _node_height(c)
+                cx = base_x + ic * (NODE_W + 10)
+                positions[c.name] = (cx, inner_col_y[ic])
+                inner_col_y[ic] += h + RANK_GAP
+
+            y = max(inner_col_y) + PKG_GAP_Y
 
     return positions
 
@@ -370,11 +401,12 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             child_y += ITEM_H
 
     # Render edges
+    ORTHO = 'edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;targetPerimeterSpacing=0;'
     edge_styles = {
-        'inherit': 'endArrow=block;endFill=0;strokeColor=#555555;',
-        'compose': 'endArrow=diamond;endFill=1;strokeColor=#555555;',
-        'delegate': 'endArrow=open;endFill=0;strokeColor=#999999;dashed=1;',
-        'realize': 'endArrow=block;endFill=0;strokeColor=#555555;dashed=1;',
+        'inherit': f'{ORTHO}endArrow=block;endFill=0;strokeColor=#555555;',
+        'compose': f'{ORTHO}endArrow=diamond;endFill=1;strokeColor=#555555;',
+        'delegate': f'{ORTHO}endArrow=open;endFill=0;strokeColor=#999999;dashed=1;',
+        'realize': f'{ORTHO}endArrow=block;endFill=0;strokeColor=#555555;dashed=1;',
     }
 
     for e in edges:
