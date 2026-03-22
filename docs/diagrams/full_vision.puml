@@ -766,7 +766,7 @@ package "Pipeline Executor" #FF9933 {
     Always free to deploy any Python.
   end note
 
-  NodeExecutor ..> Engine : calls engine ops
+  NodeExecutor ..> BuildSession : calls session.engine ops
   NodeExecutor ..> DomainModelConfig : reads pipeline config
   BaseModel *-- NodeExecutor
 }
@@ -964,7 +964,7 @@ package "App Configuration" #E6E6E6 {
   }
 
   ConfigLoader ..> AppConfig : produces
-  AppConfig ..> Engine : creates
+  Engine ..> AppConfig : created from
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -997,7 +997,7 @@ PipelineScheduler ..> BaseModelBuilder : triggers builds
 DependencyGraph ..> DomainModelConfig : reads depends_on
 
 ' Pipeline executor
-NodeExecutor ..> BuildSession : uses session
+' NodeExecutor -> BuildSession edge is in Pipeline Executor package
 BuildPluginRegistry ..> NodeExecutor : registers ops into
 
 ' Ingestion
