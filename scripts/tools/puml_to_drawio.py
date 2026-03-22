@@ -156,12 +156,13 @@ def _sugiyama_layout(
       5. Minimize edge crossings by reordering within ranks
     """
     class_map = {c.name: c for c in classes}
-    COL_W = 400
-    NODE_W = COL_W - 50
+    NODE_W = 350
+    NODE_GAP_X = 20  # horizontal gap between classes within package
     RANK_GAP = 20  # vertical gap between nodes
     PKG_LABEL_H = 30
-    PKG_GAP_X = 60  # horizontal gap between package columns
-    PKG_GAP_Y = 40  # vertical gap between package rows
+    PKG_PAD = 15  # padding inside package container
+    PKG_GAP_X = 60  # horizontal gap between packages
+    PKG_GAP_Y = 50  # vertical gap between packages
 
     # Step 1: compute inheritance rank (depth from root)
     children: dict[str, list[str]] = {}
@@ -206,54 +207,64 @@ def _sugiyama_layout(
     for pkg_name in sorted_pkgs:
         packages[pkg_name].sort(key=lambda c: (ranks.get(c.name, 0), c.name))
 
-    # Step 4: assign positions using grid layout
-    # Each package fills a column. When a column exceeds MAX_COL_HEIGHT,
-    # start a new row of columns.
-    MAX_COL_HEIGHT = 2000  # max pixels before wrapping to next row
+    # Step 4: assign positions using multi-column grid within packages
+    # Classes within each package are arranged in a grid (2-3 columns wide)
+    # Packages themselves are placed left-to-right, wrapping to next row
     positions: dict[str, tuple[int, int]] = {}
 
-    # Calculate height per package
-    pkg_heights: dict[str, int] = {}
-    for pkg_name, pkg_classes in packages.items():
-        total = PKG_LABEL_H
-        for c in pkg_classes:
-            total += _node_height(c) + RANK_GAP
-        pkg_heights[pkg_name] = total
+    # Determine inner columns per package based on class count
+    def inner_cols(n: int) -> int:
+        if n <= 3:
+            return 1
+        if n <= 8:
+            return 2
+        return 3
 
-    # Place packages left-to-right, wrapping to next row when height exceeded
+    # Calculate package dimensions (width and height) with inner grid
+    pkg_dims: dict[str, tuple[int, int]] = {}  # name -> (width, height)
+    for pkg_name, pkg_classes in packages.items():
+        n = len(pkg_classes)
+        cols = inner_cols(n)
+        pkg_w = cols * (NODE_W + NODE_GAP_X) - NODE_GAP_X + 2 * PKG_PAD
+
+        # Calculate height: distribute classes across columns
+        col_heights_inner = [0] * cols
+        for i, c in enumerate(sorted(pkg_classes, key=lambda c: (ranks.get(c.name, 0), c.name))):
+            col = i % cols
+            col_heights_inner[col] += _node_height(c) + RANK_GAP
+
+        pkg_h = PKG_LABEL_H + max(col_heights_inner) + PKG_PAD
+        pkg_dims[pkg_name] = (pkg_w, pkg_h)
+
+    # Place packages in rows, wrapping when row gets too wide
+    MAX_ROW_WIDTH = 3200
     cursor_x = 20
     cursor_y = PKG_GAP_Y
     row_max_height = 0
-    row_start_y = PKG_GAP_Y
 
     for pkg_name in sorted_pkgs:
-        pkg_h = pkg_heights.get(pkg_name, 200)
+        pkg_w, pkg_h = pkg_dims[pkg_name]
         pkg_classes = packages.get(pkg_name, [])
 
-        # Check if this package would exceed row height limit
-        # If so, and we've placed at least one package in this row, start new row
-        if cursor_y + pkg_h > row_start_y + MAX_COL_HEIGHT and cursor_y > row_start_y + PKG_LABEL_H:
-            # Move to next column in this row
-            cursor_x += COL_W + PKG_GAP_X
-            cursor_y = row_start_y
+        # Wrap to next row if this package would exceed max width
+        if cursor_x + pkg_w > MAX_ROW_WIDTH and cursor_x > 20 + PKG_PAD:
+            cursor_y += row_max_height + PKG_GAP_Y
+            cursor_x = 20
+            row_max_height = 0
 
-        # Place classes in this package
-        y = cursor_y + PKG_LABEL_H
-        for c in pkg_classes:
+        # Place classes in grid within this package
+        cols = inner_cols(len(pkg_classes))
+        col_y = [cursor_y + PKG_LABEL_H] * cols
+
+        for i, c in enumerate(sorted(pkg_classes, key=lambda c: (ranks.get(c.name, 0), c.name))):
+            col = i % cols
             h = _node_height(c)
-            positions[c.name] = (cursor_x, y)
-            y += h + RANK_GAP
+            cx = cursor_x + PKG_PAD + col * (NODE_W + NODE_GAP_X)
+            positions[c.name] = (cx, col_y[col])
+            col_y[col] += h + RANK_GAP
 
-        pkg_bottom = y
-        row_max_height = max(row_max_height, pkg_bottom - row_start_y)
-
-        # Move cursor down for next package in same column
-        cursor_y = pkg_bottom + PKG_GAP_Y
-
-        # If this column is getting tall, move to next column
-        if cursor_y - row_start_y > MAX_COL_HEIGHT:
-            cursor_x += COL_W + PKG_GAP_X
-            cursor_y = row_start_y
+        row_max_height = max(row_max_height, pkg_h)
+        cursor_x += pkg_w + PKG_GAP_X
 
     return positions
 
@@ -264,10 +275,8 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
     cells = []
     cid = 2
     node_ids: dict[str, int] = {}
-    COL_W = 380
-    NODE_W = COL_W - 30
-    PKG_GAP_X = 40
-    PKG_GAP_Y = 60
+    NODE_W = 350
+    PKG_PAD = 15
     PKG_LABEL_H = 30
 
     # Compute positions
@@ -422,7 +431,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
 
     # Render legend
     all_positions = [positions[c.name] for c in classes if c.name in positions]
-    legend_x = max(p[0] for p in all_positions) + COL_W + 60 if all_positions else 20
+    legend_x = max(p[0] for p in all_positions) + NODE_W + 60 if all_positions else 20
     legend_y = 60
 
     # Title
@@ -494,7 +503,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
     # Calculate page size from actual bounds
     all_x = [positions[c.name][0] for c in classes if c.name in positions]
     all_y = [positions[c.name][1] + _node_height(c) for c in classes if c.name in positions]
-    page_w = max(all_x) + COL_W + 200 if all_x else 3000
+    page_w = max(all_x) + NODE_W + 200 if all_x else 3000
     page_h = max(all_y) + 200 if all_y else 4000
 
     return f'''<?xml version="1.0" encoding="UTF-8"?>
