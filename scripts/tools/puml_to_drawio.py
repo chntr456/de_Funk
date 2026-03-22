@@ -287,9 +287,10 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             continue
         x, y = positions[c.name]
 
-        # Build header value — plain text, no HTML tags
-        # draw.io swimlane headers render value as plain text
-        # Use &#xa; for newlines within the attribute value
+        # Build header value — needs HTML since swimlane has html=1
+        # XML attribute encoding: &lt; for < that draw.io renders as HTML
+        # But draw.io's XML parser is lenient with value attributes
+        # Use &#xa; for line breaks (works in both XML and draw.io)
         header_lines = []
         if c.stereotype:
             header_lines.append(f"&lt;&lt;{xe(c.stereotype)}&gt;&gt;")
@@ -317,7 +318,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             f'style="swimlane;fontStyle={font_style};align=center;verticalAlign=top;'
             f'childLayout=stackLayout;horizontal=1;startSize={start_size};'
             f'horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;'
-            f'collapsible=0;marginBottom=0;whiteSpace=wrap;'
+            f'collapsible=0;marginBottom=0;html=1;whiteSpace=wrap;'
             f'fillColor={c.color};strokeColor=#333333;fontFamily=Courier New;fontSize=10;" '
             f'vertex="1" parent="1">'
             f'<mxGeometry x="{x}" y="{y}" width="{NODE_W}" height="{total_h}" as="geometry"/>'
@@ -333,7 +334,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
                 f'style="text;html=1;strokeColor=none;fillColor=none;align=left;'
                 f'verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;'
                 f'rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;'
-                f'fontFamily=Courier New;fontSize=10;" '
+                f'fontFamily=Courier New;fontSize=10;whiteSpace=wrap;" '
                 f'vertex="1" parent="{container_id}">'
                 f'<mxGeometry width="{NODE_W}" height="{ITEM_H}" as="geometry"/>'
                 f'</mxCell>')
@@ -344,7 +345,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             f'      <mxCell id="{cid}" value="" '
             f'style="line;strokeWidth=1;fillColor=none;align=left;'
             f'verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;'
-            f'rotatable=0;labelPosition=left;points=[];portConstraint=eastwest;" '
+            f'rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;" '
             f'vertex="1" parent="{container_id}">'
             f'<mxGeometry width="{NODE_W}" height="{SEP_H}" as="geometry"/>'
             f'</mxCell>')
@@ -357,7 +358,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
                 f'style="text;html=1;strokeColor=none;fillColor=none;align=left;'
                 f'verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;'
                 f'rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;'
-                f'fontFamily=Courier New;fontSize=10;" '
+                f'fontFamily=Courier New;fontSize=10;whiteSpace=wrap;" '
                 f'vertex="1" parent="{container_id}">'
                 f'<mxGeometry width="{NODE_W}" height="{ITEM_H}" as="geometry"/>'
                 f'</mxCell>')
