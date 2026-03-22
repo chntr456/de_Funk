@@ -207,12 +207,16 @@ def _sugiyama_layout(
     for pkg_name in sorted_pkgs:
         packages[pkg_name].sort(key=lambda c: (ranks.get(c.name, 0), c.name))
 
-    # Step 4: assign positions using multi-column grid within packages
-    # Classes within each package are arranged in a grid (2-3 columns wide)
-    # Packages themselves are placed left-to-right, wrapping to next row
+    # Step 4: assign positions using semantic row layout
+    # Packages placed in rows by architectural layer (top → bottom):
+    #   Row 0: Application + Config Loading
+    #   Row 1: Data Classes (domain, provider, infrastructure)
+    #   Row 2: Engine + Sessions + Field Resolution + Connections
+    #   Row 3: Build Path + Pipeline Executor + Handler Hierarchy + Orchestration
+    #   Row 4: Ingestion Path + Plugin System + Provider Data (if not in row 1)
     positions: dict[str, tuple[int, int]] = {}
 
-    # Determine inner columns per package based on class count
+    # Determine inner columns per package
     def inner_cols(n: int) -> int:
         if n <= 3:
             return 1
@@ -220,51 +224,62 @@ def _sugiyama_layout(
             return 2
         return 3
 
-    # Calculate package dimensions (width and height) with inner grid
-    pkg_dims: dict[str, tuple[int, int]] = {}  # name -> (width, height)
+    # Calculate package dimensions
+    pkg_dims: dict[str, tuple[int, int]] = {}
     for pkg_name, pkg_classes in packages.items():
         n = len(pkg_classes)
         cols = inner_cols(n)
         pkg_w = cols * (NODE_W + NODE_GAP_X) - NODE_GAP_X + 2 * PKG_PAD
-
-        # Calculate height: distribute classes across columns
         col_heights_inner = [0] * cols
         for i, c in enumerate(sorted(pkg_classes, key=lambda c: (ranks.get(c.name, 0), c.name))):
             col = i % cols
             col_heights_inner[col] += _node_height(c) + RANK_GAP
-
         pkg_h = PKG_LABEL_H + max(col_heights_inner) + PKG_PAD
         pkg_dims[pkg_name] = (pkg_w, pkg_h)
 
-    # Place packages in rows, wrapping when row gets too wide
-    MAX_ROW_WIDTH = 3200
-    cursor_x = 20
+    # Define semantic rows — packages that should be on the same horizontal band
+    ROWS = [
+        ["Application", "Config Loading", "Connections"],
+        ["Domain Data Classes", "Infrastructure Data Classes", "Provider Data Classes"],
+        ["Engine", "Sessions", "Field Resolution"],
+        ["Build Path", "Pipeline Executor", "Handler Hierarchy (API)", "Orchestration"],
+        ["Ingestion Path", "Plugin System"],
+    ]
+
+    # Flatten any packages not in the predefined rows
+    placed = {p for row in ROWS for p in row}
+    unplaced = [p for p in sorted_pkgs if p not in placed]
+    if unplaced:
+        ROWS.append(unplaced)
+
     cursor_y = PKG_GAP_Y
-    row_max_height = 0
+    for row_pkgs in ROWS:
+        # Only include packages that actually exist
+        row_pkgs = [p for p in row_pkgs if p in packages]
+        if not row_pkgs:
+            continue
 
-    for pkg_name in sorted_pkgs:
-        pkg_w, pkg_h = pkg_dims[pkg_name]
-        pkg_classes = packages.get(pkg_name, [])
+        cursor_x = 20
+        row_max_height = 0
 
-        # Wrap to next row if this package would exceed max width
-        if cursor_x + pkg_w > MAX_ROW_WIDTH and cursor_x > 20 + PKG_PAD:
-            cursor_y += row_max_height + PKG_GAP_Y
-            cursor_x = 20
-            row_max_height = 0
+        for pkg_name in row_pkgs:
+            pkg_w, pkg_h = pkg_dims.get(pkg_name, (370, 200))
+            pkg_classes = packages.get(pkg_name, [])
 
-        # Place classes in grid within this package
-        cols = inner_cols(len(pkg_classes))
-        col_y = [cursor_y + PKG_LABEL_H] * cols
+            cols = inner_cols(len(pkg_classes))
+            col_y = [cursor_y + PKG_LABEL_H] * cols
 
-        for i, c in enumerate(sorted(pkg_classes, key=lambda c: (ranks.get(c.name, 0), c.name))):
-            col = i % cols
-            h = _node_height(c)
-            cx = cursor_x + PKG_PAD + col * (NODE_W + NODE_GAP_X)
-            positions[c.name] = (cx, col_y[col])
-            col_y[col] += h + RANK_GAP
+            for i, c in enumerate(sorted(pkg_classes, key=lambda c: (ranks.get(c.name, 0), c.name))):
+                col = i % cols
+                h = _node_height(c)
+                cx = cursor_x + PKG_PAD + col * (NODE_W + NODE_GAP_X)
+                positions[c.name] = (cx, col_y[col])
+                col_y[col] += h + RANK_GAP
 
-        row_max_height = max(row_max_height, pkg_h)
-        cursor_x += pkg_w + PKG_GAP_X
+            row_max_height = max(row_max_height, pkg_h)
+            cursor_x += pkg_w + PKG_GAP_X
+
+        cursor_y += row_max_height + PKG_GAP_Y
 
     return positions
 
