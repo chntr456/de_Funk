@@ -502,6 +502,23 @@ package "Connections" #E6E6E6 {
 ' ══════════════════════════════════════════════════════════
 package "Build Path" #FF9933 {
 
+  class BaseModelBuilder <<abstract>> {
+    + model_name : str
+    + depends_on : list[str]
+    + session : BuildSession
+    --
+    + {abstract} get_model_class() : Type
+    + validate()
+    + pre_build()
+    + post_build(result)
+    + build() : BuildResult
+  }
+
+  class DomainBuilderFactory {
+    --
+    + {static} create_builders(domains_dir) : dict
+  }
+
   class BaseModel <<abstract>> {
     + session : BuildSession
     + config : DomainModelConfig
@@ -524,23 +541,6 @@ package "Build Path" #FF9933 {
     .. handles: seed, union, distinct, window, unpivot ..
   }
 
-  class BaseModelBuilder <<abstract>> {
-    + model_name : str
-    + depends_on : list[str]
-    + session : BuildSession
-    --
-    + {abstract} get_model_class() : Type
-    + validate()
-    + pre_build()
-    + post_build(result)
-    + build() : BuildResult
-  }
-
-  class DomainBuilderFactory {
-    --
-    + {static} create_builders(domains_dir) : dict
-  }
-
   class BuildResult <<dataclass>> {
     + model_name : str
     + success : bool
@@ -549,18 +549,90 @@ package "Build Path" #FF9933 {
     + error : Optional[str]
   }
 
-  note as BuildHooks
-    Known build hooks (registered as plugins):
-    - temporal: generate dim_calendar programmatically
-    - corporate.entity: after_build CIK enrichment
-    - securities.stocks: post_build technical indicators
-    - securities.forecast: custom ML training build
-  end note
-
   BaseModel <|-- DomainModel
   BaseModel ..> BuildSession : uses session
   BaseModelBuilder ..> BuildSession : uses session
   BaseModelBuilder ..> BaseModel : creates + builds
+}
+
+' ══════════════════════════════════════════════════════════
+' PIPELINE EXECUTOR (interprets config into engine calls)
+' ══════════════════════════════════════════════════════════
+package "Pipeline Executor" #FF9933 {
+
+  class NodeExecutor {
+    .. interprets graph.nodes config ..
+    .. calls engine operations in sequence ..
+    + session : BuildSession
+    --
+    + execute_all(nodes_config: dict) : dict[str, DF]
+    + execute_node(node_id, node_config, built_nodes) : DF
+    - _load_source(from_spec) : DF
+    - _apply_filters(df, filters) : DF
+    - _apply_joins(df, join_specs, built_nodes) : DF
+    - _apply_select(df, select_config) : DF
+    - _apply_derive(df, derive_config) : DF
+    - _apply_dedup(df, unique_key) : DF
+  }
+
+  note as ExecutorFlow
+    Execution sequence per node (from config):
+    ┌─────────────────────────────────────────┐
+    │ 1. HOOK: custom_node_loading(node_id)   │
+    │    → seed, union, calendar, distinct     │
+    │    → if handled, skip steps 2-7         │
+    ├─────────────────────────────────────────┤
+    │ 2. READ: _load_source(from_spec)        │
+    │    → engine.read(bronze_path)            │
+    │    → engine.read(silver_path)            │
+    │    → reference built_nodes[other_node]   │
+    ├─────────────────────────────────────────┤
+    │ 3. FILTER: _apply_filters(df, filters)  │
+    │    → engine.filter(df, conditions)       │
+    ├─────────────────────────────────────────┤
+    │ 4. JOIN: _apply_joins(df, join_specs)    │
+    │    → engine.join(df, other_df, on, how)  │
+    ├─────────────────────────────────────────┤
+    │ 5. SELECT: _apply_select(df, aliases)    │
+    │    → engine.select(df, column_map)       │
+    ├─────────────────────────────────────────┤
+    │ 6. DERIVE: _apply_derive(df, exprs)      │
+    │    → engine.derive(df, col, expr)        │
+    ├─────────────────────────────────────────┤
+    │ 7. DEDUP: _apply_dedup(df, unique_key)   │
+    │    → engine.dedup(df, columns)           │
+    └─────────────────────────────────────────┘
+  end note
+
+  note as BuildFlow
+    Full build orchestration:
+    ┌─────────────────────────────────────────┐
+    │ BaseModelBuilder.build()                │
+    │  ├─ validate()                          │
+    │  ├─ pre_build()          ← HOOK         │
+    │  ├─ BaseModel.build()                   │
+    │  │   ├─ before_build()   ← HOOK         │
+    │  │   ├─ NodeExecutor.execute_all()      │
+    │  │   │   └─ for each node in config:    │
+    │  │   │       custom_node_loading() HOOK  │
+    │  │   │       or execute_node() pipeline  │
+    │  │   ├─ separate dims/facts             │
+    │  │   ├─ after_build()    ← HOOK         │
+    │  │   └─ write_tables()                  │
+    │  └─ post_build(result)   ← HOOK         │
+    └─────────────────────────────────────────┘
+
+    4 hook points for custom code:
+    pre_build   → validation, setup
+    before_build → model-level prep
+    custom_node_loading → intercept any node
+    after_build → cross-table enrichment (CIK)
+    post_build  → technicals, stats, ML
+  end note
+
+  NodeExecutor ..> Engine : calls engine ops
+  NodeExecutor ..> DomainModelConfig : reads graph.nodes
+  BaseModel *-- NodeExecutor
 }
 
 ' ══════════════════════════════════════════════════════════
