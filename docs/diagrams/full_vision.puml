@@ -341,11 +341,6 @@ package "Engine" #80E0D0 {
     .. SQL ..
     + execute_sql(sql) : Any
     --
-    .. session factories ..
-    + ingest_session(**kwargs) : IngestSession
-    + build_session(**kwargs) : BuildSession
-    + query_session(**kwargs) : QuerySession
-    --
     + {static} for_spark(spark, storage) : Engine
     + {static} for_duckdb(duckdb_path, storage) : Engine
   }
@@ -455,9 +450,7 @@ package "Sessions" #80E0D0 {
   Session <|-- BuildSession
   Session <|-- QuerySession
 
-  Engine ..> IngestSession : creates
-  Engine ..> BuildSession : creates
-  Engine ..> QuerySession : creates
+  ' Sessions created by DeFunk app, not Engine directly
 
   Session *-- StorageRouter : path resolution
 
@@ -936,9 +929,39 @@ package "Orchestration" #CC99FF {
 }
 
 ' ══════════════════════════════════════════════════════════
-' APP CONFIGURATION
+' APPLICATION (top-level wiring — industry standard pattern)
 ' ══════════════════════════════════════════════════════════
-package "App Configuration" #E6E6E6 {
+package "Application" #E6E6E6 {
+
+  class DeFunk {
+    + config : AppConfig
+    + engine : Engine
+    + graph : DomainGraph
+    + models : dict[str, DomainModelConfig]
+    + providers : dict[str, ProviderConfig]
+    + endpoints : dict[str, EndpointConfig]
+    --
+    + {static} from_config(config_path: Path) : DeFunk
+    + {static} from_app_config(config: AppConfig) : DeFunk
+    + build_session(**kwargs) : BuildSession
+    + query_session(**kwargs) : QuerySession
+    + ingest_session(**kwargs) : IngestSession
+  }
+
+  note right of DeFunk
+    Top-level application object.
+    Assembles everything from config:
+    1. ConfigLoader → AppConfig
+    2. DomainConfigLoader → models
+    3. DomainGraph from EdgeSpecs
+    4. Engine from ConnectionConfig
+    5. Session factories with right config slices
+
+    Usage:
+      app = DeFunk.from_config("configs/")
+      session = app.build_session()
+      session.build("securities.stocks")
+  end note
 
   class ConfigLoader {
     --
@@ -951,20 +974,7 @@ package "App Configuration" #E6E6E6 {
     + storage : StorageConfig
     + run : RunConfig
     + apis : dict[str, APIConfig]
-    + domains : dict[str, DomainModelConfig]
-    + providers : dict[str, ProviderConfig]
-    + endpoints : dict[str, EndpointConfig]
   }
-
-  note right of AppConfig
-    Single config object assembled from:
-    - .env → connection, apis
-    - storage.json → storage
-    - run_config.json → run
-    - domains/models/ → domains
-    - domains/Data Sources/ → providers, endpoints
-    Engine and sessions are created from this.
-  end note
 
   AppConfig *-- RunConfig : runtime settings
 
@@ -973,7 +983,13 @@ package "App Configuration" #E6E6E6 {
   }
 
   ConfigLoader ..> AppConfig : produces
-  Engine ..> AppConfig : created from
+  DeFunk *-- AppConfig : config
+  DeFunk *-- Engine : engine
+  DeFunk *-- DomainGraph : graph
+  DeFunk ..> DomainConfigLoader : loads models
+  DeFunk ..> IngestSession : creates
+  DeFunk ..> BuildSession : creates
+  DeFunk ..> QuerySession : creates
 }
 
 ' ══════════════════════════════════════════════════════════
@@ -998,6 +1014,7 @@ DomainConfigLoader ..> DomainModelConfig : produces
 AppConfig *-- ConnectionConfig : connection
 AppConfig *-- StorageConfig : storage
 ConnectionFactory ..> DataConnection : creates
+DeFunk ..> ConnectionFactory : uses to create engine
 
 ' Orchestration → Build
 PipelineScheduler ..> DependencyGraph : build order
