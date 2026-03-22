@@ -313,7 +313,6 @@ package "Engine" #80E0D0 {
   class Engine {
     + conn : DataConnection
     + backend : str
-    + storage : StorageConfig
     - _ops : DataOps
     - _sql : SqlOps
     --
@@ -435,6 +434,7 @@ package "Sessions" #80E0D0 {
 
   class BuildSession {
     + models : dict[str, DomainModelConfig]
+    + graph : DomainGraph
     --
     + get_model(model_name) : DomainModelConfig
     + get_dependencies(model_name) : list[str]
@@ -625,11 +625,10 @@ package "Config Loading" #FFCC66 {
 package "Connections" #E6E6E6 {
 
   interface DataConnection <<interface>> {
+    + connect() : Any
+    + execute_raw(sql) : Any
     + read_table(path, format) : Any
-    + apply_filters(df, filters) : Any
-    + to_pandas(df) : DataFrame
-    + count(df) : int
-    + cache(df) : Any
+    + write_table(df, path, format, mode) : Any
     + stop()
   }
 
@@ -1075,6 +1074,7 @@ package "Application" #E6E6E6 {
   DeFunk *-- AppConfig : config
   DeFunk *-- Engine : engine
   DeFunk *-- DomainGraph : graph
+  DeFunk *-- ArtifactStore : artifacts
   DeFunk ..> DomainConfigLoader : loads models
   DeFunk ..> IngestSession : creates
   DeFunk ..> BuildSession : creates
@@ -1159,7 +1159,9 @@ DeFunk ..> ConnectionFactory : uses to create engine
 
 ' Orchestration → Build
 PipelineScheduler ..> DependencyGraph : build order
+PipelineScheduler ..> DeFunk : creates sessions via
 PipelineScheduler ..> BaseModelBuilder : triggers builds
+DomainBuilderFactory ..> BuildSession : injects into builders
 DependencyGraph ..> DomainModelConfig : reads depends_on
 
 ' Pipeline executor
