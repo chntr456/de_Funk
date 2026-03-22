@@ -580,119 +580,127 @@ package "Build Path" #FF9933 {
 }
 
 ' ══════════════════════════════════════════════════════════
-' PIPELINE EXECUTOR (interprets config into engine calls)
+' PIPELINE EXECUTOR (config-driven pipeline with hooks)
 ' ══════════════════════════════════════════════════════════
 package "Pipeline Executor" #FF9933 {
 
   class NodeExecutor {
-    .. interprets graph.nodes config ..
-    .. calls engine operations in sequence ..
+    .. config-driven pipeline executor ..
+    .. dispatches ops from registry ..
     + session : BuildSession
     - _ops : dict[str, Callable]
     --
     .. orchestration ..
     + execute_all(nodes_config) : dict[str, DF]
-    + execute_node(node_id, node_config, built_nodes) : DF
-    + register_op(name, handler)
-    .. source loading → engine.read / engine.create_df ..
+    + execute_node(node_id, node_config, built) : DF
+    + execute_pipeline(df, pipeline_steps) : DF
+    .. operation registry ..
+    + register_op(name: str, handler: Callable)
+    + get_op(name: str) : Callable
+    + list_ops() : list[str]
+    .. source loading → engine.read ..
     - _load_bronze(ref) : DF
     - _load_silver(model, table) : DF
     - _load_from_node(id, built) : DF
-    .. standard ops → engine methods ..
-    - _apply_filter(df, cfg)  → engine.filter()
-    - _apply_join(df, cfg)    → engine.join()
-    - _apply_select(df, cfg)  → engine.select()
-    - _apply_derive(df, cfg)  → engine.derive()
-    - _apply_dedup(df, cfg)   → engine.dedup()
-    - _apply_drop(df, cfg)    → engine.drop()
-    - _apply_enrich(df, cfg)  → engine.join() + engine.select()
-    .. special node types → compose engine methods ..
-    - _build_seed(cfg)        → engine.create_df(rows, schema)
-    - _build_union(cfg)       → engine.read() * N + engine.union()
-    - _build_distinct(cfg)    → engine.read() + engine.dedup()
-    - _build_window(cfg)      → engine.window(partition, order, expr)
-    - _build_unpivot(cfg)     → engine.unpivot(id, val, var)
-    - _build_generated(cfg)   → engine.execute_sql() or hook
+    .. built-in ops → engine methods ..
+    - _op_filter(df, cfg)   → engine.filter()
+    - _op_join(df, cfg)     → engine.join()
+    - _op_select(df, cfg)   → engine.select()
+    - _op_derive(df, cfg)   → engine.derive()
+    - _op_dedup(df, cfg)    → engine.dedup()
+    - _op_drop(df, cfg)     → engine.drop()
+    - _op_enrich(df, cfg)   → engine.join() + select()
+    - _op_window(df, cfg)   → engine.window()
+    - _op_unpivot(df, cfg)  → engine.unpivot()
+    - _op_hook(df, cfg)     → calls registered Python fn
+    .. special node types ..
+    - _build_seed(cfg)      → engine.create_df()
+    - _build_union(cfg)     → engine.read() * N + union()
+    - _build_distinct(cfg)  → engine.read() + dedup()
+    - _build_generated(cfg) → engine.execute_sql() or hook
   }
 
-  note as OpRegistry
-    Operations are registered handlers:
-    _ops = {
-      "filter":  _apply_filter,
-      "join":    _apply_join,
-      "select":  _apply_select,
-      "derive":  _apply_derive,
-      "dedup":   _apply_dedup,
-      "drop":    _apply_drop,
-      "enrich":  _apply_enrich,
-    }
-    User-defined ops via register_op():
-      executor.register_op("custom_cik_fix", my_fn)
-    Config can reference registered ops:
-      pipeline: [{op: filter, ...}, {op: custom_cik_fix, ...}]
+  note as PipelineConfig
+    Config-driven pipeline (explicit steps + order):
+
+    node: fact_prices
+      from: bronze.alpha_vantage_daily
+      pipeline:
+        - op: filter
+          conditions: ["asset_type = 'stock'"]
+        - op: derive
+          expressions: {security_id: "HASH(ticker)"}
+        - op: join
+          specs: [{to: dim_stock, on: [security_id]}]
+        - op: select
+          columns: {date_id: "...", close: "adjusted_close"}
+        - op: hook                    ← PYTHON HOOK
+          fn: my_custom_transform
+          params: {threshold: 0.05}
+        - op: dedup
+          keys: [security_id, date_id]
+
+    Backward compatible: if no pipeline key,
+    falls back to implicit order (filter→join→select→derive→dedup)
   end note
 
-  note as ExecutorFlow
-    Execution sequence per node (from config):
-    ┌──────────────────────────────────────────────┐
-    │ 1. HOOK: custom_node_loading(node_id)        │
-    │    → _build_seed (inline YAML data)           │
-    │    → _build_union (multiple sources UNION)    │
-    │    → _build_distinct (GROUP BY → dim)         │
-    │    → _build_window (RSI, MACD indicators)     │
-    │    → _build_unpivot (wide → long)             │
-    │    → _build_generated (deferred/calendar)     │
-    │    → if handled, skip steps 2-8               │
-    ├──────────────────────────────────────────────┤
-    │ 2. READ source:                               │
-    │    → _load_bronze(bronze.provider_table)       │
-    │    → _load_silver(model.table) (cross-dep)    │
-    │    → _load_from_node(other_node) (same model) │
-    ├──────────────────────────────────────────────┤
-    │ 3. FILTER: engine.filter(df, conditions)      │
-    ├──────────────────────────────────────────────┤
-    │ 4. JOIN: engine.join(df, other, on, how)      │
-    ├──────────────────────────────────────────────┤
-    │ 5. SELECT: engine.select(df, alias_map)       │
-    ├──────────────────────────────────────────────┤
-    │ 6. DERIVE: engine.derive(df, col, expr)       │
-    ├──────────────────────────────────────────────┤
-    │ 7. DEDUP: engine.dedup(df, unique_key)        │
-    ├──────────────────────────────────────────────┤
-    │ 8. DROP: engine.drop(df, columns)             │
-    ├──────────────────────────────────────────────┤
-    │ 9. ENRICH: engine.join(df, enrich_src, cols)  │
-    └──────────────────────────────────────────────┘
+  note as OpRegistryNote
+    Operation registry (extensible):
+
+    Built-in (registered at init):
+      filter, join, select, derive, dedup,
+      drop, enrich, window, unpivot, hook
+
+    User-defined:
+      executor.register_op("cik_fix", cik_enrichment_fn)
+      executor.register_op("technicals", compute_rsi_macd)
+
+    Plugin discovery:
+      BuildPluginRegistry.discover("plugins/")
+      → auto-registers all @pipeline_op decorated fns
+
+    Hook op signature:
+      def my_op(df, engine, config, **params) -> DF
+      → receives DataFrame, engine for ops, config for context
   end note
 
   note as BuildFlow
-    Full build orchestration:
-    ┌─────────────────────────────────────────┐
-    │ BaseModelBuilder.build()                │
-    │  ├─ validate()                          │
-    │  ├─ pre_build()          ← HOOK         │
-    │  ├─ BaseModel.build()                   │
-    │  │   ├─ before_build()   ← HOOK         │
-    │  │   ├─ NodeExecutor.execute_all()      │
-    │  │   │   └─ for each node in config:    │
-    │  │   │       custom_node_loading() HOOK  │
-    │  │   │       or execute_node() pipeline  │
-    │  │   ├─ separate dims/facts             │
-    │  │   ├─ after_build()    ← HOOK         │
-    │  │   └─ write_tables()                  │
-    │  └─ post_build(result)   ← HOOK         │
-    └─────────────────────────────────────────┘
+    Full build orchestration with hooks:
+    ┌──────────────────────────────────────────┐
+    │ BaseModelBuilder.build()                 │
+    │  ├─ validate()                           │
+    │  ├─ pre_build()           ← PYTHON HOOK  │
+    │  ├─ BaseModel.build()                    │
+    │  │   ├─ before_build()    ← PYTHON HOOK  │
+    │  │   ├─ NodeExecutor.execute_all()       │
+    │  │   │   for each node:                  │
+    │  │   │     ├─ custom_node_loading() HOOK │
+    │  │   │     │  (seed/union/calendar/etc)  │
+    │  │   │     ├─ READ source                │
+    │  │   │     └─ execute_pipeline(steps):   │
+    │  │   │         for each step:            │
+    │  │   │           dispatch _ops[step.op]  │
+    │  │   │           (includes hook steps)   │
+    │  │   ├─ separate dims / facts            │
+    │  │   ├─ after_build()     ← PYTHON HOOK  │
+    │  │   └─ write_tables()                   │
+    │  └─ post_build(result)    ← PYTHON HOOK  │
+    └──────────────────────────────────────────┘
 
-    4 hook points for custom code:
-    pre_build   → validation, setup
-    before_build → model-level prep
-    custom_node_loading → intercept any node
-    after_build → cross-table enrichment (CIK)
-    post_build  → technicals, stats, ML
+    Python hooks at every level:
+    • pre_build    → setup, validation
+    • before_build → model-level prep
+    • custom_node_loading → intercept any node
+    • pipeline op: hook → inline Python in pipeline
+    • after_build  → cross-table enrichment
+    • post_build   → technicals, stats, ML
+
+    Models are always free to deploy
+    any Python solution at any hook point.
   end note
 
   NodeExecutor ..> Engine : calls engine ops
-  NodeExecutor ..> DomainModelConfig : reads graph.nodes
+  NodeExecutor ..> DomainModelConfig : reads pipeline config
   BaseModel *-- NodeExecutor
 }
 
