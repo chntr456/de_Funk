@@ -206,12 +206,13 @@ def _sugiyama_layout(
     for pkg_name in sorted_pkgs:
         packages[pkg_name].sort(key=lambda c: (ranks.get(c.name, 0), c.name))
 
-    # Step 4: assign positions using balanced grid layout
-    # Goal: minimize total canvas area by balancing column heights
-    MAX_COLS = 4
+    # Step 4: assign positions using grid layout
+    # Each package fills a column. When a column exceeds MAX_COL_HEIGHT,
+    # start a new row of columns.
+    MAX_COL_HEIGHT = 2000  # max pixels before wrapping to next row
     positions: dict[str, tuple[int, int]] = {}
 
-    # Calculate total height per package
+    # Calculate height per package
     pkg_heights: dict[str, int] = {}
     for pkg_name, pkg_classes in packages.items():
         total = PKG_LABEL_H
@@ -219,35 +220,40 @@ def _sugiyama_layout(
             total += _node_height(c) + RANK_GAP
         pkg_heights[pkg_name] = total
 
-    # Greedy bin-packing: assign each package to the shortest column
-    col_heights: list[int] = [0] * MAX_COLS
-    col_packages: list[list[str]] = [[] for _ in range(MAX_COLS)]
+    # Place packages left-to-right, wrapping to next row when height exceeded
+    cursor_x = 20
+    cursor_y = PKG_GAP_Y
+    row_max_height = 0
+    row_start_y = PKG_GAP_Y
 
-    # Sort packages by height descending (pack tallest first for better balance)
-    sorted_by_height = sorted(sorted_pkgs, key=lambda p: -pkg_heights.get(p, 0))
+    for pkg_name in sorted_pkgs:
+        pkg_h = pkg_heights.get(pkg_name, 200)
+        pkg_classes = packages.get(pkg_name, [])
 
-    for pkg_name in sorted_by_height:
-        # Find shortest column
-        min_col = min(range(MAX_COLS), key=lambda c: col_heights[c])
-        col_packages[min_col].append(pkg_name)
-        col_heights[min_col] += pkg_heights[pkg_name] + PKG_GAP_Y
+        # Check if this package would exceed row height limit
+        # If so, and we've placed at least one package in this row, start new row
+        if cursor_y + pkg_h > row_start_y + MAX_COL_HEIGHT and cursor_y > row_start_y + PKG_LABEL_H:
+            # Move to next column in this row
+            cursor_x += COL_W + PKG_GAP_X
+            cursor_y = row_start_y
 
-    # Assign positions: each column gets its packages stacked vertically
-    for col in range(MAX_COLS):
-        base_x = col * (COL_W + PKG_GAP_X) + 20
-        y = PKG_GAP_Y
+        # Place classes in this package
+        y = cursor_y + PKG_LABEL_H
+        for c in pkg_classes:
+            h = _node_height(c)
+            positions[c.name] = (cursor_x, y)
+            y += h + RANK_GAP
 
-        for pkg_name in col_packages[col]:
-            y += PKG_LABEL_H
-            pkg_classes = packages.get(pkg_name, [])
+        pkg_bottom = y
+        row_max_height = max(row_max_height, pkg_bottom - row_start_y)
 
-            # Single column within package
-            for c in pkg_classes:
-                h = _node_height(c)
-                positions[c.name] = (base_x, y)
-                y += h + RANK_GAP
+        # Move cursor down for next package in same column
+        cursor_y = pkg_bottom + PKG_GAP_Y
 
-            y += PKG_GAP_Y
+        # If this column is getting tall, move to next column
+        if cursor_y - row_start_y > MAX_COL_HEIGHT:
+            cursor_x += COL_W + PKG_GAP_X
+            cursor_y = row_start_y
 
     return positions
 
