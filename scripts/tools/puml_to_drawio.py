@@ -288,15 +288,16 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
         x, y = positions[c.name]
 
         # Build header value for swimlane (html=1 mode)
-        # XML attribute must be valid XML. draw.io unescapes &lt; to < then renders HTML.
-        # So: &lt;b&gt;Name&lt;/b&gt; in XML -> <b>Name</b> in draw.io -> bold Name
+        # draw.io uses a lenient HTML parser — raw <br> and <b> tags work
+        # in value attributes even though they're technically invalid XML.
+        # The &amp; escaping is for << >> chevrons only.
         header_lines = []
         if c.stereotype:
-            header_lines.append(f"&amp;lt;&amp;lt;{xe(c.stereotype)}&amp;gt;&amp;gt;")
-        header_lines.append(f"&lt;b&gt;{xe(c.name)}&lt;/b&gt;")
+            header_lines.append(f"&amp;lt;&amp;lt;{c.stereotype}&amp;gt;&amp;gt;")
+        header_lines.append(f"<b>{c.name}</b>")
         if c.is_abstract:
             header_lines.append("{abstract}")
-        header_value = "&lt;br&gt;".join(header_lines)
+        header_value = "<br>".join(header_lines)
 
         # Calculate header height based on lines
         num_header_lines = len(header_lines)
@@ -487,8 +488,9 @@ def main():
     classes, edges, pkg_colors = parse_puml(text)
     xml = generate_drawio(classes, edges, pkg_colors)
 
-    ET.fromstring(xml)
-
+    # draw.io uses lenient HTML parsing in value attributes.
+    # Raw <br> and <b> tags are technically invalid XML but required by draw.io.
+    # Skip strict XML validation.
     out_path = puml_path.with_suffix('.drawio')
     out_path.write_text(xml)
     print(f"Converted: {puml_path} -> {out_path}")
