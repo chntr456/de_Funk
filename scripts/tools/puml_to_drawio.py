@@ -327,7 +327,8 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
         node_ids[c.name] = cid
         cid += 1
 
-        # Attribute items
+        # Attribute items — use explicit y positions
+        child_y = start_size
         for attr in (c.attrs or [' ']):
             cells.append(
                 f'      <mxCell id="{cid}" value="{xe(attr)}" '
@@ -336,9 +337,10 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
                 f'rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;'
                 f'fontFamily=Courier New;fontSize=10;whiteSpace=wrap;" '
                 f'vertex="1" parent="{container_id}">'
-                f'<mxGeometry width="{NODE_W}" height="{ITEM_H}" as="geometry"/>'
+                f'<mxGeometry y="{child_y}" width="{NODE_W}" height="{ITEM_H}" as="geometry"/>'
                 f'</mxCell>')
             cid += 1
+            child_y += ITEM_H
 
         # Separator line between attributes and methods
         cells.append(
@@ -347,9 +349,10 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             f'verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;'
             f'rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;" '
             f'vertex="1" parent="{container_id}">'
-            f'<mxGeometry width="{NODE_W}" height="{SEP_H}" as="geometry"/>'
+            f'<mxGeometry y="{child_y}" width="{NODE_W}" height="{SEP_H}" as="geometry"/>'
             f'</mxCell>')
         cid += 1
+        child_y += SEP_H
 
         # Method items
         for method in (c.methods or [' ']):
@@ -360,9 +363,10 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
                 f'rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;'
                 f'fontFamily=Courier New;fontSize=10;whiteSpace=wrap;" '
                 f'vertex="1" parent="{container_id}">'
-                f'<mxGeometry width="{NODE_W}" height="{ITEM_H}" as="geometry"/>'
+                f'<mxGeometry y="{child_y}" width="{NODE_W}" height="{ITEM_H}" as="geometry"/>'
                 f'</mxCell>')
             cid += 1
+            child_y += ITEM_H
 
     # Render edges
     edge_styles = {
