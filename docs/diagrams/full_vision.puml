@@ -814,7 +814,7 @@ package "Ingestion Path" #CC9966 {
   }
 
   class BronzeSink {
-    + engine : Engine
+    + session : IngestSession
     --
     + write_if_missing(table, partitions, df) : bool
     + upsert(df, table, merge_keys, partitions) : str
@@ -918,9 +918,32 @@ package "Plugin System" #B3FFB3 {
 ' ══════════════════════════════════════════════════════════
 ' KEY RELATIONSHIPS
 ' ══════════════════════════════════════════════════════════
+
+' Config loading
 DomainBuilderFactory ..> DomainConfigLoader : loads configs
-PipelineScheduler ..> DependencyGraph : build order
 BuildSession ..> DomainConfigLoader : loads models
+StorageRouter ..> StorageConfig : built from
+AppConfig *-- ConnectionConfig
+AppConfig *-- StorageConfig
+ConnectionFactory ..> DataConnection : creates
+
+' Orchestration → Build
+PipelineScheduler ..> DependencyGraph : build order
+PipelineScheduler ..> BuildSession : triggers builds
+DependencyGraph ..> DomainModelConfig : reads depends_on
+
+' Pipeline executor
+NodeExecutor ..> BuildSession : uses session
+BuildPluginRegistry ..> NodeExecutor : registers ops into
+
+' Ingestion
+IngestorEngine ..> IngestSession : uses session
+IngestorEngine *-- BaseProvider : orchestrates
+BaseProvider ..> HttpClient : fetches via
+BronzeSink ..> IngestSession : uses session
+
+' Provider ↔ Endpoint
+ProviderConfig ..> EndpointConfig : lists endpoints
 
 ' ══════════════════════════════════════════════════════════
 ' MEASURES NOTE
