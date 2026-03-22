@@ -231,6 +231,7 @@ package "Infrastructure Data Classes" #E6E6E6 {
     + raw : str
     + bronze : str
     + silver : str
+    + models : str
   }
 
   class ApiLimits <<dataclass>> {
@@ -334,6 +335,9 @@ package "Engine" #80E0D0 {
     .. reshape operations ..
     + unpivot(df, id_cols, value_cols, var_name, val_name) : Any
     + window(df, partition, order, expr, alias) : Any
+    .. analytical operations (shared by build + query) ..
+    + pivot(df, rows, cols, measures) : Any
+    + aggregate(df, group_by, aggs) : Any
     .. inspection ..
     + count(df) : int
     + to_pandas(df) : DataFrame
@@ -363,6 +367,9 @@ package "Engine" #80E0D0 {
     .. reshape operations ..
     + unpivot(df, id_cols, value_cols, var_name, val_name) : Any
     + window(df, partition, order, expr, alias) : Any
+    .. analytical operations ..
+    + pivot(df, rows, cols, measures) : Any
+    + aggregate(df, group_by, aggs) : Any
     .. inspection ..
     + count(df) : int
     + to_pandas(df) : DataFrame
@@ -504,15 +511,13 @@ package "Field Resolution" #80E0D0 {
     + get_field_catalog() : dict
   }
 
-  class StorageRouter <<dataclass>> {
-    + roots : RootsConfig
-    + domain_roots : dict[str, str]
-    + tables : dict[str, TablePath]
+  class StorageRouter {
+    + config : StorageConfig
     --
-    + resolve(table_ref) : str
-    + raw_path(provider, endpoint) : str
-    + bronze_path(provider, endpoint) : str
-    + silver_path(domain, model) : str
+    + raw_path(provider, endpoint) : Path
+    + bronze_path(provider, endpoint) : Path
+    + silver_path(model: DomainModelConfig) : Path
+    + model_path(model_name, version) : Path
   }
 
   DomainGraph ..> DomainModelConfig : reads GraphSpec.edges
@@ -682,6 +687,8 @@ package "Pipeline Executor" #FF9933 {
     - _op_enrich(df, cfg)   → engine.join() + select()
     - _op_window(df, cfg)   → engine.window()
     - _op_unpivot(df, cfg)  → engine.unpivot()
+    - _op_pivot(df, cfg)    → engine.pivot()
+    - _op_aggregate(df, cfg) → engine.aggregate()
     - _op_hook(df, cfg)     → calls registered Python fn
     .. special node types ..
     - _build_seed(cfg)      → engine.create_df()
@@ -993,6 +1000,58 @@ package "Application" #E6E6E6 {
 }
 
 ' ══════════════════════════════════════════════════════════
+' MODEL ARTIFACTS (trained ML models — separate from Silver data)
+' ══════════════════════════════════════════════════════════
+package "Model Artifacts" #B3FFB3 {
+
+  class ModelArtifact <<dataclass>> {
+    + model_name : str
+    + version : str
+    + trained_at : datetime
+    + artifact_path : Path
+    + metrics : dict
+    + config : dict
+    + status : str
+  }
+
+  class ArtifactStore {
+    + models_root : Path
+    --
+    + save(artifact: ModelArtifact, model_object: Any) : Path
+    + load(model_name, version) : tuple[ModelArtifact, Any]
+    + latest(model_name) : tuple[ModelArtifact, Any]
+    + list_versions(model_name) : list[ModelArtifact]
+    + register(artifact: ModelArtifact)
+  }
+
+  note as ArtifactNote
+    Forecast YAML config:
+    hooks:
+      post_build:
+        - {fn: plugins.forecast.train_and_save,
+           params: {methods: [arima, prophet],
+                    horizon: 30,
+                    retrain_if_stale_days: 7}}
+
+    Storage layout:
+    /storage/models/{model_name}/{version}/
+      model.pkl          ← trained model artifact
+      metadata.json      ← ModelArtifact fields
+      metrics.json       ← accuracy metrics
+
+    Results written to Silver:
+    /storage/silver/forecast/facts/fact_forecast_price/
+    /storage/silver/forecast/dims/dim_model_registry/
+
+    Recall: ArtifactStore.load("arima_aapl", "v3")
+    Retrain: PipelineScheduler checks staleness
+  end note
+
+  ArtifactStore *-- ModelArtifact : manages
+  ArtifactStore ..> StorageRouter : model_path()
+}
+
+' ══════════════════════════════════════════════════════════
 ' PLUGIN SYSTEM
 ' ══════════════════════════════════════════════════════════
 package "Plugin System" #B3FFB3 {
@@ -1048,10 +1107,11 @@ end note
 ' STORAGE NOTE
 ' ══════════════════════════════════════════════════════════
 note as StorageNote
-  | Layer | Mount | Path |
-  | Raw | HDD/NAS | /mnt/disk/storage/raw/{provider}/{endpoint}/ |
-  | Bronze | SSD | /shared/storage/bronze/{provider}/{endpoint}/ |
-  | Silver | SSD | /shared/storage/silver/{domain}/{model}/ |
+  | Layer | Mount | Path | Contents |
+  | Raw | HDD/NAS | /mnt/disk/storage/raw/{provider}/{endpoint}/ | Downloaded files |
+  | Bronze | SSD | /shared/storage/bronze/{provider}/{endpoint}/ | Typed Delta tables |
+  | Silver | SSD | /shared/storage/silver/{domain}/{model}/ | Dimensional star schema |
+  | Models | SSD | /shared/storage/models/{model_name}/{version}/ | Trained ML artifacts |
 end note
 
 ' ══════════════════════════════════════════════════════════
