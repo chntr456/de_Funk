@@ -566,6 +566,9 @@ package "Config Loading" #FFCC66 {
     + load_model_config(model_name) : DomainModelConfig
     + load_all() : dict[str, DomainModelConfig]
     + load_base(base_ref) : BaseTemplate
+    + validate_model(model_name) : list[str]
+    + validate_all() : dict[str, list[str]]
+    + get_inheritance_tree(model_name) : dict
   }
 
   class config_translator <<module>> {
@@ -577,10 +580,41 @@ package "Config Loading" #FFCC66 {
     + {static} deep_merge(base, override) : dict
     + {static} resolve_extends_reference(ref, dir, cache) : dict
     + {static} resolve_nested_extends(config, dir, cache) : dict
+    + {static} validate_extends_chain(config, dir) : list[str]
+    + {static} detect_circular_extends(ref, dir, visited) : bool
+    + {static} get_inheritance_chain(ref, dir) : list[str]
   }
 
+  note as ExtendsValidation
+    Inheritance validation logic:
+
+    1. resolve: _base.finance.securities
+       → find domains/_base/finance/securities.md
+       → parse frontmatter → BaseTemplate
+       → if not found: raise ConfigurationError
+
+    2. validate chain: no circular extends
+       → A extends B extends C extends A → error
+       → detect_circular_extends tracks visited set
+
+    3. deep_merge(parent, child):
+       → parent canonical_fields + child overrides
+       → parent tables merged with child tables
+       → child values win at leaf level
+       → lists are replaced (not appended)
+
+    4. nested extends (table-level):
+       → fact_stock_prices extends _base._fact_prices
+       → table schema merged same way
+       → validate parent table exists in base
+
+    5. get_inheritance_chain for debugging:
+       → returns [root, ..., parent, self]
+       → e.g. [_base_.entity, finance.securities, stocks]
+  end note
+
   DomainConfigLoader ..> config_translator : translates
-  DomainConfigLoader ..> extends_resolver : resolves inheritance
+  DomainConfigLoader ..> extends_resolver : resolves + validates inheritance
   DomainConfigLoader ..> BaseTemplate : loads base templates
   BaseTemplate ..> DomainModelConfig : merged into via deep_merge
 }
