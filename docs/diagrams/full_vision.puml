@@ -244,19 +244,32 @@ package "Engine" #80E0D0 {
     - _ops : DataOps
     - _sql : SqlOps
     --
-    + select(df, columns) : Any
-    + filter(df, filters) : Any
-    + derive(df, col, expr) : Any
-    + join(left, right, on, how) : Any
-    + union(dfs) : Any
-    + dedup(df, subset) : Any
+    .. read / write ..
     + read(path) : Any
     + write(df, path, format, mode) : Any
+    + create_df(rows, schema) : Any
+    + scan(path) : str
+    .. column operations ..
+    + select(df, columns) : Any
+    + drop(df, columns) : Any
+    + derive(df, col, expr) : Any
+    .. row operations ..
+    + filter(df, filters) : Any
+    + dedup(df, subset) : Any
+    .. combine operations ..
+    + join(left, right, on, how) : Any
+    + union(dfs) : Any
+    .. reshape operations ..
+    + unpivot(df, id_cols, value_cols, var_name, val_name) : Any
+    + window(df, partition, order, expr, alias) : Any
+    .. inspection ..
     + count(df) : int
     + to_pandas(df) : DataFrame
+    + columns(df) : list[str]
+    .. SQL ..
     + execute_sql(sql) : Any
-    + scan(path) : str
     --
+    .. session factories ..
     + ingest_session(**kwargs) : IngestSession
     + build_session(**kwargs) : BuildSession
     + query_session(**kwargs) : QuerySession
@@ -266,16 +279,27 @@ package "Engine" #80E0D0 {
   }
 
   interface DataOps <<interface>> {
-    + select(df, columns) : Any
-    + filter(df, filters) : Any
-    + derive(df, col, expr) : Any
-    + join(left, right, on, how) : Any
-    + union(dfs) : Any
-    + dedup(df, subset) : Any
+    .. read / write ..
     + read(path) : Any
     + write(df, path, format, mode) : Any
+    + create_df(rows, schema) : Any
+    .. column operations ..
+    + select(df, columns) : Any
+    + drop(df, columns) : Any
+    + derive(df, col, expr) : Any
+    .. row operations ..
+    + filter(df, filters) : Any
+    + dedup(df, subset) : Any
+    .. combine operations ..
+    + join(left, right, on, how) : Any
+    + union(dfs) : Any
+    .. reshape operations ..
+    + unpivot(df, id_cols, value_cols, var_name, val_name) : Any
+    + window(df, partition, order, expr, alias) : Any
+    .. inspection ..
     + count(df) : int
     + to_pandas(df) : DataFrame
+    + columns(df) : list[str]
   }
 
   interface SqlOps <<interface>> {
@@ -564,30 +588,49 @@ package "Pipeline Executor" #FF9933 {
     .. interprets graph.nodes config ..
     .. calls engine operations in sequence ..
     + session : BuildSession
+    - _ops : dict[str, Callable]
     --
     .. orchestration ..
-    + execute_all(nodes_config: dict) : dict[str, DF]
+    + execute_all(nodes_config) : dict[str, DF]
     + execute_node(node_id, node_config, built_nodes) : DF
-    .. source loading ..
-    - _load_bronze(table_ref) : DF
-    - _load_silver(model_name, table_name) : DF
-    - _load_from_node(node_id, built_nodes) : DF
-    .. standard pipeline ops (in order) ..
-    - _apply_filters(df, filters) : DF
-    - _apply_joins(df, join_specs, built_nodes) : DF
-    - _apply_select(df, select_config) : DF
-    - _apply_derive(df, derive_config) : DF
-    - _apply_dedup(df, unique_key) : DF
-    - _apply_drop(df, drop_cols) : DF
-    - _apply_enrich(df, enrich_specs) : DF
-    .. special node types (via custom_node_loading) ..
-    - _build_seed(node_id, config) : DF
-    - _build_union(node_id, config) : DF
-    - _build_distinct(node_id, config) : DF
-    - _build_window(node_id, config) : DF
-    - _build_unpivot(node_id, config) : DF
-    - _build_generated(node_id, config) : DF
+    + register_op(name, handler)
+    .. source loading → engine.read / engine.create_df ..
+    - _load_bronze(ref) : DF
+    - _load_silver(model, table) : DF
+    - _load_from_node(id, built) : DF
+    .. standard ops → engine methods ..
+    - _apply_filter(df, cfg)  → engine.filter()
+    - _apply_join(df, cfg)    → engine.join()
+    - _apply_select(df, cfg)  → engine.select()
+    - _apply_derive(df, cfg)  → engine.derive()
+    - _apply_dedup(df, cfg)   → engine.dedup()
+    - _apply_drop(df, cfg)    → engine.drop()
+    - _apply_enrich(df, cfg)  → engine.join() + engine.select()
+    .. special node types → compose engine methods ..
+    - _build_seed(cfg)        → engine.create_df(rows, schema)
+    - _build_union(cfg)       → engine.read() * N + engine.union()
+    - _build_distinct(cfg)    → engine.read() + engine.dedup()
+    - _build_window(cfg)      → engine.window(partition, order, expr)
+    - _build_unpivot(cfg)     → engine.unpivot(id, val, var)
+    - _build_generated(cfg)   → engine.execute_sql() or hook
   }
+
+  note as OpRegistry
+    Operations are registered handlers:
+    _ops = {
+      "filter":  _apply_filter,
+      "join":    _apply_join,
+      "select":  _apply_select,
+      "derive":  _apply_derive,
+      "dedup":   _apply_dedup,
+      "drop":    _apply_drop,
+      "enrich":  _apply_enrich,
+    }
+    User-defined ops via register_op():
+      executor.register_op("custom_cik_fix", my_fn)
+    Config can reference registered ops:
+      pipeline: [{op: filter, ...}, {op: custom_cik_fix, ...}]
+  end note
 
   note as ExecutorFlow
     Execution sequence per node (from config):
