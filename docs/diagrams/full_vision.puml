@@ -624,18 +624,34 @@ package "Build Path" #FF9933 {
     - _dims : dict
     - _facts : dict
     --
+    .. build lifecycle (calls hooks) ..
     + build() : tuple[dict, dict]
-    + before_build()
-    + after_build(dims, facts)
-    + custom_node_loading(node_id, config) : Optional[DF]
     + write_tables(output_root, format, mode)
     + get_table(name) : Any
     + has_table(name) : bool
     + list_tables() : list[str]
+    .. hook methods (overridable OR config-driven) ..
+    + before_build()
+    + after_build(dims, facts)
+    + custom_node_loading(node_id, config) : Optional[DF]
+    .. hook dispatch (config first, then class override) ..
+    - _run_hooks(hook_name, **context)
   }
+
+  note bottom of BaseModel
+    Hook resolution order:
+    1. Check config.hooks.{name} for registered fns
+    2. If no config hook, call self.{name}() override
+    3. If neither, no-op (default behavior)
+
+    Simple hooks → YAML config (no subclass needed)
+    Complex logic → Python subclass override
+    Both coexist on same model.
+  end note
 
   class DomainModel {
     .. default for all domains ..
+    .. all hooks handled via config ..
     + custom_node_loading(node_id, config)
     .. handles: seed, union, distinct, window, unpivot ..
   }
