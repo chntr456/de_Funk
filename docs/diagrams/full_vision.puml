@@ -531,12 +531,41 @@ package "Field Resolution" #80E0D0 {
 ' ══════════════════════════════════════════════════════════
 package "Config Loading" #FFCC66 {
 
+  class BaseTemplate <<dataclass>> {
+    + type : str
+    + model : str
+    + version : str
+    + description : str
+    + extends : Optional[str]
+    + canonical_fields : list[SchemaField]
+    + tables : dict[str, TableConfig]
+    + depends_on : list[str]
+  }
+
+  note bottom of BaseTemplate
+    Reusable markdown templates in domains/_base/:
+    _base._base_.entity → root entity pattern
+    _base.finance.securities → securities pattern
+    _base.corporate.earnings → earnings pattern
+    _base.accounting.financial_statement → etc.
+
+    Inheritance chain (resolved by extends_resolver):
+    _base._base_.entity
+      └─ _base.finance.securities
+           └─ securities.stocks (model)
+                └─ fact_stock_prices (table extends _fact_prices)
+
+    deep_merge: parent fields + child overrides
+    Tables/sources can also extend base table templates
+  end note
+
   class DomainConfigLoader {
     - domains_dir : Path
     - _parse_cache : dict
     --
     + load_model_config(model_name) : DomainModelConfig
     + load_all() : dict[str, DomainModelConfig]
+    + load_base(base_ref) : BaseTemplate
   }
 
   class config_translator <<module>> {
@@ -547,10 +576,13 @@ package "Config Loading" #FFCC66 {
     + {static} parse_front_matter(file_path) : dict
     + {static} deep_merge(base, override) : dict
     + {static} resolve_extends_reference(ref, dir, cache) : dict
+    + {static} resolve_nested_extends(config, dir, cache) : dict
   }
 
   DomainConfigLoader ..> config_translator : translates
   DomainConfigLoader ..> extends_resolver : resolves inheritance
+  DomainConfigLoader ..> BaseTemplate : loads base templates
+  BaseTemplate ..> DomainModelConfig : merged into via deep_merge
 }
 
 ' ══════════════════════════════════════════════════════════
