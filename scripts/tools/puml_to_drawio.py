@@ -478,9 +478,178 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
 </mxfile>'''
 
 
+def _find_class_name(value: str) -> str | None:
+    """Extract class name from swimlane header value."""
+    if not value:
+        return None
+    # Value might be "<<dataclass>>\nSchemaField" or just "Engine"
+    lines = value.replace('\n', ' ').replace('&#xa;', ' ').split()
+    # Skip stereotype tokens like <<dataclass>>, {abstract}
+    for token in reversed(lines):
+        if not token.startswith('<<') and not token.startswith('{') and not token.startswith('<'):
+            return token
+    return lines[-1] if lines else None
+
+
+def update_drawio(drawio_path: Path, classes: list[PumlClass]) -> int:
+    """Update class contents in existing drawio file without moving containers.
+
+    Finds swimlane containers by class name, replaces their children
+    (attributes, separator, methods) while preserving container position/size.
+    Returns count of updated classes.
+    """
+    tree = ET.parse(drawio_path)
+    root_elem = tree.getroot()
+    updated = 0
+
+    # Build lookup from puml class name -> PumlClass
+    class_map = {c.name: c for c in classes}
+
+    for diagram in root_elem.findall('diagram'):
+        mg = diagram.find('mxGraphModel')
+        if mg is None:
+            continue
+        rt = mg.find('root')
+        if rt is None:
+            continue
+
+        # Find all swimlane containers and map name -> element + id
+        containers: dict[str, tuple[ET.Element, str]] = {}
+        for cell in rt.findall('mxCell'):
+            style = cell.get('style', '')
+            if 'swimlane' in style and 'childLayout' in style:
+                name = _find_class_name(cell.get('value', ''))
+                if name:
+                    containers[name] = (cell, cell.get('id', ''))
+
+        # For each matching class, update children
+        for class_name, puml_class in class_map.items():
+            if class_name not in containers:
+                continue
+
+            container, container_id = containers[class_name]
+
+            # Remove existing children of this container
+            children_to_remove = [
+                c for c in rt.findall('mxCell')
+                if c.get('parent') == container_id and c.get('id') != container_id
+            ]
+            for child in children_to_remove:
+                rt.remove(child)
+
+            # Find max existing ID to generate new unique IDs
+            max_id = max(
+                (int(c.get('id', '0')) for c in rt.findall('mxCell')
+                 if c.get('id', '').isdigit()),
+                default=1000
+            )
+            cid = max_id + 1
+
+            # Get container geometry for width
+            geo = container.find('mxGeometry')
+            node_w = int(float(geo.get('width', '350'))) if geo is not None else 350
+
+            # Read startSize from style
+            style = container.get('style', '')
+            start_size = 26
+            for part in style.split(';'):
+                if part.startswith('startSize='):
+                    start_size = int(part.split('=')[1])
+
+            # Update header value
+            header_lines = []
+            if puml_class.stereotype:
+                header_lines.append(f"&lt;&lt;{xe(puml_class.stereotype)}&gt;&gt;")
+            header_lines.append(xe(puml_class.name))
+            if puml_class.is_abstract:
+                header_lines.append("{abstract}")
+            container.set('value', "&#xa;".join(header_lines))
+
+            # Recalculate startSize based on header lines
+            num_lines = len(header_lines)
+            new_start_size = max(26, num_lines * 18 + 4)
+
+            # Update startSize in style
+            new_style = ';'.join(
+                f'startSize={new_start_size}' if p.startswith('startSize=') else p
+                for p in style.split(';')
+            )
+            container.set('style', new_style)
+
+            # Add new children
+            ITEM_H = 20
+            SEP_H = 8
+            child_y = new_start_size
+
+            for attr in (puml_class.attrs or [' ']):
+                child = ET.SubElement(rt, 'mxCell', {
+                    'id': str(cid),
+                    'value': xe(attr),
+                    'style': ('text;html=1;strokeColor=none;fillColor=none;align=left;'
+                              'verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;'
+                              'rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;'
+                              'fontFamily=Courier New;fontSize=10;whiteSpace=wrap;'),
+                    'vertex': '1',
+                    'parent': container_id,
+                })
+                child_geo = ET.SubElement(child, 'mxGeometry', {
+                    'y': str(child_y), 'width': str(node_w), 'height': str(ITEM_H),
+                    'as': 'geometry',
+                })
+                cid += 1
+                child_y += ITEM_H
+
+            # Separator
+            sep = ET.SubElement(rt, 'mxCell', {
+                'id': str(cid),
+                'value': '',
+                'style': ('line;strokeWidth=1;fillColor=none;align=left;'
+                          'verticalAlign=middle;spacingTop=-1;spacingLeft=3;spacingRight=3;'
+                          'rotatable=0;labelPosition=right;points=[];portConstraint=eastwest;'),
+                'vertex': '1',
+                'parent': container_id,
+            })
+            sep_geo = ET.SubElement(sep, 'mxGeometry', {
+                'y': str(child_y), 'width': str(node_w), 'height': str(SEP_H),
+                'as': 'geometry',
+            })
+            cid += 1
+            child_y += SEP_H
+
+            for method in (puml_class.methods or [' ']):
+                child = ET.SubElement(rt, 'mxCell', {
+                    'id': str(cid),
+                    'value': xe(method),
+                    'style': ('text;html=1;strokeColor=none;fillColor=none;align=left;'
+                              'verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;'
+                              'rotatable=0;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;'
+                              'fontFamily=Courier New;fontSize=10;whiteSpace=wrap;'),
+                    'vertex': '1',
+                    'parent': container_id,
+                })
+                child_geo = ET.SubElement(child, 'mxGeometry', {
+                    'y': str(child_y), 'width': str(node_w), 'height': str(ITEM_H),
+                    'as': 'geometry',
+                })
+                cid += 1
+                child_y += ITEM_H
+
+            # Update container height to fit new children
+            if geo is not None:
+                geo.set('height', str(child_y))
+
+            updated += 1
+
+    # Write back
+    ET.indent(tree, space='  ')
+    tree.write(drawio_path, encoding='unicode', xml_declaration=True)
+    return updated
+
+
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python -m scripts.tools.puml_to_drawio <file.puml>")
+        print("Usage: python -m scripts.tools.puml_to_drawio <file.puml> [--update]")
+        print("  --update: update existing .drawio in-place (preserve positions)")
         sys.exit(1)
 
     puml_path = Path(sys.argv[1])
@@ -488,16 +657,21 @@ def main():
         print(f"File not found: {puml_path}")
         sys.exit(1)
 
+    update_mode = '--update' in sys.argv
+    out_path = puml_path.with_suffix('.drawio')
+
     text = puml_path.read_text()
     classes, edges, pkg_colors = parse_puml(text)
-    xml = generate_drawio(classes, edges, pkg_colors)
 
-    ET.fromstring(xml)
-
-    out_path = puml_path.with_suffix('.drawio')
-    out_path.write_text(xml)
-    print(f"Converted: {puml_path} -> {out_path}")
-    print(f"  {len(classes)} classes, {len(edges)} edges, {len(pkg_colors)} packages")
+    if update_mode and out_path.exists():
+        count = update_drawio(out_path, classes)
+        print(f"Updated: {out_path} ({count} classes updated in-place)")
+    else:
+        xml = generate_drawio(classes, edges, pkg_colors)
+        ET.fromstring(xml)
+        out_path.write_text(xml)
+        print(f"Converted: {puml_path} -> {out_path}")
+        print(f"  {len(classes)} classes, {len(edges)} edges, {len(pkg_colors)} packages")
 
 
 if __name__ == "__main__":
