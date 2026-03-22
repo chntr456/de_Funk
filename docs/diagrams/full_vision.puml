@@ -434,7 +434,6 @@ package "Sessions" #80E0D0 {
 
   class BuildSession {
     + models : dict[str, DomainModelConfig]
-    + loader : DomainConfigLoader
     --
     + get_model(model_name) : DomainModelConfig
     + get_dependencies(model_name) : list[str]
@@ -986,7 +985,7 @@ package "Plugin System" #B3FFB3 {
 
 ' Config loading
 DomainBuilderFactory ..> DomainConfigLoader : loads configs
-BuildSession ..> DomainConfigLoader : loads models
+DomainConfigLoader ..> DomainModelConfig : produces
 StorageRouter ..> StorageConfig : built from
 AppConfig *-- ConnectionConfig
 AppConfig *-- StorageConfig
@@ -994,7 +993,7 @@ ConnectionFactory ..> DataConnection : creates
 
 ' Orchestration → Build
 PipelineScheduler ..> DependencyGraph : build order
-PipelineScheduler ..> BuildSession : triggers builds
+PipelineScheduler ..> BaseModelBuilder : triggers builds
 DependencyGraph ..> DomainModelConfig : reads depends_on
 
 ' Pipeline executor
