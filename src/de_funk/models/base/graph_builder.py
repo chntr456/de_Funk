@@ -469,60 +469,37 @@ class GraphBuilder:
         table_ref = f"bronze.{table_name}"
         logger.debug(f"Loading table: {table_ref}")
 
-        # Use backend type to determine how to load
-        if self.backend == 'spark':
-            from de_funk.models.api.dal import Table
-            spark = getattr(self.connection, 'spark', self.connection)
-            table = Table(spark, self.storage_router, table_ref)
-            return table.read(merge_schema=True)
-        else:
-            # DuckDB - use read_table which auto-detects Delta/Parquet
-            path = self.storage_router.resolve(table_ref)
-            return self.connection.read_table(path)
+        path = self.storage_router.resolve(table_ref)
+        return self._read_table(path)
 
     def _load_silver_table(self, model_name: str, table_name: str) -> DataFrame:
-        """
-        Load a Silver table from another model.
-
-        This allows models to build upon data from other silver models.
-        For example, stocks.fact_stock_prices can load from securities.fact_security_prices.
-
-        Args:
-            model_name: Name of the source model (e.g., 'securities')
-            table_name: Table name within that model (e.g., 'fact_security_prices')
-
-        Returns:
-            DataFrame with the silver data
-        """
-        # Silver storage uses nested structure: {model}/dims/ and {model}/facts/
-        # Determine subdirectory based on table name prefix
+        """Load a Silver table from another model."""
         if table_name.startswith('dim_'):
             subdir = 'dims'
         elif table_name.startswith('fact_'):
             subdir = 'facts'
         else:
-            # Default to root if no prefix (backward compatibility)
             subdir = None
 
-        # Build config-style table reference with slashes
-        # Convert dot-separated model names to path: municipal.entity → municipal/entity
         model_path = model_name.replace(".", "/")
-        # e.g., "silver.municipal/entity/facts/fact_ledger_entries"
         if subdir:
             table_ref = f"silver.{model_path}/{subdir}/{table_name}"
         else:
             table_ref = f"silver.{model_path}/{table_name}"
         logger.debug(f"Loading silver table: {table_ref}")
 
-        # Use backend type to determine how to load
+        path = self.storage_router.resolve(table_ref)
+        return self._read_table(path)
+
+    def _read_table(self, path: str) -> DataFrame:
+        """Read a table from storage using the appropriate backend."""
         if self.backend == 'spark':
-            from de_funk.models.api.dal import Table
             spark = getattr(self.connection, 'spark', self.connection)
-            table = Table(spark, self.storage_router, table_ref)
-            return table.read(merge_schema=True)
+            try:
+                return spark.read.format("delta").option("mergeSchema", "true").load(path)
+            except Exception:
+                return spark.read.parquet(path)
         else:
-            # DuckDB - use read_table which auto-detects Delta/Parquet
-            path = self.storage_router.resolve(table_ref)
             return self.connection.read_table(path)
 
     def _apply_derive(self, df: DataFrame, col_name: str, expr: str, node_id: str) -> DataFrame:
