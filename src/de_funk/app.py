@@ -207,16 +207,22 @@ def _build_domain_graph(models: dict):
 
 def _create_engine(config):
     """Create Engine from AppConfig."""
-    # For now, return a lightweight wrapper — Engine will be created in Phase 2
-    # This allows DeFunk to work before Engine is fully implemented
-    class _EngineStub:
-        def __init__(self, config):
-            self.config = config
-            self.backend = getattr(config.connection, 'type', 'duckdb') if hasattr(config, 'connection') else 'duckdb'
-        def __repr__(self):
-            return f"Engine(backend={self.backend})"
+    from de_funk.core.engine import Engine
 
-    return _EngineStub(config)
+    storage = config.storage if hasattr(config, 'storage') else {}
+    conn_type = getattr(config.connection, 'type', 'duckdb') if hasattr(config, 'connection') else 'duckdb'
+
+    if conn_type == 'spark':
+        # Spark engine — needs a spark session
+        try:
+            from de_funk.orchestration.common.spark_session import get_or_create_spark
+            spark = get_or_create_spark()
+            return Engine.for_spark(spark, storage)
+        except Exception as e:
+            logger.warning(f"Could not create Spark engine: {e}. Falling back to DuckDB.")
+            return Engine.for_duckdb(storage)
+    else:
+        return Engine.for_duckdb(storage)
 
 
 def _load_provider_configs(config) -> tuple[dict, dict]:
