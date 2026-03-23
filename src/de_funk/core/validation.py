@@ -7,10 +7,8 @@ Validates notebook configurations against available models.
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 
-try:
-    from de_funk.models.registry import ModelRegistry
-except ImportError:
-    ModelRegistry = None
+# ModelRegistry removed — use DomainConfigLoader via DeFunk.from_config()
+ModelRegistry = None
 
 # NotebookConfig/Exhibit were from the old Streamlit notebook path (removed).
 # Validation still works — it just validates model configs, not notebook schemas.

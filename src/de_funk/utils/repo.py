@@ -99,7 +99,7 @@ def setup_repo_imports(start_path: Optional[Path] = None) -> Path:
 
         # Now you can import from the de_funk package:
         from de_funk.core.context import RepoContext
-        from de_funk.models.api.session import UniversalSession
+        # UniversalSession removed
     """
     repo_root = get_repo_root(start_path)
 

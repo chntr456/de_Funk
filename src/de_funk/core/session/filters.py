@@ -161,7 +161,7 @@ class FilterEngine:
         Args:
             df: DataFrame
             filters: Filter specifications
-            session: UniversalSession instance with backend property
+            session: Session instance with backend property
 
         Returns:
             Filtered DataFrame

@@ -4,7 +4,7 @@ Company Model - Corporate legal entities.
 Represents companies as legal entities (not tradable securities).
 Primary key is SEC CIK (Central Index Key).
 
-Version: 2.1 - Backend-agnostic via UniversalSession methods
+Version: 3.0 - Backend-agnostic via Engine/Session pattern
 """
 
 from de_funk.models.base.model import BaseModel

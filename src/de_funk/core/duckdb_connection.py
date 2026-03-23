@@ -277,7 +277,7 @@ class DuckDBConnection(DataConnection):
         """
         Get a table or view by name from the DuckDB catalog.
 
-        This method allows UniversalSession to use pre-created views
+        This method allows sessions to use pre-created views
         instead of building tables from Bronze on every request.
 
         Args:

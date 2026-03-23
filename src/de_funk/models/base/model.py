@@ -8,7 +8,7 @@ Query methods have been removed — FieldResolver + Engine handle all queries.
 
 Composition:
     GraphBuilder: Graph building and node loading (delegates to NodeExecutor)
-    ModelWriter: Persistence to storage (delegates to Engine.write)
+
 """
 from typing import Dict, Any, Optional, List, Tuple
 from pathlib import Path
@@ -36,7 +36,7 @@ class BaseModel:
     Lifecycle:
         1. __init__: connection + config + params
         2. build(): GraphBuilder → NodeExecutor → dims/facts
-        3. write_tables(): Engine.write or ModelWriter → Delta Lake
+        3. write_tables(): Engine.write → Delta Lake
         4. Hooks: _run_hooks() dispatches YAML → plugins → class overrides
     """
 
@@ -127,27 +127,44 @@ class BaseModel:
 
     def write_tables(self, output_root: str = None, fmt: str = "delta",
                      mode: str = "overwrite", **kwargs):
-        """Write built tables to Silver storage."""
+        """Write built tables to Silver storage.
+
+        Uses Engine.write when BuildSession is available.
+        Falls back to direct Spark/connection writes for legacy path.
+        """
         self.ensure_built()
 
-        # Use Engine.write if build_session is available
-        if self.build_session and hasattr(self.build_session, 'engine'):
-            engine = self.build_session.engine
-            silver_root = output_root or self.storage_router.silver_path(self.model_name)
-            for table_type, tables in [("dims", self._dims), ("facts", self._facts)]:
-                for name, df in (tables or {}).items():
-                    path = f"{silver_root}/{table_type}/{name}"
-                    try:
-                        engine.write(df, path, format=fmt, mode=mode)
-                        logger.info(f"Wrote {name} to {path}")
-                    except Exception as e:
-                        logger.error(f"Failed to write {name}: {e}")
-            return
+        silver_root = output_root or self._get_write_root()
 
-        # Legacy path: use ModelWriter
-        from de_funk.models.base.model_writer import ModelWriter
-        writer = ModelWriter(self)
-        writer.write_tables(output_root, fmt, mode)
+        for table_type, tables in [("dims", self._dims), ("facts", self._facts)]:
+            for name, df in (tables or {}).items():
+                path = f"{silver_root}/{table_type}/{name}"
+                try:
+                    if self.build_session and hasattr(self.build_session, 'engine'):
+                        self.build_session.engine.write(df, path, format=fmt, mode=mode)
+                    elif self.backend == 'spark' and hasattr(df, 'write'):
+                        df.write.format("delta").mode(mode).save(path)
+                    else:
+                        import os
+                        os.makedirs(path, exist_ok=True)
+                        df.to_parquet(f"{path}/data.parquet", index=False)
+                    logger.info(f"Wrote {name} to {path}")
+                except Exception as e:
+                    logger.error(f"Failed to write {name}: {e}")
+
+    def _get_write_root(self) -> str:
+        """Resolve the Silver root path for writing."""
+        model_path = self.model_name.replace(".", "/")
+        storage = self.model_cfg.get("storage", {})
+        if isinstance(storage, dict) and storage.get("silver", {}).get("root"):
+            custom = storage["silver"]["root"]
+            roots = self.storage_cfg.get("roots", {}) if isinstance(self.storage_cfg, dict) else {}
+            base = roots.get("silver", "storage/silver")
+            # Custom root is relative to repo, not silver root
+            if self.repo_root:
+                return str(self.repo_root / custom)
+            return custom
+        return self.storage_router.silver_path(self.model_name)
 
     # ── Table access (for build hooks) ────────────────────
 
