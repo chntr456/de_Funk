@@ -86,17 +86,20 @@ class BaseModelBuilder(ABC):
     model_name: str = ""
     depends_on: List[str] = []
 
-    def __init__(self, context: BuildContext):
+    def __init__(self, context: BuildContext, build_session=None):
         """
         Initialize builder with build context.
 
         Args:
             context: BuildContext with spark session, config, etc.
+            build_session: Optional BuildSession from Engine/Session pattern.
+                          When provided, the model gets access to Engine ops.
         """
         self.context = context
         self.spark = context.spark
         self.storage_config = context.storage_config
         self.repo_root = context.repo_root
+        self.build_session = build_session
         self._model_instance = None
         self._model_config = None
 
@@ -163,6 +166,10 @@ class BaseModelBuilder(ABC):
             params=params,
             repo_root=self.repo_root  # Pass as Path, not string
         )
+
+        # Inject BuildSession if available (Engine/Session pattern)
+        if self.build_session is not None:
+            self._model_instance.build_session = self.build_session
 
         return self._model_instance
 

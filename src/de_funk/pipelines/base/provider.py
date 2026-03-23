@@ -109,7 +109,8 @@ class BaseProvider(ABC):
         self,
         provider_id: str,
         spark=None,
-        docs_path: Optional[Path] = None
+        docs_path: Optional[Path] = None,
+        session=None,
     ):
         """
         Initialize the provider with configuration from markdown.
@@ -118,10 +119,12 @@ class BaseProvider(ABC):
             provider_id: Provider identifier (e.g., 'alpha_vantage', 'chicago')
             spark: SparkSession for DataFrame operations
             docs_path: Path to repo root containing markdown configs
+            session: Optional IngestSession from Engine/Session pattern
         """
         self.provider_id = provider_id
         self.spark = spark
         self._docs_path = docs_path
+        self.ingest_session = session
 
         # Load configuration from markdown
         self._provider_config: Optional[MarkdownProviderConfig] = None

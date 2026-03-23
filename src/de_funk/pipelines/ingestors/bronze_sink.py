@@ -22,8 +22,9 @@ class BronzeSink:
     Delta Lake is the default storage format (v2.0+).
     """
 
-    def __init__(self, storage_cfg: Dict[str, Any]):
+    def __init__(self, storage_cfg: Dict[str, Any], session=None):
         self.cfg = storage_cfg
+        self.ingest_session = session
         self._format = self.cfg.get("defaults", {}).get("format", "delta")
 
     def _table_cfg(self, table: str) -> Dict:

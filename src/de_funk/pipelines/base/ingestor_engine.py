@@ -147,6 +147,7 @@ class IngestorEngine:
         storage_cfg: Dict,
         max_pending_writes: int = 2,
         writer_threads: int = 2,
+        session=None,
     ):
         """
         Initialize the ingestion engine.
@@ -156,10 +157,12 @@ class IngestorEngine:
             storage_cfg: Storage configuration dict
             max_pending_writes: Max writes to queue before blocking (backpressure)
             writer_threads: Number of writer threads in pool
+            session: Optional IngestSession from Engine/Session pattern
         """
         self.provider = provider
         self.storage_cfg = storage_cfg
         self.sink = BronzeSink(storage_cfg)
+        self.ingest_session = session
         self.max_pending_writes = max_pending_writes
         self.writer_threads = writer_threads
 

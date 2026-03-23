@@ -102,8 +102,9 @@ class BaseModel:
         self.model_name = model_cfg.get('model', 'unknown')
         self.repo_root = repo_root
 
-        # Session reference for cross-model access (injected by UniversalSession)
+        # Session reference for cross-model access (injected by UniversalSession or BuildSession)
         self.session = None
+        self.build_session = None  # BuildSession from new Engine/Session pattern
 
         # Lazy-loaded caches
         self._dims: Optional[Dict[str, DataFrame]] = None
@@ -878,6 +879,52 @@ class BaseModel:
         if transform == "window":
             return self._build_window_node(node_id, node_config)
         return None
+
+    def _run_hooks(self, hook_name: str, **context) -> None:
+        """Run hooks for a lifecycle event.
+
+        Resolution order:
+        1. Check model_cfg.hooks.{hook_name} for YAML-declared hook fns
+        2. Check BuildPluginRegistry for @pipeline_hook decorated fns
+        3. If neither, call self.{hook_name}() class override (if it exists)
+        """
+        # 1. YAML config hooks
+        hooks_cfg = self.model_cfg.get("hooks", {})
+        hook_defs = hooks_cfg.get(hook_name, [])
+        if hook_defs:
+            for hook_def in hook_defs:
+                fn_path = hook_def.get("fn", "") if isinstance(hook_def, dict) else getattr(hook_def, 'fn', '')
+                params = hook_def.get("params", {}) if isinstance(hook_def, dict) else getattr(hook_def, 'params', {})
+                if fn_path:
+                    try:
+                        module_path, fn_name = fn_path.rsplit(".", 1)
+                        import importlib
+                        module = importlib.import_module(module_path)
+                        fn = getattr(module, fn_name)
+                        fn(engine=getattr(self, 'build_session', {}).engine if hasattr(getattr(self, 'build_session', None) or {}, 'engine') else None,
+                           config=self.model_cfg, **context, **params)
+                        logger.info(f"Hook {hook_name}: ran {fn_path}")
+                    except Exception as e:
+                        logger.warning(f"Hook {hook_name}/{fn_path} failed: {e}")
+            return
+
+        # 2. Plugin registry hooks
+        try:
+            from de_funk.core.plugins import BuildPluginRegistry
+            plugin_hooks = BuildPluginRegistry.get(hook_name, self.model_name)
+            if plugin_hooks:
+                for fn in plugin_hooks:
+                    try:
+                        fn(engine=getattr(self, 'build_session', {}).engine if hasattr(getattr(self, 'build_session', None) or {}, 'engine') else None,
+                           config=self.model_cfg, **context)
+                        logger.info(f"Hook {hook_name}: ran plugin {fn.__name__}")
+                    except Exception as e:
+                        logger.warning(f"Hook {hook_name}/plugin {fn.__name__} failed: {e}")
+                return
+        except ImportError:
+            pass
+
+        # 3. Class override fallback (before_build, after_build already called in build())
 
     def _build_window_node(
         self, node_id: str, node_config: Dict
