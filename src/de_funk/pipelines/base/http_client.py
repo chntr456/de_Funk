@@ -246,3 +246,7 @@ class HttpClient:
 
         logger.error(f"Request failed after {self.max_retries} retries: {method} {path}")
         raise RuntimeError(f"HTTP request failed after {self.max_retries} retries: {method} {path} {query}")
+
+    def get(self, path: str, params: dict = None) -> dict:
+        """Convenience GET request returning JSON."""
+        return self.request("core", path, params or {})

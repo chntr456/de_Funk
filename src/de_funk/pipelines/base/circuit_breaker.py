@@ -228,6 +228,18 @@ class CircuitBreaker:
 
         return wrapper
 
+    def call(self, fn: Callable, *args, **kwargs) -> Any:
+        """Execute function with circuit breaker protection."""
+        if not self.allow_request():
+            raise CircuitOpenError(f"Circuit '{self.config.name}' is open")
+        try:
+            result = fn(*args, **kwargs)
+            self.record_success()
+            return result
+        except Exception as e:
+            self.record_failure(e)
+            raise
+
     def get_status(self) -> Dict[str, Any]:
         """Get detailed status of the circuit breaker."""
         with self._lock:

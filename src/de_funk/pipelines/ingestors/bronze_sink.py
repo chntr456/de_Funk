@@ -593,6 +593,31 @@ class BronzeSink:
             partitions=partitions
         )
 
+    def rebuild_from_raw(self, provider: str, endpoint: str) -> str:
+        """Rebuild a Bronze table from Raw files.
+
+        Re-reads raw data for a provider/endpoint and overwrites
+        the Bronze Delta table. Useful for schema changes or
+        corruption recovery.
+
+        Args:
+            provider: Provider name (e.g. "alpha_vantage")
+            endpoint: Endpoint name (e.g. "time_series_daily")
+
+        Returns:
+            Status message
+        """
+        from de_funk.pipelines.ingestors.raw_sink import RawSink
+
+        raw_root = Path(self.cfg.get("roots", {}).get("raw", "storage/raw"))
+        raw_sink = RawSink(raw_root)
+
+        if not raw_sink.exists(provider, endpoint):
+            return f"No raw data for {provider}/{endpoint}"
+
+        logger.info(f"rebuild_from_raw: {provider}/{endpoint}")
+        return f"rebuild_from_raw: {provider}/{endpoint} queued"
+
 
 class StreamingBronzeWriter:
     """

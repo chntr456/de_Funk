@@ -143,6 +143,12 @@ class NodeExecutor:
 
         return None
 
+    def _load_from_node(self, node_id: str, built: dict) -> Any:
+        """Load DataFrame from a previously built node."""
+        if node_id in built:
+            return built[node_id]
+        return None
+
     def _load_bronze(self, ref: str) -> Any:
         """Load from Bronze storage."""
         path = self.session.storage_router.resolve(ref)

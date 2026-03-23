@@ -21,3 +21,10 @@ class ApiKeyPool:
         self.last_used[k] = now
         self.keys.rotate(-1)
         return k
+
+    def mark_exhausted(self, key):
+        """Mark a key as exhausted (rate-limited). Moves it to the back."""
+        if key in self.keys:
+            self.keys.remove(key)
+            self.keys.append(key)
+            self.last_used[key] = time.time()
