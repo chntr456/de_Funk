@@ -38,7 +38,8 @@ def get_spark(
     # CRITICAL: Set Python path in environment BEFORE SparkSession creation
     # This overrides conda's PYSPARK_PYTHON which may point to anaconda
     # Without this, executors inherit the wrong Python path from driver environment
-    venv_python = "/home/ms_trixie/venv/bin/python3"
+    import sys
+    venv_python = os.environ.get("PYSPARK_PYTHON", sys.executable)
     os.environ["PYSPARK_PYTHON"] = venv_python
     os.environ["PYSPARK_DRIVER_PYTHON"] = venv_python
 
@@ -127,14 +128,14 @@ def get_spark(
         .config("spark.executorEnv.SPARK_SCALA_VERSION", "2.13")
         # Python environment - ensure workers use correct Python path
         # spark.pyspark.python affects both driver and executor Python binary selection
-        .config("spark.pyspark.python", "/home/ms_trixie/venv/bin/python3")
-        .config("spark.pyspark.driver.python", os.environ.get("PYSPARK_DRIVER_PYTHON", "/home/ms_trixie/venv/bin/python3"))
+        .config("spark.pyspark.python", venv_python)
+        .config("spark.pyspark.driver.python", os.environ.get("PYSPARK_DRIVER_PYTHON", venv_python))
         # CRITICAL: spark.executorEnv.PYSPARK_PYTHON sets PYSPARK_PYTHON env var on executors
         # Without this, executors inherit the driver's PYSPARK_PYTHON which may point to anaconda
-        .config("spark.executorEnv.PYSPARK_PYTHON", "/home/ms_trixie/venv/bin/python3")
+        .config("spark.executorEnv.PYSPARK_PYTHON", venv_python)
         # Network configuration - use local IP for cluster communication
-        # This prevents Spark from using hostnames (like Tailscale) that workers can't resolve
-        .config("spark.driver.host", os.environ.get("SPARK_DRIVER_HOST", "192.168.1.212"))
+        # Set SPARK_DRIVER_HOST in .env for cluster mode (e.g., 192.168.1.212)
+        .config("spark.driver.host", os.environ.get("SPARK_DRIVER_HOST", "0.0.0.0"))
         .config("spark.driver.bindAddress", "0.0.0.0")
         # Delta Lake support (v2.3 migration)
         # Note: Use delta-spark_2.13:4.0.0 for Spark 4.x, delta-spark_2.12:3.1.0 for Spark 3.x
