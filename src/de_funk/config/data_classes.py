@@ -166,6 +166,34 @@ class SourceConfig:
 
 
 @dataclass
+class MLModelSpec:
+    """ML model definition from YAML. Parsed from model.md ml_models: section."""
+    name: str = ""
+    type: str = ""              # arima, prophet, random_forest
+    target: list[str] = dc_field(default_factory=list)
+    features: list[str] = dc_field(default_factory=list)
+    lookback_days: int = 90
+    forecast_horizon: int = 7
+    parameters: dict = dc_field(default_factory=dict)
+    retrain_if_stale_days: int = 7
+    enabled: bool = True
+
+    @staticmethod
+    def from_dict(name: str, data: dict) -> MLModelSpec:
+        return MLModelSpec(
+            name=name,
+            type=data.get("type", ""),
+            target=data.get("target", []),
+            features=data.get("features", []),
+            lookback_days=data.get("lookback_days", 90),
+            forecast_horizon=data.get("forecast_horizon", 7),
+            parameters=data.get("parameters", {}),
+            retrain_if_stale_days=data.get("retrain_if_stale_days", 7),
+            enabled=data.get("enabled", True),
+        )
+
+
+@dataclass
 class DomainModelConfig:
     """Parsed from model.md frontmatter + auto-discovered tables/sources/views."""
     model: str = ""
@@ -181,6 +209,7 @@ class DomainModelConfig:
     build: BuildSpec = dc_field(default_factory=BuildSpec)
     measures: MeasuresSpec = dc_field(default_factory=MeasuresSpec)
     hooks: HooksConfig = dc_field(default_factory=HooksConfig)
+    ml_models: dict[str, MLModelSpec] = dc_field(default_factory=dict)
     metadata: dict = dc_field(default_factory=dict)
 
     tables: dict[str, TableConfig] = dc_field(default_factory=dict)

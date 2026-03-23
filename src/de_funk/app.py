@@ -104,6 +104,9 @@ class DeFunk:
         # 5. Load provider/endpoint configs
         providers, endpoints = _load_provider_configs(config)
 
+        # 6. Create ArtifactStore for ML model management
+        artifact_store = _create_artifact_store(config)
+
         logger.info(
             f"DeFunk ready: {len(models)} models, "
             f"{len(providers)} providers, "
@@ -118,6 +121,7 @@ class DeFunk:
             models=models,
             providers=providers,
             endpoints=endpoints,
+            artifact_store=artifact_store,
         )
 
     def build_session(self, **kwargs):
@@ -269,6 +273,17 @@ def _load_provider_configs(config) -> tuple[dict, dict]:
         logger.warning(f"Could not load provider configs: {e}")
 
     return providers, endpoints
+
+
+def _create_artifact_store(config):
+    """Create ArtifactStore for ML model lifecycle management."""
+    from de_funk.core.artifacts import ArtifactStore
+
+    storage = config.storage if hasattr(config, 'storage') else {}
+    roots = storage.get("roots", {}) if isinstance(storage, dict) else {}
+    models_root = roots.get("models", "storage/models")
+
+    return ArtifactStore(models_root=models_root)
 
 
 def _build_domain_overrides(config) -> dict:

@@ -20,7 +20,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from de_funk.api.routers import bronze, dimensions, domains, health, query
+from de_funk.api.routers import bronze, dimensions, domains, health, models, predict, query
 from de_funk.config.logging import get_logger, setup_logging
 
 setup_logging()
@@ -60,6 +60,8 @@ def create_app() -> FastAPI:
     fastapi_app.include_router(dimensions.router, prefix="/api")
     fastapi_app.include_router(query.router, prefix="/api")
     fastapi_app.include_router(bronze.router, prefix="/api")
+    fastapi_app.include_router(predict.router, prefix="/api")
+    fastapi_app.include_router(models.router, prefix="/api")
 
     @fastapi_app.on_event("startup")
     async def startup() -> None:
