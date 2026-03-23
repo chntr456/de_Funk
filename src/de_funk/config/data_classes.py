@@ -268,3 +268,117 @@ class ProviderConfig:
     data_tags: list[str] = dc_field(default_factory=list)
     status: str = "active"
     source_file: Optional[str] = None
+
+
+# ── Infrastructure data classes ──────────────────────────
+# Typed replacements for raw dicts from storage.json / run_config.json.
+
+@dataclass
+class RootsConfig:
+    """Storage mount points for each data tier."""
+    raw: str = "storage/raw"
+    bronze: str = "storage/bronze"
+    silver: str = "storage/silver"
+    models: str = "storage/models"
+
+    @staticmethod
+    def from_dict(data: dict) -> RootsConfig:
+        return RootsConfig(
+            raw=data.get("raw", "storage/raw"),
+            bronze=data.get("bronze", "storage/bronze"),
+            silver=data.get("silver", "storage/silver"),
+            models=data.get("models", "storage/models"),
+        )
+
+
+@dataclass
+class ApiLimits:
+    """Query limits for the API layer."""
+    duckdb_memory_limit: str = "3GB"
+    max_sql_rows: int = 30000
+    max_dimension_values: int = 10000
+    max_response_mb: float = 4.0
+
+    @staticmethod
+    def from_dict(data: dict) -> ApiLimits:
+        return ApiLimits(
+            duckdb_memory_limit=data.get("duckdb_memory_limit", "3GB"),
+            max_sql_rows=data.get("max_sql_rows", 30000),
+            max_dimension_values=data.get("max_dimension_values", 10000),
+            max_response_mb=data.get("max_response_mb", 4.0),
+        )
+
+
+@dataclass
+class TablePath:
+    """Storage path for one table (root tier + relative path)."""
+    root: str = "silver"
+    rel: str = ""
+    partitions: list[str] = dc_field(default_factory=list)
+
+    @property
+    def full_path(self) -> str:
+        return f"{self.root}/{self.rel}" if self.rel else self.root
+
+    @staticmethod
+    def from_dict(data: dict) -> TablePath:
+        return TablePath(
+            root=data.get("root", "silver"),
+            rel=data.get("rel", ""),
+            partitions=data.get("partitions", []),
+        )
+
+
+@dataclass
+class ClusterConfig:
+    """Spark cluster settings from run_config.json."""
+    spark_master: str = "auto"
+    fallback_to_local: bool = True
+    task_batch_size: int = 50
+
+    @staticmethod
+    def from_dict(data: dict) -> ClusterConfig:
+        return ClusterConfig(
+            spark_master=data.get("spark_master", "auto"),
+            fallback_to_local=data.get("fallback_to_local", True),
+            task_batch_size=data.get("task_batch_size", 50),
+        )
+
+
+@dataclass
+class RetryConfig:
+    """Retry policy from run_config.json."""
+    max_retries: int = 3
+    retry_delay_seconds: float = 2.0
+    exponential_backoff: bool = True
+
+    @staticmethod
+    def from_dict(data: dict) -> RetryConfig:
+        return RetryConfig(
+            max_retries=data.get("max_retries", 3),
+            retry_delay_seconds=data.get("retry_delay_seconds", 2.0),
+            exponential_backoff=data.get("exponential_backoff", True),
+        )
+
+
+@dataclass
+class RunConfig:
+    """Pipeline run configuration from run_config.json."""
+    defaults: dict = dc_field(default_factory=dict)
+    providers: dict[str, dict] = dc_field(default_factory=dict)
+    silver_models: list[str] = dc_field(default_factory=list)
+    cluster: ClusterConfig = dc_field(default_factory=ClusterConfig)
+    retry: RetryConfig = dc_field(default_factory=RetryConfig)
+    profiles: dict[str, dict] = dc_field(default_factory=dict)
+
+    @staticmethod
+    def from_dict(data: dict) -> RunConfig:
+        silver = data.get("silver_models", {})
+        return RunConfig(
+            defaults=data.get("defaults", {}),
+            providers=data.get("providers", {}),
+            silver_models=silver.get("models", []) if isinstance(silver, dict) else silver,
+            cluster=ClusterConfig.from_dict(data.get("cluster", {})),
+            retry=RetryConfig.from_dict(data.get("retry", {})),
+            profiles=data.get("profiles", {}),
+        )

@@ -212,17 +212,24 @@ def _create_engine(config):
     storage = config.storage if hasattr(config, 'storage') else {}
     conn_type = getattr(config.connection, 'type', 'duckdb') if hasattr(config, 'connection') else 'duckdb'
 
+    # Extract API limits from storage config
+    api_cfg = storage.get("api", {}) if isinstance(storage, dict) else {}
+    memory_limit = api_cfg.get("duckdb_memory_limit", "3GB")
+    max_sql_rows = api_cfg.get("max_sql_rows", 30000)
+    max_dimension_values = api_cfg.get("max_dimension_values", 10000)
+
     if conn_type == 'spark':
-        # Spark engine — needs a spark session
         try:
             from de_funk.orchestration.common.spark_session import get_or_create_spark
             spark = get_or_create_spark()
-            return Engine.for_spark(spark, storage)
+            return Engine.for_spark(spark, storage_config=storage)
         except Exception as e:
             logger.warning(f"Could not create Spark engine: {e}. Falling back to DuckDB.")
-            return Engine.for_duckdb(storage)
+            return Engine.for_duckdb(storage_config=storage, memory_limit=memory_limit,
+                                     max_sql_rows=max_sql_rows, max_dimension_values=max_dimension_values)
     else:
-        return Engine.for_duckdb(storage)
+        return Engine.for_duckdb(storage_config=storage, memory_limit=memory_limit,
+                                 max_sql_rows=max_sql_rows, max_dimension_values=max_dimension_values)
 
 
 def _load_provider_configs(config) -> tuple[dict, dict]:

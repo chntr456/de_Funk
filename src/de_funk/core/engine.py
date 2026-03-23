@@ -1,14 +1,14 @@
 """
 Engine — long-lived backend-agnostic data operations.
 
-Wraps the existing QueryEngine (DuckDB) and DataConnection (Spark)
-behind a unified interface. Handlers and sessions use Engine instead
-of importing duckdb or pyspark directly.
+Delegates all operations to DataOps (DataFrame ops) and SqlOps (SQL ops).
+Created via Engine.for_duckdb() or Engine.for_spark().
 
-Phase 2 implementation: wraps existing QueryEngine internally.
-Future: replace QueryEngine internals with DataOps/SqlOps strategy.
+Backward compatibility: get_query_engine() and get_handler_registry()
+bridge to the existing handler code during migration.
 """
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Any, Optional
 
@@ -21,32 +21,136 @@ class Engine:
     """Backend-agnostic data engine.
 
     Provides read/write/join/filter/aggregate operations that work
-    with both DuckDB and Spark. Created by DeFunk.from_config().
-
-    Current implementation wraps QueryEngine for DuckDB path.
+    with both DuckDB and Spark via DataOps/SqlOps strategy pattern.
     """
 
-    def __init__(self, backend: str, conn=None, storage_config=None, **kwargs):
+    def __init__(self, backend: str, ops=None, sql=None,
+                 conn=None, storage_config=None, **kwargs):
         self.backend = backend
+        self._ops = ops
+        self._sql = sql
         self._conn = conn
         self._storage_config = storage_config or {}
-        self._query_engine = None  # Lazy — created when needed
+        self._query_engine = None  # Lazy — backward compat bridge
         self._kwargs = kwargs
 
     @staticmethod
-    def for_duckdb(storage_config: dict, **kwargs) -> Engine:
-        """Create a DuckDB-backed engine."""
-        engine = Engine(backend="duckdb", storage_config=storage_config, **kwargs)
+    def for_duckdb(storage_config: dict = None, memory_limit: str = "3GB",
+                   max_sql_rows: int = 30000, max_dimension_values: int = 10000,
+                   **kwargs) -> Engine:
+        """Create a DuckDB-backed engine with DataOps + SqlOps."""
+        import duckdb
+        conn = duckdb.connect()
+        conn.execute(f"SET memory_limit='{memory_limit}'")
+
+        from de_funk.core.ops import DuckDBOps
+        from de_funk.core.sql import DuckDBSql
+
+        ops = DuckDBOps(conn=conn, memory_limit=memory_limit)
+        sql = DuckDBSql(conn, max_sql_rows=max_sql_rows,
+                        max_dimension_values=max_dimension_values)
+
+        engine = Engine(backend="duckdb", ops=ops, sql=sql, conn=conn,
+                        storage_config=storage_config or {}, **kwargs)
+        logger.info(f"Engine: DuckDB ready (memory={memory_limit})")
         return engine
 
     @staticmethod
-    def for_spark(spark_session, storage_config: dict, **kwargs) -> Engine:
-        """Create a Spark-backed engine."""
-        engine = Engine(backend="spark", conn=spark_session, storage_config=storage_config, **kwargs)
+    def for_spark(spark_session, storage_config: dict = None, **kwargs) -> Engine:
+        """Create a Spark-backed engine with DataOps + SqlOps."""
+        from de_funk.core.ops import SparkOps
+        from de_funk.core.sql import SparkSql
+
+        ops = SparkOps(spark_session)
+        sql = SparkSql(spark_session)
+
+        engine = Engine(backend="spark", ops=ops, sql=sql, conn=spark_session,
+                        storage_config=storage_config or {}, **kwargs)
+        logger.info("Engine: Spark ready")
         return engine
 
+    # ── DataFrame operations (delegate to DataOps) ────────
+
+    def read(self, path: str, format: str = "delta") -> Any:
+        return self._ops.read(path, format)
+
+    def write(self, df: Any, path: str, format: str = "delta",
+              mode: str = "overwrite") -> None:
+        self._ops.write(df, path, format, mode)
+
+    def create_df(self, rows: list[list], schema: list[tuple[str, str]]) -> Any:
+        return self._ops.create_df(rows, schema)
+
+    def select(self, df: Any, columns: list[str]) -> Any:
+        return self._ops.select(df, columns)
+
+    def drop(self, df: Any, columns: list[str]) -> Any:
+        return self._ops.drop(df, columns)
+
+    def derive(self, df: Any, col: str, expr: str) -> Any:
+        return self._ops.derive(df, col, expr)
+
+    def filter(self, df: Any, conditions: list[str]) -> Any:
+        return self._ops.filter(df, conditions)
+
+    def dedup(self, df: Any, subset: list[str]) -> Any:
+        return self._ops.dedup(df, subset)
+
+    def join(self, left: Any, right: Any, on: list[str], how: str = "inner") -> Any:
+        return self._ops.join(left, right, on, how)
+
+    def union(self, dfs: list[Any]) -> Any:
+        return self._ops.union(dfs)
+
+    def unpivot(self, df: Any, id_cols: list[str], value_cols: list[str],
+                var_name: str = "variable", val_name: str = "value") -> Any:
+        return self._ops.unpivot(df, id_cols, value_cols, var_name, val_name)
+
+    def window(self, df: Any, partition: list[str], order: list[str],
+               expr: str, alias: str) -> Any:
+        return self._ops.window(df, partition, order, expr, alias)
+
+    def pivot(self, df: Any, rows: list[str], cols: list[str],
+              measures: list[dict]) -> Any:
+        return self._ops.pivot(df, rows, cols, measures)
+
+    def aggregate(self, df: Any, group_by: list[str], aggs: list[dict]) -> Any:
+        return self._ops.aggregate(df, group_by, aggs)
+
+    def count(self, df: Any) -> int:
+        return self._ops.count(df)
+
+    def to_pandas(self, df: Any) -> Any:
+        return self._ops.to_pandas(df)
+
+    def columns(self, df: Any) -> list[str]:
+        return self._ops.columns(df)
+
+    # ── SQL operations (delegate to SqlOps) ───────────────
+
+    def execute_sql(self, sql_str: str, max_rows: int = 0) -> list:
+        return self._sql.execute_sql(sql_str, max_rows)
+
+    def scan(self, path: str) -> str:
+        return self._sql.scan(path)
+
+    def build_from(self, tables: dict[str, str], resolver=None,
+                   allowed_domains: set[str] | None = None) -> str:
+        return self._sql.build_from(tables, resolver, allowed_domains)
+
+    def build_where(self, filters: list, resolver=None,
+                    from_tables: set[str] | None = None) -> list[str]:
+        return self._sql.build_where(filters, resolver, from_tables)
+
+    def distinct_values(self, resolved, extra_filters=None,
+                        resolver=None, max_values: int = 0) -> list:
+        return self._sql.distinct_values(resolved, extra_filters, resolver, max_values)
+
+    # ── Backward compatibility bridges ────────────────────
+    # These will be removed after handler migration (Phase 7+10).
+
     def _get_query_engine(self):
-        """Lazy-create QueryEngine for DuckDB operations."""
+        """Lazy-create QueryEngine for legacy handler compatibility."""
         if self._query_engine is None and self.backend == "duckdb":
             from de_funk.api.executor import QueryEngine
 
@@ -66,66 +170,19 @@ class Engine:
                 max_dimension_values=max_dimension_values,
                 max_response_mb=max_response_mb,
             )
-            logger.info(f"Engine: DuckDB QueryEngine created (memory={memory_limit})")
         return self._query_engine
-
-    # ── DataFrame operations ─────────────────────────────
-
-    def read(self, path: str) -> Any:
-        """Read a table from storage."""
-        qe = self._get_query_engine()
-        if qe:
-            return qe._conn.execute(f"SELECT * FROM '{path}'").fetchdf()
-        raise NotImplementedError(f"read() not implemented for backend={self.backend}")
-
-    def write(self, df, path: str, format: str = "delta", mode: str = "overwrite") -> Any:
-        """Write a DataFrame to storage."""
-        raise NotImplementedError("write() — use ModelWriter for now")
-
-    def execute_sql(self, sql: str) -> Any:
-        """Execute raw SQL."""
-        qe = self._get_query_engine()
-        if qe:
-            return qe._execute(sql)
-        raise NotImplementedError(f"execute_sql() not implemented for backend={self.backend}")
-
-    def count(self, df) -> int:
-        """Count rows in a DataFrame."""
-        if hasattr(df, '__len__'):
-            return len(df)
-        if hasattr(df, 'count'):
-            return df.count()
-        return 0
-
-    def to_pandas(self, df):
-        """Convert to pandas DataFrame."""
-        if hasattr(df, 'toPandas'):
-            return df.toPandas()
-        return df
-
-    def columns(self, df) -> list[str]:
-        """Get column names."""
-        if hasattr(df, 'columns'):
-            return list(df.columns)
-        return []
-
-    # ── Query handler support ────────────────────────────
 
     def get_query_engine(self):
         """Get the underlying QueryEngine for handler compatibility.
 
-        This is the bridge between old handler code and the new Engine.
-        Handlers can call engine.get_query_engine() to get the QueryEngine
-        they previously inherited via mixin.
-
-        Will be removed when handlers are fully migrated.
+        Bridge for old handler code. Will be removed after Phase 7.
         """
         return self._get_query_engine()
 
     def get_handler_registry(self, resolver=None, bronze_resolver=None):
         """Create a HandlerRegistry using this Engine's QueryEngine.
 
-        This replaces the old build_registry() function in handlers/__init__.py
+        Bridge for old API setup. Will be removed after Phase 10.
         """
         from de_funk.api.handlers import HandlerRegistry, _HANDLER_CLASSES
 

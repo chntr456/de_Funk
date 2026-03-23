@@ -9,6 +9,7 @@ needed for their specific path and delegate operations to the Engine.
     IngestSession: reads APIs, writes Raw+Bronze
 """
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Optional
@@ -25,25 +26,24 @@ class Session(ABC):
         self.engine = engine
         self._storage_config = storage_config or {}
 
+        from de_funk.core.storage import StorageRouter
+        self.storage_router = StorageRouter(self._storage_config)
+
     def raw_path(self, provider: str, endpoint: str) -> str:
         """Resolve raw storage path."""
-        roots = self._storage_config.get("roots", {}) if isinstance(self._storage_config, dict) else {}
-        raw_root = roots.get("raw", "storage/raw")
-        return f"{raw_root}/{provider}/{endpoint}"
+        return self.storage_router.raw_path(provider, endpoint)
 
     def bronze_path(self, provider: str, endpoint: str) -> str:
         """Resolve bronze storage path."""
-        roots = self._storage_config.get("roots", {}) if isinstance(self._storage_config, dict) else {}
-        bronze_root = roots.get("bronze", "storage/bronze")
-        return f"{bronze_root}/{provider}/{endpoint}"
+        return self.storage_router.bronze_path(provider, endpoint)
 
-    def silver_path(self, domain: str, model: str = "") -> str:
+    def silver_path(self, domain: str, table: str = "") -> str:
         """Resolve silver storage path."""
-        roots = self._storage_config.get("roots", {}) if isinstance(self._storage_config, dict) else {}
-        silver_root = roots.get("silver", "storage/silver")
-        if model:
-            return f"{silver_root}/{domain}/{model}"
-        return f"{silver_root}/{domain}"
+        return self.storage_router.silver_path(domain, table)
+
+    def model_path(self, model_name: str, version: str = "") -> str:
+        """Resolve ML model artifact path."""
+        return self.storage_router.model_path(model_name, version)
 
     @abstractmethod
     def close(self):
@@ -71,18 +71,94 @@ class BuildSession(Session):
         model = self.get_model(model_name)
         return model.get("depends_on", []) if isinstance(model, dict) else getattr(model, 'depends_on', [])
 
-    def build(self, model_name: str) -> dict:
-        """Build a single model. Returns BuildResult-like dict."""
-        logger.info(f"BuildSession.build({model_name})")
-        # This will be wired to BaseModelBuilder in Phase 2
-        return {"model_name": model_name, "success": True}
+    def build(self, model_name: str) -> Any:
+        """Build a single model via BaseModelBuilder pipeline.
 
-    def build_all(self) -> list[dict]:
+        Returns a BuildResult dataclass.
+        """
+        import time
+        t0 = time.perf_counter()
+        logger.info(f"BuildSession.build({model_name})")
+
+        try:
+            from de_funk.models.base.domain_builder import DomainBuilderFactory
+            from de_funk.models.base.builder import BuildContext, BuildResult
+
+            # Create BuildContext from session config
+            context = BuildContext(
+                spark=self.engine._conn if self.engine.backend == "spark" else None,
+                storage_config=self._storage_config,
+                repo_root=Path(self._kwargs.get("repo_root", ".")),
+                date_from=self._kwargs.get("date_from", "2020-01-01"),
+                date_to=self._kwargs.get("date_to", "2099-12-31"),
+                max_tickers=self._kwargs.get("max_tickers"),
+            )
+
+            # Find and run the builder
+            builders = DomainBuilderFactory.create_builders(
+                Path(self._kwargs.get("repo_root", ".")) / "domains"
+            )
+            if model_name not in builders:
+                return BuildResult(
+                    model_name=model_name, success=False,
+                    error=f"No builder found for {model_name}",
+                    duration_seconds=time.perf_counter() - t0,
+                )
+
+            builder_cls = builders[model_name]
+            builder = builder_cls(context)
+            result = builder.build()
+            return result
+        except Exception as e:
+            from de_funk.models.base.builder import BuildResult
+            logger.error(f"Build failed for {model_name}: {e}", exc_info=True)
+            return BuildResult(
+                model_name=model_name, success=False,
+                error=str(e),
+                duration_seconds=time.perf_counter() - t0,
+            )
+
+    def build_all(self) -> list:
         """Build all models in dependency order."""
+        order = self._topological_sort()
         results = []
-        for model_name in self.models:
+        for model_name in order:
             results.append(self.build(model_name))
         return results
+
+    def _topological_sort(self) -> list[str]:
+        """Sort models by dependencies (Kahn's algorithm)."""
+        in_degree = {m: 0 for m in self.models}
+        for model_name in self.models:
+            deps = self.get_dependencies(model_name)
+            for dep in deps:
+                if dep in in_degree:
+                    in_degree[model_name] = in_degree.get(model_name, 0) + 1
+
+        from collections import deque
+        queue = deque([m for m, d in in_degree.items() if d == 0])
+        result = []
+
+        dep_map = {}
+        for model_name in self.models:
+            for dep in self.get_dependencies(model_name):
+                dep_map.setdefault(dep, []).append(model_name)
+
+        while queue:
+            m = queue.popleft()
+            result.append(m)
+            for dependent in dep_map.get(m, []):
+                if dependent in in_degree:
+                    in_degree[dependent] -= 1
+                    if in_degree[dependent] == 0:
+                        queue.append(dependent)
+
+        # Add any remaining (circular deps or missing)
+        for m in self.models:
+            if m not in result:
+                result.append(m)
+
+        return result
 
     def close(self):
         pass
@@ -107,6 +183,23 @@ class QuerySession(Session):
         if self.resolver is None:
             return []
         return self.resolver.find_join_path(src, dst)
+
+    def distinct_values(self, resolved, extra_filters=None, resolver=None) -> list:
+        """Return distinct values for a dimension field."""
+        return self.engine.distinct_values(
+            resolved, extra_filters=extra_filters,
+            resolver=resolver or self.resolver,
+        )
+
+    def build_from(self, tables: dict[str, str], allowed_domains: set[str] | None = None) -> str:
+        """Build FROM clause with automatic join resolution."""
+        return self.engine.build_from(tables, resolver=self.resolver,
+                                       allowed_domains=allowed_domains)
+
+    def build_where(self, filters: list, from_tables: set[str] | None = None) -> list[str]:
+        """Build WHERE clause fragments from filter specs."""
+        return self.engine.build_where(filters, resolver=self.resolver,
+                                        from_tables=from_tables)
 
     def close(self):
         pass
