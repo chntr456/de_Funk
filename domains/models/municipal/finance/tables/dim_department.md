@@ -16,7 +16,7 @@ schema:
   - [org_unit_code, string, false, "Natural key", {derived: "COALESCE(organizational_unit, 'UNKNOWN')"}]
   - [org_unit_name, string, false, "Display name", {derived: "COALESCE(organizational_unit, 'UNKNOWN')"}]
   - [org_unit_type, string, false, "Type", {derived: "'DEPARTMENT'"}]
-  - [parent_org_unit_id, integer, true, "No hierarchy in source", {derived: "null"}]
+  - [parent_org_unit_id, integer, true, "No hierarchy in source", {derived: "CAST(null AS INT)"}]
   - [legal_entity_id, integer, false, "City of Chicago", {derived: "ABS(HASH(CONCAT('CITY_', 'Chicago')))"}]
   - [is_active, boolean, false, "Operational", {default: true}]
 
