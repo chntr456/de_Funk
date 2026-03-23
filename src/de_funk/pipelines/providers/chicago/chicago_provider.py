@@ -72,9 +72,10 @@ class ChicagoProvider(SocrataBaseProvider):
             spark=spark,
             docs_path=docs_path,
             storage_path=storage_path,
-            preserve_raw=preserve_raw,
-            load_from_raw=load_from_raw
         )
+        if preserve_raw and storage_path:
+            self.enable_raw_save(storage_path)
+        self._load_from_raw = load_from_raw
 
 
 def create_chicago_provider(

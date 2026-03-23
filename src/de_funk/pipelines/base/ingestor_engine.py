@@ -166,6 +166,11 @@ class IngestorEngine:
         self.max_pending_writes = max_pending_writes
         self.writer_threads = writer_threads
 
+        # Raw sink — saves raw API responses before Bronze transformation
+        from de_funk.pipelines.ingestors.raw_sink import RawSink
+        raw_root = storage_cfg.get("roots", {}).get("raw", "storage/raw") if isinstance(storage_cfg, dict) else "storage/raw"
+        self.raw_sink = RawSink(raw_root=raw_root)
+
         # Track pending writes per work item
         self._pending_futures: List[Future] = []
         self._write_errors: List[str] = []
@@ -375,6 +380,48 @@ class IngestorEngine:
         gc.collect(1)
         gc.collect(2)
 
+    def _save_raw(self, records: list, provider_id: str, work_item: str,
+                  partition: str = "") -> None:
+        """Save raw API records to the Raw tier before Bronze transformation."""
+        try:
+            self.raw_sink.write(records, provider_id, work_item, partition)
+            logger.debug(f"Raw saved: {provider_id}/{work_item} ({len(records)} records)")
+        except Exception as e:
+            logger.warning(f"Raw save failed for {provider_id}/{work_item}: {e}")
+
+    def _archive_raw(self, table_name: str) -> None:
+        """Archive raw data to compressed tar.gz after Bronze write.
+
+        Archives per-provider: raw/{provider}/{endpoint}/ → raw_archive/{provider}_{endpoint}_{date}.tar.gz
+        """
+        import tarfile
+        from datetime import datetime
+
+        # Parse provider/endpoint from table_name (e.g. "chicago/community_areas")
+        parts = table_name.split("/")
+        if len(parts) < 2:
+            return
+
+        provider = parts[0]
+        endpoint = parts[1]
+        raw_path = Path(self.raw_sink.raw_root) / provider / endpoint
+
+        if not raw_path.exists() or not any(raw_path.iterdir()):
+            return
+
+        archive_dir = Path(self.raw_sink.raw_root).parent / "raw_archive"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+
+        archive_name = f"{provider}_{endpoint}_{datetime.now().strftime('%Y%m%d')}.tar.gz"
+        archive_path = archive_dir / archive_name
+
+        try:
+            with tarfile.open(archive_path, "w:gz") as tar:
+                tar.add(str(raw_path), arcname=f"{provider}/{endpoint}")
+            logger.info(f"Archived raw: {archive_path} ({archive_path.stat().st_size / 1024:.0f} KB)")
+        except Exception as e:
+            logger.warning(f"Raw archive failed for {table_name}: {e}")
+
     def _async_write(
         self,
         df,
@@ -418,6 +465,9 @@ class IngestorEngine:
             else:
                 self.sink.overwrite(df, table_name, partitions=partitions)
                 logger.info(f"Wrote {table_name}: {count:,} records (mode=overwrite)")
+
+            # Archive raw data after successful Bronze write
+            self._archive_raw(table_name)
 
             return count
         finally:
@@ -633,6 +683,8 @@ class IngestorEngine:
                 max_records=max_records,
                 **kwargs
             ):
+                # Save raw before any transformation
+                self._save_raw(batch, self.provider.provider_id, work_item)
                 buffer.extend(batch)
 
                 # When buffer reaches batch size, write it
