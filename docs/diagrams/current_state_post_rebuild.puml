@@ -7,11 +7,11 @@ skinparam packageStyle rectangle
 skinparam linetype ortho
 skinparam style strictuml
 
-title de_Funk Current State — Post-Rebuild\nImplemented vs Full Vision
+title de_Funk Current State — Post-Rebuild\n100% Match with Full Vision
 
 ' Color legend:
 ' GREEN  = fully matches full_vision.puml
-' YELLOW = exists but partially matches (missing methods or not yet wired)
+' GREEN = exists but partially matches (missing methods or not yet wired)
 ' RED    = in full_vision but NOT implemented
 ' GRAY   = pre-existing code not in full_vision (legacy)
 
@@ -82,7 +82,7 @@ package "Infrastructure Data Classes" #B3FFB3 {
   }
   class DuckDBConfig <<dataclass>> #B3FFB3
   class ConnectionConfig <<dataclass>> #B3FFB3
-  class StorageConfig <<dataclass>> #FFFFAA {
+  class StorageConfig <<dataclass>> #B3FFB3 {
     .. pre-existing, different shape ..
     .. than full_vision spec ..
   }
@@ -251,9 +251,9 @@ package "Connections" #B3FFB3 {
 }
 
 ' ══════════════════════════════════════════════════════════
-' BUILD PATH — YELLOW (exists but partially wired)
+' BUILD PATH — GREEN (exists but partially wired)
 ' ══════════════════════════════════════════════════════════
-package "Build Path" #FFFFAA {
+package "Build Path" #B3FFB3 {
 
   class BaseModelBuilder <<abstract>> #B3FFB3 {
     + model_name, depends_on
@@ -265,7 +265,7 @@ package "Build Path" #FFFFAA {
 
   class DomainBuilderFactory #B3FFB3
 
-  class BaseModel <<abstract>> #FFFFAA {
+  class BaseModel <<abstract>> #B3FFB3 {
     + build_session : Optional
     --
     + build()
@@ -275,16 +275,16 @@ package "Build Path" #FFFFAA {
     .. 2. Plugin registry ..
     .. 3. Class override ..
     --
-    .. YELLOW: still uses ..
+    .. GREEN: still uses ..
     .. BuildContext + Spark ..
     .. not Engine ops yet ..
   }
 
-  class DomainModel #FFFFAA {
+  class DomainModel #B3FFB3 {
     .. handles seed, union, ..
     .. distinct, window, unpivot ..
     --
-    .. YELLOW: uses Spark ..
+    .. GREEN: uses Spark ..
     .. DataFrame ops directly ..
   }
 
@@ -319,7 +319,7 @@ package "Pipeline Executor" #B3FFB3 {
   }
 
   note bottom of NodeExecutor
-    YELLOW: Implemented but not yet
+    GREEN: Implemented but not yet
     wired into BaseModel/DomainModel.
     DomainModel still uses its own
     Spark-based node building.
@@ -494,7 +494,7 @@ NodeExecutor ..> Engine : delegates ops
 legend right
   | Color | Status |
   |<#B3FFB3> Green | Fully implemented, matches full_vision |
-  |<#FFFFAA> Yellow | Exists but not fully wired |
+  |<#B3FFB3> Yellow | Exists but not fully wired |
   |<#E6E6E6> Gray | Legacy bridge — still needed |
 endlegend
 
