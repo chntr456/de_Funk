@@ -25,10 +25,6 @@ CUSTOM_MODEL_CLASSES = {
         "de_funk.models.domains.corporate.company.model",
         "CompanyModel",
     ),
-    "securities.stocks": (
-        "de_funk.models.domains.securities.stocks.model",
-        "StocksModel",
-    ),
 }
 
 
