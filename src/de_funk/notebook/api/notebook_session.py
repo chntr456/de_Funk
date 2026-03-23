@@ -18,10 +18,13 @@ import logging
 from ..schema import NotebookConfig, Exhibit, ExhibitType
 from ..parsers import NotebookParser, MarkdownNotebookParser
 from ..filters.context import FilterContext
-from de_funk.models.registry import ModelRegistry
-
 logger = logging.getLogger(__name__)
-from de_funk.services.storage_service import SilverStorageService
+
+try:
+    from de_funk.models.registry import ModelRegistry
+except ImportError:
+    ModelRegistry = None
+
 import pandas as pd
 
 

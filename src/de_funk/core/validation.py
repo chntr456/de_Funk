@@ -7,7 +7,10 @@ Validates notebook configurations against available models.
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
 
-from de_funk.models.registry import ModelRegistry
+try:
+    from de_funk.models.registry import ModelRegistry
+except ImportError:
+    ModelRegistry = None
 from de_funk.notebook.schema import NotebookConfig, Exhibit
 
 

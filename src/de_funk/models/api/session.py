@@ -127,14 +127,8 @@ class UniversalSession:
         # Cache loaded models
         self._models: Dict[str, Any] = {}
 
-        # Build model dependency graph from registry (handles modular YAML)
-        from de_funk.models.api.graph import ModelGraph
-        self.model_graph = ModelGraph()
-        try:
-            # Use registry to handle modular YAML configs (v2.0+)
-            self.model_graph.build_from_registry(self.registry)
-        except Exception as e:
-            logger.warning(f"Could not build model graph: {e}")
+        # Model graph (deprecated — use DomainGraph via DeFunk.graph)
+        self.model_graph = None
 
         # Composition helpers (lazy-loaded)
         self._auto_join_handler = None
@@ -165,18 +159,14 @@ class UniversalSession:
         raise ValueError(f"Unknown connection type: {connection_type}")
 
     def _get_auto_join_handler(self):
-        """Get or create AutoJoinHandler instance."""
-        if self._auto_join_handler is None:
-            from de_funk.models.api.auto_join import AutoJoinHandler
-            self._auto_join_handler = AutoJoinHandler(self)
-        return self._auto_join_handler
+        """Deprecated: use DomainGraph for join resolution."""
+        logger.warning("AutoJoinHandler is deprecated — use DomainGraph")
+        return None
 
     def _get_aggregation_handler(self):
-        """Get or create AggregationHandler instance."""
-        if self._aggregation_handler is None:
-            from de_funk.models.api.aggregation import AggregationHandler
-            self._aggregation_handler = AggregationHandler(self)
-        return self._aggregation_handler
+        """Deprecated: use Engine.aggregate()."""
+        logger.warning("AggregationHandler is deprecated — use Engine.aggregate()")
+        return None
 
     # ============================================================
     # GRAPH ORCHESTRATION

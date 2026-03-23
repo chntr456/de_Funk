@@ -156,15 +156,9 @@ class BaseModel:
 
     @property
     def query_planner(self):
-        """
-        Get query planner for dynamic table joins.
-
-        Uses the model's graph edges to plan and execute joins at runtime.
-        """
-        if self._query_planner is None:
-            from de_funk.models.api.query_planner import GraphQueryPlanner
-            self._query_planner = GraphQueryPlanner(self)
-        return self._query_planner
+        """Deprecated: use DomainGraph for join path resolution."""
+        logger.warning("query_planner is deprecated — use DomainGraph via build_session.graph")
+        return None
 
     @property
     def python_measures(self):
