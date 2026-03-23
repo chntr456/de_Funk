@@ -1,9 +1,0 @@
-digraph "classes_config" {
-rankdir=BT
-charset="utf-8"
-"de_funk.config.models.AppConfig" [color="black", fontcolor="black", label=<{AppConfig|apis : Dict[str, Dict[str, Any]]<br ALIGN="LEFT"/>configs_dir<br ALIGN="LEFT"/>connection<br ALIGN="LEFT"/>debug<br ALIGN="LEFT"/>env_loaded : bool<br ALIGN="LEFT"/>legacy_models_dir<br ALIGN="LEFT"/>log_level : str<br ALIGN="LEFT"/>models_dir<br ALIGN="LEFT"/>repo_root : Path<br ALIGN="LEFT"/>storage : Dict[str, Any]<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
-"de_funk.config.models.ConnectionConfig" [color="black", fontcolor="black", label=<{ConnectionConfig|duckdb : Optional[DuckDBConfig]<br ALIGN="LEFT"/>spark : Optional[SparkConfig]<br ALIGN="LEFT"/>type : str<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
-"de_funk.config.models.DebugConfig" [color="black", fontcolor="black", label=<{DebugConfig|exhibits : bool<br ALIGN="LEFT"/>filters : bool<br ALIGN="LEFT"/>sql : bool<br ALIGN="LEFT"/>|from_env(): 'DebugConfig'<br ALIGN="LEFT"/>}>, shape="record", style="solid"];
-"de_funk.config.models.ConnectionConfig" -> "de_funk.config.models.AppConfig" [arrowhead="diamond", arrowtail="none", fontcolor="green", label="connection", style="solid"];
-"de_funk.config.models.DebugConfig" -> "de_funk.config.models.AppConfig" [arrowhead="diamond", arrowtail="none", fontcolor="green", label="debug", style="solid"];
-}
