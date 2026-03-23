@@ -1,0 +1,769 @@
+@startuml "de_Funk Current Architecture — Code-Scraped"
+
+skinparam classFontName "Courier New"
+skinparam classFontSize 10
+skinparam packageFontSize 12
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam style strictuml
+
+title de_Funk Current Architecture\nScraped from src/de_funk/ — all architectural classes
+
+package "Domain Data Classes" #FFCC66 {
+  class SchemaField <<dataclass>>
+  class EdgeSpec <<dataclass>>
+  class MeasureDef <<dataclass>>
+  class AliasSpec <<dataclass>>
+  class EnrichSpec <<dataclass>>
+  class HookDef <<dataclass>>
+  class PipelineStep <<dataclass>>
+  class PhaseSpec <<dataclass>>
+  class ModelStorageSpec <<dataclass>>
+  class BuildSpec <<dataclass>>
+  class GraphSpec <<dataclass>>
+  class MeasuresSpec <<dataclass>>
+  class HooksConfig <<dataclass>>
+  class TableConfig <<dataclass>>
+  class SourceConfig <<dataclass>>
+  class DomainModelConfig <<dataclass>>
+  class BaseTemplate <<dataclass>>
+}
+
+package "Provider Data Classes" #CC9966 {
+  class EndpointSchemaField <<dataclass>>
+  class EndpointConfig <<dataclass>>
+  class ProviderConfig <<dataclass>>
+}
+
+package "Infrastructure Data Classes" #E6E6E6 {
+  class RootsConfig <<dataclass>> {
+    + from_dict()
+  }
+  class ApiLimits <<dataclass>> {
+    + from_dict()
+  }
+  class TablePath <<dataclass>> {
+    + full_path()
+    + from_dict()
+  }
+  class ClusterConfig <<dataclass>> {
+    + from_dict()
+  }
+  class RetryConfig <<dataclass>> {
+    + from_dict()
+  }
+  class RunConfig <<dataclass>> {
+    + from_dict()
+  }
+}
+
+package "Engine" #80E0D0 {
+  class Engine {
+    + for_duckdb()
+    + for_spark()
+    + read()
+    + write()
+    + create_df()
+    + select()
+  }
+  abstract class DataOps <<abstract>> {
+    + read()
+    + write()
+    + create_df()
+    + select()
+    + drop()
+    + derive()
+  }
+  class DuckDBOps {
+    + read()
+    + write()
+    + create_df()
+    + select()
+    + drop()
+    + derive()
+  }
+  class SparkOps {
+    + read()
+    + write()
+    + create_df()
+    + select()
+    + drop()
+    + derive()
+  }
+  abstract class SqlOps <<abstract>> {
+    + execute_sql()
+    + scan()
+    + build_from()
+    + build_where()
+    + distinct_values()
+  }
+  class DuckDBSql {
+    + execute_sql()
+    + scan()
+    + build_from()
+    + build_where()
+    + distinct_values()
+  }
+  class SparkSql {
+    + execute_sql()
+    + scan()
+    + build_from()
+    + build_where()
+    + distinct_values()
+  }
+}
+
+package "Sessions" #80E0D0 {
+  class FilterEngine {
+    + apply_filters()
+    + apply_from_session()
+    + build_filter_sql()
+  }
+  abstract class Session <<abstract>> {
+    + raw_path()
+    + bronze_path()
+    + silver_path()
+    + model_path()
+    + close()
+  }
+  class BuildSession {
+    + get_model()
+    + get_dependencies()
+    + build()
+    + build_all()
+    + close()
+  }
+  class QuerySession {
+    + resolve()
+    + find_join_path()
+    + distinct_values()
+    + build_from()
+    + build_where()
+    + close()
+  }
+  class IngestSession {
+    + get_provider()
+    + get_endpoint()
+    + close()
+  }
+}
+
+package "Field Resolution" #80E0D0 {
+  class BronzeEndpointInfo <<dataclass>>
+  class BronzeResolver {
+    + resolve()
+    + reachable_domains()
+    + find_join_path()
+    + get_endpoint_catalog()
+  }
+  class QueryEngine {
+    + distinct_values()
+    + distinct_values_by_measure()
+  }
+  class FieldRef
+  class ResolvedField {
+    + domain()
+  }
+  class FieldResolver {
+    + reachable_domains()
+    + find_join_path()
+    + resolve()
+    + resolve_many()
+    + get_field_catalog()
+  }
+  class DomainGraph {
+    + find_join_path()
+    + reachable_domains()
+    + neighbors()
+    + domains_for_table()
+    + all_tables()
+    + all_edges()
+  }
+  class StorageRouter {
+    + raw_path()
+    + bronze_path()
+    + silver_path()
+    + model_path()
+    + resolve()
+    + silver_root()
+  }
+}
+
+package "Config Loading" #FFCC66 {
+  class DomainConfigLoaderV4 {
+    + load_model_config()
+    + list_models()
+    + get_dependencies()
+    + get_build_order()
+    + load_base()
+    + clear_cache()
+  }
+  class ConfigLoader {
+    + load_env()
+    + load_storage()
+    + load()
+    + repo_root()
+  }
+  class SchemaField <<dataclass>> {
+    + is_computed()
+    + is_generated()
+  }
+  class EndpointConfig <<dataclass>> {
+    + get_spark_raw_schema()
+  }
+  class ProviderConfig <<dataclass>>
+  class MarkdownConfigLoader {
+    + parse_frontmatter()
+    + parse_schema_block()
+    + parse_view_ids_table()
+    + parse_schema_array()
+    + parse_bronze_config()
+    + load_provider()
+  }
+  class SparkConfig <<dataclass>> {
+    + to_spark_conf_dict()
+  }
+  class DuckDBConfig <<dataclass>> {
+    + to_connection_params()
+  }
+  class ConnectionConfig <<dataclass>>
+  class StorageConfig <<dataclass>> {
+    + from_dict()
+  }
+  class APIConfig <<dataclass>> {
+    + from_dict()
+  }
+  class AppConfig <<dataclass>> {
+    + models_dir()
+    + legacy_models_dir()
+    + configs_dir()
+  }
+  class TableConfig <<dataclass>>
+  class MeasureConfig <<dataclass>>
+  class ModelConfig {
+    + storage_root()
+    + storage_format()
+    + list_tables()
+    + list_dimensions()
+    + list_facts()
+    + get_table()
+  }
+  class ModelRegistry {
+    + list_models()
+    + get_model()
+    + has_model()
+    + list_tables()
+    + list_measures()
+    + get_table_schema()
+  }
+}
+
+package "Connections" #E6E6E6 {
+  abstract class DataConnection <<abstract>> {
+    + read_table()
+    + apply_filters()
+    + to_pandas()
+    + count()
+    + cache()
+    + uncache()
+  }
+  class SparkConnection {
+    + read_table()
+    + write_delta_table()
+    + merge_delta_table()
+    + optimize_delta_table()
+    + vacuum_delta_table()
+    + get_delta_table_history()
+  }
+  class ConnectionFactory {
+    + create()
+  }
+  class DuckDBConnection {
+    + table()
+    + has_view()
+    + read_table()
+    + write_delta_table()
+    + get_delta_table_history()
+    + optimize_delta_table()
+  }
+}
+
+package "Build Path" #FF9933 {
+  class ModelGraph {
+    + build_from_registry()
+    + build_from_config_dir()
+    + are_related()
+    + get_dependencies()
+    + get_dependents()
+    + get_join_path()
+  }
+  class BuildResult <<dataclass>>
+  class BuildContext <<dataclass>>
+  abstract class BaseModelBuilder <<abstract>> {
+    + get_model_class()
+    + get_model_config()
+    + create_model_instance()
+    + get_required_bronze_tables()
+    + validate_bronze_tables()
+    + pre_build()
+  }
+  class BuilderRegistry {
+    + register()
+    + get()
+    + all()
+    + discover()
+    + get_build_order()
+    + clear()
+  }
+  class ValidationIssue <<dataclass>>
+  class ValidationReport <<dataclass>> {
+    + is_valid()
+    + error_count()
+    + warning_count()
+    + add_error()
+    + add_warning()
+    + add_info()
+  }
+  abstract class DataValidator <<abstract>> {
+    + columns()
+    + row_count()
+    + get_required_columns()
+    + get_numeric_columns()
+    + get_date_column()
+    + get_entity_column()
+  }
+  class DomainBuilderFactory {
+    + create_builders()
+  }
+  class DomainModel {
+    + custom_node_loading()
+    + graph_builder()
+  }
+  class ComputedColumnsEnricher {
+    + run()
+  }
+  class TimeSeriesForecastModel {
+    + get_source_model_name()
+    + get_source_table_name()
+    + get_entity_column()
+    + get_date_column()
+    + get_training_data()
+    + run_forecast_for_entity()
+  }
+  class GraphBuilder {
+    + connection()
+    + backend()
+    + model_cfg()
+    + storage_router()
+    + session()
+    + build()
+  }
+  class JoinUtils {
+    + join_pairs_from_strings()
+    + infer_join_pairs()
+    + join_with_dedupe()
+  }
+  class MeasureCalculator {
+    + model_cfg()
+    + model_name()
+    + backend()
+    + calculate_measure()
+    + calculate_measure_by_entity()
+  }
+  class BaseModel {
+    + backend()
+    + measures()
+    + query_planner()
+    + python_measures()
+    + set_session()
+    + build()
+  }
+  class StorageRouter <<dataclass>> {
+    + resolve()
+    + bronze_path()
+    + silver_path()
+  }
+  class ModelWriter {
+    + auto_vacuum()
+    + model_name()
+    + storage_cfg()
+    + write_tables()
+  }
+  class TableAccessor {
+    + model_cfg()
+    + model_name()
+    + ensure_built()
+    + get_table()
+    + get_table_enriched()
+    + get_dimension_df()
+  }
+  class CompanyBuilder {
+    + get_model_class()
+    + post_build()
+  }
+  class CompanyModel {
+    + get_company_by_cik()
+    + get_company_by_ticker()
+    + get_companies_by_sector()
+    + get_active_companies()
+    + list_sectors()
+    + get_company_count_by_sector()
+  }
+  class TemporalBuilder {
+    + get_model_class()
+    + pre_build()
+    + post_build()
+  }
+  class CalendarBuilder {
+    + build()
+    + build_spark_dataframe()
+  }
+  class TemporalModel {
+    + custom_node_loading()
+    + get_calendar()
+    + get_weekdays()
+    + get_weekends()
+    + get_fiscal_year_dates()
+    + get_quarter_dates()
+  }
+  class ForecastDataValidator {
+    + get_required_columns()
+    + get_optional_columns()
+    + get_numeric_columns()
+    + get_date_column()
+    + get_entity_column()
+    + get_valid_ranges()
+  }
+  class StocksSourceValidator {
+    + get_required_columns()
+    + get_optional_columns()
+    + get_numeric_columns()
+    + get_date_column()
+    + get_entity_column()
+    + get_min_rows()
+  }
+  class ForecastModel {
+    + get_source_model_name()
+    + get_source_table_name()
+    + get_entity_column()
+    + get_date_column()
+    + get_training_data()
+    + run_forecast_for_ticker()
+  }
+  class SecuritiesBuilder {
+    + get_model_class()
+    + post_build()
+  }
+  class StocksBuilder {
+    + get_model_class()
+    + post_build()
+  }
+}
+
+package "Pipeline Executor" #FF9933 {
+  class NodeExecutor {
+    + register_op()
+    + get_op()
+    + list_ops()
+    + execute_all()
+    + execute_node()
+    + execute_pipeline()
+  }
+}
+
+package "Handler Hierarchy" #B3D9FF {
+  class HandlerRegistry {
+    + register()
+    + get()
+    + supported_types()
+  }
+  abstract class ExhibitHandler <<abstract>> {
+    + execute()
+    + distinct_values()
+    + distinct_values_by_measure()
+  }
+  class BoxHandler {
+    + execute()
+  }
+  class GraphicalHandler {
+    + execute()
+  }
+  class MetricsHandler {
+    + execute()
+  }
+  class PivotHandler {
+    + execute()
+  }
+  class TableDataHandler {
+    + execute()
+  }
+}
+
+package "Ingestion Path" #CC9966 {
+  class CircuitBreaker {
+    + state()
+    + stats()
+    + allow_request()
+    + record_success()
+    + record_failure()
+    + reset()
+  }
+  class Facet {
+    + get_coerce_rules()
+    + get_spark_casts()
+    + get_final_columns()
+    + get_field_mappings()
+    + get_computed_fields()
+    + get_facet_config()
+  }
+  class HttpClient {
+    + request_text()
+    + request()
+    + get()
+  }
+  class IngestorEngine {
+    + get_executor()
+    + shutdown_executor()
+    + run()
+    + run_with_discovery()
+  }
+  class ApiKeyPool {
+    + size()
+    + next_key()
+    + mark_exhausted()
+  }
+  abstract class BaseProvider <<abstract>> {
+    + base_url()
+    + rate_limit()
+    + env_api_key()
+    + get_provider_setting()
+    + get_endpoint_config()
+    + list_work_items()
+  }
+  class TokenBucket <<dataclass>> {
+    + acquire()
+    + wait()
+    + try_acquire()
+    + available_tokens()
+    + get_stats()
+  }
+  class SocrataClient {
+    + request()
+    + fetch_all()
+    + fetch_all_flat()
+    + get_row_count()
+    + get_metadata()
+    + fetch_csv()
+  }
+  class SocrataBaseProvider {
+    + enable_raw_save()
+    + list_work_items()
+    + fetch()
+    + normalize()
+    + get_table_name()
+    + get_resource_id()
+  }
+  class BronzeSink {
+    + exists()
+    + write_if_missing()
+    + append_immutable()
+    + upsert()
+    + smart_write()
+    + write()
+  }
+  class RawSink {
+    + write()
+    + exists()
+    + read()
+  }
+  class AlphaVantageProvider {
+    + enable_raw_save()
+    + has_raw_data()
+    + set_tickers()
+    + list_work_items()
+    + populate_raw_cache()
+    + fetch()
+  }
+  class ChicagoProvider
+  class CookCountyProvider {
+    + fetch_parcel_data()
+  }
+}
+
+package "Orchestration" #CC99FF {
+  class ModelInfo <<dataclass>>
+  class DependencyGraph {
+    + build()
+    + get_dependencies()
+    + topological_sort()
+    + filter_buildable()
+    + get_dependents()
+    + visualize()
+  }
+}
+
+package "Application" #E6E6E6 {
+  class DeFunk {
+    + from_config()
+    + from_app_config()
+    + build_session()
+    + query_session()
+    + ingest_session()
+  }
+}
+
+package "Model Artifacts" #B3FFB3 {
+  class ModelArtifact <<dataclass>> {
+    + to_dict()
+    + from_dict()
+  }
+  class ArtifactStore {
+    + save()
+    + load()
+    + latest()
+    + list_versions()
+    + register()
+  }
+}
+
+package "Plugin System" #B3FFB3 {
+  class BuildPluginRegistry {
+    + register()
+    + get()
+    + list_hooks()
+    + discover()
+  }
+}
+
+package "Legacy Bridge" #E6E6E6 {
+  class AggregationHandler {
+    + connection()
+    + backend()
+    + registry()
+    + aggregate_data()
+  }
+  class AutoJoinHandler {
+    + connection()
+    + backend()
+    + registry()
+    + select_columns()
+    + find_materialized_view()
+    + plan_auto_joins()
+  }
+  class StorageRouter <<dataclass>> {
+    + parse_table_ref()
+    + resolve()
+    + bronze_path()
+    + silver_path()
+  }
+  class Table {
+    + path()
+    + read()
+    + set_df()
+  }
+  class GraphQueryPlanner {
+    + get_table_enriched()
+    + get_join_path()
+    + get_table_relationships()
+    + find_tables_with_column()
+  }
+  class UniversalSession {
+    + backend()
+    + should_apply_cross_model_filter()
+    + column_exists_in_table()
+    + load_model()
+    + get_model_instance()
+    + get_table()
+  }
+  class StorageRouter <<dataclass>> {
+    + resolve()
+    + bronze_path()
+    + silver_path()
+  }
+  class SilverStorageService {
+    + get_table()
+    + list_models()
+    + list_tables()
+    + list_dimensions()
+    + list_facts()
+    + list_measures()
+  }
+}
+
+package "Notebook" #B3D9FF {
+  class NotebookSession {
+    + load_notebook()
+    + get_model_session()
+    + get_filter_context()
+    + update_filters()
+    + get_exhibit_data()
+  }
+}
+
+package "Core" #80E0D0 {
+  class RepoContext <<dataclass>> {
+    + get_api_config()
+    + from_repo_root()
+    + config()
+  }
+}
+
+package "Utils" #E6E6E6 {
+  class APIValidator {
+    + validate_date_range()
+    + test_api_connection()
+    + get_recommended_date_range()
+    + prompt_user_for_adjusted_range()
+  }
+  class PipelineRunTracker {
+    + start_run()
+    + log_stage()
+    + log_error()
+    + log_warning()
+    + update_results()
+    + end_run()
+  }
+}
+
+ExhibitHandler <|-- BoxHandler
+ExhibitHandler <|-- GraphicalHandler
+ExhibitHandler <|-- MetricsHandler
+ExhibitHandler <|-- PivotHandler
+ExhibitHandler <|-- TableDataHandler
+DataConnection <|-- SparkConnection
+DataConnection <|-- DuckDBConnection
+DataOps <|-- DuckDBOps
+DataOps <|-- SparkOps
+SqlOps <|-- DuckDBSql
+SqlOps <|-- SparkSql
+Session <|-- BuildSession
+Session <|-- QuerySession
+Session <|-- IngestSession
+BaseModel <|-- TimeSeriesForecastModel
+BaseModelBuilder <|-- CompanyBuilder
+BaseModel <|-- CompanyModel
+BaseModelBuilder <|-- TemporalBuilder
+BaseModel <|-- TemporalModel
+DataValidator <|-- ForecastDataValidator
+DataValidator <|-- StocksSourceValidator
+TimeSeriesForecastModel <|-- ForecastModel
+BaseModelBuilder <|-- SecuritiesBuilder
+BaseModelBuilder <|-- StocksBuilder
+BaseProvider <|-- SocrataBaseProvider
+BaseProvider <|-- AlphaVantageProvider
+SocrataBaseProvider <|-- ChicagoProvider
+SocrataBaseProvider <|-- CookCountyProvider
+
+legend right
+  | Color | Layer |
+  |<#FFCC66> Gold | Data Classes (from YAML/JSON) |
+  |<#80E0D0> Teal | Engine + Sessions + Resolution |
+  |<#FF9933> Orange | Build Path |
+  |<#B3D9FF> Light Blue | API / Notebook |
+  |<#CC9966> Brown | Ingestion Path |
+  |<#CC99FF> Purple | Orchestration |
+  |<#E6E6E6> Gray | Infrastructure + Legacy |
+  |<#B3FFB3> Green | Plugin System |
+endlegend
+
+@enduml
