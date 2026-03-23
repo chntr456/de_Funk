@@ -11,7 +11,11 @@ try:
     from de_funk.models.registry import ModelRegistry
 except ImportError:
     ModelRegistry = None
-from de_funk.notebook.schema import NotebookConfig, Exhibit
+
+# NotebookConfig/Exhibit were from the old Streamlit notebook path (removed).
+# Validation still works — it just validates model configs, not notebook schemas.
+NotebookConfig = None
+Exhibit = None
 
 
 @dataclass

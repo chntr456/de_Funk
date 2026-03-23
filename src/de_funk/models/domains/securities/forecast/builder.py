@@ -267,18 +267,10 @@ from de_funk.core.connection import get_spark_connection
 
             # Create forecast model instance
             from de_funk.models.domains.securities.forecast import ForecastModel
-            from de_funk.models.api.session import UniversalSession
-from de_funk.core.connection import get_spark_connection
+            from de_funk.core.connection import get_spark_connection
 
             # Create connection wrapper for Spark session
             connection = get_spark_connection(self.spark)
-
-            # Create session for cross-model access
-            session = UniversalSession(
-                connection=connection,
-                storage_cfg=self.storage_config,
-                repo_root=self.repo_root
-            )
 
             forecast_model = ForecastModel(
                 connection=connection,
