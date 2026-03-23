@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from de_funk.api.executor import QueryEngine, truncate_to_mb
+from de_funk.api.executor import truncate_to_mb
 from de_funk.api.handlers.base import ExhibitHandler
 from de_funk.api.handlers.formatting import parse_format_section, resolve_format
 from de_funk.api.models.requests import (
@@ -17,7 +17,7 @@ from de_funk.config.logging import get_logger
 logger = get_logger(__name__)
 
 
-class TableDataHandler(ExhibitHandler, QueryEngine):
+class TableDataHandler(ExhibitHandler):
     handles = {"table.data", "data_table"}
 
     def execute(self, payload: dict[str, Any], resolver: FieldResolver) -> TableResponse:

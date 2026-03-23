@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from de_funk.api.executor import QueryEngine
 from de_funk.api.handlers.base import ExhibitHandler
 from de_funk.api.handlers.formatting import parse_format_section
 from de_funk.api.models.requests import (
@@ -18,7 +17,7 @@ from de_funk.config.logging import get_logger
 logger = get_logger(__name__)
 
 
-class GraphicalHandler(ExhibitHandler, QueryEngine):
+class GraphicalHandler(ExhibitHandler):
     handles = {
         "plotly.line", "line", "line_chart",
         "plotly.bar", "bar", "bar_chart",

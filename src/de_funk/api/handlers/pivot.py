@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from de_funk.api.executor import QueryEngine, truncate_to_mb
+from de_funk.api.executor import truncate_to_mb
 from de_funk.api.handlers.base import ExhibitHandler
 from de_funk.api.handlers.gt_formatter import build_gt
 from de_funk.api.handlers.reshape import (
@@ -45,7 +45,7 @@ MAX_HTML_ROWS = 400
 MAX_PIVOT_COLUMNS = 200
 
 
-class PivotHandler(ExhibitHandler, QueryEngine):
+class PivotHandler(ExhibitHandler):
     handles = {"table.pivot", "pivot", "pivot_table", "great_table", "great_tables", "gt"}
 
     def execute(self, payload: dict[str, Any], resolver: FieldResolver) -> GreatTablesResponse:

@@ -195,13 +195,7 @@ class Engine:
 
         for cls in _HANDLER_CLASSES:
             handler = cls.__new__(cls)
-            handler._conn = qe._conn
-            handler._delta_available = qe._delta_available
-            handler._scan_cache = qe._scan_cache
-            handler._max_sql_rows = qe._max_sql_rows
-            handler._max_dimension_values = qe._max_dimension_values
-            handler.max_response_mb = qe.max_response_mb
-            handler.storage_root = qe.storage_root
+            handler._qe = qe
             registry.register(handler)
 
         return registry

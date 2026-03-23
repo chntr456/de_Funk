@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from de_funk.api.executor import QueryEngine
 from de_funk.api.handlers.base import ExhibitHandler
 from de_funk.api.handlers.formatting import parse_format_section, resolve_format
 from de_funk.api.measures import build_measure_sql
@@ -18,7 +17,7 @@ from de_funk.config.logging import get_logger
 logger = get_logger(__name__)
 
 
-class MetricsHandler(ExhibitHandler, QueryEngine):
+class MetricsHandler(ExhibitHandler):
     handles = {"cards.metric", "kpi", "metric_cards"}
 
     def execute(self, payload: dict[str, Any], resolver: FieldResolver) -> MetricResponse:
@@ -51,7 +50,7 @@ class MetricsHandler(ExhibitHandler, QueryEngine):
 
         sql = f"SELECT {', '.join(select_parts)} FROM {from_clause} {where_clause}"
         logger.debug(f"Metrics SQL: {sql}")
-        row = self._conn.execute(sql).fetchone()
+        row = self._qe._conn.execute(sql).fetchone()
 
         metrics = []
         for i, (m, resolved_f) in enumerate(metric_meta):

@@ -54,35 +54,24 @@ def build_registry(
 ) -> HandlerRegistry:
     """Build the handler registry with a shared DuckDB connection.
 
-    Creates one QueryEngine (one DuckDB connection), then injects its
-    connection state into each handler. This prevents 5+ separate
-    connections each holding their own buffer cache — the main cause
-    of progressive memory bloat.
+    Creates one QueryEngine (one DuckDB connection), then injects it
+    into each handler via _qe. ExhibitHandler bridge methods proxy
+    all QueryEngine operations.
     """
     from de_funk.api.executor import QueryEngine
 
     registry = HandlerRegistry()
-    init_kwargs: dict[str, Any] = dict(
+    shared_engine = QueryEngine(
         storage_root=storage_root,
         memory_limit=memory_limit,
         max_sql_rows=max_sql_rows,
         max_dimension_values=max_dimension_values,
         max_response_mb=max_response_mb,
     )
-
-    # Create a single shared QueryEngine with one DuckDB connection
-    shared_engine = QueryEngine(**init_kwargs)
     registry.shared_engine = shared_engine
 
     for cls in _HANDLER_CLASSES:
         handler = cls.__new__(cls)
-        # Copy shared engine state into the handler instance
-        handler._conn = shared_engine._conn
-        handler._delta_available = shared_engine._delta_available
-        handler._scan_cache = shared_engine._scan_cache
-        handler._max_sql_rows = shared_engine._max_sql_rows
-        handler._max_dimension_values = shared_engine._max_dimension_values
-        handler.max_response_mb = shared_engine.max_response_mb
-        handler.storage_root = shared_engine.storage_root
+        handler._qe = shared_engine
         registry.register(handler)
     return registry

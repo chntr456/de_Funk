@@ -3,13 +3,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from de_funk.api.executor import QueryEngine
 from de_funk.api.handlers.base import ExhibitHandler
 from de_funk.api.models.requests import BoxQueryRequest
 from de_funk.api.resolver import FieldResolver
 
 
-class BoxHandler(ExhibitHandler, QueryEngine):
+class BoxHandler(ExhibitHandler):
     handles = {"plotly.box", "box", "ohlcv", "candlestick"}
 
     def execute(self, payload: dict[str, Any], resolver: FieldResolver) -> dict:
