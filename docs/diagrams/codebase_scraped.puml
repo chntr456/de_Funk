@@ -1,4 +1,4 @@
-@startuml "de_Funk Current Architecture — Code-Scraped"
+@startuml "de_Funk Codebase — Post-Rebuild (Code-Scraped)"
 
 skinparam classFontName "Courier New"
 skinparam classFontSize 10
@@ -7,58 +7,58 @@ skinparam packageStyle rectangle
 skinparam linetype ortho
 skinparam style strictuml
 
-title de_Funk Current Architecture\nScraped from src/de_funk/ — all architectural classes
+title de_Funk Codebase — Post-Rebuild\nScraped from src/de_funk/ — GREEN=vision, GRAY=support
 
 package "Domain Data Classes" #FFCC66 {
-  class SchemaField <<dataclass>>
-  class EdgeSpec <<dataclass>>
-  class MeasureDef <<dataclass>>
-  class AliasSpec <<dataclass>>
-  class EnrichSpec <<dataclass>>
-  class HookDef <<dataclass>>
-  class PipelineStep <<dataclass>>
-  class PhaseSpec <<dataclass>>
-  class ModelStorageSpec <<dataclass>>
-  class BuildSpec <<dataclass>>
-  class GraphSpec <<dataclass>>
-  class MeasuresSpec <<dataclass>>
-  class HooksConfig <<dataclass>>
-  class TableConfig <<dataclass>>
-  class SourceConfig <<dataclass>>
-  class DomainModelConfig <<dataclass>>
-  class BaseTemplate <<dataclass>>
+  class SchemaField #B3FFB3
+  class EdgeSpec #B3FFB3
+  class MeasureDef #B3FFB3
+  class AliasSpec #B3FFB3
+  class EnrichSpec #B3FFB3
+  class HookDef #B3FFB3
+  class PipelineStep #B3FFB3
+  class PhaseSpec #B3FFB3
+  class ModelStorageSpec #B3FFB3
+  class BuildSpec #B3FFB3
+  class GraphSpec #B3FFB3
+  class MeasuresSpec #B3FFB3
+  class HooksConfig #B3FFB3
+  class TableConfig #B3FFB3
+  class SourceConfig #B3FFB3
+  class DomainModelConfig #B3FFB3
+  class BaseTemplate #B3FFB3
 }
 
 package "Provider Data Classes" #CC9966 {
-  class EndpointSchemaField <<dataclass>>
-  class EndpointConfig <<dataclass>>
-  class ProviderConfig <<dataclass>>
+  class EndpointSchemaField #B3FFB3
+  class EndpointConfig #B3FFB3
+  class ProviderConfig #B3FFB3
 }
 
 package "Infrastructure Data Classes" #E6E6E6 {
-  class RootsConfig <<dataclass>> {
+  class RootsConfig #B3FFB3 {
     + from_dict()
   }
-  class ApiLimits <<dataclass>> {
+  class ApiLimits #B3FFB3 {
     + from_dict()
   }
-  class TablePath <<dataclass>> {
+  class TablePath #B3FFB3 {
     + full_path()
     + from_dict()
   }
-  class ClusterConfig <<dataclass>> {
+  class ClusterConfig #B3FFB3 {
     + from_dict()
   }
-  class RetryConfig <<dataclass>> {
+  class RetryConfig #B3FFB3 {
     + from_dict()
   }
-  class RunConfig <<dataclass>> {
+  class RunConfig #B3FFB3 {
     + from_dict()
   }
 }
 
 package "Engine" #80E0D0 {
-  class Engine {
+  class Engine #B3FFB3 {
     + for_duckdb()
     + for_spark()
     + read()
@@ -66,7 +66,7 @@ package "Engine" #80E0D0 {
     + create_df()
     + select()
   }
-  abstract class DataOps <<abstract>> {
+  class DataOps #B3FFB3 {
     + read()
     + write()
     + create_df()
@@ -74,7 +74,7 @@ package "Engine" #80E0D0 {
     + drop()
     + derive()
   }
-  class DuckDBOps {
+  class DuckDBOps #B3FFB3 {
     + read()
     + write()
     + create_df()
@@ -82,7 +82,7 @@ package "Engine" #80E0D0 {
     + drop()
     + derive()
   }
-  class SparkOps {
+  class SparkOps #B3FFB3 {
     + read()
     + write()
     + create_df()
@@ -90,21 +90,21 @@ package "Engine" #80E0D0 {
     + drop()
     + derive()
   }
-  abstract class SqlOps <<abstract>> {
+  class SqlOps #B3FFB3 {
     + execute_sql()
     + scan()
     + build_from()
     + build_where()
     + distinct_values()
   }
-  class DuckDBSql {
+  class DuckDBSql #B3FFB3 {
     + execute_sql()
     + scan()
     + build_from()
     + build_where()
     + distinct_values()
   }
-  class SparkSql {
+  class SparkSql #B3FFB3 {
     + execute_sql()
     + scan()
     + build_from()
@@ -119,21 +119,21 @@ package "Sessions" #80E0D0 {
     + apply_from_session()
     + build_filter_sql()
   }
-  abstract class Session <<abstract>> {
+  class Session #B3FFB3 {
     + raw_path()
     + bronze_path()
     + silver_path()
     + model_path()
     + close()
   }
-  class BuildSession {
+  class BuildSession #B3FFB3 {
     + get_model()
     + get_dependencies()
     + build()
     + build_all()
     + close()
   }
-  class QuerySession {
+  class QuerySession #B3FFB3 {
     + resolve()
     + find_join_path()
     + distinct_values()
@@ -141,7 +141,7 @@ package "Sessions" #80E0D0 {
     + build_where()
     + close()
   }
-  class IngestSession {
+  class IngestSession #B3FFB3 {
     + get_provider()
     + get_endpoint()
     + close()
@@ -149,29 +149,25 @@ package "Sessions" #80E0D0 {
 }
 
 package "Field Resolution" #80E0D0 {
-  class BronzeEndpointInfo <<dataclass>>
+  class BronzeEndpointInfo
   class BronzeResolver {
     + resolve()
     + reachable_domains()
     + find_join_path()
     + get_endpoint_catalog()
   }
-  class QueryEngine {
-    + distinct_values()
-    + distinct_values_by_measure()
-  }
-  class FieldRef
-  class ResolvedField {
+  class FieldRef #B3FFB3
+  class ResolvedField #B3FFB3 {
     + domain()
   }
-  class FieldResolver {
+  class FieldResolver #B3FFB3 {
     + reachable_domains()
     + find_join_path()
     + resolve()
     + resolve_many()
     + get_field_catalog()
   }
-  class DomainGraph {
+  class DomainGraph #B3FFB3 {
     + find_join_path()
     + reachable_domains()
     + neighbors()
@@ -179,7 +175,7 @@ package "Field Resolution" #80E0D0 {
     + all_tables()
     + all_edges()
   }
-  class StorageRouter {
+  class StorageRouter #B3FFB3 {
     + raw_path()
     + bronze_path()
     + silver_path()
@@ -190,7 +186,7 @@ package "Field Resolution" #80E0D0 {
 }
 
 package "Config Loading" #FFCC66 {
-  class DomainConfigLoaderV4 {
+  class DomainConfigLoaderV4 #B3FFB3 {
     + load_model_config()
     + list_models()
     + get_dependencies()
@@ -204,14 +200,14 @@ package "Config Loading" #FFCC66 {
     + load()
     + repo_root()
   }
-  class SchemaField <<dataclass>> {
+  class SchemaField #B3FFB3 {
     + is_computed()
     + is_generated()
   }
-  class EndpointConfig <<dataclass>> {
+  class EndpointConfig #B3FFB3 {
     + get_spark_raw_schema()
   }
-  class ProviderConfig <<dataclass>>
+  class ProviderConfig #B3FFB3
   class MarkdownConfigLoader {
     + parse_frontmatter()
     + parse_schema_block()
@@ -220,46 +216,28 @@ package "Config Loading" #FFCC66 {
     + parse_bronze_config()
     + load_provider()
   }
-  class SparkConfig <<dataclass>> {
+  class SparkConfig #B3FFB3 {
     + to_spark_conf_dict()
   }
-  class DuckDBConfig <<dataclass>> {
+  class DuckDBConfig #B3FFB3 {
     + to_connection_params()
   }
-  class ConnectionConfig <<dataclass>>
-  class StorageConfig <<dataclass>> {
+  class ConnectionConfig #B3FFB3
+  class StorageConfig #B3FFB3 {
     + from_dict()
   }
-  class APIConfig <<dataclass>> {
+  class APIConfig {
     + from_dict()
   }
-  class AppConfig <<dataclass>> {
+  class AppConfig #B3FFB3 {
     + models_dir()
     + legacy_models_dir()
     + configs_dir()
   }
-  class TableConfig <<dataclass>>
-  class MeasureConfig <<dataclass>>
-  class ModelConfig {
-    + storage_root()
-    + storage_format()
-    + list_tables()
-    + list_dimensions()
-    + list_facts()
-    + get_table()
-  }
-  class ModelRegistry {
-    + list_models()
-    + get_model()
-    + has_model()
-    + list_tables()
-    + list_measures()
-    + get_table_schema()
-  }
 }
 
 package "Connections" #E6E6E6 {
-  abstract class DataConnection <<abstract>> {
+  class DataConnection #B3FFB3 {
     + read_table()
     + apply_filters()
     + to_pandas()
@@ -267,7 +245,7 @@ package "Connections" #E6E6E6 {
     + cache()
     + uncache()
   }
-  class SparkConnection {
+  class SparkConnection #B3FFB3 {
     + read_table()
     + write_delta_table()
     + merge_delta_table()
@@ -275,10 +253,10 @@ package "Connections" #E6E6E6 {
     + vacuum_delta_table()
     + get_delta_table_history()
   }
-  class ConnectionFactory {
+  class ConnectionFactory #B3FFB3 {
     + create()
   }
-  class DuckDBConnection {
+  class DuckDBConnection #B3FFB3 {
     + table()
     + has_view()
     + read_table()
@@ -289,17 +267,20 @@ package "Connections" #E6E6E6 {
 }
 
 package "Build Path" #FF9933 {
-  class ModelGraph {
-    + build_from_registry()
-    + build_from_config_dir()
-    + are_related()
-    + get_dependencies()
-    + get_dependents()
-    + get_join_path()
+  class StorageRouter #B3FFB3 {
+    + parse_table_ref()
+    + resolve()
+    + bronze_path()
+    + silver_path()
   }
-  class BuildResult <<dataclass>>
-  class BuildContext <<dataclass>>
-  abstract class BaseModelBuilder <<abstract>> {
+  class Table {
+    + path()
+    + read()
+    + set_df()
+  }
+  class BuildResult #B3FFB3
+  class BuildContext
+  class BaseModelBuilder #B3FFB3 {
     + get_model_class()
     + get_model_config()
     + create_model_instance()
@@ -315,8 +296,8 @@ package "Build Path" #FF9933 {
     + get_build_order()
     + clear()
   }
-  class ValidationIssue <<dataclass>>
-  class ValidationReport <<dataclass>> {
+  class ValidationIssue
+  class ValidationReport {
     + is_valid()
     + error_count()
     + warning_count()
@@ -324,7 +305,7 @@ package "Build Path" #FF9933 {
     + add_warning()
     + add_info()
   }
-  abstract class DataValidator <<abstract>> {
+  class DataValidator {
     + columns()
     + row_count()
     + get_required_columns()
@@ -332,10 +313,10 @@ package "Build Path" #FF9933 {
     + get_date_column()
     + get_entity_column()
   }
-  class DomainBuilderFactory {
+  class DomainBuilderFactory #B3FFB3 {
     + create_builders()
   }
-  class DomainModel {
+  class DomainModel #B3FFB3 {
     + custom_node_loading()
     + graph_builder()
   }
@@ -370,7 +351,7 @@ package "Build Path" #FF9933 {
     + calculate_measure()
     + calculate_measure_by_entity()
   }
-  class BaseModel {
+  class BaseModel #B3FFB3 {
     + backend()
     + measures()
     + query_planner()
@@ -378,7 +359,7 @@ package "Build Path" #FF9933 {
     + set_session()
     + build()
   }
-  class StorageRouter <<dataclass>> {
+  class StorageRouter #B3FFB3 {
     + resolve()
     + bronze_path()
     + silver_path()
@@ -458,10 +439,28 @@ package "Build Path" #FF9933 {
     + get_model_class()
     + post_build()
   }
+  class TableConfig #B3FFB3
+  class MeasureConfig
+  class ModelConfig {
+    + storage_root()
+    + storage_format()
+    + list_tables()
+    + list_dimensions()
+    + list_facts()
+    + get_table()
+  }
+  class ModelRegistry {
+    + list_models()
+    + get_model()
+    + has_model()
+    + list_tables()
+    + list_measures()
+    + get_table_schema()
+  }
 }
 
 package "Pipeline Executor" #FF9933 {
-  class NodeExecutor {
+  class NodeExecutor #B3FFB3 {
     + register_op()
     + get_op()
     + list_ops()
@@ -472,35 +471,35 @@ package "Pipeline Executor" #FF9933 {
 }
 
 package "Handler Hierarchy" #B3D9FF {
-  class HandlerRegistry {
+  class HandlerRegistry #B3FFB3 {
     + register()
     + get()
     + supported_types()
   }
-  abstract class ExhibitHandler <<abstract>> {
+  class ExhibitHandler #B3FFB3 {
     + execute()
     + distinct_values()
     + distinct_values_by_measure()
   }
-  class BoxHandler {
+  class BoxHandler #B3FFB3 {
     + execute()
   }
-  class GraphicalHandler {
+  class GraphicalHandler #B3FFB3 {
     + execute()
   }
-  class MetricsHandler {
+  class MetricsHandler #B3FFB3 {
     + execute()
   }
-  class PivotHandler {
+  class PivotHandler #B3FFB3 {
     + execute()
   }
-  class TableDataHandler {
+  class TableDataHandler #B3FFB3 {
     + execute()
   }
 }
 
 package "Ingestion Path" #CC9966 {
-  class CircuitBreaker {
+  class CircuitBreaker #B3FFB3 {
     + state()
     + stats()
     + allow_request()
@@ -516,23 +515,23 @@ package "Ingestion Path" #CC9966 {
     + get_computed_fields()
     + get_facet_config()
   }
-  class HttpClient {
+  class HttpClient #B3FFB3 {
     + request_text()
     + request()
     + get()
   }
-  class IngestorEngine {
+  class IngestorEngine #B3FFB3 {
     + get_executor()
     + shutdown_executor()
     + run()
     + run_with_discovery()
   }
-  class ApiKeyPool {
+  class ApiKeyPool #B3FFB3 {
     + size()
     + next_key()
     + mark_exhausted()
   }
-  abstract class BaseProvider <<abstract>> {
+  class BaseProvider #B3FFB3 {
     + base_url()
     + rate_limit()
     + env_api_key()
@@ -540,7 +539,7 @@ package "Ingestion Path" #CC9966 {
     + get_endpoint_config()
     + list_work_items()
   }
-  class TokenBucket <<dataclass>> {
+  class TokenBucket #B3FFB3 {
     + acquire()
     + wait()
     + try_acquire()
@@ -563,7 +562,7 @@ package "Ingestion Path" #CC9966 {
     + get_table_name()
     + get_resource_id()
   }
-  class BronzeSink {
+  class BronzeSink #B3FFB3 {
     + exists()
     + write_if_missing()
     + append_immutable()
@@ -571,7 +570,7 @@ package "Ingestion Path" #CC9966 {
     + smart_write()
     + write()
   }
-  class RawSink {
+  class RawSink #B3FFB3 {
     + write()
     + exists()
     + read()
@@ -591,8 +590,8 @@ package "Ingestion Path" #CC9966 {
 }
 
 package "Orchestration" #CC99FF {
-  class ModelInfo <<dataclass>>
-  class DependencyGraph {
+  class ModelInfo
+  class DependencyGraph #B3FFB3 {
     + build()
     + get_dependencies()
     + topological_sort()
@@ -603,7 +602,7 @@ package "Orchestration" #CC99FF {
 }
 
 package "Application" #E6E6E6 {
-  class DeFunk {
+  class DeFunk #B3FFB3 {
     + from_config()
     + from_app_config()
     + build_session()
@@ -613,11 +612,11 @@ package "Application" #E6E6E6 {
 }
 
 package "Model Artifacts" #B3FFB3 {
-  class ModelArtifact <<dataclass>> {
+  class ModelArtifact #B3FFB3 {
     + to_dict()
     + from_dict()
   }
-  class ArtifactStore {
+  class ArtifactStore #B3FFB3 {
     + save()
     + load()
     + latest()
@@ -627,7 +626,7 @@ package "Model Artifacts" #B3FFB3 {
 }
 
 package "Plugin System" #B3FFB3 {
-  class BuildPluginRegistry {
+  class BuildPluginRegistry #B3FFB3 {
     + register()
     + get()
     + list_hooks()
@@ -635,73 +634,8 @@ package "Plugin System" #B3FFB3 {
   }
 }
 
-package "Legacy Bridge" #E6E6E6 {
-  class AggregationHandler {
-    + connection()
-    + backend()
-    + registry()
-    + aggregate_data()
-  }
-  class AutoJoinHandler {
-    + connection()
-    + backend()
-    + registry()
-    + select_columns()
-    + find_materialized_view()
-    + plan_auto_joins()
-  }
-  class StorageRouter <<dataclass>> {
-    + parse_table_ref()
-    + resolve()
-    + bronze_path()
-    + silver_path()
-  }
-  class Table {
-    + path()
-    + read()
-    + set_df()
-  }
-  class GraphQueryPlanner {
-    + get_table_enriched()
-    + get_join_path()
-    + get_table_relationships()
-    + find_tables_with_column()
-  }
-  class UniversalSession {
-    + backend()
-    + should_apply_cross_model_filter()
-    + column_exists_in_table()
-    + load_model()
-    + get_model_instance()
-    + get_table()
-  }
-  class StorageRouter <<dataclass>> {
-    + resolve()
-    + bronze_path()
-    + silver_path()
-  }
-  class SilverStorageService {
-    + get_table()
-    + list_models()
-    + list_tables()
-    + list_dimensions()
-    + list_facts()
-    + list_measures()
-  }
-}
-
-package "Notebook" #B3D9FF {
-  class NotebookSession {
-    + load_notebook()
-    + get_model_session()
-    + get_filter_context()
-    + update_filters()
-    + get_exhibit_data()
-  }
-}
-
 package "Core" #80E0D0 {
-  class RepoContext <<dataclass>> {
+  class RepoContext {
     + get_api_config()
     + from_repo_root()
     + config()
@@ -755,15 +689,9 @@ SocrataBaseProvider <|-- ChicagoProvider
 SocrataBaseProvider <|-- CookCountyProvider
 
 legend right
-  | Color | Layer |
-  |<#FFCC66> Gold | Data Classes (from YAML/JSON) |
-  |<#80E0D0> Teal | Engine + Sessions + Resolution |
-  |<#FF9933> Orange | Build Path |
-  |<#B3D9FF> Light Blue | API / Notebook |
-  |<#CC9966> Brown | Ingestion Path |
-  |<#CC99FF> Purple | Orchestration |
-  |<#E6E6E6> Gray | Infrastructure + Legacy |
-  |<#B3FFB3> Green | Plugin System |
+  | Color | Meaning |
+  |<#B3FFB3> Green | In full_vision.puml (target architecture) |
+  |<#FFFFFF> White | Support class (not in vision, still used) |
 endlegend
 
 @enduml
