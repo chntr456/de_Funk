@@ -143,8 +143,8 @@ class IngestorEngine:
 
     def __init__(
         self,
-        provider: BaseProvider,
-        storage_cfg: Dict,
+        provider: BaseProvider = None,
+        storage_cfg: Dict = None,
         max_pending_writes: int = 2,
         writer_threads: int = 2,
         session=None,
@@ -152,28 +152,60 @@ class IngestorEngine:
         """
         Initialize the ingestion engine.
 
+        Preferred: pass session (IngestSession) which provides storage_router,
+        engine, and provider/endpoint config lookup.
+
+        Legacy: pass provider + storage_cfg directly.
+
         Args:
-            provider: Provider instance implementing BaseProvider interface
-            storage_cfg: Storage configuration dict
+            provider: Provider instance (legacy) or None if using session
+            storage_cfg: Storage configuration dict (legacy) or None if using session
             max_pending_writes: Max writes to queue before blocking (backpressure)
             writer_threads: Number of writer threads in pool
-            session: Optional IngestSession from Engine/Session pattern
+            session: IngestSession from DeFunk.ingest_session()
         """
+        self.session = session
         self.provider = provider
-        self.storage_cfg = storage_cfg
-        self.sink = BronzeSink(storage_cfg)
-        self.ingest_session = session
         self.max_pending_writes = max_pending_writes
         self.writer_threads = writer_threads
 
-        # Raw sink — saves raw API responses before Bronze transformation
+        # Resolve storage config from session or direct param
+        if session is not None:
+            self.storage_cfg = session._storage_config
+            self.storage_router = session.storage_router
+        else:
+            self.storage_cfg = storage_cfg or {}
+            from de_funk.core.storage import StorageRouter
+            self.storage_router = StorageRouter(self.storage_cfg)
+
+        # Create sinks using storage_router paths
+        self.sink = BronzeSink(self.storage_cfg, session=session)
+
         from de_funk.pipelines.ingestors.raw_sink import RawSink
-        raw_root = storage_cfg.get("roots", {}).get("raw", "storage/raw") if isinstance(storage_cfg, dict) else "storage/raw"
-        self.raw_sink = RawSink(raw_root=raw_root)
+        self.raw_sink = RawSink(raw_root=self.storage_router.raw_root)
 
         # Track pending writes per work item
         self._pending_futures: List[Future] = []
         self._write_errors: List[str] = []
+
+    @classmethod
+    def from_session(cls, session, provider: BaseProvider,
+                     max_pending_writes: int = 2, writer_threads: int = 2):
+        """Create IngestorEngine from an IngestSession.
+
+        Usage:
+            app = DeFunk.from_config()
+            session = app.ingest_session()
+            provider = create_chicago_provider(spark, docs_path)
+            engine = IngestorEngine.from_session(session, provider)
+            engine.run(work_items=["crimes"])
+        """
+        return cls(
+            provider=provider,
+            session=session,
+            max_pending_writes=max_pending_writes,
+            writer_threads=writer_threads,
+        )
 
     @classmethod
     def get_executor(cls, max_workers: int = 2) -> ThreadPoolExecutor:
