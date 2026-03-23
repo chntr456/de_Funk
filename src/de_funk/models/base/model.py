@@ -153,17 +153,12 @@ class BaseModel:
                     logger.error(f"Failed to write {name}: {e}")
 
     def _get_write_root(self) -> str:
-        """Resolve the Silver root path for writing."""
-        model_path = self.model_name.replace(".", "/")
-        storage = self.model_cfg.get("storage", {})
-        if isinstance(storage, dict) and storage.get("silver", {}).get("root"):
-            custom = storage["silver"]["root"]
-            roots = self.storage_cfg.get("roots", {}) if isinstance(self.storage_cfg, dict) else {}
-            base = roots.get("silver", "storage/silver")
-            # Custom root is relative to repo, not silver root
-            if self.repo_root:
-                return str(self.repo_root / custom)
-            return custom
+        """Resolve the Silver root path for writing.
+
+        Always uses StorageRouter which respects storage_cfg['roots']['silver'].
+        The model-level storage.silver.root in YAML is informational only —
+        the actual write path comes from the centralized storage config.
+        """
         return self.storage_router.silver_path(self.model_name)
 
     # ── Table access (for build hooks) ────────────────────
