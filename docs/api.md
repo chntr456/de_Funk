@@ -214,7 +214,7 @@ print(resp.json()["values"][:10])
 ```
 
 **Source**: `src/de_funk/api/routers/dimensions.py` calls
-`QueryEngine.distinct_values()` or `QueryEngine.distinct_values_by_measure()`
+`Engine.distinct_values()` or `Engine.distinct_values_by_measure()`
 in `src/de_funk/api/executor.py`.
 
 ---
@@ -522,7 +522,7 @@ POST /api/query
 ## Part 3: Exhibit Type Handlers
 
 Each handler is a class that inherits from both `ExhibitHandler` (abstract
-interface) and `QueryEngine` (shared DuckDB infrastructure). All handlers live
+interface) and `Engine` (shared DuckDB infrastructure). All handlers live
 in `src/de_funk/api/handlers/`.
 
 ### GraphicalHandler
@@ -1224,7 +1224,7 @@ ip addr show | grep "inet " | grep -v 127.0.0.1
    - `FieldResolver` scans `domains/models/` and builds the Silver field index + join graph
    - `BronzeResolver` scans `data_sources/Endpoints/` and builds the Bronze field index
      (providers, endpoints, fields, Delta paths)
-   - `QueryEngine` initializes a DuckDB connection with the configured memory limit,
+   - `Engine` initializes a DuckDB connection with the configured memory limit,
      installs and loads the Delta extension
    - `HandlerRegistry` instantiates all five handler classes with shared config
 5. Server is ready at `http://{host}:{port}`

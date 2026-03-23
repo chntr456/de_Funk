@@ -1114,12 +1114,12 @@ df = table.read()
 
 ### ModelWriter
 
-**Location**: `src/de_funk/models/base/model_writer.py`
+**Location**: `src/de_funk/models/base/model.py (write_tables method)`
 
 The `ModelWriter` persists model dimensions and facts to the Silver layer using Delta Lake format.
 
 ```python
-from de_funk.models.base.model_writer import ModelWriter
+# ModelWriter removed — BaseModel.write_tables() writes directly
 
 writer = ModelWriter(model)
 stats = writer.write_tables(mode="overwrite")
@@ -1160,7 +1160,7 @@ stats = writer.write_tables(
 
 ```python
 # Check format resolution:
-# model_writer.py reads from model_cfg, then storage_cfg, then DEFAULT_FORMAT
+# write_tables reads from model_cfg, then storage_cfg, then DEFAULT_FORMAT
 format = (
     model.model_cfg.get("storage", {}).get("format")    # 1. model.md
     or storage_cfg.get("defaults", {}).get("format")    # 2. storage.json

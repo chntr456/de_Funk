@@ -79,17 +79,17 @@ This design means:
 ```
 Obsidian Note                 FastAPI                    DuckDB
 ┌─────────────┐    POST     ┌──────────────┐  SQL     ┌──────────────┐
-│ ```de_funk   │──────────→│ FieldResolver │────────→│ Silver Layer │
-│ type: ...    │            │ BronzeResolver│────────→│ Bronze Layer │
-│ rows: [...]  │←──────────│ QueryEngine   │←────────│ (Delta Lake) │
-│ ```          │  JSON/HTML │ Handlers      │          └──────────────┘
+│ ```de_funk   │──────────→│ DeFunk App    │────────→│ Silver Layer │
+│ type: ...    │            │  Engine       │────────→│ Bronze Layer │
+│ rows: [...]  │←──────────│  Handlers     │←────────│ (Delta Lake) │
+│ ```          │  JSON/HTML │  Resolver     │          └──────────────┘
 └─────────────┘             └──────────────┘                  ↑
                                                        Build Pipeline
-                                                       (Spark reads YAML
-                                                        from markdown)
+                                                       (Spark + NodeExecutor
+                                                        reads YAML configs)
                                                               ↑
-                                                        Bronze Layer
-                                                        (Raw API Data)
+                                                    Raw → Bronze (Delta)
+                                                    (API Data → archived)
 ```
 
 The markdown files in `domains/models/` drive both the build pipeline (Spark reads them to know what tables to create and how to join them) and the query pipeline (the API reads them to resolve field references and build SQL joins).
@@ -208,6 +208,6 @@ Comprehensive walkthrough guides written in notebook style with executable code 
 | [domains/_model_guides_/](../domains/_model_guides_/) | YAML frontmatter syntax reference for model.md files |
 | [exhibits/_index.md](../exhibits/_index.md) | Exhibit type catalog (chart, table, metric, control) |
 | [data_sources/](../data_sources/) | API provider configs and endpoint documentation |
-| [proposals/](proposals/) | Accepted architectural proposals (005, 008) |
+| [diagrams/](diagrams/) | Architecture diagrams (PlantUML + draw.io) |
 | [scripts/examples/](../scripts/examples/) | Runnable code examples (queries, measures, extending, backends) |
 | [CLAUDE.md](../CLAUDE.md) | AI assistant guide — code quality rules, conventions |

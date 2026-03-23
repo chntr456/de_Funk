@@ -1,6 +1,6 @@
 # Python Class & Method Reference
 
-**Last Updated**: 2026-03-17
+**Last Updated**: 2026-03-23
 
 This document catalogs every public Python class in `src/de_funk/`, explaining what each class does, why it exists, and what its key methods manage. Organized by package.
 
@@ -273,17 +273,14 @@ The model layer reads domain configs, builds Silver tables from Bronze, provides
 
 ### TableAccessor
 
-**File**: `models/base/table_accessor.py`
 **Why**: Extracted from BaseModel to keep table-access logic in one place. Handles the "search dims then facts" pattern, schema inspection, and enriched queries.
 
 ### MeasureCalculator
 
-**File**: `models/base/measure_calculator.py`
 **Why**: Extracted from BaseModel. Routes measure calculation to the right executor (simple SQL, computed expression, or Python measure module).
 
 ### ModelWriter
 
-**File**: `models/base/model_writer.py`
 **Why**: Handles Delta Lake persistence with auto-vacuum, partitioning, and overwrite/append modes. Separated so write logic doesn't clutter the model class.
 
 | Method | What it does |
@@ -319,7 +316,7 @@ The model layer reads domain configs, builds Silver tables from Bronze, provides
 | `bronze_path(logical_table)` | Legacy: resolve bronze table path |
 | `silver_path(logical_rel)` | Legacy: resolve silver table path |
 
-### UniversalSession
+### Session
 
 **File**: `models/api/session.py`
 **Why**: Model-agnostic session for cross-model queries. Loads models on demand, provides the model registry and dependency graph, and supports auto-join across models.
@@ -334,7 +331,7 @@ The model layer reads domain configs, builds Silver tables from Bronze, provides
 | `build_from_registry(model_registry)` | Build both graphs from the model registry |
 | `validate_no_cycles()` | Verify the dependency DAG has no cycles |
 
-### ModelRegistry
+### DomainConfigLoader
 
 **File**: `models/registry.py`
 **Why**: Central catalog of all available models. Provides model lookup, table listing, schema inspection, and class registration for dynamic instantiation.
@@ -534,7 +531,7 @@ The query execution layer. The Obsidian plugin sends exhibit block payloads to t
 
 **Supporting classes**: `FieldRef` (parsed domain.field with longest-prefix matching), `ResolvedField` (resolution result with table_name, column, silver_path, format_code).
 
-### QueryEngine
+### Engine
 
 **File**: `api/executor.py`
 **Why**: Shared DuckDB infrastructure for all handlers. Manages the DuckDB connection, builds FROM clauses with automatic joins, builds WHERE clauses from filters, and provides centralized query execution with row limits and MB caps.
@@ -548,7 +545,7 @@ The query execution layer. The Obsidian plugin sends exhibit block payloads to t
 
 ### Exhibit Handlers
 
-Each handler subclasses `ExhibitHandler` and implements `execute(payload, resolver)`. They inherit `QueryEngine` for shared SQL infrastructure.
+Each handler subclasses `ExhibitHandler` and implements `execute(payload, resolver)`. They inherit `Engine` for shared SQL infrastructure.
 
 | Handler | File | Block Types | What it produces |
 |---------|------|-------------|-----------------|

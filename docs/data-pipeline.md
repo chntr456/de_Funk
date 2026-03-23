@@ -1080,7 +1080,6 @@ DuckDB reads Delta tables directly via its built-in Delta extension for interact
 | `src/de_funk/models/base/builder.py` | `BaseModelBuilder` + `BuilderRegistry` |
 | `src/de_funk/models/base/domain_builder.py` | `DomainBuilderFactory` dynamic builder creation |
 | `src/de_funk/models/base/graph_builder.py` | `GraphBuilder` table construction |
-| `src/de_funk/models/base/model_writer.py` | `ModelWriter` Silver persistence |
 | `configs/storage.json` | Storage paths and write strategies |
 | `scripts/ingest/run_bronze_ingestion.py` | Bronze ingestion CLI |
 | `scripts/build/build_models.py` | Silver build CLI |

@@ -318,7 +318,7 @@ python -c "
 import sys
 sys.path.insert(0, '.')
 from config import ConfigLoader
-from models.registry import ModelRegistry
+from de_funk.app import DeFunk
 print('✓ Core imports working')
 "
 
@@ -328,8 +328,8 @@ python -c "
 import sys
 sys.path.insert(0, '.')
 from pathlib import Path
-from models.registry import ModelRegistry
-registry = ModelRegistry(Path('configs/models'))
+from de_funk.app import DeFunk
+app = DeFunk.from_config("configs/")
 models = registry.list_models()
 print(f'✓ Found {len(models)} models: {models}')
 "
