@@ -200,9 +200,9 @@ def _load_domain_models(config) -> dict:
 
 def _build_domain_graph(models: dict):
     """Build DomainGraph from all EdgeSpecs across models."""
-    # For now, return the models dict — DomainGraph will be created in Phase 3
-    # This allows DeFunk to work before DomainGraph is implemented
-    return models
+    from de_funk.core.graph import DomainGraph
+    graph = DomainGraph(models)
+    return graph
 
 
 def _create_engine(config):
