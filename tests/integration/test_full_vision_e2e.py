@@ -116,12 +116,10 @@ class TestNoDirectImports:
                 source = f.read()
             assert "import duckdb" not in source, f"{mod_name} imports duckdb directly"
 
-    def test_no_query_engine_mixin(self):
-        """No handler should inherit QueryEngine."""
-        from de_funk.api.executor import QueryEngine
-        from de_funk.api.handlers import _HANDLER_CLASSES
-        for cls in _HANDLER_CLASSES:
-            assert QueryEngine not in cls.__mro__, f"{cls.__name__} still inherits QueryEngine"
+    def test_query_engine_removed(self):
+        """QueryEngine class has been removed from codebase."""
+        import de_funk.api.executor as executor_module
+        assert not hasattr(executor_module, 'QueryEngine')
 
 
 class TestFieldResolution:
