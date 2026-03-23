@@ -1,4 +1,4 @@
-@startuml "de_Funk Codebase — Scraped Post-Rebuild"
+@startuml "de_Funk Codebase — Post-Rebuild (Code-Scraped)"
 
 skinparam classFontName "Courier New"
 skinparam classFontSize 10
@@ -7,7 +7,7 @@ skinparam packageStyle rectangle
 skinparam linetype ortho
 skinparam style strictuml
 
-title de_Funk Codebase — All Architectural Classes\nScraped from src/de_funk/ post-rebuild
+title de_Funk Codebase — Post-Rebuild\nScraped from src/de_funk/
 
 package "Domain Data Classes" #FFCC66 {
 
@@ -840,6 +840,7 @@ package "Ingestion Path" #CC9966 {
     + _executor
     + _executor_lock
     --
+    + from_session()
     + get_executor()
     + shutdown_executor()
     + run()
@@ -889,7 +890,7 @@ package "Ingestion Path" #CC9966 {
 
 }
 
-package "Concrete Providers" #E6E6E6 {
+package "Concrete Providers" #CC9966 {
 
   class AlphaVantageProvider {
     + PROVIDER_NAME
@@ -1056,8 +1057,10 @@ Session *-- StorageRouter
 NodeExecutor ..> Engine : delegates ops
 ExhibitHandler ..> Engine : _engine
 BaseModel ..> BuildPluginRegistry : _run_hooks
+IngestorEngine *-- RawSink
 IngestorEngine *-- BronzeSink
 IngestorEngine *-- BaseProvider
+IngestorEngine ..> IngestSession : composes
 
 legend right
   | Color | Layer |
