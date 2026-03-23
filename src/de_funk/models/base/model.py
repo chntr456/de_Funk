@@ -126,7 +126,7 @@ class BaseModel:
             self.build()
 
     def write_tables(self, output_root: str = None, fmt: str = "delta",
-                     mode: str = "overwrite"):
+                     mode: str = "overwrite", **kwargs):
         """Write built tables to Silver storage."""
         self.ensure_built()
 
@@ -172,6 +172,53 @@ class BaseModel:
         if self._facts:
             tables.extend(self._facts.keys())
         return tables
+
+    # ── DataFrame operations (used by GraphBuilder) ────────
+
+    def _apply_filters(self, df, filters):
+        """Apply filter conditions to a DataFrame."""
+        if not filters:
+            return df
+        if self.backend == 'spark' and PYSPARK_AVAILABLE:
+            for f in filters:
+                df = df.filter(f)
+        else:
+            import pandas as pd
+            if isinstance(df, pd.DataFrame):
+                for f in filters:
+                    df = df.query(f)
+        return df
+
+    def _select_columns(self, df, select_spec):
+        """Apply column selection/aliasing to a DataFrame."""
+        if not select_spec:
+            return df
+        if isinstance(select_spec, dict):
+            # {target: source_expr} aliasing
+            if self.backend == 'spark' and PYSPARK_AVAILABLE:
+                exprs = [F.expr(f"{src_expr} AS {target}") for target, src_expr in select_spec.items()]
+                return df.selectExpr(*[f"{v} AS {k}" for k, v in select_spec.items()])
+            else:
+                import pandas as pd
+                if isinstance(df, pd.DataFrame):
+                    rename_map = {}
+                    for target, src in select_spec.items():
+                        if src in df.columns:
+                            rename_map[src] = target
+                    return df.rename(columns=rename_map)[list(select_spec.keys())]
+        elif isinstance(select_spec, list):
+            # Simple column list
+            if self.backend == 'spark' and PYSPARK_AVAILABLE:
+                available = set(df.columns)
+                cols = [c for c in select_spec if c in available]
+                return df.select(*cols) if cols else df
+            else:
+                import pandas as pd
+                if isinstance(df, pd.DataFrame):
+                    available = set(df.columns)
+                    cols = [c for c in select_spec if c in available]
+                    return df[cols] if cols else df
+        return df
 
     # ── Extension points (override in subclasses) ─────────
 
