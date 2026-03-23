@@ -89,7 +89,7 @@ class TestHandlerRegistry:
         assert registry is not None
         handler = registry.get("line")
         assert handler is not None
-        assert handler._qe is not None
+        assert handler._engine is not None
 
     def test_all_exhibit_types_registered(self, defunk, resolver):
         registry = defunk.engine.get_handler_registry(resolver=resolver)

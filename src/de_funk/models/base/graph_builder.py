@@ -60,31 +60,113 @@ class GraphBuilder:
         """
         Build model tables from Bronze layer.
 
-        All graph operations (joins, relationships, validation) are handled
-        at query time by GraphQueryPlanner and UniversalSession.
-
-        This method simply:
-        1. Loads individual tables from Bronze
-        2. Applies transformations (select, derive)
-        3. Separates into dimensions and facts
+        When a BuildSession with Engine is available, delegates to NodeExecutor
+        for backend-agnostic builds. Otherwise falls back to the legacy Spark path.
 
         Returns:
             Tuple of (dimensions, facts)
         """
-        # Call before hook
+        # Run before hooks (config-driven + class override)
+        self.model._run_hooks("before_build")
         self.model.before_build()
 
-        # Build all tables from Bronze
-        nodes = self._build_nodes()
+        # Try NodeExecutor path when Engine is available
+        build_session = getattr(self.model, 'build_session', None)
+        if build_session is not None and hasattr(build_session, 'engine') and build_session.engine._ops is not None:
+            nodes = self._build_nodes_via_executor(build_session)
+        else:
+            # Legacy path: direct Spark/DuckDB ops
+            nodes = self._build_nodes()
 
         # Separate by naming convention
         dims = {k: v for k, v in nodes.items() if k.startswith("dim_")}
         facts = {k: v for k, v in nodes.items() if k.startswith("fact_")}
 
-        # Call after hook (allows model-specific customization)
+        # Run after hooks (config-driven + class override)
         dims, facts = self.model.after_build(dims, facts)
+        self.model._run_hooks("after_build", dims=dims, facts=facts)
 
         return dims, facts
+
+    def _build_nodes_via_executor(self, build_session) -> Dict[str, DataFrame]:
+        """Build nodes using NodeExecutor + Engine ops (backend-agnostic)."""
+        from de_funk.core.executor import NodeExecutor
+
+        executor = NodeExecutor(build_session)
+        graph = self.model_cfg.get('graph', {})
+        nodes_config = graph.get('nodes', {})
+
+        if isinstance(nodes_config, list):
+            nodes_config = {nc['id']: nc for nc in nodes_config}
+
+        # Store in-progress nodes for phase-dependent tables
+        self.model._building_nodes = {}
+
+        # Translate graph node configs to NodeExecutor format
+        translated = {}
+        for node_id, node_cfg in nodes_config.items():
+            translated[node_id] = self._translate_node_config(node_id, node_cfg)
+
+        # Execute via NodeExecutor — handles custom_node_loading internally
+        results = {}
+        for node_id, cfg in translated.items():
+            # Try custom loading first (seed, union, distinct, window, unpivot)
+            custom_df = self.model.custom_node_loading(node_id, nodes_config.get(node_id, cfg))
+            if custom_df is not None:
+                results[node_id] = custom_df
+                self.model._building_nodes[node_id] = custom_df
+                continue
+
+            # Standard node via executor
+            result = executor.execute_node(node_id, cfg, results)
+            if result is not None:
+                results[node_id] = result
+                self.model._building_nodes[node_id] = result
+
+        return results
+
+    def _translate_node_config(self, node_id: str, node_cfg: Dict) -> Dict:
+        """Translate graph_builder node config to NodeExecutor format."""
+        result = {"from": node_cfg.get("from", "")}
+
+        pipeline = []
+
+        # Filters → filter op
+        if node_cfg.get("filters"):
+            pipeline.append({"op": "filter", "conditions": node_cfg["filters"]})
+
+        # Select → select op (with aliasing support)
+        if node_cfg.get("select"):
+            cols = list(node_cfg["select"].values()) if isinstance(node_cfg["select"], dict) else node_cfg["select"]
+            pipeline.append({"op": "select", "columns": cols})
+
+        # Derive → derive op
+        if node_cfg.get("derive"):
+            pipeline.append({"op": "derive", "expressions": node_cfg["derive"]})
+
+        # Unique key → dedup op
+        if node_cfg.get("unique_key"):
+            pipeline.append({"op": "dedup", "keys": node_cfg["unique_key"]})
+
+        if pipeline:
+            result["pipeline"] = pipeline
+
+        # Special types
+        from_spec = node_cfg.get("from", "")
+        if from_spec == "__seed__":
+            result["type"] = "seed"
+        elif from_spec == "__union__":
+            result["type"] = "union"
+        elif from_spec == "__distinct__":
+            result["type"] = "distinct"
+        elif from_spec == "__generated__":
+            result["type"] = "generated"
+
+        # Optional flag
+        if node_cfg.get("optional"):
+            result["optional"] = True
+
+        return result
 
     def _build_nodes(self) -> Dict[str, DataFrame]:
         """

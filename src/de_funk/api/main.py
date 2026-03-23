@@ -97,12 +97,15 @@ def create_app() -> FastAPI:
             domain_overrides=domain_overrides,
         )
 
-        # 3. Handler registry — creates shared DuckDB connection for queries
+        # 3. Handler registry — uses Engine directly (no QueryEngine bridge)
+        api_cfg = storage_config.get("api", {}) if isinstance(storage_config, dict) else {}
         fastapi_app.state.registry = defunk.engine.get_handler_registry(
             resolver=fastapi_app.state.resolver,
+            max_response_mb=float(api_cfg.get("max_response_mb", 4.0)),
+            storage_root=storage_root,
         )
-        # Dimension endpoint reuses the shared QueryEngine
-        fastapi_app.state.executor = fastapi_app.state.registry.shared_engine
+        # Dimension endpoint uses Engine directly
+        fastapi_app.state.executor = defunk.engine
 
         # 4. Bronze resolver for /api/bronze endpoints
         bronze_root_raw = roots.get("bronze", "storage/bronze")

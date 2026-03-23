@@ -50,7 +50,8 @@ class MetricsHandler(ExhibitHandler):
 
         sql = f"SELECT {', '.join(select_parts)} FROM {from_clause} {where_clause}"
         logger.debug(f"Metrics SQL: {sql}")
-        row = self._qe._conn.execute(sql).fetchone()
+        rows = self._execute(sql, max_rows=1)
+        row = rows[0] if rows else None
 
         metrics = []
         for i, (m, resolved_f) in enumerate(metric_meta):

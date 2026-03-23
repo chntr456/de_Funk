@@ -1,8 +1,8 @@
 """
-Handler registry — auto-discovers handlers and maps type strings to instances.
+Handler registry — discovers handlers and maps type strings to instances.
 
 Usage:
-    registry = build_registry(storage_root, memory_limit, ...)
+    registry = build_registry(engine)
     handler = registry.get("plotly.line")
     result = handler.execute(payload, resolver)
 """
@@ -46,32 +46,58 @@ class HandlerRegistry:
 
 
 def build_registry(
-    storage_root: Path,
-    memory_limit: str,
-    max_sql_rows: int,
-    max_dimension_values: int,
-    max_response_mb: float,
+    storage_root: Path | None = None,
+    memory_limit: str = "3GB",
+    max_sql_rows: int = 30000,
+    max_dimension_values: int = 10000,
+    max_response_mb: float = 4.0,
+    engine=None,
 ) -> HandlerRegistry:
-    """Build the handler registry with a shared DuckDB connection.
+    """Build the handler registry with a shared Engine.
 
-    Creates one QueryEngine (one DuckDB connection), then injects it
-    into each handler via _qe. ExhibitHandler bridge methods proxy
-    all QueryEngine operations.
+    Creates or uses an Engine with DuckDB backend, then injects it
+    into each handler. All handlers share one DuckDB connection.
+
+    Args:
+        storage_root: Silver storage root (used for legacy QueryEngine path)
+        memory_limit: DuckDB memory limit
+        max_sql_rows: Max rows per query
+        max_dimension_values: Max dimension values
+        max_response_mb: Max response size in MB
+        engine: Optional pre-built Engine instance
     """
-    from de_funk.api.executor import QueryEngine
-
     registry = HandlerRegistry()
-    shared_engine = QueryEngine(
-        storage_root=storage_root,
+
+    if engine is not None:
+        # New path: use provided Engine directly
+        for cls in _HANDLER_CLASSES:
+            handler = cls.__new__(cls)
+            handler._engine = engine
+            handler.max_response_mb = max_response_mb
+            handler.storage_root = storage_root
+            handler._max_sql_rows = max_sql_rows
+            handler._max_dimension_values = max_dimension_values
+            registry.register(handler)
+        return registry
+
+    # Create Engine from params
+    from de_funk.core.engine import Engine
+    eng = Engine.for_duckdb(
         memory_limit=memory_limit,
         max_sql_rows=max_sql_rows,
         max_dimension_values=max_dimension_values,
-        max_response_mb=max_response_mb,
     )
-    registry.shared_engine = shared_engine
 
     for cls in _HANDLER_CLASSES:
         handler = cls.__new__(cls)
-        handler._qe = shared_engine
+        handler._engine = eng
+        handler.max_response_mb = max_response_mb
+        handler.storage_root = storage_root
+        handler._max_sql_rows = max_sql_rows
+        handler._max_dimension_values = max_dimension_values
         registry.register(handler)
+
+    # Store shared engine on registry for dimension endpoint
+    registry.shared_engine = eng
+
     return registry

@@ -146,59 +146,59 @@ class Engine:
                         resolver=None, max_values: int = 0) -> list:
         return self._sql.distinct_values(resolved, extra_filters, resolver, max_values)
 
-    # ── Backward compatibility bridges ────────────────────
-    # These will be removed after handler migration (Phase 7+10).
+    def distinct_values_by_measure(self, resolved, order_by, order_dir="desc",
+                                   extra_filters=None, resolver=None) -> list:
+        """Return distinct values ordered by aggregated measure."""
+        dim_col = f'"{resolved.table_name}"."{resolved.column}"'
+        measure_col = f'"{order_by.table_name}"."{order_by.column}"'
+        dir_sql = "DESC" if order_dir.lower() == "desc" else "ASC"
 
-    def _get_query_engine(self):
-        """Lazy-create QueryEngine for legacy handler compatibility."""
-        if self._query_engine is None and self.backend == "duckdb":
-            from de_funk.api.executor import QueryEngine
+        from de_funk.api.handlers.base import ExhibitHandler
+        extra = ExhibitHandler._build_extra_where(extra_filters)
+        tables = ExhibitHandler._collect_tables(
+            [resolved, order_by] + ExhibitHandler._extra_filter_fields(extra_filters)
+        )
 
-            roots = self._storage_config.get("roots", {}) if isinstance(self._storage_config, dict) else {}
-            api_cfg = self._storage_config.get("api", {}) if isinstance(self._storage_config, dict) else {}
+        if len(tables) == 1:
+            name, path = next(iter(tables.items()))
+            from_clause = f'{self.scan(path)} AS "{name}"'
+        else:
+            from_clause = self.build_from(tables, resolver)
 
-            storage_root = Path(roots.get("silver", "storage/silver"))
-            memory_limit = api_cfg.get("duckdb_memory_limit", "3GB")
-            max_sql_rows = api_cfg.get("max_sql_rows", 30000)
-            max_dimension_values = api_cfg.get("max_dimension_values", 10000)
-            max_response_mb = api_cfg.get("max_response_mb", 4.0)
+        sql = f"""
+            SELECT {dim_col}, AVG({measure_col}) AS _sort_val
+            FROM {from_clause}
+            WHERE {dim_col} IS NOT NULL{extra}
+            GROUP BY {dim_col}
+            ORDER BY _sort_val {dir_sql}
+        """
+        max_dim = self._sql._max_dimension_values if hasattr(self._sql, '_max_dimension_values') else 10000
+        result = self.execute_sql(sql, max_rows=max_dim)
+        return [row[0] for row in result]
 
-            self._query_engine = QueryEngine(
-                storage_root=storage_root,
-                memory_limit=memory_limit,
-                max_sql_rows=max_sql_rows,
-                max_dimension_values=max_dimension_values,
-                max_response_mb=max_response_mb,
-            )
-        return self._query_engine
+    # ── Backward compatibility ─────────────────────────────
 
     def get_query_engine(self):
-        """Get the underlying QueryEngine for handler compatibility.
+        """Deprecated: handlers now use Engine directly.
 
-        Bridge for old handler code. Will be removed after Phase 7.
+        Returns self for API compatibility with code that checks for
+        a query engine instance.
         """
-        return self._get_query_engine()
+        return self
 
-    def get_handler_registry(self, resolver=None, bronze_resolver=None):
-        """Create a HandlerRegistry using this Engine's QueryEngine.
+    def get_handler_registry(self, resolver=None, bronze_resolver=None,
+                             max_response_mb: float = 4.0,
+                             storage_root=None):
+        """Create a HandlerRegistry using this Engine directly."""
+        from de_funk.api.handlers import build_registry
 
-        Bridge for old API setup. Will be removed after Phase 10.
-        """
-        from de_funk.api.handlers import HandlerRegistry, _HANDLER_CLASSES
-
-        qe = self._get_query_engine()
-        if qe is None:
-            raise RuntimeError("Cannot create handler registry without DuckDB QueryEngine")
-
-        registry = HandlerRegistry()
-        registry.shared_engine = qe
-
-        for cls in _HANDLER_CLASSES:
-            handler = cls.__new__(cls)
-            handler._qe = qe
-            registry.register(handler)
-
-        return registry
+        return build_registry(
+            engine=self,
+            storage_root=storage_root,
+            max_response_mb=max_response_mb,
+            max_sql_rows=self._sql._max_sql_rows if hasattr(self._sql, '_max_sql_rows') else 30000,
+            max_dimension_values=self._sql._max_dimension_values if hasattr(self._sql, '_max_dimension_values') else 10000,
+        )
 
     def __repr__(self):
         return f"Engine(backend={self.backend})"
