@@ -58,9 +58,12 @@ class BaseModel:
         self._facts: Optional[Dict[str, DataFrame]] = None
         self._is_built = False
 
-        # Storage router for path resolution
-        from de_funk.core.storage import StorageRouter as CoreStorageRouter
-        self.storage_router = CoreStorageRouter(self.storage_cfg)
+        # Storage router — use session's if available, otherwise create one
+        if self.build_session and hasattr(self.build_session, 'storage_router'):
+            self.storage_router = self.build_session.storage_router
+        else:
+            from de_funk.core.storage import StorageRouter
+            self.storage_router = StorageRouter(self.storage_cfg)
 
         # Detect backend type
         self._backend = self._detect_backend()
