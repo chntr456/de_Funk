@@ -234,26 +234,3 @@ def _get_decorator_hooks(hook_type: str, model_name: str) -> List[Callable]:
     return hooks.get(model_name, []) + hooks.get("*", [])
 
 
-# ── Backward compatibility ─────────────────────────────────
-# BuildPluginRegistry is an alias for code that still references it.
-
-class BuildPluginRegistry:
-    """Deprecated: use HookRunner for config-first dispatch,
-    or @pipeline_hook decorator for Python-only hooks."""
-
-    @staticmethod
-    def register(hook_type: str, model_name: str, fn: Callable):
-        _decorator_registry.setdefault(hook_type, {}).setdefault(model_name, []).append(fn)
-
-    @staticmethod
-    def get(hook_type: str, model_name: str) -> List[Callable]:
-        return _get_decorator_hooks(hook_type, model_name)
-
-    @staticmethod
-    def list_hooks() -> Dict[str, Dict[str, int]]:
-        return {ht: {m: len(fns) for m, fns in models.items()}
-                for ht, models in _decorator_registry.items()}
-
-    @staticmethod
-    def discover(hooks_dir: str = "de_funk.hooks"):
-        discover_hooks(hooks_dir)

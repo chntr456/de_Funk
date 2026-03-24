@@ -38,16 +38,15 @@ class TestBaseModelRunHooks:
             # so just verify _run_hooks doesn't crash with valid config
             BaseModel._run_hooks(model, "after_build")
 
-    def test_run_hooks_plugin_registry(self):
-        """Plugin registry hooks are discovered."""
-        from de_funk.core.hooks import BuildPluginRegistry, _decorator_registry
+    def test_run_hooks_decorator_registry(self):
+        """Decorator-registered hooks are discovered by HookRunner."""
+        from de_funk.core.hooks import _decorator_registry
 
         called = []
         def my_hook(engine=None, config=None, **kwargs):
             called.append("plugin_called")
 
-        # Register a hook
-        BuildPluginRegistry.register("test_hook", "test_model", my_hook)
+        _decorator_registry.setdefault("test_hook", {}).setdefault("test_model", []).append(my_hook)
 
         from de_funk.models.base.model import BaseModel
         model = MagicMock(spec=BaseModel)
@@ -59,7 +58,7 @@ class TestBaseModelRunHooks:
         assert "plugin_called" in called
 
         # Cleanup
-        _decorator_registry.get("test_hook", {}).pop("test_model", None)
+        _decorator_registry["test_hook"]["test_model"].remove(my_hook)
 
 
 class TestBaseModelBuildSession:

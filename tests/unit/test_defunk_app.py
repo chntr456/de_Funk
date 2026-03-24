@@ -156,31 +156,37 @@ class TestSessions:
         assert session.silver_path("securities", "stocks") == "/silver/securities/stocks"
 
 
-class TestPlugins:
-    """Test plugin registry and discovery."""
+class TestHooks:
+    """Test hook registry and discovery."""
 
-    def test_plugin_registration(self):
-        from de_funk.core.plugins import BuildPluginRegistry
+    def test_hook_registration(self):
+        from de_funk.core.hooks import _decorator_registry, _get_decorator_hooks
         fn = lambda df, engine, config, **params: df
-        BuildPluginRegistry.register("test_hook", "test.model", fn)
-        hooks = BuildPluginRegistry.get("test_hook", "test.model")
+        _decorator_registry.setdefault("test_hook", {}).setdefault("test.model", []).append(fn)
+        hooks = _get_decorator_hooks("test_hook", "test.model")
         assert fn in hooks
+        # Cleanup
+        _decorator_registry["test_hook"]["test.model"].remove(fn)
 
-    def test_plugin_discovery(self):
-        from de_funk.core.hooks import BuildPluginRegistry, discover_hooks
+    def test_hook_discovery(self):
+        from de_funk.core.hooks import _decorator_registry, _get_decorator_hooks, discover_hooks
         discover_hooks("de_funk.hooks")
-        hooks = BuildPluginRegistry.list_hooks()
-        assert "after_build" in hooks
-        assert "corporate.entity" in hooks["after_build"]
-        assert "custom_node_loading" in hooks
-        assert "temporal" in hooks["custom_node_loading"]
+        # Check decorator registry has hooks from hooks/ directory
+        all_hooks = {ht: {m: len(fns) for m, fns in models.items()}
+                     for ht, models in _decorator_registry.items()}
+        assert "after_build" in all_hooks
+        assert "corporate.entity" in all_hooks["after_build"]
+        assert "custom_node_loading" in all_hooks
+        assert "temporal" in all_hooks["custom_node_loading"]
 
     def test_wildcard_hooks(self):
-        from de_funk.core.plugins import BuildPluginRegistry
+        from de_funk.core.hooks import _decorator_registry, _get_decorator_hooks
         fn = lambda df, engine, config, **params: df
-        BuildPluginRegistry.register("wildcard_test", "*", fn)
-        hooks = BuildPluginRegistry.get("wildcard_test", "any.model")
+        _decorator_registry.setdefault("wildcard_test", {}).setdefault("*", []).append(fn)
+        hooks = _get_decorator_hooks("wildcard_test", "any.model")
         assert fn in hooks
+        # Cleanup
+        _decorator_registry["wildcard_test"]["*"].remove(fn)
 
 
 class TestEngine:
