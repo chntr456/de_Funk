@@ -72,11 +72,19 @@ class Engine:
     # ── DataFrame operations (delegate to DataOps) ────────
 
     def read(self, path: str, format: str = "delta") -> Any:
-        return self._ops.read(path, format)
+        try:
+            return self._ops.read(path, format)
+        except Exception as e:
+            from de_funk.core.exceptions import DataNotFoundError
+            raise DataNotFoundError(path, f"Engine.read failed: {e}") from e
 
     def write(self, df: Any, path: str, format: str = "delta",
               mode: str = "overwrite") -> None:
-        self._ops.write(df, path, format, mode)
+        try:
+            self._ops.write(df, path, format, mode)
+        except Exception as e:
+            from de_funk.core.exceptions import WriteError
+            raise WriteError(path, f"Engine.write failed: {e}") from e
 
     def create_df(self, rows: list[list], schema: list[tuple[str, str]]) -> Any:
         return self._ops.create_df(rows, schema)

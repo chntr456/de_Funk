@@ -70,10 +70,14 @@ class BaseModelBuilder(ABC):
 
     def build(self) -> BuildResult:
         """Build the model: instantiate → build → write."""
+        from de_funk.core.error_handling import ErrorContext
+        from de_funk.core.exceptions import ModelError, StorageError, ConfigurationError
+
         start = time.time()
         try:
-            model_config = self.get_model_config()
-            model_class = self.get_model_class()
+            with ErrorContext("Load config", model=self.model_name):
+                model_config = self.get_model_config()
+                model_class = self.get_model_class()
 
             params = {
                 "repo_root": str(Path(self.session._kwargs.get('repo_root', '.'))),
@@ -83,14 +87,16 @@ class BaseModelBuilder(ABC):
             if self.session._kwargs.get('max_tickers'):
                 params["UNIVERSE_SIZE"] = self.session._kwargs['max_tickers']
 
-            model = model_class(
-                session=self.session,
-                model_cfg=model_config,
-                params=params,
-            )
+            with ErrorContext("Build tables", model=self.model_name):
+                model = model_class(
+                    session=self.session,
+                    model_cfg=model_config,
+                    params=params,
+                )
+                dims, facts = model.build()
 
-            dims, facts = model.build()
-            model.write_tables()
+            with ErrorContext("Write Silver", model=self.model_name):
+                model.write_tables()
 
             return BuildResult(
                 model_name=self.model_name,
@@ -99,13 +105,30 @@ class BaseModelBuilder(ABC):
                 facts=len(facts),
                 duration_seconds=time.time() - start,
             )
+
+        except ConfigurationError as e:
+            logger.error(f"Config error building {self.model_name}: {e}")
+            return BuildResult(
+                model_name=self.model_name, success=False,
+                error=f"[CONFIG] {e}", duration_seconds=time.time() - start,
+            )
+        except StorageError as e:
+            logger.error(f"Storage error building {self.model_name}: {e}")
+            return BuildResult(
+                model_name=self.model_name, success=False,
+                error=f"[STORAGE] {e}", duration_seconds=time.time() - start,
+            )
+        except ModelError as e:
+            logger.error(f"Model error building {self.model_name}: {e}")
+            return BuildResult(
+                model_name=self.model_name, success=False,
+                error=f"[MODEL] {e}", duration_seconds=time.time() - start,
+            )
         except Exception as e:
             logger.error(f"Build failed for {self.model_name}: {e}", exc_info=True)
             return BuildResult(
-                model_name=self.model_name,
-                success=False,
-                error=str(e),
-                duration_seconds=time.time() - start,
+                model_name=self.model_name, success=False,
+                error=str(e), duration_seconds=time.time() - start,
             )
 
     @classmethod

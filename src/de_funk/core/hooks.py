@@ -174,11 +174,12 @@ class HookRunner:
                     continue
 
                 try:
-                    fn = _import_fn(fn_path)
-                    result = fn(config=self.model_cfg, **context, **params)
-                    logger.info(f"Hook {hook_name}: {fn_path}")
+                    from de_funk.core.error_handling import ErrorContext
+                    with ErrorContext(f"Hook {hook_name}", fn=fn_path, model=self.model_name):
+                        fn = _import_fn(fn_path)
+                        result = fn(config=self.model_cfg, **context, **params)
                 except Exception as e:
-                    logger.warning(f"Hook {hook_name}/{fn_path} failed: {e}")
+                    logger.error(f"Hook {hook_name}/{fn_path} failed: {e}", exc_info=True)
             return result
 
         # 2. Decorator registry (fallback — Python escape hatch)

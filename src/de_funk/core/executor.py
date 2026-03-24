@@ -70,6 +70,7 @@ class NodeExecutor:
 
     def execute_node(self, node_id: str, config: dict, built: dict) -> Any:
         """Execute a single node: load source → run pipeline → return DF."""
+        from de_funk.core.error_handling import ErrorContext
         logger.info(f"Executing node: {node_id}")
 
         # Check for special node types
