@@ -125,30 +125,19 @@ class ForecastBuilder(BaseModelBuilder):
         # Ensure Spark session is active
         self._ensure_active_session()
 
-        from de_funk.models.domains.corporate.company.model import CompanyModel
-from de_funk.core.connection import get_spark_connection
-        from de_funk.config.domain import get_domain_loader
+        from de_funk.core.storage import StorageRouter
 
-        # Create connection wrapper
-        connection = get_spark_connection(self.spark)
+        # Read dim_company directly from Silver (no need for CompanyModel class)
+        router = StorageRouter(self.storage_config)
+        company_path = router.silver_path("corporate.entity", "dims/dim_company")
 
-        # Load company model config
-        domains_dir = self.repo_root / "domains"
-        loader = get_domain_loader(domains_dir)
-        company_config = loader.load_model_config("corporate.entity")
+        if self.spark:
+            dim_company = self.spark.read.format("delta").load(company_path)
+        else:
+            logger.warning("No Spark session — cannot read dim_company")
+            return []
 
-        # Instantiate company model
-        company_model = CompanyModel(
-            connection=connection,
-            storage_cfg=self.storage_config,
-            model_cfg=company_config,
-            params={},
-            repo_root=self.repo_root
-        )
-
-        # Get dim_company table and sort by market_cap
-        dim_company = company_model.get_table('dim_company')
-        logger.debug(f"dim_company loaded, type={type(dim_company)}")
+        logger.debug(f"dim_company loaded from {company_path}")
 
         if self.spark:
             # Spark DataFrame - use col() for safer column access
