@@ -10,7 +10,7 @@ Solution: After build, join facts by ticker to get correct company_id.
 Declared in corporate/entity/model.md:
     hooks:
       after_build:
-        - {fn: de_funk.plugins.company_cik.fix_company_ids}
+        - {fn: de_funk.hooks.corporate.cik_enrichment.fix_company_ids}
 """
 from de_funk.core.hooks import pipeline_hook
 from de_funk.config.logging import get_logger

@@ -4,7 +4,7 @@ Forecast plugin — train time series models and save via ArtifactStore.
 Triggered by post_build hook in domain model config:
     hooks:
       post_build:
-        - {fn: de_funk.plugins.forecast.train_and_save,
+        - {fn: de_funk.hooks.securities.forecast.train_and_save,
            params: {methods: [arima, prophet], horizon: 30}}
 
 Reads ml_models config from model.md for model definitions.
@@ -16,7 +16,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from de_funk.core.plugins import pipeline_hook
+from de_funk.core.hooks import pipeline_hook
 from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)

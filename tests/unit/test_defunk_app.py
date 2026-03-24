@@ -167,8 +167,8 @@ class TestPlugins:
         assert fn in hooks
 
     def test_plugin_discovery(self):
-        from de_funk.core.plugins import BuildPluginRegistry
-        BuildPluginRegistry.discover("de_funk.plugins")
+        from de_funk.core.hooks import BuildPluginRegistry, discover_hooks
+        discover_hooks("de_funk.hooks")
         hooks = BuildPluginRegistry.list_hooks()
         assert "after_build" in hooks
         assert "corporate.entity" in hooks["after_build"]

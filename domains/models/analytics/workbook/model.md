@@ -25,9 +25,9 @@ ml_models:
 
 hooks:
   before_build:
-    - {fn: de_funk.plugins.workbook.log_start, params: {}}
+    - {fn: de_funk.hooks._common.log_build.log_start, params: {}}
   post_build:
-    - {fn: de_funk.plugins.workbook.train_and_save, params: {model_key: stock_predictor}}
+    - {fn: de_funk.hooks.analytics.workbook.train_and_save, params: {model_key: stock_predictor}}
 
 graph:
   edges:

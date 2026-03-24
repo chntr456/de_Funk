@@ -54,16 +54,83 @@ def pipeline_hook(hook_type: str, model: str = "*"):
     return decorator
 
 
-def discover_plugins(plugins_dir: str = "de_funk.plugins"):
-    """Auto-discover plugin modules. Importing them triggers @pipeline_hook registration."""
+def discover_hooks(hooks_dir: str = "de_funk.hooks"):
+    """Auto-discover hook modules from the hooks/ directory tree.
+
+    Recursively imports all .py files under hooks/, which triggers
+    @pipeline_hook registration for decorated functions.
+    """
     import pkgutil
     try:
-        package = importlib.import_module(plugins_dir)
-        for _, name, _ in pkgutil.iter_modules(package.__path__):
-            importlib.import_module(f"{plugins_dir}.{name}")
-            logger.info(f"Discovered plugin: {plugins_dir}.{name}")
+        package = importlib.import_module(hooks_dir)
+        for importer, name, is_pkg in pkgutil.walk_packages(
+            package.__path__, prefix=f"{hooks_dir}."
+        ):
+            if name.endswith("__init__"):
+                continue
+            try:
+                importlib.import_module(name)
+                logger.debug(f"Discovered hook module: {name}")
+            except Exception as e:
+                logger.debug(f"Could not load {name}: {e}")
     except (ModuleNotFoundError, AttributeError) as e:
-        logger.debug(f"No plugins at {plugins_dir}: {e}")
+        logger.debug(f"No hooks at {hooks_dir}: {e}")
+
+
+def discover_plugins(hooks_dir: str = "de_funk.hooks"):
+    """Backward compat — redirects to discover_hooks for old plugins/ dir."""
+    discover_hooks(hooks_dir)
+
+
+def catalog(hooks_dir: str = "de_funk.hooks") -> dict:
+    """Build a catalog of all available hooks by scanning docstrings.
+
+    Returns dict of {dotted_path: {trigger, domain, description, params}}.
+    """
+    import pkgutil
+    import inspect
+
+    discover_hooks(hooks_dir)
+    result = {}
+
+    try:
+        package = importlib.import_module(hooks_dir)
+        for importer, mod_name, is_pkg in pkgutil.walk_packages(
+            package.__path__, prefix=f"{hooks_dir}."
+        ):
+            if mod_name.endswith("__init__"):
+                continue
+            try:
+                mod = importlib.import_module(mod_name)
+            except Exception:
+                continue
+
+            for name, obj in inspect.getmembers(mod, inspect.isfunction):
+                if name.startswith("_"):
+                    continue
+                # Skip imported utility functions (get_logger, pipeline_hook, etc.)
+                if obj.__module__ != mod.__name__:
+                    continue
+                doc = inspect.getdoc(obj) or ""
+                entry = {"description": doc.split("\n")[0] if doc else ""}
+
+                # Parse structured docstring fields
+                for line in doc.split("\n"):
+                    line = line.strip()
+                    if line.startswith("Trigger:"):
+                        entry["trigger"] = line.split(":", 1)[1].strip()
+                    elif line.startswith("Domain:"):
+                        entry["domain"] = line.split(":", 1)[1].strip()
+                    elif line.startswith("Params:"):
+                        entry["params"] = [p.strip() for p in line.split(":", 1)[1].split(",")]
+
+                path = f"{mod_name}.{name}"
+                result[path] = entry
+
+    except (ModuleNotFoundError, AttributeError):
+        pass
+
+    return result
 
 
 # ── HookRunner — config-first dispatch ─────────────────────
@@ -188,5 +255,5 @@ class BuildPluginRegistry:
                 for ht, models in _decorator_registry.items()}
 
     @staticmethod
-    def discover(plugins_dir: str = "de_funk.plugins"):
-        discover_plugins(plugins_dir)
+    def discover(hooks_dir: str = "de_funk.hooks"):
+        discover_hooks(hooks_dir)

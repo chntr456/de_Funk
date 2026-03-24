@@ -17,7 +17,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from de_funk.core.plugins import pipeline_hook
+from de_funk.core.hooks import pipeline_hook
 from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)

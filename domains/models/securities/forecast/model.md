@@ -19,7 +19,7 @@ ml_models:
 
 hooks:
   post_build:
-    - {fn: de_funk.plugins.forecast.train_and_save,
+    - {fn: de_funk.hooks.securities.forecast.train_and_save,
        params: {methods: [arima, prophet, random_forest], horizon: 30}}
 
 graph:

@@ -10,7 +10,7 @@ sources_from: sources/entity/
 
 hooks:
   after_build:
-    - {fn: de_funk.plugins.company_cik.fix_company_ids}
+    - {fn: de_funk.hooks.corporate.cik_enrichment.fix_company_ids}
 
 storage:
   format: delta

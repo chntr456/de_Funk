@@ -3,7 +3,7 @@
 Registered as custom_node_loading hook for the temporal model.
 Generates a calendar dimension table covering configurable date range.
 """
-from de_funk.core.plugins import pipeline_hook
+from de_funk.core.hooks import pipeline_hook
 from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)

@@ -3,7 +3,7 @@
 Registered as post_build hook for securities.stocks model.
 Replaces the old StocksBuilder.post_build() class override.
 """
-from de_funk.core.plugins import pipeline_hook
+from de_funk.core.hooks import pipeline_hook
 from de_funk.config.logging import get_logger
 
 logger = get_logger(__name__)
