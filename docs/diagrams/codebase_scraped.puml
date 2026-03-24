@@ -510,11 +510,11 @@ package "Build Path" #FF9933 {
 
   class BaseModel {
     + backend()
-    + set_session()
     + build()
     + ensure_built()
     + write_tables()
     + get_table()
+    + has_table()
   }
 
   class BaseModelBuilder {
@@ -525,13 +525,6 @@ package "Build Path" #FF9933 {
     + get_model_config()
     + build()
     + get_dependencies()
-  }
-
-  class BuildContext {
-    + spark
-    + storage_config
-    + repo_root
-    + date_from
   }
 
   class BuildResult {
@@ -564,8 +557,6 @@ package "Build Path" #FF9933 {
   }
 
   class DomainModel {
-    + _base_class
-    --
     + custom_node_loading()
     + graph_builder()
   }
@@ -854,13 +845,6 @@ package "Model Artifacts" #B3FFB3 {
 
 package "Core" #80E0D0 {
 
-  class BuildPluginRegistry {
-    + register()
-    + get()
-    + list_hooks()
-    + discover()
-  }
-
   class HookRunner {
     + run()
     + has_hooks()
@@ -901,6 +885,7 @@ package "Utils" #E6E6E6 {
 }
 
 ' ── Inheritance (auto-detected from class bases) ──
+BaseModel <|-- DomainModel
 BaseProvider <|-- AlphaVantageProvider
 BaseProvider <|-- SocrataBaseProvider
 DataConnection <|-- DuckDBConnection
@@ -922,7 +907,6 @@ SqlOps <|-- SparkSql
 
 ' ── Composition (auto-detected from type annotations + __init__) ──
 AppConfig *-- ConnectionConfig : connection
-BaseModel *-- StorageRouter : storage_router
 BaseTemplate *-- SchemaField : canonical_fields
 BaseTemplate *-- TableConfig : tables
 BuildSpec *-- PhaseSpec : phases
@@ -962,7 +946,6 @@ ValidationReport *-- ValidationIssue : issues
 
 ' ── Dependencies (auto-detected from lazy imports in methods) ──
 BaseModel ..> HookRunner : _run_hooks()
-BuildSession ..> BuildContext : build()
 BuildSession ..> BuildResult : build()
 BuildSession ..> DomainBuilderFactory : build()
 DeFunk ..> BuildSession : build_session()
@@ -974,8 +957,6 @@ DomainBuilderFactory ..> DomainConfigLoaderV4 : _create_builder_class()
 DomainBuilderFactory ..> DomainConfigLoaderV4 : create_builders()
 DomainModel ..> HookRunner : custom_node_loading()
 Engine ..> ExhibitHandler : distinct_values_by_measure()
-GraphBuilder ..> BuildSession : _get_or_create_session()
-GraphBuilder ..> Engine : _get_or_create_session()
 GraphBuilder ..> NodeExecutor : _build_nodes()
 RepoContext ..> ConnectionFactory : from_repo_root()
 
@@ -991,9 +972,9 @@ legend right
   |<#B3FFB3> Green | Plugins + Artifacts |
   ---
   **Edge types (all auto-detected):**
-  Inheritance: 18
-  Composition: 38
-  Dependencies: 17 cross-package
+  Inheritance: 19
+  Composition: 37
+  Dependencies: 14 cross-package
 endlegend
 
 @enduml
