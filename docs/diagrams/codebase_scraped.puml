@@ -969,7 +969,7 @@ package "Model Artifacts" #B3FFB3 {
 
 }
 
-package "Plugin System" #B3FFB3 {
+package "Core" #80E0D0 {
 
   class BuildPluginRegistry {
     + register()
@@ -978,9 +978,11 @@ package "Plugin System" #B3FFB3 {
     + discover()
   }
 
-}
-
-package "Core" #80E0D0 {
+  class HookRunner {
+    + run()
+    + has_hooks()
+    + list_hooks()
+  }
 
   class RepoContext {
     + repo
@@ -1086,7 +1088,7 @@ TableConfig *-- SchemaField : schema
 ValidationReport *-- ValidationIssue : issues
 
 ' ── Dependencies (auto-detected from lazy imports in methods) ──
-BaseModel ..> BuildPluginRegistry : _run_hooks()
+BaseModel ..> HookRunner : _run_hooks()
 BuildSession ..> BuildContext : build()
 BuildSession ..> BuildResult : build()
 BuildSession ..> DomainBuilderFactory : build()
