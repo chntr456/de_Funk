@@ -1,95 +1,77 @@
 """
-Graph Builder for BaseModel.
+GraphBuilder — builds model tables from Bronze via NodeExecutor.
 
-Handles building model tables from Bronze layer:
-- Node loading from Bronze
-- Transformations (select, derive, filters)
-- Cross-model reference resolution
-- Join utilities
+Reads graph.nodes config from model YAML, translates to NodeExecutor
+format, and executes through Engine ops. Custom node loading (seed,
+union, distinct, window) is handled by DomainModel.custom_node_loading().
 
-This module is used by BaseModel via composition.
+All DataFrame operations go through Engine — no direct Spark/DuckDB code.
 """
-
 from typing import Dict, Any, Optional, List, Tuple
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Type alias for DataFrame (can be Spark or DuckDB)
 DataFrame = Any
 
 
 class GraphBuilder:
-    """
-    Builds model graph from YAML configuration.
-
-    Handles loading nodes from Bronze, applying transformations,
-    and resolving cross-model references.
-    """
+    """Builds model tables from Bronze via NodeExecutor + Engine."""
 
     def __init__(self, model):
-        """
-        Initialize graph builder.
-
-        Args:
-            model: BaseModel instance (provides connection, config, etc.)
-        """
         self.model = model
-
-    @property
-    def connection(self):
-        return self.model.connection
-
-    @property
-    def backend(self) -> str:
-        return self.model.backend
 
     @property
     def model_cfg(self) -> Dict:
         return self.model.model_cfg
 
-    @property
-    def storage_router(self):
-        return self.model.storage_router
-
-    @property
-    def session(self):
-        return self.model.session
-
     def build(self) -> Tuple[Dict[str, DataFrame], Dict[str, DataFrame]]:
-        """
-        Build model tables from Bronze layer.
-
-        When a BuildSession with Engine is available, delegates to NodeExecutor
-        for backend-agnostic builds. Otherwise falls back to the legacy Spark path.
-
-        Returns:
-            Tuple of (dimensions, facts)
-        """
-        # Run before hooks (config-driven + class override)
+        """Build model tables: hooks → NodeExecutor → separate dims/facts → hooks."""
         self.model._run_hooks("before_build")
         self.model.before_build()
 
-        # Try NodeExecutor path when Engine is available
-        build_session = getattr(self.model, 'build_session', None)
-        if build_session is not None and hasattr(build_session, 'engine') and build_session.engine._ops is not None:
-            nodes = self._build_nodes_via_executor(build_session)
-        else:
-            # Legacy path: direct Spark/DuckDB ops
-            nodes = self._build_nodes()
+        # Ensure we have an Engine — create from connection if no build_session
+        build_session = self._get_or_create_session()
+        nodes = self._build_nodes(build_session)
 
-        # Separate by naming convention
         dims = {k: v for k, v in nodes.items() if k.startswith("dim_")}
         facts = {k: v for k, v in nodes.items() if k.startswith("fact_")}
 
-        # Run after hooks (config-driven + class override)
         dims, facts = self.model.after_build(dims, facts)
         self.model._run_hooks("after_build", dims=dims, facts=facts)
 
         return dims, facts
 
-    def _build_nodes_via_executor(self, build_session) -> Dict[str, DataFrame]:
-        """Build nodes using NodeExecutor + Engine ops (backend-agnostic)."""
+    def _get_or_create_session(self):
+        """Get existing BuildSession or create a minimal one from the connection."""
+        build_session = getattr(self.model, 'build_session', None)
+        if build_session is not None and hasattr(build_session, 'engine') and build_session.engine._ops is not None:
+            return build_session
+
+        # Create Engine from the connection
+        from de_funk.core.engine import Engine
+
+        backend = self.model.backend
+        if backend == 'spark':
+            spark = getattr(self.model.connection, 'spark', self.model.connection)
+            engine = Engine.for_spark(spark, storage_config=self.model.storage_cfg)
+        else:
+            engine = Engine.for_duckdb(storage_config=self.model.storage_cfg)
+
+        # Create a minimal BuildSession
+        from de_funk.core.sessions import BuildSession
+        session = BuildSession(
+            engine=engine,
+            models={},
+            graph=None,
+            storage_config=self.model.storage_cfg,
+        )
+        # Inject into model so write_tables can use it too
+        self.model.build_session = session
+        return session
+
+    def _build_nodes(self, build_session) -> Dict[str, DataFrame]:
+        """Build all nodes via NodeExecutor."""
         from de_funk.core.executor import NodeExecutor
 
         executor = NodeExecutor(build_session)
@@ -99,54 +81,95 @@ class GraphBuilder:
         if isinstance(nodes_config, list):
             nodes_config = {nc['id']: nc for nc in nodes_config}
 
-        # Store in-progress nodes for phase-dependent tables
         self.model._building_nodes = {}
 
-        # Translate graph node configs to NodeExecutor format
-        translated = {}
-        for node_id, node_cfg in nodes_config.items():
-            translated[node_id] = self._translate_node_config(node_id, node_cfg)
-
-        # Execute via NodeExecutor — handles custom_node_loading internally
+        # Translate and execute each node
         results = {}
-        for node_id, cfg in translated.items():
-            # Try custom loading first (seed, union, distinct, window, unpivot)
-            custom_df = self.model.custom_node_loading(node_id, nodes_config.get(node_id, cfg))
+        for node_id, node_cfg in nodes_config.items():
+            # Custom loading first (seed, union, distinct, window, unpivot)
+            custom_df = self.model.custom_node_loading(node_id, node_cfg)
             if custom_df is not None:
                 results[node_id] = custom_df
                 self.model._building_nodes[node_id] = custom_df
                 continue
 
-            # Standard node via executor
-            result = executor.execute_node(node_id, cfg, results)
+            # Translate to NodeExecutor format
+            translated = self._translate_node_config(node_id, node_cfg)
+
+            # Execute via NodeExecutor
+            result = executor.execute_node(node_id, translated, results)
             if result is not None:
                 results[node_id] = result
                 self.model._building_nodes[node_id] = result
 
         return results
 
+    # ── Helpers used by DomainModel custom_node_loading ─────
+
+    def _load_bronze_table(self, table_name: str) -> DataFrame:
+        """Load a Bronze table via StorageRouter + Engine."""
+        table_ref = f"bronze.{table_name}"
+        path = self.model.storage_router.resolve(table_ref)
+        session = self._get_or_create_session()
+        return session.engine.read(path)
+
+    def _load_silver_table(self, model_name: str, table_name: str) -> DataFrame:
+        """Load a Silver table from another model."""
+        if table_name.startswith('dim_'):
+            subdir = 'dims'
+        elif table_name.startswith('fact_'):
+            subdir = 'facts'
+        else:
+            subdir = None
+
+        model_path = model_name.replace(".", "/")
+        table_ref = f"silver.{model_path}/{subdir}/{table_name}" if subdir else f"silver.{model_path}/{table_name}"
+        path = self.model.storage_router.resolve(table_ref)
+        session = self._get_or_create_session()
+        return session.engine.read(path)
+
+    def _apply_derive(self, df: DataFrame, col_name: str, expr: str, node_id: str) -> DataFrame:
+        """Apply a derive expression via Engine."""
+        session = self._get_or_create_session()
+        return session.engine.derive(df, col_name, expr)
+
+    # ── Node config translation ───────────────────────────
+
     def _translate_node_config(self, node_id: str, node_cfg: Dict) -> Dict:
-        """Translate graph_builder node config to NodeExecutor format."""
+        """Translate graph node config to NodeExecutor format."""
         result = {"from": node_cfg.get("from", "")}
 
         pipeline = []
 
-        # Filters → filter op
         if node_cfg.get("filters"):
             pipeline.append({"op": "filter", "conditions": node_cfg["filters"]})
 
-        # Select → select op (with aliasing support)
-        if node_cfg.get("select"):
-            cols = list(node_cfg["select"].values()) if isinstance(node_cfg["select"], dict) else node_cfg["select"]
-            pipeline.append({"op": "select", "columns": cols})
+        if node_cfg.get("join"):
+            for join_spec in node_cfg["join"]:
+                pipeline.append({"op": "join", "params": {
+                    "right": join_spec.get("table", ""),
+                    "on": join_spec.get("on", []),
+                    "how": join_spec.get("type", "left"),
+                }})
 
-        # Derive → derive op
+        if node_cfg.get("select"):
+            if isinstance(node_cfg["select"], dict):
+                # Select-as-dict is aliasing — translate to derive + select
+                for target, source_expr in node_cfg["select"].items():
+                    if source_expr != target:
+                        pipeline.append({"op": "derive", "expressions": {target: source_expr}})
+                pipeline.append({"op": "select", "columns": list(node_cfg["select"].keys())})
+            else:
+                pipeline.append({"op": "select", "columns": node_cfg["select"]})
+
         if node_cfg.get("derive"):
             pipeline.append({"op": "derive", "expressions": node_cfg["derive"]})
 
-        # Unique key → dedup op
         if node_cfg.get("unique_key"):
             pipeline.append({"op": "dedup", "keys": node_cfg["unique_key"]})
+
+        if node_cfg.get("drop"):
+            pipeline.append({"op": "drop", "columns": node_cfg["drop"]})
 
         if pipeline:
             result["pipeline"] = pipeline
@@ -162,461 +185,7 @@ class GraphBuilder:
         elif from_spec == "__generated__":
             result["type"] = "generated"
 
-        # Optional flag
         if node_cfg.get("optional"):
             result["optional"] = True
 
         return result
-
-    def _build_nodes(self) -> Dict[str, DataFrame]:
-        """
-        Build all nodes from graph.nodes config.
-
-        For each node:
-        1. Load from Bronze (via custom loading or default)
-        2. Apply select transformations
-        3. Apply derive transformations
-
-        Returns:
-            Dictionary mapping node_id to DataFrame
-        """
-        graph = self.model_cfg.get('graph', {})
-        nodes = {}
-
-        # Support both dict and list formats for nodes
-        nodes_config = graph.get('nodes', {})
-        if isinstance(nodes_config, dict):
-            # Dict format (modular YAML): {node_id: {from: ..., select: ...}}
-            node_items = [(node_id, node_config) for node_id, node_config in nodes_config.items()]
-        else:
-            # List format (legacy YAML): [{id: node_id, from: ..., select: ...}]
-            node_items = [(node_config['id'], node_config) for node_config in nodes_config]
-
-        # Store in-progress nodes on model for Phase 2 tables that
-        # reference Phase 1 tables (e.g., distinct dims from facts)
-        self.model._building_nodes = nodes
-
-        for node_id, node_config in node_items:
-
-            # Try custom loading first
-            custom_df = self.model.custom_node_loading(node_id, node_config)
-            if custom_df is not None:
-                nodes[node_id] = custom_df
-                continue
-
-            # Check if loading from bronze, silver (another model), or another node
-            from_spec = node_config['from']
-
-            # Skip domain-config markers that custom_node_loading didn't handle
-            if from_spec.startswith('__') and from_spec.endswith('__'):
-                logger.info(f"Skipping unhandled marker node '{node_id}' (from: {from_spec})")
-                continue
-
-            if '.' in from_spec:
-                # Has a dot - could be bronze.table or model.table (silver)
-                if from_spec.startswith('bronze.'):
-                    # Loading from bronze: bronze.provider.table_name
-                    table = from_spec.split('.', 1)[1]
-                    try:
-                        df = self._load_bronze_table(table)
-                    except Exception as e:
-                        # Check if this node is marked as optional
-                        if node_config.get('optional', False):
-                            logger.warning(f"Skipping optional node {node_id}: bronze table '{table}' not found")
-                            continue
-                        else:
-                            # Re-raise the error for required nodes
-                            raise
-                else:
-                    # Loading from silver: model.table_name (e.g., securities.fact_security_prices)
-                    # Use rsplit to support dot-separated model names (e.g., municipal.entity.dim_municipality)
-                    model_name, table = from_spec.rsplit('.', 1)
-                    try:
-                        df = self._load_silver_table(model_name, table)
-                    except Exception as e:
-                        # Check if this node is marked as optional
-                        if node_config.get('optional', False):
-                            logger.warning(f"Skipping optional node {node_id}: silver table '{model_name}.{table}' not found")
-                            continue
-                        else:
-                            raise
-            else:
-                # Loading from another node (must already be built)
-                parent_node = from_spec
-                if parent_node not in nodes:
-                    raise ValueError(
-                        f"Node {node_id} depends on {parent_node}, but {parent_node} hasn't been built yet. "
-                        f"Ensure nodes are defined in dependency order in graph.nodes"
-                    )
-                df = nodes[parent_node]
-
-            # Apply filters (before select to filter source data)
-            if 'filters' in node_config and node_config['filters']:
-                df = self.model._apply_filters(df, node_config['filters'])
-
-            # Apply joins (before select so joined columns are available)
-            if 'join' in node_config and node_config['join']:
-                df = self._apply_joins(df, node_config['join'], nodes, node_id)
-
-            # Apply select (column selection/aliasing)
-            if 'select' in node_config and node_config['select']:
-                df = self.model._select_columns(df, node_config['select'])
-
-            # Apply derive (computed columns)
-            if 'derive' in node_config and node_config['derive']:
-                logger.info(f"Applying {len(node_config['derive'])} derive expressions to {node_id}")
-                for out_name, expr in node_config['derive'].items():
-                    try:
-                        logger.debug(f"  Deriving '{out_name}' = {expr}")
-                        df = self._apply_derive(df, out_name, expr, node_id)
-                        logger.debug(f"  ✓ Derived '{out_name}' successfully")
-                    except Exception as e:
-                        # Log ERROR (not just warning) and skip this derived column
-                        # Common reasons: unsupported expressions, nested window functions
-                        logger.error(
-                            f"FAILED to derive column '{out_name}' in node '{node_id}': {e}",
-                            exc_info=True
-                        )
-                        # Continue with other columns
-                        continue
-                # Log resulting columns after derive
-                if self.backend == 'spark':
-                    logger.info(f"  Columns after derive: {df.columns}")
-
-            # Enforce unique_key constraint (deduplication)
-            if 'unique_key' in node_config and node_config['unique_key']:
-                unique_cols = node_config['unique_key']
-                logger.debug(f"Applying unique_key constraint on {node_id}: deduplicating by {unique_cols}")
-                if self.backend == 'spark':
-                    df = df.dropDuplicates(unique_cols)
-                else:
-                    # DuckDB: Convert to pandas if needed, drop duplicates, convert back
-                    import pandas as pd
-                    if isinstance(df, pd.DataFrame):
-                        # Already a pandas DataFrame (from _apply_derive)
-                        pdf = df
-                    else:
-                        # DuckDB relation - convert to pandas
-                        pdf = df.df()
-                    pdf = pdf.drop_duplicates(subset=unique_cols, keep='last')
-                    df = self.connection.conn.from_df(pdf)
-
-            # Drop columns specified in 'drop' config (removes natural keys after deriving FKs)
-            if 'drop' in node_config and node_config['drop']:
-                drop_cols = node_config['drop']
-                logger.info(f"Dropping columns from {node_id}: {drop_cols}")
-                if self.backend == 'spark':
-                    logger.info(f"  Columns before drop: {df.columns}")
-                if self.backend == 'spark':
-                    df = df.drop(*drop_cols)
-                else:
-                    # DuckDB/pandas - drop columns
-                    import pandas as pd
-                    if hasattr(df, 'df'):
-                        pdf = df.df()
-                    elif isinstance(df, pd.DataFrame):
-                        pdf = df
-                    else:
-                        pdf = df
-                    pdf = pdf.drop(columns=[c for c in drop_cols if c in pdf.columns], errors='ignore')
-                    if hasattr(self.connection, 'conn'):
-                        df = self.connection.conn.from_df(pdf)
-                    else:
-                        df = pdf
-
-            nodes[node_id] = df
-
-        return nodes
-
-    def _apply_joins(
-        self,
-        df: DataFrame,
-        join_specs: List[Dict],
-        nodes: Dict[str, DataFrame],
-        node_id: str
-    ) -> DataFrame:
-        """
-        Apply join operations to a DataFrame.
-
-        Args:
-            df: Main DataFrame to join onto
-            join_specs: List of join specifications from YAML
-            nodes: Already-built nodes dictionary
-            node_id: Current node ID (for error messages)
-
-        Returns:
-            Joined DataFrame with columns from all tables
-
-        Example YAML:
-            join:
-              - table: _ticker_cik_lookup
-                on: ["ticker=ticker"]
-                type: inner
-        """
-        for join_spec in join_specs:
-            join_table = join_spec['table']
-            join_on = join_spec.get('on', [])
-            join_type = join_spec.get('type', 'left')
-
-            # Get the table to join with
-            if join_table not in nodes:
-                raise ValueError(
-                    f"Node {node_id} tries to join with '{join_table}', but it hasn't been built yet. "
-                    f"Ensure '{join_table}' is defined before '{node_id}' in graph.nodes"
-                )
-            right_df = nodes[join_table]
-
-            # Parse join conditions: ["ticker=ticker", "date=date"] -> pairs
-            join_pairs = []
-            for condition in join_on:
-                left_col, right_col = condition.split('=')
-                join_pairs.append((left_col.strip(), right_col.strip()))
-
-            if self.backend == 'spark':
-                # Spark join with aliased columns to avoid ambiguity
-                # Use double underscore (__) as separator to avoid Spark interpreting
-                # the dot as struct field access (e.g., _ticker_cik_lookup.cik would fail)
-                from pyspark.sql import functions as F
-
-                # Rename ALL right columns with table prefix (including join keys)
-                # This avoids ambiguity after join when both tables have same column names
-                renamed_right_cols = {}
-                for col in right_df.columns:
-                    new_name = f"{join_table}__{col}"
-                    renamed_right_cols[col] = new_name
-                    right_df = right_df.withColumnRenamed(col, new_name)
-
-                # Build join condition using renamed right column names
-                join_cond = None
-                for left_col, right_col in join_pairs:
-                    renamed_right_col = renamed_right_cols[right_col]
-                    cond = df[left_col] == right_df[renamed_right_col]
-                    join_cond = cond if join_cond is None else (join_cond & cond)
-
-                # Perform join
-                df = df.join(right_df, join_cond, how=join_type)
-
-                # Drop the renamed join key columns from right side (they're duplicates)
-                for _, right_col in join_pairs:
-                    renamed_col = renamed_right_cols[right_col]
-                    if renamed_col in df.columns:
-                        df = df.drop(renamed_col)
-
-            else:
-                # DuckDB/pandas join
-                import pandas as pd
-
-                # Convert to pandas if needed
-                if hasattr(df, 'df'):
-                    left_pdf = df.df()
-                elif isinstance(df, pd.DataFrame):
-                    left_pdf = df
-                else:
-                    left_pdf = df
-
-                if hasattr(right_df, 'df'):
-                    right_pdf = right_df.df()
-                elif isinstance(right_df, pd.DataFrame):
-                    right_pdf = right_df
-                else:
-                    right_pdf = right_df
-
-                # Rename right columns with table prefix using double underscore (except join keys)
-                # Use same convention as Spark: _ticker_cik_lookup__cik
-                right_join_cols = {r for _, r in join_pairs}
-                rename_map = {
-                    col: f"{join_table}__{col}"
-                    for col in right_pdf.columns
-                    if col not in right_join_cols
-                }
-                right_pdf = right_pdf.rename(columns=rename_map)
-
-                # Build merge parameters
-                left_on = [l for l, _ in join_pairs]
-                right_on = [r for _, r in join_pairs]
-
-                # Map join type
-                how_map = {'inner': 'inner', 'left': 'left', 'right': 'right', 'outer': 'outer'}
-                how = how_map.get(join_type, 'left')
-
-                # Perform merge
-                df = left_pdf.merge(right_pdf, left_on=left_on, right_on=right_on, how=how)
-
-                # Convert back to DuckDB if needed
-                if hasattr(self.connection, 'conn'):
-                    df = self.connection.conn.from_df(df)
-
-            logger.debug(f"Applied {join_type} join: {node_id} ← {join_table} on {join_on}")
-
-        return df
-
-    def _load_bronze_table(self, table_name: str) -> DataFrame:
-        """
-        Load a Bronze table using StorageRouter.
-
-        Supports both Delta Lake (default) and Parquet formats.
-        Auto-detects format based on presence of _delta_log directory.
-
-        Args:
-            table_name: Logical table name from graph config.
-                       Can use dot notation (alpha_vantage.securities_reference)
-                       or slash notation (alpha_vantage/securities_reference).
-
-        Returns:
-            DataFrame with merged schema
-        """
-        # Build config-style table reference: "bronze.alpha_vantage.listing_status"
-        table_ref = f"bronze.{table_name}"
-        logger.debug(f"Loading table: {table_ref}")
-
-        path = self.storage_router.resolve(table_ref)
-        return self._read_table(path)
-
-    def _load_silver_table(self, model_name: str, table_name: str) -> DataFrame:
-        """Load a Silver table from another model."""
-        if table_name.startswith('dim_'):
-            subdir = 'dims'
-        elif table_name.startswith('fact_'):
-            subdir = 'facts'
-        else:
-            subdir = None
-
-        model_path = model_name.replace(".", "/")
-        if subdir:
-            table_ref = f"silver.{model_path}/{subdir}/{table_name}"
-        else:
-            table_ref = f"silver.{model_path}/{table_name}"
-        logger.debug(f"Loading silver table: {table_ref}")
-
-        path = self.storage_router.resolve(table_ref)
-        return self._read_table(path)
-
-    def _read_table(self, path: str) -> DataFrame:
-        """Read a table from storage using the appropriate backend."""
-        if self.backend == 'spark':
-            spark = getattr(self.connection, 'spark', self.connection)
-            try:
-                return spark.read.format("delta").option("mergeSchema", "true").load(path)
-            except Exception:
-                return spark.read.parquet(path)
-        else:
-            return self.connection.read_table(path)
-
-    def _apply_derive(self, df: DataFrame, col_name: str, expr: str, node_id: str) -> DataFrame:
-        """
-        Apply a derive expression to create a computed column.
-
-        Supports:
-        - Column references: "ticker" -> F.col("ticker")
-        - SHA1 hash: "sha1(ticker)" -> F.sha1(F.col("ticker"))
-        - SQL expressions: Window functions, aggregations, etc. via F.expr()
-
-        Args:
-            df: Input DataFrame
-            col_name: Output column name
-            expr: Derive expression (can be any valid SQL expression)
-            node_id: Node ID (for error messages)
-
-        Returns:
-            DataFrame with new column
-        """
-        if self.backend == 'spark':
-            from pyspark.sql import functions as F
-
-            # SHA1 hash (special case for common pattern)
-            if expr.startswith('sha1(') and expr.endswith(')'):
-                col = expr[5:-1]  # Extract column name
-                return df.withColumn(col_name, F.sha1(F.col(col)))
-
-            # Direct column reference
-            elif expr in df.columns:
-                return df.withColumn(col_name, F.col(expr))
-
-            # Arbitrary SQL expression (window functions, aggregations, etc.)
-            else:
-                try:
-                    return df.withColumn(col_name, F.expr(expr))
-                except Exception as e:
-                    raise ValueError(
-                        f"Failed to apply derive expression '{expr}' in node '{node_id}': {e}"
-                    )
-        else:
-            # DuckDB - use SQL execution for complex expressions
-            if expr.startswith('sha1(') and expr.endswith(')'):
-                col = expr[5:-1]  # Extract column name
-                sql_expr = f"SHA1({col})"
-            else:
-                # Direct column reference or SQL expression
-                sql_expr = expr
-
-            # For complex expressions (especially window functions), use SQL execution
-            # Register DataFrame as temp table, execute SQL, return result
-            temp_table = f"_temp_{node_id}_{col_name}"
-
-            # Register current DataFrame
-            self.connection.conn.register(temp_table, df)
-
-            # Build SQL with all existing columns plus the new derived column
-            existing_cols = ', '.join([f'"{c}"' for c in df.columns])
-            sql = f"SELECT {existing_cols}, {sql_expr} AS {col_name} FROM {temp_table}"
-
-            # Execute and return result
-            result_df = self.connection.conn.execute(sql).fetchdf()
-
-            # Unregister temp table to avoid memory leaks
-            self.connection.conn.unregister(temp_table)
-
-            return result_df
-
-    def resolve_node(self, node_id: str, nodes: Dict[str, DataFrame]) -> DataFrame:
-        """
-        Resolve a node DataFrame, supporting cross-model references.
-
-        Args:
-            node_id: Node identifier (e.g., 'dim_company' or 'core.dim_calendar')
-            nodes: Local nodes dictionary
-
-        Returns:
-            DataFrame for the node
-
-        Raises:
-            ValueError: If node not found
-        """
-        # Check if it's a cross-model reference (contains dot)
-        if '.' in node_id and node_id not in nodes:
-            # Cross-model reference: modelname.nodename
-            if not self.session:
-                raise ValueError(
-                    f"Cross-model reference '{node_id}' requires session, "
-                    f"but model.session is None. Call model.set_session(session) first."
-                )
-
-            model_name, table_name = node_id.split('.', 1)
-
-            # Get the other model from session
-            try:
-                other_model = self.session.get_model_instance(model_name)
-                other_model.ensure_built()
-
-                # Try dimensions first, then facts
-                if table_name in other_model._dims:
-                    return other_model.get_dimension_df(table_name)
-                elif table_name in other_model._facts:
-                    return other_model.get_fact_df(table_name)
-                else:
-                    raise KeyError(
-                        f"Table '{table_name}' not found in {model_name}. "
-                        f"Available dimensions: {list(other_model._dims.keys())}, "
-                        f"Available facts: {list(other_model._facts.keys())}"
-                    )
-            except Exception as e:
-                raise ValueError(
-                    f"Cross-model reference '{node_id}' failed: {e}"
-                ) from e
-
-        # Local node
-        if node_id in nodes:
-            return nodes[node_id]
-
-        raise ValueError(f"Node '{node_id}' not found in local nodes or cross-model refs")
-
