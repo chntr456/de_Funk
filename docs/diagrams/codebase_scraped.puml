@@ -575,18 +575,8 @@ package "Build Path" #FF9933 {
   }
 
   class GraphBuilder {
-    + connection()
-    + backend()
     + model_cfg()
-    + storage_router()
-    + session()
     + build()
-  }
-
-  class JoinUtils {
-    + join_pairs_from_strings()
-    + infer_join_pairs()
-    + join_with_dedupe()
   }
 
   class TimeSeriesForecastModel {
@@ -635,28 +625,6 @@ package "Pipeline Executor" #FF9933 {
 }
 
 package "Domain Builders" #FF9933 {
-
-  class CalendarBuilder {
-    + build()
-    + build_spark_dataframe()
-  }
-
-  class CompanyBuilder {
-    + model_name
-    + depends_on
-    --
-    + get_model_class()
-    + post_build()
-  }
-
-  class CompanyModel {
-    + get_company_by_cik()
-    + get_company_by_ticker()
-    + get_companies_by_sector()
-    + get_active_companies()
-    + list_sectors()
-    + get_company_count_by_sector()
-  }
 
   class ForecastDataValidator {
     + MIN_POINTS_ARIMA
@@ -719,11 +687,6 @@ package "Domain Builders" #FF9933 {
     + DEFAULT_END_DATE
     --
     + custom_node_loading()
-    + get_calendar()
-    + get_weekdays()
-    + get_weekends()
-    + get_fiscal_year_dates()
-    + get_quarter_dates()
   }
 
 }
@@ -1018,10 +981,8 @@ package "Utils" #E6E6E6 {
 }
 
 ' ── Inheritance (auto-detected from class bases) ──
-BaseModel <|-- CompanyModel
 BaseModel <|-- TemporalModel
 BaseModel <|-- TimeSeriesForecastModel
-BaseModelBuilder <|-- CompanyBuilder
 BaseModelBuilder <|-- SecuritiesBuilder
 BaseModelBuilder <|-- StocksBuilder
 BaseModelBuilder <|-- TemporalBuilder
@@ -1100,7 +1061,9 @@ DeFunk ..> QuerySession : query_session()
 DomainBuilderFactory ..> DomainConfigLoaderV4 : _create_builder_class()
 DomainBuilderFactory ..> DomainConfigLoaderV4 : create_builders()
 Engine ..> ExhibitHandler : distinct_values_by_measure()
-GraphBuilder ..> NodeExecutor : _build_nodes_via_executor()
+GraphBuilder ..> BuildSession : _get_or_create_session()
+GraphBuilder ..> Engine : _get_or_create_session()
+GraphBuilder ..> NodeExecutor : _build_nodes()
 RepoContext ..> ConnectionFactory : from_repo_root()
 
 legend right
@@ -1115,9 +1078,9 @@ legend right
   |<#B3FFB3> Green | Plugins + Artifacts |
   ---
   **Edge types (all auto-detected):**
-  Inheritance: 28
+  Inheritance: 26
   Composition: 38
-  Dependencies: 14 cross-package
+  Dependencies: 16 cross-package
 endlegend
 
 @enduml
