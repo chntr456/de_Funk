@@ -256,48 +256,15 @@ class BaseModel:
     # ── Hook dispatch ─────────────────────────────────────
 
     def _run_hooks(self, hook_name: str, **context) -> None:
-        """Run hooks for a lifecycle event.
+        """Run hooks via HookRunner — YAML config first, decorator fallback.
 
-        Resolution order:
-        1. Check model_cfg.hooks.{hook_name} for YAML-declared hook fns
-        2. Check BuildPluginRegistry for @pipeline_hook decorated fns
-        3. If neither, no-op (class overrides called separately by GraphBuilder)
+        See core/hooks.py for resolution order.
         """
-        # 1. YAML config hooks
-        hooks_cfg = self.model_cfg.get("hooks", {})
-        hook_defs = hooks_cfg.get(hook_name, [])
-        if hook_defs:
-            for hook_def in hook_defs:
-                fn_path = hook_def.get("fn", "") if isinstance(hook_def, dict) else getattr(hook_def, 'fn', '')
-                params = hook_def.get("params", {}) if isinstance(hook_def, dict) else getattr(hook_def, 'params', {})
-                if fn_path:
-                    try:
-                        module_path, fn_name = fn_path.rsplit(".", 1)
-                        import importlib
-                        module = importlib.import_module(module_path)
-                        fn = getattr(module, fn_name)
-                        engine = self.build_session.engine if self.build_session and hasattr(self.build_session, 'engine') else None
-                        fn(engine=engine, config=self.model_cfg, model=self, **context, **params)
-                        logger.info(f"Hook {hook_name}: ran {fn_path}")
-                    except Exception as e:
-                        logger.warning(f"Hook {hook_name}/{fn_path} failed: {e}")
-            return
+        from de_funk.core.hooks import HookRunner
 
-        # 2. Plugin registry hooks
-        try:
-            from de_funk.core.plugins import BuildPluginRegistry
-            plugin_hooks = BuildPluginRegistry.get(hook_name, self.model_name)
-            if plugin_hooks:
-                for fn in plugin_hooks:
-                    try:
-                        engine = self.build_session.engine if self.build_session and hasattr(self.build_session, 'engine') else None
-                        fn(engine=engine, config=self.model_cfg, model=self, **context)
-                        logger.info(f"Hook {hook_name}: ran plugin {fn.__name__}")
-                    except Exception as e:
-                        logger.warning(f"Hook {hook_name}/plugin {fn.__name__} failed: {e}")
-                return
-        except ImportError:
-            pass
+        engine = self.build_session.engine if self.build_session and hasattr(self.build_session, 'engine') else None
+        runner = HookRunner(self.model_cfg, model_name=self.model_name)
+        runner.run(hook_name, engine=engine, model=self, **context)
 
     # ── Window node building ──────────────────────────────
 

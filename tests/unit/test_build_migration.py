@@ -10,7 +10,7 @@ class TestBaseModelRunHooks:
         model = MagicMock(spec=BaseModel)
         model.model_cfg = {"hooks": {}}
         model.model_name = "test"
-        # Call the real _run_hooks
+        model.build_session = None
         BaseModel._run_hooks(model, "before_build")
 
     def test_run_hooks_yaml_config(self):
@@ -40,7 +40,7 @@ class TestBaseModelRunHooks:
 
     def test_run_hooks_plugin_registry(self):
         """Plugin registry hooks are discovered."""
-        from de_funk.core.plugins import BuildPluginRegistry, _registry
+        from de_funk.core.hooks import BuildPluginRegistry, _decorator_registry
 
         called = []
         def my_hook(engine=None, config=None, **kwargs):
@@ -59,7 +59,7 @@ class TestBaseModelRunHooks:
         assert "plugin_called" in called
 
         # Cleanup
-        _registry.get("test_hook", {}).pop("test_model", None)
+        _decorator_registry.get("test_hook", {}).pop("test_model", None)
 
 
 class TestBaseModelBuildSession:
