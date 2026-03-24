@@ -1,4 +1,4 @@
-@startuml "de_Funk Codebase — Post-Rebuild (Code-Scraped)"
+@startuml "de_Funk Codebase — Auto-Scraped (all edges)"
 
 skinparam classFontName "Courier New"
 skinparam classFontSize 10
@@ -7,7 +7,7 @@ skinparam packageStyle rectangle
 skinparam linetype ortho
 skinparam style strictuml
 
-title de_Funk Codebase — Post-Rebuild\nScraped from src/de_funk/
+title de_Funk Codebase\nAuto-scraped: inheritance + composition + dependencies
 
 package "Domain Data Classes" #FFCC66 {
 
@@ -1015,59 +1015,91 @@ package "Utils" #E6E6E6 {
 
 }
 
+' ── Inheritance (auto-detected from class bases) ──
+BaseModel <|-- CompanyModel
+BaseModel <|-- TemporalModel
+BaseModel <|-- TimeSeriesForecastModel
+BaseModelBuilder <|-- CompanyBuilder
+BaseModelBuilder <|-- SecuritiesBuilder
+BaseModelBuilder <|-- StocksBuilder
+BaseModelBuilder <|-- TemporalBuilder
+BaseProvider <|-- AlphaVantageProvider
+BaseProvider <|-- SocrataBaseProvider
+DataConnection <|-- DuckDBConnection
+DataConnection <|-- SparkConnection
+DataOps <|-- DuckDBOps
+DataOps <|-- SparkOps
+DataValidator <|-- ForecastDataValidator
+DataValidator <|-- StocksSourceValidator
 ExhibitHandler <|-- BoxHandler
 ExhibitHandler <|-- GraphicalHandler
 ExhibitHandler <|-- MetricsHandler
 ExhibitHandler <|-- PivotHandler
 ExhibitHandler <|-- TableDataHandler
-DataConnection <|-- SparkConnection
-DataConnection <|-- DuckDBConnection
-DataOps <|-- DuckDBOps
-DataOps <|-- SparkOps
-SqlOps <|-- DuckDBSql
-SqlOps <|-- SparkSql
 Session <|-- BuildSession
-Session <|-- QuerySession
 Session <|-- IngestSession
-BaseModel <|-- TimeSeriesForecastModel
-BaseModelBuilder <|-- CompanyBuilder
-BaseModel <|-- CompanyModel
-BaseModelBuilder <|-- TemporalBuilder
-BaseModel <|-- TemporalModel
-DataValidator <|-- ForecastDataValidator
-DataValidator <|-- StocksSourceValidator
-TimeSeriesForecastModel <|-- ForecastModel
-BaseModelBuilder <|-- SecuritiesBuilder
-BaseModelBuilder <|-- StocksBuilder
-BaseProvider <|-- SocrataBaseProvider
-BaseProvider <|-- AlphaVantageProvider
+Session <|-- QuerySession
 SocrataBaseProvider <|-- ChicagoProvider
 SocrataBaseProvider <|-- CookCountyProvider
+SqlOps <|-- DuckDBSql
+SqlOps <|-- SparkSql
+TimeSeriesForecastModel <|-- ForecastModel
 
-' Key relationships
-DeFunk *-- Engine
-DeFunk *-- DomainGraph
-DeFunk *-- ArtifactStore
-DeFunk ..> BuildSession : creates
-DeFunk ..> QuerySession : creates
-DeFunk ..> IngestSession : creates
-Engine *-- DataOps : _ops
-Engine *-- SqlOps : _sql
-Session *-- StorageRouter
-NodeExecutor ..> Engine : delegates ops
-ExhibitHandler ..> Engine : _engine
-IngestorEngine *-- RawSink
-IngestorEngine *-- BronzeSink
-IngestorEngine *-- BaseProvider
-IngestorEngine ..> IngestSession : composes
-
-' Hook → Forecast → Artifact chain
+' ── Composition (auto-detected from type annotations + __init__) ──
+AppConfig *-- ConnectionConfig : connection
+BaseModel *-- StorageRouter : storage_router
+BaseTemplate *-- SchemaField : canonical_fields
+BaseTemplate *-- TableConfig : tables
+BuildSpec *-- PhaseSpec : phases
+BuilderRegistry *-- BaseModelBuilder : _builders
+ConnectionConfig *-- DuckDBConfig : duckdb
+ConnectionConfig *-- SparkConfig : spark
+DomainModelConfig *-- BuildSpec : build
+DomainModelConfig *-- GraphSpec : graph
 DomainModelConfig *-- HooksConfig : hooks
 DomainModelConfig *-- MLModelSpec : ml_models
-HooksConfig *-- HookDef : hook definitions
-BaseModel ..> BuildPluginRegistry : _run_hooks dispatches
-BuildPluginRegistry ..> ArtifactStore : plugins save models via
-BuildPluginRegistry ..> NodeExecutor : registers ops into
+DomainModelConfig *-- MeasuresSpec : measures
+DomainModelConfig *-- ModelStorageSpec : storage
+DomainModelConfig *-- SourceConfig : sources
+DomainModelConfig *-- TableConfig : tables
+EndpointConfig *-- EndpointSchemaField : schema
+EndpointConfig *-- SchemaField : schema
+GraphSpec *-- EdgeSpec : edges
+HooksConfig *-- HookDef : after_build
+HooksConfig *-- HookDef : before_build
+HooksConfig *-- HookDef : post_build
+HooksConfig *-- HookDef : pre_build
+IngestorEngine *-- BronzeSink : sink
+IngestorEngine *-- RawSink : raw_sink
+IngestorEngine *-- StorageRouter : storage_router
+MeasuresSpec *-- MeasureDef : computed
+MeasuresSpec *-- MeasureDef : simple
+RepoContext *-- AppConfig : _config
+RunConfig *-- ClusterConfig : cluster
+RunConfig *-- RetryConfig : retry
+Session *-- StorageRouter : storage_router
+SourceConfig *-- AliasSpec : aliases
+TableConfig *-- EnrichSpec : enrich
+TableConfig *-- MeasureDef : measures
+TableConfig *-- PipelineStep : pipeline
+TableConfig *-- SchemaField : schema
+ValidationReport *-- ValidationIssue : issues
+
+' ── Dependencies (auto-detected from lazy imports in methods) ──
+BaseModel ..> BuildPluginRegistry : _run_hooks()
+BuildSession ..> BuildContext : build()
+BuildSession ..> BuildResult : build()
+BuildSession ..> DomainBuilderFactory : build()
+DeFunk ..> BuildSession : build_session()
+DeFunk ..> ConfigLoader : from_config()
+DeFunk ..> FieldResolver : query_session()
+DeFunk ..> IngestSession : ingest_session()
+DeFunk ..> QuerySession : query_session()
+DomainBuilderFactory ..> DomainConfigLoaderV4 : _create_builder_class()
+DomainBuilderFactory ..> DomainConfigLoaderV4 : create_builders()
+Engine ..> ExhibitHandler : distinct_values_by_measure()
+GraphBuilder ..> NodeExecutor : _build_nodes_via_executor()
+RepoContext ..> ConnectionFactory : from_repo_root()
 
 legend right
   | Color | Layer |
@@ -1079,6 +1111,11 @@ legend right
   |<#CC99FF> Purple | Orchestration |
   |<#E6E6E6> Gray | Infrastructure |
   |<#B3FFB3> Green | Plugins + Artifacts |
+  ---
+  **Edge types (all auto-detected):**
+  Inheritance: 28
+  Composition: 38
+  Dependencies: 14 cross-package
 endlegend
 
 @enduml
