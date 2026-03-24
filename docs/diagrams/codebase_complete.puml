@@ -1,0 +1,451 @@
+@startuml "de_Funk Complete Codebase — All Classes"
+
+skinparam classFontName "Courier New"
+skinparam classFontSize 9
+skinparam packageFontSize 11
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam style strictuml
+
+title de_Funk Complete Codebase — ALL 191 classes\nNothing excluded
+
+package "Domain Data Classes (17)" #FFCC66 {
+  class AliasSpec
+  class BaseTemplate
+  class BuildSpec
+  class DomainModelConfig
+  class EdgeSpec
+  class EnrichSpec
+  class GraphSpec
+  class HookDef
+  class HooksConfig
+  class MeasureDef
+  class MeasuresSpec
+  class ModelStorageSpec
+  class PhaseSpec
+  class PipelineStep
+  class SchemaField
+  class SourceConfig
+  class TableConfig
+}
+
+package "Provider Data Classes (3)" #CC9966 {
+  class EndpointConfig
+  class EndpointSchemaField
+  class ProviderConfig
+}
+
+package "Infrastructure Data Classes (7)" #E6E6E6 {
+  class ApiLimits { from_dict() }
+  class ClusterConfig { from_dict() }
+  class MLModelSpec { from_dict() }
+  class RetryConfig { from_dict() }
+  class RootsConfig { from_dict() }
+  class RunConfig { from_dict() }
+  class TablePath { full_path; from_dict() }
+}
+
+package "Engine (7)" #80E0D0 {
+  class DataOps { read; write; create_df() }
+  class DuckDBOps { read; write; create_df() }
+  class DuckDBSql { execute_sql; scan; build_from() }
+  class Engine { for_duckdb; for_spark; read() }
+  class SparkOps { read; write; create_df() }
+  class SparkSql { execute_sql; scan; build_from() }
+  class SqlOps { execute_sql; scan; build_from() }
+}
+
+package "Sessions (5)" #80E0D0 {
+  class BuildSession { get_model; get_dependencies; build() }
+  class FilterEngine { apply_filters; apply_from_session; build_filter_sql() }
+  class IngestSession { get_provider; get_endpoint; close() }
+  class QuerySession { resolve; find_join_path; distinct_values() }
+  class Session { raw_path; bronze_path; silver_path() }
+}
+
+package "Field Resolution (7)" #80E0D0 {
+  class BronzeEndpointInfo
+  class BronzeResolver { resolve; reachable_domains; find_join_path() }
+  class DomainGraph { find_join_path; reachable_domains; neighbors() }
+  class FieldRef
+  class FieldResolver { reachable_domains; find_join_path; resolve() }
+  class ResolvedField { domain() }
+  class StorageRouter { raw_path; bronze_path; silver_path() }
+}
+
+package "Config Loading (14)" #FFCC66 {
+  class APIConfig { from_dict() }
+  class AppConfig { models_dir; legacy_models_dir; configs_dir() }
+  class BronzeConfig
+  class ConfigLoader { load_env; load_storage; load() }
+  class ConnectionConfig
+  class DebugConfig { from_env() }
+  class DomainConfigLoaderV4 { load_model_config; list_models; get_dependencies() }
+  class DuckDBConfig { to_connection_params() }
+  class EndpointConfig { get_spark_raw_schema() }
+  class MarkdownConfigLoader { parse_frontmatter; parse_schema_block; parse_view_ids_table() }
+  class ProviderConfig
+  class SchemaField { is_computed; is_generated() }
+  class SparkConfig { to_spark_conf_dict() }
+  class StorageConfig { from_dict() }
+}
+
+package "Connections (4)" #E6E6E6 {
+  class ConnectionFactory { create() }
+  class DataConnection { read_table; apply_filters; to_pandas() }
+  class DuckDBConnection { table; has_view; read_table() }
+  class SparkConnection { read_table; write_delta_table; merge_delta_table() }
+}
+
+package "Build Path (10)" #FF9933 {
+  class BaseModel { backend; build; ensure_built() }
+  class BaseModelBuilder { get_model_class; get_model_config; build() }
+  class BuildResult
+  class BuilderRegistry { register; all; discover() }
+  class DataValidator { columns; row_count; get_required_columns() }
+  class DomainBuilderFactory { create_builders() }
+  class DomainModel { custom_node_loading; graph_builder() }
+  class GraphBuilder { model_cfg; build() }
+  class ValidationIssue
+  class ValidationReport { is_valid; error_count; warning_count() }
+}
+
+package "Pipeline Executor (1)" #FF9933 {
+  class NodeExecutor { register_op; get_op; list_ops() }
+}
+
+package "Handler Hierarchy (7)" #B3D9FF {
+  class BoxHandler { execute() }
+  class ExhibitHandler { execute; distinct_values; distinct_values_by_measure() }
+  class GraphicalHandler { execute() }
+  class HandlerRegistry { register; get; supported_types() }
+  class MetricsHandler { execute() }
+  class PivotHandler { execute() }
+  class TableDataHandler { execute() }
+}
+
+package "API Models (24)" #B3D9FF {
+  class BoxQueryRequest
+  class BucketSpec
+  class ColumnTuple
+  class DimensionValuesResponse
+  class ExpandableData
+  class FilterSpec
+  class GraphicalQueryRequest
+  class GraphicalResponse
+  class GreatTablesResponse
+  class HealthResponse
+  class MeasureTuple
+  class MetricQueryRequest
+  class MetricResponse
+  class MetricValue
+  class PageFilters
+  class PivotQueryRequest { row_fields; col_fields() }
+  class SeriesData
+  class SortConfig
+  class SortSpec
+  class TableColumn
+  class TableDataQueryRequest
+  class TableResponse
+  class TotalsSpec
+  class WindowSpec
+}
+
+package "Ingestion Path (27)" #CC9966 {
+  class ApiKeyPool { size; next_key; mark_exhausted() }
+  class BaseProvider { base_url; rate_limit; env_api_key() }
+  class BaseRegistry { render() }
+  class BronzeSink { exists; write_if_missing; append_immutable() }
+  class CircuitBreaker { state; stats; allow_request() }
+  class CircuitBreakerConfig
+  class CircuitBreakerManager { get_breaker; configure; get_all_status() }
+  class CircuitOpenError
+  class CircuitState
+  class CircuitStats
+  class DataType
+  class Endpoint
+  class Facet { get_coerce_rules; get_spark_casts; get_final_columns() }
+  class FetchResult
+  class HttpClient { request_text; request; get() }
+  class IngestionResults { add_result; summary; print_summary() }
+  class IngestorEngine { from_session; get_executor; shutdown_executor() }
+  class RateLimitConfig { calls_per_second; refill_rate() }
+  class RateLimiterManager { get_limiter; configure_provider; wait() }
+  class RawSink { write; exists; read() }
+  class SocrataBaseProvider { enable_raw_save; list_work_items; fetch() }
+  class SocrataClient { request; fetch_all; fetch_all_flat() }
+  class SparkNormalizer { normalize; normalize_with_schema() }
+  class StreamingBronzeWriter { add_records; add_batch; flush() }
+  class TokenBucket { acquire; wait; try_acquire() }
+  class WorkItemResult
+  class WriteTask
+}
+
+package "Concrete Providers (6)" #CC9966 {
+  class AlphaVantageProvider { enable_raw_save; has_raw_data; set_tickers() }
+  class AlphaVantageRegistry { render() }
+  class ChicagoProvider
+  class CookCountyProvider { fetch_parcel_data() }
+  class ProviderInfo { to_dict() }
+  class ProviderRegistry { discover; list_available; get_info() }
+}
+
+package "Pipeline Internals (10)" #CC9966 {
+  class BatchProgressTracker { start_batch; update; complete_ticker() }
+  class MetricsCollector { time; record; finish() }
+  class PhaseProgress { percent; elapsed_seconds; eta_seconds() }
+  class PipelineProgressTracker { set_phase_total; start_phase; update_phase() }
+  class PipelineStats { elapsed_seconds; format_elapsed() }
+  class ProgressBar { render() }
+  class StepMetric { avg_ms; total_seconds; record() }
+  class StepProgressTracker { update; step_complete; finish() }
+  class TickerProgressCallback
+  class TimingContext
+}
+
+package "Orchestration (5)" #CC99FF {
+  class CheckpointManager { create_checkpoint; load_checkpoint; find_latest_checkpoint() }
+  class DependencyGraph { build; get_dependencies; topological_sort() }
+  class ModelInfo
+  class PipelineCheckpoint { to_dict; from_dict() }
+  class TickerCheckpoint { to_dict; from_dict() }
+}
+
+package "Application (1)" #E6E6E6 {
+  class DeFunk { from_config; from_app_config; build_session() }
+}
+
+package "Model Artifacts (2)" #B3FFB3 {
+  class ArtifactStore { save; load; latest() }
+  class ModelArtifact { to_dict; from_dict() }
+}
+
+package "Hooks (1)" #B3FFB3 {
+  class HookRunner { run; has_hooks; list_hooks() }
+}
+
+package "Exceptions (23)" #FFC0C0 {
+  class ConfigurationError
+  class ConnectionError
+  class DataNotFoundError
+  class DeFunkError
+  class DependencyError
+  class FilterError
+  class ForecastError
+  class IngestionError
+  class InsufficientDataError
+  class InvalidConfigError
+  class JoinError
+  class MeasureError
+  class MissingConfigError
+  class ModelError
+  class ModelNotFoundError
+  class ModelTrainingError
+  class PipelineError
+  class QueryError
+  class RateLimitError
+  class StorageError
+  class TableNotFoundError
+  class TransformationError
+  class WriteError
+}
+
+package "Logging (4)" #E6E6E6 {
+  class ColoredFormatter { format() }
+  class LogConfig { from_env() }
+  class LogTimer
+  class StructuredFormatter { format() }
+}
+
+package "Core (4)" #80E0D0 {
+  class ErrorContext
+  class NotebookValidator { validate; validate_and_raise; get_warnings() }
+  class RepoContext { get_api_config; from_repo_root; config() }
+  class ValidationError
+}
+
+package "Utils (2)" #E6E6E6 {
+  class APIValidator { validate_date_range; test_api_connection; get_recommended_date_range() }
+  class PipelineRunTracker { start_run; log_stage; log_error() }
+}
+
+BaseModel <|-- BoxQueryRequest
+BaseModel <|-- BucketSpec
+BaseModel <|-- ColumnTuple
+BaseModel <|-- DimensionValuesResponse
+BaseModel <|-- DomainModel
+BaseModel <|-- ExpandableData
+BaseModel <|-- FilterSpec
+BaseModel <|-- GraphicalQueryRequest
+BaseModel <|-- GraphicalResponse
+BaseModel <|-- GreatTablesResponse
+BaseModel <|-- HealthResponse
+BaseModel <|-- MeasureTuple
+BaseModel <|-- MetricQueryRequest
+BaseModel <|-- MetricResponse
+BaseModel <|-- MetricValue
+BaseModel <|-- PageFilters
+BaseModel <|-- PivotQueryRequest
+BaseModel <|-- SeriesData
+BaseModel <|-- SortConfig
+BaseModel <|-- SortSpec
+BaseModel <|-- TableColumn
+BaseModel <|-- TableDataQueryRequest
+BaseModel <|-- TableResponse
+BaseModel <|-- TotalsSpec
+BaseModel <|-- WindowSpec
+BaseProvider <|-- AlphaVantageProvider
+BaseProvider <|-- SocrataBaseProvider
+BaseRegistry <|-- AlphaVantageRegistry
+ConfigurationError <|-- InvalidConfigError
+ConfigurationError <|-- MissingConfigError
+DataConnection <|-- DuckDBConnection
+DataConnection <|-- SparkConnection
+DataOps <|-- DuckDBOps
+DataOps <|-- SparkOps
+DeFunkError <|-- ConfigurationError
+DeFunkError <|-- ConnectionError
+DeFunkError <|-- ForecastError
+DeFunkError <|-- ModelError
+DeFunkError <|-- PipelineError
+DeFunkError <|-- QueryError
+DeFunkError <|-- StorageError
+ExhibitHandler <|-- BoxHandler
+ExhibitHandler <|-- GraphicalHandler
+ExhibitHandler <|-- MetricsHandler
+ExhibitHandler <|-- PivotHandler
+ExhibitHandler <|-- TableDataHandler
+ForecastError <|-- InsufficientDataError
+ForecastError <|-- ModelTrainingError
+ModelError <|-- DependencyError
+ModelError <|-- MeasureError
+ModelError <|-- ModelNotFoundError
+ModelError <|-- TableNotFoundError
+PipelineError <|-- IngestionError
+PipelineError <|-- RateLimitError
+PipelineError <|-- TransformationError
+QueryError <|-- FilterError
+QueryError <|-- JoinError
+Session <|-- BuildSession
+Session <|-- IngestSession
+Session <|-- QuerySession
+SocrataBaseProvider <|-- ChicagoProvider
+SocrataBaseProvider <|-- CookCountyProvider
+SqlOps <|-- DuckDBSql
+SqlOps <|-- SparkSql
+StorageError <|-- DataNotFoundError
+StorageError <|-- WriteError
+
+AppConfig *-- ConnectionConfig : connection
+AppConfig *-- DebugConfig : debug
+BaseTemplate *-- SchemaField : canonical_fields
+BaseTemplate *-- TableConfig : tables
+BoxQueryRequest *-- FilterSpec : filters
+BoxQueryRequest *-- PageFilters : page_filters
+BoxQueryRequest *-- SortSpec : sort
+BuildSpec *-- PhaseSpec : phases
+BuilderRegistry *-- BaseModelBuilder : _builders
+CircuitBreakerManager *-- CircuitBreakerConfig : DEFAULT_CONFIGS
+CircuitBreakerManager *-- CircuitBreakerManager : _instance
+ConnectionConfig *-- DuckDBConfig : duckdb
+ConnectionConfig *-- SparkConfig : spark
+DomainModelConfig *-- BuildSpec : build
+DomainModelConfig *-- GraphSpec : graph
+DomainModelConfig *-- HooksConfig : hooks
+DomainModelConfig *-- MLModelSpec : ml_models
+DomainModelConfig *-- MeasuresSpec : measures
+DomainModelConfig *-- ModelStorageSpec : storage
+DomainModelConfig *-- SourceConfig : sources
+DomainModelConfig *-- TableConfig : tables
+EndpointConfig *-- BronzeConfig : bronze
+EndpointConfig *-- EndpointSchemaField : schema
+EndpointConfig *-- SchemaField : schema
+FetchResult *-- DataType : data_type
+GraphSpec *-- EdgeSpec : edges
+GraphicalQueryRequest *-- FilterSpec : filters
+GraphicalQueryRequest *-- PageFilters : page_filters
+GraphicalQueryRequest *-- SortSpec : sort
+GraphicalResponse *-- SeriesData : series
+GreatTablesResponse *-- ExpandableData : expandable
+HooksConfig *-- HookDef : after_build
+HooksConfig *-- HookDef : before_build
+HooksConfig *-- HookDef : post_build
+HooksConfig *-- HookDef : pre_build
+IngestionResults *-- WorkItemResult : results
+MeasuresSpec *-- MeasureDef : computed
+MeasuresSpec *-- MeasureDef : simple
+MetricQueryRequest *-- FilterSpec : filters
+MetricQueryRequest *-- MeasureTuple : metrics
+MetricQueryRequest *-- PageFilters : page_filters
+MetricResponse *-- MetricValue : metrics
+PipelineCheckpoint *-- TickerCheckpoint : tickers
+PivotQueryRequest *-- BucketSpec : buckets
+PivotQueryRequest *-- FilterSpec : filters
+PivotQueryRequest *-- MeasureTuple : measures
+PivotQueryRequest *-- PageFilters : page_filters
+PivotQueryRequest *-- SortConfig : sort
+PivotQueryRequest *-- TotalsSpec : totals
+PivotQueryRequest *-- WindowSpec : windows
+ProviderRegistry *-- ProviderInfo : _providers
+RateLimiterManager *-- RateLimiterManager : _instance
+RepoContext *-- AppConfig : _config
+RunConfig *-- ClusterConfig : cluster
+RunConfig *-- RetryConfig : retry
+SortConfig *-- SortSpec : cols
+SortConfig *-- SortSpec : rows
+SourceConfig *-- AliasSpec : aliases
+TableConfig *-- EnrichSpec : enrich
+TableConfig *-- MeasureDef : measures
+TableConfig *-- PipelineStep : pipeline
+TableConfig *-- SchemaField : schema
+TableDataQueryRequest *-- ColumnTuple : columns
+TableDataQueryRequest *-- FilterSpec : filters
+TableDataQueryRequest *-- PageFilters : page_filters
+TableResponse *-- TableColumn : columns
+TokenBucket *-- RateLimitConfig : config
+ValidationReport *-- ValidationIssue : issues
+
+AlphaVantageProvider ..> SparkNormalizer : _normalize_spark_df()
+AlphaVantageProvider ..> SparkNormalizer : normalize()
+BaseModel ..> HookRunner : _run_hooks()
+BaseModelBuilder ..> ConfigurationError : build()
+BaseModelBuilder ..> ErrorContext : build()
+BaseModelBuilder ..> ModelError : build()
+BaseModelBuilder ..> StorageError : build()
+BuildSession ..> BuildResult : build()
+BuildSession ..> DomainBuilderFactory : build()
+DeFunk ..> BuildSession : build_session()
+DeFunk ..> ConfigLoader : from_config()
+DeFunk ..> FieldResolver : query_session()
+DeFunk ..> IngestSession : ingest_session()
+DeFunk ..> QuerySession : query_session()
+DomainBuilderFactory ..> DomainConfigLoaderV4 : _create_builder_class()
+DomainBuilderFactory ..> DomainConfigLoaderV4 : create_builders()
+DomainModel ..> HookRunner : custom_node_loading()
+Engine ..> DataNotFoundError : read()
+Engine ..> ExhibitHandler : distinct_values_by_measure()
+Engine ..> WriteError : write()
+GraphBuilder ..> NodeExecutor : _build_nodes()
+HookRunner ..> ErrorContext : run()
+IngestorEngine ..> StorageRouter : __init__()
+NodeExecutor ..> ErrorContext : execute_node()
+RepoContext ..> ConnectionFactory : from_repo_root()
+Session ..> StorageRouter : __init__()
+
+legend right
+  191 classes, 66 inheritance,
+  68 composition, 26 dependency edges
+  ---
+  | Color | Layer |
+  |<#FFCC66> Gold | Data Classes |
+  |<#80E0D0> Teal | Engine/Sessions/Resolution |
+  |<#FF9933> Orange | Build Path |
+  |<#B3D9FF> Blue | API Layer |
+  |<#CC9966> Brown | Ingestion |
+  |<#CC99FF> Purple | Orchestration |
+  |<#FFC0C0> Red | Exceptions |
+  |<#B3FFB3> Green | Hooks/Artifacts |
+  |<#E6E6E6> Gray | Infrastructure |
+endlegend
+
+@enduml
