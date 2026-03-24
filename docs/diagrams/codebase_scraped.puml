@@ -523,10 +523,8 @@ package "Build Path" #FF9933 {
     --
     + get_model_class()
     + get_model_config()
-    + create_model_instance()
-    + get_required_bronze_tables()
-    + validate_bronze_tables()
-    + pre_build()
+    + build()
+    + get_dependencies()
   }
 
   class BuildContext {
@@ -547,10 +545,8 @@ package "Build Path" #FF9933 {
     + _builders
     --
     + register()
-    + get()
     + all()
     + discover()
-    + get_build_order()
     + clear()
   }
 
@@ -648,22 +644,6 @@ package "Domain Builders" #FF9933 {
     + run_forecast_for_ticker()
   }
 
-  class SecuritiesBuilder {
-    + model_name
-    + depends_on
-    --
-    + get_model_class()
-    + post_build()
-  }
-
-  class StocksBuilder {
-    + model_name
-    + depends_on
-    --
-    + get_model_class()
-    + post_build()
-  }
-
   class StocksSourceValidator {
     + get_required_columns()
     + get_optional_columns()
@@ -671,15 +651,6 @@ package "Domain Builders" #FF9933 {
     + get_date_column()
     + get_entity_column()
     + get_min_rows()
-  }
-
-  class TemporalBuilder {
-    + model_name
-    + depends_on
-    --
-    + get_model_class()
-    + pre_build()
-    + post_build()
   }
 
   class TemporalModel {
@@ -983,9 +954,6 @@ package "Utils" #E6E6E6 {
 ' ── Inheritance (auto-detected from class bases) ──
 BaseModel <|-- TemporalModel
 BaseModel <|-- TimeSeriesForecastModel
-BaseModelBuilder <|-- SecuritiesBuilder
-BaseModelBuilder <|-- StocksBuilder
-BaseModelBuilder <|-- TemporalBuilder
 BaseProvider <|-- AlphaVantageProvider
 BaseProvider <|-- SocrataBaseProvider
 DataConnection <|-- DuckDBConnection
@@ -1078,7 +1046,7 @@ legend right
   |<#B3FFB3> Green | Plugins + Artifacts |
   ---
   **Edge types (all auto-detected):**
-  Inheritance: 26
+  Inheritance: 23
   Composition: 38
   Dependencies: 16 cross-package
 endlegend
