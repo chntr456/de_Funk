@@ -16,16 +16,11 @@ logger = logging.getLogger(__name__)
 # Custom model classes for models with specialized build logic.
 # Maps model_name -> (module_path, class_name).
 # Models not listed here use the generic DomainModel.
-# Models with custom Python classes (for logic that can't be YAML hooks).
-# TemporalModel: custom_node_loading returns a DataFrame (calendar generation).
-# All other models use generic DomainModel — hooks declared in YAML.
-CUSTOM_MODEL_CLASSES = {
-    "temporal": (
-        "de_funk.models.domains.foundation.temporal.model",
-        "TemporalModel",
-    ),
-    # corporate.entity: CIK enrichment moved to YAML hook → plugins/company_cik.py
-}
+# All models use generic DomainModel. Custom logic lives in hooks/:
+#   temporal: hooks/temporal/calendar.py (custom_node_loading → @pipeline_hook)
+#   corporate.entity: hooks/corporate/cik_enrichment.py (after_build → YAML hook)
+#   securities.forecast: hooks/securities/forecast.py (post_build → YAML hook)
+CUSTOM_MODEL_CLASSES = {}
 
 
 def _import_model_class(module_path: str, class_name: str) -> type:

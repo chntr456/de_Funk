@@ -131,12 +131,23 @@ class DomainModel:
         """
         Handle domain-config-specific node types that GraphBuilder can't process.
 
-        Intercepts:
-        - __seed__ nodes: create DataFrame from inline data
-        - __union__ nodes: load and UNION multiple sources
-        - __generated__ nodes: post-build computation (returns None to skip)
-        - __distinct__ nodes: SELECT DISTINCT / GROUP BY from other tables
+        Resolution order:
+        1. Check @pipeline_hook("custom_node_loading") for this model
+        2. Handle built-in markers: __seed__, __union__, __distinct__, __generated__
+        3. Handle transforms: window, unpivot
+        4. Return None → GraphBuilder handles it as standard node
         """
+        # 1. Check hooks (e.g. temporal calendar generation)
+        from de_funk.core.hooks import HookRunner
+        runner = HookRunner(self.model_cfg, model_name=self.model_name)
+        engine = self.build_session.engine if self.build_session and hasattr(self.build_session, 'engine') else None
+        hook_result = runner.run("custom_node_loading",
+                                 engine=engine, model=self,
+                                 node_id=node_id, node_config=node_config)
+        if hook_result is not None:
+            return hook_result
+
+        # 2. Built-in markers
         from_spec = node_config.get("from", "")
 
         if from_spec == "__seed__":
