@@ -17,6 +17,11 @@ ml_models:
   prophet_30d: {type: prophet, target: [close], lookback_days: 365, forecast_horizon: 30}
   random_forest_14d: {type: random_forest, target: [close], lookback_days: 90, forecast_horizon: 14}
 
+hooks:
+  post_build:
+    - {fn: de_funk.plugins.forecast.train_and_save,
+       params: {methods: [arima, prophet, random_forest], horizon: 30}}
+
 graph:
   edges:
     - [forecast_price_to_prediction_cal, fact_forecast_price, temporal.dim_calendar, [prediction_date_id=date_id], many_to_one, temporal]

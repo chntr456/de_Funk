@@ -1056,11 +1056,18 @@ Engine *-- SqlOps : _sql
 Session *-- StorageRouter
 NodeExecutor ..> Engine : delegates ops
 ExhibitHandler ..> Engine : _engine
-BaseModel ..> BuildPluginRegistry : _run_hooks
 IngestorEngine *-- RawSink
 IngestorEngine *-- BronzeSink
 IngestorEngine *-- BaseProvider
 IngestorEngine ..> IngestSession : composes
+
+' Hook → Forecast → Artifact chain
+DomainModelConfig *-- HooksConfig : hooks
+DomainModelConfig *-- MLModelSpec : ml_models
+HooksConfig *-- HookDef : hook definitions
+BaseModel ..> BuildPluginRegistry : _run_hooks dispatches
+BuildPluginRegistry ..> ArtifactStore : plugins save models via
+BuildPluginRegistry ..> NodeExecutor : registers ops into
 
 legend right
   | Color | Layer |
