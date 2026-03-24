@@ -49,7 +49,7 @@ def _generate_spark(model, start: str, end: str, fiscal_start: int):
     """Generate calendar via Spark SQL."""
     from pyspark.sql import functions as F
 
-    spark = getattr(model.connection, 'spark', model.connection)
+    spark = model.connection
 
     df = spark.sql(f"""
         SELECT explode(sequence(

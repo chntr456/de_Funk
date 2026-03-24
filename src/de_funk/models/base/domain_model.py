@@ -378,7 +378,7 @@ class DomainModel(BaseModel):
                 sql = f"SELECT {select_clause} FROM {view_name} GROUP BY {group_clause}"
 
                 logger.debug(f"  Aggregate SQL: {sql}")
-                spark = getattr(self.connection, 'spark', None) or self.connection
+                spark = self.connection
                 df = spark.sql(sql)
             else:
                 raise NotImplementedError("Aggregate transform not yet supported for DuckDB")
@@ -631,7 +631,7 @@ class DomainModel(BaseModel):
             spark_schema = StructType([
                 StructField(name, StringType(), True) for name in col_names
             ])
-            return self.connection.spark.createDataFrame([], spark_schema)
+            return self.connection.createDataFrame([], spark_schema)
         else:
             import pandas as pd
             empty = pd.DataFrame(columns=col_names)
@@ -696,7 +696,7 @@ class DomainModel(BaseModel):
                 cleaned_data.append(cleaned_row)
             seed_data = cleaned_data
 
-        return self.connection.spark.createDataFrame(seed_data, spark_schema)
+        return self.connection.createDataFrame(seed_data, spark_schema)
 
     def _seed_to_duckdb_df(
         self,
@@ -788,7 +788,7 @@ class DomainModel(BaseModel):
         sql = f"SELECT {id_cols_str}, {stack_expr} FROM {view_name}"
         logger.debug(f"  Unpivot SQL for {node_id}: {sql[:200]}...")
 
-        spark = getattr(self.connection, 'spark', None) or self.connection
+        spark = self.connection
         result = spark.sql(sql)
 
         # Filter out NULL values (columns that didn't exist in this row)
