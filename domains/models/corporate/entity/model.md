@@ -7,6 +7,11 @@ extends: [_base.entity.company]
 depends_on: [temporal]
 
 sources_from: sources/entity/
+
+hooks:
+  after_build:
+    - {fn: de_funk.plugins.company_cik.fix_company_ids}
+
 storage:
   format: delta
   silver:
