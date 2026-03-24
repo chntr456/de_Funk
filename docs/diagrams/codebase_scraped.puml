@@ -575,15 +575,6 @@ package "Build Path" #FF9933 {
     + build()
   }
 
-  class TimeSeriesForecastModel {
-    + get_source_model_name()
-    + get_source_table_name()
-    + get_entity_column()
-    + get_date_column()
-    + get_training_data()
-    + run_forecast_for_entity()
-  }
-
   class ValidationIssue {
     + level
     + category
@@ -621,37 +612,6 @@ package "Pipeline Executor" #FF9933 {
 }
 
 package "Domain Builders" #FF9933 {
-
-  class ForecastDataValidator {
-    + MIN_POINTS_ARIMA
-    + MIN_POINTS_PROPHET
-    + MIN_POINTS_RF
-    --
-    + get_required_columns()
-    + get_optional_columns()
-    + get_numeric_columns()
-    + get_date_column()
-    + get_entity_column()
-    + get_valid_ranges()
-  }
-
-  class ForecastModel {
-    + get_source_model_name()
-    + get_source_table_name()
-    + get_entity_column()
-    + get_date_column()
-    + get_training_data()
-    + run_forecast_for_ticker()
-  }
-
-  class StocksSourceValidator {
-    + get_required_columns()
-    + get_optional_columns()
-    + get_numeric_columns()
-    + get_date_column()
-    + get_entity_column()
-    + get_min_rows()
-  }
 
   class TemporalModel {
     + DEFAULT_START_DATE
@@ -953,15 +913,12 @@ package "Utils" #E6E6E6 {
 
 ' ── Inheritance (auto-detected from class bases) ──
 BaseModel <|-- TemporalModel
-BaseModel <|-- TimeSeriesForecastModel
 BaseProvider <|-- AlphaVantageProvider
 BaseProvider <|-- SocrataBaseProvider
 DataConnection <|-- DuckDBConnection
 DataConnection <|-- SparkConnection
 DataOps <|-- DuckDBOps
 DataOps <|-- SparkOps
-DataValidator <|-- ForecastDataValidator
-DataValidator <|-- StocksSourceValidator
 ExhibitHandler <|-- BoxHandler
 ExhibitHandler <|-- GraphicalHandler
 ExhibitHandler <|-- MetricsHandler
@@ -974,7 +931,6 @@ SocrataBaseProvider <|-- ChicagoProvider
 SocrataBaseProvider <|-- CookCountyProvider
 SqlOps <|-- DuckDBSql
 SqlOps <|-- SparkSql
-TimeSeriesForecastModel <|-- ForecastModel
 
 ' ── Composition (auto-detected from type annotations + __init__) ──
 AppConfig *-- ConnectionConfig : connection
@@ -1046,7 +1002,7 @@ legend right
   |<#B3FFB3> Green | Plugins + Artifacts |
   ---
   **Edge types (all auto-detected):**
-  Inheritance: 23
+  Inheritance: 19
   Composition: 38
   Dependencies: 16 cross-package
 endlegend
