@@ -611,17 +611,6 @@ package "Pipeline Executor" #FF9933 {
 
 }
 
-package "Domain Builders" #FF9933 {
-
-  class TemporalModel {
-    + DEFAULT_START_DATE
-    + DEFAULT_END_DATE
-    --
-    + custom_node_loading()
-  }
-
-}
-
 package "Handler Hierarchy" #B3D9FF {
 
   class BoxHandler {
@@ -912,7 +901,6 @@ package "Utils" #E6E6E6 {
 }
 
 ' ── Inheritance (auto-detected from class bases) ──
-BaseModel <|-- TemporalModel
 BaseProvider <|-- AlphaVantageProvider
 BaseProvider <|-- SocrataBaseProvider
 DataConnection <|-- DuckDBConnection
@@ -984,6 +972,7 @@ DeFunk ..> IngestSession : ingest_session()
 DeFunk ..> QuerySession : query_session()
 DomainBuilderFactory ..> DomainConfigLoaderV4 : _create_builder_class()
 DomainBuilderFactory ..> DomainConfigLoaderV4 : create_builders()
+DomainModel ..> HookRunner : custom_node_loading()
 Engine ..> ExhibitHandler : distinct_values_by_measure()
 GraphBuilder ..> BuildSession : _get_or_create_session()
 GraphBuilder ..> Engine : _get_or_create_session()
@@ -1002,9 +991,9 @@ legend right
   |<#B3FFB3> Green | Plugins + Artifacts |
   ---
   **Edge types (all auto-detected):**
-  Inheritance: 19
+  Inheritance: 18
   Composition: 38
-  Dependencies: 16 cross-package
+  Dependencies: 17 cross-package
 endlegend
 
 @enduml
