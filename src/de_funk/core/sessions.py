@@ -72,29 +72,15 @@ class BuildSession(Session):
         return model.get("depends_on", []) if isinstance(model, dict) else getattr(model, 'depends_on', [])
 
     def build(self, model_name: str) -> Any:
-        """Build a single model via BaseModelBuilder pipeline.
-
-        Returns a BuildResult dataclass.
-        """
+        """Build a single model — passes this session directly to the builder."""
         import time
         t0 = time.perf_counter()
         logger.info(f"BuildSession.build({model_name})")
 
         try:
             from de_funk.models.base.domain_builder import DomainBuilderFactory
-            from de_funk.models.base.builder import BuildContext, BuildResult
+            from de_funk.models.base.builder import BuildResult
 
-            # Create BuildContext from session config
-            context = BuildContext(
-                spark=self.engine._conn if self.engine.backend == "spark" else None,
-                storage_config=self._storage_config,
-                repo_root=Path(self._kwargs.get("repo_root", ".")),
-                date_from=self._kwargs.get("date_from", "2020-01-01"),
-                date_to=self._kwargs.get("date_to", "2099-12-31"),
-                max_tickers=self._kwargs.get("max_tickers"),
-            )
-
-            # Find and run the builder
             builders = DomainBuilderFactory.create_builders(
                 Path(self._kwargs.get("repo_root", ".")) / "domains"
             )
@@ -106,7 +92,7 @@ class BuildSession(Session):
                 )
 
             builder_cls = builders[model_name]
-            builder = builder_cls(context)
+            builder = builder_cls(self)  # Pass session directly
             result = builder.build()
             return result
         except Exception as e:

@@ -1,4 +1,4 @@
-"""Tests for Build Path Migration — Phase 8."""
+"""Tests for Build Path — session-first model building."""
 import pytest
 from unittest.mock import MagicMock, patch
 
@@ -10,17 +10,12 @@ class TestBaseModelRunHooks:
         model = MagicMock(spec=BaseModel)
         model.model_cfg = {"hooks": {}}
         model.model_name = "test"
-        model.build_session = None
+        model.engine = MagicMock()
         BaseModel._run_hooks(model, "before_build")
 
     def test_run_hooks_yaml_config(self):
         """YAML hooks are called when configured."""
         from de_funk.models.base.model import BaseModel
-
-        called = []
-        def mock_hook(engine=None, config=None, **params):
-            called.append(("mock_hook", params))
-
         model = MagicMock(spec=BaseModel)
         model.model_cfg = {
             "hooks": {
@@ -30,13 +25,8 @@ class TestBaseModelRunHooks:
             }
         }
         model.model_name = "test"
-        model.build_session = None
-
-        with patch("tests.unit.test_build_migration._test_hook", mock_hook, create=True):
-            import importlib
-            # We can't easily test the dynamic import path without a real module,
-            # so just verify _run_hooks doesn't crash with valid config
-            BaseModel._run_hooks(model, "after_build")
+        model.engine = MagicMock()
+        BaseModel._run_hooks(model, "after_build")
 
     def test_run_hooks_decorator_registry(self):
         """Decorator-registered hooks are discovered by HookRunner."""
@@ -52,75 +42,31 @@ class TestBaseModelRunHooks:
         model = MagicMock(spec=BaseModel)
         model.model_cfg = {"hooks": {}}
         model.model_name = "test_model"
-        model.build_session = None
-
+        model.engine = MagicMock()
         BaseModel._run_hooks(model, "test_hook")
         assert "plugin_called" in called
 
-        # Cleanup
         _decorator_registry["test_hook"]["test_model"].remove(my_hook)
 
 
-class TestBaseModelBuildSession:
-    def test_model_has_build_session_attr(self):
-        """BaseModel has build_session attribute."""
+class TestBaseModelSession:
+    def test_model_takes_session(self):
+        """BaseModel.__init__ takes session as first arg."""
+        import inspect
         from de_funk.models.base.model import BaseModel
-        # Can't easily instantiate BaseModel (needs connection), check class
-        assert "build_session" in BaseModel.__init__.__code__.co_names or True
-        # Just verify the attribute is set in __init__ by reading the source
-        import inspect
-        source = inspect.getsource(BaseModel.__init__)
-        assert "build_session" in source
+        sig = inspect.signature(BaseModel.__init__)
+        params = list(sig.parameters.keys())
+        assert params[1] == "session"  # self, session, model_cfg, params
 
-
-class TestBaseModelBuilderSession:
-    def test_builder_accepts_build_session(self):
-        """BaseModelBuilder accepts optional build_session parameter."""
-        from de_funk.models.base.builder import BaseModelBuilder, BuildContext
+    def test_builder_takes_session(self):
+        """BaseModelBuilder.__init__ takes session."""
         import inspect
+        from de_funk.models.base.builder import BaseModelBuilder
         sig = inspect.signature(BaseModelBuilder.__init__)
-        assert "build_session" in sig.parameters
+        params = list(sig.parameters.keys())
+        assert params[1] == "session"
 
-    def test_builder_injects_session_into_model(self):
-        """Builder injects build_session into created model."""
-        from de_funk.models.base.builder import BaseModelBuilder, BuildContext, BuildResult
-        from unittest.mock import MagicMock
-
-        mock_session = MagicMock()
-        context = MagicMock(spec=BuildContext)
-        context.spark = MagicMock()
-        context.storage_config = {}
-        context.repo_root = MagicMock()
-        context.date_from = "2024-01-01"
-        context.date_to = "2024-12-31"
-        context.max_tickers = None
-
-        # We can't easily test create_model_instance without Spark,
-        # but verify the parameter is stored
-        class TestBuilder(BaseModelBuilder):
-            model_name = "test"
-            def get_model_class(self):
-                return MagicMock
-
-        builder = TestBuilder(context, build_session=mock_session)
-        assert builder.build_session is mock_session
-
-
-class TestBackwardCompat:
-    def test_builder_works_without_session(self):
-        """Builder works without build_session (backward compat)."""
-        from de_funk.models.base.builder import BaseModelBuilder, BuildContext
-        from unittest.mock import MagicMock
-
-        context = MagicMock(spec=BuildContext)
-        context.spark = MagicMock()
-        context.storage_config = {}
-        context.repo_root = MagicMock()
-
-        class TestBuilder(BaseModelBuilder):
-            model_name = "test"
-            def get_model_class(self):
-                return MagicMock
-
-        builder = TestBuilder(context)
-        assert builder.build_session is None
+    def test_no_build_context(self):
+        """BuildContext has been removed."""
+        import de_funk.models.base.builder as builder_mod
+        assert not hasattr(builder_mod, 'BuildContext')

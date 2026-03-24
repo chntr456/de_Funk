@@ -337,9 +337,9 @@ def job_weekly_forecasts():
         ctx = RepoContext.from_repo_root(connection_type="spark")
 
         from de_funk.models.domains.securities.forecast.builder import ForecastBuilder
-        from de_funk.models.base.builder import BuildContext
+        # BuildContext removed — use BuildSession
 
-        build_ctx = BuildContext(
+        # Use DeFunk.build_session() instead
             repo_root=Path(repo_root),
             storage_config=ctx.storage,
             spark=ctx.spark,

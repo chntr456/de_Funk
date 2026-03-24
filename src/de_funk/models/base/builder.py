@@ -1,26 +1,19 @@
 """
 BaseModelBuilder — builds Silver tables from domain configs.
 
-Used by DomainBuilderFactory to create dynamic builders for each model.
+Takes a BuildSession directly — no BuildContext intermediary.
 Each builder declares model_name, depends_on, and get_model_class().
 
-BuildResult captures the outcome of a build (success, rows, duration).
-BuildContext holds shared resources (Spark session, storage config).
+BuildResult captures the outcome of a build.
 """
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Dict, Any, Optional, List, Tuple, Type
+from typing import Dict, Any, Optional, List, Type
 from pathlib import Path
 import logging
 import time
-
-if True:  # TYPE_CHECKING workaround
-    try:
-        from pyspark.sql import SparkSession, DataFrame
-    except ImportError:
-        pass
 
 logger = logging.getLogger(__name__)
 
@@ -44,32 +37,18 @@ class BuildResult:
         return f"✗ {self.model_name}: {self.error}"
 
 
-@dataclass
-class BuildContext:
-    """Shared resources for builders."""
-    spark: Any  # SparkSession
-    storage_config: Dict[str, Any]
-    repo_root: Path
-    date_from: str
-    date_to: str
-    max_tickers: Optional[int] = None
-    dry_run: bool = False
-    verbose: bool = False
-
-
 class BaseModelBuilder(ABC):
-    """Abstract builder for domain models."""
+    """Abstract builder for domain models. Takes BuildSession directly."""
 
     model_name: str = ""
     depends_on: List[str] = []
 
-    def __init__(self, context: BuildContext, build_session=None):
-        self.context = context
-        self.spark = context.spark
-        self.storage_config = context.storage_config
-        self.repo_root = context.repo_root
-        self.build_session = build_session
-        self._model_instance = None
+    def __init__(self, session):
+        """
+        Args:
+            session: BuildSession with engine, storage_router, models, graph
+        """
+        self.session = session
         self._model_config = None
 
     @abstractmethod
@@ -82,7 +61,8 @@ class BaseModelBuilder(ABC):
         if self._model_config is None:
             from de_funk.config.domain import get_domain_loader
             from de_funk.config.domain.config_translator import translate_domain_config
-            domains_dir = self.repo_root / "domains"
+            repo_root = Path(self.session._kwargs.get('repo_root', '.'))
+            domains_dir = repo_root / "domains"
             loader = get_domain_loader(domains_dir)
             raw_config = loader.load_model_config(self.model_name)
             self._model_config = translate_domain_config(raw_config)
@@ -95,47 +75,37 @@ class BaseModelBuilder(ABC):
             model_config = self.get_model_config()
             model_class = self.get_model_class()
 
-            # Create connection
-            from de_funk.core.connection import get_spark_connection
-            connection = get_spark_connection(self.spark)
-
             params = {
-                "DATE_FROM": self.context.date_from,
-                "DATE_TO": self.context.date_to,
+                "repo_root": str(Path(self.session._kwargs.get('repo_root', '.'))),
+                "DATE_FROM": self.session._kwargs.get('date_from', '2020-01-01'),
+                "DATE_TO": self.session._kwargs.get('date_to', '2026-12-31'),
             }
-            if self.context.max_tickers:
-                params["UNIVERSE_SIZE"] = self.context.max_tickers
+            if self.session._kwargs.get('max_tickers'):
+                params["UNIVERSE_SIZE"] = self.session._kwargs['max_tickers']
 
             model = model_class(
-                connection=connection,
-                storage_cfg=self.storage_config,
+                session=self.session,
                 model_cfg=model_config,
                 params=params,
-                repo_root=self.repo_root,
             )
-
-            if self.build_session is not None:
-                model.build_session = self.build_session
 
             dims, facts = model.build()
             model.write_tables()
 
-            duration = time.time() - start
             return BuildResult(
                 model_name=self.model_name,
                 success=True,
                 dimensions=len(dims),
                 facts=len(facts),
-                duration_seconds=duration,
+                duration_seconds=time.time() - start,
             )
         except Exception as e:
-            duration = time.time() - start
             logger.error(f"Build failed for {self.model_name}: {e}", exc_info=True)
             return BuildResult(
                 model_name=self.model_name,
                 success=False,
                 error=str(e),
-                duration_seconds=duration,
+                duration_seconds=time.time() - start,
             )
 
     @classmethod
@@ -145,7 +115,6 @@ class BaseModelBuilder(ABC):
 
 class BuilderRegistry:
     """Registry of discovered model builders."""
-
     _builders: Dict[str, Type[BaseModelBuilder]] = {}
 
     @classmethod
@@ -159,7 +128,7 @@ class BuilderRegistry:
 
     @classmethod
     def discover(cls, models_path: Path) -> None:
-        """Discover builders from Python modules in models/domains/."""
+        """Discover builders from Python modules."""
         import importlib
         if not models_path.exists():
             return

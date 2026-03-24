@@ -30,9 +30,7 @@ class GraphBuilder:
         self.model._run_hooks("before_build")
         self.model.before_build()
 
-        # Ensure we have an Engine — create from connection if no build_session
-        build_session = self._get_or_create_session()
-        nodes = self._build_nodes(build_session)
+        nodes = self._build_nodes(self.model.session)
 
         dims = {k: v for k, v in nodes.items() if k.startswith("dim_")}
         facts = {k: v for k, v in nodes.items() if k.startswith("fact_")}
@@ -41,34 +39,6 @@ class GraphBuilder:
         self.model._run_hooks("after_build", dims=dims, facts=facts)
 
         return dims, facts
-
-    def _get_or_create_session(self):
-        """Get existing BuildSession or create a minimal one from the connection."""
-        build_session = getattr(self.model, 'build_session', None)
-        if build_session is not None and hasattr(build_session, 'engine') and build_session.engine._ops is not None:
-            return build_session
-
-        # Create Engine from the connection
-        from de_funk.core.engine import Engine
-
-        backend = self.model.backend
-        if backend == 'spark':
-            spark = getattr(self.model.connection, 'spark', self.model.connection)
-            engine = Engine.for_spark(spark, storage_config=self.model.storage_cfg)
-        else:
-            engine = Engine.for_duckdb(storage_config=self.model.storage_cfg)
-
-        # Create a minimal BuildSession
-        from de_funk.core.sessions import BuildSession
-        session = BuildSession(
-            engine=engine,
-            models={},
-            graph=None,
-            storage_config=self.model.storage_cfg,
-        )
-        # Inject into model so write_tables can use it too
-        self.model.build_session = session
-        return session
 
     def _build_nodes(self, build_session) -> Dict[str, DataFrame]:
         """Build all nodes via NodeExecutor."""
@@ -110,8 +80,7 @@ class GraphBuilder:
         """Load a Bronze table via StorageRouter + Engine."""
         table_ref = f"bronze.{table_name}"
         path = self.model.storage_router.resolve(table_ref)
-        session = self._get_or_create_session()
-        return session.engine.read(path)
+        return self.model.engine.read(path)
 
     def _load_silver_table(self, model_name: str, table_name: str) -> DataFrame:
         """Load a Silver table from another model."""
@@ -125,13 +94,11 @@ class GraphBuilder:
         model_path = model_name.replace(".", "/")
         table_ref = f"silver.{model_path}/{subdir}/{table_name}" if subdir else f"silver.{model_path}/{table_name}"
         path = self.model.storage_router.resolve(table_ref)
-        session = self._get_or_create_session()
-        return session.engine.read(path)
+        return self.model.engine.read(path)
 
     def _apply_derive(self, df: DataFrame, col_name: str, expr: str, node_id: str) -> DataFrame:
         """Apply a derive expression via Engine."""
-        session = self._get_or_create_session()
-        return session.engine.derive(df, col_name, expr)
+        return self.model.engine.derive(df, col_name, expr)
 
     # ── Node config translation ───────────────────────────
 

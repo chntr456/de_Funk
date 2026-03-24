@@ -15,6 +15,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from pathlib import Path
 import logging
 
+from de_funk.models.base.model import BaseModel
 from de_funk.config.domain.config_translator import _normalize_from
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,7 @@ def _find_derived_source_cols(
     return extras
 
 
-class DomainModel:
+class DomainModel(BaseModel):
     """
     BaseModel subclass that handles domain config specifics.
 
@@ -88,36 +89,8 @@ class DomainModel:
         model.build()
     """
 
-    # Import BaseModel lazily to avoid circular imports
-    _base_class = None
-
-    @classmethod
-    def _get_base_class(cls):
-        if cls._base_class is None:
-            from de_funk.models.base.model import BaseModel
-            cls._base_class = BaseModel
-        return cls._base_class
-
-    def __new__(cls, *args, **kwargs):
-        """Dynamically inherit from BaseModel to avoid import-time issues."""
-        base = cls._get_base_class()
-        # Create a new class that inherits from both DomainModel and BaseModel
-        if not issubclass(cls, base):
-            # Rebuild the class with BaseModel as parent
-            cls = type('DomainModel', (cls, base), dict(cls.__dict__))
-            cls._base_class = base
-        return base.__new__(cls)
-
-    def __init__(
-        self,
-        connection,
-        storage_cfg: Dict,
-        model_cfg: Dict,
-        params: Dict = None,
-        repo_root: Optional[Path] = None,
-    ):
-        base = self._get_base_class()
-        base.__init__(self, connection, storage_cfg, model_cfg, params, repo_root)
+    def __init__(self, session, model_cfg: Dict, params: Dict = None):
+        super().__init__(session, model_cfg, params)
 
         # Domain-config-specific state
         self._domain_build = model_cfg.get("_domain_build", {})

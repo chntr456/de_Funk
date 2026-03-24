@@ -590,7 +590,7 @@ class TestDomainBuilderFactory:
     def test_domain_builder_uses_custom_model_class(self):
         """Models in CUSTOM_MODEL_CLASSES get their custom model class."""
         from de_funk.models.base.domain_builder import DomainBuilderFactory, CUSTOM_MODEL_CLASSES
-        from de_funk.models.base.builder import BuilderRegistry, BuildContext
+        from de_funk.models.base.builder import BuilderRegistry
 
         domains_dir = project_root / "domains"
         if not (domains_dir / "models").exists():
@@ -606,14 +606,9 @@ class TestDomainBuilderFactory:
             for model_name in CUSTOM_MODEL_CLASSES:
                 if model_name in created:
                     builder_cls = created[model_name]
-                    mock_context = MagicMock(spec=BuildContext)
-                    mock_context.spark = MagicMock()
-                    mock_context.storage_config = {}
-                    mock_context.repo_root = project_root
-                    mock_context.date_from = "2024-01-01"
-                    mock_context.date_to = "2024-12-31"
-                    mock_context.max_tickers = None
-                    builder = builder_cls(mock_context)
+                    mock_session = MagicMock()
+                    mock_session._kwargs = {"repo_root": str(project_root)}
+                    builder = builder_cls(mock_session)
                     model_cls = builder.get_model_class()
                     expected_class_name = CUSTOM_MODEL_CLASSES[model_name][1]
                     assert model_cls.__name__ == expected_class_name, \
@@ -624,7 +619,7 @@ class TestDomainBuilderFactory:
     def test_domain_builder_config_uses_v4_loader(self):
         """Builder's get_model_config uses v4 loader + translator."""
         from de_funk.models.base.domain_builder import DomainBuilderFactory
-        from de_funk.models.base.builder import BuilderRegistry, BuildContext
+        from de_funk.models.base.builder import BuilderRegistry
 
         domains_dir = project_root / "domains"
         if not (domains_dir / "models").exists():
@@ -645,15 +640,11 @@ class TestDomainBuilderFactory:
             model_name, builder_cls = next(iter(created.items()))
 
             # Create a mock context
-            mock_context = MagicMock(spec=BuildContext)
-            mock_context.spark = MagicMock()
-            mock_context.storage_config = {}
-            mock_context.repo_root = project_root
-            mock_context.date_from = "2024-01-01"
-            mock_context.date_to = "2024-12-31"
-            mock_context.max_tickers = None
+            mock_session = MagicMock()
+            mock_session.engine = MagicMock()
+            mock_session._kwargs = {"repo_root": str(project_root)}
 
-            builder = builder_cls(mock_context)
+            builder = builder_cls(mock_session)
             config = builder.get_model_config()
 
             # The translated config should have graph.nodes
