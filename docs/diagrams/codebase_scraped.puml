@@ -845,6 +845,8 @@ package "Model Artifacts" #B3FFB3 {
 
 package "Core" #80E0D0 {
 
+  class ErrorContext
+
   class HookRunner {
     + run()
     + has_hooks()
@@ -946,6 +948,7 @@ ValidationReport *-- ValidationIssue : issues
 
 ' ── Dependencies (auto-detected from lazy imports in methods) ──
 BaseModel ..> HookRunner : _run_hooks()
+BaseModelBuilder ..> ErrorContext : build()
 BuildSession ..> BuildResult : build()
 BuildSession ..> DomainBuilderFactory : build()
 DeFunk ..> BuildSession : build_session()
@@ -958,6 +961,7 @@ DomainBuilderFactory ..> DomainConfigLoaderV4 : create_builders()
 DomainModel ..> HookRunner : custom_node_loading()
 Engine ..> ExhibitHandler : distinct_values_by_measure()
 GraphBuilder ..> NodeExecutor : _build_nodes()
+NodeExecutor ..> ErrorContext : execute_node()
 RepoContext ..> ConnectionFactory : from_repo_root()
 
 legend right
@@ -974,7 +978,7 @@ legend right
   **Edge types (all auto-detected):**
   Inheritance: 19
   Composition: 37
-  Dependencies: 14 cross-package
+  Dependencies: 16 cross-package
 endlegend
 
 @enduml
