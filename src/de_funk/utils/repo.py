@@ -18,7 +18,7 @@ Usage:
     # Option 3: Use with context manager (auto-cleanup)
     from de_funk.utils.repo import repo_imports
     with repo_imports() as repo_root:
-from de_funk.core.context import RepoContext
+        from de_funk.core.context import RepoContext
         # ... your code ...
 """
 
@@ -37,7 +37,7 @@ def get_repo_root(start_path: Optional[Path] = None) -> Path:
     Find repository root by walking up from start_path.
 
     This is the single source of truth for repo root discovery.
-    Uses markers (configs/, core/, .git/) to identify the root.
+    Uses markers (src/, configs/, .git/) to identify the root.
 
     Args:
         start_path: Starting path for search. If None, starts from this file's location.
@@ -99,7 +99,6 @@ def setup_repo_imports(start_path: Optional[Path] = None) -> Path:
 
         # Now you can import from the de_funk package:
         from de_funk.core.context import RepoContext
-        # UniversalSession removed
     """
     repo_root = get_repo_root(start_path)
 
@@ -183,7 +182,7 @@ def verify_repo_structure() -> bool:
     try:
         repo_root = get_repo_root()
 
-        # Required directories (new src/de_funk structure)
+        # Required directories
         required_dirs = [
             "src/de_funk",
             "src/de_funk/config",
@@ -191,7 +190,6 @@ def verify_repo_structure() -> bool:
             "src/de_funk/models",
             "src/de_funk/utils",
             "configs",
-            "app",
             "scripts",
         ]
 

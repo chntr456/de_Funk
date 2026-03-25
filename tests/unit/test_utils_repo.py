@@ -14,9 +14,9 @@ import shutil
 # Bootstrap
 _current = Path(__file__).resolve()
 for _parent in [_current.parent] + list(_current.parents):
-    if (_parent / "configs").exists() and (_parent / "core").exists():
-        if str(_parent) not in sys.path:
-            sys.path.insert(0, str(_parent))
+    if (_parent / "configs").exists() and (_parent / "src").exists():
+        if str(_parent / "src") not in sys.path:
+            sys.path.insert(0, str(_parent / "src"))
         break
 
 from de_funk.utils.repo import get_repo_root, setup_repo_imports, verify_repo_structure, repo_imports
@@ -32,7 +32,7 @@ class TestGetRepoRoot(unittest.TestCase):
         self.assertIsInstance(repo_root, Path)
         self.assertTrue(repo_root.exists())
         self.assertTrue((repo_root / "configs").exists())
-        self.assertTrue((repo_root / "core").exists())
+        self.assertTrue((repo_root / "src" / "de_funk").exists())
 
     def test_repo_root_is_absolute(self):
         """Test that returned path is absolute."""
@@ -81,16 +81,14 @@ class TestSetupRepoImports(unittest.TestCase):
 
     def test_idempotent(self):
         """Test that calling multiple times doesn't duplicate in sys.path."""
-        original_len = len(sys.path)
-
         setup_repo_imports()
         setup_repo_imports()
         setup_repo_imports()
 
-        # Should not have added repo root multiple times
+        # Should not have added src path multiple times
         repo_root = get_repo_root()
-        count = sys.path.count(str(repo_root))
-        self.assertLessEqual(count, 1)
+        src_count = sys.path.count(str(repo_root / "src"))
+        self.assertLessEqual(src_count, 1)
 
 
 class TestVerifyRepoStructure(unittest.TestCase):
@@ -162,11 +160,12 @@ class TestRepoRootConsistency(unittest.TestCase):
         repo_root = get_repo_root()
 
         expected_dirs = [
-            "config",
+            "src/de_funk",
+            "src/de_funk/config",
+            "src/de_funk/core",
+            "src/de_funk/models",
+            "src/de_funk/utils",
             "configs",
-            "core",
-            "models",
-            "utils",
             "scripts",
             "docs",
         ]
