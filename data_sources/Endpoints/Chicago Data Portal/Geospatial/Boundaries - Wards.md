@@ -42,6 +42,8 @@ date_column: null
 schema:
   - [ward, int, ward, false, "Ward number (1-50)"]
   - [alderman, string, alderman, true, "Alderman name"]
+  - [st_area_sh, double, st_area_sh, true, "Shape area (sq feet)"]
+  - [st_length_, double, st_length_, true, "Shape perimeter (feet)"]
   - [the_geom, string, the_geom, true, "GeoJSON geometry"]
 ---
 

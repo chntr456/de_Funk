@@ -15,7 +15,7 @@ aliases:
   - [centroid_lat, "CAST(get_json_object(the_geom, '$.coordinates[0][0][0][1]') AS DOUBLE)"]
   - [centroid_lon, "CAST(get_json_object(the_geom, '$.coordinates[0][0][0][0]') AS DOUBLE)"]
   - [geom_wkt, the_geom]
-  - [area_sqmi, shape_area]
+  - [area_sqmi, st_area_sh]
   - [population, "null"]
 ---
 

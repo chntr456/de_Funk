@@ -43,6 +43,8 @@ schema:
   - [zone_type, string, zone_type, false, "Zoning type"]
   - [zone_class, string, zone_class, true, "Zoning classification"]
   - [ordinance_date, date, ordinance_date, true, "Ordinance date", {transform: "to_date(yyyy-MM-dd)"}]
+  - [shape_area, double, shape_area, true, "Shape area (sq feet)"]
+  - [shape_len, double, shape_len, true, "Shape perimeter (feet)"]
   - [the_geom, string, the_geom, true, "GeoJSON geometry"]
 ---
 
