@@ -19,6 +19,7 @@ required_params: []
 # Pagination
 pagination_type: offset
 bulk_download: true
+download_method: csv
 
 # Metadata
 domain: transportation
