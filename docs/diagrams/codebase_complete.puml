@@ -1026,7 +1026,7 @@ package "Pipeline Infrastructure (19)" #CC9966 {
 
 }
 
-package "Concrete Providers (6)" #CC9966 {
+package "Concrete Providers (4)" #CC9966 {
 
   package "pipelines/providers/alpha_vantage/ (2)" {
     class AlphaVantageProvider {
@@ -1039,20 +1039,6 @@ package "Concrete Providers (6)" #CC9966 {
     }
     class AlphaVantageRegistry {
       + render()
-    }
-  }
-
-  package "pipelines/providers/chicago/ (1)" {
-    class ChicagoProvider {
-      + PROVIDER_NAME
-    }
-  }
-
-  package "pipelines/providers/cook_county/ (1)" {
-    class CookCountyProvider {
-      + PROVIDER_NAME
-      --
-      + fetch_parcel_data()
     }
   }
 
@@ -1253,8 +1239,6 @@ QueryError <|-- JoinError
 Session <|-- BuildSession
 Session <|-- IngestSession
 Session <|-- QuerySession
-SocrataBaseProvider <|-- ChicagoProvider
-SocrataBaseProvider <|-- CookCountyProvider
 SqlOps <|-- DuckDBSql
 SqlOps <|-- SparkSql
 StorageError <|-- DataNotFoundError
@@ -1368,8 +1352,8 @@ Session ..> StorageRouter : __init__()
 SocrataBaseProvider ..> SparkNormalizer : _create_dataframe()
 
 legend right
-  191 classes in 52 files, 13 logical groups
-  66 inheritance, 68 composition,
+  189 classes in 50 files, 13 logical groups
+  64 inheritance, 68 composition,
   37 cross-file dependency edges
   ---
   | Color | Group |
