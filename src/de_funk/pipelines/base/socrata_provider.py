@@ -830,6 +830,91 @@ class SocrataBaseProvider(BaseProvider):
         return self.read_csv_with_spark(raw_path_obj, endpoint)
 
 
+    def download_all_csv(self, work_items: Optional[List[str]] = None, force: bool = False) -> dict:
+        """
+        Download raw CSV files for all endpoints. No Spark, no Bronze — just HTTP.
+
+        This is Operation 1 of the two-step pipeline:
+          1. download_all_csv() → raw CSVs on disk
+          2. IngestorEngine.run() → Spark reads raw → Bronze → Silver
+
+        Args:
+            work_items: Specific endpoints to download (None = all)
+            force: If True, re-download even if file exists
+
+        Returns:
+            Dict of {endpoint_id: {path, bytes, status}}
+        """
+        if not self._storage_path:
+            raise ValueError("storage_path required for CSV download. Pass storage_path to create_socrata_provider().")
+
+        items = work_items or self.list_work_items()
+        results = {}
+
+        for endpoint_id in items:
+            endpoint = self._endpoints.get(endpoint_id)
+            if not endpoint:
+                results[endpoint_id] = {'status': 'skipped', 'reason': 'unknown endpoint'}
+                continue
+
+            # Handle multi-year endpoints
+            if endpoint.view_ids:
+                for year, resource_id in endpoint.view_ids.items():
+                    if not resource_id:
+                        continue
+                    raw_path = self._get_raw_path(endpoint_id, resource_id, year=year)
+                    if not raw_path:
+                        continue
+                    key = f"{endpoint_id}/{year}"
+                    if raw_path.exists() and not force:
+                        results[key] = {'path': str(raw_path), 'bytes': raw_path.stat().st_size, 'status': 'exists'}
+                        logger.info(f"  {key}: exists ({raw_path.stat().st_size:,} bytes)")
+                    else:
+                        try:
+                            logger.info(f"  Downloading {key}...")
+                            nbytes = self.client.download_csv_to_file(
+                                resource_id=resource_id,
+                                output_path=str(raw_path),
+                                label=f"{endpoint_id}/{year}",
+                            )
+                            results[key] = {'path': str(raw_path), 'bytes': nbytes, 'status': 'downloaded'}
+                        except Exception as e:
+                            results[key] = {'status': 'error', 'reason': str(e)}
+                            logger.error(f"  {key}: {e}")
+            else:
+                resource_id = self._get_resource_id(endpoint)
+                if not resource_id:
+                    results[endpoint_id] = {'status': 'skipped', 'reason': 'no resource_id'}
+                    continue
+
+                raw_path = self._get_raw_path(endpoint_id, resource_id)
+                if not raw_path:
+                    results[endpoint_id] = {'status': 'skipped', 'reason': 'no raw path'}
+                    continue
+
+                if raw_path.exists() and not force:
+                    results[endpoint_id] = {'path': str(raw_path), 'bytes': raw_path.stat().st_size, 'status': 'exists'}
+                    logger.info(f"  {endpoint_id}: exists ({raw_path.stat().st_size:,} bytes)")
+                else:
+                    try:
+                        logger.info(f"  Downloading {endpoint_id}...")
+                        nbytes = self.client.download_csv_to_file(
+                            resource_id=resource_id,
+                            output_path=str(raw_path),
+                            label=endpoint_id,
+                        )
+                        results[endpoint_id] = {'path': str(raw_path), 'bytes': nbytes, 'status': 'downloaded'}
+                    except Exception as e:
+                        results[endpoint_id] = {'status': 'error', 'reason': str(e)}
+                        logger.error(f"  {endpoint_id}: {e}")
+
+        downloaded = sum(1 for r in results.values() if r['status'] == 'downloaded')
+        existed = sum(1 for r in results.values() if r['status'] == 'exists')
+        errors = sum(1 for r in results.values() if r['status'] == 'error')
+        logger.info(f"Download complete: {downloaded} downloaded, {existed} existed, {errors} errors")
+        return results
+
+
 def create_socrata_provider(
     provider_id: str,
     spark=None,
