@@ -42,6 +42,9 @@ date_column: null
 schema:
   - [area_numbe, int, area_numbe, false, "Community area number (1-77)"]
   - [community, string, community, true, "Community area name"]
+  - [area_num_1, int, area_num_1, true, "Alternate area number"]
+  - [shape_area, double, shape_area, true, "Shape area (sq feet)"]
+  - [shape_len, double, shape_len, true, "Shape perimeter (feet)"]
   - [the_geom, string, the_geom, true, "GeoJSON geometry"]
 ---
 
