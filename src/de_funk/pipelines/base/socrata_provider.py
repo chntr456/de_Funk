@@ -781,9 +781,16 @@ class SocrataBaseProvider(BaseProvider):
         if endpoint.download_method != 'csv' or not self._storage_path:
             return None
 
-        # Multi-year endpoints use INCREMENTAL path
+        # Multi-year endpoints: return comma-separated paths
         if endpoint.view_ids:
-            return None
+            paths = []
+            for year, resource_id in endpoint.view_ids.items():
+                if not resource_id:
+                    continue
+                p = self._get_raw_path(work_item, resource_id, year=year)
+                if p:
+                    paths.append(str(p))
+            return ','.join(paths) if paths else None
 
         resource_id = self._get_resource_id(endpoint)
         if not resource_id:
@@ -794,13 +801,14 @@ class SocrataBaseProvider(BaseProvider):
 
     def read_raw_as_df(self, work_item: str, raw_path: str) -> Optional[DataFrame]:
         """
-        Read raw CSV file with Spark and return normalized DataFrame.
+        Read raw CSV file(s) with Spark and return normalized DataFrame.
 
-        Downloads the CSV if it doesn't exist yet.
+        Downloads any missing CSVs first. Handles multi-year endpoints
+        (comma-separated paths) by reading each and unioning.
 
         Args:
             work_item: Work item identifier
-            raw_path: Path to raw CSV file
+            raw_path: Path to raw CSV file, or comma-separated paths for multi-year
 
         Returns:
             Spark DataFrame with normalized data
@@ -809,25 +817,46 @@ class SocrataBaseProvider(BaseProvider):
         if not endpoint:
             return None
 
-        raw_path_obj = Path(raw_path)
-        resource_id = self._get_resource_id(endpoint)
+        paths = raw_path.split(',')
+        dfs = []
 
-        # Download CSV if not exists
-        if not raw_path_obj.exists():
-            logger.info(f"Downloading CSV: {work_item}")
-            raw_path_obj.parent.mkdir(parents=True, exist_ok=True)
-            self.client.download_csv_to_file(
-                resource_id=resource_id,
-                output_path=raw_path,
-                label=work_item
-            )
+        for p in paths:
+            raw_path_obj = Path(p.strip())
 
-        if not raw_path_obj.exists():
-            logger.warning(f"CSV download failed for {work_item}")
+            # Download if not exists
+            if not raw_path_obj.exists():
+                # Extract resource_id from filename (format: endpoint_resourceid.csv)
+                stem = raw_path_obj.stem
+                parts = stem.rsplit('_', 1)
+                resource_id = parts[-1] if len(parts) > 1 else self._get_resource_id(endpoint)
+                if resource_id:
+                    logger.info(f"Downloading CSV: {work_item} → {raw_path_obj.name}")
+                    raw_path_obj.parent.mkdir(parents=True, exist_ok=True)
+                    self.client.download_csv_to_file(
+                        resource_id=resource_id,
+                        output_path=str(raw_path_obj),
+                        label=work_item
+                    )
+
+            if not raw_path_obj.exists():
+                logger.warning(f"CSV not found: {raw_path_obj}")
+                continue
+
+            df = self.read_csv_with_spark(raw_path_obj, endpoint)
+            if df is not None:
+                dfs.append(df)
+
+        if not dfs:
             return None
+        if len(dfs) == 1:
+            return dfs[0]
 
-        # Read with Spark
-        return self.read_csv_with_spark(raw_path_obj, endpoint)
+        # Union all year DataFrames (align columns)
+        result = dfs[0]
+        for df in dfs[1:]:
+            result = result.unionByName(df, allowMissingColumns=True)
+        logger.info(f"Unioned {len(dfs)} CSVs for {work_item}")
+        return result
 
 
     def download_all_csv(self, work_items: Optional[List[str]] = None, force: bool = False) -> dict:
