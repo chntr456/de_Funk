@@ -905,7 +905,7 @@ package "api.models/ (24)" #B3D9FF {
 
 package "config.domain/ (1)" #FFCC66 {
 
-  class DomainConfigLoaderV4 {
+  class DomainConfigLoader {
     + load_model_config()
     + list_models()
     + get_dependencies()
@@ -1530,8 +1530,8 @@ DeFunk ..> ConfigLoader : from_config()
 DeFunk ..> FieldResolver : query_session()
 DeFunk ..> IngestSession : ingest_session()
 DeFunk ..> QuerySession : query_session()
-DomainBuilderFactory ..> DomainConfigLoaderV4 : _create_builder_class()
-DomainBuilderFactory ..> DomainConfigLoaderV4 : create_builders()
+DomainBuilderFactory ..> DomainConfigLoader : _create_builder_class()
+DomainBuilderFactory ..> DomainConfigLoader : create_builders()
 DomainModel ..> HookRunner : custom_node_loading()
 Engine ..> ExhibitHandler : distinct_values_by_measure()
 GraphBuilder ..> NodeExecutor : _build_nodes()

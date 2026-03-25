@@ -44,8 +44,8 @@ def domains_dir():
 @pytest.fixture(scope="module")
 def domain_loader(domains_dir):
     """V4 config loader instance."""
-    from de_funk.config.domain import DomainConfigLoaderV4
-    return DomainConfigLoaderV4(domains_dir)
+    from de_funk.config.domain import DomainConfigLoader
+    return DomainConfigLoader(domains_dir)
 
 
 @pytest.fixture(scope="module")

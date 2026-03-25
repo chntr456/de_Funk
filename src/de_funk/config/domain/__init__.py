@@ -15,9 +15,9 @@ where models are split across multiple files:
             └── views/*.md      # type: domain-model-view
 
 Usage:
-    from de_funk.config.domain import DomainConfigLoaderV4, get_domain_loader
+    from de_funk.config.domain import DomainConfigLoader, get_domain_loader
 
-    loader = DomainConfigLoaderV4(Path("domains"))
+    loader = DomainConfigLoader(Path("domains"))
     config = loader.load_model_config("county.property")
 """
 
@@ -47,7 +47,7 @@ FILE_TYPES = {
 }
 
 
-class DomainConfigLoaderV4:
+class DomainConfigLoader:
     """
     Multi-file domain configuration loader (v4 format).
 
@@ -335,7 +335,7 @@ class DomainConfigLoaderV4:
         self._parse_cache.clear()
 
 
-def get_domain_loader(domains_dir: Path) -> DomainConfigLoaderV4:
+def get_domain_loader(domains_dir: Path) -> DomainConfigLoader:
     """
     Factory: return V4 domain config loader.
 
@@ -343,7 +343,7 @@ def get_domain_loader(domains_dir: Path) -> DomainConfigLoaderV4:
         domains_dir: Path to the domains/ directory
 
     Returns:
-        DomainConfigLoaderV4 instance
+        DomainConfigLoader instance
 
     Raises:
         FileNotFoundError: If domains_dir doesn't exist or has no v4 structure
@@ -353,4 +353,4 @@ def get_domain_loader(domains_dir: Path) -> DomainConfigLoaderV4:
     if not domains_dir.exists():
         raise FileNotFoundError(f"Domains directory not found: {domains_dir}")
 
-    return DomainConfigLoaderV4(domains_dir)
+    return DomainConfigLoader(domains_dir)

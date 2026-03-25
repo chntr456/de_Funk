@@ -37,7 +37,7 @@ def translate_domain_config(domain_config: Dict[str, Any]) -> Dict[str, Any]:
     and ADDS a synthesized `graph.nodes` dict so GraphBuilder can process it.
 
     Args:
-        domain_config: Config dict from DomainConfigLoaderV4.load_model_config()
+        domain_config: Config dict from DomainConfigLoader.load_model_config()
 
     Returns:
         Translated config dict with graph.nodes added

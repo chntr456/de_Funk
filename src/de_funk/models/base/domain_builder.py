@@ -36,7 +36,7 @@ class DomainBuilderFactory:
 
     Each generated builder:
     - Has model_name and depends_on from the domain config
-    - Uses DomainConfigLoaderV4 + translate_domain_config() for config loading
+    - Uses DomainConfigLoader + translate_domain_config() for config loading
     - Returns the appropriate model class (custom or DomainModel)
     - Registers with BuilderRegistry
     """
@@ -55,12 +55,12 @@ class DomainBuilderFactory:
         Returns:
             Dict of model_name -> builder_class for all created builders
         """
-        from de_funk.config.domain import DomainConfigLoaderV4, get_domain_loader
+        from de_funk.config.domain import DomainConfigLoader, get_domain_loader
         from de_funk.models.base.builder import BuilderRegistry
 
         # Check if this is actually a domain config directory
         loader = get_domain_loader(domains_dir)
-        if not isinstance(loader, DomainConfigLoaderV4):
+        if not isinstance(loader, DomainConfigLoader):
             logger.debug(f"{domains_dir} is not a domain config directory")
             return {}
 
@@ -134,10 +134,10 @@ class DomainBuilderFactory:
 
         def get_model_config(self) -> Dict[str, Any]:
             if self._model_config is None:
-                from de_funk.config.domain import DomainConfigLoaderV4
+                from de_funk.config.domain import DomainConfigLoader
                 from de_funk.config.domain.config_translator import translate_domain_config
 
-                loader = DomainConfigLoaderV4(self._domains_dir)
+                loader = DomainConfigLoader(self._domains_dir)
                 raw_config = loader.load_model_config(self.model_name)
                 self._model_config = translate_domain_config(raw_config)
 

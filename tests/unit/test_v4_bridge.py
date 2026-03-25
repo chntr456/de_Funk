@@ -664,12 +664,12 @@ class TestTranslateRealConfigs:
 
     @pytest.fixture
     def domain_loader(self):
-        from de_funk.config.domain import DomainConfigLoaderV4, get_domain_loader
+        from de_funk.config.domain import DomainConfigLoader, get_domain_loader
         domains_dir = project_root / "domains"
         if not (domains_dir / "models").exists():
             pytest.skip("domains/ directory not in v4 format")
         loader = get_domain_loader(domains_dir)
-        if not isinstance(loader, DomainConfigLoaderV4):
+        if not isinstance(loader, DomainConfigLoader):
             pytest.skip("Not a v4 domain directory")
         return loader
 

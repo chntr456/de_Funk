@@ -167,14 +167,14 @@ class TestPhase0FixtureValidation:
 # ===========================================================================
 
 class TestPhase1CoreLoader:
-    """Tests for DomainConfigLoaderV4 multi-file discovery."""
+    """Tests for DomainConfigLoader multi-file discovery."""
 
     @pytest.fixture
     def loader(self, fixtures_dir):
         """Create V4 loader pointed at test fixtures."""
         try:
-            from de_funk.config.domain import DomainConfigLoaderV4
-            return DomainConfigLoaderV4(fixtures_dir)
+            from de_funk.config.domain import DomainConfigLoader
+            return DomainConfigLoader(fixtures_dir)
         except ImportError:
             pytest.skip("Phase 1 not yet implemented")
 
@@ -266,8 +266,8 @@ class TestPhase2Schema:
 
     @pytest.fixture
     def loader(self, fixtures_dir):
-        from de_funk.config.domain import DomainConfigLoaderV4
-        return DomainConfigLoaderV4(fixtures_dir)
+        from de_funk.config.domain import DomainConfigLoader
+        return DomainConfigLoader(fixtures_dir)
 
     def test_canonical_fields_to_schema(self):
         """canonical_fields keyword format converts to positional schema format."""
@@ -477,9 +477,9 @@ class TestPhase3Sources:
 
     def test_loader_discovers_sources_with_aliases(self):
         """Loader should discover sources with their alias configurations."""
-        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain import DomainConfigLoader
 
-        loader = DomainConfigLoaderV4(FIXTURES_DIR)
+        loader = DomainConfigLoader(FIXTURES_DIR)
         config = loader.load_model_config("test_model")
         sources = config.get("sources", {})
         assert len(sources) >= 2
@@ -653,10 +653,10 @@ class TestPhase4Build:
 
     def test_loader_build_config_from_fixtures(self):
         """Loader should preserve build config from model.md fixtures."""
-        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain import DomainConfigLoader
         from de_funk.config.domain.build import parse_build_config
 
-        loader = DomainConfigLoaderV4(FIXTURES_DIR)
+        loader = DomainConfigLoader(FIXTURES_DIR)
         config = loader.load_model_config("test_model")
         build = parse_build_config(config)
         assert len(build["phases"]) == 2
@@ -796,10 +796,10 @@ class TestPhase5Views:
 
     def test_view_from_loader_fixtures(self):
         """Loader should discover and assemble views from fixtures."""
-        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain import DomainConfigLoader
         from de_funk.config.domain.views import parse_view_config
 
-        loader = DomainConfigLoaderV4(FIXTURES_DIR)
+        loader = DomainConfigLoader(FIXTURES_DIR)
         config = loader.load_model_config("test_model")
         views = config.get("views", {})
         assert "view_entity_summary" in views
@@ -811,9 +811,9 @@ class TestPhase5Views:
 
     def test_view_measures_preserved(self):
         """View measures should be preserved through assembly."""
-        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain import DomainConfigLoader
 
-        loader = DomainConfigLoaderV4(FIXTURES_DIR)
+        loader = DomainConfigLoader(FIXTURES_DIR)
         config = loader.load_model_config("test_model")
         view = config["views"]["view_entity_summary"]
         measures = view.get("measures", [])
@@ -926,10 +926,10 @@ class TestPhase6Federation:
 
     def test_real_federation_model(self):
         """Real accounting_federation should parse correctly."""
-        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain import DomainConfigLoader
         from de_funk.config.domain.federation import get_federation_config
 
-        loader = DomainConfigLoaderV4(Path(__file__).resolve().parent.parent.parent / "domains")
+        loader = DomainConfigLoader(Path(__file__).resolve().parent.parent.parent / "domains")
         try:
             config = loader.load_model_config("accounting_federation")
         except FileNotFoundError:
@@ -1072,10 +1072,10 @@ class TestPhase7Graph:
 
     def test_loader_graph_from_fixtures(self):
         """Loader should preserve graph config from model.md."""
-        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain import DomainConfigLoader
         from de_funk.config.domain.graph import parse_graph_config
 
-        loader = DomainConfigLoaderV4(FIXTURES_DIR)
+        loader = DomainConfigLoader(FIXTURES_DIR)
         config = loader.load_model_config("test_model")
         graph = parse_graph_config(config)
         assert len(graph["edges"]) >= 2
@@ -1120,9 +1120,9 @@ class TestPhase8Migration:
         """Topological sort should succeed for all models."""
         if not self.DOMAINS_DIR.exists():
             pytest.skip("domains not available")
-        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain import DomainConfigLoader
 
-        loader = DomainConfigLoaderV4(self.DOMAINS_DIR)
+        loader = DomainConfigLoader(self.DOMAINS_DIR)
         models = loader.list_models()
         assert len(models) >= 5, f"Expected 5+ models, got {len(models)}"
 
@@ -1134,18 +1134,18 @@ class TestPhase8Migration:
         """get_domain_loader should return V4 loader for domains/."""
         if not self.DOMAINS_DIR.exists():
             pytest.skip("domains not available")
-        from de_funk.config.domain import get_domain_loader, DomainConfigLoaderV4
+        from de_funk.config.domain import get_domain_loader, DomainConfigLoader
 
         loader = get_domain_loader(self.DOMAINS_DIR)
-        assert isinstance(loader, DomainConfigLoaderV4)
+        assert isinstance(loader, DomainConfigLoader)
 
     def test_cross_model_extends_resolve(self):
         """Extends references across models should resolve."""
         if not self.DOMAINS_DIR.exists():
             pytest.skip("domains not available")
-        from de_funk.config.domain import DomainConfigLoaderV4
+        from de_funk.config.domain import DomainConfigLoader
 
-        loader = DomainConfigLoaderV4(self.DOMAINS_DIR)
+        loader = DomainConfigLoader(self.DOMAINS_DIR)
         models = loader.list_models()
 
         # Try loading each model — extends failures would raise
