@@ -4,7 +4,7 @@ provider: Chicago Data Portal
 endpoint_id: cta_bus_stops
 
 # API Configuration
-endpoint_pattern: /resource/84eu-buny.json
+endpoint_pattern: /resource/qs84-j7wh.json
 method: GET
 format: json
 auth: inherit
