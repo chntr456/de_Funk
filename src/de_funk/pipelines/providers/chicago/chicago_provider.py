@@ -19,8 +19,7 @@ def create_chicago_provider(
     spark=None,
     docs_path: Optional[Path] = None,
     storage_path: Optional[Path] = None,
-    preserve_raw: bool = False,
-    load_from_raw: bool = False,
+    **kwargs,
 ) -> SocrataBaseProvider:
     """Create a Chicago Data Portal provider (config-driven)."""
     return create_socrata_provider(
@@ -28,7 +27,7 @@ def create_chicago_provider(
         spark=spark,
         docs_path=docs_path,
         storage_path=storage_path,
-        preserve_raw=preserve_raw,
+        **kwargs,
     )
 
 

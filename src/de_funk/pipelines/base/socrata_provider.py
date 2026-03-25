@@ -835,7 +835,7 @@ def create_socrata_provider(
     spark=None,
     docs_path: Optional[Path] = None,
     storage_path: Optional[Path] = None,
-    preserve_raw: bool = False,
+    preserve_raw: bool = True,
 ) -> SocrataBaseProvider:
     """
     Config-driven factory for Socrata providers.
