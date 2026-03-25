@@ -130,7 +130,7 @@ class IngestorEngine:
         - Reusable pattern for Airflow migration
 
     Example:
-        provider = create_chicago_provider(spark, docs_path)
+        provider = create_socrata_provider("chicago", spark=spark, docs_path=docs_path)
         engine = IngestorEngine(provider, storage_cfg)
 
         # Ingest all endpoints with async writes
@@ -196,7 +196,7 @@ class IngestorEngine:
         Usage:
             app = DeFunk.from_config()
             session = app.ingest_session()
-            provider = create_chicago_provider(spark, docs_path)
+            provider = create_socrata_provider("chicago", spark=spark, docs_path=docs_path)
             engine = IngestorEngine.from_session(session, provider)
             engine.run(work_items=["crimes"])
         """
@@ -987,12 +987,9 @@ def create_engine(
         )
 
     elif provider_name in ("chicago", "chicago_data_portal"):
-        from de_funk.pipelines.providers.chicago.chicago_provider import (
-            create_chicago_provider
-        )
-        # Pass storage_path to enable BULK path (Spark-native CSV reading)
+        from de_funk.pipelines.base.socrata_provider import create_socrata_provider
         storage_path = Path(storage_cfg.get("roots", {}).get("bronze", "storage/bronze")).parent
-        provider = create_chicago_provider(spark, docs_path, storage_path=storage_path)
+        provider = create_socrata_provider("chicago", spark=spark, docs_path=docs_path, storage_path=storage_path)
         return IngestorEngine(
             provider, storage_cfg,
             max_pending_writes=max_pending_writes,
@@ -1000,12 +997,9 @@ def create_engine(
         )
 
     elif provider_name in ("cook_county", "cook_county_data_portal"):
-        from de_funk.pipelines.providers.cook_county.cook_county_provider import (
-            create_cook_county_provider
-        )
-        # Pass storage_path to enable BULK path (Spark-native CSV reading)
+        from de_funk.pipelines.base.socrata_provider import create_socrata_provider
         storage_path = Path(storage_cfg.get("roots", {}).get("bronze", "storage/bronze")).parent
-        provider = create_cook_county_provider(spark, docs_path, storage_path=storage_path)
+        provider = create_socrata_provider("cook_county", spark=spark, docs_path=docs_path, storage_path=storage_path)
         return IngestorEngine(
             provider, storage_cfg,
             max_pending_writes=max_pending_writes,
