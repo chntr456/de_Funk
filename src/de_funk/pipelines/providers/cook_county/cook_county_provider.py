@@ -1,126 +1,18 @@
 """
-Cook County Data Portal Provider Implementation.
+Cook County Data Portal — config-driven Socrata provider.
 
-Implements data ingestion from Cook County's Socrata Open Data API.
-Configuration loaded from markdown documentation (single source of truth).
-
-Features:
-- Offset-based pagination for large datasets
-- SoQL query support ($where, $select, $order, etc.)
-- Rate limiting with app token support
-- Schema-driven transformation using markdown configs
-- PIN-based property lookups
+No subclass needed. All behavior from SocrataBaseProvider + markdown configs.
 
 Usage:
     from de_funk.pipelines.providers.cook_county import create_cook_county_provider
-    from de_funk.pipelines.base.ingestor_engine import IngestorEngine
-
     provider = create_cook_county_provider(spark, docs_path)
-    engine = IngestorEngine(provider, storage_cfg)
-
-    # Ingest all endpoints
-    results = engine.run(write_batch_size=500000)
-
-    # Ingest specific endpoints
-    results = engine.run(work_items=["property_locations", "assessments"])
-
-Author: de_Funk Team
 """
-
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Generator
+from typing import Optional
 from pathlib import Path
 
-from de_funk.pipelines.base.socrata_provider import SocrataBaseProvider
-from de_funk.config.logging import get_logger
-
-logger = get_logger(__name__)
-
-
-class CookCountyProvider(SocrataBaseProvider):
-    """
-    Provider for Cook County Data Portal (Socrata API).
-
-    Inherits all functionality from SocrataBaseProvider.
-    Configuration loaded from:
-    - Data Sources/Providers/Cook County Data Portal.md
-    - Data Sources/Endpoints/Cook County Data Portal/*.md
-    """
-
-    PROVIDER_NAME = "Cook County Data Portal"
-
-    def __init__(
-        self,
-        spark=None,
-        docs_path: Optional[Path] = None,
-        storage_path: Optional[Path] = None,
-        preserve_raw: bool = False,
-        load_from_raw: bool = False
-    ):
-        """
-        Initialize Cook County provider.
-
-        Args:
-            spark: SparkSession
-            docs_path: Path to repo root
-            storage_path: Path to storage root (for raw layer)
-            preserve_raw: If True, keep raw CSV files after Bronze write
-            load_from_raw: If True, skip download and load from existing raw CSVs
-        """
-        super().__init__(
-            provider_id="cook_county",
-            spark=spark,
-            docs_path=docs_path,
-            storage_path=storage_path,
-        )
-        if preserve_raw and storage_path:
-            self.enable_raw_save(storage_path)
-        self._load_from_raw = load_from_raw
-
-    # =========================================================================
-    # COOK COUNTY SPECIFIC: PIN-BASED LOOKUPS
-    # =========================================================================
-
-    def fetch_parcel_data(
-        self,
-        pins: Optional[List[str]] = None,
-        **kwargs
-    ) -> Generator[List[Dict], None, None]:
-        """
-        Fetch parcel data for specific PINs.
-
-        This is a convenience method for property-specific lookups.
-
-        Args:
-            pins: List of Property Index Numbers (PINs)
-            **kwargs: Additional query parameters
-
-        Yields:
-            List[Dict] - Batches of parcel records
-        """
-        if not pins:
-            return
-
-        endpoint = self._endpoints.get("property_locations")
-        if not endpoint:
-            logger.warning("property_locations endpoint not configured")
-            return
-
-        resource_id = self._get_resource_id(endpoint)
-        if not resource_id:
-            return
-
-        # Build PIN filter
-        pin_list = ",".join(f"'{p}'" for p in pins)
-        params = {"$where": f"pin IN ({pin_list})"}
-
-        for batch in self.client.fetch_all(
-            resource_id=resource_id,
-            query_params=params,
-            limit=self._default_limit
-        ):
-            yield batch
+from de_funk.pipelines.base.socrata_provider import SocrataBaseProvider, create_socrata_provider
 
 
 def create_cook_county_provider(
@@ -128,25 +20,17 @@ def create_cook_county_provider(
     docs_path: Optional[Path] = None,
     storage_path: Optional[Path] = None,
     preserve_raw: bool = False,
-    load_from_raw: bool = False
-) -> CookCountyProvider:
-    """
-    Factory function to create a CookCountyProvider.
-
-    Args:
-        spark: SparkSession
-        docs_path: Path to repo root
-        storage_path: Path to storage root (for raw layer)
-        preserve_raw: If True, keep raw CSV files after Bronze write
-        load_from_raw: If True, skip download and load from existing raw CSVs
-
-    Returns:
-        Configured CookCountyProvider
-    """
-    return CookCountyProvider(
+    load_from_raw: bool = False,
+) -> SocrataBaseProvider:
+    """Create a Cook County Data Portal provider (config-driven)."""
+    return create_socrata_provider(
+        provider_id="cook_county",
         spark=spark,
         docs_path=docs_path,
         storage_path=storage_path,
         preserve_raw=preserve_raw,
-        load_from_raw=load_from_raw
     )
+
+
+# Backward compat alias
+CookCountyProvider = SocrataBaseProvider

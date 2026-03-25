@@ -828,3 +828,37 @@ class SocrataBaseProvider(BaseProvider):
 
         # Read with Spark
         return self.read_csv_with_spark(raw_path_obj, endpoint)
+
+
+def create_socrata_provider(
+    provider_id: str,
+    spark=None,
+    docs_path: Optional[Path] = None,
+    storage_path: Optional[Path] = None,
+    preserve_raw: bool = False,
+) -> SocrataBaseProvider:
+    """
+    Config-driven factory for Socrata providers.
+
+    No subclass needed — provider_id determines which markdown configs
+    to load. All behavior comes from SocrataBaseProvider + config.
+
+    Args:
+        provider_id: Provider identifier ('chicago', 'cook_county', etc.)
+        spark: SparkSession
+        docs_path: Path to repo root (contains Data Sources/)
+        storage_path: Path to storage root (for raw layer)
+        preserve_raw: If True, save raw CSV files before Bronze write
+
+    Returns:
+        Configured SocrataBaseProvider instance
+    """
+    provider = SocrataBaseProvider(
+        provider_id=provider_id,
+        spark=spark,
+        docs_path=docs_path,
+        storage_path=storage_path,
+    )
+    if preserve_raw and storage_path:
+        provider.enable_raw_save(storage_path)
+    return provider
