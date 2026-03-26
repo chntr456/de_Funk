@@ -11,7 +11,7 @@ title de_Funk Complete — Logical Groups > File Packages > Classes\nALL 191 cla
 
 package "Configuration Layer (41)" #FFCC66 {
 
-  package "config/data_classes.py (27)" {
+  package "config/data_classes.py (27)" #FFCC66 {
     class AliasSpec {
       + target_column : str
       + expression : str
@@ -157,7 +157,7 @@ package "Configuration Layer (41)" #FFCC66 {
     }
   }
 
-  package "config/domain/ (1)" {
+  package "config/domain/ (1)" #FFCC66 {
     class DomainConfigLoader {
       + load_model_config()
       + list_models()
@@ -166,7 +166,7 @@ package "Configuration Layer (41)" #FFCC66 {
     }
   }
 
-  package "config/loader.py (1)" {
+  package "config/loader.py (1)" #FFCC66 {
     class ConfigLoader {
       + load_env()
       + load_storage()
@@ -175,7 +175,7 @@ package "Configuration Layer (41)" #FFCC66 {
     }
   }
 
-  package "config/markdown_loader.py (5)" {
+  package "config/markdown_loader.py (5)" #FFCC66 {
     class BronzeConfig {
       + table : str
       + partitions : List[str]
@@ -209,7 +209,7 @@ package "Configuration Layer (41)" #FFCC66 {
     }
   }
 
-  package "config/models.py (7)" {
+  package "config/models.py (7)" #FFCC66 {
     class APIConfig {
       + name : str
       + base_url : str
@@ -265,7 +265,7 @@ package "Configuration Layer (41)" #FFCC66 {
 
 package "Logging & Errors (30)" #FFC0C0 {
 
-  package "config/logging.py (4)" {
+  package "config/logging.py (4)" #FFC0C0 {
     class ColoredFormatter {
       + COLORS
       + RESET
@@ -285,11 +285,11 @@ package "Logging & Errors (30)" #FFC0C0 {
     }
   }
 
-  package "core/error_handling.py (1)" {
+  package "core/error_handling.py (1)" #FFC0C0 {
     class ErrorContext
   }
 
-  package "core/exceptions.py (23)" {
+  package "core/exceptions.py (23)" #FFC0C0 {
     class ConfigurationError
     class ConnectionError
     class DataNotFoundError
@@ -315,7 +315,7 @@ package "Logging & Errors (30)" #FFC0C0 {
     class WriteError
   }
 
-  package "core/validation.py (2)" {
+  package "core/validation.py (2)" #FFC0C0 {
     class NotebookValidator {
       + validate()
       + validate_and_raise()
@@ -333,7 +333,7 @@ package "Logging & Errors (30)" #FFC0C0 {
 
 package "Engine & Sessions (14)" #80E0D0 {
 
-  package "core/engine.py (1)" {
+  package "core/engine.py (1)" #80E0D0 {
     class Engine {
       + for_duckdb()
       + for_spark()
@@ -342,7 +342,7 @@ package "Engine & Sessions (14)" #80E0D0 {
     }
   }
 
-  package "core/graph.py (1)" {
+  package "core/graph.py (1)" #80E0D0 {
     class DomainGraph {
       + find_join_path()
       + reachable_domains()
@@ -351,7 +351,7 @@ package "Engine & Sessions (14)" #80E0D0 {
     }
   }
 
-  package "core/ops.py (3)" {
+  package "core/ops.py (3)" #80E0D0 {
     class DataOps {
       + read()
       + write()
@@ -372,7 +372,7 @@ package "Engine & Sessions (14)" #80E0D0 {
     }
   }
 
-  package "core/session/ (5)" {
+  package "core/session/ (5)" #80E0D0 {
     class BuildSession {
       + get_model()
       + get_dependencies()
@@ -403,7 +403,7 @@ package "Engine & Sessions (14)" #80E0D0 {
     }
   }
 
-  package "core/sql.py (3)" {
+  package "core/sql.py (3)" #80E0D0 {
     class DuckDBSql {
       + execute_sql()
       + scan()
@@ -424,7 +424,7 @@ package "Engine & Sessions (14)" #80E0D0 {
     }
   }
 
-  package "core/storage.py (1)" {
+  package "core/storage.py (1)" #80E0D0 {
     class StorageRouter {
       + raw_path()
       + bronze_path()
@@ -437,7 +437,7 @@ package "Engine & Sessions (14)" #80E0D0 {
 
 package "Connections (4)" #E6E6E6 {
 
-  package "core/connection.py (3)" {
+  package "core/connection.py (3)" #E6E6E6 {
     class ConnectionFactory {
       + create()
     }
@@ -455,7 +455,7 @@ package "Connections (4)" #E6E6E6 {
     }
   }
 
-  package "core/duckdb_connection.py (1)" {
+  package "core/duckdb_connection.py (1)" #E6E6E6 {
     class DuckDBConnection {
       + table()
       + has_view()
@@ -468,7 +468,7 @@ package "Connections (4)" #E6E6E6 {
 
 package "API Layer (36)" #B3D9FF {
 
-  package "api/bronze_resolver.py (2)" {
+  package "api/bronze_resolver.py (2)" #B3D9FF {
     class BronzeEndpointInfo {
       + provider_id : str
       + endpoint_id : str
@@ -482,7 +482,7 @@ package "API Layer (36)" #B3D9FF {
     }
   }
 
-  package "api/handlers/ (7)" {
+  package "api/handlers/ (7)" #B3D9FF {
     class BoxHandler {
       + handles
       --
@@ -524,7 +524,7 @@ package "API Layer (36)" #B3D9FF {
     }
   }
 
-  package "api/models/ (24)" {
+  package "api/models/ (24)" #B3D9FF {
     class BoxQueryRequest {
       + type : str
       + category : str
@@ -641,7 +641,7 @@ package "API Layer (36)" #B3D9FF {
     }
   }
 
-  package "api/resolver.py (3)" {
+  package "api/resolver.py (3)" #B3D9FF {
     class FieldRef {
       + _known_domains : set[str]
     }
@@ -660,7 +660,7 @@ package "API Layer (36)" #B3D9FF {
 
 package "Build Pipeline (11)" #FF9933 {
 
-  package "core/executor.py (1)" {
+  package "core/executor.py (1)" #FF9933 {
     class NodeExecutor {
       + register_op()
       + get_op()
@@ -669,7 +669,7 @@ package "Build Pipeline (11)" #FF9933 {
     }
   }
 
-  package "models/base/builder.py (3)" {
+  package "models/base/builder.py (3)" #FF9933 {
     class BaseModelBuilder {
       + model_name : str
       + depends_on : List[str]
@@ -694,7 +694,7 @@ package "Build Pipeline (11)" #FF9933 {
     }
   }
 
-  package "models/base/data_validator.py (3)" {
+  package "models/base/data_validator.py (3)" #FF9933 {
     class DataValidator {
       + columns()
       + row_count()
@@ -718,27 +718,27 @@ package "Build Pipeline (11)" #FF9933 {
     }
   }
 
-  package "models/base/domain_builder.py (1)" {
+  package "models/base/domain_builder.py (1)" #FF9933 {
     class DomainBuilderFactory {
       + create_builders()
     }
   }
 
-  package "models/base/domain_model.py (1)" {
+  package "models/base/domain_model.py (1)" #FF9933 {
     class DomainModel {
       + custom_node_loading()
       + graph_builder()
     }
   }
 
-  package "models/base/graph_builder.py (1)" {
+  package "models/base/graph_builder.py (1)" #FF9933 {
     class GraphBuilder {
       + model_cfg()
       + build()
     }
   }
 
-  package "models/base/model.py (1)" {
+  package "models/base/model.py (1)" #FF9933 {
     class BaseModel {
       + backend()
       + build()
@@ -751,7 +751,7 @@ package "Build Pipeline (11)" #FF9933 {
 
 package "Ingestion Pipeline (18)" #CC9966 {
 
-  package "pipelines/base/facet.py (1)" {
+  package "pipelines/base/facet.py (1)" #CC9966 {
     class Facet {
       + NUMERIC_COERCE : Dict[str, str]
       + SPARK_CASTS : Dict[str, str]
@@ -764,7 +764,7 @@ package "Ingestion Pipeline (18)" #CC9966 {
     }
   }
 
-  package "pipelines/base/http_client.py (1)" {
+  package "pipelines/base/http_client.py (1)" #CC9966 {
     class HttpClient {
       + request_text()
       + request()
@@ -772,7 +772,7 @@ package "Ingestion Pipeline (18)" #CC9966 {
     }
   }
 
-  package "pipelines/base/ingestor_engine.py (3)" {
+  package "pipelines/base/ingestor_engine.py (3)" #CC9966 {
     class IngestionResults {
       + work_items : List[str]
       + total_work_items : int
@@ -798,7 +798,7 @@ package "Ingestion Pipeline (18)" #CC9966 {
     }
   }
 
-  package "pipelines/base/key_pool.py (1)" {
+  package "pipelines/base/key_pool.py (1)" #CC9966 {
     class ApiKeyPool {
       + size()
       + next_key()
@@ -806,14 +806,14 @@ package "Ingestion Pipeline (18)" #CC9966 {
     }
   }
 
-  package "pipelines/base/normalizer.py (1)" {
+  package "pipelines/base/normalizer.py (1)" #CC9966 {
     class SparkNormalizer {
       + normalize()
       + normalize_with_schema()
     }
   }
 
-  package "pipelines/base/provider.py (4)" {
+  package "pipelines/base/provider.py (4)" #CC9966 {
     class BaseProvider {
       + PROVIDER_NAME : str
       --
@@ -839,7 +839,7 @@ package "Ingestion Pipeline (18)" #CC9966 {
     }
   }
 
-  package "pipelines/base/registry.py (2)" {
+  package "pipelines/base/registry.py (2)" #CC9966 {
     class BaseRegistry {
       + render()
     }
@@ -850,7 +850,7 @@ package "Ingestion Pipeline (18)" #CC9966 {
     }
   }
 
-  package "pipelines/base/socrata_client.py (1)" {
+  package "pipelines/base/socrata_client.py (1)" #CC9966 {
     class SocrataClient {
       + DEFAULT_LIMIT
       + MAX_RETRIES
@@ -863,7 +863,7 @@ package "Ingestion Pipeline (18)" #CC9966 {
     }
   }
 
-  package "pipelines/base/socrata_provider.py (1)" {
+  package "pipelines/base/socrata_provider.py (1)" #CC9966 {
     class SocrataBaseProvider {
       + enable_raw_save()
       + list_work_items()
@@ -872,7 +872,7 @@ package "Ingestion Pipeline (18)" #CC9966 {
     }
   }
 
-  package "pipelines/ingestors/ (3)" {
+  package "pipelines/ingestors/ (3)" #CC9966 {
     class BronzeSink {
       + exists()
       + write_if_missing()
@@ -896,7 +896,7 @@ package "Ingestion Pipeline (18)" #CC9966 {
 
 package "Pipeline Infrastructure (19)" #CC9966 {
 
-  package "pipelines/base/circuit_breaker.py (6)" {
+  package "pipelines/base/circuit_breaker.py (6)" #CC9966 {
     class CircuitBreaker {
       + state()
       + stats()
@@ -931,7 +931,7 @@ package "Pipeline Infrastructure (19)" #CC9966 {
     }
   }
 
-  package "pipelines/base/metrics.py (3)" {
+  package "pipelines/base/metrics.py (3)" #CC9966 {
     class MetricsCollector {
       + time()
       + record()
@@ -950,7 +950,7 @@ package "Pipeline Infrastructure (19)" #CC9966 {
     class TimingContext
   }
 
-  package "pipelines/base/progress_tracker.py (7)" {
+  package "pipelines/base/progress_tracker.py (7)" #CC9966 {
     class BatchProgressTracker {
       + DATA_TYPE_SHORT_NAMES
       --
@@ -994,7 +994,7 @@ package "Pipeline Infrastructure (19)" #CC9966 {
     class TickerProgressCallback
   }
 
-  package "pipelines/base/rate_limiter.py (3)" {
+  package "pipelines/base/rate_limiter.py (3)" #CC9966 {
     class RateLimitConfig {
       + calls_per_minute : float
       + burst_size : int
@@ -1028,7 +1028,7 @@ package "Pipeline Infrastructure (19)" #CC9966 {
 
 package "Concrete Providers (4)" #CC9966 {
 
-  package "pipelines/providers/alpha_vantage/ (2)" {
+  package "pipelines/providers/alpha_vantage/ (2)" #CC9966 {
     class AlphaVantageProvider {
       + PROVIDER_NAME
       --
@@ -1042,7 +1042,7 @@ package "Concrete Providers (4)" #CC9966 {
     }
   }
 
-  package "pipelines/providers/registry/ (2)" {
+  package "pipelines/providers/registry/ (2)" #CC9966 {
     class ProviderInfo {
       + name : str
       + description : str
@@ -1066,7 +1066,7 @@ package "Concrete Providers (4)" #CC9966 {
 
 package "Hooks & Artifacts (3)" #B3FFB3 {
 
-  package "core/artifacts.py (2)" {
+  package "core/artifacts.py (2)" #B3FFB3 {
     class ArtifactStore {
       + save()
       + load()
@@ -1083,7 +1083,7 @@ package "Hooks & Artifacts (3)" #B3FFB3 {
     }
   }
 
-  package "core/hooks.py (1)" {
+  package "core/hooks.py (1)" #B3FFB3 {
     class HookRunner {
       + run()
       + has_hooks()
@@ -1095,7 +1095,7 @@ package "Hooks & Artifacts (3)" #B3FFB3 {
 
 package "Orchestration (5)" #CC99FF {
 
-  package "orchestration/ (5)" {
+  package "orchestration/ (5)" #CC99FF {
     class CheckpointManager {
       + DEFAULT_CHECKPOINT_DIR
       --
@@ -1137,7 +1137,7 @@ package "Orchestration (5)" #CC99FF {
 
 package "Application (1)" #E6E6E6 {
 
-  package "app.py (1)" {
+  package "app.py (1)" #E6E6E6 {
     class DeFunk {
       + from_config()
       + from_app_config()
@@ -1150,7 +1150,7 @@ package "Application (1)" #E6E6E6 {
 
 package "Utilities (3)" #E6E6E6 {
 
-  package "core/context.py (1)" {
+  package "core/context.py (1)" #E6E6E6 {
     class RepoContext {
       + repo : Path
       + spark : Any
@@ -1162,7 +1162,7 @@ package "Utilities (3)" #E6E6E6 {
     }
   }
 
-  package "utils/ (2)" {
+  package "utils/ (2)" #E6E6E6 {
     class APIValidator {
       + validate_date_range()
       + test_api_connection()
