@@ -20,6 +20,7 @@ package "Configuration Layer (41)" #FFCC66 {
       + duckdb_memory_limit : str
       + max_sql_rows : int
       + max_dimension_values : int
+      + max_response_mb : float
       --
       + from_dict()
     }
@@ -27,11 +28,14 @@ package "Configuration Layer (41)" #FFCC66 {
       + type : str
       + model : str
       + version : str
+      + description : str
+      + extends : Optional[str]
     }
     class BuildSpec {
       + sort_by : list[str]
       + optimize : bool
       + partitions : list[str]
+      + phases : dict[str, PhaseSpec]
     }
     class ClusterConfig {
       + spark_master : str
@@ -44,21 +48,29 @@ package "Configuration Layer (41)" #FFCC66 {
       + model : str
       + version : str
       + description : str
+      + extends : list[str]
+      + depends_on : list[str]
     }
     class EdgeSpec {
       + name : str
       + from_table : str
       + to_table : str
+      + join_keys : list[str]
+      + cardinality : str
     }
     class EndpointConfig {
       + endpoint_id : str
       + provider : str
       + method : str
+      + endpoint_pattern : str
+      + format : str
     }
     class EndpointSchemaField {
       + name : str
       + type : str
       + source_field : str
+      + nullable : bool
+      + description : str
     }
     class EnrichSpec {
       + from_table : str
@@ -77,11 +89,14 @@ package "Configuration Layer (41)" #FFCC66 {
       + pre_build : list[HookDef]
       + before_build : list[HookDef]
       + after_build : list[HookDef]
+      + post_build : list[HookDef]
     }
     class MLModelSpec {
       + name : str
       + type : str
       + target : list[str]
+      + features : list[str]
+      + lookback_days : int
       --
       + from_dict()
     }
@@ -89,6 +104,8 @@ package "Configuration Layer (41)" #FFCC66 {
       + name : str
       + aggregation : str
       + field : str | dict
+      + label : str
+      + format : Optional[str]
     }
     class MeasuresSpec {
       + simple : list[MeasureDef]
@@ -110,6 +127,8 @@ package "Configuration Layer (41)" #FFCC66 {
       + provider_id : str
       + provider : str
       + api_type : str
+      + base_url : str
+      + auth_model : str
     }
     class RetryConfig {
       + max_retries : int
@@ -122,6 +141,7 @@ package "Configuration Layer (41)" #FFCC66 {
       + raw : str
       + bronze : str
       + silver : str
+      + models : str
       --
       + from_dict()
     }
@@ -129,6 +149,8 @@ package "Configuration Layer (41)" #FFCC66 {
       + defaults : dict
       + providers : dict[str, dict]
       + silver_models : list[str]
+      + cluster : ClusterConfig
+      + retry : RetryConfig
       --
       + from_dict()
     }
@@ -136,16 +158,22 @@ package "Configuration Layer (41)" #FFCC66 {
       + name : str
       + type : str
       + nullable : bool
+      + description : str
+      + derived : Optional[str]
     }
     class SourceConfig {
       + source : str
       + maps_to : str
       + from_ref : str
+      + aliases : list[AliasSpec]
+      + domain_source : Optional[str]
     }
     class TableConfig {
       + table : str
       + table_type : str
       + schema : list[SchemaField]
+      + primary_key : list[str]
+      + unique_key : list[str]
     }
     class TablePath {
       + root : str
@@ -163,6 +191,8 @@ package "Configuration Layer (41)" #FFCC66 {
       + list_models()
       + get_dependencies()
       + get_build_order()
+      + load_base()
+      + clear_cache()
     }
   }
 
@@ -180,11 +210,15 @@ package "Configuration Layer (41)" #FFCC66 {
       + table : str
       + partitions : List[str]
       + write_strategy : str
+      + key_columns : List[str]
+      + date_column : Optional[str]
     }
     class EndpointConfig {
       + endpoint_id : str
       + provider : str
       + method : str
+      + endpoint_pattern : str
+      + format : str
       --
       + get_spark_raw_schema()
     }
@@ -193,16 +227,24 @@ package "Configuration Layer (41)" #FFCC66 {
       + parse_schema_block()
       + parse_view_ids_table()
       + parse_schema_array()
+      + parse_bronze_config()
+      + load_provider()
+      + load_endpoint()
+      + load_providers()
     }
     class ProviderConfig {
       + provider_id : str
       + provider : str
       + api_type : str
+      + base_url : str
+      + auth_model : str
     }
     class SchemaField {
       + name : str
       + type : str
       + source : str
+      + nullable : bool
+      + description : str
       --
       + is_computed()
       + is_generated()
@@ -214,6 +256,8 @@ package "Configuration Layer (41)" #FFCC66 {
       + name : str
       + base_url : str
       + endpoints : Dict[str, Any]
+      + api_keys : List[str]
+      + rate_limit_calls : int
       --
       + from_dict()
     }
@@ -221,6 +265,8 @@ package "Configuration Layer (41)" #FFCC66 {
       + repo_root : Path
       + connection : ConnectionConfig
       + storage : Dict[str, Any]
+      + apis : Dict[str, Dict[str, Any]]
+      + log_level : str
       --
       + models_dir()
       + legacy_models_dir()
@@ -242,6 +288,8 @@ package "Configuration Layer (41)" #FFCC66 {
       + database_path : Path
       + memory_limit : str
       + threads : int
+      + read_only : bool
+      + additional_config : Dict[str, Any]
       --
       + to_connection_params()
     }
@@ -249,6 +297,8 @@ package "Configuration Layer (41)" #FFCC66 {
       + driver_memory : str
       + executor_memory : str
       + shuffle_partitions : int
+      + timezone : str
+      + legacy_time_parser : bool
       --
       + to_spark_conf_dict()
     }
@@ -276,6 +326,8 @@ package "Logging & Errors (30)" #FFC0C0 {
       + console_level : str
       + file_level : str
       + log_dir : Path
+      + log_file : str
+      + json_log_file : str
       --
       + from_env()
     }
@@ -321,6 +373,7 @@ package "Logging & Errors (30)" #FFC0C0 {
       + validate_and_raise()
       + get_warnings()
       + get_errors()
+      + is_valid()
     }
     class ValidationError {
       + level : str
@@ -339,6 +392,10 @@ package "Engine & Sessions (14)" #80E0D0 {
       + for_spark()
       + read()
       + write()
+      + create_df()
+      + select()
+      + drop()
+      + derive()
     }
   }
 
@@ -348,6 +405,10 @@ package "Engine & Sessions (14)" #80E0D0 {
       + reachable_domains()
       + neighbors()
       + domains_for_table()
+      + all_tables()
+      + all_edges()
+      + distance()
+      + connected_components()
     }
   }
 
@@ -357,18 +418,30 @@ package "Engine & Sessions (14)" #80E0D0 {
       + write()
       + create_df()
       + select()
+      + drop()
+      + derive()
+      + filter()
+      + dedup()
     }
     class DuckDBOps {
       + read()
       + write()
       + create_df()
       + select()
+      + drop()
+      + derive()
+      + filter()
+      + dedup()
     }
     class SparkOps {
       + read()
       + write()
       + create_df()
       + select()
+      + drop()
+      + derive()
+      + filter()
+      + dedup()
     }
   }
 
@@ -378,6 +451,7 @@ package "Engine & Sessions (14)" #80E0D0 {
       + get_dependencies()
       + build()
       + build_all()
+      + close()
     }
     class FilterEngine {
       + apply_filters()
@@ -394,12 +468,15 @@ package "Engine & Sessions (14)" #80E0D0 {
       + find_join_path()
       + distinct_values()
       + build_from()
+      + build_where()
+      + close()
     }
     class Session {
       + raw_path()
       + bronze_path()
       + silver_path()
       + model_path()
+      + close()
     }
   }
 
@@ -409,18 +486,21 @@ package "Engine & Sessions (14)" #80E0D0 {
       + scan()
       + build_from()
       + build_where()
+      + distinct_values()
     }
     class SparkSql {
       + execute_sql()
       + scan()
       + build_from()
       + build_where()
+      + distinct_values()
     }
     class SqlOps {
       + execute_sql()
       + scan()
       + build_from()
       + build_where()
+      + distinct_values()
     }
   }
 
@@ -430,6 +510,10 @@ package "Engine & Sessions (14)" #80E0D0 {
       + bronze_path()
       + silver_path()
       + model_path()
+      + resolve()
+      + silver_root()
+      + bronze_root()
+      + raw_root()
     }
   }
 
@@ -446,12 +530,19 @@ package "Connections (4)" #E6E6E6 {
       + apply_filters()
       + to_pandas()
       + count()
+      + cache()
+      + uncache()
+      + stop()
     }
     class SparkConnection {
       + read_table()
       + write_delta_table()
       + merge_delta_table()
       + optimize_delta_table()
+      + vacuum_delta_table()
+      + get_delta_table_history()
+      + apply_filters()
+      + to_pandas()
     }
   }
 
@@ -461,6 +552,10 @@ package "Connections (4)" #E6E6E6 {
       + has_view()
       + read_table()
       + write_delta_table()
+      + get_delta_table_history()
+      + optimize_delta_table()
+      + vacuum_delta_table()
+      + read_parquet()
     }
   }
 
@@ -473,6 +568,7 @@ package "API Layer (36)" #B3D9FF {
       + provider_id : str
       + endpoint_id : str
       + bronze_path : Path
+      + fields : dict[str, str]
     }
     class BronzeResolver {
       + resolve()
@@ -492,6 +588,8 @@ package "API Layer (36)" #B3D9FF {
       + handles : set[str]
       + _engine : Any
       + max_response_mb : float
+      + storage_root : Any
+      + _max_sql_rows : int
       --
       + execute()
       + distinct_values()
@@ -529,6 +627,8 @@ package "API Layer (36)" #B3D9FF {
       + type : str
       + category : str
       + open : Optional[str]
+      + high : Optional[str]
+      + low : Optional[str]
     }
     class BucketSpec {
       + size : Optional[float]
@@ -539,6 +639,8 @@ package "API Layer (36)" #B3D9FF {
       + key : str
       + field : str
       + aggregation : Optional[str]
+      + format : Optional[str]
+      + label : Optional[str]
     }
     class DimensionValuesResponse {
       + field : str
@@ -553,11 +655,14 @@ package "API Layer (36)" #B3D9FF {
       + model_config
       + field : str
       + operator : str
+      + value : Union[list, str, int, float, dict]
     }
     class GraphicalQueryRequest {
       + type : str
       + x : Optional[str]
       + y : Optional[Union[str, list[str]]]
+      + group_by : Optional[str]
+      + size : Optional[str]
     }
     class GraphicalResponse {
       + series : list[SeriesData]
@@ -576,11 +681,15 @@ package "API Layer (36)" #B3D9FF {
       + key : str
       + field : Union[str, dict]
       + aggregation : Optional[str]
+      + format : Optional[str]
+      + label : Optional[str]
     }
     class MetricQueryRequest {
       + type : str
       + metrics : list[MeasureTuple]
       + filters : list[FilterSpec]
+      + page_filters : Optional[PageFilters]
+      + models : list[str]
     }
     class MetricResponse {
       + metrics : list[MetricValue]
@@ -589,6 +698,7 @@ package "API Layer (36)" #B3D9FF {
       + key : str
       + label : str
       + value : Any
+      + format : Optional[str]
     }
     class PageFilters {
       + ignore : list[str]
@@ -597,6 +707,8 @@ package "API Layer (36)" #B3D9FF {
       + type : str
       + rows : Union[str, list[str]]
       + cols : Optional[Union[str, list[str]]]
+      + layout : str
+      + measures : list[MeasureTuple]
       --
       + row_fields()
       + col_fields()
@@ -605,6 +717,7 @@ package "API Layer (36)" #B3D9FF {
       + name : str
       + x : list
       + y : list
+      + size : Optional[list]
     }
     class SortConfig {
       + rows : Optional[SortSpec]
@@ -619,16 +732,20 @@ package "API Layer (36)" #B3D9FF {
       + key : str
       + label : str
       + format : Optional[str]
+      + group : Optional[str]
     }
     class TableDataQueryRequest {
       + type : str
       + columns : list[ColumnTuple]
       + sort_by : Optional[str]
+      + sort_order : str
+      + filters : list[FilterSpec]
     }
     class TableResponse {
       + columns : list[TableColumn]
       + rows : list[list[Any]]
       + truncated : bool
+      + formatting : Optional[dict[str, Any]]
     }
     class TotalsSpec {
       + rows : bool
@@ -638,6 +755,7 @@ package "API Layer (36)" #B3D9FF {
       + key : str
       + source : str
       + type : str
+      + label : Optional[str]
     }
   }
 
@@ -650,6 +768,7 @@ package "API Layer (36)" #B3D9FF {
       + find_join_path()
       + resolve()
       + resolve_many()
+      + get_field_catalog()
     }
     class ResolvedField {
       + domain()
@@ -666,6 +785,8 @@ package "Build Pipeline (11)" #FF9933 {
       + get_op()
       + list_ops()
       + execute_all()
+      + execute_node()
+      + execute_pipeline()
     }
   }
 
@@ -683,6 +804,8 @@ package "Build Pipeline (11)" #FF9933 {
       + model_name : str
       + success : bool
       + dimensions : int
+      + facts : int
+      + rows_written : int
     }
     class BuilderRegistry {
       + _builders : Dict[str, Type[BaseModelBuilder]]
@@ -700,21 +823,30 @@ package "Build Pipeline (11)" #FF9933 {
       + row_count()
       + get_required_columns()
       + get_numeric_columns()
+      + get_date_column()
+      + get_entity_column()
+      + get_optional_columns()
+      + get_valid_ranges()
     }
     class ValidationIssue {
       + level : str
       + category : str
       + message : str
+      + details : Dict[str, Any]
     }
     class ValidationReport {
       + validator_name : str
       + timestamp : datetime
       + issues : List[ValidationIssue]
+      + metrics : Dict[str, Any]
       --
       + is_valid()
       + error_count()
       + warning_count()
       + add_error()
+      + add_warning()
+      + add_info()
+      + summary()
     }
   }
 
@@ -744,6 +876,10 @@ package "Build Pipeline (11)" #FF9933 {
       + build()
       + ensure_built()
       + write_tables()
+      + get_table()
+      + has_table()
+      + list_tables()
+      + before_build()
     }
   }
 
@@ -756,11 +892,17 @@ package "Ingestion Pipeline (18)" #CC9966 {
       + NUMERIC_COERCE : Dict[str, str]
       + SPARK_CASTS : Dict[str, str]
       + FINAL_COLUMNS : Optional[List[Tuple[str, str]]]
+      + PROVIDER_ID : Optional[str]
+      + ENDPOINT_ID : Optional[str]
       --
       + get_coerce_rules()
       + get_spark_casts()
       + get_final_columns()
       + get_field_mappings()
+      + get_computed_fields()
+      + get_facet_config()
+      + normalize()
+      + postprocess()
     }
   }
 
@@ -777,6 +919,8 @@ package "Ingestion Pipeline (18)" #CC9966 {
       + work_items : List[str]
       + total_work_items : int
       + completed_work_items : int
+      + total_records : int
+      + total_errors : int
       --
       + add_result()
       + summary()
@@ -790,11 +934,14 @@ package "Ingestion Pipeline (18)" #CC9966 {
       + get_executor()
       + shutdown_executor()
       + run()
+      + run_with_discovery()
     }
     class WriteTask {
       + df : Any
       + table_name : str
       + partitions : Optional[List[str]]
+      + record_count : int
+      + work_item : str
     }
   }
 
@@ -821,21 +968,31 @@ package "Ingestion Pipeline (18)" #CC9966 {
       + rate_limit()
       + env_api_key()
       + get_provider_setting()
+      + get_endpoint_config()
+      + list_work_items()
+      + fetch()
+      + normalize()
     }
     class DataType {
       + REFERENCE
       + PRICES
       + INCOME_STATEMENT
+      + BALANCE_SHEET
+      + CASH_FLOW
     }
     class FetchResult {
       + ticker : str
       + data_type : DataType
       + success : bool
+      + data : Optional[Any]
+      + error : Optional[str]
     }
     class WorkItemResult {
       + work_item : str
       + success : bool
       + record_count : int
+      + error : Optional[str]
+      + table_path : Optional[str]
     }
   }
 
@@ -847,6 +1004,8 @@ package "Ingestion Pipeline (18)" #CC9966 {
       + name : str
       + base : str
       + method : str
+      + path_template : str
+      + required_params : list
     }
   }
 
@@ -860,6 +1019,10 @@ package "Ingestion Pipeline (18)" #CC9966 {
       + fetch_all()
       + fetch_all_flat()
       + get_row_count()
+      + get_metadata()
+      + fetch_csv()
+      + download_csv_to_file()
+      + fetch_csv_from_file()
     }
   }
 
@@ -869,6 +1032,10 @@ package "Ingestion Pipeline (18)" #CC9966 {
       + list_work_items()
       + fetch()
       + normalize()
+      + get_table_name()
+      + get_resource_id()
+      + list_endpoints()
+      + read_csv_with_spark()
     }
   }
 
@@ -878,6 +1045,10 @@ package "Ingestion Pipeline (18)" #CC9966 {
       + write_if_missing()
       + append_immutable()
       + upsert()
+      + smart_write()
+      + write()
+      + overwrite()
+      + append()
     }
     class RawSink {
       + write()
@@ -889,6 +1060,8 @@ package "Ingestion Pipeline (18)" #CC9966 {
       + add_batch()
       + flush()
       + total_records()
+      + buffered_records()
+      + batches_written()
     }
   }
 
@@ -902,11 +1075,17 @@ package "Pipeline Infrastructure (19)" #CC9966 {
       + stats()
       + allow_request()
       + record_success()
+      + record_failure()
+      + reset()
+      + protect()
+      + call()
     }
     class CircuitBreakerConfig {
       + failure_threshold : int
       + success_threshold : int
       + timeout_seconds : float
+      + half_open_max_calls : int
+      + name : str
     }
     class CircuitBreakerManager {
       + _instance : Optional['CircuitBreakerManager']
@@ -928,6 +1107,8 @@ package "Pipeline Infrastructure (19)" #CC9966 {
       + total_calls : int
       + successful_calls : int
       + failed_calls : int
+      + rejected_calls : int
+      + state_changes : int
     }
   }
 
@@ -937,11 +1118,16 @@ package "Pipeline Infrastructure (19)" #CC9966 {
       + record()
       + finish()
       + elapsed_seconds()
+      + summary()
+      + print_report()
+      + get_slowest_steps()
     }
     class StepMetric {
       + name : str
       + count : int
       + total_ms : float
+      + min_ms : float
+      + max_ms : float
       --
       + avg_ms()
       + total_seconds()
@@ -958,11 +1144,14 @@ package "Pipeline Infrastructure (19)" #CC9966 {
       + update()
       + complete_ticker()
       + complete_batch()
+      + finish()
     }
     class PhaseProgress {
       + name : str
       + total : int
       + completed : int
+      + errors : int
+      + start_time : Optional[float]
       --
       + percent()
       + elapsed_seconds()
@@ -974,11 +1163,17 @@ package "Pipeline Infrastructure (19)" #CC9966 {
       + start_phase()
       + update_phase()
       + complete_phase()
+      + complete_ticker()
+      + get_overall_progress()
+      + print_overall_status()
+      + finish()
     }
     class PipelineStats {
       + total_tickers : int
       + completed_tickers : int
       + total_api_calls : int
+      + successful_calls : int
+      + failed_calls : int
       --
       + elapsed_seconds()
       + format_elapsed()
@@ -1011,16 +1206,21 @@ package "Pipeline Infrastructure (19)" #CC9966 {
       + configure_provider()
       + wait()
       + try_acquire()
+      + get_all_stats()
+      + reset()
     }
     class TokenBucket {
       + config : RateLimitConfig
       + tokens : float
       + last_refill : float
+      + lock : threading.Lock
+      + total_requests : int
       --
       + acquire()
       + wait()
       + try_acquire()
       + available_tokens()
+      + get_stats()
     }
   }
 
@@ -1036,6 +1236,10 @@ package "Concrete Providers (4)" #CC9966 {
       + has_raw_data()
       + set_tickers()
       + list_work_items()
+      + populate_raw_cache()
+      + fetch()
+      + normalize()
+      + get_table_name()
     }
     class AlphaVantageRegistry {
       + render()
@@ -1047,6 +1251,8 @@ package "Concrete Providers (4)" #CC9966 {
       + name : str
       + description : str
       + version : str
+      + models : List[str]
+      + bronze_tables : List[str]
       --
       + to_dict()
     }
@@ -1059,6 +1265,10 @@ package "Concrete Providers (4)" #CC9966 {
       + list_available()
       + get_info()
       + get_ingestor()
+      + get_all_info()
+      + get_providers_for_model()
+      + get_providers_by_tag()
+      + register()
     }
   }
 
@@ -1072,11 +1282,14 @@ package "Hooks & Artifacts (3)" #B3FFB3 {
       + load()
       + latest()
       + list_versions()
+      + register()
     }
     class ModelArtifact {
       + model_name : str
       + version : str
       + trained_at : str
+      + artifact_path : str
+      + metrics : dict
       --
       + to_dict()
       + from_dict()
@@ -1103,22 +1316,34 @@ package "Orchestration (5)" #CC99FF {
       + load_checkpoint()
       + find_latest_checkpoint()
       + find_resumable_checkpoint()
+      + mark_ticker_started()
+      + mark_ticker_completed()
+      + mark_ticker_failed()
+      + get_pending_tickers()
     }
     class DependencyGraph {
       + build()
       + get_dependencies()
       + topological_sort()
       + filter_buildable()
+      + get_dependents()
+      + visualize()
+      + get_tiers()
+      + list_models()
     }
     class ModelInfo {
       + name : str
       + version : str
       + depends_on : List[str]
+      + inherits_from : Optional[str]
+      + storage_root : str
     }
     class PipelineCheckpoint {
       + pipeline_id : str
       + pipeline_name : str
       + started_at : str
+      + last_updated : str
+      + status : str
       --
       + to_dict()
       + from_dict()
@@ -1127,6 +1352,8 @@ package "Orchestration (5)" #CC99FF {
       + ticker : str
       + status : str
       + started_at : Optional[str]
+      + completed_at : Optional[str]
+      + error : Optional[str]
       --
       + to_dict()
       + from_dict()
@@ -1143,6 +1370,7 @@ package "Application (1)" #E6E6E6 {
       + from_app_config()
       + build_session()
       + query_session()
+      + ingest_session()
     }
   }
 
@@ -1155,6 +1383,8 @@ package "Utilities (3)" #E6E6E6 {
       + repo : Path
       + spark : Any
       + storage : Dict[str, Any]
+      + connection : Optional[Any]
+      + connection_type : str
       --
       + get_api_config()
       + from_repo_root()
@@ -1174,6 +1404,10 @@ package "Utilities (3)" #E6E6E6 {
       + log_stage()
       + log_error()
       + log_warning()
+      + update_results()
+      + end_run()
+      + get_recent_runs()
+      + print_recent_runs()
     }
   }
 
