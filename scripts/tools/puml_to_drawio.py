@@ -324,8 +324,8 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
         bx, by, bx2, by2 = min_x - 10, min_y - PKG_LABEL_H - 5, max_x + NODE_W + 10, max_y + 10
         cells.append(
             f'      <mxCell id="{cid}" value="{xe(pkg_name)}" '
-            f'style="rounded=1;whiteSpace=wrap;fontSize=13;fontStyle=1;fontFamily=Courier New;'
-            f'verticalAlign=top;dashed=1;dashPattern=5 5;opacity=30;'
+            f'style="swimlane;whiteSpace=wrap;html=1;fontSize=13;fontStyle=1;fontFamily=Courier New;'
+            f'startSize=30;collapsible=1;'
             f'fillColor={color};strokeColor=#999999;" '
             f'vertex="1" parent="1">'
             f'<mxGeometry x="{bx}" y="{by}" width="{bx2 - bx}" height="{by2 - by}" as="geometry"/>'

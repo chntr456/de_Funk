@@ -1313,184 +1313,6 @@ package "Ingestion Core (18)" #CC9966 {
 
 }
 
-package "Ingestion Infrastructure (19)" #CC9966 {
-
-  class BatchProgressTracker {
-    + DATA_TYPE_SHORT_NAMES
-    --
-    + start_batch()
-    + update()
-    + complete_ticker()
-    + complete_batch()
-    + finish()
-  }
-
-  class CircuitBreaker {
-    + state()
-    + stats()
-    + allow_request()
-    + record_success()
-    + record_failure()
-    + reset()
-    + protect()
-    + call()
-    + get_status()
-  }
-
-  class CircuitBreakerConfig {
-    + failure_threshold : int
-    + success_threshold : int
-    + timeout_seconds : float
-    + half_open_max_calls : int
-    + name : str
-  }
-
-  class CircuitBreakerManager {
-    + _instance : Optional['CircuitBreakerManager']
-    + _lock : threading.Lock
-    + DEFAULT_CONFIGS : Dict[str, CircuitBreakerConfig]
-    --
-    + get_breaker()
-    + configure()
-    + get_all_status()
-    + reset_all()
-  }
-
-  class CircuitOpenError
-
-  class CircuitState {
-    + CLOSED
-    + OPEN
-    + HALF_OPEN
-  }
-
-  class CircuitStats {
-    + total_calls : int
-    + successful_calls : int
-    + failed_calls : int
-    + rejected_calls : int
-    + state_changes : int
-    + last_failure_time : Optional[float]
-    + last_success_time : Optional[float]
-    + consecutive_failures : int
-    + consecutive_successes : int
-  }
-
-  class MetricsCollector {
-    + time()
-    + record()
-    + finish()
-    + elapsed_seconds()
-    + summary()
-    + print_report()
-    + get_slowest_steps()
-  }
-
-  class PhaseProgress {
-    + name : str
-    + total : int
-    + completed : int
-    + errors : int
-    + start_time : Optional[float]
-    + end_time : Optional[float]
-    + current_ticker : str
-    --
-    + percent()
-    + elapsed_seconds()
-    + eta_seconds()
-    + is_complete()
-  }
-
-  class PipelineProgressTracker {
-    + set_phase_total()
-    + start_phase()
-    + update_phase()
-    + complete_phase()
-    + complete_ticker()
-    + get_overall_progress()
-    + print_overall_status()
-    + finish()
-  }
-
-  class PipelineStats {
-    + total_tickers : int
-    + completed_tickers : int
-    + total_api_calls : int
-    + successful_calls : int
-    + failed_calls : int
-    + start_time : Optional[float]
-    + end_time : Optional[float]
-    --
-    + elapsed_seconds()
-    + format_elapsed()
-  }
-
-  class ProgressBar {
-    + render()
-  }
-
-  class RateLimitConfig {
-    + calls_per_minute : float
-    + burst_size : int
-    + name : str
-    --
-    + calls_per_second()
-    + refill_rate()
-  }
-
-  class RateLimiterManager {
-    + _instance : Optional['RateLimiterManager']
-    + _lock : threading.Lock
-    --
-    + get_limiter()
-    + configure_provider()
-    + wait()
-    + try_acquire()
-    + get_all_stats()
-    + reset()
-  }
-
-  class StepMetric {
-    + name : str
-    + count : int
-    + total_ms : float
-    + min_ms : float
-    + max_ms : float
-    + errors : int
-    --
-    + avg_ms()
-    + total_seconds()
-    + record()
-  }
-
-  class StepProgressTracker {
-    + update()
-    + step_complete()
-    + finish()
-  }
-
-  class TickerProgressCallback
-
-  class TimingContext
-
-  class TokenBucket {
-    + config : RateLimitConfig
-    + tokens : float
-    + last_refill : float
-    + lock : threading.Lock
-    + total_requests : int
-    + total_waits : int
-    + total_wait_time : float
-    --
-    + acquire()
-    + wait()
-    + try_acquire()
-    + available_tokens()
-    + get_stats()
-  }
-
-}
-
 package "Providers (4)" #CC9966 {
 
   class AlphaVantageProvider {
@@ -1759,57 +1581,6 @@ package "Utilities (3)" #E6E6E6 {
 
 }
 
-
-package "API Routers (7)" #B3D9FF {
-
-  class QueryRouter <<router>> {
-    + POST /api/query
-    --
-    + execute_query(payload)
-  }
-
-  class DimensionsRouter <<router>> {
-    + GET /api/dimensions/{ref}
-    --
-    + get_dimension_values(ref)
-  }
-
-  class DomainsRouter <<router>> {
-    + GET /api/domains
-  }
-
-  class BronzeRouter <<router>> {
-    + POST /api/bronze/query
-    + GET /api/bronze/endpoints
-    + GET /api/bronze/dimensions/{ref}
-  }
-
-  class HealthRouter <<router>> {
-    + GET /api/health
-  }
-
-  class PredictRouter <<router>> {
-    + GET /api/predict/{model_name}
-  }
-
-  class ModelsRouter <<router>> {
-    + GET /api/models
-    + GET /api/models/{name}/{version}
-  }
-
-}
-
-package "Obsidian Plugin" #99CCFF {
-
-  class ObsidianPlugin <<external>> {
-    + renderExhibit(block)
-    + fetchDimensions(ref)
-    + filterSidebar()
-  }
-
-}
-
-
 BaseModel <|-- BoxQueryRequest
 BaseModel <|-- BucketSpec
 BaseModel <|-- ColumnTuple
@@ -1884,8 +1655,6 @@ BoxQueryRequest *-- PageFilters : page_filters
 BoxQueryRequest *-- SortSpec : sort
 BuildSpec *-- PhaseSpec : phases
 BuilderRegistry *-- BaseModelBuilder : _builders
-CircuitBreakerManager *-- CircuitBreakerConfig : DEFAULT_CONFIGS
-CircuitBreakerManager *-- CircuitBreakerManager : _instance
 ConnectionConfig *-- DuckDBConfig : duckdb
 ConnectionConfig *-- SparkConfig : spark
 DomainModelConfig *-- BuildSpec : build
@@ -1926,7 +1695,6 @@ PivotQueryRequest *-- SortConfig : sort
 PivotQueryRequest *-- TotalsSpec : totals
 PivotQueryRequest *-- WindowSpec : windows
 ProviderRegistry *-- ProviderInfo : _providers
-RateLimiterManager *-- RateLimiterManager : _instance
 RepoContext *-- AppConfig : _config
 RunConfig *-- ClusterConfig : cluster
 RunConfig *-- RetryConfig : retry
@@ -1941,7 +1709,6 @@ TableDataQueryRequest *-- ColumnTuple : columns
 TableDataQueryRequest *-- FilterSpec : filters
 TableDataQueryRequest *-- PageFilters : page_filters
 TableResponse *-- TableColumn : columns
-TokenBucket *-- RateLimitConfig : config
 ValidationReport *-- ValidationIssue : issues
 
 AlphaVantageProvider ..> SparkNormalizer : _normalize_spark_df()
@@ -1971,8 +1738,8 @@ RepoContext ..> ConnectionFactory : from_repo_root()
 Session ..> StorageRouter : __init__()
 
 legend right
-  189 classes in 18 groups
-  64 inheritance, 68 composition,
+  170 classes in 17 groups
+  64 inheritance, 64 composition,
   25 cross-group dependency edges
   ---
   | Color | Concern |
@@ -1986,16 +1753,5 @@ legend right
   |<#B3FFB3> Green | Hooks + Artifacts |
   |<#E6E6E6> Gray | Infrastructure |
 endlegend
-
-
-ObsidianPlugin ..> QueryRouter : POST /api/query
-ObsidianPlugin ..> DimensionsRouter : GET /api/dimensions
-ObsidianPlugin ..> DomainsRouter : GET /api/domains
-ObsidianPlugin ..> BronzeRouter : POST /api/bronze
-QueryRouter ..> HandlerRegistry : get(type)
-DimensionsRouter ..> FieldResolver : resolve()
-BronzeRouter ..> BronzeResolver : resolve()
-PredictRouter ..> ArtifactStore : load()
-ModelsRouter ..> ArtifactStore : list_versions()
 
 @enduml
