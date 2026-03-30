@@ -1759,6 +1759,57 @@ package "Utilities (3)" #E6E6E6 {
 
 }
 
+
+package "API Routers (7)" #B3D9FF {
+
+  class QueryRouter <<router>> {
+    + POST /api/query
+    --
+    + execute_query(payload)
+  }
+
+  class DimensionsRouter <<router>> {
+    + GET /api/dimensions/{ref}
+    --
+    + get_dimension_values(ref)
+  }
+
+  class DomainsRouter <<router>> {
+    + GET /api/domains
+  }
+
+  class BronzeRouter <<router>> {
+    + POST /api/bronze/query
+    + GET /api/bronze/endpoints
+    + GET /api/bronze/dimensions/{ref}
+  }
+
+  class HealthRouter <<router>> {
+    + GET /api/health
+  }
+
+  class PredictRouter <<router>> {
+    + GET /api/predict/{model_name}
+  }
+
+  class ModelsRouter <<router>> {
+    + GET /api/models
+    + GET /api/models/{name}/{version}
+  }
+
+}
+
+package "Obsidian Plugin" #99CCFF {
+
+  class ObsidianPlugin <<external>> {
+    + renderExhibit(block)
+    + fetchDimensions(ref)
+    + filterSidebar()
+  }
+
+}
+
+
 BaseModel <|-- BoxQueryRequest
 BaseModel <|-- BucketSpec
 BaseModel <|-- ColumnTuple
@@ -1935,5 +1986,16 @@ legend right
   |<#B3FFB3> Green | Hooks + Artifacts |
   |<#E6E6E6> Gray | Infrastructure |
 endlegend
+
+
+ObsidianPlugin ..> QueryRouter : POST /api/query
+ObsidianPlugin ..> DimensionsRouter : GET /api/dimensions
+ObsidianPlugin ..> DomainsRouter : GET /api/domains
+ObsidianPlugin ..> BronzeRouter : POST /api/bronze
+QueryRouter ..> HandlerRegistry : get(type)
+DimensionsRouter ..> FieldResolver : resolve()
+BronzeRouter ..> BronzeResolver : resolve()
+PredictRouter ..> ArtifactStore : load()
+ModelsRouter ..> ArtifactStore : list_versions()
 
 @enduml
