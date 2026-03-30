@@ -31,39 +31,81 @@ source_files:
 
 ### What Problem This Solves
 
-<!-- TODO: Explain the problem this group addresses. -->
+de_Funk ingests data from multiple external APIs (Alpha Vantage for financial data, Socrata/SODA for open government data) into a Bronze layer of Delta Lake tables. Each API has different authentication, rate limits, pagination patterns, response formats, and schema conventions. The ingestion pipeline provides a provider-agnostic framework that standardizes this process: fetch raw data in batches, normalize to Spark DataFrames, and write to Bronze Delta tables with configurable write strategies (append, upsert, overwrite).
+
+Key challenges addressed:
+- **Rate limiting**: Alpha Vantage free tier allows 5 calls/min; premium allows 75/min. Socrata APIs have different limits. The token bucket rate limiter handles this per-provider.
+- **Failure isolation**: A single API outage should not block ingestion of other data types. Circuit breakers prevent cascading failures.
+- **Throughput**: API fetches and Delta writes can overlap using async writes with a bounded in-memory queue, yielding 2-3x throughput improvement.
+- **Resumability**: Long-running ingestion of 500+ tickers needs checkpointing to resume from failure.
 
 ### Key Design Decisions
 
 | Decision | Rationale | Alternative Considered |
 |----------|-----------|----------------------|
-| <!-- TODO --> | | |
+| Provider abstraction with "work_item" concept | Different providers have different granularity: Alpha Vantage work items are data types (prices, reference), Socrata work items are endpoint IDs (crimes, budget). The abstract `BaseProvider` unifies both patterns with `list_work_items()`, `fetch()`, `normalize()`, `get_table_name()`. | Separate ingestion code per provider |
+| Configuration from markdown documentation files | Provider and endpoint configs live in markdown files with YAML frontmatter under `data_sources/`. This keeps documentation and configuration in sync (single source of truth). `MarkdownConfigLoader` parses these files. | Separate YAML config files |
+| Token bucket rate limiting (not simple sleep) | Token bucket allows burst capacity while maintaining average rate. A provider that sleeps 1s between calls wastes capacity when the API allows bursts. The bucket accumulates tokens during idle periods. | Fixed `time.sleep()` between requests |
+| Async writes via ThreadPoolExecutor | Decouples API fetching from Delta Lake writes. While the writer thread commits one batch, the fetch thread can start the next API call. Bounded queue (max 3 pending) prevents OOM. | Sequential fetch-then-write per batch |
+| BronzeSink with multiple write strategies (append_immutable, upsert, overwrite) | Time-series data (prices) is append-only and idempotent. Reference data needs upsert. Financial statements may need full overwrite. Endpoint config in markdown specifies the strategy. | Single overwrite-all strategy |
 
 ### Config-Driven Aspects
 
 | Behavior | Controlled By | Location |
 |----------|--------------|----------|
-| <!-- TODO --> | | |
+| API base URL, rate limit, API key env var | Provider markdown frontmatter (`base_url`, `rate_limit`, `env_api_key`) | `data_sources/{provider}/provider.md` |
+| Endpoint resource IDs, schemas, write strategies | Endpoint markdown frontmatter | `data_sources/{provider}/endpoints/{endpoint}.md` |
+| Field mappings (source -> target column names) | Endpoint `schema:` section with `source:` fields | `data_sources/{provider}/endpoints/{endpoint}.md` |
+| Type coercions (string -> double, etc.) | Endpoint `schema:` section with `{coerce: type}` | `data_sources/{provider}/endpoints/{endpoint}.md` |
+| Per-provider rate limits | `PROVIDER_RATE_LIMITS` dict + `RateLimiterManager.configure_provider()` | `src/de_funk/pipelines/base/rate_limiter.py` |
+| Circuit breaker thresholds | `CircuitBreakerConfig` (default: 5 failures, 60s timeout) | `src/de_funk/pipelines/base/circuit_breaker.py` |
+| Bronze storage paths | `storage.json` > `roots.bronze` | `configs/storage.json` |
 
 ## Architecture
 
 ### Where This Fits
 
 ```
-[Upstream] --> [THIS GROUP] --> [Downstream]
+[External APIs]                    [Raw Storage]
+  Alpha Vantage  ──┐                    │
+  Socrata/SODA   ──┤                    │
+  BLS            ──┘                    │
+        │                               │
+   [HttpClient / SocrataClient]         │
+   [Rate Limiter + Circuit Breaker]     │
+        │                               │
+   [BaseProvider.fetch()]  ──────> [RawSink]
+        │
+   [BaseProvider.normalize() / Facet / SparkNormalizer]
+        │
+   [IngestorEngine.run()]
+        │
+   [BronzeSink.write() / upsert() / append_immutable()]
+        │
+   [Bronze Delta Lake Tables]
+        │
+   [Build Pipeline reads Bronze for Silver transforms]
 ```
 
-<!-- TODO: Brief explanation of data/control flow. -->
+The ingestion pipeline sits between external APIs and the Bronze layer. It produces Delta Lake tables that the build pipeline (Module 06) reads as source data for Silver dimensional models.
 
 ### Dependencies
 
 | Depends On | What For |
 |------------|----------|
-| <!-- TODO --> | |
+| `de_funk.config.markdown_loader.MarkdownConfigLoader` | Reading provider and endpoint configs from markdown |
+| `de_funk.config.logging` | Structured logging |
+| `pyspark` (Spark) | DataFrame creation and normalization (via `SparkNormalizer`, `Facet`) |
+| `delta-spark` | Delta Lake write operations in `BronzeSink` |
+| `urllib` | HTTP requests in `HttpClient` |
+| `requests` / `urllib3` | HTTP requests in `SocrataClient` |
 
 | Depended On By | What For |
 |----------------|----------|
-| <!-- TODO --> | |
+| `de_funk.models.base.graph_builder.GraphBuilder` | Reading Bronze tables as build sources |
+| `de_funk.orchestration.scheduler` | Scheduled daily price ingestion and market cap refresh |
+| `de_funk.orchestration.checkpoint.CheckpointManager` | Tracking ingestion progress per ticker |
+| `scripts/ingest/` | CLI scripts for manual ingestion runs |
 
 ## Key Classes
 
@@ -285,12 +327,12 @@ source_files:
 
 **File**: `src/de_funk/pipelines/base/key_pool.py:4`
 
-**Purpose**: <!-- TODO -->
+**Purpose**: Manages a rotating pool of API keys for providers that support multiple keys. Uses a deque to cycle through keys, with cooldown tracking to avoid re-using an exhausted key too soon.
 
 | Method | Description |
 |--------|-------------|
-| `size()` | <!-- TODO --> |
-| `next_key()` | <!-- TODO --> |
+| `size()` | Return the number of keys in the pool. |
+| `next_key()` | Return the next available key, rotating the pool. Skips keys within cooldown. |
 | `mark_exhausted(key)` | Mark a key as exhausted (rate-limited). Moves it to the back. |
 
 ### SparkNormalizer
@@ -308,7 +350,7 @@ source_files:
 
 **File**: `src/de_funk/pipelines/base/registry.py:5`
 
-**Purpose**: <!-- TODO -->
+**Purpose**: Data class representing a single API endpoint definition, with URL template, HTTP method, required parameters, default query parameters, and response key for data extraction.
 
 | Attribute | Type |
 |-----------|------|
@@ -324,7 +366,7 @@ source_files:
 
 **File**: `src/de_funk/pipelines/base/registry.py:14`
 
-**Purpose**: <!-- TODO -->
+**Purpose**: Registry of API endpoint definitions. Subclasses populate endpoint metadata (URL templates, query defaults). The `render()` method substitutes parameters into the endpoint template to produce a callable URL.
 
 | Method | Description |
 |--------|-------------|
@@ -431,7 +473,7 @@ source_files:
 
 | Method | Description |
 |--------|-------------|
-| `calls_per_second() -> float` | <!-- TODO --> |
+| `calls_per_second() -> float` | Computed property: `calls_per_minute / 60.0`. |
 | `refill_rate() -> float` | Tokens added per second. |
 
 ### TokenBucket
@@ -636,8 +678,8 @@ source_files:
 
 | Method | Description |
 |--------|-------------|
-| `exists(table: str, partitions: Optional[Dict]) -> bool` | <!-- TODO --> |
-| `write_if_missing(table: str, partitions: Optional[Dict], df) -> bool` | <!-- TODO --> |
+| `exists(table: str, partitions: Optional[Dict]) -> bool` | Check if a Bronze table (and optional partition) exists on disk. |
+| `write_if_missing(table: str, partitions: Optional[Dict], df) -> bool` | Write only if the table or partition does not already exist. Returns True if written. |
 | `append_immutable(df, table: str, key_columns: List[str], partitions: Optional[List[str]], date_column: str) -> str` | Append immutable time-series data efficiently using INSERT-only semantics. |
 | `upsert(df, table: str, key_columns: List[str], partitions: Optional[List[str]], update_existing: bool) -> str` | Upsert DataFrame into bronze table using Read-Merge-Overwrite strategy. |
 | `smart_write(df, table: str) -> str` | Universal write method that picks strategy based on storage.json config. |
@@ -733,7 +775,7 @@ source_files:
 
 | Method | Description |
 |--------|-------------|
-| `to_dict() -> Dict[str, Any]` | <!-- TODO --> |
+| `to_dict() -> Dict[str, Any]` | Serialize to a plain dict via `dataclasses.asdict()`. |
 
 ### ProviderRegistry
 
@@ -763,11 +805,127 @@ source_files:
 
 ### Common Operations
 
-<!-- TODO: Runnable code examples with expected output -->
+**Running ingestion for a provider:**
+
+```python
+from de_funk.pipelines.base.ingestor_engine import IngestorEngine
+from de_funk.pipelines.providers.alpha_vantage.alpha_vantage_provider import AlphaVantageProvider
+from pathlib import Path
+
+# Create provider from markdown config
+provider = AlphaVantageProvider(
+    provider_id="alpha_vantage",
+    spark=spark_session,
+    docs_path=Path("data_sources"),
+)
+provider.set_tickers(["AAPL", "MSFT", "GOOGL"])
+
+# Create engine and run
+engine = IngestorEngine.from_session(session, provider)
+results = engine.run(work_items=["prices", "reference"])
+results.print_summary()
+# INGESTION SUMMARY
+# Work items: 2/2 completed
+# Records: 15,420
+# Time: 34.2s
+# Throughput: 451 records/sec
+```
+
+**Using the rate limiter directly:**
+
+```python
+from de_funk.pipelines.base.rate_limiter import RateLimiterManager
+
+manager = RateLimiterManager()
+manager.configure_provider("alpha_vantage", calls_per_minute=75, burst_size=10)
+
+# Before each API call
+manager.wait("alpha_vantage")  # blocks until a token is available
+response = make_api_call()
+```
+
+**Using the circuit breaker:**
+
+```python
+from de_funk.pipelines.base.circuit_breaker import CircuitBreakerManager
+
+manager = CircuitBreakerManager()
+breaker = manager.get_breaker("alpha_vantage")
+
+if breaker.allow_request():
+    try:
+        result = api_call()
+        breaker.record_success()
+    except Exception as e:
+        breaker.record_failure(e)
+else:
+    # Circuit is open -- fail fast
+    logger.warning("Circuit open, skipping API call")
+```
+
+**Writing to Bronze with BronzeSink:**
+
+```python
+from de_funk.pipelines.ingestors.bronze_sink import BronzeSink
+
+sink = BronzeSink(spark=spark, storage_cfg=storage_cfg)
+
+# Append immutable time-series data
+sink.append_immutable(
+    df=prices_df,
+    table="alpha_vantage.daily_prices",
+    key_columns=["ticker", "trade_date"],
+    date_column="trade_date",
+)
+
+# Upsert reference data
+sink.upsert(
+    df=reference_df,
+    table="alpha_vantage.listing_status",
+    key_columns=["ticker"],
+)
+```
 
 ### Integration Examples
 
-<!-- TODO: Show cross-group usage -->
+**Full ingestion pipeline with checkpointing:**
+
+```python
+from de_funk.orchestration.checkpoint import CheckpointManager
+
+checkpoint_mgr = CheckpointManager()
+checkpoint = checkpoint_mgr.find_resumable_checkpoint("alpha_vantage_ingestion")
+
+if checkpoint:
+    tickers = checkpoint_mgr.get_pending_tickers()
+    logger.info(f"Resuming with {len(tickers)} pending tickers")
+else:
+    tickers = provider.discover_tickers(state="active")
+    checkpoint = checkpoint_mgr.create_checkpoint("alpha_vantage_ingestion", tickers)
+
+for ticker in tickers:
+    checkpoint_mgr.mark_ticker_started(ticker)
+    try:
+        # ... ingest ticker data ...
+        checkpoint_mgr.mark_ticker_completed(ticker, endpoints={"prices": "ok"})
+    except Exception as e:
+        checkpoint_mgr.mark_ticker_failed(ticker, str(e))
+
+checkpoint_mgr.mark_pipeline_completed()
+```
+
+**Provider registry for dynamic provider discovery:**
+
+```python
+from de_funk.pipelines.providers.registry import ProviderRegistry
+
+registry = ProviderRegistry(providers_dir=Path("data_sources"))
+registry.discover()
+
+for name in registry.list_available():
+    info = registry.get_info(name)
+    print(f"{name}: {info.description} (tables: {info.bronze_tables})")
+```
 
 ## Triage & Debugging
 
@@ -775,15 +933,37 @@ source_files:
 
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
-| <!-- TODO --> | | |
+| `HTTPError 429 Too Many Requests` | Rate limit exceeded for the provider | Check `PROVIDER_RATE_LIMITS` config. For Alpha Vantage free tier, limit is 5/min. Consider upgrading API key tier or reducing `calls_per_minute`. |
+| `CircuitOpenError: Circuit 'xxx' is OPEN` | Circuit breaker tripped after repeated failures | Check the underlying API status. Call `CircuitBreakerManager().get_breaker("xxx").reset()` to manually close the circuit. |
+| `No API key found in environment` | The environment variable for the provider's API key is not set | Set the env var specified in `provider.md` frontmatter (e.g. `export ALPHA_VANTAGE_API_KEY=xxx`) |
+| Ingestion produces 0 records for an endpoint | API returned empty data, or the `response_key` in markdown config is wrong | Check the raw API response manually. Verify the `response_key` in the endpoint markdown matches the actual JSON structure. |
+| `DeltaTableAlreadyExistsException` during write | Attempting to overwrite a Delta table with `mode=error` | Use `mode=overwrite` or switch to `upsert()`/`append_immutable()` |
+| Ingestion hangs / very slow | Rate limiter cooldown is too aggressive, or API is returning slow responses | Check `RateLimiterManager().get_all_stats()` for wait times. Check network connectivity. |
+| `SparkException` during normalize | Raw data has unexpected types or NULL values that break Spark schema inference | Check the endpoint's `schema:` section in markdown for correct type coercions. Add `{coerce: type}` rules. |
+| Progress tracker shows ETA as "unknown" | Phase not started or total count is 0 | Call `start_phase()` before `update_phase()` |
 
 ### Debug Checklist
 
-- [ ] <!-- TODO -->
+- [ ] Verify API key is set: `echo $ALPHA_VANTAGE_API_KEY` (or the provider's env var)
+- [ ] Test raw API call manually: `curl "https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=AAPL&apikey=$ALPHA_VANTAGE_API_KEY"`
+- [ ] Check rate limiter stats: `RateLimiterManager().get_all_stats()` for total_waits and total_wait_time
+- [ ] Check circuit breaker status: `CircuitBreakerManager().get_all_status()` for any OPEN circuits
+- [ ] Enable raw save mode to inspect API responses: `provider.enable_raw_save(Path("storage/raw"), True)`
+- [ ] Check Bronze table exists after ingestion: `ls storage/bronze/<provider>/<table>/`
+- [ ] Verify endpoint markdown config: check `data_sources/<provider>/endpoints/<endpoint>.md` for correct `resource_id`, `schema`, `write_strategy`
+- [ ] For Socrata providers, verify resource ID with: `curl "https://data.cityofchicago.org/resource/<id>.json?$limit=1"`
 
 ### Common Pitfalls
 
-1. <!-- TODO -->
+1. **Forgetting to call `provider.set_tickers()` for Alpha Vantage**: Unlike Socrata providers (which discover work items from endpoint configs), Alpha Vantage needs explicit ticker lists. Without `set_tickers()`, `list_work_items()` returns data types but `fetch()` has no tickers to iterate over.
+
+2. **Mixing up work_item semantics**: For Alpha Vantage, a work_item is a data type ("prices", "reference"). For Socrata, it is an endpoint ID ("crimes", "budget"). The `IngestorEngine.run()` method is provider-agnostic but the work_items you pass must match the provider's convention.
+
+3. **Rate limiter is per-process singleton**: `RateLimiterManager` and `CircuitBreakerManager` use class-level singletons. Running multiple ingestion processes against the same API will not share rate limit state. Use a single process or external rate limiting for multi-process scenarios.
+
+4. **BronzeSink write strategy must match data characteristics**: Using `overwrite` on time-series data loses historical records. Using `append_immutable` on reference data creates duplicates. The endpoint markdown's `write_strategy` field should match the data type: `append_immutable` for prices, `upsert` for reference, `overwrite` for snapshots.
+
+5. **ApiKeyPool cooldown vs rate limiter**: The `ApiKeyPool` has its own cooldown per key (default 60s), separate from the `TokenBucket` rate limiter. If you have multiple API keys, the pool rotates between them, but the rate limiter still enforces the overall calls-per-minute budget.
 
 ## File Reference
 
