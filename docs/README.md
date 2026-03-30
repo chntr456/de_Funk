@@ -200,6 +200,27 @@ Comprehensive walkthrough guides written in notebook style with executable code 
 | [Obsidian Plugin](obsidian-plugin.md) | Exhibit blocks, frontmatter filters, controls, complete dashboard tutorial | You're creating Obsidian dashboards |
 | [Internals](internals.md) | Config, logging, exceptions, measures, filters, storage routing — with class examples | You're working on framework internals |
 
+## Module Documentation
+
+Per-group architectural docs covering usage, triage, and design decisions for every part of the codebase.
+
+| Document | Classes | What It Covers |
+|----------|---------|---------------|
+| [01 Application](modules/01-application.md) | 1 | DeFunk entry point |
+| [02 Configuration](modules/02-configuration.md) | 40 | Data classes, config loaders, markdown parsers |
+| [03 Engine & Sessions](modules/03-engine-sessions.md) | 17 | Engine, DataOps/SqlOps, Sessions, connections |
+| [04 Graph & Resolution](modules/04-graph-resolution.md) | 6 | DomainGraph, FieldResolver, BronzeResolver |
+| [05 API](modules/05-api.md) | 30 | Handlers, request models, routers |
+| [06 Build Pipeline](modules/06-build-pipeline.md) | 14 | BaseModel, GraphBuilder, NodeExecutor, hooks |
+| [07 Ingestion](modules/07-ingestion.md) | 41 | IngestorEngine, providers, rate limiting |
+| [08 Orchestration](modules/08-orchestration.md) | 5 | Scheduler, dependency graph, checkpoints |
+| [09 Error Handling](modules/09-error-handling.md) | 26 | Exception hierarchy, ErrorContext |
+| [10 Logging](modules/10-logging.md) | 4 | Structured logging, LogTimer |
+| [11 Utilities](modules/11-utilities.md) | 3 | Repo context, validators |
+| [12 Obsidian Plugin](modules/12-obsidian-plugin.md) | — | TypeScript plugin (external) |
+
+See [modules/README.md](modules/README.md) for a "which doc do I need?" decision tree.
+
 ## Reference
 
 | Location | Description |

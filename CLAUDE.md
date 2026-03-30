@@ -210,6 +210,11 @@ Before implementing new functionality:
 - [ ] No hardcoded default data
 - [ ] No `.to_pandas()` on large tables
 - [ ] Added/updated tests if behavior changed
+- [ ] Updated `docs/modules/*.md` if public class/method added or renamed
+
+### Module Documentation
+
+When adding or renaming a public class or method in `src/de_funk/`, update the relevant `docs/modules/*.md` document and its `last_updated` frontmatter field. Run `python -m scripts.docs.scaffold_module_docs --check` to find stale docs.
 
 ### Docstring Standards
 
