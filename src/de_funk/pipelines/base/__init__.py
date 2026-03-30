@@ -7,22 +7,11 @@ pipelines. It includes:
 - Provider: Abstract interface for data sources (config loaded from markdown)
 - SocrataBaseProvider: Base class for Socrata API providers
 - IngestorEngine: Generic ingestion engine
-- HTTP utilities: Rate limiting, key rotation, progress tracking
+- HTTP utilities: Key rotation, HTTP client
 """
 from de_funk.pipelines.base.facet import Facet, coalesce_existing, first_existing
 from de_funk.pipelines.base.http_client import HttpClient
 from de_funk.pipelines.base.key_pool import ApiKeyPool
-from de_funk.pipelines.base.progress_tracker import (
-    PipelineProgressTracker,
-    PhaseProgress,
-    PipelineStats,
-    TickerProgressCallback,
-    ProgressBar,
-    BatchProgressTracker,
-    format_duration,
-    format_eta
-)
-from de_funk.pipelines.base.metrics import MetricsCollector, TimingContext
 from de_funk.pipelines.base.provider import (
     BaseProvider,
     DataType,
@@ -40,18 +29,6 @@ __all__ = [
     # HTTP and Keys
     'HttpClient',
     'ApiKeyPool',
-    # Progress Tracking
-    'PipelineProgressTracker',
-    'PhaseProgress',
-    'PipelineStats',
-    'TickerProgressCallback',
-    'ProgressBar',
-    'BatchProgressTracker',
-    'format_duration',
-    'format_eta',
-    # Metrics
-    'MetricsCollector',
-    'TimingContext',
     # Provider Interface
     'BaseProvider',
     'SocrataBaseProvider',

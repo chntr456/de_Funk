@@ -1088,12 +1088,12 @@ class TestPhase8Migration:
     DOMAINS_DIR = Path(__file__).resolve().parent.parent.parent / "domains"
 
     def test_domains_dir_has_v4_structure(self):
-        """domains/ should have v4 structure (_base, _model_guides_, models)."""
+        """domains/ should have v4 structure (_base, models)."""
         if not self.DOMAINS_DIR.exists():
             pytest.skip("domains not available")
         assert (self.DOMAINS_DIR / "_base").is_dir()
-        assert (self.DOMAINS_DIR / "_model_guides_").is_dir()
         assert (self.DOMAINS_DIR / "models").is_dir()
+        # _model_guides_ moved to docs/guides/yaml/
 
     def test_all_168_files_parse(self):
         """Every .md file in domains/ should parse without error."""
