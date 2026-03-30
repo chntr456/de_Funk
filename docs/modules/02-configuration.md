@@ -27,39 +27,71 @@ source_files:
 
 ### What Problem This Solves
 
-<!-- TODO: Explain the problem this group addresses. -->
+de_Funk's configuration comes from three distinct sources: JSON files (`storage.json`, `run_config.json`), markdown files with YAML frontmatter (domain models, providers, endpoints), and environment variables (API keys, debug flags, connection overrides). Without a typed layer, every consumer passes around raw `Dict[str, Any]` values, leading to silent key mismatches, no IDE completion, and errors that surface far from where the config was loaded.
+
+This group solves that problem at two levels:
+
+1. **Typed data classes** (`data_classes.py`, `models.py`) -- `@dataclass` objects that mirror every YAML/JSON structure. Parse-time validation catches typos and missing fields before they reach business logic. IDE autocompletion works on every attribute.
+2. **Config loaders** (`loader.py`, `markdown_loader.py`, `config/domain/`) -- read files, resolve paths, merge precedence layers (explicit param > env var > file > default), and return typed objects.
 
 ### Key Design Decisions
 
 | Decision | Rationale | Alternative Considered |
 |----------|-----------|----------------------|
-| <!-- TODO --> | | |
+| Two parallel data class files (`data_classes.py` for domain YAML, `models.py` for infrastructure) | Domain configs evolve independently of infrastructure configs. Keeping them separate prevents a single 600+ line mega-file and makes ownership clear. | Single data_classes file; rejected because domain model structures (EdgeSpec, MeasureDef) change with schema evolution while infrastructure models (SparkConfig, DuckDBConfig) are stable. |
+| `from_dict()` static methods on infrastructure classes | Provides a clean boundary between raw JSON dicts and typed objects. Centralizes default values so callers don't repeat fallback logic. | Constructor-only parsing; rejected because `__init__` would need complex conditional logic for optional nested fields. |
+| Markdown-first config with JSON fallback | Markdown files serve as both documentation (readable in Obsidian) and machine config (YAML frontmatter). JSON remains for backward compatibility but triggers deprecation warnings. | JSON-only; rejected because it separates docs from config, causing them to drift. |
+| `ConnectionConfig.__post_init__` validation | Catches misconfigured connection types immediately at construction time rather than at first query. | Lazy validation; rejected because a bad connection type would produce confusing errors deep in Engine creation. |
+| Explicit `storage_path` in `run_config.json` (no fallback) | Prevents accidental writes to wrong storage locations. Forces users to explicitly configure where data lives. | Auto-detect from environment; rejected because implicit paths led to data being written to dev locations in production. |
 
 ### Config-Driven Aspects
 
 | Behavior | Controlled By | Location |
 |----------|--------------|----------|
-| <!-- TODO --> | | |
+| Connection backend (Spark vs DuckDB) | `connection.type` or `CONNECTION_TYPE` env | `configs/storage.json`, env var |
+| DuckDB memory, threads | `DUCKDB_MEMORY_LIMIT`, `DUCKDB_THREADS` env | Environment or defaults in `constants.py` |
+| Spark driver/executor memory | `SPARK_DRIVER_MEMORY`, `SPARK_EXECUTOR_MEMORY` env | Environment or defaults in `constants.py` |
+| Storage tier root paths | `roots` dict in storage config | `configs/storage.json` + `run_config.json` `storage_path` |
+| API rate limits per provider | `rate_limit_per_sec` in provider frontmatter | `Data Sources/Providers/*.md` |
+| Debug logging (SQL, filters, exhibits) | `DEBUG_SQL`, `DEBUG_FILTERS`, `DEBUG_EXHIBITS` env | Environment variables, loaded by `DebugConfig.from_env()` |
+| Domain model discovery | `domains/models/` directory structure | `model.md` files with `type: domain-model` frontmatter |
 
 ## Architecture
 
 ### Where This Fits
 
 ```
-[Upstream] --> [THIS GROUP] --> [Downstream]
+[.env + env vars]  [configs/*.json]  [domains/**/*.md]  [Data Sources/**/*.md]
+       |                  |                  |                    |
+       v                  v                  v                    v
+    ConfigLoader     ConfigLoader    DomainConfigLoader   MarkdownConfigLoader
+           \              |              /                      /
+            \             v             /                      /
+             +---->  AppConfig  <------+---------------------+
+                         |
+                         v
+                      DeFunk
 ```
 
-<!-- TODO: Brief explanation of data/control flow. -->
+`ConfigLoader` is the primary entry point. It reads `storage.json`, resolves paths using `run_config.json`, loads `.env`, builds `ConnectionConfig` and `StorageConfig`, merges API configs from markdown (preferred) and JSON (fallback), and produces a single `AppConfig`. Domain model configs flow through a separate `config/domain/` pipeline that parses model markdown, resolves `extends` inheritance, and produces `DomainModelConfig` data classes.
 
 ### Dependencies
 
 | Depends On | What For |
 |------------|----------|
-| <!-- TODO --> | |
+| `yaml` (PyYAML) | Parsing YAML frontmatter from markdown files |
+| `json` (stdlib) | Reading `storage.json`, `run_config.json` |
+| `os` (stdlib) | Environment variable access |
+| `de_funk.utils.repo` | Centralized repo root discovery |
+| `de_funk.config.constants` | Default values for all config parameters |
 
 | Depended On By | What For |
 |----------------|----------|
-| <!-- TODO --> | |
+| `DeFunk` (`app.py`) | `ConfigLoader.load()` produces `AppConfig` used for all wiring |
+| `Engine` (`core/engine.py`) | Reads `storage_config` dict for API limits |
+| `StorageRouter` (`core/storage.py`) | Reads `roots` and `domain_roots` from storage config |
+| `FieldResolver` (`api/resolver.py`) | Reads domain model markdown files directly |
+| `BuildSession` (`core/sessions.py`) | Receives model configs as dicts or `DomainModelConfig` |
 
 ## Key Classes
 
@@ -283,7 +315,7 @@ source_files:
 
 | Method | Description |
 |--------|-------------|
-| `from_dict(data: dict) -> MLModelSpec` | <!-- TODO --> |
+| `from_dict(data: dict) -> MLModelSpec` | Create an MLModelSpec from a raw YAML dict, applying defaults for all optional fields. |
 
 ### DomainModelConfig
 
@@ -421,7 +453,7 @@ source_files:
 
 | Method | Description |
 |--------|-------------|
-| `from_dict() -> RootsConfig` | <!-- TODO --> |
+| `from_dict() -> RootsConfig` | Create a RootsConfig from a raw dict, applying defaults (`storage/raw`, `storage/bronze`, etc.) for missing keys. |
 
 ### ApiLimits
 
@@ -438,7 +470,7 @@ source_files:
 
 | Method | Description |
 |--------|-------------|
-| `from_dict() -> ApiLimits` | <!-- TODO --> |
+| `from_dict() -> ApiLimits` | Create ApiLimits from a raw dict with defaults (3GB memory, 30000 rows, 10000 dimension values, 4MB response). |
 
 ### TablePath
 
@@ -454,8 +486,8 @@ source_files:
 
 | Method | Description |
 |--------|-------------|
-| `full_path() -> str` | <!-- TODO --> |
-| `from_dict() -> TablePath` | <!-- TODO --> |
+| `full_path() -> str` | Returns `"{root}/{rel}"` or just `root` if `rel` is empty. Property, not a method call. |
+| `from_dict() -> TablePath` | Create a TablePath from a raw dict with defaults (root="silver", rel="", partitions=[]). |
 
 ### ClusterConfig
 
@@ -471,7 +503,7 @@ source_files:
 
 | Method | Description |
 |--------|-------------|
-| `from_dict() -> ClusterConfig` | <!-- TODO --> |
+| `from_dict() -> ClusterConfig` | Create ClusterConfig from a raw dict with defaults (spark_master="auto", fallback_to_local=True, task_batch_size=50). |
 
 ### RetryConfig
 
@@ -487,7 +519,7 @@ source_files:
 
 | Method | Description |
 |--------|-------------|
-| `from_dict() -> RetryConfig` | <!-- TODO --> |
+| `from_dict() -> RetryConfig` | Create RetryConfig from a raw dict with defaults (max_retries=3, retry_delay_seconds=2.0, exponential_backoff=True). |
 
 ### RunConfig
 
@@ -506,7 +538,7 @@ source_files:
 
 | Method | Description |
 |--------|-------------|
-| `from_dict() -> RunConfig` | <!-- TODO --> |
+| `from_dict() -> RunConfig` | Create RunConfig from a raw dict. Handles both `silver_models` as a list and as a dict with a `models` key. Delegates nested objects to `ClusterConfig.from_dict()` and `RetryConfig.from_dict()`. |
 
 ### SparkConfig
 
@@ -769,11 +801,64 @@ source_files:
 
 ### Common Operations
 
-<!-- TODO: Runnable code examples with expected output -->
+```python
+from pathlib import Path
+from de_funk.config.loader import ConfigLoader
+
+# Load full application config
+loader = ConfigLoader(repo_root=Path("/home/user/de_Funk"))
+config = loader.load(connection_type="duckdb")
+# config.repo_root       -> Path("/home/user/de_Funk")
+# config.connection.type  -> "duckdb"
+# config.storage["roots"]["silver"] -> "/shared/storage/silver"
+
+# Load storage-only config (faster, skips API config parsing)
+storage = loader.load_storage()
+# storage["roots"]["bronze"] -> "/shared/storage/bronze"
+
+# Load markdown provider/endpoint configs
+from de_funk.config.markdown_loader import MarkdownConfigLoader
+md_loader = MarkdownConfigLoader(repo_root=Path("/home/user/de_Funk"))
+providers = md_loader.load_providers()
+endpoints = md_loader.load_endpoints(provider="Alpha Vantage")
+
+# Get bronze write config for an endpoint
+bronze_configs = md_loader.get_bronze_configs()
+# {"alpha_vantage.time_series_daily": {"table": "time_series_daily", ...}}
+
+# Use typed data classes directly
+from de_funk.config.data_classes import RunConfig
+import json
+with open("configs/run_config.json") as f:
+    raw = json.load(f)
+run_config = RunConfig.from_dict(raw)
+# run_config.cluster.spark_master    -> "auto"
+# run_config.retry.max_retries       -> 3
+# run_config.silver_models            -> ["securities.stocks", ...]
+```
 
 ### Integration Examples
 
-<!-- TODO: Show cross-group usage -->
+```python
+# ConfigLoader feeds into DeFunk app creation
+from de_funk.app import DeFunk
+app = DeFunk.from_config("configs/")
+# Internally: ConfigLoader.load() -> AppConfig -> DeFunk.from_app_config()
+
+# MarkdownConfigLoader used by ingest pipelines
+from de_funk.config.markdown_loader import MarkdownConfigLoader
+md_loader = MarkdownConfigLoader(repo_root=Path("."))
+endpoint = md_loader.load_endpoint(Path("Data Sources/Endpoints/Alpha Vantage/Prices/Time Series Daily.md"))
+# endpoint.schema       -> [SchemaField(name="open", type="double", ...)]
+# endpoint.bronze.table -> "time_series_daily"
+
+# DebugConfig enables runtime SQL logging
+import os
+os.environ["DEBUG_SQL"] = "true"
+from de_funk.config.models import DebugConfig
+debug = DebugConfig.from_env()
+# debug.sql -> True
+```
 
 ## Triage & Debugging
 
@@ -781,15 +866,30 @@ source_files:
 
 | Symptom | Likely Cause | Fix |
 |---------|-------------|-----|
-| <!-- TODO --> | | |
+| `ValueError: Configuration file not found: .../storage.json` | Missing `configs/storage.json` | Create the file or check repo root detection |
+| `ValueError: Storage path not configured` | `run_config.json` missing `defaults.storage_path` | Add `"defaults": {"storage_path": "/shared/storage"}` to `configs/run_config.json` |
+| `ValueError: Invalid connection type: foo` | Typo in `CONNECTION_TYPE` env var or `connection_type` param | Use `"spark"` or `"duckdb"` |
+| `ValueError: Repository root does not exist` | `AppConfig.__post_init__` validation failed | Check that the path exists on disk |
+| `FALLBACK: Using JSON config for 'alpha_vantage'` (warning) | Provider not yet migrated to markdown | Create `Data Sources/Providers/Alpha Vantage.md` |
+| `No .env file found` (debug log) | Missing `.env` in repo root | Create `.env` or set env vars directly |
+| Empty `providers` dict after load | `Data Sources/Providers/` directory missing or files lack `type: api-provider` frontmatter | Check markdown files have correct `type:` field |
 
 ### Debug Checklist
 
-- [ ] <!-- TODO -->
+- [ ] Run `ConfigLoader(repo_root=Path(".")).load()` in isolation to verify config loading works
+- [ ] Check `configs/storage.json` is valid JSON (`python -m json.tool configs/storage.json`)
+- [ ] Check `configs/run_config.json` has `defaults.storage_path` key
+- [ ] Verify `.env` file has API keys in `PROVIDER_API_KEYS=key1,key2` format
+- [ ] For markdown config issues, check that files have `---` YAML frontmatter delimiters
+- [ ] If repo root auto-detection fails, check that `src/`, `configs/`, and `.git/` all exist in the same directory
+- [ ] Set `LOG_LEVEL=DEBUG` to see all config loading details
 
 ### Common Pitfalls
 
-1. <!-- TODO -->
+1. **Two SchemaField classes**: `data_classes.SchemaField` (domain schemas) and `markdown_loader.SchemaField` (endpoint schemas) are different classes with different attributes. Import the correct one for your context.
+2. **`AppConfig.storage` is a raw dict, not `StorageConfig`**: Despite `StorageConfig` existing in `models.py`, `AppConfig.storage` stores the resolved JSON dict (with absolute paths). This is intentional -- it preserves the full structure including `domain_roots` and `tables`.
+3. **Environment variables only set if not already present**: `ConfigLoader.load_env()` uses `os.environ.setdefault` semantics -- it will not overwrite existing env vars. Set vars before calling `load_env()` to override `.env` file values.
+4. **Nested DuckDB path detection**: `ConfigLoader` has a defensive check for paths like `/path/duckdb/storage/duckdb/analytics.db` and auto-corrects them. If you see a "Detected nested duckdb path" warning, check your `DUCKDB_PATH` env var.
 
 ## File Reference
 

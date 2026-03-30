@@ -226,7 +226,7 @@ See [modules/README.md](modules/README.md) for a "which doc do I need?" decision
 | Location | Description |
 |----------|-------------|
 | [Python Reference](python-reference.md) | Every Python class and method — purpose, inputs/outputs, why it exists |
-| [domains/_model_guides_/](../domains/_model_guides_/) | YAML frontmatter syntax reference for model.md files |
+| [guides/yaml/](guides/yaml/) | YAML frontmatter syntax reference for model.md files |
 | [exhibits/_index.md](../exhibits/_index.md) | Exhibit type catalog (chart, table, metric, control) |
 | [data_sources/](../data_sources/) | API provider configs and endpoint documentation |
 | [diagrams/](diagrams/) | Architecture diagrams (PlantUML + draw.io) |

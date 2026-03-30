@@ -853,7 +853,7 @@ All 17 registered domain models:
 
 ### YAML Syntax Guides
 
-Detailed reference files in `domains/_model_guides_/`:
+Detailed reference files in `docs/guides/yaml/`:
 
 | Guide | Topic |
 |-------|-------|
