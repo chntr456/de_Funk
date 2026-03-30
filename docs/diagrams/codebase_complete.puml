@@ -1,1701 +1,1760 @@
-@startuml "de_Funk Complete — Nested Groups"
+@startuml "de_Funk Complete Codebase"
 
 skinparam classFontName "Courier New"
 skinparam classFontSize 9
-skinparam packageFontSize 10
+skinparam packageFontSize 11
 skinparam packageStyle rectangle
 skinparam linetype ortho
 skinparam style strictuml
 
-title de_Funk Complete — Logical Groups > File Packages > Classes\nALL 191 classes
+title de_Funk — All 189 Classes\nGrouped by architectural concern
 
-package "Configuration Layer (41)" #FFCC66 {
+package "Application (1)" #E6E6E6 {
 
-  package "config/data_classes.py (27)" #FFCC66 {
-    class AliasSpec {
-      + target_column : str
-      + expression : str
-    }
-    class ApiLimits {
-      + duckdb_memory_limit : str
-      + max_sql_rows : int
-      + max_dimension_values : int
-      + max_response_mb : float
-      --
-      + from_dict()
-    }
-    class BaseTemplate {
-      + type : str
-      + model : str
-      + version : str
-      + description : str
-      + extends : Optional[str]
-      + canonical_fields : list[SchemaField]
-      + tables : dict[str, TableConfig]
-      + depends_on : list[str]
-      + source_file : Optional[str]
-    }
-    class BuildSpec {
-      + sort_by : list[str]
-      + optimize : bool
-      + partitions : list[str]
-      + phases : dict[str, PhaseSpec]
-    }
-    class ClusterConfig {
-      + spark_master : str
-      + fallback_to_local : bool
-      + task_batch_size : int
-      --
-      + from_dict()
-    }
-    class DomainModelConfig {
-      + model : str
-      + version : str
-      + description : str
-      + extends : list[str]
-      + depends_on : list[str]
-      + status : str
-      + sources_from : Optional[str]
-      + storage : ModelStorageSpec
-      + graph : GraphSpec
-      + build : BuildSpec
-      + measures : MeasuresSpec
-      + hooks : HooksConfig
-      + ml_models : dict[str, MLModelSpec]
-      + metadata : dict
-      + tables : dict[str, TableConfig]
-      + sources : dict[str, SourceConfig]
-      + views : dict[str, Any]
-      + source_file : Optional[str]
-    }
-    class EdgeSpec {
-      + name : str
-      + from_table : str
-      + to_table : str
-      + join_keys : list[str]
-      + cardinality : str
-      + target_domain : Optional[str]
-      + optional : bool
-    }
-    class EndpointConfig {
-      + endpoint_id : str
-      + provider : str
-      + method : str
-      + endpoint_pattern : str
-      + format : str
-      + auth : str
-      + response_key : Optional[str]
-      + default_query : dict
-      + required_params : list[str]
-      + pagination_type : str
-      + bulk_download : bool
-      + download_method : str
-      + json_structure : str
-      + raw_schema : list[list]
-      + schema : list[EndpointSchemaField]
-      + bronze : Optional[str]
-      + partitions : list[str]
-      + write_strategy : str
-      + key_columns : list[str]
-      + date_column : Optional[str]
-      + domain : str
-      + data_tags : list[str]
-      + status : str
-      + update_cadence : str
-      + source_file : Optional[str]
-    }
-    class EndpointSchemaField {
-      + name : str
-      + type : str
-      + source_field : str
-      + nullable : bool
-      + description : str
-      + transform : Optional[str]
-      + coerce : Optional[str]
-      + default : Optional[Any]
-    }
-    class EnrichSpec {
-      + from_table : str
-      + join : list[str]
-      + columns : list[str]
-    }
-    class GraphSpec {
-      + edges : list[EdgeSpec]
-      + paths : dict[str, Any]
-    }
-    class HookDef {
-      + fn : str
-      + params : dict
-    }
-    class HooksConfig {
-      + pre_build : list[HookDef]
-      + before_build : list[HookDef]
-      + after_build : list[HookDef]
-      + post_build : list[HookDef]
-    }
-    class MLModelSpec {
-      + name : str
-      + type : str
-      + target : list[str]
-      + features : list[str]
-      + lookback_days : int
-      + forecast_horizon : int
-      + parameters : dict
-      + retrain_if_stale_days : int
-      + enabled : bool
-      --
-      + from_dict()
-    }
-    class MeasureDef {
-      + name : str
-      + aggregation : str
-      + field : str | dict
-      + label : str
-      + format : Optional[str]
-      + options : dict
-    }
-    class MeasuresSpec {
-      + simple : list[MeasureDef]
-      + computed : list[MeasureDef]
-    }
-    class ModelStorageSpec {
-      + format : str
-      + silver_root : Optional[str]
-    }
-    class PhaseSpec {
-      + tables : list[str]
-    }
-    class PipelineStep {
-      + op : str
-      + fn : Optional[str]
-      + params : dict
-    }
-    class ProviderConfig {
-      + provider_id : str
-      + provider : str
-      + api_type : str
-      + base_url : str
-      + auth_model : str
-      + env_api_key : str
-      + rate_limit_per_sec : float
-      + default_headers : dict
-      + provider_settings : dict
-      + endpoints : list[str]
-      + models : list[str]
-      + category : str
-      + data_domains : list[str]
-      + data_tags : list[str]
-      + status : str
-      + source_file : Optional[str]
-    }
-    class RetryConfig {
-      + max_retries : int
-      + retry_delay_seconds : float
-      + exponential_backoff : bool
-      --
-      + from_dict()
-    }
-    class RootsConfig {
-      + raw : str
-      + bronze : str
-      + silver : str
-      + models : str
-      --
-      + from_dict()
-    }
-    class RunConfig {
-      + defaults : dict
-      + providers : dict[str, dict]
-      + silver_models : list[str]
-      + cluster : ClusterConfig
-      + retry : RetryConfig
-      + profiles : dict[str, dict]
-      --
-      + from_dict()
-    }
-    class SchemaField {
-      + name : str
-      + type : str
-      + nullable : bool
-      + description : str
-      + derived : Optional[str]
-      + fk : Optional[str]
-      + format : Optional[str]
-    }
-    class SourceConfig {
-      + source : str
-      + maps_to : str
-      + from_ref : str
-      + aliases : list[AliasSpec]
-      + domain_source : Optional[str]
-      + filter : list[str]
-      + discriminator : Optional[str]
-      + extends : Optional[str]
-      + source_file : Optional[str]
-    }
-    class TableConfig {
-      + table : str
-      + table_type : str
-      + schema : list[SchemaField]
-      + primary_key : list[str]
-      + unique_key : list[str]
-      + partition_by : list[str]
-      + measures : list[MeasureDef]
-      + enrich : list[EnrichSpec]
-      + pipeline : list[PipelineStep]
-      + extends : Optional[str]
-      + source_file : Optional[str]
-    }
-    class TablePath {
-      + root : str
-      + rel : str
-      + partitions : list[str]
-      --
-      + full_path()
-      + from_dict()
-    }
-  }
-
-  package "config/domain/ (1)" #FFCC66 {
-    class DomainConfigLoader {
-      + load_model_config()
-      + list_models()
-      + get_dependencies()
-      + get_build_order()
-      + load_base()
-      + clear_cache()
-    }
-  }
-
-  package "config/loader.py (1)" #FFCC66 {
-    class ConfigLoader {
-      + load_env()
-      + load_storage()
-      + load()
-      + repo_root()
-    }
-  }
-
-  package "config/markdown_loader.py (5)" #FFCC66 {
-    class BronzeConfig {
-      + table : str
-      + partitions : List[str]
-      + write_strategy : str
-      + key_columns : List[str]
-      + date_column : Optional[str]
-      + comment : str
-    }
-    class EndpointConfig {
-      + endpoint_id : str
-      + provider : str
-      + method : str
-      + endpoint_pattern : str
-      + format : str
-      + auth : str
-      + response_key : Optional[str]
-      + default_query : Dict[str, Any]
-      + required_params : List[str]
-      + pagination_type : str
-      + schema : List[SchemaField]
-      + bronze : Optional[BronzeConfig]
-      + domain : str
-      + data_tags : List[str]
-      + status : str
-      + enabled : bool
-      + view_ids : Dict[str, str]
-      + download_method : str
-      + json_structure : str
-      + raw_schema : List[List[Any]]
-      + raw : Dict[str, Any]
-      --
-      + get_spark_raw_schema()
-    }
-    class MarkdownConfigLoader {
-      + parse_frontmatter()
-      + parse_schema_block()
-      + parse_view_ids_table()
-      + parse_schema_array()
-      + parse_bronze_config()
-      + load_provider()
-      + load_endpoint()
-      + load_providers()
-      + load_endpoints()
-      + get_provider_config()
-      + get_bronze_configs()
-      + get_endpoint_schema()
-      + get_coercion_rules()
-      + get_field_mappings()
-      + get_computed_fields()
-      + clear_cache()
-    }
-    class ProviderConfig {
-      + provider_id : str
-      + provider : str
-      + api_type : str
-      + base_url : str
-      + auth_model : str
-      + env_api_key : str
-      + rate_limit_per_sec : float
-      + default_headers : Dict[str, str]
-      + models : List[str]
-      + category : str
-      + data_domains : List[str]
-      + data_tags : List[str]
-      + status : str
-      + raw : Dict[str, Any]
-    }
-    class SchemaField {
-      + name : str
-      + type : str
-      + source : str
-      + nullable : bool
-      + description : str
-      + transform : Optional[str]
-      + coerce : Optional[str]
-      + expr : Optional[str]
-      + default : Optional[Any]
-      --
-      + is_computed()
-      + is_generated()
-    }
-  }
-
-  package "config/models.py (7)" #FFCC66 {
-    class APIConfig {
-      + name : str
-      + base_url : str
-      + endpoints : Dict[str, Any]
-      + api_keys : List[str]
-      + rate_limit_calls : int
-      + rate_limit_period : int
-      + headers : Dict[str, str]
-      + timeout : int
-      --
-      + from_dict()
-    }
-    class AppConfig {
-      + repo_root : Path
-      + connection : ConnectionConfig
-      + storage : Dict[str, Any]
-      + apis : Dict[str, Dict[str, Any]]
-      + log_level : str
-      + debug : DebugConfig
-      + env_loaded : bool
-      --
-      + models_dir()
-      + legacy_models_dir()
-      + configs_dir()
-    }
-    class ConnectionConfig {
-      + type : str
-      + spark : Optional[SparkConfig]
-      + duckdb : Optional[DuckDBConfig]
-    }
-    class DebugConfig {
-      + filters : bool
-      + exhibits : bool
-      + sql : bool
-      --
-      + from_env()
-    }
-    class DuckDBConfig {
-      + database_path : Path
-      + memory_limit : str
-      + threads : int
-      + read_only : bool
-      + additional_config : Dict[str, Any]
-      --
-      + to_connection_params()
-    }
-    class SparkConfig {
-      + driver_memory : str
-      + executor_memory : str
-      + shuffle_partitions : int
-      + timezone : str
-      + legacy_time_parser : bool
-      + additional_config : Dict[str, Any]
-      --
-      + to_spark_conf_dict()
-    }
-    class StorageConfig {
-      + bronze_root : Path
-      + silver_root : Path
-      + tables : Dict[str, Dict[str, Any]]
-      --
-      + from_dict()
-    }
+  class DeFunk {
+    + from_config()
+    + from_app_config()
+    + build_session()
+    + query_session()
+    + ingest_session()
   }
 
 }
 
-package "Logging & Errors (30)" #FFC0C0 {
+package "Data Classes (27)" #FFCC66 {
 
-  package "config/logging.py (4)" #FFC0C0 {
-    class ColoredFormatter {
-      + COLORS
-      + RESET
-      --
-      + format()
-    }
-    class LogConfig {
-      + console_level : str
-      + file_level : str
-      + log_dir : Path
-      + log_file : str
-      + json_log_file : str
-      + max_bytes : int
-      + backup_count : int
-      + console_format : str
-      + file_format : str
-      + date_format : str
-      + enable_json : bool
-      + module_levels : Dict[str, str]
-      --
-      + from_env()
-    }
-    class LogTimer
-    class StructuredFormatter {
-      + format()
-    }
+  class AliasSpec {
+    + target_column : str
+    + expression : str
   }
 
-  package "core/error_handling.py (1)" #FFC0C0 {
-    class ErrorContext
+  class ApiLimits {
+    + duckdb_memory_limit : str
+    + max_sql_rows : int
+    + max_dimension_values : int
+    + max_response_mb : float
+    --
+    + from_dict()
   }
 
-  package "core/exceptions.py (23)" #FFC0C0 {
-    class ConfigurationError
-    class ConnectionError
-    class DataNotFoundError
-    class DeFunkError
-    class DependencyError
-    class FilterError
-    class ForecastError
-    class IngestionError
-    class InsufficientDataError
-    class InvalidConfigError
-    class JoinError
-    class MeasureError
-    class MissingConfigError
-    class ModelError
-    class ModelNotFoundError
-    class ModelTrainingError
-    class PipelineError
-    class QueryError
-    class RateLimitError
-    class StorageError
-    class TableNotFoundError
-    class TransformationError
-    class WriteError
+  class BaseTemplate {
+    + type : str
+    + model : str
+    + version : str
+    + description : str
+    + extends : Optional[str]
+    + canonical_fields : list[SchemaField]
+    + tables : dict[str, TableConfig]
+    + depends_on : list[str]
+    + source_file : Optional[str]
   }
 
-  package "core/validation.py (2)" #FFC0C0 {
-    class NotebookValidator {
-      + validate()
-      + validate_and_raise()
-      + get_warnings()
-      + get_errors()
-      + is_valid()
-    }
-    class ValidationError {
-      + level : str
-      + message : str
-      + location : Optional[str]
-    }
+  class BuildSpec {
+    + sort_by : list[str]
+    + optimize : bool
+    + partitions : list[str]
+    + phases : dict[str, PhaseSpec]
+  }
+
+  class ClusterConfig {
+    + spark_master : str
+    + fallback_to_local : bool
+    + task_batch_size : int
+    --
+    + from_dict()
+  }
+
+  class DomainModelConfig {
+    + model : str
+    + version : str
+    + description : str
+    + extends : list[str]
+    + depends_on : list[str]
+    + status : str
+    + sources_from : Optional[str]
+    + storage : ModelStorageSpec
+    + graph : GraphSpec
+    + build : BuildSpec
+    + measures : MeasuresSpec
+    + hooks : HooksConfig
+    + ml_models : dict[str, MLModelSpec]
+    + metadata : dict
+    + tables : dict[str, TableConfig]
+    + sources : dict[str, SourceConfig]
+    + views : dict[str, Any]
+    + source_file : Optional[str]
+  }
+
+  class EdgeSpec {
+    + name : str
+    + from_table : str
+    + to_table : str
+    + join_keys : list[str]
+    + cardinality : str
+    + target_domain : Optional[str]
+    + optional : bool
+  }
+
+  class EndpointConfig {
+    + endpoint_id : str
+    + provider : str
+    + method : str
+    + endpoint_pattern : str
+    + format : str
+    + auth : str
+    + response_key : Optional[str]
+    + default_query : dict
+    + required_params : list[str]
+    + pagination_type : str
+    + bulk_download : bool
+    + download_method : str
+    + json_structure : str
+    + raw_schema : list[list]
+    + schema : list[EndpointSchemaField]
+    + bronze : Optional[str]
+    + partitions : list[str]
+    + write_strategy : str
+    + key_columns : list[str]
+    + date_column : Optional[str]
+    + domain : str
+    + data_tags : list[str]
+    + status : str
+    + update_cadence : str
+    + source_file : Optional[str]
+  }
+
+  class EndpointSchemaField {
+    + name : str
+    + type : str
+    + source_field : str
+    + nullable : bool
+    + description : str
+    + transform : Optional[str]
+    + coerce : Optional[str]
+    + default : Optional[Any]
+  }
+
+  class EnrichSpec {
+    + from_table : str
+    + join : list[str]
+    + columns : list[str]
+  }
+
+  class GraphSpec {
+    + edges : list[EdgeSpec]
+    + paths : dict[str, Any]
+  }
+
+  class HookDef {
+    + fn : str
+    + params : dict
+  }
+
+  class HooksConfig {
+    + pre_build : list[HookDef]
+    + before_build : list[HookDef]
+    + after_build : list[HookDef]
+    + post_build : list[HookDef]
+  }
+
+  class MLModelSpec {
+    + name : str
+    + type : str
+    + target : list[str]
+    + features : list[str]
+    + lookback_days : int
+    + forecast_horizon : int
+    + parameters : dict
+    + retrain_if_stale_days : int
+    + enabled : bool
+    --
+    + from_dict()
+  }
+
+  class MeasureDef {
+    + name : str
+    + aggregation : str
+    + field : str | dict
+    + label : str
+    + format : Optional[str]
+    + options : dict
+  }
+
+  class MeasuresSpec {
+    + simple : list[MeasureDef]
+    + computed : list[MeasureDef]
+  }
+
+  class ModelStorageSpec {
+    + format : str
+    + silver_root : Optional[str]
+  }
+
+  class PhaseSpec {
+    + tables : list[str]
+  }
+
+  class PipelineStep {
+    + op : str
+    + fn : Optional[str]
+    + params : dict
+  }
+
+  class ProviderConfig {
+    + provider_id : str
+    + provider : str
+    + api_type : str
+    + base_url : str
+    + auth_model : str
+    + env_api_key : str
+    + rate_limit_per_sec : float
+    + default_headers : dict
+    + provider_settings : dict
+    + endpoints : list[str]
+    + models : list[str]
+    + category : str
+    + data_domains : list[str]
+    + data_tags : list[str]
+    + status : str
+    + source_file : Optional[str]
+  }
+
+  class RetryConfig {
+    + max_retries : int
+    + retry_delay_seconds : float
+    + exponential_backoff : bool
+    --
+    + from_dict()
+  }
+
+  class RootsConfig {
+    + raw : str
+    + bronze : str
+    + silver : str
+    + models : str
+    --
+    + from_dict()
+  }
+
+  class RunConfig {
+    + defaults : dict
+    + providers : dict[str, dict]
+    + silver_models : list[str]
+    + cluster : ClusterConfig
+    + retry : RetryConfig
+    + profiles : dict[str, dict]
+    --
+    + from_dict()
+  }
+
+  class SchemaField {
+    + name : str
+    + type : str
+    + nullable : bool
+    + description : str
+    + derived : Optional[str]
+    + fk : Optional[str]
+    + format : Optional[str]
+  }
+
+  class SourceConfig {
+    + source : str
+    + maps_to : str
+    + from_ref : str
+    + aliases : list[AliasSpec]
+    + domain_source : Optional[str]
+    + filter : list[str]
+    + discriminator : Optional[str]
+    + extends : Optional[str]
+    + source_file : Optional[str]
+  }
+
+  class TableConfig {
+    + table : str
+    + table_type : str
+    + schema : list[SchemaField]
+    + primary_key : list[str]
+    + unique_key : list[str]
+    + partition_by : list[str]
+    + measures : list[MeasureDef]
+    + enrich : list[EnrichSpec]
+    + pipeline : list[PipelineStep]
+    + extends : Optional[str]
+    + source_file : Optional[str]
+  }
+
+  class TablePath {
+    + root : str
+    + rel : str
+    + partitions : list[str]
+    --
+    + full_path()
+    + from_dict()
   }
 
 }
 
-package "Engine & Sessions (14)" #80E0D0 {
+package "Configuration (14)" #FFCC66 {
 
-  package "core/engine.py (1)" #80E0D0 {
-    class Engine {
-      + for_duckdb()
-      + for_spark()
-      + read()
-      + write()
-      + create_df()
-      + select()
-      + drop()
-      + derive()
-      + filter()
-      + dedup()
-      + join()
-      + union()
-      + unpivot()
-      + window()
-      + pivot()
-      + aggregate()
-      + count()
-      + to_pandas()
-      + columns()
-      + execute_sql()
-      + scan()
-      + build_from()
-      + build_where()
-      + distinct_values()
-      + distinct_values_by_measure()
-      + get_query_engine()
-      + get_handler_registry()
-    }
+  class APIConfig {
+    + name : str
+    + base_url : str
+    + endpoints : Dict[str, Any]
+    + api_keys : List[str]
+    + rate_limit_calls : int
+    + rate_limit_period : int
+    + headers : Dict[str, str]
+    + timeout : int
+    --
+    + from_dict()
   }
 
-  package "core/graph.py (1)" #80E0D0 {
-    class DomainGraph {
-      + find_join_path()
-      + reachable_domains()
-      + neighbors()
-      + domains_for_table()
-      + all_tables()
-      + all_edges()
-      + distance()
-      + connected_components()
-      + subgraph()
-    }
+  class AppConfig {
+    + repo_root : Path
+    + connection : ConnectionConfig
+    + storage : Dict[str, Any]
+    + apis : Dict[str, Dict[str, Any]]
+    + log_level : str
+    + debug : DebugConfig
+    + env_loaded : bool
+    --
+    + models_dir()
+    + legacy_models_dir()
+    + configs_dir()
   }
 
-  package "core/ops.py (3)" #80E0D0 {
-    class DataOps {
-      + read()
-      + write()
-      + create_df()
-      + select()
-      + drop()
-      + derive()
-      + filter()
-      + dedup()
-      + join()
-      + union()
-      + unpivot()
-      + window()
-      + pivot()
-      + aggregate()
-      + count()
-      + to_pandas()
-      + columns()
-    }
-    class DuckDBOps {
-      + read()
-      + write()
-      + create_df()
-      + select()
-      + drop()
-      + derive()
-      + filter()
-      + dedup()
-      + join()
-      + union()
-      + unpivot()
-      + window()
-      + pivot()
-      + aggregate()
-      + count()
-      + to_pandas()
-      + columns()
-    }
-    class SparkOps {
-      + read()
-      + write()
-      + create_df()
-      + select()
-      + drop()
-      + derive()
-      + filter()
-      + dedup()
-      + join()
-      + union()
-      + unpivot()
-      + window()
-      + pivot()
-      + aggregate()
-      + count()
-      + to_pandas()
-      + columns()
-    }
+  class BronzeConfig {
+    + table : str
+    + partitions : List[str]
+    + write_strategy : str
+    + key_columns : List[str]
+    + date_column : Optional[str]
+    + comment : str
   }
 
-  package "core/session/ (5)" #80E0D0 {
-    class BuildSession {
-      + get_model()
-      + get_dependencies()
-      + build()
-      + build_all()
-      + close()
-    }
-    class FilterEngine {
-      + apply_filters()
-      + apply_from_session()
-      + build_filter_sql()
-    }
-    class IngestSession {
-      + get_provider()
-      + get_endpoint()
-      + close()
-    }
-    class QuerySession {
-      + resolve()
-      + find_join_path()
-      + distinct_values()
-      + build_from()
-      + build_where()
-      + close()
-    }
-    class Session {
-      + raw_path()
-      + bronze_path()
-      + silver_path()
-      + model_path()
-      + close()
-    }
+  class ConfigLoader {
+    + load_env()
+    + load_storage()
+    + load()
+    + repo_root()
   }
 
-  package "core/sql.py (3)" #80E0D0 {
-    class DuckDBSql {
-      + execute_sql()
-      + scan()
-      + build_from()
-      + build_where()
-      + distinct_values()
-    }
-    class SparkSql {
-      + execute_sql()
-      + scan()
-      + build_from()
-      + build_where()
-      + distinct_values()
-    }
-    class SqlOps {
-      + execute_sql()
-      + scan()
-      + build_from()
-      + build_where()
-      + distinct_values()
-    }
+  class ConnectionConfig {
+    + type : str
+    + spark : Optional[SparkConfig]
+    + duckdb : Optional[DuckDBConfig]
   }
 
-  package "core/storage.py (1)" #80E0D0 {
-    class StorageRouter {
-      + raw_path()
-      + bronze_path()
-      + silver_path()
-      + model_path()
-      + resolve()
-      + silver_root()
-      + bronze_root()
-      + raw_root()
-      + models_root()
-    }
+  class DebugConfig {
+    + filters : bool
+    + exhibits : bool
+    + sql : bool
+    --
+    + from_env()
+  }
+
+  class DomainConfigLoader {
+    + load_model_config()
+    + list_models()
+    + get_dependencies()
+    + get_build_order()
+    + load_base()
+    + clear_cache()
+  }
+
+  class DuckDBConfig {
+    + database_path : Path
+    + memory_limit : str
+    + threads : int
+    + read_only : bool
+    + additional_config : Dict[str, Any]
+    --
+    + to_connection_params()
+  }
+
+  class EndpointConfig {
+    + endpoint_id : str
+    + provider : str
+    + method : str
+    + endpoint_pattern : str
+    + format : str
+    + auth : str
+    + response_key : Optional[str]
+    + default_query : Dict[str, Any]
+    + required_params : List[str]
+    + pagination_type : str
+    + schema : List[SchemaField]
+    + bronze : Optional[BronzeConfig]
+    + domain : str
+    + data_tags : List[str]
+    + status : str
+    + enabled : bool
+    + view_ids : Dict[str, str]
+    + download_method : str
+    + json_structure : str
+    + raw_schema : List[List[Any]]
+    + raw : Dict[str, Any]
+    --
+    + get_spark_raw_schema()
+  }
+
+  class MarkdownConfigLoader {
+    + parse_frontmatter()
+    + parse_schema_block()
+    + parse_view_ids_table()
+    + parse_schema_array()
+    + parse_bronze_config()
+    + load_provider()
+    + load_endpoint()
+    + load_providers()
+    + load_endpoints()
+    + get_provider_config()
+    + get_bronze_configs()
+    + get_endpoint_schema()
+    + get_coercion_rules()
+    + get_field_mappings()
+    + get_computed_fields()
+    + clear_cache()
+  }
+
+  class ProviderConfig {
+    + provider_id : str
+    + provider : str
+    + api_type : str
+    + base_url : str
+    + auth_model : str
+    + env_api_key : str
+    + rate_limit_per_sec : float
+    + default_headers : Dict[str, str]
+    + models : List[str]
+    + category : str
+    + data_domains : List[str]
+    + data_tags : List[str]
+    + status : str
+    + raw : Dict[str, Any]
+  }
+
+  class SchemaField {
+    + name : str
+    + type : str
+    + source : str
+    + nullable : bool
+    + description : str
+    + transform : Optional[str]
+    + coerce : Optional[str]
+    + expr : Optional[str]
+    + default : Optional[Any]
+    --
+    + is_computed()
+    + is_generated()
+  }
+
+  class SparkConfig {
+    + driver_memory : str
+    + executor_memory : str
+    + shuffle_partitions : int
+    + timezone : str
+    + legacy_time_parser : bool
+    + additional_config : Dict[str, Any]
+    --
+    + to_spark_conf_dict()
+  }
+
+  class StorageConfig {
+    + bronze_root : Path
+    + silver_root : Path
+    + tables : Dict[str, Dict[str, Any]]
+    --
+    + from_dict()
+  }
+
+}
+
+package "Engine (7)" #80E0D0 {
+
+  class DataOps {
+    + read()
+    + write()
+    + create_df()
+    + select()
+    + drop()
+    + derive()
+    + filter()
+    + dedup()
+    + join()
+    + union()
+    + unpivot()
+    + window()
+    + pivot()
+    + aggregate()
+    + count()
+    + to_pandas()
+    + columns()
+  }
+
+  class DuckDBOps {
+    + read()
+    + write()
+    + create_df()
+    + select()
+    + drop()
+    + derive()
+    + filter()
+    + dedup()
+    + join()
+    + union()
+    + unpivot()
+    + window()
+    + pivot()
+    + aggregate()
+    + count()
+    + to_pandas()
+    + columns()
+  }
+
+  class DuckDBSql {
+    + execute_sql()
+    + scan()
+    + build_from()
+    + build_where()
+    + distinct_values()
+  }
+
+  class Engine {
+    + for_duckdb()
+    + for_spark()
+    + read()
+    + write()
+    + create_df()
+    + select()
+    + drop()
+    + derive()
+    + filter()
+    + dedup()
+    + join()
+    + union()
+    + unpivot()
+    + window()
+    + pivot()
+    + aggregate()
+    + count()
+    + to_pandas()
+    + columns()
+    + execute_sql()
+    + scan()
+    + build_from()
+    + build_where()
+    + distinct_values()
+    + distinct_values_by_measure()
+    + get_query_engine()
+    + get_handler_registry()
+  }
+
+  class SparkOps {
+    + read()
+    + write()
+    + create_df()
+    + select()
+    + drop()
+    + derive()
+    + filter()
+    + dedup()
+    + join()
+    + union()
+    + unpivot()
+    + window()
+    + pivot()
+    + aggregate()
+    + count()
+    + to_pandas()
+    + columns()
+  }
+
+  class SparkSql {
+    + execute_sql()
+    + scan()
+    + build_from()
+    + build_where()
+    + distinct_values()
+  }
+
+  class SqlOps {
+    + execute_sql()
+    + scan()
+    + build_from()
+    + build_where()
+    + distinct_values()
+  }
+
+}
+
+package "Sessions (5)" #80E0D0 {
+
+  class BuildSession {
+    + get_model()
+    + get_dependencies()
+    + build()
+    + build_all()
+    + close()
+  }
+
+  class FilterEngine {
+    + apply_filters()
+    + apply_from_session()
+    + build_filter_sql()
+  }
+
+  class IngestSession {
+    + get_provider()
+    + get_endpoint()
+    + close()
+  }
+
+  class QuerySession {
+    + resolve()
+    + find_join_path()
+    + distinct_values()
+    + build_from()
+    + build_where()
+    + close()
+  }
+
+  class Session {
+    + raw_path()
+    + bronze_path()
+    + silver_path()
+    + model_path()
+    + close()
+  }
+
+}
+
+package "Graph & Resolution (7)" #80E0D0 {
+
+  class BronzeEndpointInfo {
+    + provider_id : str
+    + endpoint_id : str
+    + bronze_path : Path
+    + fields : dict[str, str]
+  }
+
+  class BronzeResolver {
+    + resolve()
+    + reachable_domains()
+    + find_join_path()
+    + get_endpoint_catalog()
+  }
+
+  class DomainGraph {
+    + find_join_path()
+    + reachable_domains()
+    + neighbors()
+    + domains_for_table()
+    + all_tables()
+    + all_edges()
+    + distance()
+    + connected_components()
+    + subgraph()
+  }
+
+  class FieldRef {
+    + _known_domains : set[str]
+  }
+
+  class FieldResolver {
+    + reachable_domains()
+    + find_join_path()
+    + resolve()
+    + resolve_many()
+    + get_field_catalog()
+  }
+
+  class ResolvedField {
+    + domain()
+  }
+
+  class StorageRouter {
+    + raw_path()
+    + bronze_path()
+    + silver_path()
+    + model_path()
+    + resolve()
+    + silver_root()
+    + bronze_root()
+    + raw_root()
+    + models_root()
   }
 
 }
 
 package "Connections (4)" #E6E6E6 {
 
-  package "core/connection.py (3)" #E6E6E6 {
-    class ConnectionFactory {
-      + create()
-    }
-    class DataConnection {
-      + read_table()
-      + apply_filters()
-      + to_pandas()
-      + count()
-      + cache()
-      + uncache()
-      + stop()
-    }
-    class SparkConnection {
-      + read_table()
-      + write_delta_table()
-      + merge_delta_table()
-      + optimize_delta_table()
-      + vacuum_delta_table()
-      + get_delta_table_history()
-      + apply_filters()
-      + to_pandas()
-      + count()
-      + cache()
-      + uncache()
-      + stop()
-    }
+  class ConnectionFactory {
+    + create()
   }
 
-  package "core/duckdb_connection.py (1)" #E6E6E6 {
-    class DuckDBConnection {
-      + table()
-      + has_view()
-      + read_table()
-      + write_delta_table()
-      + get_delta_table_history()
-      + optimize_delta_table()
-      + vacuum_delta_table()
-      + read_parquet()
-      + createDataFrame()
-      + apply_filters()
-      + to_pandas()
-      + count()
-      + cache()
-      + uncache()
-      + stop()
-      + execute_sql()
-      + execute()
-    }
+  class DataConnection {
+    + read_table()
+    + apply_filters()
+    + to_pandas()
+    + count()
+    + cache()
+    + uncache()
+    + stop()
+  }
+
+  class DuckDBConnection {
+    + table()
+    + has_view()
+    + read_table()
+    + write_delta_table()
+    + get_delta_table_history()
+    + optimize_delta_table()
+    + vacuum_delta_table()
+    + read_parquet()
+    + createDataFrame()
+    + apply_filters()
+    + to_pandas()
+    + count()
+    + cache()
+    + uncache()
+    + stop()
+    + execute_sql()
+    + execute()
+  }
+
+  class SparkConnection {
+    + read_table()
+    + write_delta_table()
+    + merge_delta_table()
+    + optimize_delta_table()
+    + vacuum_delta_table()
+    + get_delta_table_history()
+    + apply_filters()
+    + to_pandas()
+    + count()
+    + cache()
+    + uncache()
+    + stop()
   }
 
 }
 
-package "API Layer (36)" #B3D9FF {
+package "API Handlers (7)" #B3D9FF {
 
-  package "api/bronze_resolver.py (2)" #B3D9FF {
-    class BronzeEndpointInfo {
-      + provider_id : str
-      + endpoint_id : str
-      + bronze_path : Path
-      + fields : dict[str, str]
-    }
-    class BronzeResolver {
-      + resolve()
-      + reachable_domains()
-      + find_join_path()
-      + get_endpoint_catalog()
-    }
+  class BoxHandler {
+    + handles
+    --
+    + execute()
   }
 
-  package "api/handlers/ (7)" #B3D9FF {
-    class BoxHandler {
-      + handles
-      --
-      + execute()
-    }
-    class ExhibitHandler {
-      + handles : set[str]
-      + _engine : Any
-      + max_response_mb : float
-      + storage_root : Any
-      + _max_sql_rows : int
-      + _max_dimension_values : int
-      --
-      + execute()
-      + distinct_values()
-      + distinct_values_by_measure()
-    }
-    class GraphicalHandler {
-      + handles
-      --
-      + execute()
-    }
-    class HandlerRegistry {
-      + register()
-      + get()
-      + supported_types()
-    }
-    class MetricsHandler {
-      + handles
-      --
-      + execute()
-    }
-    class PivotHandler {
-      + handles
-      --
-      + execute()
-    }
-    class TableDataHandler {
-      + handles
-      --
-      + execute()
-    }
+  class ExhibitHandler {
+    + handles : set[str]
+    + _engine : Any
+    + max_response_mb : float
+    + storage_root : Any
+    + _max_sql_rows : int
+    + _max_dimension_values : int
+    --
+    + execute()
+    + distinct_values()
+    + distinct_values_by_measure()
   }
 
-  package "api/models/ (24)" #B3D9FF {
-    class BoxQueryRequest {
-      + type : str
-      + category : str
-      + open : Optional[str]
-      + high : Optional[str]
-      + low : Optional[str]
-      + close : Optional[str]
-      + y : Optional[str]
-      + group_by : Optional[str]
-      + sort : Optional[SortSpec]
-      + filters : list[FilterSpec]
-      + page_filters : Optional[PageFilters]
-      + models : list[str]
-    }
-    class BucketSpec {
-      + size : Optional[float]
-      + edges : Optional[list[float]]
-      + count : Optional[int]
-    }
-    class ColumnTuple {
-      + key : str
-      + field : str
-      + aggregation : Optional[str]
-      + format : Optional[str]
-      + label : Optional[str]
-    }
-    class DimensionValuesResponse {
-      + field : str
-      + values : list[Any]
-    }
-    class ExpandableData {
-      + columns : list[dict[str, Any]]
-      + children : dict[str, list[list[Any]]]
-      + total_rows : int
-    }
-    class FilterSpec {
-      + model_config
-      + field : str
-      + operator : str
-      + value : Union[list, str, int, float, dict]
-    }
-    class GraphicalQueryRequest {
-      + type : str
-      + x : Optional[str]
-      + y : Optional[Union[str, list[str]]]
-      + group_by : Optional[str]
-      + size : Optional[str]
-      + color : Optional[str]
-      + labels : Optional[str]
-      + values : Optional[str]
-      + z : Optional[str]
-      + aggregation : Optional[str]
-      + sort : Optional[SortSpec]
-      + filters : list[FilterSpec]
-      + page_filters : Optional[PageFilters]
-      + models : list[str]
-    }
-    class GraphicalResponse {
-      + series : list[SeriesData]
-      + truncated : bool
-      + formatting : Optional[dict[str, Any]]
-    }
-    class GreatTablesResponse {
-      + html : str
-      + expandable : Optional[ExpandableData]
-    }
-    class HealthResponse {
-      + status : str
-      + version : str
-    }
-    class MeasureTuple {
-      + key : str
-      + field : Union[str, dict]
-      + aggregation : Optional[str]
-      + format : Optional[str]
-      + label : Optional[str]
-    }
-    class MetricQueryRequest {
-      + type : str
-      + metrics : list[MeasureTuple]
-      + filters : list[FilterSpec]
-      + page_filters : Optional[PageFilters]
-      + models : list[str]
-    }
-    class MetricResponse {
-      + metrics : list[MetricValue]
-    }
-    class MetricValue {
-      + key : str
-      + label : str
-      + value : Any
-      + format : Optional[str]
-    }
-    class PageFilters {
-      + ignore : list[str]
-    }
-    class PivotQueryRequest {
-      + type : str
-      + rows : Union[str, list[str]]
-      + cols : Optional[Union[str, list[str]]]
-      + layout : str
-      + measures : list[MeasureTuple]
-      + buckets : Optional[dict[str, BucketSpec]]
-      + windows : Optional[list[WindowSpec]]
-      + totals : Optional[TotalsSpec]
-      + sort : Optional[SortConfig]
-      + filters : list[FilterSpec]
-      + page_filters : Optional[PageFilters]
-      + models : list[str]
-      --
-      + row_fields()
-      + col_fields()
-    }
-    class SeriesData {
-      + name : str
-      + x : list
-      + y : list
-      + size : Optional[list]
-    }
-    class SortConfig {
-      + rows : Optional[SortSpec]
-      + cols : Optional[SortSpec]
-    }
-    class SortSpec {
-      + by : Optional[str]
-      + order : str
-      + values : Optional[list[str]]
-    }
-    class TableColumn {
-      + key : str
-      + label : str
-      + format : Optional[str]
-      + group : Optional[str]
-    }
-    class TableDataQueryRequest {
-      + type : str
-      + columns : list[ColumnTuple]
-      + sort_by : Optional[str]
-      + sort_order : str
-      + filters : list[FilterSpec]
-      + page_filters : Optional[PageFilters]
-      + models : list[str]
-    }
-    class TableResponse {
-      + columns : list[TableColumn]
-      + rows : list[list[Any]]
-      + truncated : bool
-      + formatting : Optional[dict[str, Any]]
-    }
-    class TotalsSpec {
-      + rows : bool
-      + cols : bool
-    }
-    class WindowSpec {
-      + key : str
-      + source : str
-      + type : str
-      + label : Optional[str]
-    }
+  class GraphicalHandler {
+    + handles
+    --
+    + execute()
   }
 
-  package "api/resolver.py (3)" #B3D9FF {
-    class FieldRef {
-      + _known_domains : set[str]
-    }
-    class FieldResolver {
-      + reachable_domains()
-      + find_join_path()
-      + resolve()
-      + resolve_many()
-      + get_field_catalog()
-    }
-    class ResolvedField {
-      + domain()
-    }
+  class HandlerRegistry {
+    + register()
+    + get()
+    + supported_types()
+  }
+
+  class MetricsHandler {
+    + handles
+    --
+    + execute()
+  }
+
+  class PivotHandler {
+    + handles
+    --
+    + execute()
+  }
+
+  class TableDataHandler {
+    + handles
+    --
+    + execute()
+  }
+
+}
+
+package "API Request/Response Models (24)" #B3D9FF {
+
+  class BoxQueryRequest {
+    + type : str
+    + category : str
+    + open : Optional[str]
+    + high : Optional[str]
+    + low : Optional[str]
+    + close : Optional[str]
+    + y : Optional[str]
+    + group_by : Optional[str]
+    + sort : Optional[SortSpec]
+    + filters : list[FilterSpec]
+    + page_filters : Optional[PageFilters]
+    + models : list[str]
+  }
+
+  class BucketSpec {
+    + size : Optional[float]
+    + edges : Optional[list[float]]
+    + count : Optional[int]
+  }
+
+  class ColumnTuple {
+    + key : str
+    + field : str
+    + aggregation : Optional[str]
+    + format : Optional[str]
+    + label : Optional[str]
+  }
+
+  class DimensionValuesResponse {
+    + field : str
+    + values : list[Any]
+  }
+
+  class ExpandableData {
+    + columns : list[dict[str, Any]]
+    + children : dict[str, list[list[Any]]]
+    + total_rows : int
+  }
+
+  class FilterSpec {
+    + model_config
+    + field : str
+    + operator : str
+    + value : Union[list, str, int, float, dict]
+  }
+
+  class GraphicalQueryRequest {
+    + type : str
+    + x : Optional[str]
+    + y : Optional[Union[str, list[str]]]
+    + group_by : Optional[str]
+    + size : Optional[str]
+    + color : Optional[str]
+    + labels : Optional[str]
+    + values : Optional[str]
+    + z : Optional[str]
+    + aggregation : Optional[str]
+    + sort : Optional[SortSpec]
+    + filters : list[FilterSpec]
+    + page_filters : Optional[PageFilters]
+    + models : list[str]
+  }
+
+  class GraphicalResponse {
+    + series : list[SeriesData]
+    + truncated : bool
+    + formatting : Optional[dict[str, Any]]
+  }
+
+  class GreatTablesResponse {
+    + html : str
+    + expandable : Optional[ExpandableData]
+  }
+
+  class HealthResponse {
+    + status : str
+    + version : str
+  }
+
+  class MeasureTuple {
+    + key : str
+    + field : Union[str, dict]
+    + aggregation : Optional[str]
+    + format : Optional[str]
+    + label : Optional[str]
+  }
+
+  class MetricQueryRequest {
+    + type : str
+    + metrics : list[MeasureTuple]
+    + filters : list[FilterSpec]
+    + page_filters : Optional[PageFilters]
+    + models : list[str]
+  }
+
+  class MetricResponse {
+    + metrics : list[MetricValue]
+  }
+
+  class MetricValue {
+    + key : str
+    + label : str
+    + value : Any
+    + format : Optional[str]
+  }
+
+  class PageFilters {
+    + ignore : list[str]
+  }
+
+  class PivotQueryRequest {
+    + type : str
+    + rows : Union[str, list[str]]
+    + cols : Optional[Union[str, list[str]]]
+    + layout : str
+    + measures : list[MeasureTuple]
+    + buckets : Optional[dict[str, BucketSpec]]
+    + windows : Optional[list[WindowSpec]]
+    + totals : Optional[TotalsSpec]
+    + sort : Optional[SortConfig]
+    + filters : list[FilterSpec]
+    + page_filters : Optional[PageFilters]
+    + models : list[str]
+    --
+    + row_fields()
+    + col_fields()
+  }
+
+  class SeriesData {
+    + name : str
+    + x : list
+    + y : list
+    + size : Optional[list]
+  }
+
+  class SortConfig {
+    + rows : Optional[SortSpec]
+    + cols : Optional[SortSpec]
+  }
+
+  class SortSpec {
+    + by : Optional[str]
+    + order : str
+    + values : Optional[list[str]]
+  }
+
+  class TableColumn {
+    + key : str
+    + label : str
+    + format : Optional[str]
+    + group : Optional[str]
+  }
+
+  class TableDataQueryRequest {
+    + type : str
+    + columns : list[ColumnTuple]
+    + sort_by : Optional[str]
+    + sort_order : str
+    + filters : list[FilterSpec]
+    + page_filters : Optional[PageFilters]
+    + models : list[str]
+  }
+
+  class TableResponse {
+    + columns : list[TableColumn]
+    + rows : list[list[Any]]
+    + truncated : bool
+    + formatting : Optional[dict[str, Any]]
+  }
+
+  class TotalsSpec {
+    + rows : bool
+    + cols : bool
+  }
+
+  class WindowSpec {
+    + key : str
+    + source : str
+    + type : str
+    + label : Optional[str]
   }
 
 }
 
 package "Build Pipeline (11)" #FF9933 {
 
-  package "core/executor.py (1)" #FF9933 {
-    class NodeExecutor {
-      + register_op()
-      + get_op()
-      + list_ops()
-      + execute_all()
-      + execute_node()
-      + execute_pipeline()
-    }
+  class BaseModel {
+    + backend()
+    + build()
+    + ensure_built()
+    + write_tables()
+    + get_table()
+    + has_table()
+    + list_tables()
+    + before_build()
+    + after_build()
+    + custom_node_loading()
+    + set_session()
   }
 
-  package "models/base/builder.py (3)" #FF9933 {
-    class BaseModelBuilder {
-      + model_name : str
-      + depends_on : List[str]
-      --
-      + get_model_class()
-      + get_model_config()
-      + build()
-      + get_dependencies()
-    }
-    class BuildResult {
-      + model_name : str
-      + success : bool
-      + dimensions : int
-      + facts : int
-      + rows_written : int
-      + duration_seconds : float
-      + error : Optional[str]
-      + warnings : List[str]
-    }
-    class BuilderRegistry {
-      + _builders : Dict[str, Type[BaseModelBuilder]]
-      --
-      + register()
-      + all()
-      + discover()
-      + clear()
-    }
+  class BaseModelBuilder {
+    + model_name : str
+    + depends_on : List[str]
+    --
+    + get_model_class()
+    + get_model_config()
+    + build()
+    + get_dependencies()
   }
 
-  package "models/base/data_validator.py (3)" #FF9933 {
-    class DataValidator {
-      + columns()
-      + row_count()
-      + get_required_columns()
-      + get_numeric_columns()
-      + get_date_column()
-      + get_entity_column()
-      + get_optional_columns()
-      + get_valid_ranges()
-      + get_min_rows()
-      + get_null_thresholds()
-      + validate()
-    }
-    class ValidationIssue {
-      + level : str
-      + category : str
-      + message : str
-      + details : Dict[str, Any]
-    }
-    class ValidationReport {
-      + validator_name : str
-      + timestamp : datetime
-      + issues : List[ValidationIssue]
-      + metrics : Dict[str, Any]
-      --
-      + is_valid()
-      + error_count()
-      + warning_count()
-      + add_error()
-      + add_warning()
-      + add_info()
-      + summary()
-    }
+  class BuildResult {
+    + model_name : str
+    + success : bool
+    + dimensions : int
+    + facts : int
+    + rows_written : int
+    + duration_seconds : float
+    + error : Optional[str]
+    + warnings : List[str]
   }
 
-  package "models/base/domain_builder.py (1)" #FF9933 {
-    class DomainBuilderFactory {
-      + create_builders()
-    }
+  class BuilderRegistry {
+    + _builders : Dict[str, Type[BaseModelBuilder]]
+    --
+    + register()
+    + all()
+    + discover()
+    + clear()
   }
 
-  package "models/base/domain_model.py (1)" #FF9933 {
-    class DomainModel {
-      + custom_node_loading()
-      + graph_builder()
-    }
+  class DataValidator {
+    + columns()
+    + row_count()
+    + get_required_columns()
+    + get_numeric_columns()
+    + get_date_column()
+    + get_entity_column()
+    + get_optional_columns()
+    + get_valid_ranges()
+    + get_min_rows()
+    + get_null_thresholds()
+    + validate()
   }
 
-  package "models/base/graph_builder.py (1)" #FF9933 {
-    class GraphBuilder {
-      + model_cfg()
-      + build()
-    }
+  class DomainBuilderFactory {
+    + create_builders()
   }
 
-  package "models/base/model.py (1)" #FF9933 {
-    class BaseModel {
-      + backend()
-      + build()
-      + ensure_built()
-      + write_tables()
-      + get_table()
-      + has_table()
-      + list_tables()
-      + before_build()
-      + after_build()
-      + custom_node_loading()
-      + set_session()
-    }
+  class DomainModel {
+    + custom_node_loading()
+    + graph_builder()
   }
 
-}
-
-package "Ingestion Pipeline (18)" #CC9966 {
-
-  package "pipelines/base/facet.py (1)" #CC9966 {
-    class Facet {
-      + NUMERIC_COERCE : Dict[str, str]
-      + SPARK_CASTS : Dict[str, str]
-      + FINAL_COLUMNS : Optional[List[Tuple[str, str]]]
-      + PROVIDER_ID : Optional[str]
-      + ENDPOINT_ID : Optional[str]
-      --
-      + get_coerce_rules()
-      + get_spark_casts()
-      + get_final_columns()
-      + get_field_mappings()
-      + get_computed_fields()
-      + get_facet_config()
-      + normalize()
-      + postprocess()
-      + validate()
-      + calls()
-    }
+  class GraphBuilder {
+    + model_cfg()
+    + build()
   }
 
-  package "pipelines/base/http_client.py (1)" #CC9966 {
-    class HttpClient {
-      + request_text()
-      + request()
-      + get()
-    }
+  class NodeExecutor {
+    + register_op()
+    + get_op()
+    + list_ops()
+    + execute_all()
+    + execute_node()
+    + execute_pipeline()
   }
 
-  package "pipelines/base/ingestor_engine.py (3)" #CC9966 {
-    class IngestionResults {
-      + work_items : List[str]
-      + total_work_items : int
-      + completed_work_items : int
-      + total_records : int
-      + total_errors : int
-      + results : Dict[str, WorkItemResult]
-      + elapsed_seconds : float
-      --
-      + add_result()
-      + summary()
-      + print_summary()
-    }
-    class IngestorEngine {
-      + _executor : Optional[ThreadPoolExecutor]
-      + _executor_lock
-      --
-      + from_session()
-      + get_executor()
-      + shutdown_executor()
-      + run()
-      + run_with_discovery()
-    }
-    class WriteTask {
-      + df : Any
-      + table_name : str
-      + partitions : Optional[List[str]]
-      + record_count : int
-      + work_item : str
-    }
+  class ValidationIssue {
+    + level : str
+    + category : str
+    + message : str
+    + details : Dict[str, Any]
   }
 
-  package "pipelines/base/key_pool.py (1)" #CC9966 {
-    class ApiKeyPool {
-      + size()
-      + next_key()
-      + mark_exhausted()
-    }
-  }
-
-  package "pipelines/base/normalizer.py (1)" #CC9966 {
-    class SparkNormalizer {
-      + normalize()
-      + normalize_with_schema()
-    }
-  }
-
-  package "pipelines/base/provider.py (4)" #CC9966 {
-    class BaseProvider {
-      + PROVIDER_NAME : str
-      --
-      + base_url()
-      + rate_limit()
-      + env_api_key()
-      + get_provider_setting()
-      + get_endpoint_config()
-      + list_work_items()
-      + fetch()
-      + normalize()
-      + get_table_name()
-      + get_partitions()
-      + get_key_columns()
-      + get_write_strategy()
-      + get_date_column()
-      + get_response_key()
-      + get_field_mappings()
-      + get_type_coercions()
-    }
-    class DataType {
-      + REFERENCE
-      + PRICES
-      + INCOME_STATEMENT
-      + BALANCE_SHEET
-      + CASH_FLOW
-      + EARNINGS
-      + OPTIONS
-      + ETF_PROFILE
-      + DIVIDENDS
-      + SPLITS
-    }
-    class FetchResult {
-      + ticker : str
-      + data_type : DataType
-      + success : bool
-      + data : Optional[Any]
-      + error : Optional[str]
-      + api_calls : int
-    }
-    class WorkItemResult {
-      + work_item : str
-      + success : bool
-      + record_count : int
-      + error : Optional[str]
-      + table_path : Optional[str]
-    }
-  }
-
-  package "pipelines/base/registry.py (2)" #CC9966 {
-    class BaseRegistry {
-      + render()
-    }
-    class Endpoint {
-      + name : str
-      + base : str
-      + method : str
-      + path_template : str
-      + required_params : list
-      + default_query : dict
-      + response_key : str
-    }
-  }
-
-  package "pipelines/base/socrata_client.py (1)" #CC9966 {
-    class SocrataClient {
-      + DEFAULT_LIMIT
-      + MAX_RETRIES
-      + DEFAULT_TIMEOUT
-      --
-      + request()
-      + fetch_all()
-      + fetch_all_flat()
-      + get_row_count()
-      + get_metadata()
-      + fetch_csv()
-      + download_csv_to_file()
-      + fetch_csv_from_file()
-    }
-  }
-
-  package "pipelines/base/socrata_provider.py (1)" #CC9966 {
-    class SocrataBaseProvider {
-      + enable_raw_save()
-      + list_work_items()
-      + fetch()
-      + normalize()
-      + get_table_name()
-      + get_resource_id()
-      + list_endpoints()
-      + read_csv_with_spark()
-      + get_raw_path()
-      + read_raw_as_df()
-      + download_all_csv()
-    }
-  }
-
-  package "pipelines/ingestors/ (3)" #CC9966 {
-    class BronzeSink {
-      + exists()
-      + write_if_missing()
-      + append_immutable()
-      + upsert()
-      + smart_write()
-      + write()
-      + overwrite()
-      + append()
-      + streaming_writer()
-      + rebuild_from_raw()
-    }
-    class RawSink {
-      + write()
-      + exists()
-      + read()
-    }
-    class StreamingBronzeWriter {
-      + add_records()
-      + add_batch()
-      + flush()
-      + total_records()
-      + buffered_records()
-      + batches_written()
-    }
-  }
-
-}
-
-package "Pipeline Infrastructure (19)" #CC9966 {
-
-  package "pipelines/base/circuit_breaker.py (6)" #CC9966 {
-    class CircuitBreaker {
-      + state()
-      + stats()
-      + allow_request()
-      + record_success()
-      + record_failure()
-      + reset()
-      + protect()
-      + call()
-      + get_status()
-    }
-    class CircuitBreakerConfig {
-      + failure_threshold : int
-      + success_threshold : int
-      + timeout_seconds : float
-      + half_open_max_calls : int
-      + name : str
-    }
-    class CircuitBreakerManager {
-      + _instance : Optional['CircuitBreakerManager']
-      + _lock : threading.Lock
-      + DEFAULT_CONFIGS : Dict[str, CircuitBreakerConfig]
-      --
-      + get_breaker()
-      + configure()
-      + get_all_status()
-      + reset_all()
-    }
-    class CircuitOpenError
-    class CircuitState {
-      + CLOSED
-      + OPEN
-      + HALF_OPEN
-    }
-    class CircuitStats {
-      + total_calls : int
-      + successful_calls : int
-      + failed_calls : int
-      + rejected_calls : int
-      + state_changes : int
-      + last_failure_time : Optional[float]
-      + last_success_time : Optional[float]
-      + consecutive_failures : int
-      + consecutive_successes : int
-    }
-  }
-
-  package "pipelines/base/metrics.py (3)" #CC9966 {
-    class MetricsCollector {
-      + time()
-      + record()
-      + finish()
-      + elapsed_seconds()
-      + summary()
-      + print_report()
-      + get_slowest_steps()
-    }
-    class StepMetric {
-      + name : str
-      + count : int
-      + total_ms : float
-      + min_ms : float
-      + max_ms : float
-      + errors : int
-      --
-      + avg_ms()
-      + total_seconds()
-      + record()
-    }
-    class TimingContext
-  }
-
-  package "pipelines/base/progress_tracker.py (7)" #CC9966 {
-    class BatchProgressTracker {
-      + DATA_TYPE_SHORT_NAMES
-      --
-      + start_batch()
-      + update()
-      + complete_ticker()
-      + complete_batch()
-      + finish()
-    }
-    class PhaseProgress {
-      + name : str
-      + total : int
-      + completed : int
-      + errors : int
-      + start_time : Optional[float]
-      + end_time : Optional[float]
-      + current_ticker : str
-      --
-      + percent()
-      + elapsed_seconds()
-      + eta_seconds()
-      + is_complete()
-    }
-    class PipelineProgressTracker {
-      + set_phase_total()
-      + start_phase()
-      + update_phase()
-      + complete_phase()
-      + complete_ticker()
-      + get_overall_progress()
-      + print_overall_status()
-      + finish()
-    }
-    class PipelineStats {
-      + total_tickers : int
-      + completed_tickers : int
-      + total_api_calls : int
-      + successful_calls : int
-      + failed_calls : int
-      + start_time : Optional[float]
-      + end_time : Optional[float]
-      --
-      + elapsed_seconds()
-      + format_elapsed()
-    }
-    class ProgressBar {
-      + render()
-    }
-    class StepProgressTracker {
-      + update()
-      + step_complete()
-      + finish()
-    }
-    class TickerProgressCallback
-  }
-
-  package "pipelines/base/rate_limiter.py (3)" #CC9966 {
-    class RateLimitConfig {
-      + calls_per_minute : float
-      + burst_size : int
-      + name : str
-      --
-      + calls_per_second()
-      + refill_rate()
-    }
-    class RateLimiterManager {
-      + _instance : Optional['RateLimiterManager']
-      + _lock : threading.Lock
-      --
-      + get_limiter()
-      + configure_provider()
-      + wait()
-      + try_acquire()
-      + get_all_stats()
-      + reset()
-    }
-    class TokenBucket {
-      + config : RateLimitConfig
-      + tokens : float
-      + last_refill : float
-      + lock : threading.Lock
-      + total_requests : int
-      + total_waits : int
-      + total_wait_time : float
-      --
-      + acquire()
-      + wait()
-      + try_acquire()
-      + available_tokens()
-      + get_stats()
-    }
-  }
-
-}
-
-package "Concrete Providers (4)" #CC9966 {
-
-  package "pipelines/providers/alpha_vantage/ (2)" #CC9966 {
-    class AlphaVantageProvider {
-      + PROVIDER_NAME
-      --
-      + enable_raw_save()
-      + has_raw_data()
-      + set_tickers()
-      + list_work_items()
-      + populate_raw_cache()
-      + fetch()
-      + normalize()
-      + get_table_name()
-      + get_partitions()
-      + get_key_columns()
-      + get_raw_path()
-      + read_raw_as_df()
-      + discover_tickers()
-      + get_tickers_by_market_cap()
-      + seed_tickers()
-    }
-    class AlphaVantageRegistry {
-      + render()
-    }
-  }
-
-  package "pipelines/providers/registry/ (2)" #CC9966 {
-    class ProviderInfo {
-      + name : str
-      + description : str
-      + version : str
-      + models : List[str]
-      + bronze_tables : List[str]
-      + config_key : str
-      + module_path : str
-      + class_name : str
-      + tags : List[str]
-      + enabled : bool
-      --
-      + to_dict()
-    }
-    class ProviderRegistry {
-      + _providers : Dict[str, ProviderInfo]
-      + _discovered : bool
-      + _providers_dir : Path
-      --
-      + discover()
-      + list_available()
-      + get_info()
-      + get_ingestor()
-      + get_all_info()
-      + get_providers_for_model()
-      + get_providers_by_tag()
-      + register()
-      + reset()
-    }
+  class ValidationReport {
+    + validator_name : str
+    + timestamp : datetime
+    + issues : List[ValidationIssue]
+    + metrics : Dict[str, Any]
+    --
+    + is_valid()
+    + error_count()
+    + warning_count()
+    + add_error()
+    + add_warning()
+    + add_info()
+    + summary()
   }
 
 }
 
 package "Hooks & Artifacts (3)" #B3FFB3 {
 
-  package "core/artifacts.py (2)" #B3FFB3 {
-    class ArtifactStore {
-      + save()
-      + load()
-      + latest()
-      + list_versions()
-      + register()
-    }
-    class ModelArtifact {
-      + model_name : str
-      + version : str
-      + trained_at : str
-      + artifact_path : str
-      + metrics : dict
-      + config : dict
-      + status : str
-      --
-      + to_dict()
-      + from_dict()
-    }
+  class ArtifactStore {
+    + save()
+    + load()
+    + latest()
+    + list_versions()
+    + register()
   }
 
-  package "core/hooks.py (1)" #B3FFB3 {
-    class HookRunner {
-      + run()
-      + has_hooks()
-      + list_hooks()
-    }
+  class HookRunner {
+    + run()
+    + has_hooks()
+    + list_hooks()
+  }
+
+  class ModelArtifact {
+    + model_name : str
+    + version : str
+    + trained_at : str
+    + artifact_path : str
+    + metrics : dict
+    + config : dict
+    + status : str
+    --
+    + to_dict()
+    + from_dict()
+  }
+
+}
+
+package "Ingestion Core (18)" #CC9966 {
+
+  class ApiKeyPool {
+    + size()
+    + next_key()
+    + mark_exhausted()
+  }
+
+  class BaseProvider {
+    + PROVIDER_NAME : str
+    --
+    + base_url()
+    + rate_limit()
+    + env_api_key()
+    + get_provider_setting()
+    + get_endpoint_config()
+    + list_work_items()
+    + fetch()
+    + normalize()
+    + get_table_name()
+    + get_partitions()
+    + get_key_columns()
+    + get_write_strategy()
+    + get_date_column()
+    + get_response_key()
+    + get_field_mappings()
+    + get_type_coercions()
+  }
+
+  class BaseRegistry {
+    + render()
+  }
+
+  class BronzeSink {
+    + exists()
+    + write_if_missing()
+    + append_immutable()
+    + upsert()
+    + smart_write()
+    + write()
+    + overwrite()
+    + append()
+    + streaming_writer()
+    + rebuild_from_raw()
+  }
+
+  class DataType {
+    + REFERENCE
+    + PRICES
+    + INCOME_STATEMENT
+    + BALANCE_SHEET
+    + CASH_FLOW
+    + EARNINGS
+    + OPTIONS
+    + ETF_PROFILE
+    + DIVIDENDS
+    + SPLITS
+  }
+
+  class Endpoint {
+    + name : str
+    + base : str
+    + method : str
+    + path_template : str
+    + required_params : list
+    + default_query : dict
+    + response_key : str
+  }
+
+  class Facet {
+    + NUMERIC_COERCE : Dict[str, str]
+    + SPARK_CASTS : Dict[str, str]
+    + FINAL_COLUMNS : Optional[List[Tuple[str, str]]]
+    + PROVIDER_ID : Optional[str]
+    + ENDPOINT_ID : Optional[str]
+    --
+    + get_coerce_rules()
+    + get_spark_casts()
+    + get_final_columns()
+    + get_field_mappings()
+    + get_computed_fields()
+    + get_facet_config()
+    + normalize()
+    + postprocess()
+    + validate()
+    + calls()
+  }
+
+  class FetchResult {
+    + ticker : str
+    + data_type : DataType
+    + success : bool
+    + data : Optional[Any]
+    + error : Optional[str]
+    + api_calls : int
+  }
+
+  class HttpClient {
+    + request_text()
+    + request()
+    + get()
+  }
+
+  class IngestionResults {
+    + work_items : List[str]
+    + total_work_items : int
+    + completed_work_items : int
+    + total_records : int
+    + total_errors : int
+    + results : Dict[str, WorkItemResult]
+    + elapsed_seconds : float
+    --
+    + add_result()
+    + summary()
+    + print_summary()
+  }
+
+  class IngestorEngine {
+    + _executor : Optional[ThreadPoolExecutor]
+    + _executor_lock
+    --
+    + from_session()
+    + get_executor()
+    + shutdown_executor()
+    + run()
+    + run_with_discovery()
+  }
+
+  class RawSink {
+    + write()
+    + exists()
+    + read()
+  }
+
+  class SocrataBaseProvider {
+    + enable_raw_save()
+    + list_work_items()
+    + fetch()
+    + normalize()
+    + get_table_name()
+    + get_resource_id()
+    + list_endpoints()
+    + read_csv_with_spark()
+    + get_raw_path()
+    + read_raw_as_df()
+    + download_all_csv()
+  }
+
+  class SocrataClient {
+    + DEFAULT_LIMIT
+    + MAX_RETRIES
+    + DEFAULT_TIMEOUT
+    --
+    + request()
+    + fetch_all()
+    + fetch_all_flat()
+    + get_row_count()
+    + get_metadata()
+    + fetch_csv()
+    + download_csv_to_file()
+    + fetch_csv_from_file()
+  }
+
+  class SparkNormalizer {
+    + normalize()
+    + normalize_with_schema()
+  }
+
+  class StreamingBronzeWriter {
+    + add_records()
+    + add_batch()
+    + flush()
+    + total_records()
+    + buffered_records()
+    + batches_written()
+  }
+
+  class WorkItemResult {
+    + work_item : str
+    + success : bool
+    + record_count : int
+    + error : Optional[str]
+    + table_path : Optional[str]
+  }
+
+  class WriteTask {
+    + df : Any
+    + table_name : str
+    + partitions : Optional[List[str]]
+    + record_count : int
+    + work_item : str
+  }
+
+}
+
+package "Ingestion Infrastructure (19)" #CC9966 {
+
+  class BatchProgressTracker {
+    + DATA_TYPE_SHORT_NAMES
+    --
+    + start_batch()
+    + update()
+    + complete_ticker()
+    + complete_batch()
+    + finish()
+  }
+
+  class CircuitBreaker {
+    + state()
+    + stats()
+    + allow_request()
+    + record_success()
+    + record_failure()
+    + reset()
+    + protect()
+    + call()
+    + get_status()
+  }
+
+  class CircuitBreakerConfig {
+    + failure_threshold : int
+    + success_threshold : int
+    + timeout_seconds : float
+    + half_open_max_calls : int
+    + name : str
+  }
+
+  class CircuitBreakerManager {
+    + _instance : Optional['CircuitBreakerManager']
+    + _lock : threading.Lock
+    + DEFAULT_CONFIGS : Dict[str, CircuitBreakerConfig]
+    --
+    + get_breaker()
+    + configure()
+    + get_all_status()
+    + reset_all()
+  }
+
+  class CircuitOpenError
+
+  class CircuitState {
+    + CLOSED
+    + OPEN
+    + HALF_OPEN
+  }
+
+  class CircuitStats {
+    + total_calls : int
+    + successful_calls : int
+    + failed_calls : int
+    + rejected_calls : int
+    + state_changes : int
+    + last_failure_time : Optional[float]
+    + last_success_time : Optional[float]
+    + consecutive_failures : int
+    + consecutive_successes : int
+  }
+
+  class MetricsCollector {
+    + time()
+    + record()
+    + finish()
+    + elapsed_seconds()
+    + summary()
+    + print_report()
+    + get_slowest_steps()
+  }
+
+  class PhaseProgress {
+    + name : str
+    + total : int
+    + completed : int
+    + errors : int
+    + start_time : Optional[float]
+    + end_time : Optional[float]
+    + current_ticker : str
+    --
+    + percent()
+    + elapsed_seconds()
+    + eta_seconds()
+    + is_complete()
+  }
+
+  class PipelineProgressTracker {
+    + set_phase_total()
+    + start_phase()
+    + update_phase()
+    + complete_phase()
+    + complete_ticker()
+    + get_overall_progress()
+    + print_overall_status()
+    + finish()
+  }
+
+  class PipelineStats {
+    + total_tickers : int
+    + completed_tickers : int
+    + total_api_calls : int
+    + successful_calls : int
+    + failed_calls : int
+    + start_time : Optional[float]
+    + end_time : Optional[float]
+    --
+    + elapsed_seconds()
+    + format_elapsed()
+  }
+
+  class ProgressBar {
+    + render()
+  }
+
+  class RateLimitConfig {
+    + calls_per_minute : float
+    + burst_size : int
+    + name : str
+    --
+    + calls_per_second()
+    + refill_rate()
+  }
+
+  class RateLimiterManager {
+    + _instance : Optional['RateLimiterManager']
+    + _lock : threading.Lock
+    --
+    + get_limiter()
+    + configure_provider()
+    + wait()
+    + try_acquire()
+    + get_all_stats()
+    + reset()
+  }
+
+  class StepMetric {
+    + name : str
+    + count : int
+    + total_ms : float
+    + min_ms : float
+    + max_ms : float
+    + errors : int
+    --
+    + avg_ms()
+    + total_seconds()
+    + record()
+  }
+
+  class StepProgressTracker {
+    + update()
+    + step_complete()
+    + finish()
+  }
+
+  class TickerProgressCallback
+
+  class TimingContext
+
+  class TokenBucket {
+    + config : RateLimitConfig
+    + tokens : float
+    + last_refill : float
+    + lock : threading.Lock
+    + total_requests : int
+    + total_waits : int
+    + total_wait_time : float
+    --
+    + acquire()
+    + wait()
+    + try_acquire()
+    + available_tokens()
+    + get_stats()
+  }
+
+}
+
+package "Providers (4)" #CC9966 {
+
+  class AlphaVantageProvider {
+    + PROVIDER_NAME
+    --
+    + enable_raw_save()
+    + has_raw_data()
+    + set_tickers()
+    + list_work_items()
+    + populate_raw_cache()
+    + fetch()
+    + normalize()
+    + get_table_name()
+    + get_partitions()
+    + get_key_columns()
+    + get_raw_path()
+    + read_raw_as_df()
+    + discover_tickers()
+    + get_tickers_by_market_cap()
+    + seed_tickers()
+  }
+
+  class AlphaVantageRegistry {
+    + render()
+  }
+
+  class ProviderInfo {
+    + name : str
+    + description : str
+    + version : str
+    + models : List[str]
+    + bronze_tables : List[str]
+    + config_key : str
+    + module_path : str
+    + class_name : str
+    + tags : List[str]
+    + enabled : bool
+    --
+    + to_dict()
+  }
+
+  class ProviderRegistry {
+    + _providers : Dict[str, ProviderInfo]
+    + _discovered : bool
+    + _providers_dir : Path
+    --
+    + discover()
+    + list_available()
+    + get_info()
+    + get_ingestor()
+    + get_all_info()
+    + get_providers_for_model()
+    + get_providers_by_tag()
+    + register()
+    + reset()
   }
 
 }
 
 package "Orchestration (5)" #CC99FF {
 
-  package "orchestration/ (5)" #CC99FF {
-    class CheckpointManager {
-      + DEFAULT_CHECKPOINT_DIR
-      --
-      + create_checkpoint()
-      + load_checkpoint()
-      + find_latest_checkpoint()
-      + find_resumable_checkpoint()
-      + mark_ticker_started()
-      + mark_ticker_completed()
-      + mark_ticker_failed()
-      + get_pending_tickers()
-      + get_failed_tickers()
-      + mark_pipeline_completed()
-      + mark_pipeline_failed()
-      + get_progress()
-      + clear_checkpoint()
-      + list_checkpoints()
-    }
-    class DependencyGraph {
-      + build()
-      + get_dependencies()
-      + topological_sort()
-      + filter_buildable()
-      + get_dependents()
-      + visualize()
-      + get_tiers()
-      + list_models()
-      + get_model_info()
-      + validate()
-    }
-    class ModelInfo {
-      + name : str
-      + version : str
-      + depends_on : List[str]
-      + inherits_from : Optional[str]
-      + storage_root : str
-      + enabled : bool
-    }
-    class PipelineCheckpoint {
-      + pipeline_id : str
-      + pipeline_name : str
-      + started_at : str
-      + last_updated : str
-      + status : str
-      + total_tickers : int
-      + processed_count : int
-      + failed_count : int
-      + tickers : Dict[str, TickerCheckpoint]
-      + metadata : Dict[str, Any]
-      --
-      + to_dict()
-      + from_dict()
-    }
-    class TickerCheckpoint {
-      + ticker : str
-      + status : str
-      + started_at : Optional[str]
-      + completed_at : Optional[str]
-      + error : Optional[str]
-      + retries : int
-      + data_endpoints : Dict[str, str]
-      --
-      + to_dict()
-      + from_dict()
-    }
+  class CheckpointManager {
+    + DEFAULT_CHECKPOINT_DIR
+    --
+    + create_checkpoint()
+    + load_checkpoint()
+    + find_latest_checkpoint()
+    + find_resumable_checkpoint()
+    + mark_ticker_started()
+    + mark_ticker_completed()
+    + mark_ticker_failed()
+    + get_pending_tickers()
+    + get_failed_tickers()
+    + mark_pipeline_completed()
+    + mark_pipeline_failed()
+    + get_progress()
+    + clear_checkpoint()
+    + list_checkpoints()
+  }
+
+  class DependencyGraph {
+    + build()
+    + get_dependencies()
+    + topological_sort()
+    + filter_buildable()
+    + get_dependents()
+    + visualize()
+    + get_tiers()
+    + list_models()
+    + get_model_info()
+    + validate()
+  }
+
+  class ModelInfo {
+    + name : str
+    + version : str
+    + depends_on : List[str]
+    + inherits_from : Optional[str]
+    + storage_root : str
+    + enabled : bool
+  }
+
+  class PipelineCheckpoint {
+    + pipeline_id : str
+    + pipeline_name : str
+    + started_at : str
+    + last_updated : str
+    + status : str
+    + total_tickers : int
+    + processed_count : int
+    + failed_count : int
+    + tickers : Dict[str, TickerCheckpoint]
+    + metadata : Dict[str, Any]
+    --
+    + to_dict()
+    + from_dict()
+  }
+
+  class TickerCheckpoint {
+    + ticker : str
+    + status : str
+    + started_at : Optional[str]
+    + completed_at : Optional[str]
+    + error : Optional[str]
+    + retries : int
+    + data_endpoints : Dict[str, str]
+    --
+    + to_dict()
+    + from_dict()
   }
 
 }
 
-package "Application (1)" #E6E6E6 {
+package "Error Handling (26)" #FFC0C0 {
 
-  package "app.py (1)" #E6E6E6 {
-    class DeFunk {
-      + from_config()
-      + from_app_config()
-      + build_session()
-      + query_session()
-      + ingest_session()
-    }
+  class ConfigurationError
+
+  class ConnectionError
+
+  class DataNotFoundError
+
+  class DeFunkError
+
+  class DependencyError
+
+  class ErrorContext
+
+  class FilterError
+
+  class ForecastError
+
+  class IngestionError
+
+  class InsufficientDataError
+
+  class InvalidConfigError
+
+  class JoinError
+
+  class MeasureError
+
+  class MissingConfigError
+
+  class ModelError
+
+  class ModelNotFoundError
+
+  class ModelTrainingError
+
+  class NotebookValidator {
+    + validate()
+    + validate_and_raise()
+    + get_warnings()
+    + get_errors()
+    + is_valid()
+  }
+
+  class PipelineError
+
+  class QueryError
+
+  class RateLimitError
+
+  class StorageError
+
+  class TableNotFoundError
+
+  class TransformationError
+
+  class ValidationError {
+    + level : str
+    + message : str
+    + location : Optional[str]
+  }
+
+  class WriteError
+
+}
+
+package "Logging (4)" #E6E6E6 {
+
+  class ColoredFormatter {
+    + COLORS
+    + RESET
+    --
+    + format()
+  }
+
+  class LogConfig {
+    + console_level : str
+    + file_level : str
+    + log_dir : Path
+    + log_file : str
+    + json_log_file : str
+    + max_bytes : int
+    + backup_count : int
+    + console_format : str
+    + file_format : str
+    + date_format : str
+    + enable_json : bool
+    + module_levels : Dict[str, str]
+    --
+    + from_env()
+  }
+
+  class LogTimer
+
+  class StructuredFormatter {
+    + format()
   }
 
 }
 
 package "Utilities (3)" #E6E6E6 {
 
-  package "core/context.py (1)" #E6E6E6 {
-    class RepoContext {
-      + repo : Path
-      + spark : Any
-      + storage : Dict[str, Any]
-      + connection : Optional[Any]
-      + connection_type : str
-      + _config : Optional[AppConfig]
-      --
-      + get_api_config()
-      + from_repo_root()
-      + config()
-    }
+  class APIValidator {
+    + validate_date_range()
+    + test_api_connection()
+    + get_recommended_date_range()
+    + prompt_user_for_adjusted_range()
   }
 
-  package "utils/ (2)" #E6E6E6 {
-    class APIValidator {
-      + validate_date_range()
-      + test_api_connection()
-      + get_recommended_date_range()
-      + prompt_user_for_adjusted_range()
-    }
-    class PipelineRunTracker {
-      + start_run()
-      + log_stage()
-      + log_error()
-      + log_warning()
-      + update_results()
-      + end_run()
-      + get_recent_runs()
-      + print_recent_runs()
-    }
+  class PipelineRunTracker {
+    + start_run()
+    + log_stage()
+    + log_error()
+    + log_warning()
+    + update_results()
+    + end_run()
+    + get_recent_runs()
+    + print_recent_runs()
+  }
+
+  class RepoContext {
+    + repo : Path
+    + spark : Any
+    + storage : Dict[str, Any]
+    + connection : Optional[Any]
+    + connection_type : str
+    + _config : Optional[AppConfig]
+    --
+    + get_api_config()
+    + from_repo_root()
+    + config()
   }
 
 }
@@ -1836,7 +1895,6 @@ ValidationReport *-- ValidationIssue : issues
 
 AlphaVantageProvider ..> SparkNormalizer : _normalize_spark_df()
 AlphaVantageProvider ..> SparkNormalizer : normalize()
-BaseModel ..> GraphBuilder : build()
 BaseModel ..> HookRunner : _run_hooks()
 BaseModelBuilder ..> ConfigurationError : build()
 BaseModelBuilder ..> ErrorContext : build()
@@ -1849,43 +1907,32 @@ DeFunk ..> ConfigLoader : from_config()
 DeFunk ..> FieldResolver : query_session()
 DeFunk ..> IngestSession : ingest_session()
 DeFunk ..> QuerySession : query_session()
-DomainBuilderFactory ..> BaseModelBuilder : _create_builder_class()
-DomainBuilderFactory ..> BuilderRegistry : create_builders()
 DomainBuilderFactory ..> DomainConfigLoader : _create_builder_class()
 DomainBuilderFactory ..> DomainConfigLoader : create_builders()
-DomainBuilderFactory ..> DomainModel : _create_builder_class()
-DomainModel ..> GraphBuilder : graph_builder()
 DomainModel ..> HookRunner : custom_node_loading()
 Engine ..> DataNotFoundError : read()
-Engine ..> DuckDBOps : for_duckdb()
-Engine ..> DuckDBSql : for_duckdb()
 Engine ..> ExhibitHandler : distinct_values_by_measure()
-Engine ..> SparkOps : for_spark()
-Engine ..> SparkSql : for_spark()
 Engine ..> WriteError : write()
-GraphBuilder ..> NodeExecutor : _build_nodes()
 HookRunner ..> ErrorContext : run()
-IngestorEngine ..> RawSink : __init__()
 IngestorEngine ..> StorageRouter : __init__()
 NodeExecutor ..> ErrorContext : execute_node()
 RepoContext ..> ConnectionFactory : from_repo_root()
 Session ..> StorageRouter : __init__()
-SocrataBaseProvider ..> SparkNormalizer : _create_dataframe()
 
 legend right
-  189 classes in 50 files, 13 logical groups
+  189 classes in 18 groups
   64 inheritance, 68 composition,
-  37 cross-file dependency edges
+  25 cross-group dependency edges
   ---
-  | Color | Group |
-  |<#FFCC66> Gold | Configuration |
-  |<#80E0D0> Teal | Engine & Sessions |
+  | Color | Concern |
+  |<#FFCC66> Gold | Data Classes + Config |
+  |<#80E0D0> Teal | Engine, Sessions, Resolution |
   |<#FF9933> Orange | Build Pipeline |
   |<#B3D9FF> Blue | API Layer |
-  |<#CC9966> Brown | Ingestion Pipeline |
+  |<#CC9966> Brown | Ingestion |
   |<#CC99FF> Purple | Orchestration |
-  |<#FFC0C0> Red | Logging & Errors |
-  |<#B3FFB3> Green | Hooks & Artifacts |
+  |<#FFC0C0> Red | Error Handling |
+  |<#B3FFB3> Green | Hooks + Artifacts |
   |<#E6E6E6> Gray | Infrastructure |
 endlegend
 
