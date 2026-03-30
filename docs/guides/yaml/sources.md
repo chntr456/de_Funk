@@ -1,7 +1,11 @@
 ---
+
 type: reference
 description: "Guide for source files and hashing conventions"
 ---
+
+> **Implementation Status**: All features fully implemented.
+
 
 ## sources Guide
 
@@ -11,6 +15,7 @@ Source files map bronze (raw ingested) data to a domain model's canonical schema
 
 ```yaml
 ---
+
 type: domain-model-source
 source: payments                          # Source identifier
 extends: _base.accounting.ledger_entry    # Base template this source maps to
@@ -25,6 +30,7 @@ aliases:
   - [payee, vendor_name]
   - [transaction_amount, amount]
 ---
+
 
 ## Payments
 Description of the data source.
@@ -53,6 +59,7 @@ Description of the data source.
 
 ---
 
+
 ### Alias Conventions
 
 Aliases map source (bronze) columns to canonical (silver) columns:
@@ -79,6 +86,7 @@ aliases:
 - `TBD` is acceptable for nullable fields where the mapping is not yet determined
 
 ---
+
 
 ### Surrogate Key Hashing Convention
 
@@ -140,6 +148,7 @@ aliases:
 
 ---
 
+
 ### Discriminator Keys
 
 Source files use discriminator keys to identify the type of record being loaded. These are injected as literal values into the SELECT.
@@ -156,6 +165,7 @@ The discriminator is used in:
 
 ---
 
+
 ### domain_source Key
 
 Every source declares `domain_source:` as a top-level key with a SQL literal string:
@@ -170,6 +180,7 @@ Federation uses `domain_source` as the `union_key` to identify which source each
 
 ---
 
+
 ### Multiple Sources → One Table
 
 Multiple source files can feed the same target table via `maps_to:`. The loader unions them automatically:
@@ -183,6 +194,7 @@ entry_type: VENDOR_PAYMENT       entry_type: CONTRACT
 Both produce rows in `fact_ledger_entries` with different `entry_type` discriminators. Hash-based PKs with the `entry_type` prefix ensure no collisions.
 
 ---
+
 
 ### Adding a New Source
 

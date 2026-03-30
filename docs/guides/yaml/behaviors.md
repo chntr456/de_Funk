@@ -1,7 +1,11 @@
 ---
+
 type: reference
 description: "Guide for the behaviors convention — cross-cutting capabilities on base templates"
 ---
+
+> **Implementation Status**: **PARSED ONLY**. Behavior tags are read from config but are NOT used for validation, feature auto-discovery, or capability queries. They serve as documentation metadata only.
+
 
 ## behaviors Guide
 

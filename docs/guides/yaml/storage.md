@@ -1,13 +1,18 @@
 ---
+
 type: reference
 description: "Guide for storage and source discovery configuration"
 ---
+
+> **Implementation Status**: All features fully implemented.
+
 
 ## storage Guide
 
 Storage configuration defines where Silver output is written and how source files are discovered. Bronze input is handled by source files (see source_onboarding.md), not by the storage block.
 
 ---
+
 
 ### Storage Block
 
@@ -29,6 +34,7 @@ storage:
 | `sources_from` | No | Directory containing source files (alternative placement — see below) |
 
 ---
+
 
 ### sources_from
 
@@ -60,6 +66,7 @@ Both placements are equivalent. The loader discovers all `*.md` files in the dir
 
 ---
 
+
 ### Entity Placeholder
 
 Municipal and county models use `{entity}` as a placeholder for city/county-specific paths:
@@ -86,6 +93,7 @@ At build time, `{entity}` is replaced with the concrete entity name (e.g., `chic
 
 ---
 
+
 ### Silver Output Paths
 
 Silver tables are written to subdirectories under `silver.root`:
@@ -101,6 +109,7 @@ storage/silver/{model}/
 Each table becomes a Delta Lake directory with `_delta_log/` and Parquet data files.
 
 ---
+
 
 ### Source Discovery
 
@@ -123,6 +132,7 @@ No wiring is needed in `model.md`. The loader reads `model.md` first, then disco
 
 ---
 
+
 ### Models Without Sources
 
 Two patterns produce tables without bronze sources:
@@ -133,6 +143,7 @@ Two patterns produce tables without bronze sources:
 Neither requires `sources_from:`.
 
 ---
+
 
 ### Complete Examples
 

@@ -1,13 +1,18 @@
 ---
+
 type: reference
 description: "Guide for materialization — what gets built, in what order, and how"
 ---
+
+> **Implementation Status**: All features fully implemented.
+
 
 ## materialization Guide
 
 Materialization controls which tables are written to Delta Lake storage, the order they are built, and which are kept as intermediates.
 
 ---
+
 
 ### What Gets Materialized
 
@@ -22,6 +27,7 @@ Materialization controls which tables are written to Delta Lake storage, the ord
 | Static/seeded dimension | `tables/*.md` → `static: true` | Yes | Populated from inline `data:` block |
 
 ---
+
 
 ### Build Phases
 
@@ -63,6 +69,7 @@ build:
 
 ---
 
+
 ### Phase Ordering
 
 Typical phase pattern:
@@ -87,6 +94,7 @@ Phase 3 runs after phases 1-2 because `fact_stock_technicals` is `generated: tru
 
 ---
 
+
 ### Persist Control
 
 `persist` works at two levels:
@@ -104,16 +112,19 @@ build:
 
 ```yaml
 ---
+
 type: domain-model-table
 table: fact_ledger_entries
 table_type: fact
 persist: true
 ---
+
 ```
 
 Table-level `persist` overrides phase-level `persist`. If neither is set, the default is `true` (write to Silver).
 
 ---
+
 
 ### Generated Tables
 
@@ -121,6 +132,7 @@ Tables marked `generated: true` are not loaded from bronze sources. Instead, the
 
 ```yaml
 ---
+
 type: domain-model-table
 table: fact_stock_technicals
 extends: _base.finance.securities._fact_technicals
@@ -129,6 +141,7 @@ generated: true
 primary_key: [technical_id]
 partition_by: [date_id]
 ---
+
 ```
 
 The builder knows to compute these tables from the model's existing Silver data (e.g., computing SMA/EMA/RSI from `fact_stock_prices`).
@@ -141,12 +154,14 @@ The builder knows to compute these tables from the model's existing Silver data 
 
 ---
 
+
 ### Static/Seeded Tables
 
 Tables marked `static: true` or `seed: true` are populated from inline `data:` blocks, not from bronze or other Silver tables:
 
 ```yaml
 ---
+
 type: domain-model-table
 table: dim_municipality
 table_type: dimension
@@ -156,11 +171,13 @@ data:
     municipality_name: "Chicago"
     municipality_type: CITY
 ---
+
 ```
 
 These are built before any phase (or as phase 0) since they have no dependencies.
 
 ---
+
 
 ### Self-Generated Models
 
@@ -178,6 +195,7 @@ calendar_config:
 `from: self` signals the builder to generate rows algorithmically rather than reading from bronze. The base template `_base/temporal/calendar.md` defines a `generation:` block with default parameters; the model overrides them via `calendar_config:`.
 
 ---
+
 
 ### Storage Format
 

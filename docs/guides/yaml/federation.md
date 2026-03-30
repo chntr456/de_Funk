@@ -1,20 +1,36 @@
 ---
+
 type: reference
 description: "Guide for federation — cross-model union queries via models/_base/"
 status: planned
 ---
 
-> **Status: PLANNED** — Config parsing is implemented (`config/domain/federation.py`),
+> **Implementation Status**: **PLANNED**. Federation participation flags are parsed and recognized. However, `union_of` tables are NOT synthesized into SQL UNIONs during build. Federation models exist in `domains/models/_base/` but are not built.
+
+
+## federation Guide
+
+### Implementation Status
+
+| Feature | Status |
+|---------|--------|
+| `federation.enabled` | **PARSED ONLY** -- read by config loader, not acted on by build pipeline |
+| `federation.union_key` | **PARSED ONLY** -- read by config loader, not acted on by build pipeline |
+| `federation.children` | **PARSED ONLY** -- read by config loader, not acted on by build pipeline |
+| `tables.*.union_of` | **PARSED ONLY** -- read by config loader, never synthesized into UNION nodes |
+| `domain_source` column injection | **IMPLEMENTED** -- sources inject `domain_source` as a literal column |
+| Federation UNION view materialization | **PLANNED** -- not built yet |
+
+> **PLANNED** — Config parsing is implemented (`config/domain/federation.py`),
 > but the build pipeline does not yet execute federation. `federation.enabled`,
 > `children`, `union_key`, and `union_of` are parsed but never built into Silver
 > tables. Note: `DomainModel._build_union_node()` unions multiple Bronze sources
-> into one Silver fact — that is source-level union, not federation.
-
-## federation Guide
+> into one Silver fact -- that is source-level union, not federation.
 
 Federation enables querying across multiple domain-models that share the same base template by creating UNION views of their fact tables.
 
 ---
+
 
 ### Architecture
 
@@ -36,6 +52,7 @@ models/_base/accounting/model.md           ← Creates v_all_ledger_entries (UNI
 ```
 
 ---
+
 
 ### Federation Model Config (models/_base/)
 
@@ -82,6 +99,7 @@ tables:
 
 ---
 
+
 ### Domain Model Config (participation signal)
 
 Domain models that participate in federation declare a simple block:
@@ -97,6 +115,7 @@ This signals the model produces federated data. The `domain_source` column value
 
 ---
 
+
 ### domain_source Column
 
 The `domain_source` column is defined on the root event base (`_base._base_.event`) and carried into every fact table. This column is `nullable: false` — every fact row must identify its origin.
@@ -105,17 +124,20 @@ Sources declare it as a top-level key:
 
 ```yaml
 ---
+
 type: domain-model-source
 source: payments
 maps_to: fact_ledger_entries
 from: bronze.payments
 domain_source: "'chicago'"
 ---
+
 ```
 
 The loader injects it as a literal column value in the SELECT.
 
 ---
+
 
 ### Query Pattern
 
@@ -129,6 +151,7 @@ SELECT * FROM _base.accounting.v_all_financial_events
 ```
 
 ---
+
 
 ### Adding a New City
 
@@ -153,6 +176,7 @@ When onboarding a second municipality (e.g., Detroit):
 
 ---
 
+
 ### Current Federation Models
 
 | Federation Model | Location | Children | Union Tables |
@@ -167,6 +191,7 @@ When onboarding a second municipality (e.g., Detroit):
 | `finance_federation` | `models/_base/finance/` | securities_stocks | v_all_dividends, v_all_splits |
 
 ---
+
 
 ### Build Order
 

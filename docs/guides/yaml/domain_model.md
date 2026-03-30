@@ -1,13 +1,18 @@
 ---
+
 type: reference
 description: "Complete YAML reference for domain-model files"
 ---
+
+> **Implementation Status**: Core fields (type, model, version, extends, depends_on, graph, build, hooks, storage, measures) are fully implemented. `ml_models:` is **parsed only** (dataclass exists but build pipeline does not use it). `views:` is **not implemented**.
+
 
 ## domain-model Guide
 
 A `domain-model` is a concrete implementation that maps source data to a canonical schema defined by a `domain-base`. It produces materialized tables in Silver.
 
 ---
+
 
 ### File Types
 
@@ -19,6 +24,7 @@ A `domain-model` is a concrete implementation that maps source data to a canonic
 | `domain-model-view` | `views/*.md` | Derived or rollup view definitions |
 
 ---
+
 
 ### Directory Structure
 
@@ -41,6 +47,7 @@ models/{domain}/{subdomain}/
 **Auto-discovery:** The loader reads `model.md` first, then discovers all `sources/*.md` and `tables/*.md` automatically. No wiring needed.
 
 ---
+
 
 ### model.md — All Top-Level Keys
 
@@ -118,6 +125,7 @@ models/{domain}/{subdomain}/
 
 ---
 
+
 ### domain-model-source — All Keys
 
 | Key | Type | Required | Description |
@@ -138,6 +146,7 @@ See sources.md for alias conventions, hashing patterns, and worked examples.
 See source_onboarding.md for the 5-phase onboarding workflow.
 
 ---
+
 
 ### domain-model-table — All Keys
 
@@ -169,6 +178,7 @@ See tables.md for schema column format and options.
 
 ---
 
+
 ### domain-model-view — All Keys
 
 | Key | Type | Required | Description |
@@ -185,10 +195,12 @@ See views.md for derived vs rollup patterns and assumption binding.
 
 ---
 
+
 ### Complete Example
 
 ```yaml
 ---
+
 type: domain-model
 model: municipal_finance
 version: 3.1
@@ -240,4 +252,5 @@ metadata:
   subdomain: finance
 status: active
 ---
+
 ```

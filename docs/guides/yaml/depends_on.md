@@ -1,7 +1,11 @@
 ---
+
 type: reference
 description: "Guide for depends_on - model build ordering"
 ---
+
+> **Implementation Status**: All features fully implemented.
+
 
 ## depends_on Guide
 

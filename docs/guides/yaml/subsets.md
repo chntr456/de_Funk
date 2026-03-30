@@ -1,7 +1,11 @@
 ---
+
 type: reference
 description: "Guide for the subsets convention — declarative data slicing by dimension discriminator"
 ---
+
+> **Implementation Status**: Pattern 1 (wide_table auto-absorption) is fully implemented. Pattern 2 (separate models) and Pattern 3 (filter-only subsets) are **parsed only** — config is read but no build-time effects are generated.
+
 
 ## subsets Guide
 
@@ -90,6 +94,7 @@ _dim_parcel:
 
 ---
 
+
 #### Pattern 2: Separate Models (For independent domain models)
 
 > **Status: PLANNED** — Parsed in config but no special handling in the build
@@ -116,6 +121,7 @@ subsets:
 
 ---
 
+
 #### Pattern 3: Filter-Only (No type-specific fields)
 
 > **Status: PLANNED** — Parsed in config but filter predicates are not
@@ -140,6 +146,7 @@ subsets:
 
 ---
 
+
 ### Pattern Selection Guide
 
 | Question | Wide Table | Separate Models | Filter-Only |
@@ -150,6 +157,7 @@ subsets:
 | Same source data? | Yes | No | Yes |
 
 ---
+
 
 ### Key Properties
 
@@ -178,6 +186,7 @@ subsets:
 
 ---
 
+
 ### Auto-Absorption Mechanism
 
 When a parent template has `subsets.pattern: wide_table`:
@@ -192,6 +201,7 @@ When a parent template has `subsets.pattern: wide_table`:
 
 ---
 
+
 ### Current Subset Assignments
 
 | Base Template | Discriminator | Pattern | Values |
@@ -205,6 +215,7 @@ When a parent template has `subsets.pattern: wide_table`:
 
 ---
 
+
 ### Relationship to Federation
 
 Subsets and federation are complementary:
@@ -214,6 +225,7 @@ Subsets and federation are complementary:
 This enables queries like: "Show residential parcels across all federated counties" (subset + federation).
 
 ---
+
 
 ### Loader Behavior
 

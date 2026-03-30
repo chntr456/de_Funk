@@ -1,13 +1,18 @@
 ---
+
 type: reference
 description: "Step-by-step guide for onboarding a new data source into an existing model"
 ---
+
+> **Implementation Status**: All features fully implemented.
+
 
 ## Source Onboarding Guide
 
 How to add a new data source (bronze table) to an existing domain model. For source file syntax details, see `sources.md`.
 
 ---
+
 
 ### Prerequisites
 
@@ -18,6 +23,7 @@ Before starting, you need:
 3. **The base template** the model extends (e.g., `_base.accounting.ledger_entry`)
 
 ---
+
 
 ### Phase 1: Identify the Target Table
 
@@ -32,6 +38,7 @@ Q: Is this the same kind of data as an existing source?
 Check `canonical_fields` in the base template to understand what columns are expected.
 
 ---
+
 
 ### Phase 2: Create the Source File
 
@@ -51,6 +58,7 @@ Minimal template:
 
 ```yaml
 ---
+
 type: domain-model-source
 source: new_source
 extends: _base.accounting.ledger_entry
@@ -74,12 +82,14 @@ aliases:
   - [contract_number, "null"]
 ---
 
+
 ## New Source
 
 Description of where this data comes from and any caveats.
 ```
 
 ---
+
 
 ### Phase 3: Map Aliases
 
@@ -101,6 +111,7 @@ For each canonical field in the base template:
 
 ---
 
+
 ### Phase 4: Verify Edges
 
 Check that your new rows will join correctly through the model's graph edges:
@@ -114,6 +125,7 @@ For new dimension values (vendors, departments not yet in the dimension):
 - If the dimension is static (`static: true`), you'll need to add seed data
 
 ---
+
 
 ### Phase 5: Test
 
@@ -129,6 +141,7 @@ Verification checklist:
 
 ---
 
+
 ### Worked Example: Adding Detroit Payments
 
 Goal: Add Detroit vendor payment data to `municipal/finance`.
@@ -141,6 +154,7 @@ Goal: Add Detroit vendor payment data to `municipal/finance`.
 
 ```yaml
 ---
+
 type: domain-model-source
 source: detroit_payments
 extends: _base.accounting.ledger_entry
@@ -163,6 +177,7 @@ aliases:
   - [contract_number, "null"]
   - [description, payment_description]
 ---
+
 
 ## Detroit Payments
 

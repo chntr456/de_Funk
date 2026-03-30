@@ -1,13 +1,18 @@
 ---
+
 type: reference
 description: "Complete YAML reference for domain-model-table files"
 ---
+
+> **Implementation Status**: Core features (schema, primary_key, table_type, seed, distinct, union, enrich, unpivot) are fully implemented. `derivations:` is **not implemented**. `unique_key` is **parsed but not enforced** during build.
+
 
 ## tables Guide
 
 A `domain-model-table` defines one materialized table in the Silver layer. Tables are the single source of truth for column definitions. Data sourcing is handled by source files (`maps_to:` links sources to tables); tables do not declare `from:`.
 
 ---
+
 
 ### All Table Keys
 
@@ -83,6 +88,7 @@ unique_key: [iucr_code, fbi_code]
 
 ---
 
+
 ### Schema Column Format
 
 ```yaml
@@ -108,12 +114,14 @@ schema:
 
 ---
 
+
 ### Fact Table (extends base, schema inherited)
 
 Facts typically `extends:` a base template table, inheriting its schema. Use `additional_schema:` to add model-specific columns.
 
 ```yaml
 ---
+
 type: domain-model-table
 table: fact_ledger_entries
 extends: _base.accounting.ledger_entry._fact_ledger_entries
@@ -127,11 +135,13 @@ additional_schema:
   - [department_id, integer, true, "FK to dim_department"]
   - [contract_id, integer, true, "FK to dim_contract"]
 ---
+
 ```
 
 Data flows into fact tables via source files that declare `maps_to: fact_ledger_entries`. Multiple sources are unioned automatically.
 
 ---
+
 
 ### Fact Table with Filters
 
@@ -139,6 +149,7 @@ Use `filters:` when a fact table reads from a shared bronze source and needs to 
 
 ```yaml
 ---
+
 type: domain-model-table
 table: fact_stock_prices
 extends: _base.finance.securities._fact_prices
@@ -148,9 +159,11 @@ partition_by: [date_id]
 filters:
   - "asset_type = 'stocks'"
 ---
+
 ```
 
 ---
+
 
 ### Dimension Table (schema explicit)
 
@@ -158,6 +171,7 @@ Dimensions built from source data typically need explicit `schema:` and often us
 
 ```yaml
 ---
+
 type: domain-model-table
 table: dim_vendor
 table_type: dimension
@@ -172,9 +186,11 @@ schema:
   - [total_payments, "decimal(18,2)", true, "Lifetime total", {derived: "SUM(transaction_amount)"}]
   - [payment_count, integer, true, "Number of payments", {derived: "COUNT(DISTINCT entry_id)"}]
 ---
+
 ```
 
 ---
+
 
 ### Generated Table
 
@@ -182,6 +198,7 @@ schema:
 
 ```yaml
 ---
+
 type: domain-model-table
 table: fact_stock_technicals
 extends: _base.finance.securities._fact_technicals
@@ -190,6 +207,7 @@ generated: true
 primary_key: [technical_id]
 partition_by: [date_id]
 ---
+
 ```
 
 The base template `_fact_technicals` declares `generated: true` and defines the schema (SMA, EMA, MACD, RSI, ATR, Bollinger bands). The concrete table inherits everything.
@@ -197,6 +215,7 @@ The base template `_fact_technicals` declares `generated: true` and defines the 
 **Where used:** `fact_stock_technicals` (computed from prices), `fact_forecast_price`, `fact_forecast_metrics`, `dim_model_registry` (ML outputs).
 
 ---
+
 
 ### Static / Seeded Dimension
 
@@ -206,6 +225,7 @@ The base template `_fact_technicals` declares `generated: true` and defines the 
 
 ```yaml
 ---
+
 type: domain-model-table
 table: dim_financial_account
 extends: _base.accounting.chart_of_accounts._dim_chart_of_accounts
@@ -219,12 +239,14 @@ data:
   - {account_code: TOTAL_REVENUE, account_name: "Total Revenue", account_type: REVENUE, statement_section: INCOME_STATEMENT, normal_balance: CREDIT, is_rollup: true, format_type: CURRENCY, level: 1, display_order: 1}
   - {account_code: COST_OF_REVENUE, account_name: "Cost of Revenue", account_type: EXPENSE, statement_section: INCOME_STATEMENT, normal_balance: DEBIT, is_rollup: false, format_type: CURRENCY, level: 2, display_order: 2}
 ---
+
 ```
 
 **Expanded row format** (few rows, more readable):
 
 ```yaml
 ---
+
 type: domain-model-table
 table: dim_municipality
 extends: _base.entity.municipality._dim_municipality
@@ -241,11 +263,13 @@ data:
     state: IL
     population: 2746388
 ---
+
 ```
 
 `static` and `seed` are synonyms — use whichever reads best. Both signal "no bronze source; populate from `data:` block."
 
 ---
+
 
 ### Enrichment
 
@@ -307,6 +331,7 @@ enrich:
 
 ---
 
+
 ### Derivations (Source-Specific Column Mapping)
 
 `derivations:` is a flat map that overrides the `derived:` option on inherited columns without repeating the full schema. Use it when a model table `extends:` a base table and needs to map canonical column names to source-specific expressions.
@@ -348,6 +373,7 @@ derivations:
 
 ---
 
+
 ### Table-Level Measures
 
 Tables can declare measures directly. Format matches model-level `measures.simple`:
@@ -370,6 +396,7 @@ measures:
 Aggregation types: `count`, `count_distinct`, `sum`, `avg`, `min`, `max`, `expression`.
 
 ---
+
 
 ### Naming Conventions
 

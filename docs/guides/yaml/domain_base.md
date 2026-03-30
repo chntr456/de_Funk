@@ -1,13 +1,18 @@
 ---
+
 type: reference
 description: "Complete YAML reference for domain-base template files"
 ---
+
+> **Implementation Status**: All features fully implemented.
+
 
 ## domain-base Guide
 
 A `domain-base` is a reusable template that defines canonical schemas, measures, and graph patterns. It is never materialized — only inherited by concrete `domain-model` files via `extends:`.
 
 ---
+
 
 ### All Top-Level Keys
 
@@ -68,6 +73,7 @@ A `domain-base` is a reusable template that defines canonical schemas, measures,
 
 ---
 
+
 ### canonical_fields
 
 The semantic contract that domain-models must fulfill. Format:
@@ -90,6 +96,7 @@ canonical_fields:
 **Used by:** All 28 files in `_base/` (exclusively a base template feature).
 
 ---
+
 
 ### Template Tables
 
@@ -115,6 +122,7 @@ extends: _base.accounting.ledger_entry._fact_ledger_entries
 
 ---
 
+
 ### auto_edges
 
 FK patterns applied automatically to every fact table whose schema contains the matching column. Declared on base templates, inherited through the chain.
@@ -136,6 +144,7 @@ auto_edges:
 
 ---
 
+
 ### python_measures (Base-Level)
 
 Complex calculations defined on base templates, inherited by all extending models:
@@ -156,6 +165,7 @@ python_measures:
 
 ---
 
+
 ### Template Table Measures
 
 Measures defined inside template table schemas:
@@ -168,6 +178,7 @@ tables:
 ```
 
 ---
+
 
 ### behaviors
 
@@ -186,6 +197,7 @@ See behaviors.md for full assignment table.
 
 ---
 
+
 ### generation (temporal only)
 
 Declares that this is a self-generating dimension with configurable parameters:
@@ -203,6 +215,7 @@ generation:
 Models override via `calendar_config:` in their model.md.
 
 ---
+
 
 ### Inheritance Chain
 
@@ -242,10 +255,12 @@ _base.temporal.calendar                Calendar dimension (standalone)
 
 ---
 
+
 ### Complete Example
 
 ```yaml
 ---
+
 type: domain-base
 model: ledger_entry
 version: 3.0
@@ -285,4 +300,5 @@ domain: accounting
 tags: [base, template, accounting, ledger]
 status: active
 ---
+
 ```

@@ -1,9 +1,27 @@
 ---
+
 type: reference
 description: "Complete YAML reference for measure definitions across all file types"
 ---
 
+> **Implementation Status**: Simple and computed (SQL) measures are fully implemented. Python measures (NPV, sharpe_ratio, cross-table joins) are **not auto-executed** — they exist only as documentation of the intended design.
+
+
 ## measures Guide
+
+### Implementation Status
+
+| Feature | Status |
+|---------|--------|
+| Model-level simple measures | **IMPLEMENTED** |
+| Model-level computed measures | **IMPLEMENTED** |
+| Table-level measures | **IMPLEMENTED** |
+| Measure options (`format`, `filters`) | **IMPLEMENTED** |
+| Python measures (`python_measures:` block) | **NOT IMPLEMENTED** -- YAML syntax is documented below for future use, but no Python measure execution engine exists. Functions like `calculate_npv`, `sharpe_ratio`, `calculate_spending_velocity` are not built. |
+| Cross-table python measures (`joins:` key) | **NOT IMPLEMENTED** |
+
+---
+
 
 Measures define pre-built calculations. They exist at three levels:
 
@@ -14,6 +32,7 @@ Measures define pre-built calculations. They exist at three levels:
 | **Python measures** | `_base/*.md` → `python_measures:` | Yes (via `extends:` chain) | Complex calculations requiring Python |
 
 ---
+
 
 ### Model-Level Measures
 
@@ -74,6 +93,7 @@ SQL expressions for derived metrics. Format:
 
 ---
 
+
 ### Table-Level Measures
 
 Defined directly in `tables/*.md` files. Same tuple format but column is unqualified (scoped to the table):
@@ -98,7 +118,14 @@ Table-level measures are also declared in base template tables (inside `_base/*.
 
 ---
 
+
 ### Python Measures (Base-Level)
+
+> **NOT IMPLEMENTED** — The YAML syntax below is documented for planned future use.
+> No Python measure execution engine exists. The `function:` paths (e.g.,
+> `accounting.measures.calculate_npv`, `finance.measures.calculate_dividend_yield`)
+> do not resolve to real Python modules. The config loader does not process
+> `python_measures:` blocks.
 
 Complex calculations that require Python (rolling windows, statistical models, NPV). Defined on base templates inside a table block, inherited by all extending models.
 
@@ -189,6 +216,7 @@ python_measures:
 | `_base.regulatory.inspection` | `compliance_trend`, `repeat_offender_score` | `_fact_inspections` |
 
 ---
+
 
 ### Measure Levels Summary
 

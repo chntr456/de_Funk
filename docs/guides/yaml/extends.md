@@ -1,13 +1,18 @@
 ---
+
 type: reference
 description: "Complete guide for extends keyword — inheritance across all file types"
 ---
+
+> **Implementation Status**: All features fully implemented.
+
 
 ## extends Guide
 
 The `extends` keyword links child definitions to parent templates, inheriting schema, measures, edges, and behaviors. It is used at four levels: model, table, source, and view.
 
 ---
+
 
 ### Model-Level Extends
 
@@ -46,6 +51,7 @@ All three formats are equivalent. Use block list for readability when extending 
 
 ---
 
+
 ### What Gets Inherited (Model-Level)
 
 | From Base | Behavior |
@@ -62,18 +68,21 @@ All three formats are equivalent. Use block list for readability when extending 
 
 ---
 
+
 ### Table-Level Extends
 
 Tables in `tables/*.md` use `extends:` with a dotted path that includes the specific table name:
 
 ```yaml
 ---
+
 type: domain-model-table
 table: fact_ledger_entries
 extends: _base.accounting.ledger_entry._fact_ledger_entries
 table_type: fact
 primary_key: [entry_id]
 ---
+
 ```
 
 **Path format:** `_base.{domain}.{template}._{table_name}`
@@ -91,18 +100,21 @@ _base.transportation.transit._dim_transit_station
 
 ---
 
+
 ### Source-Level Extends
 
 Source files in `sources/*.md` use `extends:` to reference the base template (not a specific table):
 
 ```yaml
 ---
+
 type: domain-model-source
 source: payments
 extends: _base.accounting.ledger_entry
 maps_to: fact_ledger_entries
 from: bronze.chicago_payments
 ---
+
 ```
 
 **Path format:** `_base.{domain}.{template}`
@@ -120,17 +132,20 @@ Source-level `extends:` tells the loader which `canonical_fields` contract to va
 
 ---
 
+
 ### View-Level Extends
 
 View files in `views/*.md` use `extends:` to reference a base template view:
 
 ```yaml
 ---
+
 type: domain-model-view
 view: view_equalized_values
 extends: _base.property.parcel._view_equalized_values
 view_type: derived
 ---
+
 ```
 
 **Path format:** `_base.{domain}.{template}._{view_name}`
@@ -138,6 +153,7 @@ view_type: derived
 The child view inherits the base view's schema, assumptions, and measures, and can override `assumptions:` to bind to concrete data sources.
 
 ---
+
 
 ### Schema Merge Rules
 
@@ -151,6 +167,7 @@ When a child `extends:` a parent:
 6. `additional_schema:` columns are appended after inherited columns
 
 ---
+
 
 ### Inheritance Chain
 
@@ -167,6 +184,7 @@ Each level adds `canonical_fields` and table columns. The child inherits the ful
 The complete inheritance tree is documented in `domain_base.md`.
 
 ---
+
 
 ### subset_of and subset_value
 
@@ -214,6 +232,7 @@ The securities domain uses a different pattern (separate models) — see `subset
 
 ---
 
+
 ### Multi-Extends Resolution
 
 When a model extends multiple bases, the loader merges them in order:
@@ -236,6 +255,7 @@ extends:
 This enables models like `municipal_finance` to combine ledger entries, budget statements, fund accounting, and chart of accounts — each from a separate base template — into one model.
 
 ---
+
 
 ### Quick Reference
 

@@ -1,14 +1,29 @@
 ---
+
 type: reference
 description: "Guide for the views convention — layered calculations and rollup aggregations"
 status: planned
 ---
 
-> **Status: PLANNED** — Config parsing is implemented (`config/domain/views.py`), but
-> the build pipeline does not yet materialize views. Views declared in model configs
-> are parsed and validated but never built into Silver tables.
+> **Implementation Status**: **PLANNED**. Config parsing infrastructure exists (`config/domain/views.py`) but views are NOT materialized as Silver tables. All documentation below describes the intended design.
+
 
 ## views Guide
+
+### Implementation Status
+
+| Feature | Status |
+|---------|--------|
+| `views:` block parsing | **PARSED ONLY** -- config loader reads and validates views, but the build pipeline never materializes them |
+| Derived views | **PARSED ONLY** |
+| Rollup views | **PARSED ONLY** |
+| View assumptions | **PARSED ONLY** |
+| View layering (view-on-view) | **PARSED ONLY** |
+| View-level measures | **PARSED ONLY** |
+
+> **PARSED ONLY** — Config parsing is implemented (`config/domain/views.py`), but
+> the build pipeline does not yet materialize views. Views declared in model configs
+> are parsed and validated but never built into Silver tables.
 
 A `views:` block declares named views that layer calculations onto physical tables. Views separate assumption-driven business logic from raw data storage.
 
@@ -115,6 +130,7 @@ views:
 **Separate file** (`models/{model}/views/view_name.md`):
 ```yaml
 ---
+
 type: domain-model-view
 view: view_equalized_values
 extends: _base.property.parcel._view_equalized_values
@@ -125,6 +141,7 @@ assumptions:
     source: dim_tax_district.equalization_factor
     join_on: [township_code=township_code, year=tax_year]
 ---
+
 ```
 
 ### Naming Convention

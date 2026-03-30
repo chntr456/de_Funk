@@ -1,15 +1,32 @@
 ---
+
 type: reference
 description: "Guide for graph definitions - edges only in v5.0"
 ---
 
+> **Implementation Status**: Explicit `graph.edges` are fully implemented. `auto_edges` and `paths` are **parsed only** — the config loader reads them but the build pipeline does not use them.
+
+
 ## graph Guide
+
+### Implementation Status
+
+| Feature | Status |
+|---------|--------|
+| `graph.edges` (explicit edges) | **IMPLEMENTED** |
+| Cross-model edges | **IMPLEMENTED** |
+| Optional edges (left joins) | **IMPLEMENTED** |
+| `auto_edges` (inherited FK edges) | **PARSED ONLY** -- config loader reads these from base templates, but they are never auto-injected into the build or query pipeline |
+| `graph.paths` (multi-hop traversals) | **PARSED ONLY** -- config loader reads these, but no traversal API exists to use them |
+
+---
+
 
 In v5.0, graph only contains `edges`. Source/filter/derive are defined in table definitions.
 
 ### auto_edges (Inherited FK Edges)
 
-> **Status: PLANNED** — Config parsing reads `auto_edges` from base templates
+> **PARSED ONLY** — Config parsing reads `auto_edges` from base templates
 > (`config/domain/graph.py`), but the build pipeline and query API do not
 > auto-inject these edges. All edges must be explicitly declared in `graph.edges`.
 
@@ -91,7 +108,7 @@ For nullable FKs, append `optional: true` as a 7th element:
 
 ### Paths (Multi-Hop Traversals)
 
-> **Status: PLANNED** — Config parsing reads `graph.paths` (`config/domain/graph.py`),
+> **PARSED ONLY** — Config parsing reads `graph.paths` (`config/domain/graph.py`),
 > but neither the build pipeline nor the FastAPI query API uses them. The old
 > `models/api/graph.py` had path traversal code, but that's dead code from the
 > pre-FastAPI query layer.
