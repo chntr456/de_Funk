@@ -200,10 +200,14 @@ class MarkdownConfigLoader:
         Initialize the markdown config loader.
 
         Args:
-            docs_path: Path to repo root directory (contains Data Sources/, Guides/)
+            docs_path: Path to repo root directory (contains data_sources/)
         """
         self.docs_path = Path(docs_path)
-        self.data_sources_path = self.docs_path / "Data Sources"
+        # Support both directory names
+        ds = self.docs_path / "data_sources"
+        if not ds.exists():
+            ds = self.docs_path / "Data Sources"
+        self.data_sources_path = ds
         self.providers_path = self.data_sources_path / "Providers"
         self.endpoints_path = self.data_sources_path / "Endpoints"
         self.models_path = self.docs_path / "Models"
@@ -591,11 +595,15 @@ class MarkdownConfigLoader:
 
             self._endpoints_cache = endpoints
 
-        # Filter by provider if specified
+        # Filter by provider if specified (match display name, slug, or bronze field)
         if provider:
+            prov_lower = provider.lower()
             return {
                 eid: ep for eid, ep in endpoints.items()
-                if ep.provider == provider or ep.provider.lower().replace(' ', '_') == provider.lower()
+                if ep.provider == provider
+                or ep.provider.lower().replace(' ', '_') == prov_lower
+                or getattr(ep, 'bronze', '') == prov_lower
+                or ep.provider.lower().replace(' ', '_').startswith(prov_lower)
             }
 
         return endpoints
