@@ -305,6 +305,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
 
     # Render package labels (at top of each package's bounding box)
     pkg_bounds: dict[str, tuple[int, int, int, int]] = {}
+    _pkg_parent_ids: dict[str, tuple[int, int, int]] = {}  # class_name → (container_id, offset_x, offset_y)
     for pkg_name, pkg_classes in packages.items():
         if not pkg_classes:
             continue
@@ -322,6 +323,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
         color = pkg_colors.get(pkg_name, "#E6E6E6")
         # Package background rectangle
         bx, by, bx2, by2 = min_x - 10, min_y - PKG_LABEL_H - 5, max_x + NODE_W + 10, max_y + 10
+        pkg_cell_id = cid
         cells.append(
             f'      <mxCell id="{cid}" value="{xe(pkg_name)}" '
             f'style="swimlane;whiteSpace=wrap;html=1;fontSize=13;fontStyle=1;fontFamily=Courier New;'
@@ -331,6 +333,9 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             f'<mxGeometry x="{bx}" y="{by}" width="{bx2 - bx}" height="{by2 - by}" as="geometry"/>'
             f'</mxCell>')
         cid += 1
+        # Map each class in this package to its container ID and offset
+        for pc in pkg_classes:
+            _pkg_parent_ids[pc.name] = (pkg_cell_id, bx, by + 30)  # +30 for swimlane header
 
     # Render classes as UML 2.5 swimlane containers with stacked children
     ITEM_H = 20
@@ -367,6 +372,15 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
         font_style = 0 if (c.is_abstract or c.stereotype in ('interface', 'abstract')) else 1
 
         # Swimlane container (the UML 2.5 classifier box)
+        # Parent to package container if available, adjust coordinates to be relative
+        parent_id = "1"
+        cx, cy = x, y
+        if c.name in _pkg_parent_ids:
+            parent_id, ox, oy = _pkg_parent_ids[c.name]
+            cx = x - ox  # relative to container
+            cy = y - oy
+            parent_id = str(parent_id)
+
         cells.append(
             f'      <mxCell id="{cid}" value="{header_value}" '
             f'style="swimlane;fontStyle={font_style};align=center;verticalAlign=top;'
@@ -374,8 +388,8 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
             f'horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;'
             f'collapsible=0;marginBottom=0;html=1;whiteSpace=wrap;'
             f'fillColor={c.color};strokeColor=#333333;fontFamily=Courier New;fontSize=10;" '
-            f'vertex="1" parent="1">'
-            f'<mxGeometry x="{x}" y="{y}" width="{NODE_W}" height="{total_h}" as="geometry"/>'
+            f'vertex="1" parent="{parent_id}">'
+            f'<mxGeometry x="{cx}" y="{cy}" width="{NODE_W}" height="{total_h}" as="geometry"/>'
             f'</mxCell>')
         container_id = cid
         node_ids[c.name] = cid
