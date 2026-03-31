@@ -337,6 +337,15 @@ package "Configuration (14)" #FFCC66 {
     + load_storage()
     + load()
     + repo_root()
+    - _discover_repo_root()
+    - _get_api_keys()
+    - _load_json_config()
+    - _build_connection_config()
+    - _build_storage_config()
+    - _get_run_config_storage_path()
+    - _resolve_storage_paths()
+    - _inject_api_keys()
+    - _load_api_configs_from_markdown()
   }
 
   class ConnectionConfig {
@@ -360,6 +369,12 @@ package "Configuration (14)" #FFCC66 {
     + get_build_order()
     + load_base()
     + clear_cache()
+    - _build_index()
+    - _discover_tables()
+    - _discover_sources()
+    - _discover_views()
+    - _get_parsed()
+    - _assemble_model()
   }
 
   class DuckDBConfig {
@@ -510,6 +525,7 @@ package "Engine (7)" #80E0D0 {
     + count()
     + to_pandas()
     + columns()
+    - _scan_expr()
   }
 
   class DuckDBSql {
@@ -518,6 +534,7 @@ package "Engine (7)" #80E0D0 {
     + build_from()
     + build_where()
     + distinct_values()
+    - _resolve_intermediate_path()
   }
 
   class Engine {
@@ -596,12 +613,17 @@ package "Sessions (5)" #80E0D0 {
     + build()
     + build_all()
     + close()
+    - _topological_sort()
   }
 
   class FilterEngine {
     + apply_filters()
     + apply_from_session()
     + build_filter_sql()
+    - _convert_date_to_date_id()
+    - _format_sql_value()
+    - _apply_spark_filters()
+    - _apply_duckdb_filters()
   }
 
   class IngestSession {
@@ -643,6 +665,8 @@ package "Graph & Resolution (7)" #80E0D0 {
     + reachable_domains()
     + find_join_path()
     + get_endpoint_catalog()
+    - _build_index()
+    - _parse_ref()
   }
 
   class DomainGraph {
@@ -655,10 +679,13 @@ package "Graph & Resolution (7)" #80E0D0 {
     + distance()
     + connected_components()
     + subgraph()
+    - _build_from_models()
+    - _register_edge()
   }
 
   class FieldRef {
     + _known_domains : set[str]
+    - _match_domain()
   }
 
   class FieldResolver {
@@ -667,6 +694,13 @@ package "Graph & Resolution (7)" #80E0D0 {
     + resolve()
     + resolve_many()
     + get_field_catalog()
+    - _build_dir_to_model_map()
+    - _table_name_from_ref()
+    - _register_edge()
+    - _domain_for_table()
+    - _build_index()
+    - _resolve_temporal()
+    - _resolve_domain_field()
   }
 
   class ResolvedField {
@@ -721,6 +755,12 @@ package "Connections (4)" #E6E6E6 {
     + stop()
     + execute_sql()
     + execute()
+    - _enable_delta_extension()
+    - _init_model_views()
+    - _is_delta_table()
+    - _read_delta_table()
+    - _merge_delta_table()
+    - __del__()
   }
 
   class SparkConnection {
@@ -736,6 +776,7 @@ package "Connections (4)" #E6E6E6 {
     + cache()
     + uncache()
     + stop()
+    - _is_delta_table()
   }
 
 }
@@ -759,12 +800,24 @@ package "API Handlers (7)" #B3D9FF {
     + execute()
     + distinct_values()
     + distinct_values_by_measure()
+    - _execute()
+    - _safe_scan()
+    - _build_from()
+    - _build_where()
+    - _build_order()
+    - _build_extra_where()
+    - _collect_tables()
+    - _collect_tables_with_domains()
+    - _resolve_filter_tables()
+    - _extra_filter_fields()
+    - _from_tables()
   }
 
   class GraphicalHandler {
     + handles
     --
     + execute()
+    - _shape_graphical()
   }
 
   class HandlerRegistry {
@@ -783,6 +836,17 @@ package "API Handlers (7)" #B3D9FF {
     + handles
     --
     + execute()
+    - _row_labels()
+    - _totals_sql()
+    - _totals_sql_rows_only()
+    - _discover_col_values()
+    - _combo_to_key()
+    - _filter_clause()
+    - _measure_combo_pairs()
+    - _generate_wide_sql()
+    - _build_wide_columns()
+    - _query_2d_wide()
+    - _query_1d()
   }
 
   class TableDataHandler {
@@ -994,6 +1058,10 @@ package "Build Pipeline (11)" #FF9933 {
     + after_build()
     + custom_node_loading()
     + set_session()
+    - _apply_filters()
+    - _select_columns()
+    - _run_hooks()
+    - _build_window_node()
   }
 
   class BaseModelBuilder {
@@ -1038,20 +1106,47 @@ package "Build Pipeline (11)" #FF9933 {
     + get_min_rows()
     + get_null_thresholds()
     + validate()
+    - _detect_backend()
+    - _validate_columns()
+    - _validate_row_count()
+    - _validate_data_types()
+    - _validate_ranges()
+    - _validate_nulls()
+    - _validate_time_series()
+    - _collect_metrics()
   }
 
   class DomainBuilderFactory {
     + create_builders()
+    - _create_builder_class()
   }
 
   class DomainModel {
     + custom_node_loading()
     + graph_builder()
+    - _build_seed_node()
+    - _build_union_node()
+    - _load_internal_or_bronze()
+    - _build_distinct_node()
+    - _apply_distinct_enrichments()
+    - _build_window_node()
+    - _build_unpivot_node()
+    - _create_empty_df()
+    - _seed_to_spark_df()
+    - _seed_to_duckdb_df()
+    - _apply_seed_derived_columns()
+    - _apply_derive()
+    - _apply_unpivot()
   }
 
   class GraphBuilder {
     + model_cfg()
     + build()
+    - _build_nodes()
+    - _load_bronze_table()
+    - _load_silver_table()
+    - _apply_derive()
+    - _translate_node_config()
   }
 
   class NodeExecutor {
@@ -1061,6 +1156,28 @@ package "Build Pipeline (11)" #FF9933 {
     + execute_all()
     + execute_node()
     + execute_pipeline()
+    - _register_builtins()
+    - _load_source()
+    - _load_from_node()
+    - _load_bronze()
+    - _load_silver()
+    - _op_filter()
+    - _op_join()
+    - _op_select()
+    - _op_derive()
+    - _op_dedup()
+    - _op_drop()
+    - _op_enrich()
+    - _op_window()
+    - _op_unpivot()
+    - _op_pivot()
+    - _op_aggregate()
+    - _op_hook()
+    - _import_fn()
+    - _build_seed()
+    - _build_union()
+    - _build_distinct()
+    - _build_generated()
   }
 
   class ValidationIssue {
@@ -1145,6 +1262,8 @@ package "Ingestion Core (18)" #CC9966 {
     + get_response_key()
     + get_field_mappings()
     + get_type_coercions()
+    - _load_config_from_markdown()
+    - _setup()
   }
 
   class BaseRegistry {
@@ -1162,6 +1281,12 @@ package "Ingestion Core (18)" #CC9966 {
     + append()
     + streaming_writer()
     + rebuild_from_raw()
+    - _table_cfg()
+    - _path()
+    - _is_delta_table()
+    - _resolve_key_columns()
+    - _cleanup_old_files()
+    - _write_delta()
   }
 
   class DataType {
@@ -1204,6 +1329,15 @@ package "Ingestion Core (18)" #CC9966 {
     + postprocess()
     + validate()
     + calls()
+    - _load_markdown_schema()
+    - _clean_raw_value()
+    - _clean_raw_row()
+    - _clean_raw_batches()
+    - _coerce_rows()
+    - _apply_spark_casts()
+    - _apply_final_columns()
+    - _apply_computed_fields()
+    - _empty_df()
   }
 
   class FetchResult {
@@ -1213,12 +1347,16 @@ package "Ingestion Core (18)" #CC9966 {
     + data : Optional[Any]
     + error : Optional[str]
     + api_calls : int
+    - __bool__()
   }
 
   class HttpClient {
     + request_text()
     + request()
     + get()
+    - _effective_min_interval()
+    - _throttle()
+    - _build_request()
   }
 
   class IngestionResults {
@@ -1244,6 +1382,15 @@ package "Ingestion Core (18)" #CC9966 {
     + shutdown_executor()
     + run()
     + run_with_discovery()
+    - _wait_for_pending_writes()
+    - _cleanup_spark_memory()
+    - _save_raw()
+    - _archive_raw()
+    - _async_write()
+    - _ingest_bulk_from_raw()
+    - _ingest_work_item_async()
+    - _validate_partitions()
+    - _ingest_work_item_sync()
   }
 
   class RawSink {
@@ -1264,6 +1411,17 @@ package "Ingestion Core (18)" #CC9966 {
     + get_raw_path()
     + read_raw_as_df()
     + download_all_csv()
+    - _setup()
+    - _fetch_single_resource()
+    - _fetch_multi_year()
+    - _get_raw_path()
+    - _cleanup_raw_file()
+    - _get_resource_id()
+    - _safe_parse_date()
+    - _safe_parse_timestamp()
+    - _create_dataframe()
+    - _apply_schema_types()
+    - _normalize_column_name()
   }
 
   class SocrataClient {
@@ -1279,11 +1437,21 @@ package "Ingestion Core (18)" #CC9966 {
     + fetch_csv()
     + download_csv_to_file()
     + fetch_csv_from_file()
+    - _throttle()
+    - _build_url()
+    - _download_csv_gzip()
   }
 
   class SparkNormalizer {
     + normalize()
     + normalize_with_schema()
+    - _apply_field_mappings()
+    - _apply_type_coercions()
+    - _parse_dates()
+    - _parse_timestamps()
+    - _apply_computed_columns()
+    - _add_metadata()
+    - _select_final_columns()
   }
 
   class StreamingBronzeWriter {
@@ -1333,6 +1501,26 @@ package "Providers (4)" #CC9966 {
     + discover_tickers()
     + get_tickers_by_market_cap()
     + seed_tickers()
+    - _setup()
+    - _get_raw_path()
+    - _save_raw_response()
+    - _load_raw_response()
+    - _read_nested_map_json()
+    - _read_object_json()
+    - _read_array_json()
+    - _read_array_reports_json()
+    - _normalize_spark_df()
+    - _get_field_mappings_for_endpoint()
+    - _get_type_coercions_for_endpoint()
+    - _get_date_columns_for_endpoint()
+    - _get_data_type()
+    - _get_response_key()
+    - _convert_to_records()
+    - _normalize_prices()
+    - _normalize_reference()
+    - _normalize_financials()
+    - _normalize_corporate_actions()
+    - _fetch_single()
   }
 
   class AlphaVantageRegistry {
@@ -1368,6 +1556,9 @@ package "Providers (4)" #CC9966 {
     + get_providers_by_tag()
     + register()
     + reset()
+    - _load_provider_yaml()
+    - _load_provider_convention()
+    - _pascal_case()
   }
 
 }
@@ -1391,6 +1582,9 @@ package "Orchestration (5)" #CC99FF {
     + get_progress()
     + clear_checkpoint()
     + list_checkpoints()
+    - _get_checkpoint_path()
+    - _save_checkpoint()
+    - _maybe_save()
   }
 
   class DependencyGraph {
@@ -1404,6 +1598,11 @@ package "Orchestration (5)" #CC99FF {
     + list_models()
     + get_model_info()
     + validate()
+    - _discover_models()
+    - _load_model_yaml()
+    - _build_edges()
+    - _get_deps_recursive()
+    - _topo_sort_simple()
   }
 
   class ModelInfo {
@@ -1488,6 +1687,10 @@ package "Error Handling (26)" #FFC0C0 {
     + get_warnings()
     + get_errors()
     + is_valid()
+    - _validate_models()
+    - _validate_exhibit()
+    - _validate_filters()
+    - _parse_source()
   }
 
   class PipelineError
@@ -1519,6 +1722,7 @@ package "Logging (4)" #E6E6E6 {
     + RESET
     --
     + format()
+    - _supports_color()
   }
 
   class LogConfig {
@@ -1553,6 +1757,7 @@ package "Utilities (3)" #E6E6E6 {
     + test_api_connection()
     + get_recommended_date_range()
     + prompt_user_for_adjusted_range()
+    - _suggest_adjusted_range()
   }
 
   class PipelineRunTracker {
@@ -1564,6 +1769,8 @@ package "Utilities (3)" #E6E6E6 {
     + end_run()
     + get_recent_runs()
     + print_recent_runs()
+    - _save_run()
+    - _update_summary_log()
   }
 
   class RepoContext {
