@@ -73,6 +73,7 @@ def parse_puml(text: str) -> tuple[list[PumlClass], list[PumlEdge], dict[str, st
                 current_pkg, current_pkg_color = pkg_stack.pop()
             continue
 
+        # Class with body: class Foo { ... }
         cls_match = re.match(
             r'(abstract\s+)?(?:class|interface)\s+(\S+?)(?:\s+<<(\w+)>>)?\s*(?:(#\w+))?\s*\{', stripped)
         if cls_match:
@@ -80,7 +81,6 @@ def parse_puml(text: str) -> tuple[list[PumlClass], list[PumlEdge], dict[str, st
             name = cls_match.group(2).strip('"')
             stereotype = cls_match.group(3) or ""
             color = cls_match.group(4) or current_pkg_color
-            # Auto-detect interface keyword
             if stripped.startswith('interface ') and not stereotype:
                 stereotype = 'interface'
             current_class = PumlClass(
@@ -89,6 +89,22 @@ def parse_puml(text: str) -> tuple[list[PumlClass], list[PumlEdge], dict[str, st
                 color=color)
             classes[name] = current_class
             in_attrs = True
+            continue
+
+        # Bare class (no body): class Foo or class Foo <<stereotype>>
+        bare_match = re.match(
+            r'(abstract\s+)?(?:class|interface)\s+(\S+?)(?:\s+<<(\w+)>>)?\s*(?:(#\w+))?\s*$', stripped)
+        if bare_match:
+            is_abstract = bool(bare_match.group(1))
+            name = bare_match.group(2).strip('"')
+            stereotype = bare_match.group(3) or ""
+            color = bare_match.group(4) or current_pkg_color
+            if stripped.startswith('interface ') and not stereotype:
+                stereotype = 'interface'
+            classes[name] = PumlClass(
+                name=name, is_abstract=is_abstract,
+                stereotype=stereotype, package=current_pkg,
+                color=color)
             continue
 
         if current_class:
