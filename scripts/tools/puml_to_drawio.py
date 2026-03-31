@@ -349,7 +349,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
 
         color = pkg_colors.get(pkg_name, "#E6E6E6")
         # Package background rectangle
-        bx, by, bx2, by2 = min_x - 10, min_y - PKG_LABEL_H - 5, max_x + NODE_W + 10, max_y + 10
+        bx, by, bx2, by2 = min_x - 20, min_y - PKG_LABEL_H - 15, max_x + NODE_W + 20, max_y + 50
         pkg_cell_id = cid
         cells.append(
             f'      <mxCell id="{cid}" value="{xe(pkg_name)}" '
@@ -362,7 +362,7 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
         cid += 1
         # Map each class in this package to its container ID and offset
         for pc in pkg_classes:
-            _pkg_parent_ids[pc.name] = (pkg_cell_id, bx, by + 30)  # +30 for swimlane header
+            _pkg_parent_ids[pc.name] = (pkg_cell_id, bx, by)  # children positioned relative to container origin
 
     # Render classes as UML 2.5 swimlane containers with stacked children
     ITEM_H = 20
@@ -404,8 +404,8 @@ def generate_drawio(classes: list[PumlClass], edges: list[PumlEdge],
         cx, cy = x, y
         if c.name in _pkg_parent_ids:
             parent_id, ox, oy = _pkg_parent_ids[c.name]
-            cx = x - ox  # relative to container
-            cy = y - oy
+            cx = x - ox + 10  # relative to container, with left padding
+            cy = y - oy + 40  # push below container header (startSize=30 + 10px gap)
             parent_id = str(parent_id)
 
         cells.append(
