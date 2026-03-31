@@ -87,7 +87,15 @@ def parse_puml(text: str) -> tuple[list[PumlClass], list[PumlEdge], dict[str, st
                 name=name, is_abstract=is_abstract,
                 stereotype=stereotype, package=current_pkg,
                 color=color)
-            classes[name] = current_class
+            # Disambiguate if same name exists in a different package
+            key = name
+            if name in classes and classes[name].package != current_pkg:
+                key = f"{name}_{current_pkg.split('(')[0].strip().replace(' ', '_')}"
+                current_class = PumlClass(
+                    name=key, is_abstract=is_abstract,
+                    stereotype=stereotype, package=current_pkg,
+                    color=color)
+            classes[key] = current_class
             in_attrs = True
             continue
 
@@ -101,8 +109,11 @@ def parse_puml(text: str) -> tuple[list[PumlClass], list[PumlEdge], dict[str, st
             color = bare_match.group(4) or current_pkg_color
             if stripped.startswith('interface ') and not stereotype:
                 stereotype = 'interface'
-            classes[name] = PumlClass(
-                name=name, is_abstract=is_abstract,
+            key = name
+            if name in classes and classes[name].package != current_pkg:
+                key = f"{name}_{current_pkg.split('(')[0].strip().replace(' ', '_')}"
+            classes[key] = PumlClass(
+                name=key, is_abstract=is_abstract,
                 stereotype=stereotype, package=current_pkg,
                 color=color)
             continue
