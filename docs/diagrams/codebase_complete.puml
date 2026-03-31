@@ -1647,39 +1647,73 @@ package "Orchestration (5)" #CC99FF {
 
 package "Error Handling (26)" #FFC0C0 {
 
-  class ConfigurationError
+  class ConfigurationError {
+    Error in configuration loading or validation.
+  }
 
-  class ConnectionError
+  class ConnectionError {
+    Error in database connection.
+  }
 
-  class DataNotFoundError
+  class DataNotFoundError {
+    Requested data does not exist.
+  }
 
-  class DeFunkError
+  class DeFunkError {
+    Base exception for all de_Funk errors.
+  }
 
-  class DependencyError
+  class DependencyError {
+    Model dependency not satisfied.
+  }
 
-  class ErrorContext
+  class ErrorContext {
+    Context manager for detailed error reporting.
+  }
 
-  class FilterError
+  class FilterError {
+    Error applying filters.
+  }
 
-  class ForecastError
+  class ForecastError {
+    Error in forecasting operations.
+  }
 
-  class IngestionError
+  class IngestionError {
+    Error during data ingestion from API.
+  }
 
-  class InsufficientDataError
+  class InsufficientDataError {
+    Not enough data for forecasting.
+  }
 
-  class InvalidConfigError
+  class InvalidConfigError {
+    Configuration value is invalid.
+  }
 
-  class JoinError
+  class JoinError {
+    Error joining tables.
+  }
 
-  class MeasureError
+  class MeasureError {
+    Error calculating a measure.
+  }
 
-  class MissingConfigError
+  class MissingConfigError {
+    Required configuration is missing.
+  }
 
-  class ModelError
+  class ModelError {
+    Error in model operations.
+  }
 
-  class ModelNotFoundError
+  class ModelNotFoundError {
+    Requested model does not exist.
+  }
 
-  class ModelTrainingError
+  class ModelTrainingError {
+    Error training forecast model.
+  }
 
   class NotebookValidator {
     + validate()
@@ -1693,17 +1727,29 @@ package "Error Handling (26)" #FFC0C0 {
     - _parse_source()
   }
 
-  class PipelineError
+  class PipelineError {
+    Error in data pipeline execution.
+  }
 
-  class QueryError
+  class QueryError {
+    Error executing a query.
+  }
 
-  class RateLimitError
+  class RateLimitError {
+    API rate limit exceeded.
+  }
 
-  class StorageError
+  class StorageError {
+    Error in storage operations.
+  }
 
-  class TableNotFoundError
+  class TableNotFoundError {
+    Requested table does not exist in model.
+  }
 
-  class TransformationError
+  class TransformationError {
+    Error during data transformation.
+  }
 
   class ValidationError {
     + level : str
@@ -1711,7 +1757,9 @@ package "Error Handling (26)" #FFC0C0 {
     + location : Optional[str]
   }
 
-  class WriteError
+  class WriteError {
+    Error writing data to storage.
+  }
 
 }
 
@@ -1742,7 +1790,9 @@ package "Logging (4)" #E6E6E6 {
     + from_env()
   }
 
-  class LogTimer
+  class LogTimer {
+    Context manager for timing operations with automatic logging.
+  }
 
   class StructuredFormatter {
     + format()
