@@ -17,6 +17,7 @@ package "Application (1)" #E6E6E6 {
     + build_session()
     + query_session()
     + ingest_session()
+    - __init__()
   }
 
 }
@@ -321,6 +322,7 @@ package "Configuration (14)" #FFCC66 {
     + models_dir()
     + legacy_models_dir()
     + configs_dir()
+    - __post_init__()
   }
 
   class BronzeConfig {
@@ -337,6 +339,7 @@ package "Configuration (14)" #FFCC66 {
     + load_storage()
     + load()
     + repo_root()
+    - __init__()
     - _discover_repo_root()
     - _get_api_keys()
     - _load_json_config()
@@ -352,6 +355,7 @@ package "Configuration (14)" #FFCC66 {
     + type : str
     + spark : Optional[SparkConfig]
     + duckdb : Optional[DuckDBConfig]
+    - __post_init__()
   }
 
   class DebugConfig {
@@ -369,6 +373,7 @@ package "Configuration (14)" #FFCC66 {
     + get_build_order()
     + load_base()
     + clear_cache()
+    - __init__()
     - _build_index()
     - _discover_tables()
     - _discover_sources()
@@ -430,6 +435,7 @@ package "Configuration (14)" #FFCC66 {
     + get_field_mappings()
     + get_computed_fields()
     + clear_cache()
+    - __init__()
   }
 
   class ProviderConfig {
@@ -525,6 +531,7 @@ package "Engine (7)" #80E0D0 {
     + count()
     + to_pandas()
     + columns()
+    - __init__()
     - _scan_expr()
   }
 
@@ -534,6 +541,7 @@ package "Engine (7)" #80E0D0 {
     + build_from()
     + build_where()
     + distinct_values()
+    - __init__()
     - _resolve_intermediate_path()
   }
 
@@ -565,6 +573,8 @@ package "Engine (7)" #80E0D0 {
     + distinct_values_by_measure()
     + get_query_engine()
     + get_handler_registry()
+    - __init__()
+    - __repr__()
   }
 
   class SparkOps {
@@ -585,6 +595,7 @@ package "Engine (7)" #80E0D0 {
     + count()
     + to_pandas()
     + columns()
+    - __init__()
   }
 
   class SparkSql {
@@ -593,6 +604,7 @@ package "Engine (7)" #80E0D0 {
     + build_from()
     + build_where()
     + distinct_values()
+    - __init__()
   }
 
   class SqlOps {
@@ -613,6 +625,7 @@ package "Sessions (5)" #80E0D0 {
     + build()
     + build_all()
     + close()
+    - __init__()
     - _topological_sort()
   }
 
@@ -630,6 +643,7 @@ package "Sessions (5)" #80E0D0 {
     + get_provider()
     + get_endpoint()
     + close()
+    - __init__()
   }
 
   class QuerySession {
@@ -639,6 +653,7 @@ package "Sessions (5)" #80E0D0 {
     + build_from()
     + build_where()
     + close()
+    - __init__()
   }
 
   class Session {
@@ -647,6 +662,7 @@ package "Sessions (5)" #80E0D0 {
     + silver_path()
     + model_path()
     + close()
+    - __init__()
   }
 
 }
@@ -665,6 +681,7 @@ package "Graph & Resolution (7)" #80E0D0 {
     + reachable_domains()
     + find_join_path()
     + get_endpoint_catalog()
+    - __init__()
     - _build_index()
     - _parse_ref()
   }
@@ -679,13 +696,16 @@ package "Graph & Resolution (7)" #80E0D0 {
     + distance()
     + connected_components()
     + subgraph()
+    - __init__()
     - _build_from_models()
     - _register_edge()
   }
 
   class FieldRef {
     + _known_domains : set[str]
+    - __init__()
     - _match_domain()
+    - __repr__()
   }
 
   class FieldResolver {
@@ -694,6 +714,7 @@ package "Graph & Resolution (7)" #80E0D0 {
     + resolve()
     + resolve_many()
     + get_field_catalog()
+    - __init__()
     - _build_dir_to_model_map()
     - _table_name_from_ref()
     - _register_edge()
@@ -705,6 +726,8 @@ package "Graph & Resolution (7)" #80E0D0 {
 
   class ResolvedField {
     + domain()
+    - __init__()
+    - __repr__()
   }
 
   class StorageRouter {
@@ -717,6 +740,7 @@ package "Graph & Resolution (7)" #80E0D0 {
     + bronze_root()
     + raw_root()
     + models_root()
+    - __init__()
   }
 
 }
@@ -755,6 +779,7 @@ package "Connections (4)" #E6E6E6 {
     + stop()
     + execute_sql()
     + execute()
+    - __init__()
     - _enable_delta_extension()
     - _init_model_views()
     - _is_delta_table()
@@ -776,6 +801,7 @@ package "Connections (4)" #E6E6E6 {
     + cache()
     + uncache()
     + stop()
+    - __init__()
     - _is_delta_table()
   }
 
@@ -784,7 +810,7 @@ package "Connections (4)" #E6E6E6 {
 package "API Handlers (7)" #B3D9FF {
 
   class BoxHandler {
-    + handles
+    + handles : {'plotly.box', 'box', 'ohlcv', 'candl...
     --
     + execute()
   }
@@ -814,7 +840,7 @@ package "API Handlers (7)" #B3D9FF {
   }
 
   class GraphicalHandler {
-    + handles
+    + handles : {'plotly.line', 'line', 'line_chart',...
     --
     + execute()
     - _shape_graphical()
@@ -824,16 +850,17 @@ package "API Handlers (7)" #B3D9FF {
     + register()
     + get()
     + supported_types()
+    - __init__()
   }
 
   class MetricsHandler {
-    + handles
+    + handles : {'cards.metric', 'kpi', 'metric_cards'}
     --
     + execute()
   }
 
   class PivotHandler {
-    + handles
+    + handles : {'table.pivot', 'pivot', 'pivot_table...
     --
     + execute()
     - _row_labels()
@@ -850,7 +877,7 @@ package "API Handlers (7)" #B3D9FF {
   }
 
   class TableDataHandler {
-    + handles
+    + handles : {'table.data', 'data_table'}
     --
     + execute()
   }
@@ -900,7 +927,7 @@ package "API Request/Response Models (24)" #B3D9FF {
   }
 
   class FilterSpec {
-    + model_config
+    + model_config : {'populate_by_name': True}
     + field : str
     + operator : str
     + value : Union[list, str, int, float, dict]
@@ -1058,6 +1085,7 @@ package "Build Pipeline (11)" #FF9933 {
     + after_build()
     + custom_node_loading()
     + set_session()
+    - __init__()
     - _apply_filters()
     - _select_columns()
     - _run_hooks()
@@ -1072,6 +1100,7 @@ package "Build Pipeline (11)" #FF9933 {
     + get_model_config()
     + build()
     + get_dependencies()
+    - __init__()
   }
 
   class BuildResult {
@@ -1083,6 +1112,7 @@ package "Build Pipeline (11)" #FF9933 {
     + duration_seconds : float
     + error : Optional[str]
     + warnings : List[str]
+    - __str__()
   }
 
   class BuilderRegistry {
@@ -1106,6 +1136,7 @@ package "Build Pipeline (11)" #FF9933 {
     + get_min_rows()
     + get_null_thresholds()
     + validate()
+    - __init__()
     - _detect_backend()
     - _validate_columns()
     - _validate_row_count()
@@ -1124,6 +1155,7 @@ package "Build Pipeline (11)" #FF9933 {
   class DomainModel {
     + custom_node_loading()
     + graph_builder()
+    - __init__()
     - _build_seed_node()
     - _build_union_node()
     - _load_internal_or_bronze()
@@ -1142,6 +1174,7 @@ package "Build Pipeline (11)" #FF9933 {
   class GraphBuilder {
     + model_cfg()
     + build()
+    - __init__()
     - _build_nodes()
     - _load_bronze_table()
     - _load_silver_table()
@@ -1156,6 +1189,7 @@ package "Build Pipeline (11)" #FF9933 {
     + execute_all()
     + execute_node()
     + execute_pipeline()
+    - __init__()
     - _register_builtins()
     - _load_source()
     - _load_from_node()
@@ -1185,6 +1219,7 @@ package "Build Pipeline (11)" #FF9933 {
     + category : str
     + message : str
     + details : Dict[str, Any]
+    - __str__()
   }
 
   class ValidationReport {
@@ -1212,12 +1247,14 @@ package "Hooks & Artifacts (3)" #B3FFB3 {
     + latest()
     + list_versions()
     + register()
+    - __init__()
   }
 
   class HookRunner {
     + run()
     + has_hooks()
     + list_hooks()
+    - __init__()
   }
 
   class ModelArtifact {
@@ -1231,6 +1268,7 @@ package "Hooks & Artifacts (3)" #B3FFB3 {
     --
     + to_dict()
     + from_dict()
+    - __post_init__()
   }
 
 }
@@ -1241,6 +1279,7 @@ package "Ingestion Core (18)" #CC9966 {
     + size()
     + next_key()
     + mark_exhausted()
+    - __init__()
   }
 
   class BaseProvider {
@@ -1262,12 +1301,14 @@ package "Ingestion Core (18)" #CC9966 {
     + get_response_key()
     + get_field_mappings()
     + get_type_coercions()
+    - __init__()
     - _load_config_from_markdown()
     - _setup()
   }
 
   class BaseRegistry {
     + render()
+    - __init__()
   }
 
   class BronzeSink {
@@ -1281,6 +1322,7 @@ package "Ingestion Core (18)" #CC9966 {
     + append()
     + streaming_writer()
     + rebuild_from_raw()
+    - __init__()
     - _table_cfg()
     - _path()
     - _is_delta_table()
@@ -1290,16 +1332,16 @@ package "Ingestion Core (18)" #CC9966 {
   }
 
   class DataType {
-    + REFERENCE
-    + PRICES
-    + INCOME_STATEMENT
-    + BALANCE_SHEET
-    + CASH_FLOW
-    + EARNINGS
-    + OPTIONS
-    + ETF_PROFILE
-    + DIVIDENDS
-    + SPLITS
+    + REFERENCE : 'reference'
+    + PRICES : 'prices'
+    + INCOME_STATEMENT : 'income'
+    + BALANCE_SHEET : 'balance'
+    + CASH_FLOW : 'cashflow'
+    + EARNINGS : 'earnings'
+    + OPTIONS : 'options'
+    + ETF_PROFILE : 'etf_profile'
+    + DIVIDENDS : 'dividends'
+    + SPLITS : 'splits'
   }
 
   class Endpoint {
@@ -1329,6 +1371,7 @@ package "Ingestion Core (18)" #CC9966 {
     + postprocess()
     + validate()
     + calls()
+    - __init__()
     - _load_markdown_schema()
     - _clean_raw_value()
     - _clean_raw_row()
@@ -1354,6 +1397,7 @@ package "Ingestion Core (18)" #CC9966 {
     + request_text()
     + request()
     + get()
+    - __init__()
     - _effective_min_interval()
     - _throttle()
     - _build_request()
@@ -1375,13 +1419,14 @@ package "Ingestion Core (18)" #CC9966 {
 
   class IngestorEngine {
     + _executor : Optional[ThreadPoolExecutor]
-    + _executor_lock
+    + _executor_lock : threading.Lock()
     --
     + from_session()
     + get_executor()
     + shutdown_executor()
     + run()
     + run_with_discovery()
+    - __init__()
     - _wait_for_pending_writes()
     - _cleanup_spark_memory()
     - _save_raw()
@@ -1397,6 +1442,7 @@ package "Ingestion Core (18)" #CC9966 {
     + write()
     + exists()
     + read()
+    - __init__()
   }
 
   class SocrataBaseProvider {
@@ -1411,6 +1457,7 @@ package "Ingestion Core (18)" #CC9966 {
     + get_raw_path()
     + read_raw_as_df()
     + download_all_csv()
+    - __init__()
     - _setup()
     - _fetch_single_resource()
     - _fetch_multi_year()
@@ -1425,9 +1472,9 @@ package "Ingestion Core (18)" #CC9966 {
   }
 
   class SocrataClient {
-    + DEFAULT_LIMIT
-    + MAX_RETRIES
-    + DEFAULT_TIMEOUT
+    + DEFAULT_LIMIT : 50000
+    + MAX_RETRIES : 6
+    + DEFAULT_TIMEOUT : 300
     --
     + request()
     + fetch_all()
@@ -1437,6 +1484,7 @@ package "Ingestion Core (18)" #CC9966 {
     + fetch_csv()
     + download_csv_to_file()
     + fetch_csv_from_file()
+    - __init__()
     - _throttle()
     - _build_url()
     - _download_csv_gzip()
@@ -1445,6 +1493,7 @@ package "Ingestion Core (18)" #CC9966 {
   class SparkNormalizer {
     + normalize()
     + normalize_with_schema()
+    - __init__()
     - _apply_field_mappings()
     - _apply_type_coercions()
     - _parse_dates()
@@ -1461,6 +1510,9 @@ package "Ingestion Core (18)" #CC9966 {
     + total_records()
     + buffered_records()
     + batches_written()
+    - __init__()
+    - __enter__()
+    - __exit__()
   }
 
   class WorkItemResult {
@@ -1484,7 +1536,7 @@ package "Ingestion Core (18)" #CC9966 {
 package "Providers (4)" #CC9966 {
 
   class AlphaVantageProvider {
-    + PROVIDER_NAME
+    + PROVIDER_NAME : 'Alpha Vantage'
     --
     + enable_raw_save()
     + has_raw_data()
@@ -1501,6 +1553,7 @@ package "Providers (4)" #CC9966 {
     + discover_tickers()
     + get_tickers_by_market_cap()
     + seed_tickers()
+    - __init__()
     - _setup()
     - _get_raw_path()
     - _save_raw_response()
@@ -1525,6 +1578,7 @@ package "Providers (4)" #CC9966 {
 
   class AlphaVantageRegistry {
     + render()
+    - __init__()
   }
 
   class ProviderInfo {
@@ -1566,7 +1620,7 @@ package "Providers (4)" #CC9966 {
 package "Orchestration (5)" #CC99FF {
 
   class CheckpointManager {
-    + DEFAULT_CHECKPOINT_DIR
+    + DEFAULT_CHECKPOINT_DIR : 'storage/checkpoints'
     --
     + create_checkpoint()
     + load_checkpoint()
@@ -1582,6 +1636,7 @@ package "Orchestration (5)" #CC99FF {
     + get_progress()
     + clear_checkpoint()
     + list_checkpoints()
+    - __init__()
     - _get_checkpoint_path()
     - _save_checkpoint()
     - _maybe_save()
@@ -1598,6 +1653,7 @@ package "Orchestration (5)" #CC99FF {
     + list_models()
     + get_model_info()
     + validate()
+    - __init__()
     - _discover_models()
     - _load_model_yaml()
     - _build_edges()
@@ -1653,26 +1709,36 @@ package "Error Handling (26)" #FFC0C0 {
 
   class ConnectionError {
     Error in database connection.
+    - __init__()
   }
 
   class DataNotFoundError {
     Requested data does not exist.
+    - __init__()
   }
 
   class DeFunkError {
     Base exception for all de_Funk errors.
+    - __init__()
+    - __str__()
+    - __repr__()
   }
 
   class DependencyError {
     Model dependency not satisfied.
+    - __init__()
   }
 
   class ErrorContext {
     Context manager for detailed error reporting.
+    - __init__()
+    - __enter__()
+    - __exit__()
   }
 
   class FilterError {
     Error applying filters.
+    - __init__()
   }
 
   class ForecastError {
@@ -1681,26 +1747,32 @@ package "Error Handling (26)" #FFC0C0 {
 
   class IngestionError {
     Error during data ingestion from API.
+    - __init__()
   }
 
   class InsufficientDataError {
     Not enough data for forecasting.
+    - __init__()
   }
 
   class InvalidConfigError {
     Configuration value is invalid.
+    - __init__()
   }
 
   class JoinError {
     Error joining tables.
+    - __init__()
   }
 
   class MeasureError {
     Error calculating a measure.
+    - __init__()
   }
 
   class MissingConfigError {
     Required configuration is missing.
+    - __init__()
   }
 
   class ModelError {
@@ -1709,10 +1781,12 @@ package "Error Handling (26)" #FFC0C0 {
 
   class ModelNotFoundError {
     Requested model does not exist.
+    - __init__()
   }
 
   class ModelTrainingError {
     Error training forecast model.
+    - __init__()
   }
 
   class NotebookValidator {
@@ -1721,6 +1795,7 @@ package "Error Handling (26)" #FFC0C0 {
     + get_warnings()
     + get_errors()
     + is_valid()
+    - __init__()
     - _validate_models()
     - _validate_exhibit()
     - _validate_filters()
@@ -1737,6 +1812,7 @@ package "Error Handling (26)" #FFC0C0 {
 
   class RateLimitError {
     API rate limit exceeded.
+    - __init__()
   }
 
   class StorageError {
@@ -1745,10 +1821,12 @@ package "Error Handling (26)" #FFC0C0 {
 
   class TableNotFoundError {
     Requested table does not exist in model.
+    - __init__()
   }
 
   class TransformationError {
     Error during data transformation.
+    - __init__()
   }
 
   class ValidationError {
@@ -1759,6 +1837,7 @@ package "Error Handling (26)" #FFC0C0 {
 
   class WriteError {
     Error writing data to storage.
+    - __init__()
   }
 
 }
@@ -1766,10 +1845,11 @@ package "Error Handling (26)" #FFC0C0 {
 package "Logging (4)" #E6E6E6 {
 
   class ColoredFormatter {
-    + COLORS
-    + RESET
+    + COLORS : {'DEBUG': '\x1b[36m', 'INFO': '\x1b[3...
+    + RESET : '\x1b[0m'
     --
     + format()
+    - __init__()
     - _supports_color()
   }
 
@@ -1792,6 +1872,9 @@ package "Logging (4)" #E6E6E6 {
 
   class LogTimer {
     Context manager for timing operations with automatic logging.
+    - __init__()
+    - __enter__()
+    - __exit__()
   }
 
   class StructuredFormatter {
@@ -1807,6 +1890,7 @@ package "Utilities (3)" #E6E6E6 {
     + test_api_connection()
     + get_recommended_date_range()
     + prompt_user_for_adjusted_range()
+    - __init__()
     - _suggest_adjusted_range()
   }
 
@@ -1819,6 +1903,7 @@ package "Utilities (3)" #E6E6E6 {
     + end_run()
     + get_recent_runs()
     + print_recent_runs()
+    - __init__()
     - _save_run()
     - _update_summary_log()
   }
