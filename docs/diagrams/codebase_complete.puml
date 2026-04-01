@@ -1101,7 +1101,7 @@ package "API Request/Response Models (24)" #B3D9FF {
 
 }
 
-package "Build Pipeline (11)" #FF9933 {
+package "Build Pipeline (15)" #FF9933 {
 
   class BaseModel {
     + backend()
@@ -1131,6 +1131,23 @@ package "Build Pipeline (11)" #FF9933 {
     + build()
     + get_dependencies()
     - __init__()
+  }
+
+  class BuildPlan {
+    + model_name : str
+    + nodes : dict[str, NodeSpec]
+    + phase_order : list[list[str]]
+    + sources_by_target : dict[str, list]
+    + partitions : list[str]
+    + sort_by : list[str]
+    + optimize : bool
+    --
+    + node_ids_in_order()
+    + to_translated_dict()
+  }
+
+  class BuildPlanner {
+    + plan()
   }
 
   class BuildResult {
@@ -1212,6 +1229,12 @@ package "Build Pipeline (11)" #FF9933 {
     - _translate_node_config()
   }
 
+  class JoinSpec {
+    + right_table : str
+    + on : list[str]
+    + how : str
+  }
+
   class NodeExecutor {
     + register_op()
     + get_op()
@@ -1242,6 +1265,32 @@ package "Build Pipeline (11)" #FF9933 {
     - _build_union()
     - _build_distinct()
     - _build_generated()
+  }
+
+  class NodeSpec {
+    + node_id : str
+    + node_type : str
+    + from_ref : str
+    + select : dict[str, str]
+    + derive : dict[str, str]
+    + filters : list[str]
+    + joins : list[JoinSpec]
+    + dedup_keys : list[str]
+    + drop_cols : list[str]
+    + seed_data : list[list]
+    + seed_schema : list
+    + union_sources : list[dict]
+    + window_source : str
+    + window_schema : list
+    + window_partition : str
+    + window_order : str
+    + group_by : list[str]
+    + aggregate_exprs : dict
+    + unpivot_plan : dict
+    + enrich_specs : list[dict]
+    + _raw : dict
+    --
+    + to_dict()
   }
 
   class ValidationIssue {
@@ -1953,59 +2002,6 @@ package "Utilities (3)" #E6E6E6 {
 
 }
 
-package "Other (4)" #E6E6E6 {
-
-  class BuildPlan {
-    + model_name : str
-    + nodes : dict[str, NodeSpec]
-    + phase_order : list[list[str]]
-    + sources_by_target : dict[str, list]
-    + partitions : list[str]
-    + sort_by : list[str]
-    + optimize : bool
-    --
-    + node_ids_in_order()
-    + to_translated_dict()
-  }
-
-  class BuildPlanner {
-    + plan()
-  }
-
-  class JoinSpec {
-    + right_table : str
-    + on : list[str]
-    + how : str
-  }
-
-  class NodeSpec {
-    + node_id : str
-    + node_type : str
-    + from_ref : str
-    + select : dict[str, str]
-    + derive : dict[str, str]
-    + filters : list[str]
-    + joins : list[JoinSpec]
-    + dedup_keys : list[str]
-    + drop_cols : list[str]
-    + seed_data : list[list]
-    + seed_schema : list
-    + union_sources : list[dict]
-    + window_source : str
-    + window_schema : list
-    + window_partition : str
-    + window_order : str
-    + group_by : list[str]
-    + aggregate_exprs : dict
-    + unpivot_plan : dict
-    + enrich_specs : list[dict]
-    + _raw : dict
-    --
-    + to_dict()
-  }
-
-}
-
 BaseModel <|-- DomainModel
 BaseProvider <|-- AlphaVantageProvider
 BaseProvider <|-- SocrataBaseProvider
@@ -2117,7 +2113,6 @@ ValidationReport *-- ValidationIssue : issues
 AlphaVantageProvider ..> SparkNormalizer : _normalize_spark_df()
 AlphaVantageProvider ..> SparkNormalizer : normalize()
 BaseModel ..> HookRunner : _run_hooks()
-BaseModelBuilder ..> BuildPlanner : get_model_config()
 BaseModelBuilder ..> ConfigurationError : build()
 BaseModelBuilder ..> ErrorContext : build()
 BaseModelBuilder ..> ModelError : build()
@@ -2129,7 +2124,6 @@ DeFunk ..> ConfigLoader : from_config()
 DeFunk ..> FieldResolver : query_session()
 DeFunk ..> IngestSession : ingest_session()
 DeFunk ..> QuerySession : query_session()
-DomainBuilderFactory ..> BuildPlanner : _create_builder_class()
 DomainBuilderFactory ..> DomainConfigLoader : _create_builder_class()
 DomainBuilderFactory ..> DomainConfigLoader : create_builders()
 DomainModel ..> HookRunner : custom_node_loading()
@@ -2143,9 +2137,9 @@ RepoContext ..> ConnectionFactory : from_repo_root()
 Session ..> StorageRouter : __init__()
 
 legend right
-  174 classes in 18 groups
+  174 classes in 17 groups
   40 inheritance, 66 composition,
-  27 cross-group dependency edges
+  25 cross-group dependency edges
   ---
   | Color | Concern |
   |<#FFCC66> Gold | Data Classes + Config |
