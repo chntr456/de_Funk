@@ -89,8 +89,16 @@ package "Data Classes (27)" #FFCC66 {
     + sources : dict[str, SourceConfig]
     + views : dict[str, Any]
     + _raw : dict
+    + _build_nodes : dict
+    + _sources_by_target : dict
     + source_file : Optional[str]
     --
+    + translate()
+    + get_build_plan()
+    + get_sources_for_table()
+    + get_build_phases()
+    + get_table_names()
+    + get_edge_tables()
     + from_dict()
   }
 

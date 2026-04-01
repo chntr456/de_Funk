@@ -342,7 +342,59 @@ class DomainModelConfig:
 
     # Raw dict preserved for backward compat during migration
     _raw: dict = dc_field(default_factory=dict, repr=False)
+    # Translated build plan (populated by translate())
+    _build_nodes: dict = dc_field(default_factory=dict, repr=False)
+    _sources_by_target: dict = dc_field(default_factory=dict, repr=False)
     source_file: Optional[str] = None
+
+    def translate(self) -> DomainModelConfig:
+        """Apply config_translator to produce build-ready nodes.
+
+        Populates _build_nodes (graph.nodes for GraphBuilder) and
+        _sources_by_target (reverse map of target table → source configs).
+        Returns self for chaining.
+        """
+        from de_funk.config.domain.config_translator import translate_domain_config
+        translated = translate_domain_config(self._raw)
+        self._build_nodes = translated.get("graph", {}).get("nodes", {})
+        self._sources_by_target = translated.get("_domain_sources_by_target", {})
+        return self
+
+    def get_build_plan(self) -> dict:
+        """Get the synthesized graph.nodes for GraphBuilder.
+
+        Calls translate() on first access if not already done.
+        Returns dict mapping node_id → node config with from/select/derive/filter ops.
+        """
+        if not self._build_nodes and self._raw:
+            self.translate()
+        return self._build_nodes
+
+    def get_sources_for_table(self, table_name: str) -> list[dict]:
+        """Get source configs that feed a target table."""
+        if not self._sources_by_target and self._raw:
+            self.translate()
+        return self._sources_by_target.get(table_name, [])
+
+    def get_build_phases(self) -> list[list[str]]:
+        """Get ordered build phases — list of [table_names] per phase."""
+        result = []
+        for phase_num in sorted(self.build.phases.keys(), key=lambda x: int(x)):
+            phase = self.build.phases[phase_num]
+            result.append(phase.tables)
+        return result
+
+    def get_table_names(self) -> list[str]:
+        """Get all table names defined in this model."""
+        return [name.lstrip('_') for name in self.tables.keys()]
+
+    def get_edge_tables(self) -> set[str]:
+        """Get all table names referenced in graph edges."""
+        tables = set()
+        for edge in self.graph.edges:
+            tables.add(edge.from_table.split('.')[-1])
+            tables.add(edge.to_table.split('.')[-1])
+        return tables
 
     @staticmethod
     def from_dict(data: dict) -> DomainModelConfig:
