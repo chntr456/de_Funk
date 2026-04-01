@@ -2006,31 +2006,7 @@ package "Other (4)" #E6E6E6 {
 
 }
 
-BaseModel <|-- BoxQueryRequest
-BaseModel <|-- BucketSpec
-BaseModel <|-- ColumnTuple
-BaseModel <|-- DimensionValuesResponse
 BaseModel <|-- DomainModel
-BaseModel <|-- ExpandableData
-BaseModel <|-- FilterSpec
-BaseModel <|-- GraphicalQueryRequest
-BaseModel <|-- GraphicalResponse
-BaseModel <|-- GreatTablesResponse
-BaseModel <|-- HealthResponse
-BaseModel <|-- MeasureTuple
-BaseModel <|-- MetricQueryRequest
-BaseModel <|-- MetricResponse
-BaseModel <|-- MetricValue
-BaseModel <|-- PageFilters
-BaseModel <|-- PivotQueryRequest
-BaseModel <|-- SeriesData
-BaseModel <|-- SortConfig
-BaseModel <|-- SortSpec
-BaseModel <|-- TableColumn
-BaseModel <|-- TableDataQueryRequest
-BaseModel <|-- TableResponse
-BaseModel <|-- TotalsSpec
-BaseModel <|-- WindowSpec
 BaseProvider <|-- AlphaVantageProvider
 BaseProvider <|-- SocrataBaseProvider
 BaseRegistry <|-- AlphaVantageRegistry
@@ -2168,7 +2144,7 @@ Session ..> StorageRouter : __init__()
 
 legend right
   174 classes in 18 groups
-  64 inheritance, 66 composition,
+  40 inheritance, 66 composition,
   27 cross-group dependency edges
   ---
   | Color | Concern |
