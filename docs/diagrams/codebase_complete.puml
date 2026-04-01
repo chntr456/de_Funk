@@ -538,7 +538,7 @@ package "config/ (44)" #FFCC66 {
     + source_file : Optional[str]
   }
 
-  class EndpointConfig {
+  class EndpointConfig_markdown_loader {
     + endpoint_id : str
     + provider : str
     + method : str
@@ -717,7 +717,7 @@ package "config/ (44)" #FFCC66 {
     + source_file : Optional[str]
   }
 
-  class ProviderConfig {
+  class ProviderConfig_markdown_loader {
     + provider_id : str
     + provider : str
     + api_type : str
@@ -774,7 +774,7 @@ package "config/ (44)" #FFCC66 {
     + from_list()
   }
 
-  class SchemaField {
+  class SchemaField_markdown_loader {
     + name : str
     + type : str
     + source : str
