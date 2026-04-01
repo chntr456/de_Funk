@@ -191,7 +191,8 @@ def _load_domain_models(config) -> dict:
                     model_name = fm["model"]
                     try:
                         config_dict = loader.load_model_config(model_name)
-                        models[model_name] = config_dict
+                        from de_funk.config.data_classes import DomainModelConfig
+                        models[model_name] = DomainModelConfig.from_dict(config_dict)
                     except Exception as e:
                         logger.warning(f"Failed to load model {model_name}: {e}")
 

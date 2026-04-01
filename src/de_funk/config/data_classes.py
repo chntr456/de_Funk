@@ -32,6 +32,19 @@ class SchemaField:
     fk: Optional[str] = None
     format: Optional[str] = None
 
+    @staticmethod
+    def from_list(arr: list) -> SchemaField:
+        """Parse from YAML array: [name, type, nullable, desc, {opts}]."""
+        opts = arr[4] if len(arr) > 4 and isinstance(arr[4], dict) else {}
+        return SchemaField(
+            name=arr[0], type=arr[1],
+            nullable=arr[2] if len(arr) > 2 else True,
+            description=arr[3] if len(arr) > 3 else "",
+            derived=opts.get("derived"),
+            fk=opts.get("fk"),
+            format=opts.get("format"),
+        )
+
 
 @dataclass
 class EdgeSpec:
@@ -44,6 +57,18 @@ class EdgeSpec:
     target_domain: Optional[str] = None
     optional: bool = False
 
+    @staticmethod
+    def from_list(arr: list) -> EdgeSpec:
+        """Parse from YAML array: [name, from, to, [keys], cardinality, domain, {opts}]."""
+        opts = arr[6] if len(arr) > 6 and isinstance(arr[6], dict) else {}
+        return EdgeSpec(
+            name=arr[0], from_table=arr[1], to_table=arr[2],
+            join_keys=arr[3] if len(arr) > 3 else [],
+            cardinality=arr[4] if len(arr) > 4 else "many_to_one",
+            target_domain=arr[5] if len(arr) > 5 and not isinstance(arr[5], dict) else None,
+            optional=opts.get("optional", False),
+        )
+
 
 @dataclass
 class MeasureDef:
@@ -55,12 +80,28 @@ class MeasureDef:
     format: Optional[str] = None
     options: dict = dc_field(default_factory=dict)
 
+    @staticmethod
+    def from_list(arr: list) -> MeasureDef:
+        """Parse from YAML array: [name, agg, field, label, {opts}]."""
+        opts = arr[4] if len(arr) > 4 and isinstance(arr[4], dict) else {}
+        return MeasureDef(
+            name=arr[0], aggregation=arr[1],
+            field=arr[2] if len(arr) > 2 else "",
+            label=arr[3] if len(arr) > 3 else "",
+            format=opts.get("format"),
+            options=opts,
+        )
+
 
 @dataclass
 class AliasSpec:
     """One source alias. Parsed from [target_column, expression]."""
     target_column: str
     expression: str
+
+    @staticmethod
+    def from_list(arr: list) -> AliasSpec:
+        return AliasSpec(target_column=arr[0], expression=arr[1] if len(arr) > 1 else arr[0])
 
 
 @dataclass
@@ -76,6 +117,10 @@ class HookDef:
     """One hook definition — references a Python function by dotted path."""
     fn: str
     params: dict = dc_field(default_factory=dict)
+
+    @staticmethod
+    def from_dict(data: dict) -> HookDef:
+        return HookDef(fn=data.get("fn", ""), params=data.get("params", {}))
 
 
 @dataclass
@@ -93,12 +138,24 @@ class PhaseSpec:
     """One build phase — lists tables to build in this phase."""
     tables: list[str] = dc_field(default_factory=list)
 
+    @staticmethod
+    def from_dict(data: dict) -> PhaseSpec:
+        return PhaseSpec(tables=data.get("tables", []))
+
 
 @dataclass
 class ModelStorageSpec:
     """Storage configuration for a domain model."""
     format: str = "delta"
     silver_root: Optional[str] = None
+
+    @staticmethod
+    def from_dict(data: dict) -> ModelStorageSpec:
+        silver = data.get("silver", {})
+        return ModelStorageSpec(
+            format=data.get("format", "delta"),
+            silver_root=silver.get("root") if isinstance(silver, dict) else None,
+        )
 
 
 @dataclass
@@ -108,6 +165,20 @@ class BuildSpec:
     optimize: bool = True
     partitions: list[str] = dc_field(default_factory=list)
     phases: dict[str, PhaseSpec] = dc_field(default_factory=dict)
+    post_build: list[dict] = dc_field(default_factory=list)
+
+    @staticmethod
+    def from_dict(data: dict) -> BuildSpec:
+        phases = {}
+        for k, v in data.get("phases", {}).items():
+            phases[str(k)] = PhaseSpec.from_dict(v) if isinstance(v, dict) else PhaseSpec(tables=[])
+        return BuildSpec(
+            sort_by=data.get("sort_by", []),
+            optimize=data.get("optimize", True),
+            partitions=data.get("partitions", []),
+            phases=phases,
+            post_build=data.get("post_build", []),
+        )
 
 
 @dataclass
@@ -116,12 +187,23 @@ class GraphSpec:
     edges: list[EdgeSpec] = dc_field(default_factory=list)
     paths: dict[str, Any] = dc_field(default_factory=dict)
 
+    @staticmethod
+    def from_dict(data: dict) -> GraphSpec:
+        edges = [EdgeSpec.from_list(e) if isinstance(e, list) else e for e in data.get("edges", [])]
+        return GraphSpec(edges=edges, paths=data.get("paths", {}))
+
 
 @dataclass
 class MeasuresSpec:
     """Measure definitions for a domain model."""
     simple: list[MeasureDef] = dc_field(default_factory=list)
     computed: list[MeasureDef] = dc_field(default_factory=list)
+
+    @staticmethod
+    def from_dict(data: dict) -> MeasuresSpec:
+        simple = [MeasureDef.from_list(m) if isinstance(m, list) else m for m in data.get("simple", [])]
+        computed = [MeasureDef.from_list(m) if isinstance(m, list) else m for m in data.get("computed", [])]
+        return MeasuresSpec(simple=simple, computed=computed)
 
 
 @dataclass
@@ -131,6 +213,17 @@ class HooksConfig:
     before_build: list[HookDef] = dc_field(default_factory=list)
     after_build: list[HookDef] = dc_field(default_factory=list)
     post_build: list[HookDef] = dc_field(default_factory=list)
+
+    @staticmethod
+    def from_dict(data: dict) -> HooksConfig:
+        def _parse_hooks(arr: list) -> list[HookDef]:
+            return [HookDef.from_dict(h) if isinstance(h, dict) else h for h in arr]
+        return HooksConfig(
+            pre_build=_parse_hooks(data.get("pre_build", [])),
+            before_build=_parse_hooks(data.get("before_build", [])),
+            after_build=_parse_hooks(data.get("after_build", [])),
+            post_build=_parse_hooks(data.get("post_build", [])),
+        )
 
 
 # ── Config containers ────────────────────────────────────
@@ -150,6 +243,22 @@ class TableConfig:
     extends: Optional[str] = None
     source_file: Optional[str] = None
 
+    @staticmethod
+    def from_dict(name: str, data: dict) -> TableConfig:
+        schema = [SchemaField.from_list(s) if isinstance(s, list) else s for s in data.get("schema", [])]
+        measures = [MeasureDef.from_list(m) if isinstance(m, list) else m for m in data.get("measures", [])]
+        return TableConfig(
+            table=name,
+            table_type=data.get("table_type", data.get("type", "dimension")),
+            schema=schema,
+            primary_key=data.get("primary_key", []),
+            unique_key=data.get("unique_key", []),
+            partition_by=data.get("partition_by", data.get("partitions", [])),
+            measures=measures,
+            extends=data.get("extends"),
+            source_file=data.get("_source_file"),
+        )
+
 
 @dataclass
 class SourceConfig:
@@ -163,6 +272,21 @@ class SourceConfig:
     discriminator: Optional[str] = None
     extends: Optional[str] = None
     source_file: Optional[str] = None
+
+    @staticmethod
+    def from_dict(name: str, data: dict) -> SourceConfig:
+        aliases = [AliasSpec.from_list(a) if isinstance(a, list) else a for a in data.get("aliases", [])]
+        return SourceConfig(
+            source=name,
+            maps_to=data.get("maps_to", ""),
+            from_ref=data.get("from", ""),
+            aliases=aliases,
+            domain_source=data.get("domain_source"),
+            filter=data.get("filter", []),
+            discriminator=data.get("discriminator"),
+            extends=data.get("extends"),
+            source_file=data.get("_source_file"),
+        )
 
 
 @dataclass
@@ -216,7 +340,62 @@ class DomainModelConfig:
     sources: dict[str, SourceConfig] = dc_field(default_factory=dict)
     views: dict[str, Any] = dc_field(default_factory=dict)
 
+    # Raw dict preserved for backward compat during migration
+    _raw: dict = dc_field(default_factory=dict, repr=False)
     source_file: Optional[str] = None
+
+    @staticmethod
+    def from_dict(data: dict) -> DomainModelConfig:
+        """Convert raw YAML dict to typed DomainModelConfig.
+
+        Parses all nested structures (tables, sources, edges, measures, hooks)
+        into their typed dataclass equivalents. Preserves the raw dict in _raw
+        for backward compatibility during the migration period.
+        """
+        # Parse extends (can be string or list)
+        extends = data.get("extends", [])
+        if isinstance(extends, str):
+            extends = [extends] if extends else []
+
+        # Parse tables
+        tables = {}
+        for name, tdata in data.get("tables", {}).items():
+            if isinstance(tdata, dict):
+                tables[name] = TableConfig.from_dict(name, tdata)
+
+        # Parse sources
+        sources = {}
+        for name, sdata in data.get("sources", {}).items():
+            if isinstance(sdata, dict):
+                sources[name] = SourceConfig.from_dict(name, sdata)
+
+        # Parse ml_models
+        ml_models = {}
+        for name, mdata in data.get("ml_models", {}).items():
+            if isinstance(mdata, dict):
+                ml_models[name] = MLModelSpec.from_dict(name, mdata)
+
+        return DomainModelConfig(
+            model=data.get("model", ""),
+            version=str(data.get("version", "1.0")),
+            description=data.get("description", ""),
+            extends=extends,
+            depends_on=data.get("depends_on", []),
+            status=data.get("status", "active"),
+            sources_from=data.get("sources_from"),
+            storage=ModelStorageSpec.from_dict(data.get("storage", {})),
+            graph=GraphSpec.from_dict(data.get("graph", {})),
+            build=BuildSpec.from_dict(data.get("build", {})),
+            measures=MeasuresSpec.from_dict(data.get("measures", {})),
+            hooks=HooksConfig.from_dict(data.get("hooks", {})),
+            ml_models=ml_models,
+            metadata=data.get("metadata", {}),
+            tables=tables,
+            sources=sources,
+            views=data.get("views", {}),
+            _raw=data,
+            source_file=data.get("_source_file"),
+        )
 
 
 @dataclass

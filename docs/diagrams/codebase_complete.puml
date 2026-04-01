@@ -27,6 +27,8 @@ package "Data Classes (27)" #FFCC66 {
   class AliasSpec {
     + target_column : str
     + expression : str
+    --
+    + from_list()
   }
 
   class ApiLimits {
@@ -55,6 +57,9 @@ package "Data Classes (27)" #FFCC66 {
     + optimize : bool
     + partitions : list[str]
     + phases : dict[str, PhaseSpec]
+    + post_build : list[dict]
+    --
+    + from_dict()
   }
 
   class ClusterConfig {
@@ -83,7 +88,10 @@ package "Data Classes (27)" #FFCC66 {
     + tables : dict[str, TableConfig]
     + sources : dict[str, SourceConfig]
     + views : dict[str, Any]
+    + _raw : dict
     + source_file : Optional[str]
+    --
+    + from_dict()
   }
 
   class EdgeSpec {
@@ -94,6 +102,8 @@ package "Data Classes (27)" #FFCC66 {
     + cardinality : str
     + target_domain : Optional[str]
     + optional : bool
+    --
+    + from_list()
   }
 
   class EndpointConfig {
@@ -144,11 +154,15 @@ package "Data Classes (27)" #FFCC66 {
   class GraphSpec {
     + edges : list[EdgeSpec]
     + paths : dict[str, Any]
+    --
+    + from_dict()
   }
 
   class HookDef {
     + fn : str
     + params : dict
+    --
+    + from_dict()
   }
 
   class HooksConfig {
@@ -156,6 +170,8 @@ package "Data Classes (27)" #FFCC66 {
     + before_build : list[HookDef]
     + after_build : list[HookDef]
     + post_build : list[HookDef]
+    --
+    + from_dict()
   }
 
   class MLModelSpec {
@@ -179,20 +195,28 @@ package "Data Classes (27)" #FFCC66 {
     + label : str
     + format : Optional[str]
     + options : dict
+    --
+    + from_list()
   }
 
   class MeasuresSpec {
     + simple : list[MeasureDef]
     + computed : list[MeasureDef]
+    --
+    + from_dict()
   }
 
   class ModelStorageSpec {
     + format : str
     + silver_root : Optional[str]
+    --
+    + from_dict()
   }
 
   class PhaseSpec {
     + tables : list[str]
+    --
+    + from_dict()
   }
 
   class PipelineStep {
@@ -256,6 +280,8 @@ package "Data Classes (27)" #FFCC66 {
     + derived : Optional[str]
     + fk : Optional[str]
     + format : Optional[str]
+    --
+    + from_list()
   }
 
   class SourceConfig {
@@ -268,6 +294,8 @@ package "Data Classes (27)" #FFCC66 {
     + discriminator : Optional[str]
     + extends : Optional[str]
     + source_file : Optional[str]
+    --
+    + from_dict()
   }
 
   class TableConfig {
@@ -282,6 +310,8 @@ package "Data Classes (27)" #FFCC66 {
     + pipeline : list[PipelineStep]
     + extends : Optional[str]
     + source_file : Optional[str]
+    --
+    + from_dict()
   }
 
   class TablePath {
