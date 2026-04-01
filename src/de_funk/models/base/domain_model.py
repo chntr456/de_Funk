@@ -83,9 +83,9 @@ class DomainModel(BaseModel):
     the multi-file domain config format (markdown + YAML front matter).
 
     Usage:
-        from de_funk.config.domain.config_translator import translate_domain_config
-        translated = translate_domain_config(domain_config)
-        model = DomainModel(connection, storage_cfg, translated, params, repo_root)
+        from de_funk.models.base.build_planner import BuildPlanner
+        plan = BuildPlanner().plan(domain_config)
+        model = DomainModel(session, {**domain_config, **plan.to_translated_dict()}, params)
         model.build()
     """
 

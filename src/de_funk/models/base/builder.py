@@ -57,15 +57,23 @@ class BaseModelBuilder(ABC):
         pass
 
     def get_model_config(self) -> Dict[str, Any]:
-        """Load model config from domain markdown."""
+        """Load model config from domain markdown and produce build plan.
+
+        Uses BuildPlanner to interpret config → executable plan.
+        Returns the translated dict for backward compat with DomainModel.
+        """
         if self._model_config is None:
             from de_funk.config.domain import get_domain_loader
-            from de_funk.config.domain.config_translator import translate_domain_config
+            from de_funk.models.base.build_planner import BuildPlanner
             repo_root = Path(self.session._kwargs.get('repo_root', '.'))
             domains_dir = repo_root / "domains"
             loader = get_domain_loader(domains_dir)
             raw_config = loader.load_model_config(self.model_name)
-            self._model_config = translate_domain_config(raw_config)
+            planner = BuildPlanner()
+            plan = planner.plan(raw_config)
+            # Store both typed plan and compat dict
+            self._build_plan = plan
+            self._model_config = {**raw_config, **plan.to_translated_dict()}
         return self._model_config
 
     def build(self) -> BuildResult:

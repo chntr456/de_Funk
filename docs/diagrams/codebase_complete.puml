@@ -89,16 +89,8 @@ package "Data Classes (27)" #FFCC66 {
     + sources : dict[str, SourceConfig]
     + views : dict[str, Any]
     + _raw : dict
-    + _build_nodes : dict
-    + _sources_by_target : dict
     + source_file : Optional[str]
     --
-    + translate()
-    + get_build_plan()
-    + get_sources_for_table()
-    + get_build_phases()
-    + get_table_names()
-    + get_edge_tables()
     + from_dict()
   }
 
@@ -1961,6 +1953,59 @@ package "Utilities (3)" #E6E6E6 {
 
 }
 
+package "Other (4)" #E6E6E6 {
+
+  class BuildPlan {
+    + model_name : str
+    + nodes : dict[str, NodeSpec]
+    + phase_order : list[list[str]]
+    + sources_by_target : dict[str, list]
+    + partitions : list[str]
+    + sort_by : list[str]
+    + optimize : bool
+    --
+    + node_ids_in_order()
+    + to_translated_dict()
+  }
+
+  class BuildPlanner {
+    + plan()
+  }
+
+  class JoinSpec {
+    + right_table : str
+    + on : list[str]
+    + how : str
+  }
+
+  class NodeSpec {
+    + node_id : str
+    + node_type : str
+    + from_ref : str
+    + select : dict[str, str]
+    + derive : dict[str, str]
+    + filters : list[str]
+    + joins : list[JoinSpec]
+    + dedup_keys : list[str]
+    + drop_cols : list[str]
+    + seed_data : list[list]
+    + seed_schema : list
+    + union_sources : list[dict]
+    + window_source : str
+    + window_schema : list
+    + window_partition : str
+    + window_order : str
+    + group_by : list[str]
+    + aggregate_exprs : dict
+    + unpivot_plan : dict
+    + enrich_specs : list[dict]
+    + _raw : dict
+    --
+    + to_dict()
+  }
+
+}
+
 BaseModel <|-- BoxQueryRequest
 BaseModel <|-- BucketSpec
 BaseModel <|-- ColumnTuple
@@ -2033,6 +2078,7 @@ BaseTemplate *-- TableConfig : tables
 BoxQueryRequest *-- FilterSpec : filters
 BoxQueryRequest *-- PageFilters : page_filters
 BoxQueryRequest *-- SortSpec : sort
+BuildPlan *-- NodeSpec : nodes
 BuildSpec *-- PhaseSpec : phases
 BuilderRegistry *-- BaseModelBuilder : _builders
 ConnectionConfig *-- DuckDBConfig : duckdb
@@ -2066,6 +2112,7 @@ MetricQueryRequest *-- FilterSpec : filters
 MetricQueryRequest *-- MeasureTuple : metrics
 MetricQueryRequest *-- PageFilters : page_filters
 MetricResponse *-- MetricValue : metrics
+NodeSpec *-- JoinSpec : joins
 PipelineCheckpoint *-- TickerCheckpoint : tickers
 PivotQueryRequest *-- BucketSpec : buckets
 PivotQueryRequest *-- FilterSpec : filters
@@ -2094,6 +2141,7 @@ ValidationReport *-- ValidationIssue : issues
 AlphaVantageProvider ..> SparkNormalizer : _normalize_spark_df()
 AlphaVantageProvider ..> SparkNormalizer : normalize()
 BaseModel ..> HookRunner : _run_hooks()
+BaseModelBuilder ..> BuildPlanner : get_model_config()
 BaseModelBuilder ..> ConfigurationError : build()
 BaseModelBuilder ..> ErrorContext : build()
 BaseModelBuilder ..> ModelError : build()
@@ -2105,6 +2153,7 @@ DeFunk ..> ConfigLoader : from_config()
 DeFunk ..> FieldResolver : query_session()
 DeFunk ..> IngestSession : ingest_session()
 DeFunk ..> QuerySession : query_session()
+DomainBuilderFactory ..> BuildPlanner : _create_builder_class()
 DomainBuilderFactory ..> DomainConfigLoader : _create_builder_class()
 DomainBuilderFactory ..> DomainConfigLoader : create_builders()
 DomainModel ..> HookRunner : custom_node_loading()
@@ -2118,9 +2167,9 @@ RepoContext ..> ConnectionFactory : from_repo_root()
 Session ..> StorageRouter : __init__()
 
 legend right
-  170 classes in 17 groups
-  64 inheritance, 64 composition,
-  25 cross-group dependency edges
+  174 classes in 18 groups
+  64 inheritance, 66 composition,
+  27 cross-group dependency edges
   ---
   | Color | Concern |
   |<#FFCC66> Gold | Data Classes + Config |
