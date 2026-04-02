@@ -88,11 +88,11 @@ No separate registry file — the markdown files ARE the registry.
 | `plotly.heatmap` | `heatmap` | graphical | 2D color matrix |
 | `plotly.box` | `box`, `ohlcv` | graphical | Box-and-whisker / OHLCV candlestick |
 | `table.data` | `data_table` | tabular | Scrollable flat data table |
-| `table.pivot` | `pivot`, `gt` | tabular | Pivot table with optional Great Tables rendering |
+| `table.pivot` | `pivot`, `gt` | tabular | Pivot table with optional AG Grid rendering |
 | `cards.metric` | `kpi` | metric | KPI metric cards |
 | `control.config` | `config` | — | Interactive control panel |
 
-`table.pivot` with `formatting.renderer: great_tables` enables Great Tables styled output.
+`table.pivot` with `formatting.renderer: great_tables` enables AG Grid styled output.
 `gt` and `great_table` are aliases that set this renderer as the default.
 
 ## Base Files

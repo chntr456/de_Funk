@@ -90,15 +90,18 @@ type: table.pivot
 layer: bronze
 data:
   rows: chicago.crimes.primary_type
-  cols: [chicago.crimes.year,
+  cols: [chicago.crimes.year]
   measures:
     - [incidents, chicago.crimes.id,    count, number, Incidents]
     - [arrests,   chicago.crimes.arrest, sum,  number, Arrests]
   totals:
     rows: true
+    columns: true
+  sort:
+    by: incidents
+    where: 2025
+    order: desc
 formatting:
-  renderer: great_tables
-  theme: financial
   title: Crime Type by Year (Bronze)
 ```
 

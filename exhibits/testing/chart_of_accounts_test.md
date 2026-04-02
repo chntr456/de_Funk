@@ -139,7 +139,7 @@ formatting:
 ## Income Statement (Great Tables)
 
 ```de_funk
-type: great_tables
+type: table.pivot
 data:
   rows: corporate.finance.account_name
   cols: corporate.entity.sector

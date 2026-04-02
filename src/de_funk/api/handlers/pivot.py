@@ -19,17 +19,15 @@ from typing import Any
 
 from de_funk.api.executor import truncate_to_mb
 from de_funk.api.handlers.base import ExhibitHandler
-from de_funk.api.handlers.gt_formatter import build_gt
 from de_funk.api.handlers.reshape import (
     _col_name,
     apply_windows_1d,
 )
 from de_funk.api.measures import build_measure_sql, is_window_fn
 from de_funk.api.models.requests import (
-    ExpandableData,
-    GreatTablesResponse,
     PivotQueryRequest,
     TableColumn,
+    TableResponse,
 )
 from de_funk.api.resolver import FieldResolver
 from de_funk.config.logging import get_logger
@@ -46,18 +44,21 @@ MAX_PIVOT_COLUMNS = 200
 
 
 class PivotHandler(ExhibitHandler):
-    handles = {"table.pivot", "pivot", "pivot_table", "great_table", "great_tables", "gt"}
+    handles = {"table.pivot", "pivot", "pivot_table"}
 
-    def execute(self, payload: dict[str, Any], resolver: FieldResolver) -> GreatTablesResponse:
+    def execute(self, payload: dict[str, Any], resolver: FieldResolver) -> TableResponse:
         req = PivotQueryRequest(**payload)
 
         # Resolve all row fields
         row_resolved = [resolver.resolve(f) for f in req.row_fields]
         row_exprs = [f'"{r.table_name}"."{r.column}"' for r in row_resolved]
+        # COALESCE version for SELECT — shows 'TOTAL' instead of NULL from GROUPING SETS
+        row_select_exprs = [f"COALESCE(CAST({e} AS VARCHAR), 'TOTAL')" for e in row_exprs]
 
         # Resolve all col fields
         col_resolved = [resolver.resolve(f) for f in req.col_fields]
         col_exprs = [f'"{c.table_name}"."{c.column}"' for c in col_resolved]
+        col_select_exprs = [f"COALESCE(CAST({e} AS VARCHAR), 'TOTAL')" for e in col_exprs]
 
         # Build measure SQL
         prior_keys: dict[str, str] = {}
@@ -71,20 +72,25 @@ class PivotHandler(ExhibitHandler):
             resolver.resolve(m.field) for m in req.measures
             if isinstance(m.field, str)
         ]
-        # Resolve sort field if present — supports both:
-        #   sort: {rows: {by: "corporate.finance.display_order", order: "asc"}}  (Pydantic SortConfig)
-        #   sort: {field: "corporate.finance.display_order", dir: "asc"}          (YAML shorthand)
+        # Resolve sort — supports:
+        #   sort: {field: "domain.field", dir: "asc"}               (sort by a dimension field)
+        #   sort: {by: "incidents", where: "2025", order: "desc"}   (sort by measure value at a column)
         sort_resolved = None
         sort_tables = []
         sort_direction = "ASC"
+        sort_by_measure = None  # (measure_key, col_value) for pivot-specific sort
         raw_sort = payload.get("sort") or payload.get("data", {}).get("sort")
         if raw_sort and isinstance(raw_sort, dict):
-            sort_field = raw_sort.get("field") or (raw_sort.get("rows", {}) or {}).get("by")
-            sort_direction = (raw_sort.get("dir") or raw_sort.get("order")
-                              or (raw_sort.get("rows", {}) or {}).get("order") or "asc").upper()
-            if sort_field:
-                sort_resolved = resolver.resolve(sort_field)
-                sort_tables = [sort_resolved]
+            sort_direction = (raw_sort.get("dir") or raw_sort.get("order") or "asc").upper()
+
+            if "by" in raw_sort and "where" in raw_sort:
+                # Pivot measure sort: sort rows by a measure's value at a specific column
+                sort_by_measure = (raw_sort["by"], str(raw_sort["where"]))
+            else:
+                sort_field = raw_sort.get("field") or (raw_sort.get("rows", {}) or {}).get("by")
+                if sort_field:
+                    sort_resolved = resolver.resolve(sort_field)
+                    sort_tables = [sort_resolved]
 
         # Build core tables first, then resolve filter tables with domain scoping
         core_fields = row_resolved + col_resolved + str_field_tables + sort_tables
@@ -98,9 +104,27 @@ class PivotHandler(ExhibitHandler):
         where_clauses = self._build_where(req.filters, resolver)
         where_clause = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
-        # Sort clause — wrap in MIN() since sort field may not be in GROUP BY
+        # Sort clause
         sort_clause = ""
-        if sort_resolved:
+        if sort_by_measure:
+            # Sort by a measure's value at a specific column value
+            # e.g. sort: {by: incidents, where: 2025, order: desc}
+            # → ORDER BY COUNT(id) FILTER (WHERE year = 2025) DESC
+            measure_key, col_value = sort_by_measure
+            for m, expr in measure_exprs:
+                if m.key == measure_key:
+                    if col_exprs:
+                        # Build FILTER clause for the specific column value
+                        col_filter = " AND ".join(
+                            f"{ce} = '{col_value}'" for ce in col_exprs
+                        )
+                        sort_clause = f"ORDER BY {expr} FILTER (WHERE {col_filter}) {sort_direction}"
+                    else:
+                        sort_clause = f"ORDER BY {expr} {sort_direction}"
+                    break
+            if not sort_clause:
+                logger.warning(f"Sort measure '{measure_key}' not found in measures")
+        elif sort_resolved:
             sort_expr = f'MIN("{sort_resolved.table_name}"."{sort_resolved.column}")'
             sort_clause = f"ORDER BY {sort_expr} {sort_direction}"
 
@@ -117,75 +141,24 @@ class PivotHandler(ExhibitHandler):
                 from_clause, where_clause, sort_clause,
             )
 
-        # ── Expandable pivot when result exceeds HTML cap ─────────────
-        has_totals = req.totals and req.totals.rows
-        n_row_fields = len(req.row_fields)
-        expandable = None
-
-        if len(row_list) > MAX_HTML_ROWS and has_totals and n_row_fields > 1:
-            summary_rows = []
-            children: dict[str, list[list[Any]]] = {}
-            total_rows = len(row_list)
-
-            for row in row_list:
-                nulls_from_end = 0
-                for i in range(n_row_fields - 1, -1, -1):
-                    if row[i] is None:
-                        nulls_from_end += 1
-                    else:
-                        break
-
-                if nulls_from_end > 0:
-                    summary_rows.append(row)
-                else:
-                    parent_key = str(row[0]) if row[0] is not None else "__grand__"
-                    children.setdefault(parent_key, []).append(row)
-
-            avg_children = (len(row_list) - len(summary_rows)) / max(len(children), 1)
-            if avg_children <= 10 and total_rows <= MAX_HTML_ROWS * 3:
-                logger.info(
-                    f"Pivot has {total_rows} rows but avg {avg_children:.0f} children/group "
-                    f"— rendering flat (under 3x cap)"
-                )
-            else:
-                if len(summary_rows) > MAX_HTML_ROWS:
-                    summary_rows = summary_rows[:MAX_HTML_ROWS]
-
-                row_list = summary_rows
-                expandable = ExpandableData(
-                    columns=[
-                        {"key": c.key, "label": c.label, **({"format": c.format} if c.format else {})}
-                        for c in columns
-                    ],
-                    children=children,
-                    total_rows=total_rows,
-                )
-                logger.info(
-                    f"Expandable pivot: {len(summary_rows)} summary rows in HTML, "
-                    f"{sum(len(v) for v in children.values())} detail rows in JSON "
-                    f"({len(children)} groups)"
-                )
-        elif len(row_list) > MAX_HTML_ROWS:
-            logger.warning(
-                f"Pivot result has {len(row_list)} rows — truncating to {MAX_HTML_ROWS}. "
-                "Add filters or use totals: {rows: true} for expandable mode."
-            )
-            row_list = row_list[:MAX_HTML_ROWS]
+        # Remove duplicate TOTAL rows (NULL grouping produces extra zero-sum totals)
+        total_rows = [r for r in row_list if r[0] == "TOTAL"]
+        if len(total_rows) > 1:
+            # Keep only the TOTAL row with the highest sum (the real total)
+            best_total = max(total_rows, key=lambda r: sum(v for v in r[1:] if isinstance(v, (int, float))))
+            row_list = [r for r in row_list if r[0] != "TOTAL"] + [best_total]
 
         row_list, truncated = truncate_to_mb(row_list, columns, self.max_response_mb)
         if truncated:
             logger.info(f"Pivot response truncated to {len(row_list)} rows ({self.max_response_mb}MB cap)")
 
-        response = build_gt(
-            rows=row_list,
+        # Return raw data for AG Grid rendering (no Great Tables HTML)
+        return TableResponse(
             columns=columns,
-            formatting=payload.get("formatting", {}),
-            layout=req.layout,
-            measure_keys={m.key for m, _ in measure_exprs},
-            window_keys={w.key for w in req.windows} if req.windows else set(),
+            rows=row_list,
+            truncated=truncated,
+            formatting=payload.get("formatting"),
         )
-        response.expandable = expandable
-        return response
 
     # ------------------------------------------------------------------
     # Helpers
@@ -247,6 +220,9 @@ class PivotHandler(ExhibitHandler):
         """
         logger.debug(f"Pivot pre-query (col discovery): {sql}")
         combos = self._execute(sql, max_rows=MAX_PIVOT_COLUMNS + 1)
+
+        # Filter out combos with NULL values (e.g. crimes with no year)
+        combos = [c for c in combos if all(v is not None for v in c)]
 
         if len(combos) > MAX_PIVOT_COLUMNS:
             raise ValueError(
@@ -336,7 +312,7 @@ class PivotHandler(ExhibitHandler):
         calculations in the outer SELECT.
         """
         n_rows = len(row_exprs)
-        select_parts = [f"{expr} AS row_key_{i}" for i, expr in enumerate(row_exprs)]
+        select_parts = [f"COALESCE(CAST({expr} AS VARCHAR), 'TOTAL') AS row_key_{i}" for i, expr in enumerate(row_exprs)]
 
         # Separate base aggregation measures from computed measures.
         base_keys = {m.key for m, _ in measure_exprs if not isinstance(m.field, dict)}
@@ -567,7 +543,7 @@ class PivotHandler(ExhibitHandler):
     def _query_1d(self, req, row_exprs, measure_exprs, from_clause, where_clause, sort_clause):
         """1D pivot: GROUP BY rows, measures as flat columns."""
         n_rows = len(row_exprs)
-        select_parts = [f"{expr} AS row_key_{i}" for i, expr in enumerate(row_exprs)]
+        select_parts = [f"COALESCE(CAST({expr} AS VARCHAR), 'TOTAL') AS row_key_{i}" for i, expr in enumerate(row_exprs)]
         for m, expr in measure_exprs:
             select_parts.append(f"{expr} AS {m.key}")
 

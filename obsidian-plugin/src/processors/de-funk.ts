@@ -15,6 +15,7 @@ import { renderGraphical } from "../render/graphical";
 import { renderTabular } from "../render/tabular";
 import { renderPivot } from "../render/pivot";
 import { renderMetricCards } from "../render/metric-cards";
+import { renderAgGrid, renderAgGridPivot } from "../render/ag-grid";
 
 const GRAPHICAL_TYPES = new Set([
   "plotly.line", "line", "line_chart",
@@ -26,7 +27,7 @@ const GRAPHICAL_TYPES = new Set([
   "plotly.box", "box", "ohlcv", "candlestick",
 ]);
 const TABLE_DATA_TYPES = new Set(["table.data", "data_table"]);
-const PIVOT_TYPES = new Set(["table.pivot", "pivot", "pivot_table", "great_table", "gt"]);
+const PIVOT_TYPES = new Set(["table.pivot", "pivot", "pivot_table"]);
 const METRIC_TYPES = new Set(["cards.metric", "kpi", "metric_cards"]);
 const CONTROL_TYPES = new Set(["control.config", "config"]);
 
@@ -101,9 +102,9 @@ export function createBlockProcessor(client: ApiClient, getFrontmatter: () => No
         if (GRAPHICAL_TYPES.has(type)) {
           await renderGraphical(block, response as never, el);
         } else if (TABLE_DATA_TYPES.has(type)) {
-          renderTabular(block, response as never, el);
+          renderAgGrid(block, response as never, el);
         } else if (PIVOT_TYPES.has(type)) {
-          renderPivot(block, response as never, el);
+          renderAgGridPivot(block, response as never, el);
         } else if (METRIC_TYPES.has(type)) {
           renderMetricCards(block, response as never, el);
         } else {

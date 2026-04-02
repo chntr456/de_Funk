@@ -2110,6 +2110,234 @@ GraphBuilder ..> NodeExecutor : _build_nodes()
 IngestorEngine ..> RawSink : __init__()
 IngestorEngine ..> StorageRouter : __init__()
 
+
+' ══════════════════════════════════════════════
+' OBSIDIAN PLUGIN (TypeScript)
+' ══════════════════════════════════════════════
+
+package "obsidian-plugin/src/ (6)" #99CCFF {
+
+  class ApiClient <<typescript>> {
+    + constructor()
+    + headers()
+    + if()
+    + cacheKey()
+    + toCache()
+    + if()
+  }
+
+  class FilterSpec <<typescript>> {
+  }
+
+  class PageFilters <<typescript>> {
+  }
+
+  class SortSpec <<typescript>> {
+  }
+
+  class MeasureTuple <<typescript>> {
+  }
+
+  class ColumnTuple <<typescript>> {
+  }
+
+  class BlockData <<typescript>> {
+  }
+
+  class BlockFormatting <<typescript>> {
+  }
+
+  class BlockConfig <<typescript>> {
+  }
+
+  class DeFunkBlock <<typescript>> {
+  }
+
+  class SeriesData <<typescript>> {
+  }
+
+  class GraphicalResponse <<typescript>> {
+  }
+
+  class TableColumn <<typescript>> {
+  }
+
+  class TableResponse <<typescript>> {
+  }
+
+  class ExpandableData <<typescript>> {
+  }
+
+  class GreatTablesResponse <<typescript>> {
+  }
+
+  class MetricValue <<typescript>> {
+  }
+
+  class MetricResponse <<typescript>> {
+  }
+
+  class DimensionValuesResponse <<typescript>> {
+  }
+
+  class subscribeToFilterChanges <<function>> {
+    + subscribeToFilterChanges()
+  }
+
+  class notifyFilterChanged <<function>> {
+    + notifyFilterChanged()
+  }
+
+  class notifyControlChanged <<function>> {
+    + notifyControlChanged()
+  }
+
+  class FilterSidebar <<typescript>> {
+    + getViewType()
+    + getDisplayText()
+    + getIcon()
+    + updateFrontmatter()
+    + refreshContextFilters()
+    + for()
+  }
+
+  class NoteFilter <<typescript>> {
+    + if()
+    + parseFrontmatter()
+    + if()
+    + if()
+    + if()
+    + for()
+  }
+
+  class MeasureDef <<typescript>> {
+    + if()
+    + parseFrontmatter()
+    + if()
+    + if()
+    + if()
+    + for()
+  }
+
+  class ControlDef <<typescript>> {
+    + if()
+    + parseFrontmatter()
+    + if()
+    + if()
+    + if()
+    + for()
+  }
+
+  class NoteFrontmatter <<typescript>> {
+    + if()
+    + parseFrontmatter()
+    + if()
+    + if()
+    + if()
+    + for()
+  }
+
+  class parseMeasureDef <<function>> {
+    + parseMeasureDef()
+  }
+
+  class parseFrontmatter <<function>> {
+    + parseFrontmatter()
+  }
+
+  class filtersToSpecs <<function>> {
+    + filtersToSpecs()
+  }
+
+  class parseBlock <<function>> {
+    + parseBlock()
+  }
+
+  class buildRequest <<function>> {
+    + buildRequest()
+  }
+
+  class DeFunkSettings <<typescript>> {
+    + constructor()
+    + display()
+  }
+
+  class DeFunkSettingTab <<typescript>> {
+    + constructor()
+    + display()
+  }
+
+}
+
+package "obsidian-plugin/src/processors/ (3)" #99CCFF {
+
+  class renderConfigPanel <<function>> {
+    + renderConfigPanel()
+  }
+
+  class registerPanel <<function>> {
+    + registerPanel()
+  }
+
+  class subscribe <<function>> {
+    + subscribe()
+  }
+
+  class updateControl <<function>> {
+    + updateControl()
+  }
+
+  class createBlockProcessor <<function>> {
+    + createBlockProcessor()
+  }
+
+}
+
+package "obsidian-plugin/src/render/ (7)" #99CCFF {
+
+  class renderAgGrid <<function>> {
+    + renderAgGrid()
+  }
+
+  class renderAgGridPivot <<function>> {
+    + renderAgGridPivot()
+  }
+
+  class formatValue <<function>> {
+    + formatValue()
+  }
+
+  class renderGraphical <<function>> {
+    + renderGraphical()
+  }
+
+  class renderMetricCards <<function>> {
+    + renderMetricCards()
+  }
+
+  class renderPivot <<function>> {
+    + renderPivot()
+  }
+
+  class applyViewport <<function>> {
+    + applyViewport()
+  }
+
+  class renderTabular <<function>> {
+    + renderTabular()
+  }
+
+}
+
+' TS → Python API connections
+ApiClient ..> Engine : POST /api/query
+ApiClient ..> FieldResolver : GET /api/dimensions
+ApiClient ..> BronzeResolver : POST /api/bronze/query
+renderAgGrid ..> PivotHandler : table.pivot response
+renderAgGrid ..> TableDataHandler : table.data response
+renderGraphical ..> GraphicalHandler : plotly.* response
+renderMetricCards ..> MetricsHandler : cards.metric response
+
 legend right
   174 classes in 15 directories
   40 inheritance, 66 composition,

@@ -29,21 +29,21 @@ base_formatting:
   fields: [title, description, height, renderer, theme, shading]
 
 render_options:
-  renderer: {type: enum, values: [default, great_tables], default: default}
+  renderer: {type: enum, values: [default, ag_grid], default: default}
   theme:    {type: enum, values: [default, financial, dark, striped, minimal], default: default}
 ---
 
 ## Pivot Table
 
-Cross-tabulation with optional binning, window functions, and Great Tables rendering.
+Cross-tabulation with optional binning, window functions, and AG Grid rendering.
 
-`gt` and `great_table` are aliases that default `formatting.renderer: great_tables`.
-Great Tables renders as styled HTML — the backend returns `{"html": "..."}` for that renderer.
+`gt` and `great_table` are aliases that default `formatting.renderer: ag_grid`.
+AG Grid renders as styled HTML — the backend returns `{"html": "..."}` for that renderer.
 
 ### Data contract
 
 Default renderer: `{columns: [{key, label, format}], rows: [[val, ...]]}`.
-Great Tables renderer: `{"html": "<table ...>"}` — plugin injects directly into the note.
+AG Grid renderer: `{"html": "<table ...>"}` — plugin injects directly into the note.
 
 ### `data:` fields
 
@@ -107,7 +107,7 @@ Window tuple: `[key, source_measure_key, window_type, label]`
 |-------|---------|-------------|
 | `title` | — | Table title |
 | `height` | 400 | Table height in px |
-| `renderer` | default | `default` or `great_tables` |
+| `renderer` | default | `default` or `ag_grid` |
 | `theme` | default | `default` · `financial` · `dark` · `striped` · `minimal` |
 | `shading` | — | Conditional format: `{on: measure_key, palette: blues}` |
 
@@ -149,7 +149,7 @@ config:
     securities.stocks.policy_type: [Perm]
 ```
 
-**Great Tables styled with shading:**
+**AG Grid styled with shading:**
 ```yaml
 type: table.pivot
 data:
@@ -159,7 +159,7 @@ data:
     - [avg_close, securities.stocks.adjusted_close, avg, $, Avg Close]
   totals: {rows: true}
 formatting:
-  renderer: great_tables
+  renderer: ag_grid
   theme: financial
   shading: {on: avg_close, palette: blues}
   title: Sector Performance
@@ -169,4 +169,4 @@ formatting:
 
 - `totals:` is a **data** field — the backend computes summary rows/cols
 - `shading:` is a **formatting** field — display-only conditional formatting
-- Great Tables renders server-side HTML; the plugin injects `response.html` directly
+- AG Grid renders server-side HTML; the plugin injects `response.html` directly
