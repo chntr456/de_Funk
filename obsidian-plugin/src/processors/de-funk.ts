@@ -12,8 +12,6 @@ import { filtersToSpecs } from "../frontmatter";
 import { getState, registerPanel } from "./config-panel";
 import { subscribeToFilterChanges } from "../filter-bus";
 import { renderGraphical } from "../render/graphical";
-import { renderTabular } from "../render/tabular";
-import { renderPivot } from "../render/pivot";
 import { renderMetricCards } from "../render/metric-cards";
 import { renderAgGrid, renderAgGridPivot } from "../render/ag-grid";
 

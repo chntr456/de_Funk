@@ -38,47 +38,6 @@
   color: var(--text-normal);
 }
 
-.de-funk-table-wrapper {
-  overflow: auto !important;
-  max-height: 500px;
-  border-radius: 4px;
-}
-
-.de-funk-table {
-  width: max-content;
-  min-width: 100%;
-  border-collapse: collapse;
-  font-size: 0.88em;
-}
-
-.de-funk-table th {
-  background: var(--background-secondary);
-  padding: 6px 10px;
-  text-align: left;
-  font-weight: 600;
-  border-bottom: 1px solid var(--background-modifier-border);
-  white-space: nowrap;
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 1;
-}
-
-.de-funk-table td {
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--background-modifier-border-hover);
-  vertical-align: top;
-}
-
-.de-funk-table tbody tr:hover {
-  background: var(--background-modifier-hover);
-}
-
-.de-funk-table-pagination {
-  font-size: 0.82em;
-  color: var(--text-muted);
-  margin: 4px 0 0;
-}
-
 .de-funk-download {
   margin-top: 8px;
   font-size: 0.82em;
@@ -379,18 +338,6 @@
   font-style: italic;
 }
 
-/* ── Great Tables ─────────────────────────────── */
-.de-funk-great-tables {
-  overflow: auto;
-  max-height: 500px;
-  font-size: 0.88em;
-}
-
-.de-funk-great-tables th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-}
 
 /* ── Truncation / empty states ─────────────────── */
 .de-funk-truncation-warning {
@@ -408,4 +355,9 @@
   font-style: italic;
   padding: 12px 0;
   text-align: center;
+}
+
+/* ── AG Grid ─────────────────────────────────── */
+.de-funk-ag-grid {
+  width: 100%;
 }

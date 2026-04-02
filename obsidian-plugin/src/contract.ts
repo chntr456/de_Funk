@@ -90,7 +90,7 @@ export interface BlockFormatting {
   // table
   page_size?: number;
   download?: boolean;
-  renderer?: "default" | "great_tables";
+  renderer?: "default";
   theme?: string;
   // plotly render options
   line_shape?: "linear" | "spline" | "hv";
@@ -158,11 +158,6 @@ export interface ExpandableData {
   total_rows: number;
 }
 
-export interface GreatTablesResponse {
-  html: string;
-  expandable?: ExpandableData | null;
-}
-
 export interface MetricValue {
   key: string;
   label: string;
@@ -182,5 +177,4 @@ export interface DimensionValuesResponse {
 export type ApiResponse =
   | GraphicalResponse
   | TableResponse
-  | GreatTablesResponse
   | MetricResponse;

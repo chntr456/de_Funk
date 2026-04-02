@@ -7,6 +7,7 @@ const prod = process.argv[2] === "production";
 const context = await esbuild.context({
   entryPoints: ["src/main.ts"],
   bundle: true,
+  loader: { ".css": "text" },
   external: [
     "obsidian",
     "electron",
@@ -24,7 +25,7 @@ const context = await esbuild.context({
     ...builtins,
   ],
   format: "cjs",
-  target: "es2018",
+  target: "es2021",
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,

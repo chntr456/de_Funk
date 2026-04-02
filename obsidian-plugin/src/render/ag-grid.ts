@@ -6,7 +6,7 @@
  * columns, sorting, and proper viewport handling out of the box.
  */
 import { createGrid, ModuleRegistry, AllCommunityModule, type GridOptions, type ColDef } from "ag-grid-community";
-import type { DeFunkBlock, TableResponse, GreatTablesResponse } from "../contract";
+import type { DeFunkBlock, TableResponse } from "../contract";
 import { formatValue } from "./format";
 
 // AG Grid CSS — imported as text by esbuild, injected into document once
@@ -34,7 +34,7 @@ function initAgGrid(): void {
  */
 export function renderAgGrid(
   block: DeFunkBlock,
-  response: TableResponse | GreatTablesResponse,
+  response: TableResponse,
   el: HTMLElement,
 ): void {
   initAgGrid();
@@ -47,14 +47,6 @@ export function renderAgGrid(
     el.createEl("h4", { text: title, cls: "de-funk-table-title" });
   }
 
-  // If GT HTML response, fall back to HTML injection (AG Grid needs row data)
-  if ("html" in response && !("rows" in response)) {
-    const wrapper = el.createDiv({ cls: "de-funk-great-tables" });
-    wrapper.innerHTML = (response as GreatTablesResponse).html;
-    wrapper.style.setProperty("max-height", maxH + "px", "important");
-    wrapper.style.setProperty("overflow", "auto", "important");
-    return;
-  }
 
   const tableResponse = response as TableResponse;
   const { columns, rows } = tableResponse;
@@ -211,7 +203,7 @@ export function renderAgGrid(
  */
 export function renderAgGridPivot(
   block: DeFunkBlock,
-  response: TableResponse | GreatTablesResponse,
+  response: TableResponse,
   el: HTMLElement,
 ): void {
   // For GT HTML pivots, use regular AG Grid data table
