@@ -1,11 +1,10 @@
 /**
  * AG Grid renderer for table.data and table.pivot exhibits.
  *
- * Replaces the manual HTML table rendering with AG Grid Community,
- * which provides native horizontal scroll (always visible), frozen
- * columns, sorting, and proper viewport handling out of the box.
+ * Uses AG Grid Community for native horizontal scroll, frozen columns,
+ * column grouping (spanners), sorting, and proper viewport handling.
  */
-import { createGrid, ModuleRegistry, AllCommunityModule, type GridOptions, type ColDef } from "ag-grid-community";
+import { createGrid, ModuleRegistry, AllCommunityModule, type GridOptions, type ColDef, type ColGroupDef } from "ag-grid-community";
 import type { DeFunkBlock, TableResponse } from "../contract";
 import { formatValue } from "./format";
 
@@ -19,10 +18,8 @@ function initAgGrid(): void {
   if (initialized) return;
   initialized = true;
 
-  // Register all community modules
   ModuleRegistry.registerModules([AllCommunityModule]);
 
-  // Inject CSS
   const style = document.createElement("style");
   style.id = "de-funk-ag-grid-styles";
   style.textContent = agGridCss + "\n" + agThemeCss;
@@ -47,23 +44,20 @@ export function renderAgGrid(
     el.createEl("h4", { text: title, cls: "de-funk-table-title" });
   }
 
-
-  const tableResponse = response as TableResponse;
-  const { columns, rows } = tableResponse;
+  const { columns, rows } = response;
 
   if (!columns || !rows || rows.length === 0) {
     el.createDiv({ cls: "de-funk-empty", text: "No data returned" });
     return;
   }
 
-  // Build AG Grid column definitions
-  // Detect pivot-style columns (key contains "||" separator: measure||colValue)
+  // Detect pivot-style columns (key contains "||" separator)
   const hasPivotCols = columns.some(c => c.key.includes("||"));
 
-  let columnDefs: (ColDef | { headerName: string; children: ColDef[] })[];
+  let columnDefs: (ColDef | ColGroupDef)[];
 
   if (hasPivotCols) {
-    // Group columns by measure prefix
+    // Pivot: group data columns by measure, pin row labels
     const groups: Record<string, ColDef[]> = {};
     const rowCols: ColDef[] = [];
 
@@ -76,14 +70,12 @@ export function renderAgGrid(
           field: col.key,
           width: 90,
           minWidth: 70,
-          suppressSizeToFit: true,
           type: typeof rows[0]?.[idx] === "number" ? "numericColumn" : undefined,
-          valueFormatter: col.format
-            ? (params: { value: unknown }) => formatValue(params.value, col.format ?? null)
-            : (params: { value: unknown }) => {
-                const v = params.value;
-                return typeof v === "number" ? v.toLocaleString() : String(v ?? "");
-              },
+          valueFormatter: (params) => {
+            const v = params.value;
+            if (col.format) return formatValue(v, col.format);
+            return typeof v === "number" ? v.toLocaleString() : String(v ?? "");
+          },
           sortable: true,
           resizable: true,
         });
@@ -91,10 +83,10 @@ export function renderAgGrid(
         rowCols.push({
           headerName: col.label || col.key,
           field: col.key,
-          pinned: "left" as const,
+          pinned: "left",
           lockPinned: true,
-          minWidth: 180,
-          maxWidth: 300,
+          width: 200,
+          minWidth: 150,
           sortable: true,
           resizable: true,
           cellStyle: { fontWeight: "500" },
@@ -102,23 +94,23 @@ export function renderAgGrid(
       }
     });
 
-    columnDefs = [
-      ...rowCols,
-      ...Object.entries(groups).map(([measure, children]) => ({
-        headerName: measure.replace("_", " ").toUpperCase(),
-        children,
-      })),
-    ];
+    // Build column groups (spanners)
+    const groupDefs: ColGroupDef[] = Object.entries(groups).map(([measure, children]) => ({
+      headerName: measure.replace(/_/g, " ").toUpperCase(),
+      markerNode: true,
+      children,
+    }));
+
+    columnDefs = [...rowCols, ...groupDefs];
   } else {
-    // Standard flat columns
+    // Flat table
     columnDefs = columns.map((col, idx) => ({
       headerName: col.label || col.key,
       field: col.key,
-      pinned: idx === 0 ? "left" as const : undefined,
+      pinned: idx === 0 ? ("left" as const) : undefined,
       lockPinned: idx === 0 ? true : undefined,
-      width: idx === 0 ? 180 : undefined,
+      width: idx === 0 ? 200 : undefined,
       minWidth: idx === 0 ? 150 : 80,
-      suppressSizeToFit: true,
       valueFormatter: col.format
         ? (params: { value: unknown }) => formatValue(params.value, col.format ?? null)
         : undefined,
@@ -128,7 +120,7 @@ export function renderAgGrid(
     }));
   }
 
-  // Build row data (convert arrays to objects)
+  // Build row data
   const rowData = rows.map((row) => {
     const obj: Record<string, unknown> = {};
     columns.forEach((col, idx) => {
@@ -137,16 +129,14 @@ export function renderAgGrid(
     return obj;
   });
 
-  // Create the grid container
+  // Grid container — fixed height for proper scrolling
   const gridDiv = el.createDiv({ cls: "de-funk-ag-grid" });
-  gridDiv.style.cssText = `height:${Math.min(maxH, rows.length * 32 + 48)}px;width:100%;`;
-  gridDiv.classList.add("ag-theme-alpine");
+  const gridHeight = Math.min(maxH, rows.length * 28 + 80);
+  gridDiv.style.cssText = `height:${gridHeight}px; width:100%;`;
 
-  // Check if dark mode
-  if (document.body.classList.contains("theme-dark")) {
-    gridDiv.classList.remove("ag-theme-alpine");
-    gridDiv.classList.add("ag-theme-alpine-dark");
-  }
+  // Theme
+  const isDark = document.body.classList.contains("theme-dark");
+  gridDiv.classList.add(isDark ? "ag-theme-alpine-dark" : "ag-theme-alpine");
 
   // Grid options
   const gridOptions: GridOptions = {
@@ -156,30 +146,30 @@ export function renderAgGrid(
       sortable: true,
       resizable: true,
       minWidth: 70,
+      suppressMovable: true,
     },
+    // Layout
+    domLayout: "normal",
+    suppressHorizontalScroll: false,
+    alwaysShowHorizontalScroll: true,
+    alwaysShowVerticalScroll: false,
+    // Interaction
     animateRows: false,
     suppressCellFocus: false,
     enableCellTextSelection: true,
     ensureDomOrder: true,
-    domLayout: "normal",
-    // Horizontal scroll always visible — AG Grid handles this natively
-    suppressHorizontalScroll: false,
-    alwaysShowHorizontalScroll: true,
-    alwaysShowVerticalScroll: false,
+    // Header stays fixed while scrolling
+    suppressColumnVirtualisation: false,
   };
 
-  // For pivot tables, pin TOTAL rows to bottom and sort by last data column desc
+  // Pivot: pin TOTAL rows to bottom, sort by last year desc
   if (hasPivotCols) {
-    gridOptions.pinnedBottomRowData = rowData.filter(r => {
-      const firstKey = columns[0]?.key;
-      return firstKey && r[firstKey] === "TOTAL";
-    });
-    gridOptions.rowData = rowData.filter(r => {
-      const firstKey = columns[0]?.key;
-      return !(firstKey && r[firstKey] === "TOTAL");
-    });
+    const firstKey = columns[0]?.key;
+    if (firstKey) {
+      gridOptions.pinnedBottomRowData = rowData.filter(r => r[firstKey] === "TOTAL");
+      gridOptions.rowData = rowData.filter(r => r[firstKey] !== "TOTAL");
+    }
 
-    // Find the last non-null column to sort by
     const lastCol = columns.filter(c => c.key.includes("||")).pop();
     if (lastCol) {
       gridOptions.initialState = {
@@ -188,25 +178,22 @@ export function renderAgGrid(
     }
   }
 
-  // Create the grid
   createGrid(gridDiv, gridOptions);
 
   // Truncation warning
-  if (tableResponse.truncated) {
+  if (response.truncated) {
     const warn = el.createDiv({ cls: "de-funk-truncation-warning" });
     warn.setText("Results were capped by the server row limit. Apply a filter to narrow the data.");
   }
 }
 
 /**
- * Render a pivot table using AG Grid with pinned row labels.
+ * Render a pivot table using AG Grid.
  */
 export function renderAgGridPivot(
   block: DeFunkBlock,
   response: TableResponse,
   el: HTMLElement,
 ): void {
-  // For GT HTML pivots, use regular AG Grid data table
-  // The backend already computes the pivot — we just display it
   renderAgGrid(block, response, el);
 }
